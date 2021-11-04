@@ -10,15 +10,12 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/chain_config,
-  ../nimbus/config,
-  ../nimbus/db/db_chain,
-  ../nimbus/utils/tx_pool,
-  ../nimbus/utils/tx_pool/tx_item,
+  ../nimbus/[db/db_chain, chain_config, config],
+  ../nimbus/utils/[tx_pool, tx_pool/tx_item],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
-  stew/sorted_set,
+  stew/[keyed_queue, sorted_set],
   stint,
   unittest2
 
@@ -34,9 +31,9 @@ const
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
     dir: "tests",
-    file: "replay" / "goerli51840.txt.gz",
-    numBlocks: 18000,
-    numTxs: 728) # maximum that can be used from this dump
+    file: "replay" / "goerli68161.txt.gz",
+    numBlocks: 22000,  # block chain prequel
+    numTxs: 840)       # txs following (not in block chain)
 
   loadSpecs = goerliCapture
 
@@ -149,8 +146,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
         &"and collect {capture.numTxs} txs":
 
       elapNoisy.showElapsed("Total collection time"):
-        xp = bcDB.toTxPool(accounts = txAccounts,
-                           file = file,
+        xp = bcDB.toTxPool(file = file,
                            getStatus = randStatus,
                            loadBlocks = capture.numBlocks,
                            loadTxs = capture.numTxs,
@@ -219,11 +215,11 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       # primitives could be used in an async context.
 
       proc delayJob(xp: TxPoolRef; waitMs: int) {.async.} =
-        let n = xp.nJobsWaiting
+        let n = xp.nJobs
         xp.job(TxJobDataRef(kind: txJobNone))
         xp.job(TxJobDataRef(kind: txJobNone))
         xp.job(TxJobDataRef(kind: txJobNone))
-        log &= " wait-" & $waitMs & "-" & $(xp.nJobsWaiting - n)
+        log &= " wait-" & $waitMs & "-" & $(xp.nJobs - n)
         await chronos.milliseconds(waitMs).sleepAsync
         xp.jobCommit
         log &= " done-" & $waitMs
@@ -239,7 +235,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
         await p1
 
       waitFor xp.runJobs
-      check xp.nJobsWaiting == 0
+      check xp.nJobs == 0
       check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
 
       # Cannot rely on boundary conditions regarding nonces. So xp.verify()
@@ -444,9 +440,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
 
         # insert some txs
         for triple in testTxs:
-          let item = triple[0]
-          var tx = triple[1]
-          xq.jobAddTx(tx, item.info)
+          xq.jobAddTx(triple[1], triple[0].info)
         xq.jobCommit
 
         check xq.nItems.total == testTxs.len
@@ -456,9 +450,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
 
         # re-insert modified transactions
         for triple in testTxs:
-          let item = triple[0]
-          var tx = triple[2]
-          xq.jobAddTx(tx, "alt " & item.info)
+          xq.jobAddTx(triple[2], "alt " & triple[0].info)
         xq.jobCommit
 
         check xq.nItems.total == testTxs.len
@@ -853,6 +845,41 @@ proc runTxPackerTests(noisy = true) =
 
           noisy.say "***", "2st bLock size=", newTotal, " stats=", newStats.pp
 
+      block:
+        let
+          (nMinTxs, nTrgTxs) = (15, 15)
+          (nMinAccounts, nTrgAccounts) = (1, 4)
+
+        test &"Back track block chain head (at least "&
+            &"{nMinTxs} txs, {nMinAccounts} known accounts)":
+
+          # step back some blocks and provied a rolled back fake per-account
+          # state environment for the `backHeader` block chain position
+          let
+            (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
+            fakeAccounts = xq.getAmendedAccounts(backTxs)
+            stats = xq.nItems
+
+          # verify that test would not degenerate
+          check nMinAccounts <= accLst.len
+          check nMinTxs <= backTxs.len
+
+          noisy.say "***",
+            "back tracked block chain:",
+            &" {backTxs.len} txs, {accLst.len} known accounts"
+
+          check xq.nJobs == 0                   # want cleared job queue
+          check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
+          xq.dbHead.setAccountFns(              # set up roll back fake accounts
+            fakeAccounts.back.nonce,
+            fakeAccounts.back.balance)
+          xq.topHeader = backHeader             # move insertion point
+          xq.jobCommit                          # apply job diffs
+
+          # make sure that all txs have been added to the pool
+          check stats.total + backTxs.len == xq.nItems.total
+          check stats.disposed == xq.nItems.disposed
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -865,24 +892,6 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxPackerTests
 
 when isMainModule:
-  import ../nimbus/db/accounts_cache
-
-  proc showAccounts =
-    var senders = txAccounts.mapIt((it,true)).toTable
-    for item in txList:
-      if not senders.hasKey(item.sender):
-        senders[item.sender] = false
-    let
-      header = bcDB.getCanonicalHead
-      cache = AccountsCache.init(bcDB.db, header.stateRoot, bcDB.pruneTrie)
-    for (sender,known) in senders.pairs:
-      let
-        isKnown = if known: " known" else: " new  "
-        id = sender.toHex[30..39]
-        nonce = cache.getNonce(sender)
-        balance = cache.getBalance(sender)
-      echo &">>> {id} {isKnown} balance={balance} nonce={nonce}"
-
   proc localDir(c: CaptureSpecs): CaptureSpecs =
     result = c
     result.dir = "."

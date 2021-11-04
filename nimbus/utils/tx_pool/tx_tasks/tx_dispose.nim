@@ -93,6 +93,20 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [Defect,KeyError].} =
         if not xp.txDB.byItemID.hasKey(rc.value.key):
           break
 
+
+proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
+                                 reason, otherReason: TxInfo): int
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Move item and higher nonces per sender to wastebasket.
+  if xp.txDB.dispose(item, reason):
+    result = 1
+    # For the current sender, delete all items with higher nonces
+    let rc = xp.txDB.bySender.eq(item.sender)
+    if rc.isOK:
+      for other in rc.value.data.walkItems(item.tx.nonce):
+        if xp.txDB.dispose(other, otherReason):
+          result.inc
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

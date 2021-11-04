@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Basic Primitives
-## =================================
+## Transaction Pool Database For Buckets And Waste Basket
+## ======================================================
 ##
 
 import
@@ -55,16 +55,16 @@ type
     # ----- index tables ------
 
     byGasTip*: TxPriceTab ##\
-      ## Index for byItemID, `effectiveGasTip` > `nonce`
+      ## Index for byItemID: `effectiveGasTip` > `nonce` > item
 
     byTipCap*: TxTipCapTab ##\
-      ## Index for byItemID, `gasTipCap`
+      ## Index for byItemID: `gasTipCap` > item
 
     bySender*: TxSenderTab ##\
-      ## Index for byItemID, `sender` > `status` > `nonce`
+      ## Index for byItemID: `sender` > `status` > `nonce` > item
 
     byStatus*: TxStatusTab ##\
-      ## Index for byItemID, `status` > `nonce`
+      ## Index for byItemID: `status` > `nonce` > item
 
 
 const

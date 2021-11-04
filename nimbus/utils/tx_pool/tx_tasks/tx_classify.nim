@@ -13,7 +13,6 @@
 ##
 
 import
-  ../../../db/accounts_cache,
   ../../../forks,
   ../../../transaction,
   ../tx_dbhead,
@@ -66,12 +65,13 @@ proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
 
   true
 
-proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Make sure that there is only one contiuous sequence of nonces (per
   ## sender) starting at the account nonce.
 
   # get the next applicable nonce as registered on the account database
-  let accountNonce = ReadOnlyStateDB(xp.dbHead.accDb).getNonce(item.sender)
+  let accountNonce = xp.dbHead.accountNonce(item.sender)
 
   if item.tx.nonce < accountNonce:
     debug "invalid tx: account nonce too small",
@@ -127,10 +127,11 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
       return false
   true
 
-proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether the worst case expense is covered by the price budget,
   let
-    balance = ReadOnlyStateDB(xp.dbHead.accDb).getBalance(item.sender)
+    balance = xp.dbHead.accountBalance(item.sender)
     gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
   if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
@@ -179,7 +180,8 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool {.inline.}=
 # Public functionss
 # ------------------------------------------------------------------------------
 
-proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool =
+proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Check a (typically new) transaction whether it should be accepted at all
   ## or re-jected right away.
 
@@ -192,7 +194,8 @@ proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool =
   true
 
 
-proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool =
+proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether a valid transaction is ready to be held in the
   ## `staged` bucket in which case the function returns `true`. 
 

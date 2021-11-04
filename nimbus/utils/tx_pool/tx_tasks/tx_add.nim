@@ -150,6 +150,12 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; info = ""): bool
   else:
     unspecifiedErrorMeter(1)
 
+proc addTx*(xp: TxPoolRef; tx: Transaction; info = ""): bool
+    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `addTx()` with call-by-value `tx` argument
+  var ty = tx
+  xp.addTx(ty, info)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

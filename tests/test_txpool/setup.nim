@@ -9,16 +9,26 @@
 # according to those terms.
 
 import
-  std/[os, sequtils, strformat, tables, times],
+  std/[algorithm, os, sequtils, strformat, tables, times],
   ../../nimbus/[config, chain_config, constants, genesis],
-  ../../nimbus/db/db_chain,
+  ../../nimbus/db/[db_chain, accounts_cache],
   ../../nimbus/p2p/chain,
-  ../../nimbus/transaction,
-  ../../nimbus/utils/[ec_recover, tx_pool],
-  ../../nimbus/utils/tx_pool/tx_item,
+  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_item],
   ./helpers,
   eth/[common, keys, p2p, trie/db],
+  stew/[keyed_queue],
   stint
+
+type
+  AmendedAccountsRef* = ref object ##\
+    ## Faked `getBalance()` and `getNonce()` account functions
+    backAccounts: Table[EthAddress,(uint,uint64)] # (nonce,balance)
+    back*: tuple[
+      nonce: TxDbHeadNonce,
+      balance: TxDbHeadBalance]
+    forward*: tuple[
+      nonce: TxDbHeadNonce,
+      balance: TxDbHeadBalance]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -50,7 +60,6 @@ proc blockChainForTesting*(network: NetworkID): BaseChainDB =
 
 proc toTxPool*(
     db: BaseChainDB;                  ## to be modified
-    accounts: var seq[EthAddress];    ## to be initialsed
     file: string;                     ## input, file and transactions
     getStatus: proc(): TxItemStatus;  ## input, random function
     loadBlocks: int;                  ## load at most this many blocks
@@ -63,18 +72,8 @@ proc toTxPool*(
     txCount = 0
     chainNo = 0
     chainDB = db.newChain
-    senders: Table[EthAddress,bool]
 
   doAssert not db.isNil
-
-  proc collectAccounts(bodies: seq[BlockBody]) =
-    for body in bodies:
-      for tx in body.transactions:
-        let
-          s0 = tx.getSender
-          s1 = tx.ecRecover.value
-        doAssert s0 == s1
-        senders[s0] = true
 
   block allDone:
     for chain in file.undumpNextGroup:
@@ -89,7 +88,6 @@ proc toTxPool*(
         let (headers,bodies) = (chain[0],chain[1])
         if not chainDB.persistBlocks(headers,bodies).isOK:
           raiseAssert "persistBlocks() failed at block #" & $leadBlkNum
-        chain[1].collectAccounts
       else:
         # Import transactions
         for inx in 0 ..< chain[0].len:
@@ -122,7 +120,6 @@ proc toTxPool*(
               break allDone
 
   result.jobCommit
-  accounts = toSeq(senders.keys)
 
 
 proc toTxPool*(
@@ -198,12 +195,106 @@ proc toTxPool*(
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =
   toSeq(xp.txDB.byItemID.nextValues)
 
+
 proc setItemStatusFromInfo*(xp: TxPoolRef) =
   ## Re-define status from last character of info field. Note that this might
   ## violate boundary conditions regarding nonces.
   for item in xp.toItems:
     let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
     xp.setStatus(item, w)
+
+
+proc getAmendedAccounts*(xp: TxPoolRef;
+                         txs: seq[Transaction]): AmendedAccountsRef =
+  ## Provide fake account state environment assuming the argument `txs`
+  ## rolles back or forward the block chain states.
+  let desc = AmendedAccountsRef()
+
+  for tx in txs:
+    var item: TxItemRef
+    let rc = xp.getItem(tx.itemID)
+    if rc.isOk:
+      item = rc.value
+    else:
+      var ty = tx
+      item = xp.recoverItem(ty).value
+      if not xp.txDB.bySender.eq(item.sender).isErr:
+        # no need to adjust unknown accounts
+        continue
+    if not desc.backAccounts.hasKey(item.sender):
+      desc.backAccounts[item.sender] = (0u,0u64)
+    let maxConsumed = item.tx.gasLimit.uint64 * item.tx.gasPrice.uint64
+    desc.backAccounts[item.sender][0].inc
+    desc.backAccounts[item.sender][1] += maxConsumed
+
+  desc.back.nonce =
+      proc(rdb: ReadOnlyStateDB; acc: EthAddress):AccountNonce =
+        var nonce = rdb.getNonce(acc)
+        if desc.backAccounts.hasKey(acc):
+          if nonce < desc.backAccounts[acc][0]:
+            return 0
+          nonce -= desc.backAccounts[acc][0]
+        return nonce
+
+  desc.back.balance =
+      proc(rdb: ReadOnlyStateDB; acc: EthAddress): UInt256 =
+        var balance = rdb.getBalance(acc)
+        if desc.backAccounts.hasKey(acc):
+          if balance < desc.backAccounts[acc][1].u256:
+            return 0.u256
+          balance -= desc.backAccounts[acc][1].u256
+        return balance
+
+  desc.forward.nonce =
+      proc(rdb: ReadOnlyStateDB; acc: EthAddress):AccountNonce =
+        var nonce = rdb.getNonce(acc)
+        if desc.backAccounts.hasKey(acc):
+          nonce += desc.backAccounts[acc][0]
+        return nonce
+
+  desc.forward.balance =
+      proc(rdb: ReadOnlyStateDB; acc: EthAddress): UInt256 =
+        var balance = rdb.getBalance(acc)
+        if desc.backAccounts.hasKey(acc):
+          balance += desc.backAccounts[acc][1].u256
+        return balance
+
+  desc
+
+
+proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
+                  (BlockHeader, seq[Transaction], seq[EthAddress]) {.inline.} =
+  ## back track the block chain for at least `nTxs` transactions and
+  ## `nAccounts` sender accounts
+  var
+    accTab: Table[EthAddress,bool]
+    txsLst: seq[Transaction]
+    backHash = xp.topHeader.blockHash
+    backHeader = xp.topHeader
+    backBody = xp.dbhead.db.getBlockBody(backHash)
+
+  while true:
+    # count txs and step behind last block
+    txsLst.add backBody.transactions
+    backHash = backHeader.parentHash
+    if not xp.dbhead.db.getBlockHeader(backHash, backHeader) or
+       not xp.dbhead.db.getBlockBody(backHash, backBody):
+      break
+
+    # collect accounts unless max reached
+    if accTab.len < nAccounts:
+      for tx in backBody.transactions:
+        let rc = tx.ecRecover
+        if rc.isOK and xp.txDB.bySender.eq(rc.value).isOk:
+          accTab[rc.value] = true
+          if nAccounts <= accTab.len:
+            break
+
+    if nTxs <= txsLst.len and nAccounts <= accTab.len:
+      break
+    # otherwise get next block
+
+  (backHeader, txsLst.reversed, toSeq(accTab.keys))
 
 # ------------------------------------------------------------------------------
 # End

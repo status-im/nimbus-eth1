@@ -20,23 +20,45 @@ import
   eth/[common, keys, p2p]
 
 type
+  TxDbHeadNonce* =
+    proc(rdb: ReadOnlyStateDB; account: EthAddress): AccountNonce
+      {.gcsafe,raises: [Defect,CatchableError].}
+
+  TxDbHeadBalance* =
+    proc(rdb: ReadOnlyStateDB; account: EthAddress): UInt256
+      {.gcsafe,raises: [Defect,CatchableError].}
+
   TxDbHeadRef* = ref object ##\
     ## Cache the state of the block chain which serves as logical insertion
     ## point for a new block. This state is typically the canonical head
     ## when updated.
-    db*: BaseChainDB       ## block chain database
-    header*: BlockHeader   ## new block insertion point
-    fork*: Fork            ## current fork relative to next header
-    accDB*: AccountsCache  ## sender accounts, etc.
-    baseFee*: GasPrice     ## current base fee derived from `header`
-    trgGasLimit*: GasInt   ## effective `gasLimit` for the packer
-    maxGasLimit*: GasInt   ## may increase the `gasLimit` a bit
+    db: BaseChainDB            ## Block chain database
+    header: BlockHeader        ## New block insertion point
+    fork: Fork                 ## Current fork relative to next header
+    baseFee: GasPrice          ## Current base fee derived from `header`
+    trgGasLimit: GasInt        ## The `gasLimit` for the packer, soft limit
+    maxGasLimit: GasInt        ## May increase the `gasLimit` a bit, hard limit
+    accDB: AccountsCache       ## Sender accounts, etc.
+    nonceFn: TxDbHeadNonce     ## Sender account `getNonce()` function
+    balanceFn: TxDbHeadBalance ## Sender account `getBalance()` function
 
 const
   # currently implemented in Nimbus only to do some tesing
   londonBlock = 12_965_000.u256
 
 {.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private functions, account helpers
+# ------------------------------------------------------------------------------
+
+proc getBalance(rdb: ReadOnlyStateDB; account: EthAddress): UInt256 =
+  ## Wrapper around `getBalance()`
+  accounts_cache.getBalance(rdb,account)
+
+proc getNonce(rdb: ReadOnlyStateDB; account: EthAddress): AccountNonce =
+  ## Wrapper around `getNonce()`
+  accounts_cache.getNonce(rdb,account)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -54,14 +76,10 @@ proc toForkOrLondon(db: BaseChainDB; number: BlockNumber): Fork =
     return FkLondon
   db.config.toFork(number)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
 proc update*(dh: TxDbHeadRef; newHead: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Update by block header
-
+  ## Update by new block header
   dh.header = newHead
   dh.fork = dh.db.toForkOrLondon(dh.header.blockNumber + 1)
   dh.accDB = AccountsCache.init(dh.db.db, dh.header.stateRoot, dh.db.pruneTrie)
@@ -90,6 +108,76 @@ proc init*(T: type TxDbHeadRef; db: BaseChainDB): T
   new result
   result.db = db
   result.update(db.getCanonicalHead)
+  result.nonceFn = getNonce
+  result.balanceFn = getBalance
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc accountBalance*(dh: TxDbHeadRef; account: EthAddress): UInt256
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Wrapper around `getBalance()`
+  dh.balanceFn(ReadOnlyStateDB(dh.accDb),account)
+
+proc accountNonce*(dh: TxDbHeadRef; account: EthAddress): AccountNonce
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Wrapper around `getNonce()`
+  dh.nonceFn(ReadOnlyStateDB(dh.accDb),account)
+
+# ------------------------------------------------------------------------------
+# Public functions, getters
+# ------------------------------------------------------------------------------
+
+proc db*(dh: TxDbHeadRef): BaseChainDB {.inline.} =
+  ## Getter
+  dh.db
+
+proc header*(dh: TxDbHeadRef): BlockHeader {.inline.} =
+  ## Getter
+  dh.header
+
+proc fork*(dh: TxDbHeadRef): Fork {.inline.} =
+  ## Getter
+  dh.fork
+
+proc baseFee*(dh: TxDbHeadRef): GasPrice {.inline.} =
+  ## Getter
+  dh.baseFee
+
+proc trgGasLimit*(dh: TxDbHeadRef): GasInt {.inline.} =
+  ## Getter
+  dh.trgGasLimit
+
+proc maxGasLimit*(dh: TxDbHeadRef): GasInt {.inline.} =
+  ## Getter
+  dh.maxGasLimit
+
+# ------------------------------------------------------------------------------
+# Public functions, setters
+# ------------------------------------------------------------------------------
+
+proc `header=`*(dh: TxDbHeadRef; header: BlockHeader)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, updates descriptor
+  dh.update(header)
+
+# ------------------------------------------------------------------------------
+# Public functions, debugging & testing
+# ------------------------------------------------------------------------------
+
+proc setBaseFee*(dh: TxDbHeadRef; val: GasPrice) {.inline.} =
+  ## Temorarily overwrite (until next header update). This function
+  ## is intended to support debugging and testing.
+  dh.baseFee = val
+
+proc setAccountFns*(dh: TxDbHeadRef;
+                    nonceFn: TxDbHeadNonce = getNonce;
+                    balanceFn: TxDbHeadBalance = getBalance) {.inline.} =
+  ## Replace per sender account lookup functions. This function
+  ## is intended to support debugging and testing.
+  dh.nonceFn = nonceFn
+  dh.balanceFn = balanceFn
 
 # ------------------------------------------------------------------------------
 # End

@@ -13,8 +13,9 @@
 ##
 ## TODO:
 ## -----
-## * Support `local` txs (currently unsupported and ignored.) For
-##   now, all txs are considered from `remote` accounts.
+## * Support `local` accounts the txs of which would be prioritised. This is
+##   currently unsupported. For now, all txs are considered from `remote`
+##   accounts.
 ##
 ## * There is no handling of *zero gas price* transactions yet
 ##
@@ -24,7 +25,7 @@
 ## * Implement re-positioning the current insertion point, typically the head
 ##   of the block chain.
 ##
-## * Packer is not very smart, at the moment. This should be improved.
+## * The packer is not very smart, at the moment. This should be improved.
 ##   Some idea:
 ##   + Incrementally pack selected items until the total gas limit reaches
 ##     the low block size water mark but does not exceed the high water mark.
@@ -33,6 +34,20 @@
 ##     re-packing as close as possible to the high water mark. This algorithm
 ##     can only replace the last nonce-sorted item per sender due to the
 ##     boundary condition on nonces.
+##
+## * Some table (used for testing & data analysis) might not be needed in
+##   production environment:
+##   + `byGasTip` (see tx_price.nim), ordered by `estimatedGasTip` (depends on
+##     current value of `baseFee` which in turn depends on the block chain
+##     state/head). This table is most certainly redundant.
+##   + `byTipCap` (see tx_tipcap.nim), ordered by maxPriorityFee (or gasPrice
+##     for legay txs). On the other hand, there is a suggestion (see geth
+##     sources) that there is a by-tip range query of a group of txs for
+##     discard, or prioritise at a later stage when the txs are held already
+##     in the buckets.
+##
+## * For recycled txs after block chain head adjustments, can we use the
+##   `tx.value` rather than `tx.gasLimit * tx.gasPrice`?
 ##
 ##
 ## Transaction state diagram:
@@ -179,38 +194,44 @@
 ## from signature.
 ##
 ##
+## Interaction of components
+## =========================
+## The idea is that there are concurrent *async* instances feeding transactions
+## into a job queue via `jobAddTx()`. The job queue is then processed on demand
+## not until `jobCommit()` is run.
+##
+## A piece of code using this pool would look as follows:
+## ::
+##    # see also unit test examples, e.g. "Block packer tests"
+##    var db: BaseChainDB                    # to be initialised
+##    var txs: seq[Transaction]              # to be initialised
+##
+##    proc mineThatBlock(blk: EthBlock)      # external function
+##
+##    ..
+##
+##    var xq = TxPoolRef.init(db)            # initialise tx-pool
+##    ..
+##
+##    xq.jobAddTxs(txs)                      # add transactions to be held
+##    ..                                     # .. on the job queue
+##
+##    xq.jobCommit                           # run job queue worker/processor
+##    let newBlock = xq.ethBlock             # fetch current mining block
+##
+##    ..
+##    mineThatBlock(newBlock) ...            # some external mining process
+##    ..
+##
+##    let newTopHeader = db.getCanonicalHead # new head after mining
+##    xp.jobDeltaTxsHead(newTopHeader)       # add transactions update jobs
+##    xp.topHeader = newTopHeader            # adjust insertion point
+##    xp.jobCommit                           # run job queue worker/processor
+##
+##
 ## =====================================================================
 ##
 ## xxxxxxxxxxx to be updated, below xxxxxxxxxxxxxxxxx
-##
-## Interaction of components
-## -------------------------
-## The idea is that there are concurrent instances feeding transactions into
-## the job queue via `enter(0)`. The system uses the `{.async.}` paradigm,
-## threads are unsupported (mixing asyncs with threads failed in some test due
-## to unwanted duplication of *event* semaphores.) The job queue is processed
-## on demand, typically when a result is required.
-##
-## A piece of code using the pool would look as follows:
-## ::
-##    # see also unit test examples, e.g. "Staging and packing txs .."
-##    var db: BaseChainDB
-##    var tx: Transaction
-##    ..
-##
-##    var xq = TxPoolRef.init(db)         # initialise tx-pool
-##    ..
-##
-##    xq.pjaAddTx(tx, info = "test data") # stash transactions and hold it
-##    ..                                  # .. on the job queue for a moment
-##
-##    xq.pjaUpdatePacked                  # stash task to assemble packed bucket
-##    ..
-##
-##    xq.nextBlock                        # assemble eth block
-##
-##    let newBlock = xq.getBlock          # new block with transactions
-##
 ##
 ## Discussion of example
 ## ~~~~~~~~~~~~~~~~~~~~~
@@ -302,10 +323,10 @@
 ##
 
 import
-  std/[sequtils, times],
+  std/[sequtils, tables],
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_adjust_head, tx_buckets, tx_dispose],
+  ./tx_pool/tx_tasks/[tx_add, tx_ethblock, tx_head, tx_buckets, tx_dispose],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results]
@@ -394,12 +415,19 @@ proc processJobs(xp: TxPoolRef): int
       discard
 
     of txJobAddTxs:
-      # Add txs => pending(1), staged(2), or rejected(4) (see comment
-      # on top of this source file for details.)
+      # Add a batch of txs to the database
       var args = task.data.addTxsArgs
       for tx in args.txs.mitems:
         if xp.addTx(tx, args.info):
           xp.pStagedItems = true # triggers packer
+
+    of txJobDelItemIDs:
+      # Dispose a batch of items
+      var args = task.data.delItemIDsArgs
+      for itemID in args.itemIDs:
+        let rcItem = xp.txDB.byItemID.eq(itemID)
+        if rcItem.isOK:
+          discard xp.txDB.dispose(rcItem.value, reason = args.reason)
 
     of txJobSetHead: # FIXME: tbd
       # Change the insertion block header. This call might imply
@@ -417,11 +445,11 @@ proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = ""): TxJobID
-    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Queues a batch of transactions jobs to be processed in due course
   ## (does not run `jobCommit()`.)
-  xp.job(TxJobDataRef(
+  discard xp.job(TxJobDataRef(
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    toSeq(txs),
@@ -429,23 +457,55 @@ proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = ""): TxJobID
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc jobAddTx*(xp: TxPoolRef; tx: var Transaction; info = ""): TxJobID
-    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+proc jobAddTx*(xp: TxPoolRef; tx: var Transaction; info = "")
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Variant of `jobAddTxs()` but for a single transaction.
-  xp.job(TxJobDataRef(
+  discard xp.job(TxJobDataRef(
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    @[tx],
       info:   info)))
 
-proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = ""): TxJobID
-    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `jobAddTxs()` but for a single transaction.
-  xp.job(TxJobDataRef(
+proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `jobAddTxs()` but for a single transaction with
+  ## call-by-value `tx` argument.
+  discard xp.job(TxJobDataRef(
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    @[tx],
       info:   info)))
+
+proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## This function calculates the txs to add or delete that need to take place
+  ## after the cached block chain head is set to the position implied by the
+  ## argument `newHead`. If successful, the txs to add or delete are queued
+  ## on the job queue (run `jobCommit()` to execute) and `true` is returned.
+  ## Otherwise nothing is done and `false` is returned.
+  let rcDiff = xp.headDiff(newHead)
+  if rcDiff.isOk:
+    let changes = rcDiff.value
+
+    # Re-inject transactions, do that via job queue
+    if 0 < changes.addTxs.len:
+      discard xp.job(TxJobDataRef(
+        kind:       txJobAddTxs,
+        addTxsArgs: (
+          txs:      toSeq(changes.addTxs.nextValues),
+          info:     "")))
+
+    # Delete already *mined* transactions
+    if 0 < changes.remTxs.len:
+      discard xp.job(TxJobDataRef(
+        kind:       txJobDelItemIDs,
+        delItemIDsArgs: (
+          # prevKeys: disposing oldest nonce first will use reason
+          #           code below rather than `txInfoErrTxExpiredImplied`
+          itemIDs:  toSeq(changes.remTxs.prevKeys),
+          reason:   txInfoChainHeadUpdate)))
+
+    return true
 
 
 proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
@@ -458,7 +518,7 @@ proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
     xp.maintenanceProcessing
   debug "processed jobs", nJobs
 
-proc nJobsWaiting*(xp: TxPoolRef): int
+proc nJobs*(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Return the number of jobs currently unprocessed, waiting.
   xp.byJob.len
@@ -494,45 +554,13 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
       discard xp.txDB.reassign(item, txItemStaged)
 
 # ------------------------------------------------------------------------------
-# Public functions, immediate actions (not pending as a job.)
-# ------------------------------------------------------------------------------
-
-# core/tx_pool.go(218): func (pool *TxPool) reset(oldHead, newHead ...
-proc setHead*(xp: TxPoolRef; newHeader: BlockHeader): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## This function moves the cached block chain head to a new head implied by
-  ## the argument `newHeader`. On the way of moving there, txs will be added
-  ## to or removed from the pool.
-  ##
-  ## If successful, `true` is returned and the last block in the cache is
-  ## flushed and txs disposed. On error, `false` is returned which happens
-  ## only if there is a problem with the current and the new head on the block
-  ## chain (e.g. orphaned blocks.)
-  if xp.adjustHead(newHeader).isOk:
-    # TODO ...
-    return true
-
-# ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
 proc ethBlock*(xp: TxPoolRef): EthBlock
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the block made up by the txs from the `packed` bucket.
-  result.header = BlockHeader(
-    blockNumber: xp.dbHead.header.blockNumber + 1.u256,
-    timestamp:   getTime().utc.toTime,
-    parentHash:  xp.dbHead.header.blockHash,
-    stateRoot:   xp.dbHead.header.stateRoot,
-    txRoot:      xp.dbHead.header.txRoot,
-    gasLimit:    xp.dbHead.header.gasLimit)
-
-  # may need increase the gas limit
-  if result.header.gasLimit < xp.txDB.byStatus.eq(txItemPacked).gasLimits:
-    result.header.gasLimit = xp.dbHead.maxGasLimit
-
-  result.txs = toSeq(xp.txDB.byStatus.incItemList(txItemPacked)).mapIt(it.tx)
-
+  xp.ethBlockAssemble
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
@@ -544,11 +572,16 @@ proc nItems*(xp: TxPoolRef): TxTabsItemsCount
   ## some totals.
   xp.txDB.nItems
 
+proc topHeader*(xp: TxPoolRef): BlockHeader {.inline.} =
+  ## Getter, cached block chain insertion point. Typocally, this should be the
+  ## the same header as retrieved by the `getCanonicalHead()` unless in the
+  ## middle of a mining update.
+  xp.dbHead.header
+
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
-
 
 proc baseFee*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
@@ -583,13 +616,20 @@ proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
+proc `topHeader=`*(xp: TxPoolRef; val: BlockHeader)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, cached block chain insertion point. This will also update the
+  ## internally cached `baseFee` (depends on the block chain state.)
+  if xp.dbHead.header != val:
+    xp.dbHead.header = val
+
 proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, base fee update. If there was a value change, this function
   ## rebuilds some internal database table and implies `triggerReorg()`.
   if xp.txDB.baseFee != val:
     xp.txDB.baseFee = val      # cached value, change implies re-org
-    xp.dbHead.baseFee = val    # representative value
+    xp.dbHead.setBaseFee(val)  # representative value
     xp.pDirtyBuckets = true
 
 proc `flags=`*(xp: TxPoolRef; flags: set[TxPoolFlags]) {.inline.} =
@@ -661,16 +701,12 @@ proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
 
 proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
                    reason = txInfoExplicitDisposal;
-                   otherReason = txInfoImpliedDisposal)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                   otherReason = txInfoImpliedDisposal): int
+    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Move item to wastebasket. All items for the same sender with nonces
-  ## greater than the current one are deleted, as well.
-  discard xp.txDB.dispose(item, reason)
-  # also delete all items with higher nonces
-  let rc = xp.txDB.bySender.eq(item.sender)
-  if rc.isOK:
-    for other in rc.value.data.walkItems(item.tx.nonce):
-      discard xp.txDB.dispose(other, otherReason)
+  ## greater than the current one are deleted, as well. The function returns
+  ## the number of items eventally removed.
+  xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
 # ------------------------------------------------------------------------------
 # End

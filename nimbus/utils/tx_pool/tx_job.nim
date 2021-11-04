@@ -48,6 +48,9 @@ type
     txJobAddTxs ##\
       ## Enqueues a batch of transactions
 
+    txJobDelItemIDs ##\
+      ## Enqueues a batch of itemIDs the items of which to be disposed
+
     txJobSetHead ##\
       ## Change the insertion block header. This call might imply
       ## re-calculating current transaction states.
@@ -67,6 +70,11 @@ type
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
         info:  string]
+
+    of txJobDelItemIDs:
+      delItemIDsArgs*: tuple[
+        itemIDs: seq[Hash256],
+        reason:  TxInfo]
 
     of txJobSetHead:
       setHeadArgs*: tuple[

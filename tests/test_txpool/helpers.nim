@@ -10,7 +10,8 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/tx_pool/[tx_desc, tx_gauge, tx_item, tx_tabs],
+  ../../nimbus/utils/tx_pool/[tx_dbhead, tx_desc, tx_gauge, tx_item, tx_tabs],
+  ../../nimbus/utils/tx_pool/tx_tasks/tx_recover,
   ../replay/undump,
   eth/[common, keys],
   stew/[keyed_queue, sorted_set],
@@ -19,11 +20,17 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
-  keyed_queue,
+  tx_dbhead.TxDbHeadBalance,
+  tx_dbhead.TxDbHeadNonce,
+  tx_dbhead.db,
+  tx_dbhead.maxGasLimit,
+  tx_dbhead.setAccountFns,
+  tx_dbhead.trgGasLimit,
   tx_desc.dbHead,
   tx_desc.txDB,
   tx_desc.verify,
   tx_gauge,
+  tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
   tx_tabs.`baseFee=`,
   tx_tabs.any,
