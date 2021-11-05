@@ -41,6 +41,11 @@ type
     offer = 0x07
     accept = 0x08
 
+  ContentMessageType* = enum
+    connectionIdType = 0x00
+    contentType = 0x01
+    enrsType = 0x02
+
   PingMessage* = object
     enrSeq*: uint64
     customPayload*: ByteList
@@ -60,11 +65,14 @@ type
   FindContentMessage* = object
     contentKey*: ByteList
 
-  # TODO: Must become an SSZ Union
   ContentMessage* = object
-    connectionId*: Bytes2
-    content*: ByteList
-    enrs*: List[ByteList, 32]
+    case contentMessageType*: ContentMessageType
+    of connectionIdType:
+      connectionId*: Bytes2
+    of contentType:
+      content*: ByteList
+    of enrsType:
+      enrs*: List[ByteList, 32]
 
   OfferMessage* = object
     contentKeys*: ContentKeysList
@@ -73,7 +81,6 @@ type
     connectionId*: Bytes2
     contentKeys*: ContentKeysBitList
 
-  # TODO: Needs to become an SSZ Union
   Message* = object
     case kind*: MessageKind
     of ping:
@@ -81,7 +88,7 @@ type
     of pong:
       pong*: PongMessage
     of findnode:
-      findNode*: FindNodeMessage
+      findnode*: FindNodeMessage
     of nodes:
       nodes*: NodesMessage
     of findcontent:
@@ -104,7 +111,7 @@ type
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong
-  elif T is FindNodeMessage: findNode
+  elif T is FindNodeMessage: findnode
   elif T is NodesMessage: nodes
   elif T is FindContentMessage: findcontent
   elif T is ContentMessage: content
@@ -122,42 +129,24 @@ func fromSszBytes*(T: type UInt256, data: openArray[byte]):
   T.fromBytesLE(data)
 
 proc encodeMessage*[T: SomeMessage](m: T): seq[byte] =
-  ord(messageKind(T)).byte & SSZ.encode(m)
+  # TODO: Could/should be macro'd away,
+  # or we just use SSZ.encode(Message) directly
+  when T is PingMessage: SSZ.encode(Message(kind: ping, ping: m))
+  elif T is PongMessage: SSZ.encode(Message(kind: pong, pong: m))
+  elif T is FindNodeMessage: SSZ.encode(Message(kind: findnode, findnode: m))
+  elif T is NodesMessage: SSZ.encode(Message(kind: nodes, nodes: m))
+  elif T is FindContentMessage: SSZ.encode(Message(kind: findcontent, findcontent: m))
+  elif T is ContentMessage: SSZ.encode(Message(kind: content, content: m))
+  elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
+  elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
 
 proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
-  # Decodes to the specific `Message` type.
-  if body.len < 1:
-    return err("No message data, peer might not support this talk protocol")
-
-  var kind: MessageKind
-  if not checkedEnumAssign(kind, body[0]):
-    return err("Invalid message type")
-
-  var message = Message(kind: kind)
-
   try:
-    case kind
-    of unused: return err("Invalid message type")
-    of ping:
-      message.ping = SSZ.decode(body.toOpenArray(1, body.high), PingMessage)
-    of pong:
-      message.pong = SSZ.decode(body.toOpenArray(1, body.high), PongMessage)
-    of findNode:
-      message.findNode = SSZ.decode(body.toOpenArray(1, body.high), FindNodeMessage)
-    of nodes:
-      message.nodes = SSZ.decode(body.toOpenArray(1, body.high), NodesMessage)
-    of findcontent:
-      message.findcontent = SSZ.decode(body.toOpenArray(1, body.high), FindContentMessage)
-    of content:
-      message.content = SSZ.decode(body.toOpenArray(1, body.high), ContentMessage)
-    of offer:
-      message.offer = SSZ.decode(body.toOpenArray(1, body.high), OfferMessage)
-    of accept:
-      message.accept = SSZ.decode(body.toOpenArray(1, body.high), AcceptMessage)
+    if body.len < 1: # TODO: This check should probably move a layer down
+      return err("No message data, peer might not support this talk protocol")
+    ok(SSZ.decode(body, Message))
   except SszError:
-    return err("Invalid message encoding")
-
-  ok(message)
+    err("Invalid message encoding")
 
 template innerMessage[T: SomeMessage](message: Message, expected: MessageKind): Option[T] =
   if (message.kind == expected):

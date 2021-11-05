@@ -133,7 +133,6 @@ procSuite "Portal Wire Protocol Tests":
     check:
       content.isOk()
       content.get().enrs.len() == 1
-      content.get().content.len() == 0
 
     await test.stopTest()
 
