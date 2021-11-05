@@ -13,8 +13,8 @@ import
 
 suite "Portal Wire Protocol Message Encodings":
   test "Ping Request":
-    var dataRadius: UInt256
     let
+      dataRadius = UInt256.high() - 1 # Full radius - 1
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
       customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
@@ -22,7 +22,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0101000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
+      "0101000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -33,8 +33,8 @@ suite "Portal Wire Protocol Message Encodings":
       message.ping.customPayload == customPayload
 
   test "Pong Response":
-    var dataRadius: UInt256
     let
+      dataRadius = UInt256.high() div 2.stuint(256) # Radius of half the UInt256
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
       customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
@@ -42,7 +42,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0201000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
+      "0201000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -54,11 +54,11 @@ suite "Portal Wire Protocol Message Encodings":
 
   test "FindNode Request":
     let
-      distances = List[uint16, 256](@[0x0100'u16])
+      distances = List[uint16, 256](@[0x0100'u16, 0x00ff'u16])
       fn = FindNodeMessage(distances: distances)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "03040000000001"
+    check encoded.toHex == "03040000000001ff00"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -110,12 +110,13 @@ suite "Portal Wire Protocol Message Encodings":
       message.nodes.enrs[1] == ByteList(e2.raw)
 
   test "FindContent Request":
+    const contentKeyString = "0x706f7274616c"
     let
-      contentEncoded  = ByteList.init(@[1'u8])
-      fc = FindContentMessage(contentKey: contentEncoded)
+      contentKey = ByteList.init(hexToSeqByte(contentKeyString))
+      fc = FindContentMessage(contentKey: contentKey)
 
     let encoded = encodeMessage(fc)
-    check encoded.toHex == "050400000001"
+    check encoded.toHex == "0504000000706f7274616c"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -123,19 +124,34 @@ suite "Portal Wire Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.kind == findcontent
-      message.findcontent.contentKey == contentEncoded
+      message.findcontent.contentKey == contentKey
 
-  test "Content Response - connectionId":
-    # TODO: Add connection id case test
-    discard
-
-  test "Content Response - payload":
+  test "Content Response - connection id":
     let
-      content = ByteList(@[byte 0x01, 0x02, 0x03])
+      connectionId = Bytes2([byte 0x01, 0x02])
+      c = ContentMessage(
+        contentMessageType: connectionIdType, connectionId: connectionId)
+
+    let encoded = encodeMessage(c)
+    check encoded.toHex == "06000102"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.kind == MessageKind.content
+      message.content.contentMessageType == connectionIdType
+      message.content.connectionId == connectionId
+
+  test "Content Response - content payload":
+    const contentString = "0x7468652063616b652069732061206c6965"
+    let
+      content = ByteList(hexToSeqByte(contentString))
       c = ContentMessage(contentMessageType: contentType, content: content)
 
     let encoded = encodeMessage(c)
-    check encoded.toHex == "0601010203"
+    check encoded.toHex == "06017468652063616b652069732061206c6965"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -187,14 +203,14 @@ suite "Portal Wire Protocol Message Encodings":
       message.offer.contentKeys == contentKeys
 
   test "Accept Response":
+    var contentKeys = ContentKeysBitList.init(8)
+    contentKeys.setBit(0)
     let
       connectionId = Bytes2([byte 0x01, 0x02])
-      contentKeys = ContentKeysBitList.init(8)
-      a = AcceptMessage(connectionId: connectionId,
-        contentKeys: contentKeys)
+      a = AcceptMessage(connectionId: connectionId, contentKeys: contentKeys)
 
     let encoded = encodeMessage(a)
-    check encoded.toHex == "080102060000000001"
+    check encoded.toHex == "080102060000000101"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
