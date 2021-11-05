@@ -32,6 +32,74 @@
 ##   the bytes threshold, then replies with what it fetched.  Usually there is
 ##   no item at the exact path `limit`, so there is one after.
 ##
+## - `GetAccountRanges` parameters `origin` and `limit` must be 32 byte blobs.
+##   There is no reason why empty limit is not allowed here when it is allowed
+##   for `GetStorageRanges`, it just isn't.
+##
+## `GetStorageRanges` quirks for Geth compatibility
+## ------------------------------------------------
+##
+## When calling a Geth peer with `GetStorageRanges`:
+##
+## - Parameters `origin` and `limit` may each be empty blobs, which mean "all
+##   zeros" (0x00000...) or "no limit" (0xfffff...)  respectively.
+##
+##   (Blobs shorter than 32 bytes can also be given, and they are extended with
+##   zero bytes; longer than 32 bytes can be given and are truncated, but this
+##   is Geth being too accepting, and shouldn't be used.)
+##
+## - In the `slots` reply, the last account's storage list may be empty even if
+##   that account has non-empty storage.
+##
+##   This happens when the bytes threshold is reached just after finishing
+##   storage for the previous account, or when `origin` is greater than the
+##   first account's last storage slot.  When either of these happens, `proof`
+##   is non-empty.  In the case of `origin` zero or empty, the non-empty proof
+##   only contains the left-side boundary proof, because it meets the condition
+##   for omitting the right-side proof described in the next point.
+##
+## - In the `proof` reply, the right-side boundary proof is only included if
+##   the last returned storage slot has non-zero path and `origin != 0`, or if
+##   the result stops due to reaching the bytes threshold.
+##
+##   Because there's only one proof anyway if left-side and right-side are the
+##   same path, this works out to mean the right-side proof is omitted in cases
+##   where `origin == 0` and the result stops at a slot `>= limit` before
+##   reaching the bytes threshold.
+##
+##   Although the specification doesn't say anything about `limit`, this is
+##   against the spirit of the specification rule, which says the right-side
+##   proof is always included if the last returned path differs from the
+##   starting hash.
+##
+##   The omitted right-side proof can cause problems when using `limit`.
+##   In other words, when doing range queries, or merging results from
+##   pipelining where different `stateRoot` hashes are used as time progresses.
+##   Workarounds:
+##
+##   - Fetch the proof using a second `GetStorageRanges` query with non-zero
+##     `origin` (perhaps equal to `limit`; use `origin = 1` if `limit == 0`).
+##
+##   - Avoid the condition by using `origin >= 1` when using `limit`.
+##
+##   - Use trie node traversal (`snap` `GetTrieNodes` or `eth` `GetNodeData`)
+##     to obtain the omitted proof.
+##
+## - When multiple accounts are requested with `origin > 0`, only one account's
+##   storage is returned.  There is no point requesting multiple accounts with
+##   `origin > 0`.  (It might be useful if it treated `origin` as applying to
+##   only the first account, but it doesn't.)
+##
+## - When multiple accounts are requested with non-default `limit` and
+##   `origin == 0`, and the first account result stops at a slot `>= limit`
+##   before reaching the bytes threshold, storage for the other accounts in the
+##   request are returned as well.  The other accounts are not limited by
+##   `limit`, only the bytes threshold.  The right-side proof is omitted from
+##   `proof` when this happens, because this is the same condition as described
+##   earlier for omitting the right-side proof.  (It might be useful if it
+##   treated `origin` as applying to only the first account and `limit` to only
+##   the last account, but it doesn't.)
+##
 ## Performance benefits
 ## --------------------
 ##
@@ -198,26 +266,46 @@ p2pProtocol snap1(version = 1,
     proc getStorageRanges(peer: Peer, rootHash: TrieHash,
                           accounts: openArray[LeafPath],
                           # Next line differs from spec to match Geth.
-                          origin: LeafPath, limit: LeafPath,
+                          origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =
-      if origin == leafLow and limit == leafHigh:
-        # Fetching storage for multiple accounts.
-        tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
-          accountPaths=accounts.len,
-          stateRoot=($rootHash), responseBytes, peer
-      elif accounts.len == 1:
-        # Fetching partial storage for one account, aka. "large contract".
-        tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
-          storagePathStart=($origin), storagePathLimit=($limit),
-          stateRoot=($rootHash), responseBytes, peer
-      else:
-        # This branch is separated because these shouldn't occur.  It's not
-        # really specified what happens when there are multiple accounts and
-        # non-default path range.
-        tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
-          accountPaths=accounts.len,
-          storagePathStart=($origin), storagePathLimit=($limit),
-          stateRoot=($rootHash), responseBytes, peer
+      template describe(value: openArray[byte]): string =
+        if value.len == 0: "(empty)"
+        elif value.len == 32: value.toHex
+        else: "(non-standard-len=" & $value.len & ')' & value.toHex
+
+      if tracePackets:
+        var (originIsDefiniteLow, limitIsDefiniteHigh) = (false, false)
+        if origin.len == 0 or origin.len == 32:
+          originIsDefiniteLow = true
+          for i in 0 ..< origin.len:
+            if origin[i] != 0x00:
+              originIsDefiniteLow = false
+              break
+        if limit.len == 32:
+          limitIsDefiniteHigh = true
+          for i in 0 ..< limit.len:
+            if limit[i] != 0xff:
+              limitIsDefiniteHigh = false
+              break
+
+        if originIsDefiniteLow and limitIsDefiniteHigh:
+          # Fetching storage for multiple accounts.
+          tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
+            accountPaths=accounts.len,
+            stateRoot=($rootHash), responseBytes, peer
+        elif accounts.len == 1:
+          # Fetching partial storage for one account, aka. "large contract".
+          tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
+            storagePathStart=describe(origin), storagePathLimit=describe(limit),
+            stateRoot=($rootHash), responseBytes, peer
+        else:
+          # This branch is separated because these shouldn't occur.  It's not
+          # really specified what happens when there are multiple accounts and
+          # non-default path range.
+          tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
+            accountPaths=accounts.len,
+            storagePathStart=describe(origin), storagePathLimit=describe(limit),
+            stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", sent=0, peer
       await response.send(@[], @[])
