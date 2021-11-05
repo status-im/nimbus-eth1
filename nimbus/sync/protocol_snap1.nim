@@ -238,6 +238,24 @@ proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) {.inlin
   else:
     rlpWriter.append(account.codeHash)
 
+# TODO: Don't know why, but the `p2pProtocol` can't handle this type.  It tries
+# to serialise the `Option` as an object, looking at the internal fields.  But
+# then fails because they are private fields.
+#
+## RLP serialisation for `Option[SnapPath]`.
+#
+#proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] {.inline.} =
+#  if rlp.blobLen == 0 and rlp.isBlob:
+#    result = none(SnapPath)
+#  else:
+#    result = some(read(rlp, SnapPath))
+
+#proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) {.inline.} =
+#  if value.isNone:
+#    rlpWriter.append("")
+#  else:
+#    rlpWriter.append(value.unsafeGet)
+
 p2pProtocol snap1(version = 1,
                   rlpxName = "snap",
                   useRequestIds = true):
