@@ -16,6 +16,13 @@ import
   eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
   ./sync_types
 
+export
+  tracePackets, tracePacket,
+  traceGossips, traceGossip,
+  traceTimeouts, traceTimeout,
+  traceNetworkErrors, traceNetworkError,
+  tracePacketErrors, tracePacketError
+
 type
   NewBlockHashesAnnounce* = object
     hash: KeccakHash
@@ -36,11 +43,6 @@ type
     bestBlockHash*: KeccakHash
     bestDifficulty*: DifficultyInt
 
-export
-  tracePackets,
-  traceGossips,
-  traceHandshakes
-
 const
   maxStateFetch* = 384
   maxBodiesFetch* = 128
@@ -49,17 +51,6 @@ const
   ethVersion* = 66
 
 func toHex*(hash: KeccakHash): string = hash.data.toHex
-
-template tracePacket*(msg: static[string], args: varargs[untyped]) =
-  if tracePackets: trace `msg`, `args`
-template traceGossip*(msg: static[string], args: varargs[untyped]) =
-  if traceGossips: trace `msg`, `args`
-template traceTimeout*(msg: static[string], args: varargs[untyped]) =
-  if traceTimeouts: trace `msg`, `args`
-template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
-  if traceNetworkErrors: trace `msg`, `args`
-template tracePacketError*(msg: static[string], args: varargs[untyped]) =
-  if tracePacketErrors: trace `msg`, `args`
 
 func traceStep*(request: BlocksRequest): string =
   var str = if request.reverse: "-" else: "+"

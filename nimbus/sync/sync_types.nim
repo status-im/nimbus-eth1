@@ -29,6 +29,17 @@ const
   traceIndividualNodes* = false
     ## Whether to `trace` log each trie node, account, storage, receipt, etc.
 
+template tracePacket*(msg: static[string], args: varargs[untyped]) =
+  if tracePackets: trace `msg`, `args`
+template traceGossip*(msg: static[string], args: varargs[untyped]) =
+  if traceGossips: trace `msg`, `args`
+template traceTimeout*(msg: static[string], args: varargs[untyped]) =
+  if traceTimeouts: trace `msg`, `args`
+template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
+  if traceNetworkErrors: trace `msg`, `args`
+template tracePacketError*(msg: static[string], args: varargs[untyped]) =
+  if tracePacketErrors: trace `msg`, `args`
+
 type
   NewSync* = ref object
     ## Shared state among all peers of a syncing node.
