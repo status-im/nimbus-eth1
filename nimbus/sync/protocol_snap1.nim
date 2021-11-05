@@ -7,10 +7,30 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 ## This module implements Ethereum Snapshot Protocol (SNAP), `snap/1`, as
-## specified at:
+## specified at the reference below, but modified for Geth compatibility.
 ##
 ## - [Ethereum Snapshot Protocol (SNAP)]
 ##   (https://github.com/ethereum/devp2p/blob/master/caps/snap.md)
+##
+## Note: The `snap/1` specification doesn't match reality.  If we implement the
+## protocol as specified, Geth drops the peer connection.  We must do as Geth
+## expects.
+##
+## Modifications for Geth compatibility
+## ------------------------------------
+##
+## - `GetAccountRanges` and `GetStorageRanges` take parameters `origin` and
+##   `limit`, instead of a single `startingHash` parameter in the
+##   specification.  `origin` and `limit` are 256-bit paths representing the
+##   starting hash and ending trie path, both inclusive.
+##
+## - If the `snap/1` specification is followed (omitting `limit`), Geth 1.10
+##   disconnects immediately so we must follow this deviation.
+##
+## - Results from either call may include one item with path `>= limit`.  Geth
+##   fetches data from its internal database until it reaches this condition or
+##   the bytes threshold, then replies with what it fetched.  Usually there is
+##   no item at the exact path `limit`, so there is one after.
 ##
 ## Performance benefits
 ## --------------------
@@ -158,9 +178,12 @@ p2pProtocol snap1(version = 1,
     # User message 0x00: GetAccountRange.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getAccountRange(peer: Peer, rootHash: TrieHash,
-                         startingHash: LeafPath, responseBytes: uint64) =
+                         # Next line differs from spec to match Geth.
+                         origin: LeafPath, limit: LeafPath,
+                         responseBytes: uint64) =
       tracePacket "<< Received snap.GetAccountRange (0x00)",
-        pathStart=($startingHash), stateRoot=($rootHash), responseBytes, peer
+        pathStart=($origin), pathLimit=($limit), stateRoot=($rootHash),
+        responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", sent=0, peer
       await response.send(@[], @[])
@@ -173,25 +196,27 @@ p2pProtocol snap1(version = 1,
     # User message 0x02: GetStorageRanges.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getStorageRanges(peer: Peer, rootHash: TrieHash,
-                          accountHashes: openArray[LeafPath],
-                          startingHash: LeafPath,
+                          accounts: openArray[LeafPath],
+                          # Next line differs from spec to match Geth.
+                          origin: LeafPath, limit: LeafPath,
                           responseBytes: uint64) =
-      if startingHash == leafLow:
+      if origin == leafLow and limit == leafHigh:
         # Fetching storage for multiple accounts.
         tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
-          accountPaths=accountHashes.len,
+          accountPaths=accounts.len,
           stateRoot=($rootHash), responseBytes, peer
-      elif accountHashes.len == 1:
+      elif accounts.len == 1:
         # Fetching partial storage for one account, aka. "large contract".
         tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
-          storagePathStart=($startingHash),
+          storagePathStart=($origin), storagePathLimit=($limit),
           stateRoot=($rootHash), responseBytes, peer
       else:
         # This branch is separated because these shouldn't occur.  It's not
         # really specified what happens when there are multiple accounts and
         # non-default path range.
         tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
-          accountPaths=accountHashes.len, storagePathStart=($startingHash),
+          accountPaths=accounts.len,
+          storagePathStart=($origin), storagePathLimit=($limit),
           stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", sent=0, peer
