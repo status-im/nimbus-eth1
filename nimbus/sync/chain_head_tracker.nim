@@ -134,19 +134,19 @@ proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
   ## Trace messages when peer canonical head is confirmed or updated.
   if sp.syncMode != SyncLocked:
     debug "Sync: Now tracking chain head of peer",
-      `block`=bestNumber, hash=($bestHash), peer=sp
+      `block`=bestNumber, blockHash=($bestHash), peer=sp
   elif bestNumber > sp.bestBlockNumber:
     if bestNumber == sp.bestBlockNumber + 1:
       debug "Sync: Peer chain head advanced one block",
-        advance=1, `block`=bestNumber, hash=($bestHash), peer=sp
+        advance=1, `block`=bestNumber, blockHash=($bestHash), peer=sp
     else:
       debug "Sync: Peer chain head advanced some blocks",
         advance=(sp.bestBlockNumber - bestNumber),
-        `block`=bestNumber, hash=($bestHash), peer=sp
+        `block`=bestNumber, blockHash=($bestHash), peer=sp
   elif bestNumber < sp.bestBlockNumber or bestHash != sp.bestBlockHash:
     debug "Sync: Peer chain head reorg detected",
       advance=(sp.bestBlockNumber - bestNumber),
-      `block`=bestNumber, hash=($bestHash), peer=sp
+      `block`=bestNumber, blockHash=($bestHash), peer=sp
 
 proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
                    bestHash: BlockHash) =
