@@ -249,9 +249,14 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
+      template describeOrigin: string =
+        if origin == leafLow: "min" else: origin.toHex
+      template describeLimit: string =
+        if limit == leafHigh: "max" else: limit.toHex
+
       tracePacket "<< Received snap.GetAccountRange (0x00)",
-        pathStart=($origin), pathLimit=($limit), stateRoot=($rootHash),
-        responseBytes, peer
+        pathRange=(describeOrigin & '-' & describeLimit),
+        stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", sent=0, peer
       await response.send(@[], @[])
@@ -268,11 +273,6 @@ p2pProtocol snap1(version = 1,
                           # Next line differs from spec to match Geth.
                           origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =
-      template describe(value: openArray[byte]): string =
-        if value.len == 0: "(empty)"
-        elif value.len == 32: value.toHex
-        else: "(non-standard-len=" & $value.len & ')' & value.toHex
-
       if tracePackets:
         var (originIsDefiniteLow, limitIsDefiniteHigh) = (false, false)
         if origin.len == 0 or origin.len == 32:
@@ -288,6 +288,15 @@ p2pProtocol snap1(version = 1,
               limitIsDefiniteHigh = false
               break
 
+        template describe(value: openArray[byte]): string =
+          if value.len == 0: "(empty)"
+          elif value.len == 32: value.toHex
+          else: "(non-standard-len=" & $value.len & ')' & value.toHex
+        template describeOrigin: string =
+          if originIsDefiniteLow: "min" else: describe(origin)
+        template describeLimit: string =
+          if limitIsDefiniteHigh: "max" else: describe(limit)
+
         if originIsDefiniteLow and limitIsDefiniteHigh:
           # Fetching storage for multiple accounts.
           tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
@@ -296,7 +305,8 @@ p2pProtocol snap1(version = 1,
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
           tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
-            storagePathStart=describe(origin), storagePathLimit=describe(limit),
+            accountPaths=1,
+            storagePathRange=(describeOrigin & '-' & describeLimit),
             stateRoot=($rootHash), responseBytes, peer
         else:
           # This branch is separated because these shouldn't occur.  It's not
@@ -304,7 +314,7 @@ p2pProtocol snap1(version = 1,
           # non-default path range.
           tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
             accountPaths=accounts.len,
-            storagePathStart=describe(origin), storagePathLimit=describe(limit),
+            storagePathRange=(describeOrigin & '-' & describeLimit),
             stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", sent=0, peer
@@ -320,7 +330,7 @@ p2pProtocol snap1(version = 1,
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
       tracePacket "<< Received snap.GetByteCodes (0x04)",
-        hashCount=hashes.len, responseBytes, peer
+        hashes=hashes.len, responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.ByteCodes (0x05)", sent=0, peer
       await response.send(@[])
@@ -333,7 +343,7 @@ p2pProtocol snap1(version = 1,
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
       tracePacket "<< Received snap.GetTrieNodes (0x06)",
-        pathCount=paths.len, stateRoot=($rootHash), responseBytes, peer
+        nodePaths=paths.len, stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.TrieNodes (0x07)", sent=0, peer
       await response.send(@[])
