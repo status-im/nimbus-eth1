@@ -111,30 +111,27 @@ template `$`*(paths: (InteriorPath, InteriorPath)): string =
 
 proc traceGetNodeDataSending(request: NodeDataRequest) {.inline.} =
   tracePacket ">> Sending eth.GetNodeData (0x0d)",
-    hashCount=request.hashes.len,
-    pathRange=request.pathRange, peer=request.sp
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceGetNodeDataDelaying(request: NodeDataRequest) {.inline.} =
   tracePacket ">> Delaying eth.GetNodeData (0x0d)",
-    hashCount=request.hashes.len,
-    pathRange=request.pathRange, peer=request.sp
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceGetNodeDataSendError(request: NodeDataRequest,
                                e: ref CatchableError) {.inline.} =
   traceNetworkError ">> Error sending eth.GetNodeData (0x0d)",
-    error=e.msg, hashCount=request.hashes.len,
-    pathRange=request.pathRange, peer=request.sp
+    error=e.msg,
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceNodeDataReplyError(request: NodeDataRequest,
                              e: ref CatchableError) {.inline.} =
   traceNetworkError "<< Error waiting for reply to eth.GetNodeData (0x0d)",
-    error=e.msg, hashCount=request.hashes.len,
-    pathRange=request.pathRange, peer=request.sp
+    error=e.msg,
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceNodeDataReplyTimeout(request: NodeDataRequest) {.inline.} =
   traceTimeout "<< Timeout waiting for reply to eth.GetNodeData (0x0d)",
-    hashCount=request.hashes.len,
-    pathRange=request.pathRange, peer=request.sp
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) {.inline.} =
   # `request` can be `nil` because we don't always know which request
@@ -144,8 +141,7 @@ proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) {.inline.} 
       got=0, peer=sp
   else:
     tracePacket "<< Got eth.NodeData (0x0e)",
-      got=0, requested=request.hashes.len,
-      pathRange=request.pathRange, peer=sp
+      got=0, requested=request.hashes.len, pathRange=request.pathRange, peer=sp
 
 proc traceNodeDataReplyUnmatched(sp: SyncPeer, got: int) {.inline.} =
   # There is no request for this reply.  Therefore `sp` must be included.
