@@ -14,6 +14,7 @@
 
 
 import
+  std/[tables],
   ../../../db/db_chain,
   ../tx_dbhead,
   ../tx_desc,
@@ -27,8 +28,13 @@ type
   TxHeadDiffRef* = ref object ##\
     ## Diff data, txs changes that apply after changing the head\
     ## insertion point of the block chain
-    addTxs*: KeyedQueue[Hash256,Transaction] ## txs to add, preserve order
-    remTxs*: KeyedQueueNV[Hash256]           ## txs to remove
+
+    addTxs*: KeyedQueue[Hash256,Transaction] ##\
+      ## txs to add; using a queue makes it more intuive to delete
+      ## items while travesing the queue in a loop.
+
+    remTxs*: Table[Hash256,bool] ##\
+      ## txs to remove
 
 logScope:
   topics = "tx-pool head adjust"
@@ -43,12 +49,12 @@ logScope:
 proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [Defect,CatchableError].} =
   for tx in xp.dbhead.db.getBlockBody(blockHash).transactions:
-    discard kq.addTxs.prepend(tx.itemID,tx)
+    kq.addTxs[tx.itemID] = tx
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [Defect,CatchableError].} =
   for tx in xp.dbhead.db.getBlockBody(blockHash).transactions:
-    discard kq.addTxs.prepend(tx.itemID,tx)
+    kq.remTxs[tx.itemID] = true
 
 proc init(T: type TxHeadDiffRef): T =
   new result

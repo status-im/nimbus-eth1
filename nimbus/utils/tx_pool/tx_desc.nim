@@ -89,6 +89,7 @@ type
     minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
     stagedItems: bool           ## Some items were staged (since last check)
     dirtyBuckets: bool          ## Buckets need to be updated
+    doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
     algoFlags: set[TxPoolFlags] ## Packer strategy symbols
 
 
@@ -186,6 +187,10 @@ proc pStagedItems*(xp: TxPoolRef): bool {.inline.} =
   ## Getter, some updates since last check
   xp.param.stagedItems
 
+proc pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] {.inline.} =
+  ## Getter, cached block chain head was moved back
+  xp.param.doubleCheck
+
 proc pMinFeePrice*(xp: TxPoolRef): GasPrice {.inline.} =
   ## Getter
   xp.param.minFeePrice
@@ -214,6 +219,14 @@ proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) {.inline.} =
 proc `pStagedItems=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
   xp.param.stagedItems = val
+
+proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) {.inline.} =
+  ## Pseudo setter
+  xp.param.doubleCheck.add val
+
+proc pDoubleCheckFlush*(xp: TxPoolRef) {.inline.} =
+  ## Pseudo setter
+  xp.param.doubleCheck.setLen(0)
 
 proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
   ## Setter

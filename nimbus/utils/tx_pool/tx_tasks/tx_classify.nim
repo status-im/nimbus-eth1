@@ -185,10 +185,10 @@ proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool
   ## Check a (typically new) transaction whether it should be accepted at all
   ## or re-jected right away.
 
-  if not xp.checkTxBasic(item):
+  if not xp.checkTxNonce(item):
     return false
 
-  if not xp.checkTxNonce(item):
+  if not xp.checkTxBasic(item):
     return false
 
   true

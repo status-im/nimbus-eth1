@@ -150,14 +150,17 @@ proc toKMG*[T](s: T): string =
       return
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-proc toHex*(acc: EthAddress): string =
-  acc.toSeq.mapIt(&"{it:02x}").join
+proc pp*(a: EthAddress): string =
+  a.mapIt(it.toHex(2)).join[12 .. 19].toLowerAscii
+
+proc pp*(a: Hash256): string =
+  a.data.mapIt(it.toHex(2)).join[24 .. 31].toLowerAscii
 
 proc pp*(q: seq[(EthAddress,int)]): string =
-  "[" & q.mapIt(&"{it[0].toHex[14..19]}:{it[1]:03d}").join(",") & "]"
+  "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"
 
 proc pp*(w: TxItemStatus): string =
   ($w).replace("txItem")
@@ -226,6 +229,13 @@ proc pp*(w: TxTabsItemsCount): string =
 
 proc pp*(w: TxTabsGasTotals): string =
   &"{w.pending}/{w.staged}/{w.packed}"
+
+# ------------------------------------------------------------------------------
+# Public functions, other
+# ------------------------------------------------------------------------------
+
+proc toHex*(acc: EthAddress): string =
+  acc.toSeq.mapIt(it.toHex(2)).join
 
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   let start = getTime()

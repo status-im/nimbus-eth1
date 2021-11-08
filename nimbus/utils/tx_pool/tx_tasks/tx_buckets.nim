@@ -15,10 +15,12 @@
 import
   std/[tables],
   ../tx_desc,
+  ../tx_info,
   ../tx_item,
   ../tx_tabs,
   ../tx_tabs/tx_status,
   ./tx_classify,
+  ./tx_dispose,
   chronicles,
   eth/[common, keys]
 
@@ -54,6 +56,32 @@ proc bucketsUpdateAll*(xp: TxPoolRef): bool
   var
     stagedItemsAdded = false
     stashed: Table[EthAddress,seq[TxItemRef]]
+
+  # Prepare
+  if 0 < xp.pDoubleCheck.len:
+    for item in xp.pDoubleCheck:
+      if item.reject == txInfoOk:
+        # Check whether there was a gap when the head was moved backwards.
+        let rc = xp.txDB.bySender.eq(item.sender).any.gt(item.tx.nonce)
+        if rc.isOK:
+          let nextItem = rc.value.data
+          if item.tx.nonce + 1 < nextItem.tx.nonce:
+            discard xp.disposeItemAndHigherNonces(
+              item, txInfoErrNonceGap, txInfoErrImpliedNonceGap)
+      else:
+        # For failed txs, make sure that the account state has not
+        # changed. Assuming that this list is complete, then there are
+        # no other account affected.
+        let rc = xp.txDB.bySender.eq(item.sender).any.ge(AccountNonce.low)
+        if rc.isOK:
+          let firstItem = rc.value.data
+          if not xp.classifyValid(firstItem):
+            discard xp.disposeItemAndHigherNonces(
+              firstItem, txInfoErrNonceGap, txInfoErrImpliedNonceGap)
+
+    # Clean up that queue
+    xp.pDoubleCheckFlush
+
 
   # PENDING
   #

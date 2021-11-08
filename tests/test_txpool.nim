@@ -170,7 +170,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       # make sure that the block chain was initialised
       check capture.numBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
-      check xp.nItems.total == foldl(statCount.toSeq, a+b)
+      check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
       #                        ^^^ sum up statCount[] values
 
       # make sure that PRNG did not go bonkers
@@ -781,7 +781,7 @@ proc runTxPackerTests(noisy = true) =
           check xq.nItems.disposed == 0
 
           # assemble block from `packed` bucket
-          let total = foldl(xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
+          let total = foldl(@[0.GasInt]&xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
           check xq.gasTotals.packed == total
 
           noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
@@ -845,40 +845,45 @@ proc runTxPackerTests(noisy = true) =
 
           noisy.say "***", "2st bLock size=", newTotal, " stats=", newStats.pp
 
-      block:
+    # -------------------------------------------------
+
+    block:
+      var
+        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
+      let
+        (nMinTxs, nTrgTxs) = (15, 15)
+        (nMinAccounts, nTrgAccounts) = (1, 4)
+
+      test &"Back track block chain head (at least "&
+          &"{nMinTxs} txs, {nMinAccounts} known accounts)":
+
+        # step back some blocks and provied a rolled back fake per-account
+        # state environment for the `backHeader` block chain position
         let
-          (nMinTxs, nTrgTxs) = (15, 15)
-          (nMinAccounts, nTrgAccounts) = (1, 4)
+          (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
+          fakeAccounts = xq.getAmendedAccounts(backTxs)
+          stats = xq.nItems
 
-        test &"Back track block chain head (at least "&
-            &"{nMinTxs} txs, {nMinAccounts} known accounts)":
+        # verify that test would not degenerate
+        check nMinAccounts <= accLst.len
+        check nMinTxs <= backTxs.len
 
-          # step back some blocks and provied a rolled back fake per-account
-          # state environment for the `backHeader` block chain position
-          let
-            (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
-            fakeAccounts = xq.getAmendedAccounts(backTxs)
-            stats = xq.nItems
+        noisy.say "***",
+          "back tracked block chain:",
+          &" {backTxs.len} txs, {accLst.len} known accounts"
 
-          # verify that test would not degenerate
-          check nMinAccounts <= accLst.len
-          check nMinTxs <= backTxs.len
+        check xq.nJobs == 0                   # want cleared job queue
+        check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
+        xq.dbHead.setAccountFns(              # set up roll back fake accounts
+          fakeAccounts.back.nonce,
+          fakeAccounts.back.balance)
+        xq.topHeader = backHeader             # move insertion point
+        xq.jobCommit                          # apply job diffs
 
-          noisy.say "***",
-            "back tracked block chain:",
-            &" {backTxs.len} txs, {accLst.len} known accounts"
-
-          check xq.nJobs == 0                   # want cleared job queue
-          check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
-          xq.dbHead.setAccountFns(              # set up roll back fake accounts
-            fakeAccounts.back.nonce,
-            fakeAccounts.back.balance)
-          xq.topHeader = backHeader             # move insertion point
-          xq.jobCommit                          # apply job diffs
-
-          # make sure that all txs have been added to the pool
-          check stats.total + backTxs.len == xq.nItems.total
-          check stats.disposed == xq.nItems.disposed
+        # make sure that all txs have been added to the pool
+        let nFailed = xq.nItems.disposed - stats.disposed
+        check stats.disposed == 0
+        check stats.total + backTxs.len == xq.nItems.total
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -906,7 +911,7 @@ when isMainModule:
     capts2: CaptureSpecs = (
                 MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
 
-  noisy.runTxLoader(baseFee, capture = capts0)
+  noisy.runTxLoader(baseFee, capture = capts1)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
   noisy.runTxPackerTests

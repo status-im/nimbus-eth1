@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  std/[strutils],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/utils/tx_pool/tx_item,
   ./helpers,
@@ -70,11 +71,11 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
     tx1Signed = tx1.sign(prvKey.toPrvKey)
   block:
     let rc = tx0Signed.ecRecover
-    if rc.isErr or rc.value.toHex != pubKey:
+    if rc.isErr or rc.value.toHex.toLowerAscii != pubKey:
       return
   block:
     let rc = tx1Signed.ecRecover
-    if rc.isErr or rc.value.toHex != pubKey:
+    if rc.isErr or rc.value.toHex.toLowerAscii != pubKey:
       return
   (item,tx0Signed,tx1Signed)
 

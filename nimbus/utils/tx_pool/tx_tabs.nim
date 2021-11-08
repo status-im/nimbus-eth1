@@ -242,6 +242,15 @@ proc reject*(xp: TxTabsRef; tx: var Transaction;
   let item = TxItemRef.init(tx, reason, status, info)
   xp.byRejects[item.itemID] = item
 
+proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Variant of `reject()` with `item` rather than `tx` (assuming
+  ## `item` is not in the database.)
+  if xp.maxRejects <= xp.byRejects.len:
+    discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
+  item.reject = reason
+  xp.byRejects[item.itemID] = item
+
 proc reject*(xp: TxTabsRef; tx: Transaction;
              reason: TxInfo; status = txItemPending; info = "")
     {.gcsafe,raises: [Defect,KeyError].} =

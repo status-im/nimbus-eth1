@@ -24,6 +24,17 @@ type
       ## Tx superseded by another one with same <sender,nonce> index
       "Sender/nonce index superseded"
 
+    txInfoErrNonceGap = ##\
+      ## Non consecutive nonces detected after moving back the block chain
+      ## head. This should not happen and indicates an inconsistency between
+      ## cached transactions and the ones on the block chain.
+      "nonce gap"
+
+    txInfoErrImpliedNonceGap = ##\
+      ## Implied disposal, applies to transactions with higher nonces after
+      ## a `txInfoErrNonceGap` error.
+      "implied nonce gap"
+
     txInfoExplicitDisposal = ##\
       ## Unspecified disposal reason (fallback value)
       "on-demand disposal"
@@ -32,7 +43,7 @@ type
       ## Implied disposal, typically implied by greater nonces (fallback value)
       "implied disposal"
 
-    # ------ Miscellaneous errors ------------------------------------
+    # ------ Miscellaneous errors ----------------------------------------------
 
     txInfoErrUnspecified = ##\
       ## Some unspecified error occured
@@ -55,7 +66,7 @@ type
       ## transaction.
       "txpool is full"
 
-    # ------ Transaction format/parsing problems ---------------------
+    # ------ Transaction format/parsing problems -------------------------------
 
     txInfoErrOversizedData = ##\
       ## The input data of a transaction is greater than some meaningful
@@ -88,7 +99,7 @@ type
       ## Running basic validator failed on current transaction
       "Tx rejected by basic validator"
 
-    # ------ Signature problems ---------------------
+    # ------ Signature problems ------------------------------------------------
 
     txInfoErrInvalidSender = ##\
       ## The transaction contains an invalid signature.
@@ -98,7 +109,7 @@ type
       ## invalid transaction v, r, s values
       "Invalid transaction signature"
 
-    # ------ Gas fee and selection problems ---------------------
+    # ------ Gas fee and selection problems ------------------------------------
 
     txInfoErrUnderpriced = ##\
       ## A transaction's gas price is below the minimum configured for the
@@ -119,7 +130,7 @@ type
       ## Gase fee cap less than base fee
       "Tx has feeCap < baseFee"
 
-    # ------ operational events related to transactions ---------------------
+    # ------- operational events related to transactions -----------------------
 
     txInfoErrTxExpired = ##\
       ## A transaction has been on the system for too long so it was removed.
@@ -130,7 +141,7 @@ type
      ## tx was removed.
      "Tx expired implied"
 
-    # ------- update block chain head --------------------------------------
+    # ------- update/move block chain head -------------------------------------
 
     txInfoErrAncestorMissing = ##\
       ## Cannot forward current head as it is detached from the block chain
@@ -156,7 +167,7 @@ type
       ## Tx becomes obsolete as it is in a mined block, already
       "Tx obsoleted"
 
-    # ------- debugging error codes as used in verifier functions -------
+    # ---------- debugging error codes as used in verifier functions -----------
 
     # failed verifier codes
     txInfoVfyLeafQueue             ## Corrupted leaf item queue

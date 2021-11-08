@@ -49,6 +49,9 @@
 ## * For recycled txs after block chain head adjustments, can we use the
 ##   `tx.value` rather than `tx.gasLimit * tx.gasPrice`?
 ##
+## * Provide unit tests provoking a nonce gap error after back tracking
+##   and moving the block chain head
+##
 ##
 ## Transaction state diagram:
 ## --------------------------
@@ -417,9 +420,10 @@ proc processJobs(xp: TxPoolRef): int
     of txJobAddTxs:
       # Add a batch of txs to the database
       var args = task.data.addTxsArgs
-      for tx in args.txs.mitems:
-        if xp.addTx(tx, args.info):
-          xp.pStagedItems = true # triggers packer
+      let (stagedFlag,topItems) = xp.addTxs(args.txs, args.info)
+      if stagedFlag:
+        xp.pStagedItems = true # triggers packer
+      xp.pDoubleCheckAdd topItems
 
     of txJobDelItemIDs:
       # Dispose a batch of items
@@ -447,8 +451,14 @@ proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Queues a batch of transactions jobs to be processed in due course
-  ## (does not run `jobCommit()`.)
+  ## Queues a batch of transactions jobs to be processed in due course (does
+  ## not run `jobCommit()`.)
+  ##
+  ## The argument Transactions `txs` may come in any order, they will be
+  ## sorted by `<account,nonce>` before adding to the database with the
+  ## least nonce first. For this reason, it is suggested to pass transactions
+  ## in larger groups. Calling single transaction jobs, they must strictly be
+  ## passed smaller nonce before larger nonce.
   discard xp.job(TxJobDataRef(
     kind:     txJobAddTxs,
     addTxsArgs: (
@@ -457,24 +467,11 @@ proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc jobAddTx*(xp: TxPoolRef; tx: var Transaction; info = "")
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `jobAddTxs()` but for a single transaction.
-  discard xp.job(TxJobDataRef(
-    kind:     txJobAddTxs,
-    addTxsArgs: (
-      txs:    @[tx],
-      info:   info)))
-
 proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `jobAddTxs()` but for a single transaction with
-  ## call-by-value `tx` argument.
-  discard xp.job(TxJobDataRef(
-    kind:     txJobAddTxs,
-    addTxsArgs: (
-      txs:    @[tx],
-      info:   info)))
+  ## Variant of `jobAddTxs()` for a single transaction.
+  xp.jobAddTxs(@[tx], info)
+
 
 proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
@@ -500,9 +497,7 @@ proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
       discard xp.job(TxJobDataRef(
         kind:       txJobDelItemIDs,
         delItemIDsArgs: (
-          # prevKeys: disposing oldest nonce first will use reason
-          #           code below rather than `txInfoErrTxExpiredImplied`
-          itemIDs:  toSeq(changes.remTxs.prevKeys),
+          itemIDs:  toSeq(changes.remTxs.keys),
           reason:   txInfoChainHeadUpdate)))
 
     return true

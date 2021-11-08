@@ -57,7 +57,7 @@ proc recoverItem*(xp: TxPoolRef; tx: var Transaction;
         item.init(status, itemInfo)
         return ok(item)
 
-  # New item generated from scratch
+  # New item generated from scratch, e.g. with `nullSender`
   block:
     let rc = TxItemRef.init(tx, itemID, status, info)
     if rc.isOk:

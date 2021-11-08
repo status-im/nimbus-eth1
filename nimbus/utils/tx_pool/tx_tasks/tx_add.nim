@@ -13,6 +13,7 @@
 ##
 
 import
+  std/[tables],
   ../tx_desc,
   ../tx_gauge,
   ../tx_info,
@@ -21,12 +22,32 @@ import
   ./tx_classify,
   ./tx_recover,
   chronicles,
-  eth/[common, keys]
+  eth/[common, keys],
+  stew/[sorted_set]
+
+type
+  NonceList = ##\
+    ## Temporary sorter list
+    SortedSet[AccountNonce,TxItemRef]
+
+  AccouuntNonceTab = ##\
+    ## Temporary sorter table
+    Table[EthAddress,NonceList]
 
 logScope:
   topics = "tx-pool add transaction"
 
 {.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+proc getItemList(tab: var AccouuntNonceTab; key: EthAddress): var NonceList
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if not tab.hasKey(key):
+    tab[key] = NonceList.init
+  tab[key]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -107,10 +128,8 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
         return
       vetted = rc.error
 
-    # Error processing below
-
-  # Error => store in waste basket
-  xp.txDB.reject(item.tx, vetted, item.status, item.info)
+  # Error processing => store in waste basket
+  xp.txDB.reject(item, vetted)
 
   # update gauge
   case vetted:
@@ -127,34 +146,74 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTx*(xp: TxPoolRef; tx: var Transaction; info = ""): bool
+proc addTxs*(xp: TxPoolRef;
+             txs: var openArray[Transaction]; info = ""): (bool,seq[TxItemRef])
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
-  ## Add a transaction. It is tested and stored into either of the `pending`
-  ## or `staged` buckets, or disposed o the waste basket. The function returns
-  ## `true` if the transaction was added to the `staged` bucket.
+  ## Add a list of transactions. The list is sorted after nonces and txs are
+  ## tested and stored into either of the `pending` or `staged` buckets, or
+  ## disposed o the waste basket. The function returns the tuple
+  ## `(staged-indicator,top-items)` as explained below.
+  ##
+  ## *staged-indicator*
+  ##   If `true`, this value indicates that at least one item was added to
+  ##   the `staged` bucket (which suggest a re-run of the packer.)
+  ##
+  ## *top-items*
+  ##   For each sender where txs were added to the bucket database or waste
+  ##   basket, this list keeps the items with the highest nonce (handy for
+  ##   chasing nonce gaps after a back-move of the block chain head.)
+  ##
+  var accTab: AccouuntNonceTab
 
-  # Create tx item wrapper, preferably recovered from waste basket
-  let rc = xp.recoverItem(tx, txItemPending, info)
-  if rc.isOk:
-    return xp.addTx(rc.value)
+  for tx in txs.mitems:
+    var reason: TxInfo
 
-  # Error => store tx in waste basket
-  xp.txDB.reject(tx, rc.error, txItemPending, info)
+    # Create tx item wrapper, preferably recovered from waste basket
+    let rcTx = xp.recoverItem(tx, txItemPending, info)
+    if rcTx.isErr:
+      reason = rcTx.error
+    else:
+      let
+        item = rcTx.value
+        rcInsert = accTab.getItemList(item.sender).insert(item.tx.nonce)
+      if rcInsert.isErr:
+        reason = txInfoErrSenderNonceIndex
+      else:
+        rcInsert.value.data = item # link that item
+        continue
 
-  # update gauge
-  case rc.error:
-  of txInfoErrAlreadyKnown:
-    knownTxMeter(1)
-  of txInfoErrInvalidSender:
-    invalidTxMeter(1)
-  else:
-    unspecifiedErrorMeter(1)
+    # move item to waste basket
+    xp.txDB.reject(tx, reason, txItemPending, info)
 
-proc addTx*(xp: TxPoolRef; tx: Transaction; info = ""): bool
-    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `addTx()` with call-by-value `tx` argument
-  var ty = tx
-  xp.addTx(ty, info)
+    # update gauge
+    case reason:
+    of txInfoErrAlreadyKnown:
+      knownTxMeter(1)
+    of txInfoErrInvalidSender:
+      invalidTxMeter(1)
+    else:
+      unspecifiedErrorMeter(1)
+
+  # Add sorted transaction items
+  for itemList in accTab.mvalues:
+    var
+      rc = itemList.ge(AccountNonce.low)
+      lastItem: TxItemRef # => nil
+
+    while rc.isOK:
+      let (nonce,item) = (rc.value.key,rc.value.data)
+      if xp.addTx(item):
+        result[0] = true
+
+      # Make sure that there is at least one item per sender, prefereably
+      # a non-error item.
+      if item.reject == txInfoOk or lastItem.isNil:
+        lastItem = item
+      rc = itemList.gt(nonce)
+
+    # return the last one in the series
+    if not lastItem.isNil:
+      result[1].add lastItem
 
 # ------------------------------------------------------------------------------
 # End

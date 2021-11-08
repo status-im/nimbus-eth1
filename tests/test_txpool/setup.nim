@@ -285,10 +285,11 @@ proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
     if accTab.len < nAccounts:
       for tx in backBody.transactions:
         let rc = tx.ecRecover
-        if rc.isOK and xp.txDB.bySender.eq(rc.value).isOk:
-          accTab[rc.value] = true
-          if nAccounts <= accTab.len:
-            break
+        if rc.isOK:
+          if xp.txDB.bySender.eq(rc.value).isOk:
+            accTab[rc.value] = true
+            if nAccounts <= accTab.len:
+              break
 
     if nTxs <= txsLst.len and nAccounts <= accTab.len:
       break
