@@ -47,7 +47,6 @@ type
     sender:    EthAddress   ## Sender account address
     info:      string       ## Whatever
     status:    TxItemStatus ## Transaction status (setter available)
-    effGasTip: GasPriceEx   ## Effective gas tip value
     reject:    TxInfo       ## Reason for moving to waste basket
 
 # ------------------------------------------------------------------------------
@@ -191,8 +190,7 @@ proc cost*(tx: Transaction): UInt256 =
 
 # core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc estimatedGasTip*(tx: Transaction;
-                      baseFee: GasPrice): GasPriceEx =
+proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType == TxLegacy:
@@ -237,11 +235,6 @@ proc status*(item: TxItemRef): TxItemStatus =
   ## Getter
   item.status
 
-proc effGasTip*(item: TxItemRef): GasPriceEx =
-  ## Getter, this is typically the cached value of `estimatedGasTip()` for
-  ## a given `baseFee`
-  item.effGasTip
-
 proc reject*(item: TxItemRef): TxInfo =
   ## Getter
   item.reject
@@ -257,10 +250,6 @@ proc `local=`*(item: TxItemRef; val: bool) =
 proc `status=`*(item: TxItemRef; val: TxItemStatus) =
   ## Setter
   item.status = val
-
-proc `effGasTip=`*(item: TxItemRef; val: GasPriceEx) =
-  ## Setter
-  item.effGasTip = val
 
 proc `reject=`*(item: TxItemRef; val: TxInfo) =
   ## Setter

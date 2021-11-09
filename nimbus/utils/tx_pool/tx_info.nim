@@ -174,11 +174,6 @@ type
     # failed verifier codes
     txInfoVfyLeafQueue             ## Corrupted leaf item queue
 
-    txInfoVfyGasTipList            ## Corrupted gas price list structure
-    txInfoVfyGasTipLeafEmpty       ## Empty gas price list leaf record
-    txInfoVfyGasTipLeafQueue       ## Corrupted gas price leaf queue
-    txInfoVfyGasTipTotal           ## Wrong number of leaves
-
     txInfoVfyItemIdList            ## Corrupted ID queue/fifo structure
     txInfoVfyRejectsList           ## Corrupted waste basket structure
     txInfoVfyNonceChain            ## Non-consecutive nonces

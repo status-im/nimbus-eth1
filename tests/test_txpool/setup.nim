@@ -13,7 +13,7 @@ import
   ../../nimbus/[config, chain_config, constants, genesis],
   ../../nimbus/db/[db_chain, accounts_cache],
   ../../nimbus/p2p/chain,
-  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_item],
+  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_dbhead, tx_pool/tx_item],
   ./helpers,
   eth/[common, keys, p2p, trie/db],
   stew/[keyed_queue],
@@ -104,8 +104,7 @@ proc toTxPool*(
               continue
             txPoolOk = true
             result = TxPoolRef.init(db)
-            if 0 < baseFee:
-              result.baseFee = baseFee
+            result.dbHead.setBaseFee(baseFee)
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -131,8 +130,7 @@ proc toTxPool*(
   doAssert not db.isNil
 
   result = TxPoolRef.init(db)
-  if 0 < baseFee:
-    result.baseFee = baseFee
+  result.dbHead.setBaseFee(baseFee)
   result.maxRejects = itList.len
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
@@ -166,8 +164,7 @@ proc toTxPool*(
   doAssert 0 < itemsPC and itemsPC < 100
 
   result = TxPoolRef.init(db)
-  if 0 < baseFee:
-    result.baseFee = baseFee
+  result.dbHead.setBaseFee(baseFee)
   result.maxRejects = itList.len
 
   let

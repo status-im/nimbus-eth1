@@ -138,7 +138,7 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
   xp.startDate = getTime().utc.toTime
 
   xp.dbHead = TxDbHeadRef.init(db)
-  xp.txDB = TxTabsRef.init(xp.dbHead.baseFee)
+  xp.txDB = TxTabsRef.init
   xp.byJob = TxJobRef.init
 
   xp.lifeTime = txItemLifeTime

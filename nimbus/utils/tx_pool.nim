@@ -25,11 +25,11 @@
 ## * Implement re-positioning the current insertion point, typically the head
 ##   of the block chain.
 ##
-## * The packer is not very smart, at the moment. This should be improved.
-##   Some idea:
-##   + Incrementally pack selected items until the total gas limit reaches
-##     the low block size water mark but does not exceed the high water mark.
-##     block size water mark but not the high water mark.
+## * The incremental packer is not very smart, at the moment. This should be
+##   improved. Some idea:
+##   + Pack selected items until the total gas limit reaches the low block
+##     size water mark but does not exceed the high water mark. -- *currently
+##     implemented*
 ##   + Provide an extra optimisation algorithm to improve the situation by
 ##     re-packing as close as possible to the high water mark. This algorithm
 ##     can only replace the last nonce-sorted item per sender due to the
@@ -37,9 +37,6 @@
 ##
 ## * Some table (used for testing & data analysis) might not be needed in
 ##   production environment:
-##   + `byGasTip` (see tx_price.nim), ordered by `estimatedGasTip` (depends on
-##     current value of `baseFee` which in turn depends on the block chain
-##     state/head). This table is most certainly redundant.
 ##   + `byTipCap` (see tx_tipcap.nim), ordered by maxPriorityFee (or gasPrice
 ##     for legay txs). On the other hand, there is a suggestion (see geth
 ##     sources) that there is a by-tip range query of a group of txs for
@@ -296,12 +293,6 @@
 ##   exceed this gas limit are stored into the pending bucket (waiting for the
 ##   next cycle.)
 ##
-## baseFee
-##   Applicable to post-London only and compiled from the current block chain
-##   head. Incoming txs with smaller `maxFee` values are stored in the pending
-##   bucket (waiting for the next cycle.) For practical reasons, `baseFee` is
-##   zero for pre-London block chain states.
-##
 ## minFeePrice, *optional*
 ##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
 ##   that value.
@@ -315,13 +306,17 @@
 ##   For pre-London or legacy txs, this parameter has precedence over
 ##   `minTipPrice`. Txs are packed if the `gasPrice` is at least that value.
 ##
-## trgGasLimit, maxGasLimit
-##   These parameters are derived from the current block chain head. They
-##   limit how many blocks from the packed bucket can be packed into the body
-##   of the new block.
+## trgGasLimit, maxGasLimit, baseFee
+##   These parameters are derived from the current block chain head. The limit
+##   parameters set conditions on how many blocks from the packed bucket can be
+##   packed into the body of a new block. The base fee parameter modifies the
+##   expected gain when packing a new block (is set to *zero* for *pre-London*
+##   blocks.)
 ##
 ## lifeTime
-##   Older job can be purged from the system.
+##   Txs that stay longer in one of the buckets will be  moved to a waste
+##   basket. From there they will be eventually deleted oldest first when
+##   the maximum size would be exceeded.
 ##
 ##
 
@@ -355,7 +350,7 @@ export
   tx_item.GasPrice,
   tx_item.`<=`,
   tx_item.`<`,
-  tx_item.effGasTip,
+  tx_item.effectiveGasTip,
   tx_item.gasTipCap,
   tx_item.info,
   tx_item.itemID,
@@ -432,11 +427,6 @@ proc processJobs(xp: TxPoolRef): int
         let rcItem = xp.txDB.byItemID.eq(itemID)
         if rcItem.isOK:
           discard xp.txDB.dispose(rcItem.value, reason = args.reason)
-
-    of txJobSetHead: # FIXME: tbd
-      # Change the insertion block header. This call might imply
-      # re-calculating all current transaction states.
-      xp.pDirtyBuckets = true
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser
@@ -578,12 +568,6 @@ proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
-proc baseFee*(xp: TxPoolRef): GasPrice
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, retrieves the base fee implying the price list valuation and
-  ## order.
-  xp.txDB.baseFee
-
 proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pAlgoFlags
@@ -617,15 +601,6 @@ proc `topHeader=`*(xp: TxPoolRef; val: BlockHeader)
   ## internally cached `baseFee` (depends on the block chain state.)
   if xp.dbHead.header != val:
     xp.dbHead.header = val
-
-proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, base fee update. If there was a value change, this function
-  ## rebuilds some internal database table and implies `triggerReorg()`.
-  if xp.txDB.baseFee != val:
-    xp.txDB.baseFee = val      # cached value, change implies re-org
-    xp.dbHead.setBaseFee(val)  # representative value
-    xp.pDirtyBuckets = true
 
 proc `flags=`*(xp: TxPoolRef; flags: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.

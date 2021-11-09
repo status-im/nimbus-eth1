@@ -53,10 +53,6 @@ type
     txJobDelItemIDs ##\
       ## Enqueues a batch of itemIDs the items of which to be disposed
 
-    txJobSetHead ##\
-      ## Change the insertion block header. This call might imply
-      ## re-calculating current transaction states.
-
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
     ## Prioritised jobs, either small or important ones.
@@ -77,10 +73,6 @@ type
       delItemIDsArgs*: tuple[
         itemIDs: seq[Hash256],
         reason:  TxInfo]
-
-    of txJobSetHead:
-      setHeadArgs*: tuple[
-        head:  Hash256]
 
 
   TxJobPair* = object     ## Responding to a job queue query

@@ -158,7 +158,7 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
 
     elif algoPacked1559MinTip in xp.pAlgoFlags:
       # Fall back transaction selector scheme
-       if item.effGasTip < xp.pMinTipPrice:
+       if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
          return false
   true
 
@@ -167,7 +167,7 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   if item.tx.txType != TxLegacy:
 
     if algoPacked1559MinTip in xp.pAlgoFlags:
-      if item.effGasTip < xp.pMinTipPrice:
+      if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
         return false
 
     if algoPacked1559MinFee in xp.pAlgoFlags:
@@ -201,7 +201,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.estimatedGasTip(xp.dbHead.baseFee) <= 0.GasPriceEx:
+  if item.tx.effectiveGasTip(xp.dbHead.baseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.txGasCovered(item):

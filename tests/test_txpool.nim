@@ -124,12 +124,11 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
+proc runTxLoader(noisy = true; capture = loadSpecs) =
   let
     elapNoisy = noisy
     veryNoisy = false # noisy
     fileInfo = capture.file.splitFile.name.split(".")[0]
-    suiteInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
     file = capture.dir /  capture.file
 
   # Reset/initialise
@@ -139,7 +138,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
   gasTipCaps.reset
   bcDB = capture.network.blockChainForTesting
 
-  suite &"TxPool: Transactions from {fileInfo} capture{suiteInfo}":
+  suite &"TxPool: Transactions from {fileInfo} capture":
     var xp: TxPoolRef
 
     test &"Import {capture.numBlocks.toKMG} blocks "&
@@ -150,7 +149,6 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
                            getStatus = randStatus,
                            loadBlocks = capture.numBlocks,
                            loadTxs = capture.numTxs,
-                           baseFee = baseFee,
                            noisy = veryNoisy)
 
       # Set txs to pseudo random status
@@ -185,13 +183,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       txList = xp.toItems
       check txList.len == xp.nItems.total
 
-    test "Load gas prices and priority fees":
-
-      elapNoisy.showElapsed("Load gas prices"):
-        for nonceList in xp.txDB.byGasTip.incNonceList:
-          effGasTips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
-
-      check effGasTips.len == xp.txDB.byGasTip.len
+    test "Load priority fees":
 
       elapNoisy.showElapsed("Load priority fee caps"):
         for itemList in xp.txDB.byTipCap.incItemList:
@@ -243,13 +235,11 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check xp.txDB.verify.isOK
 
 
-proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
+proc runTxBaseTests(noisy = true) =
 
-  let
-    elapNoisy = false
-    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+  let elapNoisy = false
 
-  suite &"TxPool: Play with queues and lists{baseInfo}":
+  suite &"TxPool: Play with queues and lists":
 
     block:
       const groupLen = 13
@@ -258,7 +248,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
       test &"Load/forward walk ID queue, " &
           &"deleting groups of at most {groupLen}":
         var
-          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
+          xq = bcDB.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
 
         # Set txs to pseudo random status
@@ -276,7 +266,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
       test &"Load/reverse walk ID queue, " &
           &"deleting in groups of at most {groupLen}":
         var
-          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
+          xq = bcDB.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
 
         # Set txs to pseudo random status
@@ -291,124 +281,10 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
         check seen.len == xq.nItems.total
         check seen.len < groupLen
 
-    # ---------------------------------
-
-    block:
-      var
-        count = 0
-        xq = bcDB.toTxPool(txList, baseFee, noisy)
-      # Set txs to pseudo random status
-      xq.setItemStatusFromInfo
-
-      let
-        delLe = (effGasTips[0].int64 +
-                   ((effGasTips[^1] - effGasTips[0]).int64 div 3)).GasPriceEx
-        delMax = xq.txDB.byGasTip
-                   .le(delLe).ge(AccountNonce.low).first.value.effGasTip
-
-      test &"Load/delete with gas price less equal {delMax.toKMG}, " &
-          &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
-        elapNoisy.showElapsed(&"Deleting gas tips less equal {delMax.toKMG}"):
-          for itemList in xq.txDB.byGasTip.decItemList(maxPrice = delMax):
-            for item in itemList.walkItems:
-              count.inc
-              check xq.txDB.dispose(item,txInfoErrUnspecified)
-              check xq.txDB.verify.isOK
-        check 0 < count
-        check 0 < xq.nItems.total
-        check count + xq.nItems.total == txList.len
-        check xq.nItems.disposed == count
-
-    block:
-      var
-        count = 0
-        xq = bcDB.toTxPool(txList, baseFee, noisy)
-      # Set txs to pseudo random status
-      xq.setItemStatusFromInfo
-
-      let
-        delGe = (effGasTips[^1].int64 -
-                   ((effGasTips[^1] - effGasTips[0]).int64 div 3)).GasPriceEx
-        delMin = xq.txDB.byGasTip
-                   .ge(delGe).ge(AccountNonce.low).first.value.effGasTip
-
-      test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
-          &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
-        elapNoisy.showElapsed(
-            &"Deleting gas tips greater than {delMin.toKMG}"):
-          for itemList in xq.txDB.byGasTip.incItemList(minPrice = delMin):
-            for item in itemList.walkItems:
-              count.inc
-              check xq.txDB.dispose(item,txInfoErrUnspecified)
-              check xq.txDB.verify.isOK
-        check 0 < count
-        check 0 < xq.nItems.total
-        check count + xq.nItems.total == txList.len
-        check xq.nItems.disposed == count
-
-    block:
-      let
-        newBaseFee = if 0 < baseFee: baseFee + 7.GasPrice
-                     else:           42.GasPrice
-
-      test &"Adjust baseFee to {newBaseFee} and back":
-        var
-          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
-          baseNonces: seq[AccountNonce] # second level sequence
-
-        # Set txs to pseudo random status (database will violate
-        # boundary contitions on nonces)
-        xq.setItemStatusFromInfo
-
-        # register sequence of nonces
-        for nonceList in xq.txDB.byGasTip.incNonceList:
-          for itemList in nonceList.incItemList:
-            baseNonces.add itemList.first.value.tx.nonce
-
-        xq.baseFee = newBaseFee
-        check xq.txDB.verify.isOK
-
-        block:
-          var
-            seen: seq[Hash256]
-            tips: seq[GasPriceEx]
-          for nonceList in xq.txDB.byGasTip.incNonceList:
-            tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
-            for itemList in nonceList.incItemList:
-              for item in itemList.walkItems:
-                seen.add item.itemID
-          check txList.len == xq.txDB.byItemID.len
-          check txList.len == seen.len
-          check tips != effGasTips              # values should have changed
-          check seen != txList.mapIt(it.itemID) # order should have changed
-
-        # change back
-        xq.baseFee = baseFee
-        check xq.txDB.verify.isOK
-
-        block:
-          var
-            seen: seq[Hash256]
-            tips: seq[GasPriceEx]
-            nces: seq[AccountNonce]
-          for nonceList in xq.txDB.byGasTip.incNonceList:
-            tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
-            for itemList in nonceList.incItemList:
-              nces.add itemList.first.value.tx.nonce
-              for item in itemList.walkItems:
-                seen.add item.itemID
-          check txList.len == xq.txDB.byItemID.len
-          check txList.len == seen.len
-          check tips == effGasTips              # values restored
-          check nces == baseNonces              # values restored
-          # note: txList[] will be equivalent to seen[] but not necessary
-          #       the same
 
 
-proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
-  let baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
-
-  suite &"TxPool: Play with pool functions and primitives{baseInfo}":
+proc runTxPoolTests(noisy = true) =
+  suite &"TxPool: Play with pool functions and primitives":
 
     block:
       var
@@ -490,7 +366,6 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         xq = bcDB.toTxPool(timeGap = gap,
                            nGapItems = nItems,
                            itList = txList,
-                           baseFee = baseFee,
                            itemsPC = 35,       # arbitrary
                            delayMSecs = 100,   # large enough to process
                            noisy = noisy)
@@ -531,7 +406,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, baseFee, noisy)
+        xq = bcDB.toTxPool(txList, noisy = noisy)
         maxAddr: EthAddress
         nAddrItems = 0
 
@@ -678,11 +553,17 @@ proc runTxPackerTests(noisy = true) =
 
     test &"Calculate some non-trivial base fee":
       var
-        xq = bcDB.toTxPool(txList, 0.GasPrice, noisy = noisy)
+        xq = bcDB.toTxPool(txList, noisy = noisy)
+        feesList = SortedSet[GasPriceEx,bool].init()
+
+      # provide a sorted list of gas fees
+      for item in txList:
+        discard feesList.insert(item.tx.effectiveGasTip(0.GasPrice))
+
       let
-        minKey = max(0, xq.txDB.byGasTip.ge(GasPriceEx.low).value.key.int64)
-        lowKey = xq.txDB.byGasTip.gt(minKey.GasPriceEx).value.key.uint64
-        highKey = xq.txDB.byGasTip.le(GasPriceEx.high).value.key.uint64
+        minKey = max(0, feesList.ge(GasPriceEx.low).value.key.int64)
+        lowKey = feesList.gt(minKey.GasPriceEx).value.key.uint64
+        highKey = feesList.le(GasPriceEx.high).value.key.uint64
         keyRange = highKey - lowKey
         keyStep = max(1u64, keyRange div 500_000)
 
@@ -694,7 +575,7 @@ proc runTxPackerTests(noisy = true) =
       # the following might throw an exception if the table is de-generated
       var nextKey = ntBaseFee
       for _ in [1, 2, 3]:
-        let rcNextKey = xq.txDB.byGasTip.gt(nextKey.GasPriceEx)
+        let rcNextKey = feesList.gt(nextKey.GasPriceEx)
         check rcNextKey.isOK
         nextKey = rcNextKey.value.key.uint64.GasPrice
 
@@ -714,7 +595,7 @@ proc runTxPackerTests(noisy = true) =
           packed = xr.nItems.packed
 
         test &"Load txs with baseFee={ntBaseFee}, "&
-          &"buckets={pending}/{staged}/{packed}":
+            &"buckets={pending}/{staged}/{packed}":
 
           check 0 < pending
           check 0 < staged
@@ -735,13 +616,11 @@ proc runTxPackerTests(noisy = true) =
           check xr.nItems.total == txList.len
           check xr.nItems.disposed == 0
 
-          check xq.baseFee == ntBaseFee
-          xq.baseFee = ntNextFee
-          check xq.baseFee == ntNextFee
-
           # having the same set of txs, setting the xq database to the same
           # base fee as the xr one, the bucket fills of both database must
           # be the same after re-org
+          xq.dbHead.setBaseFee(ntNextFee)
+          xq.triggerReorg
           xq.flags = xq.flags + {algoAutoUpdateBuckets}
           xq.jobCommit(forceMaintenance = true)
 
@@ -763,8 +642,8 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.baseFee = 0.GasPrice
-          check xq.baseFee == 0.GasPrice
+          xq.dbHead.setBaseFee(0.GasPrice)
+          check xq.dbHead.baseFee == 0.GasPrice
           check xq.nItems.disposed == 0
 
           # set minimum target price
@@ -890,10 +769,9 @@ proc runTxPackerTests(noisy = true) =
 # ------------------------------------------------------------------------------
 
 proc txPoolMain*(noisy = defined(debug)) =
-  const baseFee = 42.GasPrice
-  noisy.runTxLoader(baseFee)
-  noisy.runTxBaseTests(baseFee)
-  noisy.runTxPoolTests(baseFee)
+  noisy.runTxLoader
+  noisy.runTxBaseTests
+  noisy.runTxPoolTests
   noisy.runTxPackerTests
 
 when isMainModule:
@@ -903,7 +781,6 @@ when isMainModule:
 
   const
     noisy = defined(debug)
-    baseFee = 42.GasPrice
     capts0: CaptureSpecs =
                 goerliCapture.localDir
     capts1: CaptureSpecs = (
@@ -911,13 +788,13 @@ when isMainModule:
     capts2: CaptureSpecs = (
                 MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
 
-  noisy.runTxLoader(baseFee, capture = capts1)
-  noisy.runTxBaseTests(baseFee)
-  noisy.runTxPoolTests(baseFee)
+  noisy.runTxLoader(capture = capts1)
+  noisy.runTxBaseTests
+  noisy.runTxPoolTests
   noisy.runTxPackerTests
 
-  #noisy.runTxLoader(baseFee, dir = ".")
-  #noisy.runTxPoolTests(baseFee)
+  #noisy.runTxLoader(dir = ".")
+  #noisy.runTxPoolTests
 
 # ------------------------------------------------------------------------------
 # End
