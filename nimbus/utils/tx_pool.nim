@@ -49,6 +49,8 @@
 ## * Provide unit tests provoking a nonce gap error after back tracking
 ##   and moving the block chain head
 ##
+## * Impose a size limit to the bucket database. Which items would be removed?
+##
 ##
 ## Transaction state diagram:
 ## --------------------------
@@ -197,10 +199,9 @@
 ## Interaction of components
 ## =========================
 ## The idea is that there are concurrent *async* instances feeding transactions
-## into a job queue via `jobAddTx()`. The job queue is then processed on demand
-## not until `jobCommit()` is run.
-##
-## A piece of code using this pool would look as follows:
+## into a job queue via `jobAddTxs()`. The job queue is then processed on
+## demand not until `jobCommit()` is run. A piece of code using this pool
+## architecture could look like as follows:
 ## ::
 ##    # see also unit test examples, e.g. "Block packer tests"
 ##    var db: BaseChainDB                    # to be initialised
@@ -229,29 +230,48 @@
 ##    xp.jobCommit                           # run job queue worker/processor
 ##
 ##
+## Discussion of example
+## ~~~~~~~~~~~~~~~~~~~~~
+## In the example, transactions are collected via `jobAddTx()` and added to
+## a batch of jobs to be processed at a time when considered right. The
+## processing is initiated with the `jobCommit()` directive.
+##
+## There is the block packer which works incrementally moving blocks considered
+## apt to the `txItemPacked` labelled bucket. It is typically invoked
+## implicitly by `jobCommit()` after some txs were processed. The currently
+## accumulated gas limits for all the buckets can always be inspected with
+## `gasTotals()`.
+##
+## The `ethBlock()` directive retrieves the current block for mining derived
+## from the `txItemPacked` labelled bucket.
+##
+## Then mining takes place ...
+##
+## After mining, the view of the block chain as seen by the pool must be
+## updated to be ready for a new mining process. In the best case, the
+## canonical head is just moved to the currently mined block which would imply
+## just to discard the contents of the `txItemPacked` labelled bucket. A more
+## general block chain state head update would be more complex, though.
+##
+## In the most complex case, the newly mined block was added to some branch
+## which has become an uncle to the new canonical head retrieved by
+## `getCanonicalHead()`. In order to update the pool to the state one would
+## have arrived if worked on the retrieved canonical head branch in the first
+## place, the directive `jobDeltaTxsHead()` calculates the actions of what is
+## needed to get just there from the locally cached head state of the pool.
+## These actions are added by  `jobDeltaTxsHead()` to the batch job queue to
+## be executed when it is time.
+##
+## Then the locally cached block chain head is updated by setting a new
+## `topHeader`. The *setter* behind this assignment also caches implied
+## internal parameters as base fee, fork, etc. Only after the new chain head
+## is set, the `jobCommit()` should be started to process the update actions
+## (otherwise txs might be thrown out which could be used for packing.)
+##
+##
 ## =====================================================================
 ##
 ## xxxxxxxxxxx to be updated, below xxxxxxxxxxxxxxxxx
-##
-## Discussion of example
-## ~~~~~~~~~~~~~~~~~~~~~
-## From the example, transactions are collected via `pjaAddTx()` and added to
-## a batch of jobs to be done some time later.
-##
-## Following, another job is added to the batch via `pjaUpdatePacked()`
-## requesting to fill the *packed* bucket after the added jobs have been
-## processed.
-##
-## In this example, not until `nextBlock()` is invoked, the batch of jobs in
-## the *job queue* will be processed. This directive will implicitly call
-## `jobCommit()` which invokes the job processor on the batch queue. So the
-## `nextBlock()` cleans up all of the job queue and pulls as many transactions
-## as possible from the *packed* bucket, packs them into the block up until it
-## is full and disposes the remaining transaction wrappers into the waste
-## basket (so they remain still accessible for a while.)
-##
-## Finally. `getBlock()` retrieves the last block stored in the descriptor
-## cache which will be overwritten not until `nextBlock()` is invoked, again.
 ##
 ## Processing the job queue
 ## ~~~~~~~~~~~~~~~~~~~~~~~~
