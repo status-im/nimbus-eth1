@@ -30,6 +30,8 @@ import
 export
   utils_defs
 
+{.push raises: [Defect].}
+
 const
   INMEMORY_SIGNATURES* = ##\
     ## Default number of recent block signatures to keep in memory
@@ -48,14 +50,11 @@ type
     size: uint
     q: KeyedQueue[EcKey,EthAddress]
 
-{.push raises: [Defect].}
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError]
-    {.inline.} =
+proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError] =
   ## Parts copied from `transaction.getSignature`.
   var data: array[65,byte]
   data[0..31] = tx.R.toByteArrayBE
@@ -72,7 +71,7 @@ proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError]
 
   ok(data)
 
-proc encodePreSealed(header: BlockHeader): seq[byte] {.inline.} =
+proc encodePreSealed(header: BlockHeader): seq[byte] =
   ## Cut sigature off `extraData` header field.
   if header.extraData.len < EXTRA_SEAL:
     return rlp.encode(header)
@@ -81,7 +80,7 @@ proc encodePreSealed(header: BlockHeader): seq[byte] {.inline.} =
   rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
   rlp.encode(rlpHeader)
 
-proc hashPreSealed(header: BlockHeader): Hash256 {.inline.} =
+proc hashPreSealed(header: BlockHeader): Hash256 =
   ## Returns the hash of a block prior to it being sealed.
   keccak256.digest header.encodePreSealed
 
@@ -125,7 +124,7 @@ proc ecRecover*(tx: var Transaction): EcAddrResult =
     return err(txSig.error)
   txSig.value.recoverImpl(tx.txHashNoSignature)
 
-proc ecRecover*(tx: Transaction): EcAddrResult {.inline.} =
+proc ecRecover*(tx: Transaction): EcAddrResult =
   ## Variant of `ecRecover()` for call-by-value header.
   var ty = tx
   ty.ecRecover
@@ -173,13 +172,13 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
     err(rc.error)
 
 proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult
-    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Variant of `ecRecover()` for call-by-value header
   var hdr = header
   er.ecRecover(hdr)
 
 proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
-    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
@@ -212,12 +211,12 @@ proc ecRecover*(er: var EcRecover; tx: var Transaction): EcAddrResult
 # ------------------------------------------------------------------------------
 
 proc append*(rw: var RlpWriter; data: EcRecover)
-    {.inline, raises: [Defect,KeyError].} =
+    {.raises: [Defect,KeyError].} =
   ## Generic support for `rlp.encode()`
   rw.append((data.size,data.q))
 
 proc read*(rlp: var Rlp; Q: type EcRecover): Q
-    {.inline, raises: [Defect,KeyError].} =
+    {.raises: [Defect,KeyError].} =
   ## Generic support for `rlp.decode()` for loading the cache from a
   ## serialised data stream.
   (result.size, result.q) = rlp.read((type result.size, type result.q))

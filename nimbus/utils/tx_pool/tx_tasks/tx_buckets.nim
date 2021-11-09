@@ -24,10 +24,10 @@ import
   chronicles,
   eth/[common, keys]
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "tx-pool buckets"
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private helpers

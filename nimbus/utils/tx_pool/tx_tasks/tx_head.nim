@@ -24,6 +24,8 @@ import
   eth/[common, keys],
   stew/keyed_queue
 
+{.push raises: [Defect].}
+
 type
   TxHeadDiffRef* = ref object ##\
     ## Diff data, txs changes that apply after changing the head\
@@ -38,8 +40,6 @@ type
 
 logScope:
   topics = "tx-pool head adjust"
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private functions

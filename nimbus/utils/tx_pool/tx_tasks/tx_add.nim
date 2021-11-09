@@ -25,6 +25,8 @@ import
   eth/[common, keys],
   stew/[sorted_set]
 
+{.push raises: [Defect].}
+
 type
   NonceList = ##\
     ## Temporary sorter list
@@ -37,14 +39,12 @@ type
 logScope:
   topics = "tx-pool add transaction"
 
-{.push raises: [Defect].}
-
 # ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
 
 proc getItemList(tab: var AccouuntNonceTab; key: EthAddress): var NonceList
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   if not tab.hasKey(key):
     tab[key] = NonceList.init
   tab[key]

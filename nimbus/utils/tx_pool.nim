@@ -443,14 +443,14 @@ proc processJobs(xp: TxPoolRef): int
 # ------------------------------------------------------------------------------
 
 proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
-    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a new generic job (does not run `jobCommit()`.)
   xp.byJob.add(job)
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queues a batch of transactions jobs to be processed in due course (does
   ## not run `jobCommit()`.)
   ##
@@ -468,13 +468,13 @@ proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Variant of `jobAddTxs()` for a single transaction.
   xp.jobAddTxs(@[tx], info)
 
 
 proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## This function calculates the txs to add or delete that need to take place
   ## after the cached block chain head is set to the position implied by the
   ## argument `newHead`. If successful, the txs to add or delete are queued
@@ -527,7 +527,7 @@ when JobWaitEnabled:
     await xp.byJob.waitAvail
 
 
-proc triggerReorg*(xp: TxPoolRef) {.inline.} =
+proc triggerReorg*(xp: TxPoolRef) =
   ## This function triggers a bucket re-org action with the next job queue
   ## maintenance-processing (see `jobCommit()`). This re-org action eventually
   ## happens when the `algoAutoUpdateBuckets` flag is also set.
@@ -553,7 +553,7 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
 # ------------------------------------------------------------------------------
 
 proc ethBlock*(xp: TxPoolRef): EthBlock
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the block made up by the txs from the `packed` bucket.
   xp.ethBlockAssemble
 
@@ -562,47 +562,47 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
 proc nItems*(xp: TxPoolRef): TxTabsItemsCount
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the current number of items per bucket and
   ## some totals.
   xp.txDB.nItems
 
-proc topHeader*(xp: TxPoolRef): BlockHeader {.inline.} =
+proc topHeader*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
   ## the same header as retrieved by the `getCanonicalHead()` unless in the
   ## middle of a mining update.
   xp.dbHead.header
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
 proc baseFee*(xp: TxPoolRef): GasPrice
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the base fee implying the price list valuation and
   ## order.
   xp.txDB.baseFee
 
-proc flags*(xp: TxPoolRef): set[TxPoolFlags] {.inline.} =
+proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pAlgoFlags
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc minFeePrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc minFeePrice*(xp: TxPoolRef): GasPrice =
   ## Getter, retrieves minimum for the current gas fee enforced by the
   ## transaction pool for txs to be packed. This is an EIP-1559 only
   ## parameter (see `stage1559MinFee` strategy.)
   xp.pMinFeePrice
 
-proc minTipPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc minTipPrice*(xp: TxPoolRef): GasPrice =
   ## Getter, retrieves minimum for the current gas tip (or priority fee)
   ## enforced by the transaction pool. This is an EIP-1559 parameter but it
   ## comes with a fall back interpretation (see `stage1559MinTip` strategy.)
   ## for legacy transactions.
   xp.pMinTipPrice
 
-proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter. retrieves, the current gas price enforced by the transaction
   ## pool. This is a pre-London parameter (see `packedPlMinPrice` strategy.)
   xp.pMinPlGasPrice
@@ -627,18 +627,18 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
     xp.dbHead.setBaseFee(val)  # representative value
     xp.pDirtyBuckets = true
 
-proc `flags=`*(xp: TxPoolRef; flags: set[TxPoolFlags]) {.inline.} =
+proc `flags=`*(xp: TxPoolRef; flags: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pAlgoFlags = flags
 
-proc `maxRejects=`*(xp: TxPoolRef; size: int) {.inline.} =
+proc `maxRejects=`*(xp: TxPoolRef; size: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
   xp.txDB.maxRejects = size
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
 proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minFeePrice`.  If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinFeePrice != val:
@@ -646,7 +646,7 @@ proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
     xp.pDirtyBuckets = true
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minTipPrice`. If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinTipPrice != val:
@@ -654,7 +654,7 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
     xp.pDirtyBuckets = true
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minPlGasPrice`. If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinPlGasPrice != val:
@@ -677,7 +677,7 @@ proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
   xp.txDB.setLocal(signer)

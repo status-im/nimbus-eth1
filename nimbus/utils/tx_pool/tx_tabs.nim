@@ -20,6 +20,8 @@ import
   eth/[common, keys],
   stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
 
+{.push raises: [Defect].}
+
 export
   any, eq, first, ge, gt, hasKey, last, le, len, lt,
   nItems, gasLimits, next, prev, walkItems
@@ -83,8 +85,6 @@ const
     for n in 0 ..< rc.len:
       rc[n] = 255
     rc
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -262,12 +262,12 @@ proc reject*(xp: TxTabsRef; tx: Transaction;
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc baseFee*(xp: TxTabsRef): GasPrice {.inline.} =
+proc baseFee*(xp: TxTabsRef): GasPrice =
   ## Get the `baseFee` implying the price list valuation and order. If
   ## this entry is disabled, the value `GasInt.low` is returnded.
   xp.baseFee
 
-proc maxRejects*(xp: TxTabsRef): int {.inline.} =
+proc maxRejects*(xp: TxTabsRef): int =
   ## Getter
   xp.maxRejects
 
@@ -276,12 +276,12 @@ proc maxRejects*(xp: TxTabsRef): int {.inline.} =
 # ------------------------------------------------------------------------------
 
 proc `baseFee=`*(xp: TxTabsRef; baseFee: GasPrice)
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Setter, new base fee (implies reorg).
   xp.baseFee = baseFee
   xp.byGasTip.update = xp.updateEffectiveGasTip
 
-proc `maxRejects=`*(xp: TxTabsRef; val: int) {.inline.} =
+proc `maxRejects=`*(xp: TxTabsRef; val: int) =
   ## Setter, applicable with next `reject()` invocation.
   xp.maxRejects = val
 
@@ -289,7 +289,7 @@ proc `maxRejects=`*(xp: TxTabsRef; val: int) {.inline.} =
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 
-proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
+proc hasTx*(xp: TxTabsRef; tx: Transaction): bool =
   ## Returns `true` if the argument pair `(key,local)` exists in the
   ## database.
   ##
@@ -298,7 +298,7 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
   xp.byItemID.hasKey(tx.itemID)
 
 proc nItems*(xp: TxTabsRef): TxTabsItemsCount
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   result.pending = xp.byStatus.eq(txItemPending).nItems
   result.staged = xp.byStatus.eq(txItemStaged).nItems
   result.packed = xp.byStatus.eq(txItemPacked).nItems
@@ -306,7 +306,7 @@ proc nItems*(xp: TxTabsRef): TxTabsItemsCount
   result.disposed = xp.byRejects.len
 
 proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   result.pending = xp.byStatus.eq(txItemPending).gasLimits
   result.staged = xp.byStatus.eq(txItemStaged).gasLimits
   result.packed = xp.byStatus.eq(txItemPacked).gasLimits
@@ -315,15 +315,15 @@ proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals
 # Public functions: local/remote sender accounts
 # ------------------------------------------------------------------------------
 
-proc isLocal*(xp: TxTabsRef; sender: EthAddress): bool {.inline.} =
+proc isLocal*(xp: TxTabsRef; sender: EthAddress): bool =
   ## Returns `true` if account address is local
   xp.byLocal.hasKey(sender)
 
-proc locals*(xp: TxTabsRef): seq[EthAddress] {.inline.} =
+proc locals*(xp: TxTabsRef): seq[EthAddress] =
   ## Returns  an unsorted list of addresses tagged *local*
   toSeq(xp.byLocal.keys)
 
-proc remotes*(xp: TxTabsRef): seq[EthAddress] {.inline.} =
+proc remotes*(xp: TxTabsRef): seq[EthAddress] =
   ## Returns  an unsorted list of untagged addresses
   var rcAddr = xp.bySender.first
   while rcAddr.isOK:
@@ -332,11 +332,11 @@ proc remotes*(xp: TxTabsRef): seq[EthAddress] {.inline.} =
     if not xp.byLocal.hasKey(sender):
       result.add sender
 
-proc setLocal*(xp: TxTabsRef; sender: EthAddress) {.inline.} =
+proc setLocal*(xp: TxTabsRef; sender: EthAddress) =
   ## Tag `sender` address argument *local*
   xp.byLocal[sender] = true
 
-proc resLocal*(xp: TxTabsRef; sender: EthAddress) {.inline.} =
+proc resLocal*(xp: TxTabsRef; sender: EthAddress) =
   ## Untag *local* `sender` address argument.
   xp.byLocal.del(sender)
 

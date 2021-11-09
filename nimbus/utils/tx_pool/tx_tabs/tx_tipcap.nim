@@ -22,13 +22,13 @@ import
   eth/common,
   stew/[results, sorted_set]
 
+{.push raises: [Defect].}
+
 type
   TxTipCapTab* = object ##\
     ## Generic item list indexed by gas price
     size: int
     gasList: SortedSet[GasPrice,TxLeafItemRef]
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -107,30 +107,30 @@ proc txVerify*(gp: var TxTipCapTab): Result[void,TxInfo]
 # Public SortedSet ops -- `GasInt` (level 0)
 # ------------------------------------------------------------------------------
 
-proc nItems*(gp: var TxTipCapTab): int {.inline.} =
+proc nItems*(gp: var TxTipCapTab): int =
   gp.size
 
-proc len*(gp: var TxTipCapTab): int {.inline.} =
+proc len*(gp: var TxTipCapTab): int =
   gp.gasList.len
 
 proc eq*(gp: var TxTipCapTab; key: GasPrice):
-       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] =
   gp.gasList.eq(key)
 
 proc ge*(gp: var TxTipCapTab; key: GasPrice):
-       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] =
   gp.gasList.ge(key)
 
 proc gt*(gp: var TxTipCapTab; key: GasPrice):
-       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] =
   gp.gasList.gt(key)
 
 proc le*(gp: var TxTipCapTab; key: GasPrice):
-       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] =
   gp.gasList.le(key)
 
 proc lt*(gp: var TxTipCapTab; key: GasPrice):
-       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] =
   gp.gasList.lt(key)
 
 # ------------------------------------------------------------------------------

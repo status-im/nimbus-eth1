@@ -23,6 +23,8 @@ import
   ./tx_tabs/tx_sender, # for verify()
   eth/[common, keys]
 
+{.push raises: [Defect].}
+
 type
   TxPoolCallBackRecursion* = object of Defect
     ## Attempt to recurse a call back function
@@ -126,8 +128,6 @@ const
                          algoPackedPlMinPrice,
                          algoAutoDisposeUnpacked}
 
-{.push raises: [Defect].}
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -163,47 +163,47 @@ proc init*(T: type TxPoolRef; db: BaseChainDB): T
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc startDate*(xp: TxPoolRef): Time {.inline.} =
+proc startDate*(xp: TxPoolRef): Time =
   ## Getter
   xp.startDate
 
-proc txDB*(xp: TxPoolRef): TxTabsRef {.inline.} =
+proc txDB*(xp: TxPoolRef): TxTabsRef =
   ## Getter, pool database
   xp.txDB
 
-proc byJob*(xp: TxPoolRef): TxJobRef {.inline.} =
+proc byJob*(xp: TxPoolRef): TxJobRef =
   ## Getter, job queue
   xp.byJob
 
-proc dbHead*(xp: TxPoolRef): TxDbHeadRef {.inline.} =
+proc dbHead*(xp: TxPoolRef): TxDbHeadRef =
   ## Getter, block chain DB
   xp.dbHead
 
-proc pDirtyBuckets*(xp: TxPoolRef): bool {.inline.} =
+proc pDirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, buckets need update
   xp.param.dirtyBuckets
 
-proc pStagedItems*(xp: TxPoolRef): bool {.inline.} =
+proc pStagedItems*(xp: TxPoolRef): bool =
   ## Getter, some updates since last check
   xp.param.stagedItems
 
-proc pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] {.inline.} =
+proc pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] =
   ## Getter, cached block chain head was moved back
   xp.param.doubleCheck
 
-proc pMinFeePrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc pMinFeePrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minFeePrice
 
-proc pMinTipPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc pMinTipPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minTipPrice
 
-proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minPlGasPrice
 
-proc pAlgoFlags*(xp: TxPoolRef): set[TxPoolFlags] {.inline.} =
+proc pAlgoFlags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Returns the set of algorithm strategy symbols for labelling items
   ## as`packed`
   xp.param.algoFlags
@@ -212,35 +212,35 @@ proc pAlgoFlags*(xp: TxPoolRef): set[TxPoolFlags] {.inline.} =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) {.inline.} =
+proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) =
   ## Setter
   xp.param.dirtyBuckets = val
 
-proc `pStagedItems=`*(xp: TxPoolRef; val: bool) {.inline.} =
+proc `pStagedItems=`*(xp: TxPoolRef; val: bool) =
   ## Setter
   xp.param.stagedItems = val
 
-proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) {.inline.} =
+proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
   ## Pseudo setter
   xp.param.doubleCheck.add val
 
-proc pDoubleCheckFlush*(xp: TxPoolRef) {.inline.} =
+proc pDoubleCheckFlush*(xp: TxPoolRef) =
   ## Pseudo setter
   xp.param.doubleCheck.setLen(0)
 
-proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minFeePrice = val
 
-proc `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+proc `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minTipPrice = val
 
-proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
 
-proc `pAlgoFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) {.inline.} =
+proc `pAlgoFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.algoFlags = val
 

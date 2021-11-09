@@ -23,10 +23,10 @@ import
   eth/[common, keys],
   stew/keyed_queue
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "tx-pool dispose expired"
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -43,7 +43,7 @@ proc utcNow: Time =
 # ------------------------------------------------------------------------------
 
 proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   let rc = xp.txDB.bySender.eq(item.sender)
   if rc.isOK:
     for other in rc.value.data.walkItems(item.tx.nonce):

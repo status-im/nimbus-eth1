@@ -21,10 +21,10 @@ import
   eth/[common, keys],
   stew/keyed_queue
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "tx-pool recover item"
-
-{.push raises: [Defect].}
 
 let
   nullSender = block:

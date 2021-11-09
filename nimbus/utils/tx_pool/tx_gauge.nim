@@ -15,6 +15,8 @@
 import
   metrics
 
+{.push raises: [Defect].}
+
 const
   # Provide some fall-back counters available for unit tests
   FallBackMetrics4Debugging = not defined(metrics)

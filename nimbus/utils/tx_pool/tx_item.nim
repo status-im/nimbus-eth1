@@ -20,6 +20,8 @@ import
   eth/[common, keys],
   stew/results
 
+{.push raises: [Defect].}
+
 type
   GasPrice* = ##|
     ## Handy definition distinct from `GasInt` which is a commodity while the\
@@ -63,7 +65,7 @@ proc joinXX(s: string): string =
   result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len-16 ..< s.len]
 
 
-proc utcTime: Time {.inline.} =
+proc utcTime: Time =
   getTime().utc.toTime
 
 # ------------------------------------------------------------------------------
@@ -94,7 +96,7 @@ proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc init*(item: TxItemRef; status: TxItemStatus; info: string) {.inline.} =
+proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   ## Update item descriptor.
   item.info = info
   item.status = status
@@ -102,7 +104,7 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) {.inline.} =
   item.reject = txInfoOk
 
 proc init*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
-            status: TxItemStatus; info: string): Result[T,void] {.inline.} =
+            status: TxItemStatus; info: string): Result[T,void] =
   ## Create item descriptor.
   let rc = tx.ecRecover
   if rc.isErr:
@@ -115,7 +117,7 @@ proc init*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
        status:    status))
 
 proc init*(T: type TxItemRef; tx: Transaction;
-            reject: TxInfo; status: TxItemStatus; info: string): T {.inline.} =
+            reject: TxInfo; status: TxItemStatus; info: string): T =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
   T(tx:        tx,
@@ -135,12 +137,12 @@ proc hash*(item: TxItemRef): Hash =
 # Public functions, transaction getters
 # ------------------------------------------------------------------------------
 
-proc itemID*(tx: Transaction): Hash256 {.inline.} =
+proc itemID*(tx: Transaction): Hash256 =
   ## Getter, transaction ID
   tx.rlpHash
 
 # core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
-proc protected*(tx: Transaction): bool {.inline.} =
+proc protected*(tx: Transaction): bool =
   ## Getter (go/ref compat): is replay-protected
   if tx.txType == TxLegacy:
     # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
@@ -162,12 +164,12 @@ proc eip155ChainID*(tx: Transaction): ChainID =
   # otherwise 0
 
 # # core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-# proc gas*(tx: Transaction): GasInt {.inline.} =
+# proc gas*(tx: Transaction): GasInt =
 #   ## Getter (go/ref compat): the gas limit of the transaction
 #   tx.gasLimit
 
 # core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
-proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
+proc gasTipCap*(tx: Transaction): GasPrice =
   ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
   if tx.txType == TxLegacy:
     tx.gasPrice.GasPrice
@@ -175,7 +177,7 @@ proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
     tx.maxPriorityFee.GasPrice
 
 # # core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() ..
-# proc gasFeeCap*(tx: Transaction): GasPrice {.inline.} =
+# proc gasFeeCap*(tx: Transaction): GasPrice =
 #   ## Getter (go/ref compat): the fee cap per gas of the transaction.
 #   if tx.txType == TxLegacy:
 #     tx.gasPrice.GasPrice
@@ -183,14 +185,14 @@ proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
 #     tx.maxFee.GasPrice
 
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
-proc cost*(tx: Transaction): UInt256 {.inline.} =
+proc cost*(tx: Transaction): UInt256 =
   ## Getter (go/ref compat): gas * gasPrice + value.
   (tx.gasPrice * tx.gasLimit).u256 + tx.value
 
 # core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
 proc estimatedGasTip*(tx: Transaction;
-                      baseFee: GasPrice): GasPriceEx {.inline.} =
+                      baseFee: GasPrice): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType == TxLegacy:
@@ -203,44 +205,44 @@ proc estimatedGasTip*(tx: Transaction;
 # Public functions, item getters
 # ------------------------------------------------------------------------------
 
-proc dup*(item: TxItemRef): TxItemRef {.inline.} =
+proc dup*(item: TxItemRef): TxItemRef =
   ## Getter, provide contents copy
   item.deepCopy
 
-proc itemID*(item: TxItemRef): Hash256 {.inline.} =
+proc itemID*(item: TxItemRef): Hash256 =
   ## Getter
   item.itemID
 
-proc tx*(item: TxItemRef): Transaction {.inline.} =
+proc tx*(item: TxItemRef): Transaction =
   ## Getter
   item.tx
 
-proc timeStamp*(item: TxItemRef): Time {.inline.} =
+proc timeStamp*(item: TxItemRef): Time =
   ## Getter
   item.timeStamp
 
-proc sender*(item: TxItemRef): EthAddress {.inline.} =
+proc sender*(item: TxItemRef): EthAddress =
   ## Getter
   item.sender
 
-proc info*(item: TxItemRef): string {.inline.} =
+proc info*(item: TxItemRef): string =
   ## Getter
   item.info
 
-proc local*(item: TxItemRef): bool {.inline.} =
+proc local*(item: TxItemRef): bool =
   ## Getter
   item.local
 
-proc status*(item: TxItemRef): TxItemStatus {.inline.} =
+proc status*(item: TxItemRef): TxItemStatus =
   ## Getter
   item.status
 
-proc effGasTip*(item: TxItemRef): GasPriceEx {.inline.} =
+proc effGasTip*(item: TxItemRef): GasPriceEx =
   ## Getter, this is typically the cached value of `estimatedGasTip()` for
   ## a given `baseFee`
   item.effGasTip
 
-proc reject*(item: TxItemRef): TxInfo {.inline.} =
+proc reject*(item: TxItemRef): TxInfo =
   ## Getter
   item.reject
 
@@ -248,19 +250,19 @@ proc reject*(item: TxItemRef): TxInfo {.inline.} =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `local=`*(item: TxItemRef; val: bool) {.inline.} =
+proc `local=`*(item: TxItemRef; val: bool) =
   ## Setter
   item.local = val
 
-proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
+proc `status=`*(item: TxItemRef; val: TxItemStatus) =
   ## Setter
   item.status = val
 
-proc `effGasTip=`*(item: TxItemRef; val: GasPriceEx) {.inline.} =
+proc `effGasTip=`*(item: TxItemRef; val: GasPriceEx) =
   ## Setter
   item.effGasTip = val
 
-proc `reject=`*(item: TxItemRef; val: TxInfo) {.inline.} =
+proc `reject=`*(item: TxItemRef; val: TxInfo) =
   ## Setter
   item.reject = val
 

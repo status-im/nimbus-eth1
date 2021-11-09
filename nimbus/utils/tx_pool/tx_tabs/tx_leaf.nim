@@ -18,13 +18,13 @@ import
   eth/common,
   stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
 
+{.push raises: [Defect].}
+
 type
   TxLeafItemRef* = ref object ##\
     ## All transaction items accessed by the same index are chronologically
     ## queued.
     itemList: KeyedQueueNV[TxItemRef]
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -74,21 +74,21 @@ proc txVerify*(leaf: TxLeafItemRef): Result[void,TxInfo]
 # Public KeyedQueue ops -- traversal functions
 # ------------------------------------------------------------------------------
 
-proc nItems*(itemData: TxLeafItemRef): int {.inline.} =
+proc nItems*(itemData: TxLeafItemRef): int =
   itemData.itemList.len
 
-proc nItems*[T](rc: SortedSetResult[T,TxLeafItemRef]): int {.inline.} =
+proc nItems*[T](rc: SortedSetResult[T,TxLeafItemRef]): int =
   if rc.isOK:
     return rc.value.data.nItems
   0
 
 
 proc first*(itemData: TxLeafItemRef): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.first
 
 proc first*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.first
@@ -96,11 +96,11 @@ proc first*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
 
 
 proc last*(itemData: TxLeafItemRef): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.last
 
 proc last*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.last
@@ -109,12 +109,12 @@ proc last*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
 
 proc next*(itemData: TxLeafItemRef;
            item: TxItemRef): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.next(item)
 
 proc next*[T](rc: SortedSetResult[T,TxLeafItemRef];
               item: TxItemRef): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.next(item)
@@ -123,12 +123,12 @@ proc next*[T](rc: SortedSetResult[T,TxLeafItemRef];
 
 proc prev*(itemData: TxLeafItemRef; item: TxItemRef):
          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.prev(item)
 
 proc prev*[T](rc: SortedSetResult[T,TxLeafItemRef];
               item: TxItemRef): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.prev(item)

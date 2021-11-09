@@ -19,6 +19,8 @@ import
   ./tx_item,
   eth/[common, keys, p2p]
 
+{.push raises: [Defect].}
+
 type
   TxDbHeadNonce* =
     proc(rdb: ReadOnlyStateDB; account: EthAddress): AccountNonce
@@ -45,8 +47,6 @@ type
 const
   # currently implemented in Nimbus only to do some tesing
   londonBlock = 12_965_000.u256
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private functions, account helpers
@@ -129,27 +129,27 @@ proc accountNonce*(dh: TxDbHeadRef; account: EthAddress): AccountNonce
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc db*(dh: TxDbHeadRef): BaseChainDB {.inline.} =
+proc db*(dh: TxDbHeadRef): BaseChainDB =
   ## Getter
   dh.db
 
-proc header*(dh: TxDbHeadRef): BlockHeader {.inline.} =
+proc header*(dh: TxDbHeadRef): BlockHeader =
   ## Getter
   dh.header
 
-proc fork*(dh: TxDbHeadRef): Fork {.inline.} =
+proc fork*(dh: TxDbHeadRef): Fork =
   ## Getter
   dh.fork
 
-proc baseFee*(dh: TxDbHeadRef): GasPrice {.inline.} =
+proc baseFee*(dh: TxDbHeadRef): GasPrice =
   ## Getter
   dh.baseFee
 
-proc trgGasLimit*(dh: TxDbHeadRef): GasInt {.inline.} =
+proc trgGasLimit*(dh: TxDbHeadRef): GasInt =
   ## Getter
   dh.trgGasLimit
 
-proc maxGasLimit*(dh: TxDbHeadRef): GasInt {.inline.} =
+proc maxGasLimit*(dh: TxDbHeadRef): GasInt =
   ## Getter
   dh.maxGasLimit
 
@@ -158,7 +158,7 @@ proc maxGasLimit*(dh: TxDbHeadRef): GasInt {.inline.} =
 # ------------------------------------------------------------------------------
 
 proc `header=`*(dh: TxDbHeadRef; header: BlockHeader)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, updates descriptor
   dh.update(header)
 
@@ -166,14 +166,14 @@ proc `header=`*(dh: TxDbHeadRef; header: BlockHeader)
 # Public functions, debugging & testing
 # ------------------------------------------------------------------------------
 
-proc setBaseFee*(dh: TxDbHeadRef; val: GasPrice) {.inline.} =
+proc setBaseFee*(dh: TxDbHeadRef; val: GasPrice) =
   ## Temorarily overwrite (until next header update). This function
   ## is intended to support debugging and testing.
   dh.baseFee = val
 
 proc setAccountFns*(dh: TxDbHeadRef;
                     nonceFn: TxDbHeadNonce = getNonce;
-                    balanceFn: TxDbHeadBalance = getBalance) {.inline.} =
+                    balanceFn: TxDbHeadBalance = getBalance) =
   ## Replace per sender account lookup functions. This function
   ## is intended to support debugging and testing.
   dh.nonceFn = nonceFn

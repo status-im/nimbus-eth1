@@ -21,10 +21,10 @@ import
   chronicles,
   eth/[common, keys]
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "tx-pool eth block"
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Public functions

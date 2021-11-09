@@ -26,7 +26,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc append*[K,V](rw: var RlpWriter; kq: KeyedQueue[K,V])
-    {.inline, raises: [Defect,KeyError].} =
+    {.raises: [Defect,KeyError].} =
   ## Generic support for `rlp.encode(kq)` for serialising a queue.
   ##
   ## :CAVEAT:
@@ -46,7 +46,7 @@ proc append*[K,V](rw: var RlpWriter; kq: KeyedQueue[K,V])
       raiseAssert "Garbled queue next/prv references"
 
 proc read*[K,V](rlp: var Rlp; Q: type KeyedQueue[K,V]): Q
-    {.inline, raises: [Defect,RlpError,KeyError].} =
+    {.raises: [Defect,RlpError,KeyError].} =
   ## Generic support for `rlp.decode(bytes)` for loading a queue
   ## from a serialised data stream.
   ##

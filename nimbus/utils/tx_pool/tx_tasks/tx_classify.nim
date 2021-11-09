@@ -22,6 +22,7 @@ import
   chronicles,
   eth/[common, keys]
 
+{.push raises: [Defect].}
 
 type
   TxPackRc* = enum ##\
@@ -33,13 +34,11 @@ type
 logScope:
   topics = "tx-pool classify"
 
-{.push raises: [Defect].}
-
 # ------------------------------------------------------------------------------
 # Private function: tx validity check helpers
 # ------------------------------------------------------------------------------
 
-proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   if item.tx.txType == TxEip2930 and xp.dbHead.fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
@@ -66,7 +65,7 @@ proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   true
 
 proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Make sure that there is only one contiuous sequence of nonces (per
   ## sender) starting at the account nonce.
 
@@ -95,7 +94,7 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
 # Private function: active tx classifier check helpers
 # ------------------------------------------------------------------------------
 
-proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool =
   ## Make sure that nonces appear as a contiuous sequence in `staged` bucket
   ## probably preceeded in `packed` bucket.
   let rc = xp.txDB.bySender.eq(item.sender)
@@ -107,7 +106,7 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   true
 
 
-proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
   if xp.dbHead.trgGasLimit < item.tx.gasLimit:
@@ -117,7 +116,7 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
     return false
   true
 
-proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   if item.tx.txType != TxLegacy:
     if item.tx.maxFee.GasPriceEx < xp.dbHead.baseFee:
@@ -128,7 +127,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   true
 
 proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether the worst case expense is covered by the price budget,
   let
     balance = xp.dbHead.accountBalance(item.sender)
@@ -148,7 +147,7 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
   true
 
 
-proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
   ## For legacy transactions check whether minimum gas price and tip are
   ## high enough. These checks are optional.
   if item.tx.txType == TxLegacy:
@@ -163,7 +162,7 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
          return false
   true
 
-proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool {.inline.}=
+proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   ## Helper for `classifyTxPacked()`
   if item.tx.txType != TxLegacy:
 
@@ -181,7 +180,7 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool {.inline.}=
 # ------------------------------------------------------------------------------
 
 proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check a (typically new) transaction whether it should be accepted at all
   ## or re-jected right away.
 
@@ -195,7 +194,7 @@ proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool
 
 
 proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether a valid transaction is ready to be held in the
   ## `staged` bucket in which case the function returns `true`. 
 

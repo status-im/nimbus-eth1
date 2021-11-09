@@ -25,6 +25,8 @@ import
   eth/[common, keys],
   stew/results
 
+{.push raises: [Defect].}
+
 logScope:
   topics = "tx-pool tasks"
 
@@ -34,7 +36,7 @@ logScope:
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
 proc getRemotesBelowTip*(xp: TxPoolRef; threshold: GasPrice): seq[Hash256]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold.
   if 0.GasPrice < threshold:
     for itemList in xp.txDB.byTipCap.decItemList(maxCap = threshold - 1):

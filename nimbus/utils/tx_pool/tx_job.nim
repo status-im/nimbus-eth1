@@ -20,6 +20,8 @@ import
   eth/[common, keys],
   stew/[keyed_queue, keyed_queue/kq_debug, results]
 
+{.push raises: [Defect].}
+
 # hide complexity unless really needed
 const
   jobWaitCompilerFlag = defined(job_wait_enabled) or defined(debug)
@@ -100,8 +102,6 @@ const
   txJobIdMax* = ##\
     ## Wraps around to `1` after last ID
     999999.TxJobID
-
-{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -242,15 +242,15 @@ else:
 # ------------------------------------------------------------------------------
 
 proc`[]`*(jq: TxJobRef; id: TxJobID): TxJobDataRef
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   jq.jobs[id]
 
 proc hasKey*(jq: TxJobRef; id: TxJobID): bool
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   jq.jobs.hasKey(id)
 
 proc len*(jq: TxJobRef): int
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,KeyError].} =
   jq.jobs.len
 
 # ------------------------------------------------------------------------------
