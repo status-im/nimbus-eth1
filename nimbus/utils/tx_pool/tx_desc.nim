@@ -32,67 +32,60 @@ type
   TxPoolFlags* = enum ##\
     ## Processing strategy selector symbols
 
-    algoPacked1559MinFee ##\
-      ## Include tx items which have at least this `maxFee`, other items
-      ## are considered underpriced.
-      ##
-      ## This is post-London only strategy only applicable to post-London
-      ## transactions.
+    stageItems1559MinFee ##\
+      ## Stage tx items with `tx.maxFee` at least `minFeePrice`. Other items
+      ## are left or set pending. This symbol affects post-London tx items,
+      ## only.
 
-    algoPacked1559MinTip ##\
-      ## Include tx items which have a tip at least this `estimatedGasTip`.
-      ##
-      ## This is post-London effecticve strategy with some legacy fall
-      ## back mode (see implementation of `estimatedGasTip`.)
+    stageItems1559MinTip ##\
+      ## Stage tx items with `tx.effectiveGasTip(baseFee)` at least
+      ## `minTipPrice`. Other items are considered underpriced and left
+      ## or set pending. This symbol affects post-London tx items, only.
 
-    algoPackedPlMinPrice ##\
-      ## Tx items are included where the gas proce is at least this `gasPrice`,
-      ## other items are considered underpriced.
-      ##
-      ## This is a legacy pre-London strategy to apply instead of
-      ## `stage1559MinTip`.
+    stageItemsPlMinPrice ##\
+      ## Stage tx items with `tx.gasPrice` at least `minPreLondonGasPrice`.
+      ## Other items are considered underpriced and left or set pending.
+      ## This symbol affects pre-London tx items, only.
 
     # -----------
 
-    algoPackTrgGasLimitMax ##\
-      ## If unset, the packer must not exceed `xp.dbHead.trgGasLimit` when
-      ## collecting txs for a new block. Otherwise another tx exceeding the
-      ## `xp.dbHead.trgGasLimit` is accepted if it stays within the
-      ## `xp.dbHead.trgMaxLimit`.
+    packItemsTrgGasLimitMax ##\
+      ## The packer may treat `trgGasLimit` as a soft limit and may pack an
+      ## additional block exceeding this limit as long as the resulting block
+      ## size does not exceed `maxMaxLimit`.
 
-    algoPackTryHarder ##\
-      ## When packing, do not stop at the first failure to add another block,
-      ## rather ignore that error and keep on trying for all blocks
+    packItemsTryHarder ##\
+      ## The packer will stop at the first size extension error when adding
+      ## txs. It rather will ignore that error and keep on trying for all
+      ## staged blocks.
 
     # -----------
 
-    algoAutoDisposeUnpacked ##\
+    autoUpdateBucketsDB ##\
+      ## Automatically update the state buckets after running batch jobs if
+      ## the `dirtyBuckets` flag is also set.
+
+    autoActivateTxsPacker ##\
+      ## Automatically pack transactions after running batch jobs if the
+      ## `stagedItems` flag is also set.
+
+    autoZombifyUnpacked ##\
       ## Automatically dispose *pending* or *staged* txs that were queued
       ## at least `lifeTime` ago.
 
-    algoAutoDisposePacked ##\
+    autoZombifyPacked ##\
       ## Automatically dispose *packed* txs that were queued
       ## at least `lifeTime` ago.
-
-    algoAutoUpdateBuckets ##\
-      ## Automatically update buckets if the `dirtyBuckets` flag is set. For
-      ## the `packed` bucket this means that txs that do not fit the boundary
-      ## conditions anymore are moved out into one of the other buckets. The
-      ## `dirtyBuckets` flag will be reset after processing.
-
-    algoAutoTxsPacker ##\
-      ## Automatically pack transactions if the `xp.stagedItems` flag is set.
-      ## This flag will be reset after processing.
 
 
   TxPoolParam* = tuple          ## Getter/setter accessible parameters
     minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice: GasPrice       ## Desired tip-per-tx target, `estimatedGasTip`
+    minTipPrice: GasPrice       ## Desired tip-per-tx target, `effectiveGasTip`
     minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
     stagedItems: bool           ## Some items were staged (since last check)
     dirtyBuckets: bool          ## Buckets need to be updated
     doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
-    algoFlags: set[TxPoolFlags] ## Packer strategy symbols
+    flags: set[TxPoolFlags]     ## Processing strategy symbols
 
 
   TxPoolRef* = ref object of RootObj ##\
@@ -123,10 +116,14 @@ const
 
   txMinFeePrice = 1.GasPrice
   txMinTipPrice = 1.GasPrice
-  txPoolAlgoStrategy = {algoPacked1559MinTip,
-                         algoPacked1559MinFee,
-                         algoPackedPlMinPrice,
-                         algoAutoDisposeUnpacked}
+  txPoolFlags = {stageItems1559MinTip,
+                  stageItems1559MinFee,
+                  stageItemsPlMinPrice,
+
+                  autoUpdateBucketsDB,
+                  autoActivateTxsPacker,
+
+                  autoZombifyUnpacked}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -147,7 +144,7 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
   xp.param.reset
   xp.param.minFeePrice = txMinFeePrice
   xp.param.minTipPrice = txMinTipPrice
-  xp.param.algoFlags = txPoolAlgoStrategy
+  xp.param.flags = txPoolFlags
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -203,10 +200,10 @@ proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minPlGasPrice
 
-proc pAlgoFlags*(xp: TxPoolRef): set[TxPoolFlags] =
+proc pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Returns the set of algorithm strategy symbols for labelling items
   ## as`packed`
-  xp.param.algoFlags
+  xp.param.flags
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -240,9 +237,9 @@ proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
 
-proc `pAlgoFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+proc `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
-  xp.param.algoFlags = val
+  xp.param.flags = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

@@ -22,9 +22,6 @@
 ## * Clarify whether there are legacy txs possible with post-London
 ##   chain blocks -- *yes, there are*.
 ##
-## * Implement re-positioning the current insertion point, typically the head
-##   of the block chain.
-##
 ## * The incremental packer is not very smart, at the moment. This should be
 ##   improved. Some idea:
 ##   + Pack selected items until the total gas limit reaches the low block
@@ -40,8 +37,8 @@
 ##   + `byTipCap` (see tx_tipcap.nim), ordered by maxPriorityFee (or gasPrice
 ##     for legay txs). On the other hand, there is a suggestion (see geth
 ##     sources) that there is a by-tip range query of a group of txs for
-##     discard, or prioritise at a later stage when the txs are held already
-##     in the buckets.
+##     discarding, or prioritise at a later stage when the txs are held
+##     already in the buckets.
 ##
 ## * For recycled txs after block chain head adjustments, can we use the
 ##   `tx.value` rather than `tx.gasLimit * tx.gasPrice`?
@@ -98,7 +95,8 @@
 ##
 ## If a valid transaction supersedes an existing one, the existing transaction
 ## is moved to the waste basket and the new transaction replaces the existing
-## one.
+## one if the gas price of the transaction is at least `priceBump` per cent
+## higher (see adjustable parameters, below.)
 ##
 ## State buckets
 ## -------------
@@ -109,7 +107,7 @@
 ## * the `item.reject` field is reset/unset and has value `txInfoOk`
 ##
 ## The following boundary conditions hold for the set of all transactions (or
-## items) held in one of the buckets:
+## items) held in the buckets:
 ##
 ## * Let **T** be the set of transactions from all the buckets and **Q** be
 ##   the set of *(sender,nonce)* pairs derived from the transactions. Then
@@ -199,7 +197,7 @@
 ## Interaction of components
 ## =========================
 ## The idea is that there are concurrent *async* instances feeding transactions
-## into a job queue via `jobAddTxs()`. The job queue is then processed on
+## into a batch queue via `jobAddTxs()`. The batch queue is then processed on
 ## demand not until `jobCommit()` is run. A piece of code using this pool
 ## architecture could look like as follows:
 ## ::
@@ -215,9 +213,9 @@
 ##    ..
 ##
 ##    xq.jobAddTxs(txs)                      # add transactions to be held
-##    ..                                     # .. on the job queue
+##    ..                                     # .. on the batch queue
 ##
-##    xq.jobCommit                           # run job queue worker/processor
+##    xq.jobCommit                           # run batch queue worker/processor
 ##    let newBlock = xq.ethBlock             # fetch current mining block
 ##
 ##    ..
@@ -227,11 +225,11 @@
 ##    let newTopHeader = db.getCanonicalHead # new head after mining
 ##    xp.jobDeltaTxsHead(newTopHeader)       # add transactions update jobs
 ##    xp.topHeader = newTopHeader            # adjust insertion point
-##    xp.jobCommit                           # run job queue worker/processor
+##    xp.jobCommit                           # run batch queue worker/processor
 ##
 ##
 ## Discussion of example
-## ~~~~~~~~~~~~~~~~~~~~~
+## ---------------------
 ## In the example, transactions are collected via `jobAddTx()` and added to
 ## a batch of jobs to be processed at a time when considered right. The
 ## processing is initiated with the `jobCommit()` directive.
@@ -259,7 +257,7 @@
 ## have arrived if worked on the retrieved canonical head branch in the first
 ## place, the directive `jobDeltaTxsHead()` calculates the actions of what is
 ## needed to get just there from the locally cached head state of the pool.
-## These actions are added by  `jobDeltaTxsHead()` to the batch job queue to
+## These actions are added by  `jobDeltaTxsHead()` to the batch queue to
 ## be executed when it is time.
 ##
 ## Then the locally cached block chain head is updated by setting a new
@@ -269,38 +267,72 @@
 ## (otherwise txs might be thrown out which could be used for packing.)
 ##
 ##
-## =====================================================================
+## Adjustable Parameters
+## ---------------------
 ##
-## xxxxxxxxxxx to be updated, below xxxxxxxxxxxxxxxxx
+## flags
+##   The `flags` parameter holds a set of strategy symbols for how to process
+##   items and buckets.
 ##
-## Processing the job queue
-## ~~~~~~~~~~~~~~~~~~~~~~~~
-## Although the job queue can be processed any time, a lazy approach is the
-## most convenient. nevertheless, the job processor can be triggered any time
-## concurrently with the  `jobCommit()` directive. The directive guarantees
-## that all jobs currently on the queue will be processed, but not the ones
-## added while processing. Also, processing might run on another async task.
-## So when `jobCommit()` returns, the job processor might still run.
+##   *stageItems1559MinFee*
+##     Stage tx items with `tx.maxFee` at least `minFeePrice`. Other items are
+##     left or set pending. This symbol affects post-London tx items, only.
 ##
-## Transactions and buckets
-## ~~~~~~~~~~~~~~~~~~~~~~~~
-## Transactions are wrapped into metadata (called `item`) and kept in a
-## database. Any *bucket* or *waste basket* is represented by a pair of labels 
-## `(<status>,<reason>)` where `<status>` is a *bucket* label `pending`,
-## `staged`, or `packed`, and `<reason>` is sort of an error code. An `item`
-## with reason code different from `txInfoOk` (aka zero) is from the *waste
-## basket*, otherwise it is in one of the *buckets*.
+##   *stageItems1559MinTip*
+##     Stage tx items with `tx.effectiveGasTip(baseFee)` at least
+##     `minTipPrice`. Other items are considered underpriced and left or set
+##     pending. This symbol affects post-London tx items, only.
 ##
-## The management of the `items` is supported by the tables that make up the
-## database.
+##   *stageItemsPlMinPrice*
+##     Stage tx items with `tx.gasPrice` at least `minPreLondonGasPrice`.
+##     Other items are considered underpriced and left or set pending. This
+##     symbol affects pre-London tx items, only.
 ##
-## Moving transactions around
-## ~~~~~~~~~~~~~~~~~~~~~~~~~~
-## Transactions are *moved* between *buckets* and *waste basket* (which is a
-## terminal state). These movements take places asynchronously. Incoming
-## invalid transactions are immediately placed in the *waste basket*. All other
-## transactions are handled in tasks controlled by the following parameters
-## that affect how transactions are shuffled around.
+##   *packItemsTrgGasLimitMax*
+##     The packer may treat `trgGasLimit` as a soft limit and may pack an
+##     additional block exceeding this limit as long as the resulting block
+##     size does not exceed `maxMaxLimit`.
+##
+##   *packItemsTryHarder*
+##     The packer will stop at the first size extension error when adding
+##     txs. It rather will ignore that error and keep on trying for all
+##     staged blocks.
+##
+##   *autoUpdateBucketsDB*
+##     Automatically update the state buckets after running batch jobs if the
+##     `dirtyBuckets` flag is also set.
+##
+##   *autoActivateTxsPacker*
+##     Automatically pack transactions  after running batch jobs if the
+##    `stagedItems` flag is also set.
+##
+##   *autoZombifyUnpacked*
+##     Automatically dispose *pending* or *staged* tx items that were added to
+##     the state buckets database at least `lifeTime` ago.
+##
+##   *autoZombifyPacked*
+##     Automatically dispose *packed* tx itemss that were added to
+##     the state buckets database at least `lifeTime` ago.
+##
+##   *..there might be more strategy symbols..*
+##
+## lifeTime
+##   Txs that stay longer in one of the buckets will be  moved to a waste
+##   basket. From there they will be eventually deleted oldest first when
+##   the maximum size would be exceeded.
+##
+## minFeePrice
+##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
+##   that value.
+##
+## minTipPrice
+##   For EIP-1559, txs are packed if the expected tip (see `estimatedGasTip()`)
+##   is at least that value. In compatibility mode for legacy txs, this
+##   degenerates to `gasPrice - baseFee`.
+##
+## minPreLondonGasPrice
+##   For pre-London or legacy txs, this parameter has precedence over
+##   `minTipPrice`. Txs are packed if the `gasPrice` is at least that value.
 ##
 ## priceBump
 ##   There can be only one transaction in the database for the same `sender`
@@ -308,36 +340,36 @@
 ##   (`sender`, `nonce`) pair, the new transaction will replace the current one
 ##   if it has a gas price which is at least `priceBump` per cent higher.
 ##
+## topHeader
+##   Cached block chain insertion point. Typocally, this should be the the
+##   same header as retrieved by the `getCanonicalHead()`.
+##
+##
+## Read-Only Parameters
+## --------------------
+##
+## baseFee
+##   This parameter is derived from the current block chain head. The base fee
+##   parameter modifies/determines the expected gain when packing a new block
+##   (is set to *zero* for *pre-London* blocks.)
+##
+## dirtyBuckets
+##   If `true`, the state buckets database is ready for re-org if the
+##   `autoUpdateBucketsDB` flag is also set.
+##
 ## gasLimit
 ##   Taken or derived from the current block chain head, incoming txs that
 ##   exceed this gas limit are stored into the pending bucket (waiting for the
 ##   next cycle.)
 ##
-## minFeePrice, *optional*
-##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
-##   that value.
-##
-## minTipPrice, *optional*
-##   For EIP-1559, txs are packed if the expected tip (see `estimatedGasTip()`)
-##   is at least that value. In compatibility mode for legacy txs, this
-##   degenerates to `gasPrice - baseFee`.
-##
-## minPlGasPrice, *optional*
-##   For pre-London or legacy txs, this parameter has precedence over
-##   `minTipPrice`. Txs are packed if the `gasPrice` is at least that value.
-##
-## trgGasLimit, maxGasLimit, baseFee
+## maxGasLimit, trgGasLimit
 ##   These parameters are derived from the current block chain head. The limit
 ##   parameters set conditions on how many blocks from the packed bucket can be
-##   packed into the body of a new block. The base fee parameter modifies the
-##   expected gain when packing a new block (is set to *zero* for *pre-London*
-##   blocks.)
+##   packed into the body of a new block.
 ##
-## lifeTime
-##   Txs that stay longer in one of the buckets will be  moved to a waste
-##   basket. From there they will be eventually deleted oldest first when
-##   the maximum size would be exceeded.
-##
+## stagedItems
+##   If `true`, the state buckets database is ready for packing staged items
+##   if the `autoActivateTxsPacker` flag is also set.
 ##
 
 import
@@ -394,13 +426,13 @@ proc maintenanceProcessing(xp: TxPoolRef)
   ## Tasks to be done after job processing
 
   # Purge expired items
-  if algoAutoDisposeUnpacked in xp.pAlgoFlags or
-     algoAutoDisposePacked in xp.pAlgoFlags:
+  if autoZombifyUnpacked in xp.pFlags or
+     autoZombifyPacked in xp.pFlags:
     # Move transactions older than `xp.lifeTime` to the waste basket.
     xp.disposeExpiredItems
 
   # Update buckets
-  if algoAutoUpdateBuckets in xp.pAlgoFlags:
+  if autoUpdateBucketsDB in xp.pFlags:
     if xp.pDirtyBuckets:
       # For all items, re-calculate item status values (aka bucket labels).
       # If the `force` flag is set, re-calculation is done even though the
@@ -410,7 +442,7 @@ proc maintenanceProcessing(xp: TxPoolRef)
       xp.pDirtyBuckets = false
 
   # Pack txs
-  if algoAutoTxsPacker in xp.pAlgoFlags:
+  if autoActivateTxsPacker in xp.pFlags:
     if xp.pStagedItems:
       # Incrementally pack txs by appropriate fetching by items from
       # the `staged` bucket.
@@ -539,16 +571,17 @@ when JobWaitEnabled:
 
 proc triggerReorg*(xp: TxPoolRef) =
   ## This function triggers a bucket re-org action with the next job queue
-  ## maintenance-processing (see `jobCommit()`). This re-org action eventually
-  ## happens when the `algoAutoUpdateBuckets` flag is also set.
+  ## maintenance-processing (see `jobCommit()`) by setting the `dirtyBuckets`
+  ## parameter. This re-org action eventually happens when the
+  ## `autoUpdateBucketsDB` flag is also set.
   xp.pDirtyBuckets = true
 
 proc triggerPacker*(xp: TxPoolRef; clear = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## This function triggers the packer that will attempt to add more txs to the
   ## `packed` bucket with the next job queue maintenance-processing (see
-  ## `jobCommit()`). The packer will eventually run when the
-  ## `algoAutoTxsPacker` flag is also set.
+  ## `jobCommit()`) by setting the `stagedItems` parameter. The packer will
+  ## eventually run when the `autoActivateTxsPacker` flag is also set.
   ##
   ## If the `clear` argument is set `true`, all items from the `packed` bucket
   ## are moved to the `staged` bucket. So the packer will work on an empty
@@ -562,10 +595,51 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
+proc baseFee*(xp: TxPoolRef): GasPrice =
+  ## Getter, modifies/determines the expected gain when packing
+  xp.dbHead.baseFee
+
+proc dirtyBuckets*(xp: TxPoolRef): bool =
+  ## Getter, bucket database is ready for re-org if the `autoUpdateBucketsDB`
+  ## flag is also set.
+  xp.pDirtyBuckets
+
 proc ethBlock*(xp: TxPoolRef): EthBlock
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the block made up by the txs from the `packed` bucket.
   xp.ethBlockAssemble
+
+proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, retrieves the current gas limit totals per bucket.
+  xp.txDB.gasTotals
+
+proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
+  ## Getter, retrieves strategy symbols for how to process items and buckets.
+  xp.pFlags
+
+proc maxGasLimit*(xp: TxPoolRef): GasInt =
+  ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
+  xp.dbHead.maxGasLimit
+
+# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
+proc minFeePrice*(xp: TxPoolRef): GasPrice =
+  ## Getter, retrieves minimum for the current gas fee enforced by the
+  ## transaction pool for txs to be packed. This is an EIP-1559 only
+  ## parameter (see `stage1559MinFee` strategy.)
+  xp.pMinFeePrice
+
+proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
+  ## Getter. retrieves, the current gas price enforced by the transaction
+  ## pool. This is a pre-London parameter (see `packedPlMinPrice` strategy.)
+  xp.pMinPlGasPrice
+
+proc minTipPrice*(xp: TxPoolRef): GasPrice =
+  ## Getter, retrieves minimum for the current gas tip (or priority fee)
+  ## enforced by the transaction pool. This is an EIP-1559 parameter but it
+  ## comes with a fall back interpretation (see `stage1559MinTip` strategy.)
+  ## for legacy transactions.
+  xp.pMinTipPrice
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
@@ -577,59 +651,34 @@ proc nItems*(xp: TxPoolRef): TxTabsItemsCount
   ## some totals.
   xp.txDB.nItems
 
+proc stagedItems*(xp: TxPoolRef): bool =
+  ## Getter, bucket database is ready for packing staged items if the
+  ##  `autoActivateTxsPacker` flag is also set.
+  xp.pStagedItems
+
 proc topHeader*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
-  ## the same header as retrieved by the `getCanonicalHead()` unless in the
-  ## middle of a mining update.
+  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
+  ## middle of a mining update.)
   xp.dbHead.header
 
-proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, retrieves the current gas limit totals per bucket.
-  xp.txDB.gasTotals
-
-proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
-  ## Getter, retrieves strategy symbols for how to process items and buckets.
-  xp.pAlgoFlags
-
-# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc minFeePrice*(xp: TxPoolRef): GasPrice =
-  ## Getter, retrieves minimum for the current gas fee enforced by the
-  ## transaction pool for txs to be packed. This is an EIP-1559 only
-  ## parameter (see `stage1559MinFee` strategy.)
-  xp.pMinFeePrice
-
-proc minTipPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter, retrieves minimum for the current gas tip (or priority fee)
-  ## enforced by the transaction pool. This is an EIP-1559 parameter but it
-  ## comes with a fall back interpretation (see `stage1559MinTip` strategy.)
-  ## for legacy transactions.
-  xp.pMinTipPrice
-
-proc minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter. retrieves, the current gas price enforced by the transaction
-  ## pool. This is a pre-London parameter (see `packedPlMinPrice` strategy.)
-  xp.pMinPlGasPrice
+proc trgGasLimit*(xp: TxPoolRef): GasInt =
+  ## Getter, soft size limit when packing blocks (might be extended to
+  ## `maxGasLimit`)
+  xp.dbHead.trgGasLimit
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `topHeader=`*(xp: TxPoolRef; val: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, cached block chain insertion point. This will also update the
-  ## internally cached `baseFee` (depends on the block chain state.)
-  if xp.dbHead.header != val:
-    xp.dbHead.header = val
-
-proc `flags=`*(xp: TxPoolRef; flags: set[TxPoolFlags]) =
+proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
-  xp.pAlgoFlags = flags
+  xp.pFlags = val
 
-proc `maxRejects=`*(xp: TxPoolRef; size: int) =
+proc `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
-  xp.txDB.maxRejects = size
+  xp.txDB.maxRejects = val
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
 proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
@@ -641,6 +690,14 @@ proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
     xp.pDirtyBuckets = true
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
+  ## Setter for `minPlGasPrice`. If there was a value change, this function
+  ## implies `triggerReorg()`.
+  if xp.pMinPlGasPrice != val:
+    xp.pMinPlGasPrice = val
+    xp.pDirtyBuckets = true
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
 proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minTipPrice`. If there was a value change, this function
   ## implies `triggerReorg()`.
@@ -648,13 +705,34 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pMinTipPrice = val
     xp.pDirtyBuckets = true
 
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter for `minPlGasPrice`. If there was a value change, this function
-  ## implies `triggerReorg()`.
-  if xp.pMinPlGasPrice != val:
-    xp.pMinPlGasPrice = val
+proc `topHeader=`*(xp: TxPoolRef; val: BlockHeader)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, cached block chain insertion point. This will also update the
+  ## internally cached `baseFee` (depends on the block chain state.)
+  if xp.dbHead.header != val:
+    xp.dbHead.header = val
     xp.pDirtyBuckets = true
+    xp.pStagedItems = true
+
+# ------------------------------------------------------------------------------
+# Public functions, per-tx-item operations
+# ------------------------------------------------------------------------------
+
+# core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
+# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
+proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns a transaction if it is contained in the pool.
+  xp.txDB.byItemID.eq(hash)
+
+proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
+                   reason = txInfoExplicitDisposal;
+                   otherReason = txInfoImpliedDisposal): int
+    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
+  ## Move item to wastebasket. All items for the same sender with nonces
+  ## greater than the current one are deleted, as well. The function returns
+  ## the number of items eventally removed.
+  xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
 # ------------------------------------------------------------------------------
 # Public functions, more immediate actions deemed not so important yet
@@ -677,26 +755,6 @@ proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
   ## The function returns the number of transactions migrated.
   xp.txDB.setLocal(signer)
   xp.txDB.bySender.eq(signer).nItems
-
-# ------------------------------------------------------------------------------
-# Public functions, per-tx-item operations
-# ------------------------------------------------------------------------------
-
-# core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
-# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Returns a transaction if it is contained in the pool.
-  xp.txDB.byItemID.eq(hash)
-
-proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
-                   reason = txInfoExplicitDisposal;
-                   otherReason = txInfoImpliedDisposal): int
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
-  ## Move item to wastebasket. All items for the same sender with nonces
-  ## greater than the current one are deleted, as well. The function returns
-  ## the number of items eventally removed.
-  xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
 # ------------------------------------------------------------------------------
 # End

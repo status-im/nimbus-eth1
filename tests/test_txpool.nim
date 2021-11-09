@@ -235,11 +235,10 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       check xp.txDB.verify.isOK
 
 
-proc runTxBaseTests(noisy = true) =
-
+proc runTxPoolTests(noisy = true) =
   let elapNoisy = false
 
-  suite &"TxPool: Play with queues and lists":
+  suite &"TxPool: Play with pool functions and primitives":
 
     block:
       const groupLen = 13
@@ -280,11 +279,6 @@ proc runTxBaseTests(noisy = true) =
         check xq.txDB.verify.isOK
         check seen.len == xq.nItems.total
         check seen.len < groupLen
-
-
-
-proc runTxPoolTests(noisy = true) =
-  suite &"TxPool: Play with pool functions and primitives":
 
     block:
       var
@@ -374,11 +368,11 @@ proc runTxPoolTests(noisy = true) =
       # integrily check needs xq.txDB.verify() rather than xq.verify().
       xq.setItemStatusFromInfo
 
-      test &"Delete about {nItems} expired txs out of {xq.nItems.total}":
+      test &"Auto delete about {nItems} expired txs out of {xq.nItems.total}":
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
-        xq.flags = xq.flags + {algoAutoDisposeUnpacked, algoAutoDisposePacked}
+        xq.flags = xq.flags + {autoZombifyPacked}
 
         # evict and pick items from the wastbasket
         let
@@ -621,7 +615,6 @@ proc runTxPackerTests(noisy = true) =
           # be the same after re-org
           xq.dbHead.setBaseFee(ntNextFee)
           xq.triggerReorg
-          xq.flags = xq.flags + {algoAutoUpdateBuckets}
           xq.jobCommit(forceMaintenance = true)
 
           # now, xq should look like xr
@@ -635,7 +628,7 @@ proc runTxPackerTests(noisy = true) =
           lowerPrice = minGasPrice + 1.GasPrice
 
         test &"Packing txs, baseFee=0 minPrice={packPrice} "&
-            &"targetBlockSize={xq.dbHead.trgGasLimit}":
+            &"targetBlockSize={xq.trgGasLimit}":
 
           # verify that the test does not degenerate
           check 0 < minGasPrice
@@ -643,7 +636,6 @@ proc runTxPackerTests(noisy = true) =
 
           # ignore base limit so that the `packPrice` below becomes effective
           xq.dbHead.setBaseFee(0.GasPrice)
-          check xq.dbHead.baseFee == 0.GasPrice
           check xq.nItems.disposed == 0
 
           # set minimum target price
@@ -651,7 +643,7 @@ proc runTxPackerTests(noisy = true) =
           check xq.minPreLondonGasPrice == packPrice
 
           # employ packer
-          xq.flags = xq.flags + {algoPackTryHarder, algoAutoTxsPacker}
+          xq.flags = xq.flags + {packItemsTryHarder}
           xq.jobCommit(forceMaintenance = true)
           check xq.verify.isOK
 
@@ -770,7 +762,6 @@ proc runTxPackerTests(noisy = true) =
 
 proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader
-  noisy.runTxBaseTests
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 
@@ -789,7 +780,6 @@ when isMainModule:
                 MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
 
   noisy.runTxLoader(capture = capts1)
-  noisy.runTxBaseTests
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 

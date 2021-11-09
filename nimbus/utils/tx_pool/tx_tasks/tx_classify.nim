@@ -152,11 +152,11 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
   ## high enough. These checks are optional.
   if item.tx.txType == TxLegacy:
 
-    if algoPackedPlMinPrice in xp.pAlgoFlags:
+    if stageItemsPlMinPrice in xp.pFlags:
       if item.tx.gasPrice.GasPriceEx < xp.pMinPlGasPrice:
         return false
 
-    elif algoPacked1559MinTip in xp.pAlgoFlags:
+    elif stageItems1559MinTip in xp.pFlags:
       # Fall back transaction selector scheme
        if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
          return false
@@ -166,11 +166,11 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   ## Helper for `classifyTxPacked()`
   if item.tx.txType != TxLegacy:
 
-    if algoPacked1559MinTip in xp.pAlgoFlags:
+    if stageItems1559MinTip in xp.pFlags:
       if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
         return false
 
-    if algoPacked1559MinFee in xp.pAlgoFlags:
+    if stageItems1559MinFee in xp.pFlags:
       if item.tx.maxFee.GasPriceEx < xp.pMinFeePrice:
         return false
   true
@@ -235,15 +235,15 @@ proc classifyForPacking*(xp: TxPoolRef;
     return rcDoAcceptTx
 
   # So the current tx will exceed the soft limit.
-  if algoPackTrgGasLimitMax notin xp.pAlgoFlags:
+  if packItemsTrgGasLimitMax notin xp.pFlags:
     # Required to consider the soft limit `trgGasLimit` as a hard one.
-    if algoPackTryHarder in xp.pAlgoFlags:
+    if packItemsTryHarder in xp.pFlags:
       # Try next one
       return rcSkipTx
     # Done otherwise
     return rcStopPacking
 
-  # So, `algoPackTrgGasLimitMax` is anabled and the soft limit `trgGasLimit`
+  # So, `packItemsTrgGasLimitMax` is anabled and the soft limit `trgGasLimit`
   # may be exceeded up until the hard limit `maxGasLimit`.
   if newTotal <= xp.dbHead.maxGasLimit:
     # Accept the first first block exceeding `trgGasLimit`.
@@ -253,7 +253,7 @@ proc classifyForPacking*(xp: TxPoolRef;
     return rcStopPacking
 
   # Otherwise, this block exceeds the hard limit.
-  if algoPackTryHarder in xp.pAlgoFlags:
+  if packItemsTryHarder in xp.pFlags:
     # Try next one
     return rcSkipTx
   # Done otherwise
