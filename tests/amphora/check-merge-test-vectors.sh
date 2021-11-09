@@ -12,11 +12,6 @@ set -Eeuo pipefail
 #
 #     eth/catalyst: fix random in payload, payloadid as hexutil
 
-# Prepare a payload
-resp_prepare_payload=$(curl -sX POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"engine_preparePayload","params":[{"parentHash":"0x3b8fb240d288781d4aac94d3fd16809ee413bc99294a085798a589dae51ddd4a", "timestamp":"0x5", "random":"0x0000000000000000000000000000000000000000000000000000000000000000", "feeRecipient":"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"}],"id":67}' http://localhost:8550)
-echo "engine_preparePayload response: ${resp_prepare_payload}"
-# Interop version of response, not current main version of response
-
 # Get the payload
 resp_get_payload=$(curl -sX POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"engine_getPayload","params":["0x0"],"id":67}' http://localhost:8550)
 echo "engine_getPayload response: ${resp_get_payload}"

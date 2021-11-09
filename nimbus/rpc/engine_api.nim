@@ -74,20 +74,6 @@ proc setupEngineAPI*(sealingEngine: SealingEngineRef, server: RpcServer) =
   var payloadsInstance = newClone(newSeq[ExecutionPayload]())
   template payloads: auto = payloadsInstance[]
 
-  server.rpc("engine_preparePayload") do(payloadAttributes: PayloadAttributes) -> PreparePayloadResponse:
-    # TODO we must take into consideration the payloadAttributes.parentHash value
-    let response = PreparePayloadResponse(payloadId: Quantity payloads.len)
-
-    var payload: ExecutionPayload
-    let generatePayloadRes = sealingEngine.generateExecutionPayload(
-      payloadAttributes,
-      payload)
-    if generatePayloadRes.isErr:
-      raise newException(CatchableError, generatePayloadRes.error)
-
-    payloads.add payload
-    return response
-
   server.rpc("engine_getPayload") do(payloadId: Quantity) -> ExecutionPayload:
     if payloadId.uint64 > high(int).uint64 or
        int(payloadId) >= payloads.len:
