@@ -59,10 +59,10 @@ procSuite "State Content Network":
       copyMem(nodeHash.data.addr, unsafeAddr k[0], sizeof(nodeHash.data))
 
       let
+        # TODO: add stateRoot, and path eventually
+        accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          networkId: 0'u16,
-          contentType: state_content.ContentType.Account,
-          nodeHash: nodeHash)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
       proto1.contentDB.put(contentId, v)
@@ -72,10 +72,10 @@ procSuite "State Content Network":
       copyMem(nodeHash.data.addr, unsafeAddr key[0], sizeof(nodeHash.data))
 
       let
+        accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          networkId: 0'u16,
-          contentType: state_content.ContentType.Account,
-          nodeHash: nodeHash)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
+        contentId = toContentId(contentKey)
 
       # Note: GetContent and thus the lookup here is not really needed, as we
       # only have to request data to one node.
@@ -102,11 +102,9 @@ procSuite "State Content Network":
       node3 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
-
       proto1 = StateNetwork.new(node1, ContentDB.new("", inMemory = true))
       proto2 = StateNetwork.new(node2, ContentDB.new("", inMemory = true))
       proto3 = StateNetwork.new(node3, ContentDB.new("", inMemory = true))
-
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
     check proto1.portalProtocol.addNode(node2.localNode) == Added
@@ -122,10 +120,9 @@ procSuite "State Content Network":
       copyMem(nodeHash.data.addr, unsafeAddr k[0], sizeof(nodeHash.data))
 
       let
+        accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
         contentKey = ContentKey(
-          networkId: 0'u16,
-          contentType: state_content.ContentType.Account,
-          nodeHash: nodeHash)
+          contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
       proto2.contentDB.put(contentId, v)
@@ -138,10 +135,10 @@ procSuite "State Content Network":
     let firstKey = keys[0]
     copyMem(nodeHash.data.addr, unsafeAddr firstKey[0], sizeof(nodeHash.data))
 
-    let contentKey = ContentKey(
-      networkId: 0'u16,
-      contentType: state_content.ContentType.Account,
-      nodeHash: nodeHash)
+    let
+      accountTrieNodeKey = AccountTrieNodeKey(nodeHash: nodeHash)
+      contentKey = ContentKey(
+        contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
 
     let foundContent = await proto1.getContent(contentKey)
 
