@@ -51,14 +51,17 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     let (header, body) = (headers[i], bodies[i])
 
     if header.parentHash != c.lastBlockHash:
-      # reinit the stateDB if there is some interruption
       let parent = c.db.getBlockHeader(header.parentHash)
-      c.db.initStateDB(parent.stateRoot)
+      c.parentStateRoot = parent.stateRoot
+      
+    # initStateDB will return the last known state
+    # if the stateRoot is match
+    c.db.initStateDB(c.parentStateRoot)
 
-    let
+    let 
       vmState = newBaseVMState(c.db.stateDB, header, c.db)
       validationResult = vmState.processBlock(c.clique, header, body)
-
+    
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
@@ -99,8 +102,9 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
-
-  c.lastBlockHash = headers[^1].blockHash
+    c.lastBlockHash = header.blockHash
+    c.parentStateRoot = header.stateRoot
+    
   transaction.commit()
 
 # ------------------------------------------------------------------------------

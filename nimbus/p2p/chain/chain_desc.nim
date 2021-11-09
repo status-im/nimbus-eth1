@@ -43,6 +43,7 @@ type
     forkIds: array[ChainFork, ForkID]
     blockZeroHash: KeccakHash
     lastBlockHash: KeccakHash
+    parentStateRoot: KeccakHash
 
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
@@ -227,6 +228,10 @@ proc lastBlockHash*(c: Chain): auto {.inline.} =
   ## Getter
   c.lastBlockHash
 
+proc parentStateRoot*(c: Chain): auto {.inline.} =
+  ## Getter
+  c.parentStateRoot
+
 proc currentBlock*(c: Chain): BlockHeader
   {.gcsafe, raises: [Defect,CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
@@ -252,6 +257,10 @@ proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
 proc `lastBlockHash=`*(c: Chain; blockHash: KeccakHash) {.inline.} =
   ## Setter.
   c.lastBlockHash = blockHash
+
+proc `parentStateRoot=`*(c: Chain; stateRoot: KeccakHash) {.inline.} =
+  ## Setter.
+  c.parentStateRoot = stateRoot
 
 # ------------------------------------------------------------------------------
 # End
