@@ -376,7 +376,7 @@
 
 import
   std/[sequtils, tables],
-  ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
+  ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[tx_add, tx_head, tx_buckets, tx_dispose],
   chronicles,
@@ -599,7 +599,7 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
 
 proc baseFee*(xp: TxPoolRef): GasPrice =
   ## Getter, modifies/determines the expected gain when packing
-  xp.dbHead.baseFee
+  xp.chain.baseFee
 
 proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, bucket database is ready for re-org if the `autoUpdateBucketsDB`
@@ -610,9 +610,8 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the block made up by the txs from the `packed` bucket.
   EthBlock(
-    header: xp.dbHead.nextHeader(xp.txDB.byStatus.eq(txItemPacked).gasLimits),
+    header: xp.chain.nextHeader(xp.txDB.byStatus.eq(txItemPacked).gasLimits),
     txs: toSeq(xp.txDB.byStatus.incItemList(txItemPacked)).mapIt(it.tx))
-  # xp.ethBlockAssemble
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -625,7 +624,7 @@ proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
 
 proc maxGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
-  xp.dbHead.maxGasLimit
+  xp.chain.maxGasLimit
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
 proc minFeePrice*(xp: TxPoolRef): GasPrice =
@@ -665,12 +664,12 @@ proc head*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
   ## the same header as retrieved by the `getCanonicalHead()` (unless in the
   ## middle of a mining update.)
-  xp.dbHead.head
+  xp.chain.head
 
 proc trgGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, soft size limit when packing blocks (might be extended to
   ## `maxGasLimit`)
-  xp.dbHead.trgGasLimit
+  xp.chain.trgGasLimit
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -714,8 +713,8 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, cached block chain insertion point. This will also update the
   ## internally cached `baseFee` (depends on the block chain state.)
-  if xp.dbHead.head != val:
-    xp.dbHead.head = val
+  if xp.chain.head != val:
+    xp.chain.head = val
     xp.pDirtyBuckets = true
     xp.pStagedItems = true
 

@@ -613,7 +613,7 @@ proc runTxPackerTests(noisy = true) =
           # having the same set of txs, setting the xq database to the same
           # base fee as the xr one, the bucket fills of both database must
           # be the same after re-org
-          xq.dbHead.setBaseFee(ntNextFee)
+          xq.chain.setBaseFee(ntNextFee)
           xq.triggerReorg
           xq.jobCommit(forceMaintenance = true)
 
@@ -635,7 +635,7 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.dbHead.setBaseFee(0.GasPrice)
+          xq.chain.setBaseFee(0.GasPrice)
           check xq.nItems.disposed == 0
 
           # set minimum target price
@@ -745,7 +745,7 @@ proc runTxPackerTests(noisy = true) =
 
         check xq.nJobs == 0                   # want cleared job queue
         check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
-        xq.dbHead.setAccountFns(              # set up roll back fake accounts
+        xq.chain.setAccountFns(              # set up roll back fake accounts
           fakeAccounts.back.nonce,
           fakeAccounts.back.balance)
         xq.head = backHeader                  # move insertion point

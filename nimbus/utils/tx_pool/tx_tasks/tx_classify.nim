@@ -15,7 +15,7 @@
 import
   ../../../forks,
   ../../../transaction,
-  ../tx_dbhead,
+  ../tx_chain,
   ../tx_desc,
   ../tx_item,
   ../tx_tabs,
@@ -40,18 +40,18 @@ logScope:
 
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
-  if item.tx.txType == TxEip2930 and xp.dbHead.fork < FkBerlin:
+  if item.tx.txType == TxEip2930 and xp.chain.fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
     return false
 
-  if item.tx.txType == TxEip1559 and xp.dbHead.fork < FkLondon:
+  if item.tx.txType == TxEip1559 and xp.chain.fork < FkLondon:
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
-  if item.tx.gasLimit < item.tx.intrinsicGas(xp.dbHead.fork):
+  if item.tx.gasLimit < item.tx.intrinsicGas(xp.chain.fork):
     debug "invalid tx: not enough gas to perform calculation",
       available = item.tx.gasLimit,
-      require = item.tx.intrinsicGas(xp.dbHead.fork)
+      require = item.tx.intrinsicGas(xp.chain.fork)
     return false
 
   if item.tx.txType != TxLegacy:
@@ -70,7 +70,7 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
   ## sender) starting at the account nonce.
 
   # get the next applicable nonce as registered on the account database
-  let accountNonce = xp.dbHead.accountNonce(item.sender)
+  let accountNonce = xp.chain.accountNonce(item.sender)
 
   if item.tx.nonce < accountNonce:
     debug "invalid tx: account nonce too small",
@@ -109,9 +109,9 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool =
 proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
-  if xp.dbHead.trgGasLimit < item.tx.gasLimit:
+  if xp.chain.trgGasLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
-      maxLimit = xp.dbHead.trgGasLimit,
+      maxLimit = xp.chain.trgGasLimit,
       gasLimit = item.tx.gasLimit
     return false
   true
@@ -119,10 +119,10 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
 proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   if item.tx.txType != TxLegacy:
-    if item.tx.maxFee.GasPriceEx < xp.dbHead.baseFee:
+    if item.tx.maxFee.GasPriceEx < xp.chain.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
-        baseFee = xp.dbHead.baseFee
+        baseFee = xp.chain.baseFee
       return false
   true
 
@@ -130,7 +130,7 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether the worst case expense is covered by the price budget,
   let
-    balance = xp.dbHead.accountBalance(item.sender)
+    balance = xp.chain.accountBalance(item.sender)
     gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
   if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
@@ -158,7 +158,7 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
 
     elif stageItems1559MinTip in xp.pFlags:
       # Fall back transaction selector scheme
-       if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
+       if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
          return false
   true
 
@@ -167,7 +167,7 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   if item.tx.txType != TxLegacy:
 
     if stageItems1559MinTip in xp.pFlags:
-      if item.tx.effectiveGasTip(xp.dbHead.baseFee) < xp.pMinTipPrice:
+      if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
         return false
 
     if stageItems1559MinFee in xp.pFlags:
@@ -201,7 +201,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.effectiveGasTip(xp.dbHead.baseFee) <= 0.GasPriceEx:
+  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.txGasCovered(item):
@@ -229,9 +229,9 @@ proc classifyForPacking*(xp: TxPoolRef;
   let newTotal = gasOffset + item.tx.gasLimit
 
   # Note: the following if/else clauses requires that
-  #       `xp.dbHead.trgGasLimit` <= `xp.dbHead.maxGasLimit `
+  #       `xp.chain.trgGasLimit` <= `xp.chain.maxGasLimit `
   #       which is not verified here
-  if newTotal <= xp.dbHead.trgGasLimit:
+  if newTotal <= xp.chain.trgGasLimit:
     return rcDoAcceptTx
 
   # So the current tx will exceed the soft limit.
@@ -245,9 +245,9 @@ proc classifyForPacking*(xp: TxPoolRef;
 
   # So, `packItemsTrgGasLimitMax` is anabled and the soft limit `trgGasLimit`
   # may be exceeded up until the hard limit `maxGasLimit`.
-  if newTotal <= xp.dbHead.maxGasLimit:
+  if newTotal <= xp.chain.maxGasLimit:
     # Accept the first first block exceeding `trgGasLimit`.
-    if item.tx.gasLimit <= xp.dbHead.trgGasLimit:
+    if item.tx.gasLimit <= xp.chain.trgGasLimit:
       return rcDoAcceptTx
     # Done otherwise
     return rcStopPacking

@@ -13,7 +13,7 @@ import
   ../../nimbus/[config, chain_config, constants, genesis],
   ../../nimbus/db/[db_chain, accounts_cache],
   ../../nimbus/p2p/chain,
-  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_dbhead, tx_pool/tx_item],
+  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_chain, tx_pool/tx_item],
   ./helpers,
   eth/[common, keys, p2p, trie/db],
   stew/[keyed_queue],
@@ -24,11 +24,11 @@ type
     ## Faked `getBalance()` and `getNonce()` account functions
     backAccounts: Table[EthAddress,(uint,uint64)] # (nonce,balance)
     back*: tuple[
-      nonce: TxDbHeadNonce,
-      balance: TxDbHeadBalance]
+      nonce: TxChainNonce,
+      balance: TxChainBalance]
     forward*: tuple[
-      nonce: TxDbHeadNonce,
-      balance: TxDbHeadBalance]
+      nonce: TxChainNonce,
+      balance: TxChainBalance]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -104,7 +104,7 @@ proc toTxPool*(
               continue
             txPoolOk = true
             result = TxPoolRef.init(db)
-            result.dbHead.setBaseFee(baseFee)
+            result.chain.setBaseFee(baseFee)
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -130,7 +130,7 @@ proc toTxPool*(
   doAssert not db.isNil
 
   result = TxPoolRef.init(db)
-  result.dbHead.setBaseFee(baseFee)
+  result.chain.setBaseFee(baseFee)
   result.maxRejects = itList.len
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
@@ -164,7 +164,7 @@ proc toTxPool*(
   doAssert 0 < itemsPC and itemsPC < 100
 
   result = TxPoolRef.init(db)
-  result.dbHead.setBaseFee(baseFee)
+  result.chain.setBaseFee(baseFee)
   result.maxRejects = itList.len
 
   let
@@ -268,14 +268,14 @@ proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
     txsLst: seq[Transaction]
     backHash = xp.head.blockHash
     backHeader = xp.head
-    backBody = xp.dbhead.db.getBlockBody(backHash)
+    backBody = xp.chain.db.getBlockBody(backHash)
 
   while true:
     # count txs and step behind last block
     txsLst.add backBody.transactions
     backHash = backHeader.parentHash
-    if not xp.dbhead.db.getBlockHeader(backHash, backHeader) or
-       not xp.dbhead.db.getBlockBody(backHash, backBody):
+    if not xp.chain.db.getBlockHeader(backHash, backHeader) or
+       not xp.chain.db.getBlockBody(backHash, backBody):
       break
 
     # collect accounts unless max reached

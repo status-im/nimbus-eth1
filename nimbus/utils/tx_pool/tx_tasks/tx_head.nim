@@ -16,7 +16,7 @@
 import
   std/[tables],
   ../../../db/db_chain,
-  ../tx_dbhead,
+  ../tx_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -48,12 +48,12 @@ logScope:
 # use it as a stack/lifo as the ordering is reversed
 proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  for tx in xp.dbhead.db.getBlockBody(blockHash).transactions:
+  for tx in xp.chain.db.getBlockBody(blockHash).transactions:
     kq.addTxs[tx.itemID] = tx
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  for tx in xp.dbhead.db.getBlockBody(blockHash).transactions:
+  for tx in xp.chain.db.getBlockBody(blockHash).transactions:
     kq.remTxs[tx.itemID] = true
 
 proc init(T: type TxHeadDiffRef): T =
@@ -115,19 +115,19 @@ proc headDiff*(xp: TxPoolRef;
   ## of txs to be removed is *DEL - ADD*.
   ##
   let
-    curHead = xp.dbhead.head
+    curHead = xp.chain.head
     curHash = curHead.blockHash
     newHash = newHead.blockHash
 
   var ignHeader: BlockHeader
-  if not xp.dbhead.db.getBlockHeader(newHash, ignHeader):
+  if not xp.chain.db.getBlockHeader(newHash, ignHeader):
     # sanity check
     warn "Tx-pool head forward for non-existing header",
       newHead = newHash,
       newNumber = newHead.blockNumber
     return err(txInfoErrForwardHeadMissing)
 
-  if not xp.dbhead.db.getBlockHeader(curHash, ignHeader):
+  if not xp.chain.db.getBlockHeader(curHash, ignHeader):
     # This can happen if a `setHead()` is performed, where we have discarded
     # the old head from the chain.
     if curHead.blockNumber <= newHead.blockNumber:
@@ -173,7 +173,7 @@ proc headDiff*(xp: TxPoolRef;
         tmpHead = curBranchHead # cache value for error logging
         tmpHash = curBranchHash
       curBranchHash = curBranchHead.parentHash # decrement block number
-      if not xp.dbhead.db.getBlockHeader(curBranchHash, curBranchHead):
+      if not xp.chain.db.getBlockHeader(curBranchHash, curBranchHead):
         error "Unrooted old chain seen by tx-pool",
           curBranchHead = tmpHash,
           curBranchNumber = tmpHead.blockNumber
@@ -199,7 +199,7 @@ proc headDiff*(xp: TxPoolRef;
         tmpHead = newBranchHead # cache value for error logging
         tmpHash = newBranchHash
       newBranchHash = newBranchHead.parentHash # decrement block number
-      if not xp.dbhead.db.getBlockHeader(newBranchHash, newBranchHead):
+      if not xp.chain.db.getBlockHeader(newBranchHash, newBranchHead):
         error "Unrooted new chain seen by tx-pool",
           newBranchHead = tmpHash,
           newBranchNumber = tmpHead.blockNumber
@@ -215,7 +215,7 @@ proc headDiff*(xp: TxPoolRef;
         tmpHead = curBranchHead # cache value for error logging
         tmpHash = curBranchHash
       curBranchHash = curBranchHead.parentHash
-      if not xp.dbhead.db.getBlockHeader(curBranchHash, curBranchHead):
+      if not xp.chain.db.getBlockHeader(curBranchHash, curBranchHead):
         error "Unrooted old chain seen by tx-pool",
           curBranchHead = tmpHash,
           curBranchNumber = tmpHead.blockNumber
@@ -226,7 +226,7 @@ proc headDiff*(xp: TxPoolRef;
         tmpHead = newBranchHead # cache value for error logging
         tmpHash = newBranchHash
       newBranchHash = newBranchHead.parentHash
-      if not xp.dbhead.db.getBlockHeader(newBranchHash, newBranchHead):
+      if not xp.chain.db.getBlockHeader(newBranchHash, newBranchHead):
         error "Unrooted new chain seen by tx-pool",
           newBranchHead = tmpHash,
           newBranchNumber = tmpHead.blockNumber

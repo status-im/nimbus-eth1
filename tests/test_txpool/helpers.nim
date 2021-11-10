@@ -10,7 +10,7 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/tx_pool/[tx_dbhead, tx_desc, tx_gauge, tx_item, tx_tabs],
+  ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
   ../../nimbus/utils/tx_pool/tx_tasks/tx_recover,
   ../replay/undump,
   eth/[common, keys],
@@ -20,12 +20,12 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
-  tx_dbhead.TxDbHeadBalance,
-  tx_dbhead.TxDbHeadNonce,
-  tx_dbhead.db,
-  tx_dbhead.setBaseFee,
-  tx_dbhead.setAccountFns,
-  tx_desc.dbHead,
+  tx_chain.TxChainBalance,
+  tx_chain.TxChainNonce,
+  tx_chain.db,
+  tx_chain.setBaseFee,
+  tx_chain.setAccountFns,
+  tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,
   tx_gauge,

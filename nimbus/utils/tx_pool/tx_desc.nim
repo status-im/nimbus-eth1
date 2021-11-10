@@ -15,7 +15,7 @@
 import
   std/[times],
   ../../db/db_chain,
-  ./tx_dbhead,
+  ./tx_chain,
   ./tx_info,
   ./tx_item,
   ./tx_job,
@@ -92,7 +92,7 @@ type
     ## Transaction pool descriptor
     startDate: Time             ## Start date (read-only)
 
-    dbHead: TxDbHeadRef         ## block chain state
+    chain: TxChainRef           ## block chain state
     byJob: TxJobRef             ## Job batch list
     txDB: TxTabsRef             ## Transaction lists & tables
 
@@ -134,7 +134,7 @@ proc init(xp: TxPoolRef; db: BaseChainDB; miner: Option[PrivateKey])
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.dbHead = TxDbHeadRef.init(db, miner)
+  xp.chain = TxChainRef.init(db, miner)
   xp.txDB = TxTabsRef.init
   xp.byJob = TxJobRef.init
 
@@ -178,9 +178,9 @@ proc byJob*(xp: TxPoolRef): TxJobRef =
   ## Getter, job queue
   xp.byJob
 
-proc dbHead*(xp: TxPoolRef): TxDbHeadRef =
+proc chain*(xp: TxPoolRef): TxChainRef =
   ## Getter, block chain DB
-  xp.dbHead
+  xp.chain
 
 proc pDirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, buckets need update
