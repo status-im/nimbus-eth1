@@ -266,8 +266,8 @@ proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
   var
     accTab: Table[EthAddress,bool]
     txsLst: seq[Transaction]
-    backHash = xp.topHeader.blockHash
-    backHeader = xp.topHeader
+    backHash = xp.head.blockHash
+    backHeader = xp.head
     backBody = xp.dbhead.db.getBlockBody(backHash)
 
   while true:

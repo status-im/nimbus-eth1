@@ -586,7 +586,7 @@ proc runTxPackerTests(noisy = true) =
         let
           pending = xq.nItems.pending
           staged = xq.nItems.staged
-          packed = xr.nItems.packed
+          packed = xq.nItems.packed
 
         test &"Load txs with baseFee={ntBaseFee}, "&
             &"buckets={pending}/{staged}/{packed}":
@@ -748,7 +748,7 @@ proc runTxPackerTests(noisy = true) =
         xq.dbHead.setAccountFns(              # set up roll back fake accounts
           fakeAccounts.back.nonce,
           fakeAccounts.back.balance)
-        xq.topHeader = backHeader             # move insertion point
+        xq.head = backHeader                  # move insertion point
         xq.jobCommit                          # apply job diffs
 
         # make sure that all txs have been added to the pool

@@ -129,12 +129,12 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc init(xp: TxPoolRef; db: BaseChainDB)
+proc init(xp: TxPoolRef; db: BaseChainDB; miner: Option[PrivateKey])
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.dbHead = TxDbHeadRef.init(db)
+  xp.dbHead = TxDbHeadRef.init(db, miner)
   xp.txDB = TxTabsRef.init
   xp.byJob = TxJobRef.init
 
@@ -152,9 +152,15 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
 
 proc init*(T: type TxPoolRef; db: BaseChainDB): T
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Ditto
+  ## Constructor
   new result
-  result.init(db)
+  result.init(db,PrivateKey.none)
+
+proc init*(T: type TxPoolRef; db: BaseChainDB; miner: PrivateKey): T
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Constructor
+  new result
+  result.init(db,some(miner))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters

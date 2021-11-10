@@ -9,23 +9,15 @@
 # according to those terms.
 
 import
-  std/[strutils],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/utils/tx_pool/tx_item,
-  ./helpers,
   eth/[common, common/transaction, keys],
   stew/results,
   stint
 
 const
   # example from clique, signer: 658bdf435d810c91414ec09147daa6db62406379
-  pubKey = "658bdf435d810c91414ec09147daa6db62406379"
   prvKey = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-
-proc toPrvKey(pkhex: string): PrivateKey =
-  let rc = PrivateKey.fromHex(pkhex)
-  doAssert rc.isOK
-  rc.value
 
 proc signature(tx: Transaction; key: PrivateKey): (int64,UInt256,UInt256) =
   let
@@ -48,7 +40,7 @@ proc signature(tx: Transaction; key: PrivateKey): (int64,UInt256,UInt256) =
     result[0] = -1
 
 
-proc sign*(tx: Transaction; key: PrivateKey): Transaction =
+proc sign(tx: Transaction; key: PrivateKey): Transaction =
   let (V,R,S) = tx.signature(key)
   result = tx
   result.V = V
@@ -56,6 +48,11 @@ proc sign*(tx: Transaction; key: PrivateKey): Transaction =
   result.S = S
 
 # ------------
+
+let
+  prvTestKey* = PrivateKey.fromHex(prvKey).value
+  pubTestKey* = prvTestKey.toPublicKey
+  testAddress* = pubTestKey.toCanonicalAddress
 
 proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
               (TxItemRef,Transaction,Transaction) =
@@ -67,15 +64,15 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
   tx1.gasPrice = (tx0.gasPrice * (100 + priceBump) + 99) div 100
 
   let
-    tx0Signed = tx0.sign(prvKey.toPrvKey)
-    tx1Signed = tx1.sign(prvKey.toPrvKey)
+    tx0Signed = tx0.sign(prvTestKey)
+    tx1Signed = tx1.sign(prvTestKey)
   block:
     let rc = tx0Signed.ecRecover
-    if rc.isErr or rc.value.toHex.toLowerAscii != pubKey:
+    if rc.isErr or rc.value != testAddress:
       return
   block:
     let rc = tx1Signed.ecRecover
-    if rc.isErr or rc.value.toHex.toLowerAscii != pubKey:
+    if rc.isErr or rc.value != testAddress:
       return
   (item,tx0Signed,tx1Signed)
 

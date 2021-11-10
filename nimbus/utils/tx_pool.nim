@@ -31,6 +31,8 @@
 ##     re-packing as close as possible to the high water mark. This algorithm
 ##     can only replace the last nonce-sorted item per sender due to the
 ##     boundary condition on nonces.
+##   + Also, `minGasLimit` is currently unused. The packer should always
+##     try to reach that limit even without the `packItemsTryHarder` flag set.
 ##
 ## * Some table (used for testing & data analysis) might not be needed in
 ##   production environment:
@@ -224,7 +226,7 @@
 ##
 ##    let newTopHeader = db.getCanonicalHead # new head after mining
 ##    xp.jobDeltaTxsHead(newTopHeader)       # add transactions update jobs
-##    xp.topHeader = newTopHeader            # adjust insertion point
+##    xp.head = newTopHeader                 # adjust block insertion point
 ##    xp.jobCommit                           # run batch queue worker/processor
 ##
 ##
@@ -294,9 +296,9 @@
 ##     size does not exceed `maxMaxLimit`.
 ##
 ##   *packItemsTryHarder*
-##     The packer will stop at the first size extension error when adding
-##     txs. It rather will ignore that error and keep on trying for all
-##     staged blocks.
+##     The packer will not stop at the first time when the `trgGasLimit`
+##     block size exceeded while accumulating txs. It rather will ignore that
+##     error and keep on trying for all staged blocks.
 ##
 ##   *autoUpdateBucketsDB*
 ##     Automatically update the state buckets after running batch jobs if the
@@ -315,6 +317,10 @@
 ##     the state buckets database at least `lifeTime` ago.
 ##
 ##   *..there might be more strategy symbols..*
+##
+## head
+##   Cached block chain insertion point. Typocally, this should be the the
+##   same header as retrieved by the `getCanonicalHead()`.
 ##
 ## lifeTime
 ##   Txs that stay longer in one of the buckets will be  moved to a waste
@@ -340,10 +346,6 @@
 ##   (`sender`, `nonce`) pair, the new transaction will replace the current one
 ##   if it has a gas price which is at least `priceBump` per cent higher.
 ##
-## topHeader
-##   Cached block chain insertion point. Typocally, this should be the the
-##   same header as retrieved by the `getCanonicalHead()`.
-##
 ##
 ## Read-Only Parameters
 ## --------------------
@@ -362,7 +364,7 @@
 ##   exceed this gas limit are stored into the pending bucket (waiting for the
 ##   next cycle.)
 ##
-## maxGasLimit, trgGasLimit
+## maxGasLimit, minGasLimit, trgGasLimit
 ##   These parameters are derived from the current block chain head. The limit
 ##   parameters set conditions on how many blocks from the packed bucket can be
 ##   packed into the body of a new block.
@@ -376,7 +378,7 @@ import
   std/[sequtils, tables],
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_ethblock, tx_head, tx_buckets, tx_dispose],
+  ./tx_pool/tx_tasks/[tx_add, tx_head, tx_buckets, tx_dispose],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results]
@@ -607,7 +609,10 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
 proc ethBlock*(xp: TxPoolRef): EthBlock
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the block made up by the txs from the `packed` bucket.
-  xp.ethBlockAssemble
+  EthBlock(
+    header: xp.dbHead.nextHeader(xp.txDB.byStatus.eq(txItemPacked).gasLimits),
+    txs: toSeq(xp.txDB.byStatus.incItemList(txItemPacked)).mapIt(it.tx))
+  # xp.ethBlockAssemble
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -656,11 +661,11 @@ proc stagedItems*(xp: TxPoolRef): bool =
   ##  `autoActivateTxsPacker` flag is also set.
   xp.pStagedItems
 
-proc topHeader*(xp: TxPoolRef): BlockHeader =
+proc head*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
   ## the same header as retrieved by the `getCanonicalHead()` (unless in the
   ## middle of a mining update.)
-  xp.dbHead.header
+  xp.dbHead.head
 
 proc trgGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, soft size limit when packing blocks (might be extended to
@@ -705,12 +710,12 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pMinTipPrice = val
     xp.pDirtyBuckets = true
 
-proc `topHeader=`*(xp: TxPoolRef; val: BlockHeader)
+proc `head=`*(xp: TxPoolRef; val: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, cached block chain insertion point. This will also update the
   ## internally cached `baseFee` (depends on the block chain state.)
-  if xp.dbHead.header != val:
-    xp.dbHead.header = val
+  if xp.dbHead.head != val:
+    xp.dbHead.head = val
     xp.pDirtyBuckets = true
     xp.pStagedItems = true
 
