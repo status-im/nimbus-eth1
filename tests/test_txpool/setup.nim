@@ -11,24 +11,13 @@
 import
   std/[algorithm, os, sequtils, strformat, tables, times],
   ../../nimbus/[config, chain_config, constants, genesis],
-  ../../nimbus/db/[db_chain, accounts_cache],
+  ../../nimbus/db/db_chain,
   ../../nimbus/p2p/chain,
   ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_chain, tx_pool/tx_item],
   ./helpers,
   eth/[common, keys, p2p, trie/db],
   stew/[keyed_queue],
   stint
-
-type
-  AmendedAccountsRef* = ref object ##\
-    ## Faked `getBalance()` and `getNonce()` account functions
-    backAccounts: Table[EthAddress,(uint,uint64)] # (nonce,balance)
-    back*: tuple[
-      nonce: TxChainNonce,
-      balance: TxChainBalance]
-    forward*: tuple[
-      nonce: TxChainNonce,
-      balance: TxChainBalance]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -104,7 +93,7 @@ proc toTxPool*(
               continue
             txPoolOk = true
             result = TxPoolRef.init(db)
-            result.chain.setBaseFee(baseFee)
+            result.chain.setNextBaseFee(baseFee)
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -130,7 +119,7 @@ proc toTxPool*(
   doAssert not db.isNil
 
   result = TxPoolRef.init(db)
-  result.chain.setBaseFee(baseFee)
+  result.chain.setNextBaseFee(baseFee)
   result.maxRejects = itList.len
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
@@ -164,7 +153,7 @@ proc toTxPool*(
   doAssert 0 < itemsPC and itemsPC < 100
 
   result = TxPoolRef.init(db)
-  result.chain.setBaseFee(baseFee)
+  result.chain.setNextBaseFee(baseFee)
   result.maxRejects = itList.len
 
   let
@@ -199,64 +188,6 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
   for item in xp.toItems:
     let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
     xp.setStatus(item, w)
-
-
-proc getAmendedAccounts*(xp: TxPoolRef;
-                         txs: seq[Transaction]): AmendedAccountsRef =
-  ## Provide fake account state environment assuming the argument `txs`
-  ## rolles back or forward the block chain states.
-  let desc = AmendedAccountsRef()
-
-  for tx in txs:
-    var item: TxItemRef
-    let rc = xp.getItem(tx.itemID)
-    if rc.isOk:
-      item = rc.value
-    else:
-      var ty = tx
-      item = xp.recoverItem(ty).value
-      if not xp.txDB.bySender.eq(item.sender).isErr:
-        # no need to adjust unknown accounts
-        continue
-    if not desc.backAccounts.hasKey(item.sender):
-      desc.backAccounts[item.sender] = (0u,0u64)
-    let maxConsumed = item.tx.gasLimit.uint64 * item.tx.gasPrice.uint64
-    desc.backAccounts[item.sender][0].inc
-    desc.backAccounts[item.sender][1] += maxConsumed
-
-  desc.back.nonce =
-      proc(rdb: ReadOnlyStateDB; acc: EthAddress):AccountNonce =
-        var nonce = rdb.getNonce(acc)
-        if desc.backAccounts.hasKey(acc):
-          if nonce < desc.backAccounts[acc][0]:
-            return 0
-          nonce -= desc.backAccounts[acc][0]
-        return nonce
-
-  desc.back.balance =
-      proc(rdb: ReadOnlyStateDB; acc: EthAddress): UInt256 =
-        var balance = rdb.getBalance(acc)
-        if desc.backAccounts.hasKey(acc):
-          if balance < desc.backAccounts[acc][1].u256:
-            return 0.u256
-          balance -= desc.backAccounts[acc][1].u256
-        return balance
-
-  desc.forward.nonce =
-      proc(rdb: ReadOnlyStateDB; acc: EthAddress):AccountNonce =
-        var nonce = rdb.getNonce(acc)
-        if desc.backAccounts.hasKey(acc):
-          nonce += desc.backAccounts[acc][0]
-        return nonce
-
-  desc.forward.balance =
-      proc(rdb: ReadOnlyStateDB; acc: EthAddress): UInt256 =
-        var balance = rdb.getBalance(acc)
-        if desc.backAccounts.hasKey(acc):
-          balance += desc.backAccounts[acc][1].u256
-        return balance
-
-  desc
 
 
 proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):

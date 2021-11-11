@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/[db/db_chain, chain_config, config],
+  ../nimbus/[chain_config, config, db/db_chain],
   ../nimbus/utils/[tx_pool, tx_pool/tx_item],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
@@ -68,9 +68,6 @@ var
 
   # running block chain
   bcDB: BaseChainDB
-
-  # collected accounts from block chain database transactions
-  txAccounts: seq[EthAddress]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -613,7 +610,7 @@ proc runTxPackerTests(noisy = true) =
           # having the same set of txs, setting the xq database to the same
           # base fee as the xr one, the bucket fills of both database must
           # be the same after re-org
-          xq.chain.setBaseFee(ntNextFee)
+          xq.chain.setNextBaseFee(ntNextFee)
           xq.triggerReorg
           xq.jobCommit(forceMaintenance = true)
 
@@ -635,7 +632,7 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.chain.setBaseFee(0.GasPrice)
+          xq.chain.setNextBaseFee(0.GasPrice)
           check xq.nItems.disposed == 0
 
           # set minimum target price
@@ -732,7 +729,6 @@ proc runTxPackerTests(noisy = true) =
         # state environment for the `backHeader` block chain position
         let
           (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
-          fakeAccounts = xq.getAmendedAccounts(backTxs)
           stats = xq.nItems
 
         # verify that test would not degenerate
@@ -745,9 +741,6 @@ proc runTxPackerTests(noisy = true) =
 
         check xq.nJobs == 0                   # want cleared job queue
         check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
-        xq.chain.setAccountFns(              # set up roll back fake accounts
-          fakeAccounts.back.nonce,
-          fakeAccounts.back.balance)
         xq.head = backHeader                  # move insertion point
         xq.jobCommit                          # apply job diffs
 

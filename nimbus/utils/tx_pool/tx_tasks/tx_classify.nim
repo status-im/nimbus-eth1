@@ -40,15 +40,15 @@ logScope:
 
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
-  if item.tx.txType == TxEip2930 and xp.chain.fork < FkBerlin:
+  if item.tx.txType == TxEip2930 and xp.chain.nextFork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
     return false
 
-  if item.tx.txType == TxEip1559 and xp.chain.fork < FkLondon:
+  if item.tx.txType == TxEip1559 and xp.chain.nextFork < FkLondon:
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
-  if item.tx.gasLimit < item.tx.intrinsicGas(xp.chain.fork):
+  if item.tx.gasLimit < item.tx.intrinsicGas(xp.chain.nextFork):
     debug "invalid tx: not enough gas to perform calculation",
       available = item.tx.gasLimit,
       require = item.tx.intrinsicGas(xp.chain.fork)
@@ -70,7 +70,7 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
   ## sender) starting at the account nonce.
 
   # get the next applicable nonce as registered on the account database
-  let accountNonce = xp.chain.accountNonce(item.sender)
+  let accountNonce = xp.chain.getNonce(item.sender)
 
   if item.tx.nonce < accountNonce:
     debug "invalid tx: account nonce too small",
@@ -119,7 +119,7 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
 proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   if item.tx.txType != TxLegacy:
-    if item.tx.maxFee.GasPriceEx < xp.chain.baseFee:
+    if item.tx.maxFee.GasPriceEx < xp.chain.nextBaseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
         baseFee = xp.chain.baseFee
@@ -130,7 +130,7 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether the worst case expense is covered by the price budget,
   let
-    balance = xp.chain.accountBalance(item.sender)
+    balance = xp.chain.getBalance(item.sender)
     gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
   if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
@@ -158,7 +158,7 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
 
     elif stageItems1559MinTip in xp.pFlags:
       # Fall back transaction selector scheme
-       if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
+       if item.tx.effectiveGasTip(xp.chain.nextBaseFee) < xp.pMinTipPrice:
          return false
   true
 
@@ -167,7 +167,7 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   if item.tx.txType != TxLegacy:
 
     if stageItems1559MinTip in xp.pFlags:
-      if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
+      if item.tx.effectiveGasTip(xp.chain.nextBaseFee) < xp.pMinTipPrice:
         return false
 
     if stageItems1559MinFee in xp.pFlags:
@@ -201,7 +201,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasPriceEx:
+  if item.tx.effectiveGasTip(xp.chain.nextBaseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.txGasCovered(item):

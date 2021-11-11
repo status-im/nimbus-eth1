@@ -8,12 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Tasklet: Update Staged Queue
-## =============================================
+## Transaction Pool Tasklets: Update by Bucket
+## ===========================================
 ##
 
 import
   std/[tables],
+  ../../../db/db_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -145,7 +146,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
       # Move to staged bucket
       discard xp.txDB.reassign(item, txItemStaged)
 
-  return stagedItemsAdded
+  stagedItemsAdded
 
 
 proc bucketUpdatePacked*(xp: TxPoolRef)
@@ -163,11 +164,22 @@ proc bucketUpdatePacked*(xp: TxPoolRef)
         of rcDoAcceptTx:
           if not xp.txDB.reassign(item, txItemPacked):
             break  # weird case, should not happen
-          gasTotal += item.tx.gasLimit
+          gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
         of rcStopPacking:
           break perSenderPack
         of rcSkipTx:
           break # stop for this sender (inner `incItemList()` loop)
+
+
+#[
+proc bucketVmExecPacked*(xp:  TxPoolRef)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Execute all txs in the `packed` bucket.
+  let
+    vmState = xp.chain.vmState
+    dbTx = vmState.chainDB.db.beginTransaction
+  defer: dbTx.dispose()
+]#
 
 # ------------------------------------------------------------------------------
 # End

@@ -599,7 +599,7 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
 
 proc baseFee*(xp: TxPoolRef): GasPrice =
   ## Getter, modifies/determines the expected gain when packing
-  xp.chain.baseFee
+  xp.chain.nextBaseFee
 
 proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, bucket database is ready for re-org if the `autoUpdateBucketsDB`
