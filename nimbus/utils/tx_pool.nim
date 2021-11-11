@@ -378,7 +378,7 @@ import
   std/[sequtils, tables],
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_head, tx_buckets, tx_dispose],
+  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results]
@@ -439,7 +439,7 @@ proc maintenanceProcessing(xp: TxPoolRef)
       # For all items, re-calculate item status values (aka bucket labels).
       # If the `force` flag is set, re-calculation is done even though the
       # change flag hes remained unset.
-      if xp.bucketsUpdateAll:
+      if xp.bucketUpdateAll:
         xp.pStagedItems = true # triggers packer
       xp.pDirtyBuckets = false
 
@@ -448,7 +448,7 @@ proc maintenanceProcessing(xp: TxPoolRef)
     if xp.pStagedItems:
       # Incrementally pack txs by appropriate fetching by items from
       # the `staged` bucket.
-      xp.bucketsUpdatePacked
+      xp.bucketUpdatePacked
       xp.pStagedItems = false
 
 

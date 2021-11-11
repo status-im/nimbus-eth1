@@ -47,7 +47,7 @@ proc reassignItemsPending(xp: TxPoolRef; labelFrom: TxItemStatus;
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc bucketsUpdateAll*(xp: TxPoolRef): bool
+proc bucketUpdateAll*(xp: TxPoolRef): bool
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Update all buckets. The function returns `true` if some items were added
   ## to the `staged` bucket.
@@ -148,7 +148,7 @@ proc bucketsUpdateAll*(xp: TxPoolRef): bool
   return stagedItemsAdded
 
 
-proc bucketsUpdatePacked*(xp: TxPoolRef)
+proc bucketUpdatePacked*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Attempt to pack a new block into the `packed` bucket not exceeding the
   ## block size hard or soft limits (see `xp.pAlgoFlags`.)

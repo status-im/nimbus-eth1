@@ -41,7 +41,7 @@ type
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
     txSenderAny = 0     ## all entries
-    txSenderPending      ## by status ...
+    txSenderPending     ## by status ...
     txSenderStaged
     txSenderPacked
 
