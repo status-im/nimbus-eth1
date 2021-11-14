@@ -46,7 +46,7 @@ proc test(path: string, name: string, params = "", lang = "c") =
   exec runPrefix & "build/" & name
 
 task test, "Run tests":
-  test "tests", "all_tests", "-d:chronicles_log_level=ERROR"
+  test "tests", "all_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
