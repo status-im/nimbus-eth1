@@ -202,8 +202,9 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     of MessageKind.offer:
       p.handleOffer(message.offer)
     else:
-      # This shouldn't occur as the 0 case is already covered in `decodedMessage`
-      debug "Packet decoding error: Invalid message type"
+      # This would mean a that Portal wire response message is being send over a
+      # discv5 talkreq message.
+      debug "Invalid Portal wire message type over talkreq", kind = message.kind
       @[]
   else:
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress

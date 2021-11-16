@@ -22,7 +22,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0101000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -42,7 +42,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0201000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+      "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -58,7 +58,7 @@ suite "Portal Wire Protocol Message Encodings":
       fn = FindNodeMessage(distances: distances)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "03040000000001ff00"
+    check encoded.toHex == "02040000000001ff00"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -74,7 +74,7 @@ suite "Portal Wire Protocol Message Encodings":
       n = NodesMessage(total: total)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "040105000000"
+    check encoded.toHex == "030105000000"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -96,7 +96,7 @@ suite "Portal Wire Protocol Message Encodings":
       n = NodesMessage(total: total, enrs: List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)]))
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "040105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    check encoded.toHex == "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -116,7 +116,7 @@ suite "Portal Wire Protocol Message Encodings":
       fc = FindContentMessage(contentKey: contentKey)
 
     let encoded = encodeMessage(fc)
-    check encoded.toHex == "0504000000706f7274616c"
+    check encoded.toHex == "0404000000706f7274616c"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -133,7 +133,7 @@ suite "Portal Wire Protocol Message Encodings":
         contentMessageType: connectionIdType, connectionId: connectionId)
 
     let encoded = encodeMessage(c)
-    check encoded.toHex == "06000102"
+    check encoded.toHex == "05000102"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -151,7 +151,7 @@ suite "Portal Wire Protocol Message Encodings":
       c = ContentMessage(contentMessageType: contentType, content: content)
 
     let encoded = encodeMessage(c)
-    check encoded.toHex == "06017468652063616b652069732061206c6965"
+    check encoded.toHex == "05017468652063616b652069732061206c6965"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -173,7 +173,7 @@ suite "Portal Wire Protocol Message Encodings":
       c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
 
     let encoded = encodeMessage(c)
-    check encoded.toHex == "0602080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    check encoded.toHex == "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -192,7 +192,7 @@ suite "Portal Wire Protocol Message Encodings":
       o = OfferMessage(contentKeys: contentKeys)
 
     let encoded = encodeMessage(o)
-    check encoded.toHex == "070400000004000000010203"
+    check encoded.toHex == "060400000004000000010203"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -210,7 +210,7 @@ suite "Portal Wire Protocol Message Encodings":
       a = AcceptMessage(connectionId: connectionId, contentKeys: contentKeys)
 
     let encoded = encodeMessage(a)
-    check encoded.toHex == "080102060000000101"
+    check encoded.toHex == "070102060000000101"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()

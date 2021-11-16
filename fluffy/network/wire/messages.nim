@@ -30,16 +30,14 @@ type
     dataRadius*: UInt256
 
   MessageKind* = enum
-    unused = 0x00
-
-    ping = 0x01
-    pong = 0x02
-    findnode = 0x03
-    nodes = 0x04
-    findcontent = 0x05
-    content = 0x06
-    offer = 0x07
-    accept = 0x08
+    ping = 0x00
+    pong = 0x01
+    findnode = 0x02
+    nodes = 0x03
+    findcontent = 0x04
+    content = 0x05
+    offer = 0x06
+    accept = 0x07
 
   ContentMessageType* = enum
     connectionIdType = 0x00
@@ -99,8 +97,6 @@ type
       offer*: OfferMessage
     of accept:
       accept*: AcceptMessage
-    else:
-      discard
 
   SomeMessage* =
     PingMessage or PongMessage or
