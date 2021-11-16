@@ -93,11 +93,6 @@ func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
-# TODO:
-# - On incoming portal ping of unknown node: add node to routing table by
-# grabbing ENR from discv5 routing table (might not have it)?
-# - ENRs with portal protocol capabilities as field?
-
 proc handlePing(p: PortalProtocol, ping: PingMessage):
     seq[byte] =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
@@ -189,6 +184,15 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
+    # Received a proper Portal message, check if this node exists in the base
+    # routing table and add if so.
+    # TODO: Could add a findNodes with distance 0 call when not, and perhaps,
+    # optionally pass ENRs if the message was a discv5 handshake containing the
+    # ENR.
+    let node = p.baseProtocol.getNode(srcId)
+    if node.isSome():
+      discard p.routingTable.addNode(node.get())
+
     case message.kind
     of MessageKind.ping:
       p.handlePing(message.ping)
@@ -540,25 +544,15 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
 proc seedTable*(p: PortalProtocol) =
-  ## Seed the table with nodes from the discv5 table and with specifically
-  ## provided bootstrap nodes. The latter are then supposed to be nodes
-  ## supporting the wire protocol for the specific content network.
+  ## Seed the table with specifically provided Portal bootstrap nodes. These are
+  ## nodes that must support the wire protocol for the specific content network.
   # Note: We allow replacing the bootstrap nodes in the routing table as it is
   # possible that some of these are not supporting the specific portal network.
+  # Other note: One could also pick nodes from the discv5 routing table to
+  # bootstrap the portal networks, however it would require a flag in the ENR to
+  # be added and there might be none in the routing table due to low amount of
+  # Portal nodes versus other nodes.
 
-  # TODO: Picking some nodes from discv5 routing table now. Should definitely
-  # add supported Portal network info in a k:v pair in the ENRs and filter on
-  # that.
-  let closestNodes = p.baseProtocol.neighbours(
-    NodeId.random(p.baseProtocol.rng[]), seenOnly = true)
-
-  for node in closestNodes:
-    if p.routingTable.addNode(node) == Added:
-      debug "Added node from discv5 routing table", uri = toURI(node.record)
-    else:
-      debug "Node from discv5 routing table could not be added", uri = toURI(node.record)
-
-  # Seed the table with bootstrap nodes.
   for record in p.bootstrapRecords:
     if p.addNode(record):
       debug "Added bootstrap node", uri = toURI(record),
@@ -612,9 +606,14 @@ proc refreshLoop(p: PortalProtocol) {.async.} =
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
   try:
-    await p.populateTable()
-
     while true:
+      # TODO: It would be nicer and more secure if this was event based and/or
+      # steered from the routing table.
+      while p.routingTable.len() == 0:
+        p.seedTable()
+        await p.populateTable()
+        await sleepAsync(5.seconds)
+
       let currentTime = now(chronos.Moment)
       if currentTime > (p.lastLookup + RefreshInterval):
         let randomQuery = await p.queryRandom()
@@ -626,8 +625,6 @@ proc refreshLoop(p: PortalProtocol) {.async.} =
     trace "refreshLoop canceled"
 
 proc start*(p: PortalProtocol) =
-  p.seedTable()
-
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
