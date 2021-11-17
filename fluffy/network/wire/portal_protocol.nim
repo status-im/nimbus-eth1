@@ -137,26 +137,25 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     # TODO: Need to provide uTP connectionId when content is too large for a
     # single response.
     let content = contentHandlingResult.content
-    let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
     encodeMessage(ContentMessage(
-      enrs: enrs, content: ByteList(content)))
+      contentMessageType: contentType, content: ByteList(content)))
   of ContentMissing:
     let
       contentId = contentHandlingResult.contentId
       closestNodes = p.routingTable.neighbours(
         NodeId(contentId), seenOnly = true)
-      content = ByteList(@[]) # Empty payload when enrs are send
       enrs =
         closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
     encodeMessage(ContentMessage(
-      enrs: List[ByteList, 32](List(enrs)), content: content))
+      contentMessageType: enrsType, enrs: List[ByteList, 32](List(enrs))))
 
   of ContentKeyValidationFailure:
-    # Return empty response when content key validation fails
+    # Return empty content response when content key validation fails
+    # TODO: Better would be to return no message at all, or we need to add a
+    # None type or so.
     let content = ByteList(@[])
-    let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
     encodeMessage(ContentMessage(
-      enrs: enrs, content: content))
+      contentMessageType: contentType, content: content))
 
 proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
@@ -203,8 +202,9 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     of MessageKind.offer:
       p.handleOffer(message.offer)
     else:
-      # This shouldn't occur as the 0 case is already covered in `decodedMessage`
-      debug "Packet decoding error: Invalid message type"
+      # This would mean a that Portal wire response message is being send over a
+      # discv5 talkreq message.
+      debug "Invalid Portal wire message type over talkreq", kind = message.kind
       @[]
   else:
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
@@ -388,7 +388,14 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
 
 proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     dst: Node, nodes: var seq[Node]): LookupResult =
-  if (m.enrs.len() != 0 and m.content.len() == 0):
+  case m.contentMessageType:
+  of connectionIdType:
+    # TODO: We'd have to get the data through uTP, or wrap some proc around
+    # this call that does that.
+    LookupResult(kind: Content)
+  of contentType:
+    LookupResult(kind: Content, content: m.content)
+  of enrsType:
     let records = recordsFromBytes(m.enrs)
     let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
     nodes.add(verifiedNodes)
@@ -397,16 +404,7 @@ proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
       # Attempt to add all nodes discovered
       discard p.routingTable.addNode(n)
 
-    return LookupResult(kind: Nodes, nodes: nodes)
-  elif (m.content.len() != 0 and m.enrs.len() == 0):
-    return LookupResult(kind: Content, content: m.content)
-  elif ((m.content.len() != 0 and m.enrs.len() != 0)):
-    # Both content and enrs are filled, which means protocol breach. For now
-    # just logging offending node to quickly identify it
-    warn "Invalid foundcontent response form node ", uri = toURI(dst.record)
-    return LookupResult(kind: Nodes, nodes: nodes)
-  else:
-    return LookupResult(kind: Nodes, nodes: nodes)
+    LookupResult(kind: Nodes, nodes: nodes)
 
 proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
     Future[LookupResult] {.async.} =

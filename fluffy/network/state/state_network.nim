@@ -24,17 +24,20 @@ type StateNetwork* = ref object
 proc getHandler(contentDB: ContentDB): ContentHandler =
     return (proc (contentKey: state_content.ByteList): ContentResult =
       let contentId = toContentId(contentKey)
-      let maybeContent = contentDB.get(contentId)
-      if (maybeContent.isSome()):
-        ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
+      if contentId.isSome():
+        let maybeContent = contentDB.get(contentId.get())
+        if (maybeContent.isSome()):
+          ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
+        else:
+          ContentResult(kind: ContentMissing, contentId: contentId.get())
       else:
-        ContentResult(kind: ContentMissing, contentId: contentId))
+        ContentResult(kind: ContentKeyValidationFailure, error: ""))
 
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
-    contentId = toContentId(keyEncoded)
+    contentId = toContentId(key)
 
   let nodeId = n.portalProtocol.localNode.id
 

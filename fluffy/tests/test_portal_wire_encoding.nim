@@ -13,8 +13,8 @@ import
 
 suite "Portal Wire Protocol Message Encodings":
   test "Ping Request":
-    var dataRadius: UInt256
     let
+      dataRadius = UInt256.high() - 1 # Full radius - 1
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
       customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
@@ -22,7 +22,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0101000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
+      "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -33,8 +33,8 @@ suite "Portal Wire Protocol Message Encodings":
       message.ping.customPayload == customPayload
 
   test "Pong Response":
-    var dataRadius: UInt256
     let
+      dataRadius = UInt256.high() div 2.stuint(256) # Radius of half the UInt256
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
       customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
@@ -42,7 +42,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0201000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
+      "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -54,11 +54,11 @@ suite "Portal Wire Protocol Message Encodings":
 
   test "FindNode Request":
     let
-      distances = List[uint16, 256](@[0x0100'u16])
+      distances = List[uint16, 256](@[0x0100'u16, 0x00ff'u16])
       fn = FindNodeMessage(distances: distances)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "03040000000001"
+    check encoded.toHex == "02040000000001ff00"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -68,13 +68,13 @@ suite "Portal Wire Protocol Message Encodings":
       message.kind == findnode
       message.findnode.distances == distances
 
-  test "Nodes Response - empty":
+  test "Nodes Response - empty enr list":
     let
       total = 0x1'u8
       n = NodesMessage(total: total)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "040105000000"
+    check encoded.toHex == "030105000000"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -85,7 +85,7 @@ suite "Portal Wire Protocol Message Encodings":
       message.nodes.total == total
       message.nodes.enrs.len() == 0
 
-  test "Nodes Response - enr":
+  test "Nodes Response - enrs":
     var e1, e2: Record
     check:
       e1.fromURI("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg")
@@ -96,7 +96,7 @@ suite "Portal Wire Protocol Message Encodings":
       n = NodesMessage(total: total, enrs: List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)]))
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "040105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    check encoded.toHex == "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -110,12 +110,13 @@ suite "Portal Wire Protocol Message Encodings":
       message.nodes.enrs[1] == ByteList(e2.raw)
 
   test "FindContent Request":
+    const contentKeyString = "0x706f7274616c"
     let
-      contentEncoded  = ByteList.init(@[1'u8])
-      fn = FindContentMessage(contentKey: contentEncoded)
+      contentKey = ByteList.init(hexToSeqByte(contentKeyString))
+      fc = FindContentMessage(contentKey: contentKey)
 
-    let encoded = encodeMessage(fn)
-    check encoded.toHex == "050400000001"
+    let encoded = encodeMessage(fc)
+    check encoded.toHex == "0404000000706f7274616c"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -123,16 +124,16 @@ suite "Portal Wire Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.kind == findcontent
-      message.findcontent.contentKey == contentEncoded
+      message.findcontent.contentKey == contentKey
 
-  test "Content Response - payload":
+  test "Content Response - connection id":
     let
-      enrs = List[ByteList, 32](@[])
-      content = ByteList(@[byte 0x01, 0x02, 0x03])
-      n = ContentMessage(enrs: enrs, content: content)
+      connectionId = Bytes2([byte 0x01, 0x02])
+      c = ContentMessage(
+        contentMessageType: connectionIdType, connectionId: connectionId)
 
-    let encoded = encodeMessage(n)
-    check encoded.toHex == "0600000a0000000d000000010203"
+    let encoded = encodeMessage(c)
+    check encoded.toHex == "05000102"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -140,7 +141,25 @@ suite "Portal Wire Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.kind == MessageKind.content
-      message.content.enrs.len() == 0
+      message.content.contentMessageType == connectionIdType
+      message.content.connectionId == connectionId
+
+  test "Content Response - content payload":
+    const contentString = "0x7468652063616b652069732061206c6965"
+    let
+      content = ByteList(hexToSeqByte(contentString))
+      c = ContentMessage(contentMessageType: contentType, content: content)
+
+    let encoded = encodeMessage(c)
+    check encoded.toHex == "05017468652063616b652069732061206c6965"
+
+    let decoded = decodeMessage(encoded)
+    check decoded.isOk()
+
+    let message = decoded.get()
+    check:
+      message.kind == MessageKind.content
+      message.content.contentMessageType == contentType
       message.content.content == content
 
   test "Content Response - enrs":
@@ -151,11 +170,10 @@ suite "Portal Wire Protocol Message Encodings":
 
     let
       enrs = List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
-      content = ByteList(@[])
-      n = ContentMessage(enrs: enrs, content: content)
+      c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
 
-    let encoded = encodeMessage(n)
-    check encoded.toHex == "0600000a0000000a000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    let encoded = encodeMessage(c)
+    check encoded.toHex == "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -163,18 +181,18 @@ suite "Portal Wire Protocol Message Encodings":
     let message = decoded.get()
     check:
       message.kind == MessageKind.content
+      message.content.contentMessageType == enrsType
       message.content.enrs.len() == 2
       message.content.enrs[0] == ByteList(e1.raw)
       message.content.enrs[1] == ByteList(e2.raw)
-      message.content.content == content
 
   test "Offer Request":
     let
       contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
-      am = OfferMessage(contentKeys: contentKeys)
+      o = OfferMessage(contentKeys: contentKeys)
 
-    let encoded = encodeMessage(am)
-    check encoded.toHex == "070400000004000000010203"
+    let encoded = encodeMessage(o)
+    check encoded.toHex == "060400000004000000010203"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -185,14 +203,14 @@ suite "Portal Wire Protocol Message Encodings":
       message.offer.contentKeys == contentKeys
 
   test "Accept Response":
+    var contentKeys = ContentKeysBitList.init(8)
+    contentKeys.setBit(0)
     let
       connectionId = Bytes2([byte 0x01, 0x02])
-      contentKeys = ContentKeysBitList.init(8)
-      n = AcceptMessage(connectionId: connectionId,
-        contentKeys: contentKeys)
+      a = AcceptMessage(connectionId: connectionId, contentKeys: contentKeys)
 
-    let encoded = encodeMessage(n)
-    check encoded.toHex == "080102060000000001"
+    let encoded = encodeMessage(a)
+    check encoded.toHex == "070102060000000101"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()

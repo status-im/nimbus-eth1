@@ -5,78 +5,124 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
+# As per spec:
+# https://github.com/ethereum/portal-network-specs/blob/master/state-network.md#content-keys-and-content-ids
 
 {.push raises: [Defect].}
 
 import
   std/options,
-  nimcrypto/[sha2, hash], stew/objects, stint,
+  nimcrypto/[hash, sha2, keccak], stew/objects, stint,
   ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, common_types
 
 type
-  ContentType* = enum
-    Account = 0x01
-    ContractStorage = 0x02
-    ContractBytecode = 0x03
-
-  NetworkId* = uint16
-
   NodeHash* = MDigest[32 * 8] # keccak256
-
   CodeHash* = MDigest[32 * 8] # keccak256
-
   Address* = array[20, byte]
 
-  ContentKey* = object
-    networkId*: NetworkId
-    contentType*: ContentType
-    # TODO: How shall we deal with the different ContentKey structures?
-    # Lets start with just node hashes for now.
-    # address: Address
-    # triePath: ByteList
+  ContentType* = enum
+    accountTrieNode = 0x00
+    contractStorageTrieNode = 0x01
+    accountTrieProof = 0x02
+    contractStorageTrieProof = 0x03
+    contractBytecode = 0x04
+
+  AccountTrieNodeKey* = object
+    path*: ByteList
     nodeHash*: NodeHash
+    stateRoot*: Bytes32
+
+  ContractStorageTrieNodeKey* = object
+    address*: Address
+    path*: ByteList
+    nodeHash*: NodeHash
+    stateRoot*: Bytes32
+
+  AccountTrieProofKey* = object
+    address*: Address
+    stateRoot*: Bytes32
+
+  ContractStorageTrieProofKey* = object
+    address*: Address
+    slot*: UInt256
+    stateRoot*: Bytes32
+
+  ContractBytecodeKey* = object
+    address*: Address
+    codeHash*: CodeHash
+
+  ContentKey* = object
+    case contentType*: ContentType
+    of accountTrieNode:
+      accountTrieNodeKey*: AccountTrieNodeKey
+    of contractStorageTrieNode:
+      contractStorageTrieNodeKey*: ContractStorageTrieNodeKey
+    of accountTrieProof:
+      accountTrieProofKey*: AccountTrieProofKey
+    of contractStorageTrieProof:
+      contractStorageTrieProofKey*: ContractStorageTrieProofKey
+    of contractBytecode:
+      contractBytecodeKey*: ContractBytecodeKey
 
   ContentId* = Uint256
-
-  KeccakHash* = MDigest[32 * 8] # could also import from either eth common types or trie defs
-
-template toSszType*(x: ContentType): uint8 =
-  uint8(x)
-
-template toSszType*(x: auto): auto =
-  x
-
-func fromSszBytes*(T: type ContentType, data: openArray[byte]):
-    T {.raises: [MalformedSszError, Defect].} =
-  if data.len != sizeof(uint8):
-    raiseIncorrectSize T
-
-  var contentType: T
-  if not checkedEnumAssign(contentType, data[0]):
-    raiseIncorrectSize T
-
-  contentType
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
-# TODO consider if more powerfull error handling is necessary here.
 func decode*(contentKey: ByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
     return none[ContentKey]()
 
-func toContentId*(contentKey: ByteList): ContentId =
-  # TODO: Hash function to be defined, sha256 used now, might be confusing
-  # with keccak256 that is used for the actual nodes:
-  # https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
-  let idHash = sha2.sha_256.digest(contentKey.asSeq())
+template computeContentId*(digestCtxType: type, body: untyped): ContentId =
+  var h {.inject.}: digestCtxType
+  init(h)
+  body
+  let idHash = finish(h)
   readUintBE[256](idHash.data)
 
-func toContentId*(contentKey: ContentKey): ContentId =
-  toContentId(encode(contentKey))
+proc toContentId*(contentKey: ContentKey): ContentId =
+  case contentKey.contentType:
+  of accountTrieNode: # sha256(path | node_hash)
+    let key = contentKey.accountTrieNodeKey
+    computeContentId sha256:
+      h.update(key.path.asSeq())
+      h.update(key.nodeHash.data)
+  of contractStorageTrieNode: # sha256(address | path | node_hash)
+    let key = contentKey.contractStorageTrieNodeKey
+    computeContentId sha256:
+      h.update(key.address)
+      h.update(key.path.asSeq())
+      h.update(key.nodeHash.data)
+  of accountTrieProof: # keccak(address)
+    let key = contentKey.accountTrieProofKey
+    computeContentId keccak256:
+      h.update(key.address)
+  of contractStorageTrieProof: # (keccak(address) + keccak(slot)) % 2**256
+    # TODO: Why is keccak run on slot, when it can be used directly?
+    # Also, value to LE or BE? Not mentioned in specification.
+    let key = contentKey.contractStorageTrieProofKey
+    let n1 =
+      block: computeContentId keccak256:
+        h.update(key.address)
+    let n2 =
+      block: computeContentId keccak256:
+        h.update(toBytesLE(key.slot))
+
+    n1 + n2 # uint256 will wrap arround, practically applying the modulo 256
+  of contractBytecode: # sha256(address | code_hash)
+    let key = contentKey.contractBytecodeKey
+    computeContentId sha256:
+      h.update(key.address)
+      h.update(key.codeHash.data)
+
+proc toContentId*(contentKey: ByteList): Option[ContentId] =
+  let key = decode(contentKey)
+  if key.isSome():
+    some(key.get().toContentId())
+  else:
+    none(ContentId)

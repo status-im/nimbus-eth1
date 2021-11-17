@@ -162,7 +162,12 @@ proc testHandler(contentKey: state_content.ByteList): ContentResult =
   # Note: We don't incorperate storage in this tool so we always return
   # missing content. For now we are using the state network derivation but it
   # could be selective based on the network the tool is used for.
-  ContentResult(kind: ContentMissing, contentId: toContentId(contentKey))
+  let contentId = toContentId(contentKey)
+  if contentId.isSome():
+    ContentResult(kind: ContentMissing, contentId: contentId.get())
+  else:
+    ContentResult(kind: ContentKeyValidationFailure,
+      error: "Failed decoding content key")
 
 proc run(config: DiscoveryConf) =
   let

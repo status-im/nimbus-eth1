@@ -13,3 +13,4 @@ import
 type
   ByteList* = List[byte, 2048]
   Bytes2* = array[2, byte]
+  Bytes32* = array[32, byte]
