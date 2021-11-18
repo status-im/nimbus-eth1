@@ -11,10 +11,6 @@
 ## Block PoW Support (Verifying & Mining)
 ## ======================================
 ##
-## :note:
-##    This implementation should eventually replace
-##    `p2p/validate/epoch_hash_cache.nim` and some surrounding code.
-##
 
 import
   std/[options, strutils],

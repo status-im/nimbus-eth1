@@ -40,8 +40,7 @@ type
     debugData    : JsonNode
     network      : string
 
-var cacheByEpoch: EpochHashCache
-cacheByEpoch.initEpochHashCache
+var pow = PowRef.init
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
@@ -260,7 +259,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   if validation:
     let rc = chainDB.validateHeaderAndKinship(
-      result.header, body, checkSeal, cacheByEpoch)
+      result.header, body, checkSeal, pow)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
@@ -310,7 +309,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
         # manually validating
         check chainDB.validateHeaderAndKinship(
-          preminedBlock, checkSeal, cacheByEpoch).isOk
+          preminedBlock, checkSeal, pow).isOk
 
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
