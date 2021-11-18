@@ -7,7 +7,7 @@
 
 import
   std/os,
-  testutils/unittests,
+  testutils/unittests, chronos,
   eth/[keys, trie/db, trie/hexary],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain],
