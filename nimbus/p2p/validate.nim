@@ -69,7 +69,7 @@ proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
       nonce = header.nonce.toHex,
       difficulty = header.difficulty,
       size = size,
-      cachedHash = cacheHash
+      cachedHash = cachedHash
     return err("mixHash mismatch")
 
   let value = Uint256.fromBytesBE(miningValue.data)
