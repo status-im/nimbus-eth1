@@ -13,8 +13,10 @@ import
   ../../nimbus/[config, chain_config, constants, genesis],
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/chain,
-  ../../nimbus/utils/[ec_recover, tx_pool, tx_pool/tx_chain, tx_pool/tx_item],
+  ../../nimbus/utils/[ec_recover, tx_pool],
+  ../../nimbus/utils/tx_pool/[tx_chain, tx_item],
   ./helpers,
+  ./sign_helper,
   eth/[common, keys, p2p, trie/db],
   stew/[keyed_queue],
   stint
@@ -52,17 +54,25 @@ proc toTxPool*(
     file: string;                     ## input, file and transactions
     getStatus: proc(): TxItemStatus;  ## input, random function
     loadBlocks: int;                  ## load at most this many blocks
+    minBlockTxs: int;                 ## load at least this many txs in blocks
     loadTxs: int;                     ## load at most this many transactions
     baseFee = 0.GasPrice;             ## initalise with `baseFee` (unless 0)
-    noisy: bool): TxPoolRef =
+    noisy: bool): (TxPoolRef, int) =
 
   var
     txPoolOk = false
     txCount = 0
     chainNo = 0
     chainDB = db.newChain
+    nTxs = 0
 
   doAssert not db.isNil
+
+  proc importBlocks(headers: seq[BlockHeader]; bodies: seq[BlockBody]) =
+    if not chainDB.persistBlocks(headers,bodies).isOK:
+      raiseAssert "persistBlocks() failed at block #" & $headers[0].blockNumber
+    for body in bodies:
+      nTxs += body.transactions.len
 
   block allDone:
     for chain in file.undumpNextGroup:
@@ -72,11 +82,8 @@ proc toTxPool*(
         # Verify Genesis
         doAssert chain[0][0] == db.getBlockHeader(0.u256)
 
-      elif leadBlkNum < loadBlocks.u256:
-        # Import into block chain
-        let (headers,bodies) = (chain[0],chain[1])
-        if not chainDB.persistBlocks(headers,bodies).isOK:
-          raiseAssert "persistBlocks() failed at block #" & $leadBlkNum
+      elif leadBlkNum < loadBlocks.u256 or nTxs < minBlockTxs:
+        importBlocks(chain[0],chain[1])
       else:
         # Import transactions
         for inx in 0 ..< chain[0].len:
@@ -88,12 +95,11 @@ proc toTxPool*(
           if not txPoolOk:
             if txs.len < 1:
               # collect empty blocks
-              let (headers,bodies) = (@[chain[0][inx]],@[chain[1][inx]])
-              doAssert chainDB.persistBlocks(headers,bodies).isOK
+              importBlocks(@[chain[0][inx]],@[chain[1][inx]])
               continue
             txPoolOk = true
-            result = TxPoolRef.init(db)
-            result.chain.setNextBaseFee(baseFee)
+            result[0] = TxPoolRef.init(db,testAddress)
+            result[0].chain.setNextBaseFee(baseFee)
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -103,12 +109,12 @@ proc toTxPool*(
               info = &"{txCount} #{blkNum}({chainNo}) "&
                      &"{n}/{txs.len} {statusInfo[status]}"
             noisy.showElapsed(&"insert: {info}"):
-              result.jobAddTx(txs[n], info)
+              result[0].jobAddTx(txs[n], info)
             if loadTxs <= txCount:
               break allDone
 
-  result.jobCommit
-
+  result[0].jobCommit
+  result[1] = nTxs
 
 proc toTxPool*(
     db: BaseChainDB;            ## to be modified, initialisier for `TxPool`
@@ -118,7 +124,7 @@ proc toTxPool*(
 
   doAssert not db.isNil
 
-  result = TxPoolRef.init(db)
+  result = TxPoolRef.init(db,testAddress)
   result.chain.setNextBaseFee(baseFee)
   result.maxRejects = itList.len
 
@@ -152,7 +158,7 @@ proc toTxPool*(
   doAssert not db.isNil
   doAssert 0 < itemsPC and itemsPC < 100
 
-  result = TxPoolRef.init(db)
+  result = TxPoolRef.init(db,testAddress)
   result.chain.setNextBaseFee(baseFee)
   result.maxRejects = itList.len
 

@@ -24,13 +24,6 @@ import
 
 {.push raises: [Defect].}
 
-type
-  TxPackRc* = enum ##\
-    ## Return code for the item packer classifier.
-    rcStopPacking     ## done, no more transactions
-    rcDoAcceptTx      ## pack this transaction
-    rcSkipTx          ## ignore this transaction
-
 logScope:
   topics = "tx-pool classify"
 
@@ -222,42 +215,45 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   true
 
 
-proc classifyForPacking*(xp: TxPoolRef;
-                         item: TxItemRef; gasOffset: GasInt): TxPackRc
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Simple classifier for incremental packing.
-  let newTotal = gasOffset + item.tx.gasLimit
+proc classifyPackerItem*(xp: TxPoolRef;
+                         item: TxItemRef; offset: GasInt): bool =
+  ## Classifier for incremental packing. This function checks whether the
+  ## current argument `item` would exceed packing size contraints.
+  if packItemsMaxGasLimit in xp.pFlags:
+    offset + item.tx.gasLimit < xp.chain.maxGasLimit
+  else:
+    offset + item.tx.gasLimit < xp.chain.trgGasLimit
 
-  # Note: the following if/else clauses requires that
-  #       `xp.chain.trgGasLimit` <= `xp.chain.maxGasLimit `
-  #       which is not verified here
-  if newTotal <= xp.chain.trgGasLimit:
-    return rcDoAcceptTx
-
-  # So the current tx will exceed the soft limit.
-  if packItemsTrgGasLimitMax notin xp.pFlags:
-    # Required to consider the soft limit `trgGasLimit` as a hard one.
-    if packItemsTryHarder in xp.pFlags:
-      # Try next one
-      return rcSkipTx
-    # Done otherwise
-    return rcStopPacking
-
-  # So, `packItemsTrgGasLimitMax` is anabled and the soft limit `trgGasLimit`
-  # may be exceeded up until the hard limit `maxGasLimit`.
-  if newTotal <= xp.chain.maxGasLimit:
-    # Accept the first first block exceeding `trgGasLimit`.
-    if item.tx.gasLimit <= xp.chain.trgGasLimit:
-      return rcDoAcceptTx
-    # Done otherwise
-    return rcStopPacking
-
-  # Otherwise, this block exceeds the hard limit.
+proc classifyPackerTryNext*(xp: TxPoolRef; offset: GasInt): bool =
+  ## Classifier for incremental packing. This function checks whether the
+  ## current packing level is still low enough to proceed trying to accumulate
+  ## more items.
   if packItemsTryHarder in xp.pFlags:
-    # Try next one
-    return rcSkipTx
-  # Done otherwise
-  return rcStopPacking
+    if packItemsMaxGasLimit in xp.pFlags:
+      return offset < xp.chain.trgGasLimit
+    else:
+      return offset < xp.chain.lwmGasLimit
+
+
+proc classifySqueezer*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
+  ## Classifier for incremental *sqeezing* (i.e. adding up `gasUsed` after
+  ## executing in VM.) This function checks whether the argument `totalGasUsed`
+  ## is still within acceptable constraints.
+  if squeezeItemsMaxGasLimit in xp.pFlags:
+    totalGasUsed < xp.chain.maxGasLimit
+  else:
+    totalGasUsed < xp.chain.trgGasLimit
+
+proc classifySqueezerTryNext*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
+  ##  Classifier for incremental *sqeezing* (see `classifySqueezer()`.) This
+  ## function checks whether the current squezzing level is still low enough
+  ## to proceed trying to accumulate more items.
+  if squeezeItemsTryHarder in xp.pFlags:
+    xp.classifySqueezer(totalGasUsed)
+  elif squeezeItemsMaxGasLimit in xp.pFlags:
+    totalGasUsed < xp.chain.trgGasLimit
+  else:
+    totalGasUsed < xp.chain.lwmGasLimit
 
 # ------------------------------------------------------------------------------
 # Public functionss

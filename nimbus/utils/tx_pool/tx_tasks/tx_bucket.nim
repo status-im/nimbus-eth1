@@ -14,7 +14,6 @@
 
 import
   std/[tables],
-  ../../../db/db_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -23,19 +22,27 @@ import
   ./tx_classify,
   ./tx_dispose,
   chronicles,
-  eth/[common, keys]
+  eth/[common, keys],
+  stew/[sorted_set]
 
 {.push raises: [Defect].}
+
+const
+  minEthAddress = block:
+    var rc: EthAddress
+    rc
+
+  minNonce = AccountNonce.low
 
 logScope:
   topics = "tx-pool buckets"
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Public functions
 # ------------------------------------------------------------------------------
 
-proc reassignItemsPending(xp: TxPoolRef; labelFrom: TxItemStatus;
-                          account: EthAddress; nonceFrom = AccountNonce.low)
+proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
+                                 account: EthAddress; nonceFrom = minNonce)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Move all items in bucket `lblFrom` with nonces not less than `nonceFrom`
   ## to the `pending` bucket
@@ -44,9 +51,6 @@ proc reassignItemsPending(xp: TxPoolRef; labelFrom: TxItemStatus;
     for item in rc.value.data.incItemList(nonceFrom):
       discard xp.txDB.reassign(item, txItemPending)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
 proc bucketUpdateAll*(xp: TxPoolRef): bool
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
@@ -73,7 +77,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
         # For failed txs, make sure that the account state has not
         # changed. Assuming that this list is complete, then there are
         # no other account affected.
-        let rc = xp.txDB.bySender.eq(item.sender).any.ge(AccountNonce.low)
+        let rc = xp.txDB.bySender.eq(item.sender).any.ge(minNonce)
         if rc.isOK:
           let firstItem = rc.value.data
           if not xp.classifyValid(firstItem):
@@ -106,7 +110,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
       if not xp.classifyActive(item):
         # Larger nonces cannot be held in the `staged` bucket anymore for this
         # sender account. So they are moved back to the `pending` bucket.
-        xp.reassignItemsPending(txItemStaged, item.sender, item.tx.nonce)
+        xp.bucketItemsReassignPending(txItemStaged, item.sender, item.tx.nonce)
 
         # The nonces in the `staged` bucket are always smaller than the one in
         # the `pending` bucket. So, if the lower nonce items must go to the
@@ -124,11 +128,11 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
     for item in nonceList.incItemList:
 
       if not xp.classifyActive(item):
-        xp.reassignItemsPending(txItemPacked, item.sender, item.tx.nonce)
+        xp.bucketItemsReassignPending(txItemPacked, item.sender, item.tx.nonce)
 
         # All staged items have smaller nonces for this sender, so they have
         # to go to the `pending` bucket, as well.
-        xp.reassignItemsPending(txItemStaged, item.sender)
+        xp.bucketItemsReassignPending(txItemStaged, item.sender)
         stagedItemsAdded = true
 
         stashed.del(item.sender)
@@ -148,6 +152,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
 
   stagedItemsAdded
 
+# ---------------------------
 
 proc bucketUpdatePacked*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -157,29 +162,23 @@ proc bucketUpdatePacked*(xp: TxPoolRef)
     gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
     stop = false
 
-  block perSenderPack:
-    for (_,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemStaged):
+  for (_,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemStaged):
+    block doForSender: # syntactic sugar
+
       for item in nonceList.incItemList:
-        case xp.classifyForPacking(item, gasTotal):
-        of rcDoAcceptTx:
+        if xp.classifyPackerItem(item, gasTotal):
           if not xp.txDB.reassign(item, txItemPacked):
-            break  # weird case, should not happen
-          gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
-        of rcStopPacking:
-          break perSenderPack
-        of rcSkipTx:
-          break # stop for this sender (inner `incItemList()` loop)
+            # Weird case, should not happen => try next sender
+            break doForSender
+          gasTotal += item.tx.gasLimit
 
+        elif xp.classifyPackerTryNext(gasTotal):
+          # This one is too big, try next sender as suggested by classifier
+          break doForSender
 
-#[
-proc bucketVmExecPacked*(xp:  TxPoolRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Execute all txs in the `packed` bucket.
-  let
-    vmState = xp.chain.vmState
-    dbTx = vmState.chainDB.db.beginTransaction
-  defer: dbTx.dispose()
-]#
+        else:
+          # Acceptable packing level reached, already. Stop here
+          return
 
 # ------------------------------------------------------------------------------
 # End

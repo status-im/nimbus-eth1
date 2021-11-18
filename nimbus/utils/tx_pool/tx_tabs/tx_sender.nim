@@ -24,32 +24,32 @@ type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
-    gasLimits: GasInt
+    gasLimits: GasInt                   ## Accumulated gas limits
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
     ## For a sender, items can be accessed by *nonce*, or *status,nonce*.
-    size: int
+    size: int                           ## Total number of items
     statusList: array[TxItemStatus,TxSenderNonceRef]
     allList: TxSenderNonceRef
 
   TxSenderTab* = object ##\
     ## Per address table
-    size: int
+    size: int                           ## Total number of items
     addrList: SortedSet[EthAddress,TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
-    txSenderAny = 0     ## all entries
-    txSenderPending     ## by status ...
+    txSenderAny = 0     ## All entries status (aka bucket name) ...
+    txSenderPending
     txSenderStaged
     txSenderPacked
 
   TxSenderInx = object ##\
     ## Internal access data
     sAddr: TxSenderSchedRef
-    statusNonce: TxSenderNonceRef  ## by status items sub-list
-    anyNonce: TxSenderNonceRef     ## all items sub-list
+    statusNonce: TxSenderNonceRef       ## by status items sub-list
+    anyNonce: TxSenderNonceRef          ## all items sub-list
 
 const
   minEthAddress = block:

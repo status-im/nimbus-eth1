@@ -49,15 +49,29 @@ type
 
     # -----------
 
-    packItemsTrgGasLimitMax ##\
-      ## The packer may treat `trgGasLimit` as a soft limit and may pack an
-      ## additional block exceeding this limit as long as the resulting block
-      ## size does not exceed `maxMaxLimit`.
+    packItemsMaxGasLimit ##\
+      ## It set, the *packer* will collect items while accumulating `gasLimit`
+      ## as long as `maxGasLimit` is not exceeded. Otherwise it will only
+      ## accumulate up until `trgGasLimit` is reached.
 
     packItemsTryHarder ##\
-      ## The packer will stop at the first size extension error when adding
-      ## txs. It rather will ignore that error and keep on trying for all
-      ## staged blocks.
+      ## It set, the *packer* will *not* stop at the first instance when an
+      ## item cannot be added to the collection of items anymore because its
+      ## `gasLimit` is too large. Otherwise the packer will switch to another
+      ## account and continue trying.
+
+    squeezeItemsMaxGasLimit ##\
+      ## It set, the *sqeezer* will execute and collect additional items from
+      ## the `staged` bucket while accumulating `gasUsed` as long as
+      ## `maxGasLimit` is not exceeded. Otherwise it will only accumulate up
+      ## until `trgGasLimit` is reached.
+
+    squeezeItemsTryHarder ##\
+      ## It set, the *squeezer* will *not* stop accumulaing items up until
+      ## the `maxGasLimit` or `trgGasLimit` is reached, depending on whether
+      ## the `squeezeItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
+      ## until `lwmGasLimit` is reached and even more until `trgGasLimit`
+      ## is teached if `squeezeItemsMaxGasLimit` is set.
 
     # -----------
 
@@ -77,12 +91,11 @@ type
       ## Automatically dispose *packed* txs that were queued
       ## at least `lifeTime` ago.
 
-
   TxPoolParam* = tuple          ## Getter/setter accessible parameters
     minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
     minTipPrice: GasPrice       ## Desired tip-per-tx target, `effectiveGasTip`
     minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
-    stagedItems: bool           ## Some items were staged (since last check)
+    moreStagedItems: bool       ## Some items were staged (since last check)
     dirtyBuckets: bool          ## Buckets need to be updated
     doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
     flags: set[TxPoolFlags]     ## Processing strategy symbols
@@ -129,9 +142,10 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc init(xp: TxPoolRef; db: BaseChainDB; miner: Option[PrivateKey])
+proc init(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Constructor, returns new tx-pool descriptor.
+  ## Constructor, returns new tx-pool descriptor. The `miner` argument is
+  ## the fee beneficiary.
   xp.startDate = getTime().utc.toTime
 
   xp.chain = TxChainRef.init(db, miner)
@@ -150,29 +164,15 @@ proc init(xp: TxPoolRef; db: BaseChainDB; miner: Option[PrivateKey])
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxPoolRef; db: BaseChainDB): T
+proc init*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor
   new result
-  result.init(db,PrivateKey.none)
-
-proc init*(T: type TxPoolRef; db: BaseChainDB; miner: PrivateKey): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Constructor
-  new result
-  result.init(db,some(miner))
+  result.init(db,miner)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
-
-proc startDate*(xp: TxPoolRef): Time =
-  ## Getter
-  xp.startDate
-
-proc txDB*(xp: TxPoolRef): TxTabsRef =
-  ## Getter, pool database
-  xp.txDB
 
 proc byJob*(xp: TxPoolRef): TxJobRef =
   ## Getter, job queue
@@ -182,13 +182,14 @@ proc chain*(xp: TxPoolRef): TxChainRef =
   ## Getter, block chain DB
   xp.chain
 
+proc pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
+  ## Returns the set of algorithm strategy symbols for labelling items
+  ## as`packed`
+  xp.param.flags
+
 proc pDirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, buckets need update
   xp.param.dirtyBuckets
-
-proc pStagedItems*(xp: TxPoolRef): bool =
-  ## Getter, some updates since last check
-  xp.param.stagedItems
 
 proc pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] =
   ## Getter, cached block chain head was moved back
@@ -206,10 +207,17 @@ proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minPlGasPrice
 
-proc pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
-  ## Returns the set of algorithm strategy symbols for labelling items
-  ## as`packed`
-  xp.param.flags
+proc pMoreStagedItems*(xp: TxPoolRef): bool =
+  ## Getter, some updates since last check
+  xp.param.moreStagedItems
+
+proc startDate*(xp: TxPoolRef): Time =
+  ## Getter
+  xp.startDate
+
+proc txDB*(xp: TxPoolRef): TxTabsRef =
+  ## Getter, pool database
+  xp.txDB
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -219,10 +227,6 @@ proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) =
   ## Setter
   xp.param.dirtyBuckets = val
 
-proc `pStagedItems=`*(xp: TxPoolRef; val: bool) =
-  ## Setter
-  xp.param.stagedItems = val
-
 proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
   ## Pseudo setter
   xp.param.doubleCheck.add val
@@ -230,6 +234,10 @@ proc pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
 proc pDoubleCheckFlush*(xp: TxPoolRef) =
   ## Pseudo setter
   xp.param.doubleCheck.setLen(0)
+
+proc `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+  ## Install a set of algorithm strategy symbols for labelling items as`packed`
+  xp.param.flags = val
 
 proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
@@ -243,9 +251,9 @@ proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
 
-proc `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
-  ## Install a set of algorithm strategy symbols for labelling items as`packed`
-  xp.param.flags = val
+proc `pMoreStagedItems=`*(xp: TxPoolRef; val: bool) =
+  ## Setter
+  xp.param.moreStagedItems = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

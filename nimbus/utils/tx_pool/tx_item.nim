@@ -24,8 +24,9 @@ import
 
 type
   GasPrice* = ##|
-    ## Handy definition distinct from `GasInt` which is a commodity while the\
-    ## `GasPrice` is the value per unit of gas, similar to a kind of money.
+    ## Handy definition distinct from `GasInt` which is a commodity unit while
+    ## the `GasPrice` is the commodity valuation per unit of gas, similar to a
+    ## kind of currency.
     distinct uint64
 
   GasPriceEx* = ##\
@@ -33,7 +34,7 @@ type
     distinct int64
 
   TxItemStatus* = enum ##\
-    ## current status of a transaction as seen by the pool.
+    ## Current status of a transaction as seen by the pool.
     txItemPending = 0
     txItemStaged
     txItemPacked
@@ -41,13 +42,13 @@ type
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx:        Transaction  ## Transaction data
-    itemID:    Hash256      ## Transaction hash
-    timeStamp: Time         ## Time when added
-    sender:    EthAddress   ## Sender account address
-    info:      string       ## Whatever
-    status:    TxItemStatus ## Transaction status (setter available)
-    reject:    TxInfo       ## Reason for moving to waste basket
+    tx:        Transaction           ## Transaction data
+    itemID:    Hash256               ## Transaction hash
+    timeStamp: Time                  ## Time when added
+    sender:    EthAddress            ## Sender account address
+    info:      string                ## Whatever
+    status:    TxItemStatus          ## Transaction status (setter available)
+    reject:    TxInfo                ## Reason for moving to waste basket
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -78,9 +79,6 @@ proc `==`*(a, b: GasPrice): bool {.borrow.}
 proc `+`*(a, b: GasPrice): GasPrice {.borrow.}
 proc `-`*(a, b: GasPrice): GasPrice {.borrow.}
 
-proc `-`*(a: GasPrice; b: int): GasPrice =
-  a - b.GasPrice # beware of underflow
-
 proc `$`*(a: GasPriceEx): string {.borrow.}
 proc `<`*(a, b: GasPriceEx): bool {.borrow.}
 proc `<=`*(a, b: GasPriceEx): bool {.borrow.}
@@ -88,8 +86,22 @@ proc `==`*(a, b: GasPriceEx): bool {.borrow.}
 proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 
-proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
+# mixed stuff
+
+proc `-`*(a: GasPrice; b: SomeUnsignedInt): GasPrice =
+  a - b.GasPrice # beware of underflow
+
+proc `*`*(a: SomeUnsignedInt; b: GasPrice): GasPrice =
+  (a * b.uint64).GasPrice # beware of overflow
+
+proc `*`*(a: SomeInteger; b: GasPriceEx): GasPriceEx =
+  (a * b.int64).GasPriceEx # beware of under/overflow
+
+proc `<`*(a: GasPriceEx|SomeInteger; b: GasPrice): bool =
   if a.GasPriceEx < 0.GasPriceEx: true else: a.GasPrice < b
+
+proc `<`*(a: GasPriceEx; b: SomeInteger): bool =
+  a < b.GasPriceEx
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
@@ -199,6 +211,10 @@ proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
     # London, EIP1559
     min(tx.maxPriorityFee, tx.maxFee - baseFee.int64).GasPriceEx
 
+proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
+  ## Variant of `effectiveGasTip()`
+  tx.effectiveGasTip(baseFee.truncate(uint64).GaSPrice)
+
 # ------------------------------------------------------------------------------
 # Public functions, item getters
 # ------------------------------------------------------------------------------
@@ -207,45 +223,37 @@ proc dup*(item: TxItemRef): TxItemRef =
   ## Getter, provide contents copy
   item.deepCopy
 
-proc itemID*(item: TxItemRef): Hash256 =
-  ## Getter
-  item.itemID
-
-proc tx*(item: TxItemRef): Transaction =
-  ## Getter
-  item.tx
-
-proc timeStamp*(item: TxItemRef): Time =
-  ## Getter
-  item.timeStamp
-
-proc sender*(item: TxItemRef): EthAddress =
-  ## Getter
-  item.sender
-
 proc info*(item: TxItemRef): string =
   ## Getter
   item.info
 
-proc local*(item: TxItemRef): bool =
+proc itemID*(item: TxItemRef): Hash256 =
   ## Getter
-  item.local
-
-proc status*(item: TxItemRef): TxItemStatus =
-  ## Getter
-  item.status
+  item.itemID
 
 proc reject*(item: TxItemRef): TxInfo =
   ## Getter
   item.reject
 
+proc sender*(item: TxItemRef): EthAddress =
+  ## Getter
+  item.sender
+
+proc status*(item: TxItemRef): TxItemStatus =
+  ## Getter
+  item.status
+
+proc timeStamp*(item: TxItemRef): Time =
+  ## Getter
+  item.timeStamp
+
+proc tx*(item: TxItemRef): Transaction =
+  ## Getter
+  item.tx
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
-
-proc `local=`*(item: TxItemRef; val: bool) =
-  ## Setter
-  item.local = val
 
 proc `status=`*(item: TxItemRef; val: TxItemStatus) =
   ## Setter

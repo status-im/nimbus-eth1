@@ -43,9 +43,9 @@ const
 {.push raises: [Defect].}
 
 
-proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; body: BlockBody)
-                         {.gcsafe, raises: [Defect,CatchableError].} =
+proc calculateReward*(vmState: BaseVMState; account: EthAddress;
+                      number: BlockNumber; uncles: openArray[BlockHeader])
+    {.gcsafe, raises: [Defect,CatchableError].} =
 
   var blockReward: Uint256
   safeExecutor("getFork"):
@@ -53,9 +53,9 @@ proc calculateReward*(vmState: BaseVMState;
 
   var mainReward = blockReward
 
-  for uncle in body.uncles:
+  for uncle in uncles:
     var uncleReward = uncle.blockNumber.u256 + 8.u256
-    uncleReward -= header.blockNumber.u256
+    uncleReward -= number
     uncleReward = uncleReward * blockReward
     uncleReward = uncleReward div 8.u256
     vmState.mutateStateDB:
@@ -63,6 +63,12 @@ proc calculateReward*(vmState: BaseVMState;
     mainReward += blockReward div 32.u256
 
   vmState.mutateStateDB:
-    db.addBalance(header.coinbase, mainReward)
+    db.addBalance(account, mainReward)
+
+
+proc calculateReward*(vmState: BaseVMState;
+                      header: BlockHeader; body: BlockBody)
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  vmState.calculateReward(header.coinbase, header.blockNumber, body.uncles)
 
 # End

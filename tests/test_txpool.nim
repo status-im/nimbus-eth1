@@ -11,7 +11,7 @@
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
   ../nimbus/[chain_config, config, db/db_chain],
-  ../nimbus/utils/[tx_pool, tx_pool/tx_item],
+  ../nimbus/utils/[tx_pool, tx_pool/tx_item, tx_pool/tx_tasks/tx_squeeze],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
@@ -22,18 +22,21 @@ import
 type
   CaptureSpecs = tuple
     network: NetworkID
-    dir, file: string
-    numBlocks, numTxs: int
+    file: string
+    numBlocks, minBlockTxs, numTxs: int
 
 const
   prngSeed = 42
 
+  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
+  repoDir = ["replay", "status"]                    # alternative repos
+
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
-    dir: "tests",
-    file: "replay" / "goerli68161.txt.gz",
+    file: "goerli68161.txt.gz",
     numBlocks: 22000,  # block chain prequel
-    numTxs: 840)       # txs following (not in block chain)
+    minBlockTxs: 300,  # minimum txs in imported blocks
+    numTxs:      840)  # txs following (not in block chain)
 
   loadSpecs = goerliCapture
 
@@ -117,6 +120,14 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
 
     return true
 
+proc findFilePath(file: string): string =
+  result = "?unknown?" / file
+  for dir in baseDir:
+    for repo in repoDir:
+      let path = dir / repo / file
+      if path.fileExists:
+        return path
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -126,7 +137,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
     elapNoisy = noisy
     veryNoisy = false # noisy
     fileInfo = capture.file.splitFile.name.split(".")[0]
-    file = capture.dir /  capture.file
+    filePath = capture.file.findFilePath
 
   # Reset/initialise
   statCount.reset
@@ -136,17 +147,24 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
   bcDB = capture.network.blockChainForTesting
 
   suite &"TxPool: Transactions from {fileInfo} capture":
-    var xp: TxPoolRef
+    var
+      xp: TxPoolRef
+      nTxs: int
 
-    test &"Import {capture.numBlocks.toKMG} blocks "&
-        &"and collect {capture.numTxs} txs":
+    test &"Import {capture.numBlocks.toKMG} blocks + {capture.minBlockTxs} txs"&
+        &" and collect {capture.numTxs} txs for pooling":
 
       elapNoisy.showElapsed("Total collection time"):
-        xp = bcDB.toTxPool(file = file,
-                           getStatus = randStatus,
-                           loadBlocks = capture.numBlocks,
-                           loadTxs = capture.numTxs,
-                           noisy = veryNoisy)
+        (xp, nTxs) = bcDB.toTxPool(file = filePath,
+                                   getStatus = randStatus,
+                                   loadBlocks = capture.numBlocks,
+                                   minBlockTxs = capture.minBlockTxs,
+                                   loadTxs = capture.numTxs,
+                                   noisy = veryNoisy)
+
+      # Make sure that sample extraction from file was ok
+      check capture.minBlockTxs <= nTxs
+      check capture.numTxs == xp.nItems.total
 
       # Set txs to pseudo random status
       check xp.verify.isOK
@@ -172,9 +190,6 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       for statusRatio in randStatusRatios():
         check randInitRatioBandPC < statusRatio
         check statusRatio < (10000 div randInitRatioBandPC)
-
-      # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.nItems.total == capture.numTxs
 
       # Load txList[]
       txList = xp.toItems
@@ -279,7 +294,7 @@ proc runTxPoolTests(noisy = true) =
 
     block:
       var
-        xq = TxPoolRef.init(bcDB)
+        xq = TxPoolRef.init(bcDB,testAddress)
         testTxs: array[5,(TxItemRef,Transaction,Transaction)]
 
       test &"Superseding txs with sender and nonce variants":
@@ -536,6 +551,8 @@ proc runTxPoolTests(noisy = true) =
 
 
 proc runTxPackerTests(noisy = true) =
+  let
+    elapNoisy = true # noisy
 
   suite &"TxPool: Block packer tests":
     var
@@ -649,7 +666,9 @@ proc runTxPackerTests(noisy = true) =
           check xq.nItems.disposed == 0
 
           # assemble block from `packed` bucket
-          let total = foldl(@[0.GasInt]&xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
+          let
+            items = toSeq(xq.txDB.byStatus.incItemList(txItemPacked))
+            total = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
           check xq.gasTotals.packed == total
 
           noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
@@ -697,7 +716,8 @@ proc runTxPackerTests(noisy = true) =
           check xq.verify.isOK
 
           let
-            newTotal = foldl(xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
+            items = toSeq(xq.txDB.byStatus.incItemList(txItemPacked))
+            newTotal = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
             newStats = xq.nItems
             newItem = xq.txDB.byStatus
               .eq(txItemPacked).le(maxEthAddress).le(AccountNonce.high)
@@ -721,23 +741,26 @@ proc runTxPackerTests(noisy = true) =
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 4)
+        canonicalHeader = xq.chain.db.getCanonicalHead
 
       test &"Back track block chain head (at least "&
           &"{nMinTxs} txs, {nMinAccounts} known accounts)":
 
-        # step back some blocks and provied a rolled back fake per-account
-        # state environment for the `backHeader` block chain position
+        # get the environment of a state back in the block chain, preferably
+        # at least `nTrgTxs` txs and `nTrgAccounts` known accounts
         let
           (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
+          nBackBlocks = xq.head.blockNumber - backHeader.blockNumber
           stats = xq.nItems
 
-        # verify that test would not degenerate
+        # verify that the test would not degenerate
         check nMinAccounts <= accLst.len
         check nMinTxs <= backTxs.len
 
         noisy.say "***",
-          "back tracked block chain:",
-          &" {backTxs.len} txs, {accLst.len} known accounts"
+          &"back tracked block chain:" &
+          &" {backTxs.len} txs, {nBackBlocks} blocks," &
+          &" {accLst.len} known accounts"
 
         check xq.nJobs == 0                   # want cleared job queue
         check xq.jobDeltaTxsHead(backHeader)  # set up tx diff jobs
@@ -749,6 +772,24 @@ proc runTxPackerTests(noisy = true) =
         check stats.disposed == 0
         check stats.total + backTxs.len == xq.nItems.total
 
+        #[
+        let packerBucket = xq.txDB.byStatus.eq(txItemPacked)
+
+        echo ">>> ", xq.nItems.pp, " >> ", packerBucket.gasLimits
+        echo ">>> packer",
+            " gasLimits ", xq.chain.minGasLimit,
+            " < ", xq.chain.lwmGasLimit,
+            " < ", xq.chain.trgGasLimit,
+            " < ", xq.chain.maxGasLimit,
+            "\n"
+
+        echo ">>> ", xq.squeezeVmExec.len # mapIt(it.info)
+
+        echo ">>> ", xq.nItems.pp,
+          " >> ", packerBucket.gasLimits,
+          " >> ", xq.chain.vmState.cumulativeGasUsed
+        ]#
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -759,22 +800,16 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxPackerTests
 
 when isMainModule:
-  proc localDir(c: CaptureSpecs): CaptureSpecs =
-    result = c
-    result.dir = "."
-
   const
     noisy = defined(debug)
-    capts0: CaptureSpecs =
-                goerliCapture.localDir
-    capts1: CaptureSpecs = (
-                GoerliNet, "/status", "goerli504192.txt.gz", 30000, 1500)
-    capts2: CaptureSpecs = (
-                MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
+    capts0: CaptureSpecs = goerliCapture
+    capts1: CaptureSpecs = (GoerliNet, "goerli504192.txt.gz", 30000, 500, 1500)
+    # Note: mainnet has the leading 45k blocks without any transactions
+    capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
   noisy.runTxLoader(capture = capts1)
-  noisy.runTxPoolTests
-  noisy.runTxPackerTests
+  #noisy.runTxPoolTests
+  true.runTxPackerTests
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

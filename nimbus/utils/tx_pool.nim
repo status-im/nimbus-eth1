@@ -369,16 +369,16 @@
 ##   parameters set conditions on how many blocks from the packed bucket can be
 ##   packed into the body of a new block.
 ##
-## stagedItems
-##   If `true`, the state buckets database is ready for packing staged items
-##   if the `autoActivateTxsPacker` flag is also set.
+## moreStagedItems
+##   If `true`, the state buckets database is ready for a new rounf of packing
+##   staged items if the `autoActivateTxsPacker` flag is also set.
 ##
 
 import
   std/[sequtils, tables],
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose],
+  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_squeeze],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results]
@@ -408,7 +408,6 @@ export
   tx_item.gasTipCap,
   tx_item.info,
   tx_item.itemID,
-  tx_item.local,
   tx_item.sender,
   tx_item.status,
   tx_item.timeStamp,
@@ -440,16 +439,16 @@ proc maintenanceProcessing(xp: TxPoolRef)
       # If the `force` flag is set, re-calculation is done even though the
       # change flag hes remained unset.
       if xp.bucketUpdateAll:
-        xp.pStagedItems = true # triggers packer
+        xp.pMoreStagedItems = true # triggers packer
       xp.pDirtyBuckets = false
 
   # Pack txs
   if autoActivateTxsPacker in xp.pFlags:
-    if xp.pStagedItems:
+    if xp.pMoreStagedItems:
       # Incrementally pack txs by appropriate fetching by items from
       # the `staged` bucket.
       xp.bucketUpdatePacked
-      xp.pStagedItems = false
+      xp.pMoreStagedItems = false
 
 
 proc processJobs(xp: TxPoolRef): int
@@ -471,7 +470,7 @@ proc processJobs(xp: TxPoolRef): int
       var args = task.data.addTxsArgs
       let (stagedFlag,topItems) = xp.addTxs(args.txs, args.info)
       if stagedFlag:
-        xp.pStagedItems = true # triggers packer
+        xp.pMoreStagedItems = true # triggers packer
       xp.pDoubleCheckAdd topItems
 
     of txJobDelItemIDs:
@@ -582,13 +581,13 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## This function triggers the packer that will attempt to add more txs to the
   ## `packed` bucket with the next job queue maintenance-processing (see
-  ## `jobCommit()`) by setting the `stagedItems` parameter. The packer will
+  ## `jobCommit()`) by setting the `moreStagedItems` parameter. The packer will
   ## eventually run when the `autoActivateTxsPacker` flag is also set.
   ##
   ## If the `clear` argument is set `true`, all items from the `packed` bucket
   ## are moved to the `staged` bucket. So the packer will work on an empty
   ## `packed` bucket when eventually started.
-  xp.pStagedItems = true
+  xp.pMoreStagedItems = true
   if clear:
     for item in xp.txDB.byStatus.incItemList(txItemPacked):
       discard xp.txDB.reassign(item, txItemStaged)
@@ -608,10 +607,25 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
 
 proc ethBlock*(xp: TxPoolRef): EthBlock
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, retrieves the block made up by the txs from the `packed` bucket.
-  EthBlock(
-    header: xp.chain.nextHeader(xp.txDB.byStatus.eq(txItemPacked).gasLimits),
-    txs: toSeq(xp.txDB.byStatus.incItemList(txItemPacked)).mapIt(it.tx))
+  ## Getter, retrieves a packed block ready for mining and signing depending
+  ## on the internally cached block chain head, the txs in the pool and some
+  ## tuning parameters. The following block header fields are left
+  ## uninitialised:
+  ##
+  ## * *extraData*: Blob
+  ## * *mixDigest*: Hash256
+  ## * *nonce*:     BlockNonce
+  ##
+  ## Note that this getter runs *ad hoc* all the txs through the VM in
+  ## order to build the block.
+  result.txs = xp.squeezeVmExec.mapIt(it.tx) # updates vmState
+  result.header = xp.chain.getHeader         # uses updated vmState
+
+proc gasCumulative*(xp: TxPoolRef): GasInt
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, retrieves the gas that will be burned in the block after
+  ## retrieving it via `ethBlock()`
+  xp.chain.vmState.cumulativeGasUsed
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -655,10 +669,10 @@ proc nItems*(xp: TxPoolRef): TxTabsItemsCount
   ## some totals.
   xp.txDB.nItems
 
-proc stagedItems*(xp: TxPoolRef): bool =
-  ## Getter, bucket database is ready for packing staged items if the
-  ##  `autoActivateTxsPacker` flag is also set.
-  xp.pStagedItems
+proc moreStagedItems*(xp: TxPoolRef): bool =
+  ## Getter, bucket database is ready for a new round of packing staged items
+  ## if the `autoActivateTxsPacker` flag is also set.
+  xp.pMoreStagedItems
 
 proc head*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
@@ -716,7 +730,7 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
   if xp.chain.head != val:
     xp.chain.head = val
     xp.pDirtyBuckets = true
-    xp.pStagedItems = true
+    xp.pMoreStagedItems = true
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
@@ -742,6 +756,8 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
 # Public functions, more immediate actions deemed not so important yet
 # ------------------------------------------------------------------------------
 
+#[
+
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -759,6 +775,8 @@ proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
   ## The function returns the number of transactions migrated.
   xp.txDB.setLocal(signer)
   xp.txDB.bySender.eq(signer).nItems
+
+]#
 
 # ------------------------------------------------------------------------------
 # End

@@ -13,16 +13,19 @@
 ##
 
 import
-  std/[math, times],
+  std/[math, options, times],
   ../../chain_config,
   ../../constants,
   ../../db/[db_chain, accounts_cache],
   ../../forks,
+  ../../p2p/executor,
+  ../../utils,
   ../../vm_state,
   ../../vm_types,
-  ../header,
+  ../difficulty,
   ./tx_item,
-  eth/[common, keys, p2p]
+  eth/[common, keys, p2p, rlp],
+  nimcrypto
 
 {.push raises: [Defect].}
 
@@ -30,32 +33,20 @@ type
   TxChainError* = object of CatchableError
     ## Catch and relay exception error
 
-  TxChainNonce* =
-    proc(rdb: ReadOnlyStateDB; account: EthAddress): AccountNonce
-      {.gcsafe,raises: [Defect,CatchableError].}
-
-  TxChainBalance* =
-    proc(rdb: ReadOnlyStateDB; account: EthAddress): UInt256
-      {.gcsafe,raises: [Defect,CatchableError].}
-
-  TxChainMiner = object
-    ok: bool                   ## Have miner key
-    key: PrivateKey            ## Signer key
-    address: EthAddress        ## Coinbase
-
   TxChainRef* = ref object ##\
     ## Cache the state of the block chain which serves as logical insertion
     ## point for a new block. This state is typically the canonical head
     ## when updated.
     db: BaseChainDB            ## Block chain database
-    miner: TxChainMiner        ## Optional miner specs
+    miner: EthAddress          ## Address of fee beneficiary
 
     vmState: BaseVMState       ## Current state relative to `head`
     nextBaseFee: GasPrice      ## Base fee derived from `head`
-    nextCoinbase: EthAddress   ## Derived from `head` unless signer available
-    nextExtraData: Blob        ## To be used in next block
+    nextExtraData: Blob        ## To be used in next block header
+    nextTxRoot: Hash256        ## To be used in next block header
     nextFork: Fork             ## Fork of next block
     minGasLimit: GasInt        ## Minimum `gasLimit` for the packer
+    lwmGasLimit: GasInt        ## Low water mark for VM/exec extra packer
     trgGasLimit: GasInt        ## The `gasLimit` for the packer, soft limit
     maxGasLimit: GasInt        ## May increase the `gasLimit` a bit, hard limit
 
@@ -83,11 +74,15 @@ const
     ## https://ethereum.org/en/developers/docs/blocks/#block-size
     30_000_000.GasInt
 
+  TRG_THRESHOLD_PER_CENT = ##\
+    ## VM executor stops if this per centage of `trgGasLimit` has been reached.
+    90
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-template safeExecutor*(info: string; code: untyped) =
+template safeExecutor(info: string; code: untyped) =
   try:
     code
   except CatchableError as e:
@@ -99,11 +94,19 @@ template safeExecutor*(info: string; code: untyped) =
     raise newException(TxChainError, info & "(): " & $e.name & " -- " & e.msg)
 
 
-proc getNextBaseFee*(dh: TxChainRef): UInt256 =
-  ## Calculates the `baseFee` of the head assuming this is tha parent of a
+proc getVmState(dh: TxChainRef; newHead: BlockHeader): BaseVMState
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  safeExecutor "tx_chain.newVmState()":
+    let stateRoot = AccountsCache.init(
+      dh.db.db, newHead.stateRoot, dh.db.pruneTrie)
+    result = newBaseVMState(stateRoot, newHead, dh.db)
+
+
+proc getNextBaseFee(dh: TxChainRef): UInt256 =
+  ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate. This function is derived from
-  ## `p2p/gaslimit.calcEip1599BaseFee()` which in turn has itts origins on
-  ## `consensus/misc/eip1559.go` od geth.
+  ## `p2p/gaslimit.calcEip1599BaseFee()` which in turn has its origins on
+  ## `consensus/misc/eip1559.go` of geth.
 
   # syntactic sugar, baseFee is for the next header
   let parent = dh.vmState.blockHeader
@@ -177,20 +180,19 @@ proc setGasLimits(dh: TxChainRef; gasLimit: GasInt) =
       dh.minGasLimit = gasLimit - delta
       dh.trgGasLimit = gasLimit
 
+  # VM/exec low water mark for extra packer
+  dh.lwmGasLimit = max(
+    dh.minGasLimit, (dh.trgGasLimit * TRG_THRESHOLD_PER_CENT + 50) div 100)
+
 
 proc update(dh: TxChainRef; newHead: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update by new block header
-
-  safeExecutor("tx_chain.vmState()"):
-    let stateRoot = AccountsCache.init(
-      dh.db.db, newHead.stateRoot, dh.db.pruneTrie)
-    dh.vmState = newBaseVMState(stateRoot, newHead, dh.db)
-
+  dh.vmState = dh.getVmState(newHead)
   dh.nextFork = dh.db.config.toFork(newHead.blockNumber + 1)
   dh.nextExtraData = newHead.extraData
-  dh.nextCoinbase = if dh.miner.ok: dh.miner.address else: newHead.coinbase
   dh.nextBaseFee = dh.getNextBaseFee.truncate(uint64).GasPrice
+  dh.nextTxRoot = BLANK_ROOT_HASH
 
   dh.setGasLimits(newHead.gasLimit)
 
@@ -198,19 +200,14 @@ proc update(dh: TxChainRef; newHead: BlockHeader)
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxChainRef; db: BaseChainDB; miner: Option[PrivateKey]): T
+proc init*(T: type TxChainRef; db: BaseChainDB; miner: EthAddress): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor
   new result
 
   result.db = db
+  result.miner = miner
   result.update(db.getCanonicalHead)
-
-  if miner.isSome:
-    result.miner = TxChainMiner(
-      ok:      true,
-      key:     miner.get,
-      address: miner.get.toPublicKey.toCanonicalAddress)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -226,23 +223,41 @@ proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce
   ## Wrapper around `getNonce()`
   dh.vmState.readOnlyStateDB.getNonce(account)
 
-proc nextHeader*(dh: TxChainRef; gasLimit: GasInt): BlockHeader
-    {.gcsafe,raises: [Defect,ValueError].} =
-  ## Generate a new header, child of the cached `head`
 
-  # may need increase the gas limit
-  var effGasLimit = dh.trgGasLimit
-  if effGasLimit < gasLimit:
-    effGasLimit = dh.maxGasLimit
+proc getHeader*(dh: TxChainRef): BlockHeader
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Generate a new header, a child of the cached `head` (similar to
+  ## `utils.generateHeaderFromParentHeader()`.)
 
-  generateHeaderFromParentHeader(
-    config = dh.db.config,
-    parent = dh.vmState.blockHeader,
-    coinbase = dh.nextCoinbase,
-    timestamp = some(getTime().utc.toTime),
-    gasLimit = effGasLimit,
-    extraData = dh.nextExtraData,
-    baseFee = some(dh.nextBaseFee.uint64.u256))
+  let
+    gasUsed = dh.vmState.cumulativeGasUsed
+    effGasLimit = if dh.trgGasLimit < gasUsed:   dh.maxGasLimit
+                  elif gasUsed < dh.minGasLimit: dh.minGasLimit
+                  else:                          gasUsed
+
+    feeOption = if FkLondon <= dh.nextFork: some(dh.nextBaseFee.uint64.u256)
+                else:                       UInt256.none()
+
+    tStamp = getTime().utc.toTime
+    blockNumber = dh.vmState.blockHeader.blockNumber + 1
+
+  BlockHeader(
+    parentHash:  dh.vmState.blockHeader.blockHash,
+    ommersHash:  EMPTY_UNCLE_HASH,
+    coinbase:    dh.miner,
+    stateRoot:   dh.vmState.blockHeader.stateRoot,
+    txRoot:      dh.nextTxRoot,
+    receiptRoot: dh.vmState.receipts.calcReceiptRoot,
+    bloom:       dh.vmState.receipts.createBloom,
+    difficulty:  dh.db.config.calcDifficulty(tStamp, dh.vmState.blockHeader),
+    blockNumber: dh.vmState.blockHeader.blockNumber + 1,
+    gasLimit:    effGasLimit,
+    gasUsed:     dh.vmState.cumulativeGasUsed,
+    timestamp:   tStamp,
+    # extraData: Blob       # signing data
+    # mixDigest: Hash256    # mining hash for given difficulty
+    # nonce:     BlockNonce # mining free vaiable
+    fee:         feeOption)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -252,17 +267,25 @@ proc db*(dh: TxChainRef): BaseChainDB =
   ## Getter
   dh.db
 
+proc config*(dh: TxChainRef): ChainConfig =
+  ## Getter, shortcut for `dh.db.config`
+  dh.db.config
+
 proc head*(dh: TxChainRef): BlockHeader =
   ## Getter, current
   dh.vmState.blockHeader
 
+proc lwmGasLimit*(dh: TxChainRef): GasInt =
+  ## Getter
+  dh.lwmGasLimit
+
+proc miner*(dh: TxChainRef): EthAddress =
+  ## Getter
+  dh.miner
+
 proc nextBaseFee*(dh: TxChainRef): GasPrice =
   ## Getter, baseFee of next bock
   dh.nextBaseFee
-
-proc nextCoinbase*(dh: TxChainRef): EthAddress =
-  ## Getter
-  dh.nextCoinbase
 
 proc nextExtraData*(dh: TxChainRef): Blob =
   ## Getter
@@ -271,6 +294,10 @@ proc nextExtraData*(dh: TxChainRef): Blob =
 proc nextFork*(dh: TxChainRef): Fork =
   ## Getter, fork of next block
   dh.nextFork
+
+proc nextTxRoot*(dh: TxChainRef): Hash256 =
+  ## Getter, transaction state root hash for the next header
+  dh.nextTxRoot
 
 proc maxGasLimit*(dh: TxChainRef): GasInt =
   ## Getter
@@ -284,8 +311,12 @@ proc trgGasLimit*(dh: TxChainRef): GasInt =
   ## Getter
   dh.trgGasLimit
 
-proc vmState*(dh: TxChainRef): BaseVMState =
-  ## Getter, current block chain state
+proc vmState*(dh: TxChainRef; pristine = false): BaseVMState
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, current block chain state. If the `pristine` argument is set
+  ## `true`, a new clean copy is cached and returned.
+  if pristine:
+    dh.vmState = dh.getVmState(dh.vmState.blockHeader)
   dh.vmState
 
 # ------------------------------------------------------------------------------
@@ -298,13 +329,17 @@ proc `head=`*(dh: TxChainRef; header: BlockHeader)
   ## account cachs to a new insertion point on the block chain database.
   dh.update(header)
 
-proc `nextCoinbase=`*(dh: TxChainRef; val: EthAddress) =
+proc miner*(dh: TxChainRef; val: EthAddress) =
   ## Setter
-  dh.nextCoinbase = val
+  dh.miner = val
 
 proc `nextExtraData=`*(dh: TxChainRef; val: Blob) =
   ## Setter
   dh.nextExtraData = val
+
+proc `nextTxRoot=`*(dh: TxChainRef; val: Hash256) =
+  ## Setter
+  dh.nextTxRoot = val
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging & testing

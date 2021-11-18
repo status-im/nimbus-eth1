@@ -28,13 +28,13 @@ type
   TxStatusSenderRef* = ref object ##\
     ## Per address table. This is provided as an ordered list so traversal\
     ## is predictable.
-    size: int
-    gasLimits: GasInt
+    size: int                           ## Total number of items
+    gasLimits: GasInt                   ## Accumulated gas limits
     addrList: SortedSet[EthAddress,TxStatusNonceRef]
 
   TxStatusTab* = object ##\
     ## Per status table
-    size: int
+    size: int                           ## Total number of items
     statusList: array[TxItemStatus,TxStatusSenderRef]
 
   TxStatusInx = object ##\

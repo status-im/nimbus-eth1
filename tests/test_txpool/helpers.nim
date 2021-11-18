@@ -20,11 +20,13 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
-  tx_chain.TxChainBalance,
-  tx_chain.TxChainNonce,
   tx_chain.db,
+  tx_chain.lwmGasLimit,
+  tx_chain.maxGasLimit,
+  tx_chain.minGasLimit,
   tx_chain.nextFork,
   tx_chain.setNextBaseFee,
+  tx_chain.trgGasLimit,
   tx_chain.vmState,
   tx_desc.chain,
   tx_desc.txDB,
@@ -38,6 +40,7 @@ export
   tx_tabs.eq,
   tx_tabs.first,
   tx_tabs.flushRejects,
+  tx_tabs.gasLimits,
   tx_tabs.ge,
   tx_tabs.gt,
   tx_tabs.incItemList,
@@ -149,6 +152,9 @@ proc toKMG*[T](s: T): string =
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
+proc pp*(a: BlockNonce): string =
+  a.mapIt(it.toHex(2)).join.toLowerAscii
+
 proc pp*(a: EthAddress): string =
   a.mapIt(it.toHex(2)).join[12 .. 19].toLowerAscii
 
@@ -212,13 +218,6 @@ proc pp*(txs: openArray[Transaction]; pfx = ""): string =
 
 proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
   txs.pp(" ".repeat(pfxLen))
-
-proc pp*(it: TxItemRef): string =
-  result = it.info.split[0]
-  if it.local:
-    result &= "L"
-  else:
-    result &= "R"
 
 proc pp*(w: TxTabsItemsCount): string =
   &"{w.pending}/{w.staged}/{w.packed}:{w.total}/{w.disposed}"
