@@ -159,7 +159,8 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-proc loadNetworkParams*(fileName: string, cg: var NetworkParams): bool =
+proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
+    bool {.raises: [Defect].} =
   var cc: CustomChain
   try:
     cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)

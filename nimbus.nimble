@@ -52,10 +52,12 @@ task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
 task fluffy, "Build fluffy":
-  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
+  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 
 task portalcli, "Build portalcli":
-  buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE"
+  buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 
 task testfluffy, "Run fluffy tests":
-  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  # Need the nimbus_db_backend in state network tests as we need a Hexary to
+  # start from, even though it only uses the MemoryDb.
+  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite"
