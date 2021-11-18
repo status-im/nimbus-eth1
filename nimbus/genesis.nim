@@ -5,7 +5,8 @@ import
   ./db/[db_chain, state_db],
   "."/[constants, chain_config, forks, p2p/gaslimit]
 
-proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
+proc toBlock*(g: Genesis, db: BaseChainDB = nil):
+    BlockHeader {.raises: [Defect, RlpError].} =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
                          else: (db.db, db.pruneTrie)
   tdb.put(emptyRlpHash.data, emptyRlp)
