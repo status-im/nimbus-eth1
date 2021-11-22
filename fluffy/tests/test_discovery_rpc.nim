@@ -12,7 +12,7 @@ import
   json_rpc/[rpcproxy, rpcserver], json_rpc/clients/httpclient,
   stint,eth/p2p/discoveryv5/enr, eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../rpc/discovery_api, ./test_helpers
+  ../rpc/rpc_discovery_api, ./test_helpers
 
 type TestCase = ref object
   localDiscovery: discv5_protocol.Protocol 
@@ -50,13 +50,13 @@ procSuite "Discovery Rpc":
     let resp = await tc.client.call("discv5_nodeInfo", %[])
 
     check:
-      resp.contains("node_id")
-      resp["node_id"].kind == JString
-      resp.contains("enr")
-      resp["enr"].kind == JString
+      resp.contains("nodeId")
+      resp["nodeId"].kind == JString
+      resp.contains("nodeENR")
+      resp["nodeENR"].kind == JString
 
-    let nodeId = resp["node_id"].getStr()
-    let nodeEnr = resp["enr"].getStr()
+    let nodeId = resp["nodeId"].getStr()
+    let nodeEnr = resp["nodeENR"].getStr()
 
     check:
       nodeEnr == tc.localDiscovery.localNode.record.toURI()
