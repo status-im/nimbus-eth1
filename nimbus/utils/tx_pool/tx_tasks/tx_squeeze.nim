@@ -270,8 +270,6 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
   let
     vmState = xp.chain.vmState(pristine = true)
     nextBlockNum = xp.chain.head.blockNumber + 1
-    rcPacked = xp.txDB.byStatus.eq(txItemPacked)
-    rcStaged = xp.txDB.byStatus.eq(txItemStaged)
 
   let dbTx = xp.chain.db.db.beginTransaction
   defer: dbTx.dispose()
@@ -290,51 +288,37 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
 
   # Try to compact items from the `packed` bucket as long as the
   # `spaceAvail()` constraint is not violated.
-  if rcPacked.isOK:
-    var rc = rcPacked.ge(minEthAddress)
-    while rc.isOK and xp.spaceAvail(0):
-      let (account, nonceList) = (rc.value.key, rc.value.data)
+  for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
+    # Try/execute all items from the `packed` bucket. The squeezer executes
+    # the txs in the VM and then uses the sum of burned gas results as
+    # target function (subject to bundary conditions.) Txs are expected to
+    # run through so the whole group is run as an atomic action (can only
+    # roll back all.)
+    var nonce = ctx.groupSqueezer(nonceList)
 
-      # Try/execute all items from the `packed` bucket. The squeezer executes
-      # the txs in the VM and then uses the sum of burned gas results as
-      # target function (subject to bundary conditions.) Txs are expected to
-      # run through so the whole group is run as an atomic action (can only
-      # roll back all.)
-      var nonce = ctx.groupSqueezer(nonceList)
-
-      # Compact additional items from the `packed` bucket if incidentally
-      # there are more (change of packer optimisation flags?). As the result
-      # is unknown, each tx is run atomically with roll back possibilty.
-      ctx.stepSqueezer(nonceList, nonce)
-
-      # Fetch next list item
-      rc = rcPacked.gt(account)
+    # Compact additional items from the `packed` bucket if incidentally
+    # there are more (change of packer optimisation flags?). As the result
+    # is unknown, each tx is run atomically with roll back possibilty.
+    ctx.stepSqueezer(nonceList, nonce)
 
   # Improve packing by processing the `stages` bucket.
-  if rcStaged.isOK:
+  if xp.continueSqueezing:
+    let rcPacked = xp.txDB.byStatus.eq(txItemPacked)
     var bothBuckets: seq[TxStatusNonceRef]
-    if xp.continueSqueezing:
-
-      # Try to compact items from yet untouched accounts from `staged` bucket.
-      # The items tried first are the ones with accounts not in the `packed`
-      # bucket.
-      #
-      # FIXME: Omitting the accounts that share both buckets `staged` and
-      #        `packed` increases the number of accounts in the packed ethernet
-      #        block. Whether this leads to better or more desired packing
-      #        results is unclear.
-      var rc = rcStaged.ge(minEthAddress)
-      while rc.isOK and xp.continueSqueezing:
-        let (account, nonceList) = (rc.value.key, rc.value.data)
-
-        # Not trying this one if the account is in the `packed` bucket'.
-        if rcPacked.eq(account).isOk:
-          bothBuckets.add nonceList
-        else:
-          ctx.stepSqueezer(nonceList)
-
-        # Fetch next list item
-        rc = rcStaged.gt(account)
+    # Try to compact items from yet untouched accounts from `staged` bucket.
+    # The items tried first are the ones with accounts not in the `packed`
+    # bucket.
+    #
+    # FIXME: Omitting the accounts that share both buckets `staged` and
+    #        `packed` increases the number of accounts in the packed ethernet
+    #        block. Whether this leads to better or more desired packing
+    #        results is unclear.
+    for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
+      # Not trying this one if the account is in the `packed` bucket'.
+      if rcPacked.eq(account).isOk:
+        bothBuckets.add nonceList
+      else:
+        ctx.stepSqueezer(nonceList)
 
     if xp.continueSqueezing:
       # Compact more, re-visit accounts from the `packed` bucket which

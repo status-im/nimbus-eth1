@@ -16,7 +16,7 @@ import
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/[results, sorted_set]
+  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
 
 {.push raises: [Defect].}
 
@@ -26,11 +26,11 @@ type
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxStatusSenderRef* = ref object ##\
-    ## Per address table. This is provided as an ordered list so traversal\
-    ## is predictable.
+    ## Per address table. This table is provided as a keyed queue so deletion
+    ## while traversing is supported and predictable.
     size: int                           ## Total number of items
     gasLimits: GasInt                   ## Accumulated gas limits
-    addrList: SortedSet[EthAddress,TxStatusNonceRef]
+    addrList: KeyedQueue[EthAddress,TxStatusNonceRef]
 
   TxStatusTab* = object ##\
     ## Per status table
@@ -41,11 +41,6 @@ type
     ## Internal access data
     addrData: TxStatusSenderRef
     nonceData: TxStatusNonceRef
-
-const
-  minEthAddress = block:
-    var rc: EthAddress
-    rc
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -61,14 +56,6 @@ proc nActive(sq: TxStatusTab): int =
     if not sq.statusList[status].isNil:
       result.inc
 
-proc cmp(a,b: EthAddress): int =
-  ## mixin for SortedSet
-  for n in 0 ..< EthAddress.len:
-    if a[n] < b[n]:
-      return -1
-    if b[n] < a[n]:
-      return 1
-
 proc mkInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Fails if item exists, already
@@ -82,14 +69,12 @@ proc mkInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
     sq.statusList[item.status] = inx.addrData
 
   # sender address sub-list => nonces
-  block:
-    let rc = inx.addrData.addrList.insert(item.sender)
-    if rc.isOk:
-      new inx.nonceData
-      inx.nonceData.nonceList.init
-      rc.value.data = inx.nonceData
-    else:
-      inx.nonceData = inx.addrData.addrList.eq(item.sender).value.data
+  if inx.addrData.addrList.hasKey(item.sender):
+    inx.nonceData = inx.addrData.addrList[item.sender]
+  else:
+    new inx.nonceData
+    inx.nonceData.nonceList.init
+    inx.addrData.addrList[item.sender] = inx.nonceData
 
   # nonce sublist
   let rc = inx.nonceData.nonceList.insert(item.tx.nonce)
@@ -110,10 +95,9 @@ proc getInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
     return err()
 
   # sender address sub-list => nonces
-  let rc = inx.addrData.addrList.eq(item.sender)
-  if rc.isErr:
+  if not inx.addrData.addrList.hasKey(item.sender):
     return err()
-  inx.nonceData = rc.value.data
+  inx.nonceData = inx.addrData.addrList[item.sender]
 
   ok(inx)
 
@@ -121,25 +105,26 @@ proc getInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc txInit*(sq: var TxStatusTab; size = 10) =
+proc init*(sq: var TxStatusTab; size = 10) =
   ## Optional constructor
   sq.size = 0
   sq.statusList.reset
 
 
-proc txInsert*(sq: var TxStatusTab; item: TxItemRef)
+proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Add transaction `item` to the list. The function has no effect if the
-  ## transaction exists, already.
+  ## transaction exists, already (apart from returning `false`.)
   let rc = sq.mkInxImpl(item)
   if rc.isOK:
     let inx = rc.value
     sq.size.inc
     inx.addrData.size.inc
     inx.addrData.gasLimits += item.tx.gasLimit
+    return true
 
 
-proc txDelete*(sq: var TxStatusTab; item: TxItemRef): bool
+proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = sq.getInxImpl(item)
   if rc.isOK:
@@ -159,7 +144,7 @@ proc txDelete*(sq: var TxStatusTab; item: TxItemRef): bool
     return true
 
 
-proc txVerify*(sq: var TxStatusTab): Result[void,TxInfo]
+proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## walk `TxItemStatus` > `EthAddress` > `AccountNonce`
 
@@ -175,10 +160,8 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxInfo]
       var
         addrCount = 0
         gasLimits = 0.GasInt
-        rcAddr = addrData.addrList.ge(minEthAddress)
-      while rcAddr.isOK:
-        let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
-        rcAddr = addrData.addrList.gt(addrKey)
+      for p in addrData.addrList.nextPairs:
+        let (addrKey, nonceData) = (p.key, p.data)
 
         block:
           let rc = nonceData.nonceList.verify
@@ -249,62 +232,17 @@ proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt =
 
  
 proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef] =
-  addrData.addrList.eq(sender)
+       SortedSetResult[EthAddress,TxStatusNonceRef]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  if addrData.addrList.haskey(sender):
+    return toSortedSetResult(key = sender, data = addrData.addrList[sender])
+  err(rbNotFound)
 
 proc eq*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress):
-           SortedSetResult[EthAddress,TxStatusNonceRef] =
+         sender: EthAddress): SortedSetResult[EthAddress,TxStatusNonceRef]
+    {.gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.eq(sender)
-  err(rc.error)
-
-
-proc ge*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef] =
-  addrData.addrList.ge(sender)
-
-proc ge*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress):
-           SortedSetResult[EthAddress,TxStatusNonceRef] =
-  if rc.isOK:
-    return rc.value.data.ge(sender)
-  err(rc.error)
-
-
-proc gt*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef] =
-  addrData.addrList.gt(sender)
-
-proc gt*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress):
-           SortedSetResult[EthAddress,TxStatusNonceRef] =
-  if rc.isOK:
-    return rc.value.data.gt(sender)
-  err(rc.error)
-
-
-proc le*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef] =
-  addrData.addrList.le(sender)
-
-proc le*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress):
-           SortedSetResult[EthAddress,TxStatusNonceRef] =
-  if rc.isOK:
-    return rc.value.data.le(sender)
-  err(rc.error)
-
-
-proc lt*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef] =
-  addrData.addrList.lt(sender)
-
-proc lt*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress):
-           SortedSetResult[EthAddress,TxStatusNonceRef] =
-  if rc.isOK:
-    return rc.value.data.lt(sender)
   err(rc.error)
 
 # ------------------------------------------------------------------------------

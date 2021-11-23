@@ -25,7 +25,6 @@ export
   tx_chain.maxGasLimit,
   tx_chain.minGasLimit,
   tx_chain.nextFork,
-  tx_chain.setNextBaseFee,
   tx_chain.trgGasLimit,
   tx_chain.vmState,
   tx_desc.chain,
@@ -35,28 +34,22 @@ export
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
   tx_tabs.any,
-  tx_tabs.decItemList,
+  tx_tabs.decAccount,
   tx_tabs.dispose,
   tx_tabs.eq,
-  tx_tabs.first,
   tx_tabs.flushRejects,
   tx_tabs.gasLimits,
   tx_tabs.ge,
   tx_tabs.gt,
-  tx_tabs.incItemList,
-  tx_tabs.last,
+  tx_tabs.incAccount,
+  tx_tabs.incNonce,
   tx_tabs.le,
   tx_tabs.len,
   tx_tabs.lt,
   tx_tabs.nItems,
-  tx_tabs.next,
-  tx_tabs.prev,
   tx_tabs.reassign,
   tx_tabs.reject,
   tx_tabs.verify,
-  tx_tabs.walkItems,
-  tx_tabs.walkNonceList,
-  tx_tabs.walkSchedList,
   undumpNextGroup
 
 const
@@ -250,15 +243,6 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, " ", args.toSeq.join
     else:
       echo pfx, args.toSeq.join
-
-proc bucketPart*(xp: TxPoolRef; label: TxItemStatus): seq[(EthAddress,int)] =
-  let rcBucket = xp.txDB.byStatus.eq(label)
-  if rcBucket.isOK:
-    var rcAcc = rcBucket.ge(minEthAddress)
-    while rcAcc.isOK:
-      let (sender, nonceList) = (rcAcc.value.key, rcAcc.value.data)
-      result.add (sender, nonceList.nItems)
-      rcAcc = rcBucket.gt(sender)
 
 # ------------------------------------------------------------------------------
 # End

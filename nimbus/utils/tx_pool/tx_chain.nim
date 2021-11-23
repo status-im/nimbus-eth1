@@ -323,6 +323,12 @@ proc vmState*(dh: TxChainRef; pristine = false): BaseVMState
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
+proc `nextBaseFee=`*(dh: TxChainRef; val: GasPrice) =
+  ## Setter, temorarily overwrites parameter until next `head=` update. This
+  ## function would be called in exceptional cases only as this parameter is
+  ## determined by the `head=` update.
+  dh.nextBaseFee = val
+
 proc `head=`*(dh: TxChainRef; header: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, updates descriptor. This setter re-positions the `vmState` and
@@ -350,11 +356,6 @@ proc setNextGasLimit*(dh: TxChainRef; val: GasInt) =
   ## adjusted so that it is in the proper range. This function
   ## is intended to support debugging and testing.
   dh.setGasLimits(val)
-
-proc setNextBaseFee*(dh: TxChainRef; val: GasPrice) =
-  ## Temorarily overwrite (until next header update). This function
-  ## is intended to support debugging and testing.
-  dh.nextBaseFee = val
 
 # ------------------------------------------------------------------------------
 # End

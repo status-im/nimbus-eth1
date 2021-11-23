@@ -16,7 +16,7 @@ import
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/[results, sorted_set]
+  stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
 
 {.push raises: [Defect].}
 
@@ -29,14 +29,17 @@ type
 
   TxSenderSchedRef* = ref object ##\
     ## For a sender, items can be accessed by *nonce*, or *status,nonce*.
-    size: int                           ## Total number of items
+    size: int             ## Total number of items
+    profit: GasPriceEx    ## aggregated `effectiveGasTip()` values
     statusList: array[TxItemStatus,TxSenderNonceRef]
     allList: TxSenderNonceRef
 
   TxSenderTab* = object ##\
-    ## Per address table
-    size: int                           ## Total number of items
-    addrList: SortedSet[EthAddress,TxSenderSchedRef]
+    ## Per address table This is table provided as a keyed queue so deletion
+    ## while traversing is supported and predictable.
+    size: int             ## Total number of items
+    baseFee: GasPrice     ## For aggregating `effectiveGasTip` => `gasTipSum`
+    addrList: KeyedQueue[EthAddress,TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
@@ -47,20 +50,9 @@ type
 
   TxSenderInx = object ##\
     ## Internal access data
-    sAddr: TxSenderSchedRef
-    statusNonce: TxSenderNonceRef       ## by status items sub-list
-    anyNonce: TxSenderNonceRef          ## all items sub-list
-
-const
-  minEthAddress = block:
-    var rc: EthAddress
-    rc
-
-  maxEthAddress = block:
-    var rc: EthAddress
-    for n in 0 ..< rc.len:
-      rc[n] = 255
-    rc
+    schedData: TxSenderSchedRef
+    statusNonce: TxSenderNonceRef       ## status items sub-list
+    allNonce: TxSenderNonceRef          ## all items sub-list
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -80,14 +72,6 @@ proc nActive(rq: TxSenderSchedRef): int =
     if not rq.statusList[status].isNil:
       result.inc
 
-proc cmp(a,b: EthAddress): int =
-  ## mixin for SortedSet
-  for n in 0 ..< EthAddress.len:
-    if a[n] < b[n]:
-      return -1
-    if b[n] < a[n]:
-      return 1
-
 proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
   case status
   of txItemPending:
@@ -97,38 +81,39 @@ proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
   of txItemPacked:
     return txSenderPacked
 
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   var inxData: TxSenderInx
-  block:
-    let rc = gt.addrList.insert(item.sender)
-    if rc.isOk:
-      new inxData.sAddr
-      rc.value.data = inxData.sAddr
-    else:
-      inxData.sAddr = gt.addrList.eq(item.sender).value.data
+
+  if gt.addrList.hasKey(item.sender):
+    inxData.schedData = gt.addrList[item.sender]
+  else:
+    new inxData.schedData
+    gt.addrList[item.sender] = inxData.schedData
 
   # all items sub-list
-  if inxData.sAddr.allList.isNil:
-    new inxData.anyNonce
-    inxData.anyNonce.nonceList.init
-    inxData.sAddr.allList = inxData.anyNonce
+  if inxData.schedData.allList.isNil:
+    new inxData.allNonce
+    inxData.allNonce.nonceList.init
+    inxData.schedData.allList = inxData.allNonce
   else:
-    inxData.anyNonce = inxData.sAddr.allList
-  block:
-    let rc = inxData.anyNonce.nonceList.insert(item.tx.nonce)
-    if rc.isErr:
-      return err()
-    rc.value.data = item
+    inxData.allNonce = inxData.schedData.allList
+  let rc = inxData.allNonce.nonceList.insert(item.tx.nonce)
+  if rc.isErr:
+    return err()
+  rc.value.data = item
 
   # by status items sub-list
-  if inxData.sAddr.statusList[item.status].isNil:
+  if inxData.schedData.statusList[item.status].isNil:
     new inxData.statusNonce
     inxData.statusNonce.nonceList.init
-    inxData.sAddr.statusList[item.status] = inxData.statusNonce
+    inxData.schedData.statusList[item.status] = inxData.statusNonce
   else:
-    inxData.statusNonce = inxData.sAddr.statusList[item.status]
+    inxData.statusNonce = inxData.schedData.statusList[item.status]
   # this is a new item, checked at `all items sub-list` above
   inxData.statusNonce.nonceList.insert(item.tx.nonce).value.data = item
 
@@ -139,32 +124,34 @@ proc getInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
     {.gcsafe,raises: [Defect,KeyError].} =
 
   var inxData: TxSenderInx
-  let rc = gt.addrList.eq(item.sender)
-  if rc.isErr:
+  if not gt.addrList.hasKey(item.sender):
     return err()
 
   # Sub-lists are non-nil as `TxSenderSchedRef` cannot be empty
-  inxData.sAddr = rc.value.data
+  inxData.schedData = gt.addrList[item.sender]
 
   # by status items sub-list
-  inxData.statusNonce = inxData.sAddr.statusList[item.status]
+  inxData.statusNonce = inxData.schedData.statusList[item.status]
 
   # all items sub-list
-  inxData.anyNonce = inxData.sAddr.allList
+  inxData.allNonce = inxData.schedData.allList
 
   ok(inxData)
 
 # ------------------------------------------------------------------------------
-# Public all-queue helpers
+# Public constructor
 # ------------------------------------------------------------------------------
 
-proc txInit*(gt: var TxSenderTab) =
+proc init*(gt: var TxSenderTab) =
   ## Constructor
   gt.size = 0
   gt.addrList.init
 
+# ------------------------------------------------------------------------------
+# Public functions, base management operations
+# ------------------------------------------------------------------------------
 
-proc txInsert*(gt: var TxSenderTab; item: TxItemRef): bool
+proc insert*(gt: var TxSenderTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
@@ -172,53 +159,54 @@ proc txInsert*(gt: var TxSenderTab; item: TxItemRef): bool
   if rc.isOK:
     let inx = rc.value
     gt.size.inc
-    inx.sAddr.size.inc
+
+    inx.schedData.size.inc
+    inx.schedData.profit += item.tx.effectiveGasTip(gt.baseFee)
+
     inx.statusNonce.gasLimits += item.tx.gasLimit
-    inx.anyNonce.gasLimits += item.tx.gasLimit
+    inx.allNonce.gasLimits += item.tx.gasLimit
     return true
 
 
-proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
+proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = gt.getInxImpl(item)
   if rc.isOK:
     let inx = rc.value
 
     gt.size.dec
-    inx.sAddr.size.dec
+    inx.schedData.size.dec
+    inx.schedData.profit -= item.tx.effectiveGasTip(gt.baseFee)
 
-    discard inx.anyNonce.nonceList.delete(item.tx.nonce)
-    if inx.anyNonce.nonceList.len == 0:
+    discard inx.allNonce.nonceList.delete(item.tx.nonce)
+    if inx.allNonce.nonceList.len == 0:
       # this was the last nonce for that sender account
       discard gt.addrList.delete(item.sender)
       return true
 
-    inx.anyNonce.gasLimits -= item.tx.gasLimit
+    inx.allNonce.gasLimits -= item.tx.gasLimit
 
     discard inx.statusNonce.nonceList.delete(item.tx.nonce)
     if inx.statusNonce.nonceList.len == 0:
-      inx.sAddr.statusList[item.status] = nil
+      inx.schedData.statusList[item.status] = nil
       return true
 
     inx.statusNonce.gasLimits -= item.tx.gasLimit
     return true
 
 
-proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
+proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Walk `EthAddress` > `TxSenderLocus` > `AccountNonce` > items
   block:
     let rc = gt.addrList.verify
     if rc.isErr:
       return err(txInfoVfySenderRbTree)
-  var
-    totalCount = 0
-    rcAddr = gt.addrList.ge(minEthAddress)
-  while rcAddr.isOk:
-    var addrCount = 0
-    let (addrKey, schedData) = (rcAddr.value.key, rcAddr.value.data)
-    rcAddr = gt.addrList.gt(addrKey)
 
+  var totalCount = 0
+  for p in gt.addrList.nextPairs:
+    let schedData = p.data
+    var addrCount = 0
     # at least one of status lists must be available
     if schedData.nActive == 0:
       return err(txInfoVfySenderLeafEmpty)
@@ -253,7 +241,9 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
       allCount = 0
       allGas = 0.GasInt
     block:
-      var allData = schedData.allList
+      var
+        allData = schedData.allList
+        perAddrSum: GasPriceEx
 
       block:
         let rc = allData.nonceList.verify
@@ -265,8 +255,12 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = allData.nonceList.gt(nonceKey)
 
+          perAddrSum += item.tx.effectiveGasTip(gt.baseFee)
           allGas += item.tx.gasLimit
           allCount.inc
+
+      if schedData.profit != perAddrSum:
+        return err(txInfoVfySenderProfits)
 
     if allGas != statusGas:
       return err(txInfoVfySenderTotal)
@@ -284,6 +278,35 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
   ok()
 
 # ------------------------------------------------------------------------------
+# Public getters
+# ------------------------------------------------------------------------------
+
+proc baseFee*(gt: var TxSenderTab): GasPrice =
+  ## Getter
+  gt.baseFee
+
+# ------------------------------------------------------------------------------
+# Public functions, setters
+# ------------------------------------------------------------------------------
+
+proc `baseFee=`*(gt: var TxSenderTab; val: GasPrice)
+     {.gcsafe,raises: [Defect,KeyError].}  =
+  ## Setter. When invoked, there is *always* a re-calculation of the profit
+  ## values stored with the sender address.
+  gt.baseFee = val
+
+  for p in gt.addrList.nextPairs:
+    let
+      schedData = p.data
+      nonceData = schedData.allList
+    var rc = nonceData.nonceList.ge(AccountNonce.low)
+    schedData.profit = 0.GasPriceEx
+    while rc.isOk:
+      let item = rc.value.data
+      schedData.profit += item.tx.effectiveGasTip(val)
+      rc = nonceData.nonceList.gt(item.tx.nonce)
+
+# ------------------------------------------------------------------------------
 # Public SortedSet ops -- `EthAddress` (level 0)
 # ------------------------------------------------------------------------------
 
@@ -294,25 +317,50 @@ proc nItems*(gt: var TxSenderTab): int =
   ## Getter, total number of items in the list
   gt.size
 
+
+proc gasLimits*(gt: var TxSenderTab; sender: EthAddress): GasInt
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Shortcut for `gt.eq(sender).any.gasLimits`.
+  if gt.addrList.hasKey(sender):
+    return gt.addrList[sender].allList.gasLimits
+  0
+
+
+proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## The *rank* of the `sender` argument address is some expected
+  ## *relative profitability* calculated as
+  ## ::
+  ##     rank = profit(sender,baseFee) / gasLimits(sender)
+  ##
+  ## where the `gasLimits(sender)` is
+  ## ::
+  ##     gasLimits =  sum  item(sender,nonce).gasLimit
+  ##                 nonce
+  ##
+  ## and the `profit(sender,baseFee)` is
+  ## ::
+  ##     profit =  sum  item(sender,nonce).effectiveGasTip(baseFee)
+  ##              nonce
+  ##
+  ## The latter is the aggregated `effectiveGasTip(baseFee)` value over all
+  ## items for the argument `sender`. This value depends on the current value
+  ## of the `baseFee` parameter. So the *profit* and by implication the
+  ## return value of this `rank()` function should be seen as a temporary
+  ## snapshot, at best.
+  ##
+  if gt.addrList.hasKey(sender):
+    let schedData = gt.addrList[sender]
+    return ok(schedData.profit.int64 div schedData.allList.gasLimits)
+  err()
+
+
 proc eq*(gt: var TxSenderTab; sender: EthAddress):
-       SortedSetResult[EthAddress,TxSenderSchedRef] =
-  gt.addrList.eq(sender)
-
-proc first*(gt: var TxSenderTab):
-          SortedSetResult[EthAddress,TxSenderSchedRef] =
-  gt.addrList.ge(minEthAddress)
-
-proc last*(gt: var TxSenderTab):
-          SortedSetResult[EthAddress,TxSenderSchedRef] =
-  gt.addrList.le(maxEthAddress)
-
-proc next*(gt: var TxSenderTab; key: EthAddress):
-          SortedSetResult[EthAddress,TxSenderSchedRef] =
-  gt.addrList.gt(key)
-
-proc prev*(gt: var TxSenderTab; key: EthAddress):
-          SortedSetResult[EthAddress,TxSenderSchedRef] =
-  gt.addrList.lt(key)
+       SortedSetResult[EthAddress,TxSenderSchedRef]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  if gt.addrList.hasKey(sender):
+    return toSortedSetResult(key = sender, data = gt.addrList[sender])
+  err(rbNotFound)
 
 # ------------------------------------------------------------------------------
 # Public array ops -- `TxSenderSchedule` (level 1)
@@ -405,7 +453,8 @@ proc nItems*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]): int =
 
 
 proc gasLimits*(nonceData: TxSenderNonceRef): GasInt =
-  ## Getter, total number of items in the sub-list
+  ## Getter, aggregated valued of `gasLimit` for all items in the
+  ## argument list.
   nonceData.gasLimits
 
 proc gasLimits*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
@@ -473,6 +522,17 @@ proc lt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
   if rc.isOK:
     return rc.value.data.lt(nonce)
   err(rc.error)
+
+# ------------------------------------------------------------------------------
+# Public iterators
+# ------------------------------------------------------------------------------
+
+iterator accounts*(gt: var TxSenderTab): (EthAddress,int64)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Sender account traversal, returns the account address and the rank
+  ## for that account.
+  for p in gt.addrList.nextPairs:
+    yield (p.key, p.data.profit.int64 div p.data.allList.gasLimits)
 
 # ------------------------------------------------------------------------------
 # End

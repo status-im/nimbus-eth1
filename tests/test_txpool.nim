@@ -67,7 +67,6 @@ var
 
   txList: seq[TxItemRef]
   effGasTips: seq[GasPriceEx]
-  gasTipCaps: seq[GasPrice]
 
   # running block chain
   bcDB: BaseChainDB
@@ -143,7 +142,6 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
   statCount.reset
   txList.reset
   effGasTips.reset
-  gasTipCaps.reset
   bcDB = capture.network.blockChainForTesting
 
   suite &"TxPool: Transactions from {fileInfo} capture":
@@ -195,22 +193,15 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       txList = xp.toItems
       check txList.len == xp.nItems.total
 
-    test "Load priority fees":
+      elapNoisy.showElapsed("Load min/max gas prices"):
+        for item in txList:
+          if item.tx.gasPrice < minGasPrice and 0 < item.tx.gasPrice:
+            minGasPrice = item.tx.gasPrice.GasPrice
+          if maxGasPrice < item.tx.gasPrice.GasPrice:
+            maxGasPrice = item.tx.gasPrice.GasPrice
 
-      elapNoisy.showElapsed("Load priority fee caps"):
-        for itemList in xp.txDB.byTipCap.incItemList:
-          gasTipCaps.add itemList.first.value.tx.gasTipCap
-
-          # just handy to calc min/max gas prices here
-          for item in itemList.walkItems:
-            if item.tx.gasPrice.GasPriceEx < minGasPrice and
-               0 < item.tx.gasPrice:
-              minGasPrice = item.tx.gasPrice.GasPrice
-            if maxGasPrice < item.tx.gasPrice.GasPrice:
-              maxGasPrice = item.tx.gasPrice.GasPrice
-
+      check 0.GasPrice <= minGasPrice
       check minGasPrice <= maxGasPrice
-      check gasTipCaps.len == xp.txDB.byTipCap.len
 
     test &"Concurrent job processing example":
       var log = ""
@@ -430,10 +421,10 @@ proc runTxPoolTests(noisy = true) =
       xq.setItemStatusFromInfo
 
       # find address with max number of transactions
-      for schedList in xq.txDB.bySender.walkSchedList:
-        if nAddrItems < schedList.nItems:
-          maxAddr = schedList.any.ge(AccountNonce.low).value.data.sender
-          nAddrItems = schedList.nItems
+      for (address,nonceList) in xq.txDB.incAccount:
+        if nAddrItems < nonceList.nItems:
+          maxAddr = address
+          nAddrItems = nonceList.nItems
 
       # count items
       nAddrPendingItems = xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
@@ -470,9 +461,9 @@ proc runTxPoolTests(noisy = true) =
         check 1 < fromNumItems
 
         var count = 0
-        let ncList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
+        let nonceList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
         block collect:
-          for item in ncList.walkItems:
+          for item in nonceList.incNonce:
             count.inc
             check xq.txDB.reassign(item, toBucket)
             if moveNumItems <= count:
@@ -504,11 +495,10 @@ proc runTxPoolTests(noisy = true) =
 
       # --------------------
 
-      var expect: (int,int,int)
-      for schedList in xq.txDB.bySender.walkSchedList:
-        expect[0] += schedList.eq(txItemPending).nItems
-        expect[1] += schedList.eq(txItemStaged).nItems
-        expect[2] += schedList.eq(txItemPacked).nItems
+      let expect = (
+        xq.txDB.byStatus.eq(txItemPending).nItems,
+        xq.txDB.byStatus.eq(txItemStaged).nItems,
+        xq.txDB.byStatus.eq(txItemPacked).nItems)
 
       test &"Verify #items per bucket ({expect[0]},{expect[1]},{expect[2]})":
         let status = xq.nItems
@@ -627,7 +617,7 @@ proc runTxPackerTests(noisy = true) =
           # having the same set of txs, setting the xq database to the same
           # base fee as the xr one, the bucket fills of both database must
           # be the same after re-org
-          xq.chain.setNextBaseFee(ntNextFee)
+          xq.baseFee = ntNextFee
           xq.triggerReorg
           xq.jobCommit(forceMaintenance = true)
 
@@ -649,7 +639,7 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.chain.setNextBaseFee(0.GasPrice)
+          xq.baseFee = 0.GasPrice
           check xq.nItems.disposed == 0
 
           # set minimum target price
@@ -667,7 +657,7 @@ proc runTxPackerTests(noisy = true) =
 
           # assemble block from `packed` bucket
           let
-            items = toSeq(xq.txDB.byStatus.incItemList(txItemPacked))
+            items = xq.toItems(txItemPacked)
             total = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
           check xq.gasTotals.packed == total
 
@@ -697,9 +687,7 @@ proc runTxPackerTests(noisy = true) =
 
           let
             saveStats = xq.nItems
-            lastItem = xq.txDB.byStatus
-              .eq(txItemPacked).le(maxEthAddress).le(AccountNonce.high)
-              .value.data
+            lastItem = xq.toItems(txItemPacked)[^1]
 
           # delete last item from packed bucket
           xq.disposeItems(lastItem)
@@ -716,12 +704,10 @@ proc runTxPackerTests(noisy = true) =
           check xq.verify.isOK
 
           let
-            items = toSeq(xq.txDB.byStatus.incItemList(txItemPacked))
+            items = xq.toItems(txItemPacked)
             newTotal = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
             newStats = xq.nItems
-            newItem = xq.txDB.byStatus
-              .eq(txItemPacked).le(maxEthAddress).le(AccountNonce.high)
-              .value.data
+            newItem = xq.toItems(txItemPacked)[^1]
 
           # for sanity assert the obvoius
           check 0 < xq.gasTotals.packed
@@ -807,9 +793,9 @@ when isMainModule:
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
-  noisy.runTxLoader(capture = capts1)
-  #noisy.runTxPoolTests
-  true.runTxPackerTests
+  noisy.runTxLoader(capture = capts0)
+  noisy.runTxPoolTests
+  noisy.runTxPackerTests
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

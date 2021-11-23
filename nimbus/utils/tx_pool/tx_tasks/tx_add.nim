@@ -23,7 +23,7 @@ import
   ./tx_recover,
   chronicles,
   eth/[common, keys],
-  stew/[sorted_set]
+  stew/[keyed_queue, sorted_set]
 
 {.push raises: [Defect].}
 

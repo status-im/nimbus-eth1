@@ -99,7 +99,7 @@ proc toTxPool*(
               continue
             txPoolOk = true
             result[0] = TxPoolRef.init(db,testAddress)
-            result[0].chain.setNextBaseFee(baseFee)
+            result[0].baseFee = baseFee
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -125,7 +125,7 @@ proc toTxPool*(
   doAssert not db.isNil
 
   result = TxPoolRef.init(db,testAddress)
-  result.chain.setNextBaseFee(baseFee)
+  result.baseFee = baseFee
   result.maxRejects = itList.len
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
@@ -159,7 +159,7 @@ proc toTxPool*(
   doAssert 0 < itemsPC and itemsPC < 100
 
   result = TxPoolRef.init(db,testAddress)
-  result.chain.setNextBaseFee(baseFee)
+  result.baseFee = baseFee
   result.maxRejects = itList.len
 
   let
@@ -187,6 +187,9 @@ proc toTxPool*(
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =
   toSeq(xp.txDB.byItemID.nextValues)
 
+proc toItems*(xp: TxPoolRef; label: TxItemStatus): seq[TxItemRef] =
+  for (_,nonceList) in xp.txDB.decAccount(label):
+    result.add toSeq(nonceList.incNonce)
 
 proc setItemStatusFromInfo*(xp: TxPoolRef) =
   ## Re-define status from last character of info field. Note that this might

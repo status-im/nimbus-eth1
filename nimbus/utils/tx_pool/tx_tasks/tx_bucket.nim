@@ -48,7 +48,7 @@ proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
   ## to the `pending` bucket
   let rc = xp.txDB.byStatus.eq(labelFrom).eq(account)
   if rc.isOK:
-    for item in rc.value.data.incItemList(nonceFrom):
+    for item in rc.value.data.incNonce(nonceFrom):
       discard xp.txDB.reassign(item, txItemPending)
 
 
@@ -94,18 +94,18 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
   # greater than the ones from other lists. When processing the `staged`
   # list, all that can happen is that loer nonces (than the stashed ones)
   # are added.
-  for (sender,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemPending):
+  for (sender,nonceList) in xp.txDB.incAccount(txItemPending):
     # New per-sender-account sub-sequence
     stashed[sender] = newSeq[TxItemRef]()
-    for item in nonceList.incItemList:
+    for item in nonceList.incNonce:
       # Add to sub-sequence
       stashed[sender].add item
 
   # STAGED
   #
   # Update/edit `staged` bucket.
-  for (_,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemStaged):
-    for item in nonceList.incItemList:
+  for (_,nonceList) in xp.txDB.incAccount(txItemStaged):
+    for item in nonceList.incNonce:
 
       if not xp.classifyActive(item):
         # Larger nonces cannot be held in the `staged` bucket anymore for this
@@ -124,8 +124,8 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
   # Update `packed` bucket. The items are a subset of all possibly staged
   # (aka active) items. So they follow a similar logic as for the `staged`
   # items above.
-  for (_,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemPacked):
-    for item in nonceList.incItemList:
+  for (_,nonceList) in xp.txDB.incAccount(txItemPacked):
+    for item in nonceList.incNonce:
 
       if not xp.classifyActive(item):
         xp.bucketItemsReassignPending(txItemPacked, item.sender, item.tx.nonce)
@@ -158,27 +158,24 @@ proc bucketUpdatePacked*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Attempt to pack a new block into the `packed` bucket not exceeding the
   ## block size hard or soft limits (see `xp.pAlgoFlags`.)
-  var
-    gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
-    stop = false
+  var gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
 
-  for (_,nonceList) in xp.txDB.byStatus.walkAccountPair(txItemStaged):
-    block doForSender: # syntactic sugar
+  for (_,nonceList) in xp.txDB.decAccount(txItemStaged):
+    for item in nonceList.incNonce:
 
-      for item in nonceList.incItemList:
-        if xp.classifyPackerItem(item, gasTotal):
-          if not xp.txDB.reassign(item, txItemPacked):
-            # Weird case, should not happen => try next sender
-            break doForSender
-          gasTotal += item.tx.gasLimit
+      if xp.classifyPackerItem(item, gasTotal):
+        if not xp.txDB.reassign(item, txItemPacked):
+          # Weird case, should not happen => try next sender
+          break # inner for()
+        gasTotal += item.tx.gasLimit
 
-        elif xp.classifyPackerTryNext(gasTotal):
-          # This one is too big, try next sender as suggested by classifier
-          break doForSender
+      elif xp.classifyPackerTryNext(gasTotal):
+        # This one is too big, try next sender as suggested by classifier
+        break # inner for()
 
-        else:
-          # Acceptable packing level reached, already. Stop here
-          return
+      else:
+        # Acceptable packing level reached, already. Stop here
+        return
 
 # ------------------------------------------------------------------------------
 # End

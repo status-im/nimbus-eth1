@@ -19,21 +19,13 @@
 ##
 ## * There is no handling of *zero gas price* transactions yet
 ##
-## * Clarify whether there are legacy txs possible with post-London
-##   chain blocks -- *yes, there are* (but it does not matter).
-##
-## * Some table (used for testing & data analysis) might not be needed in
-##   production environment:
-##   + `byTipCap` (see tx_tipcap.nim), ordered by maxPriorityFee (or gasPrice
-##     for legay txs). On the other hand, there is a suggestion (see geth
-##     sources) that there is a by-tip range query of a group of txs for
-##     discarding, or prioritise at a later stage when the txs are held
-##     already in the buckets.
-##
 ## * Provide unit tests provoking a nonce gap error after back tracking
 ##   and moving the block chain head
 ##
 ## * Impose a size limit to the bucket database. Which items would be removed?
+##
+## * Implement disposing of items in *tx_tab* so that updating the rank table
+##   can be optimised
 ##
 ##
 ## Transaction state database:
@@ -624,15 +616,16 @@ proc triggerPacker*(xp: TxPoolRef; clear = false)
   ## `packed` bucket when eventually started.
   xp.pMoreStagedItems = true
   if clear:
-    for item in xp.txDB.byStatus.incItemList(txItemPacked):
-      discard xp.txDB.reassign(item, txItemStaged)
+    for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
+      for item in nonceList.incNonce:
+        discard xp.txDB.reassign(item, txItemStaged)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
 proc baseFee*(xp: TxPoolRef): GasPrice =
-  ## Getter, modifies/determines the expected gain when packing
+  ## Getter, this parameter modifies/determines the expected gain when packing
   xp.chain.nextBaseFee
 
 proc dirtyBuckets*(xp: TxPoolRef): bool =
@@ -724,6 +717,17 @@ proc trgGasLimit*(xp: TxPoolRef): GasInt =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
+proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Setter, sets `baseFee` explicitely witout triggering a packer update.
+  ## Stil a database update might take place when updating account ranks.
+  ##
+  ## Typically, this function would *not* be called but rather the `head=`
+  ## update would be employed to do the job figuring out the proper value
+  ## for the `baseFee`.
+  xp.txDB.baseFee = val
+  xp.chain.nextBaseFee = val
+
 proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
@@ -764,6 +768,7 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
   ## internally cached `baseFee` (depends on the block chain state.)
   if xp.chain.head != val:
     xp.chain.head = val
+    xp.txDB.baseFee = xp.chain.nextBaseFee
     xp.pDirtyBuckets = true
     xp.pMoreStagedItems = true
 

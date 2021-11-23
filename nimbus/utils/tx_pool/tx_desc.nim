@@ -279,29 +279,30 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
     lastNonce: AccountNonce
     lastSublist: TxSenderSchedRef
 
-  for item in xp.txDB.bySender.walkItems:
-    if not initOk or lastSender != item.sender:
-      initOk = true
-      lastSender = item.sender
-      lastNonce = item.tx.nonce
-      lastSublist = xp.txDB.bySender.eq(item.sender).value.data
-    elif lastNonce + 1 == item.tx.nonce:
-      lastNonce = item.tx.nonce
-    else:
-      return err(txInfoVfyNonceChain)
+  for (_,nonceList) in xp.txDB.incAccount:
+    for item in nonceList.incNonce:
+      if not initOk or lastSender != item.sender:
+        initOk = true
+        lastSender = item.sender
+        lastNonce = item.tx.nonce
+        lastSublist = xp.txDB.bySender.eq(item.sender).value.data
+      elif lastNonce + 1 == item.tx.nonce:
+        lastNonce = item.tx.nonce
+      else:
+        return err(txInfoVfyNonceChain)
 
-    # verify bucket boundary conditions
-    case item.status:
-    of txItemPending:
-      discard
-    of txItemStaged:
-      if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
-        return err(txInfoVfyNonceChain)
-    of txItemPacked:
-      if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
-        return err(txInfoVfyNonceChain)
-      if lastSublist.eq(txItemStaged).eq(item.tx.nonce - 1).isOk:
-        return err(txInfoVfyNonceChain)
+      # verify bucket boundary conditions
+      case item.status:
+      of txItemPending:
+        discard
+      of txItemStaged:
+        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
+          return err(txInfoVfyNonceChain)
+      of txItemPacked:
+        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
+          return err(txInfoVfyNonceChain)
+        if lastSublist.eq(txItemStaged).eq(item.tx.nonce - 1).isOk:
+          return err(txInfoVfyNonceChain)
 
   ok()
 

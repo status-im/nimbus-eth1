@@ -87,7 +87,8 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
 # Private function: active tx classifier check helpers
 # ------------------------------------------------------------------------------
 
-proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool =
+proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Make sure that nonces appear as a contiuous sequence in `staged` bucket
   ## probably preceeded in `packed` bucket.
   let rc = xp.txDB.bySender.eq(item.sender)

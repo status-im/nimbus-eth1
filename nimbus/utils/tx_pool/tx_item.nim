@@ -85,6 +85,8 @@ proc `<=`*(a, b: GasPriceEx): bool {.borrow.}
 proc `==`*(a, b: GasPriceEx): bool {.borrow.}
 proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
+proc `+=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
+proc `-=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
 
 # mixed stuff
 

@@ -183,6 +183,7 @@ type
     txInfoVfySenderLeafQueue       ## Corrupted sender leaf queue
     txInfoVfySenderTotal           ## Wrong number of leaves
     txInfoVfySenderGasLimits       ## Wrong gas accu values
+    txInfoVfySenderProfits         ## Profits calculation error
 
     txInfoVfyStatusRbTree          ## Corrupted status list structure
     txInfoVfyStatusTotal           ## Wrong number of leaves
@@ -193,10 +194,12 @@ type
     txInfoVfyStatusSenderTotal     ## Sender vs status table mismatch
     txInfoVfyStatusSenderGasLimits ## Wrong gas accu values
 
-    txInfoVfyTipCapList            ## Corrupted gas price list structure
-    txInfoVfyTipCapLeafEmpty       ## Empty gas price list leaf record
-    txInfoVfyTipCapLeafQueue       ## Corrupted gas price leaf queue
-    txInfoVfyTipCapTotal           ## Wrong number of leaves
+    txInfoVfyRankAddrMismatch      ## Different ranks in address set
+    txInfoVfyReverseZombies        ## Zombie addresses in reverse lookup
+    txInfoVfyRankReverseLookup     ## Sender missing in reverse lookup
+    txInfoVfyRankReverseMismatch   ## Ranks differ with revers lookup
+    txInfoVfyRankDuplicateAddr     ## Same address with different ranks
+    txInfoVfyRankTotal             ## Wrong number of leaves (i.e. adresses)
 
     # codes provided for other modules
     txInfoVfyJobQueue              ## Corrupted jobs queue/fifo structure

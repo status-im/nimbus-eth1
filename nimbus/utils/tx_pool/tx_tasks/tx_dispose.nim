@@ -44,9 +44,9 @@ proc utcNow: Time =
 
 proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = xp.txDB.bySender.eq(item.sender)
+  let rc = xp.txDB.bySender.eq(item.sender).any
   if rc.isOK:
-    for other in rc.value.data.walkItems(item.tx.nonce):
+    for other in rc.value.data.incNonce(item.tx.nonce):
       # only delete non-expired items
       if newerThan < other.timeStamp:
         discard xp.txDB.dispose(other, txInfoErrTxExpiredImplied)
@@ -101,10 +101,12 @@ proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
   if xp.txDB.dispose(item, reason):
     result = 1
     # For the current sender, delete all items with higher nonces
-    let rc = xp.txDB.bySender.eq(item.sender)
+    let rc = xp.txDB.bySender.eq(item.sender).any
     if rc.isOK:
-      for other in rc.value.data.walkItems(item.tx.nonce):
-        if xp.txDB.dispose(other, otherReason):
+      let nonceList = rc.value.data
+
+      for otherItem in nonceList.incNonce(item.tx.nonce):
+        if xp.txDB.dispose(otherItem, otherReason):
           result.inc
 
 # ------------------------------------------------------------------------------
