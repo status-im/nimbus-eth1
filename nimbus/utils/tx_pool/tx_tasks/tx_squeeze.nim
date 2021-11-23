@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Tasklets: Update by Bucket
-## ===========================================
+## Transaction Pool Tasklets: Squeezer, VM execute and compact txs
+## ===============================================================
 ##
 
 import
@@ -263,8 +263,10 @@ proc groupSqueezer(ctx: var TxSqueezeCtx; nonceList: TxStatusNonceRef;
 
 proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Execute all txs in the `packed` bucket and return the list of collected
-  ## items.
+  ## Execute all transactios of the items in the `packed` bucket in the VM and
+  ## compact them for ethernet block inclusion (updateing `vmState` etc.) Then
+  ## compact some more from the `staged` bucket if possible. The function
+  ## returns the list of compacted items.
   let
     vmState = xp.chain.vmState(pristine = true)
     nextBlockNum = xp.chain.head.blockNumber + 1
@@ -292,13 +294,19 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
     var rc = rcPacked.ge(minEthAddress)
     while rc.isOK and xp.spaceAvail(0):
       let (account, nonceList) = (rc.value.key, rc.value.data)
-      # Try/execute all from the `packed` while accumulated `gasLimits` fit
-      # the packing constraints.
+
+      # Try/execute all items from the `packed` bucket. The squeezer executes
+      # the txs in the VM and then uses the sum of burned gas results as
+      # target function (subject to bundary conditions.) Txs are expected to
+      # run through so the whole group is run as an atomic action (can only
+      # roll back all.)
       var nonce = ctx.groupSqueezer(nonceList)
-      # Compact in additional items from the `packed` bucket if incidentally
-      # there are more. This packer executes the item in the VM and then
-      # uses the `gasUsed` result for compacting.
+
+      # Compact additional items from the `packed` bucket if incidentally
+      # there are more (change of packer optimisation flags?). As the result
+      # is unknown, each tx is run atomically with roll back possibilty.
       ctx.stepSqueezer(nonceList, nonce)
+
       # Fetch next list item
       rc = rcPacked.gt(account)
 
@@ -306,26 +314,30 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
   if rcStaged.isOK:
     var bothBuckets: seq[TxStatusNonceRef]
     if xp.continueSqueezing:
+
       # Try to compact items from yet untouched accounts from `staged` bucket.
-      # These are the ones with accounts not in the `packed` bucket.
+      # The items tried first are the ones with accounts not in the `packed`
+      # bucket.
       #
       # FIXME: Omitting the accounts that share both buckets `staged` and
-      #        `packed` at least increases the number of accounts in the
-      #        packed block. Whether this leads to better packing results
-      #        is unclear.
+      #        `packed` increases the number of accounts in the packed ethernet
+      #        block. Whether this leads to better or more desired packing
+      #        results is unclear.
       var rc = rcStaged.ge(minEthAddress)
       while rc.isOK and xp.continueSqueezing:
         let (account, nonceList) = (rc.value.key, rc.value.data)
+
         # Not trying this one if the account is in the `packed` bucket'.
         if rcPacked.eq(account).isOk:
           bothBuckets.add nonceList
         else:
           ctx.stepSqueezer(nonceList)
+
         # Fetch next list item
         rc = rcStaged.gt(account)
 
     if xp.continueSqueezing:
-      # Improve packing by re-vising accounts from the `packed` bucket which
+      # Compact more, re-visit accounts from the `packed` bucket which
       # are also in the `staged` bucket.
       for nonceList in bothBuckets:
         ctx.stepSqueezer(nonceList)
@@ -336,7 +348,7 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
   ctx.txs.setLen(ctx.nItems)
   vmState.receipts.setLen(ctx.nItems)
 
-  #  # The following is not needed as the blcok chain is rolled back anyway
+  #  # The following is not needed as the block chain is rolled back, anyway
   #
   #  if not vmState.chainDB.config.poaEngine:
   #   # @[]: no uncles yet
