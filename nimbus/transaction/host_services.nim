@@ -65,6 +65,15 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.chain_id         = vmState.chaindb.config.chainId.uint.u256.toEvmc
   host.txContext.block_base_fee   = vmState.blockHeader.baseFee.toEvmc
 
+  # Most host functions do `flip256` in `evmc_host_glue`, but due to this
+  # result being cached, it's better to do `flip256` when filling the cache.
+  host.txContext.tx_gas_price     = flip256(host.txContext.tx_gas_price)
+  host.txContext.block_difficulty = flip256(host.txContext.block_difficulty)
+  host.txContext.chain_id         = flip256(host.txContext.chain_id)
+  host.txContext.block_base_fee   = flip256(host.txContext.block_base_fee)
+
+  host.cachedTxContext = true
+
 const use_evmc_glue = defined(evmc_enabled)
 
 # When using the EVMC binary interface, each of the functions below is wrapped
@@ -243,7 +252,6 @@ template call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
 proc getTxContext(host: TransactionHost): EvmcTxContext {.show.} =
   if not host.cachedTxContext:
     host.setupTxContext()
-    host.cachedTxContext = true
   return host.txContext
 
 proc getBlockHash(host: TransactionHost, number: HostBlockNumber): HostHash {.show.} =

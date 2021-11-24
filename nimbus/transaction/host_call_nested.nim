@@ -111,6 +111,13 @@ proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
+  # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
+  # and `show` in `host_services`, but `call` needs to minimise C stack used
+  # by nested EVM calls.  Just `flip256` in glue's `call` adds a lot of
+  # stack: +65% in tests, enough to blow our 750kiB test stack target and
+  # crash.  Easily avoided by doing `flip256` and `show` out-of-line here.
+  var msg = msg # Make a local copy that's ok to modify.
+  msg.value = flip256(msg.value)
   host.showCallEntry(msg)
   let c = if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
             beforeExecCreateEvmcNested(host, msg)
@@ -138,9 +145,12 @@ proc afterExecEvmcNested(host: TransactionHost, child: Computation,
   host.showCallReturn(result, kind.isCreate)
 
 template callEvmcNested*(host: TransactionHost, msg: EvmcMessage): EvmcResult =
-  # This function must be declared `template` to ensure it is inlined at Nim
-  # level to its caller across `import`.  C level `{.inline.}` won't do this.
-  # Note that template parameters `host` and `msg` are multiple-evaluated.
+  # `call` is special.  The C stack usage must be kept small for deeply nested
+  # EVM calls.  To ensure small stack, this function must use `template` to
+  # inline at Nim level (same for `host.call(msg)`).  `{.inline.}` is not good
+  # enough.  Due to object return it ends up using a lot more stack.  (Note
+  # that template parameters `host` and `msg` are multiple-evaluated here;
+  # simple expressions must be used when calling.)
   let child = beforeExecEvmcNested(host, msg)
   child.execCallOrCreate()
   afterExecEvmcNested(host, child, msg.kind)

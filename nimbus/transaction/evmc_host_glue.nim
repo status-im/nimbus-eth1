@@ -21,15 +21,15 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
-  toHost(p).getStorage(address.fromEvmc, key.fromEvmc).toEvmc
+  toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
-  toHost(p).setStorage(address.fromEvmc, key.fromEvmc, value.fromEvmc)
+  toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,
                 address: var evmc_address): evmc_uint256be {.cdecl.} =
-    toHost(p).getBalance(address.fromEvmc).toEvmc
+    toHost(p).getBalance(address.fromEvmc).toEvmc.flip256
 
 proc getCodeSize(p: evmc_host_context,
                  address: var evmc_address): csize_t {.cdecl.} =
@@ -48,9 +48,14 @@ proc selfDestruct(p: evmc_host_context, address,
   toHost(p).selfDestruct(address.fromEvmc, beneficiary.fromEvmc)
 
 proc call(p: evmc_host_context, msg: var evmc_message): evmc_result {.cdecl.} =
+  # This would contain `flip256`, but `call` is special.  The C stack usage
+  # must be kept small for deeply nested EVM calls.  To ensure small stack,
+  # `flip256` must be handled at `host_call_nested`, not here.
   toHost(p).call(msg)
 
 proc getTxContext(p: evmc_host_context): evmc_tx_context {.cdecl.} =
+  # This would contain `flip256`, but due to this result being cached in
+  # `getTxContext`, it's better to do `flip256` when filling the cache.
   toHost(p).getTxContext()
 
 proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32 {.cdecl.} =
@@ -70,7 +75,7 @@ proc accessAccount(p: evmc_host_context,
 
 proc accessStorage(p: evmc_host_context, address: var evmc_address,
                    key: var evmc_bytes32): evmc_access_status {.cdecl.} =
-  toHost(p).accessStorage(address.fromEvmc, key.fromEvmc)
+  toHost(p).accessStorage(address.fromEvmc, key.flip256.fromEvmc)
 
 let hostInterface = evmc_host_interface(
   account_exists: accountExists,

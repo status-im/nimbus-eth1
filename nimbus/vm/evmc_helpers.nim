@@ -1,7 +1,7 @@
 import eth/common, stint, evmc/evmc, ../utils
 
 const
-  evmc_native* {.booldefine.} = true
+  evmc_native* {.booldefine.} = false
 
 func toEvmc*(a: EthAddress): evmc_address {.inline.} =
   cast[evmc_address](a)
