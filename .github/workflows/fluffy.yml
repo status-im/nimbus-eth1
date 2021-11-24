@@ -98,6 +98,13 @@ jobs:
           chmod 755 external/bin/gcc external/bin/g++
           echo "${{ github.workspace }}/external/bin" >> $GITHUB_PATH
 
+      # Required for running the local testnet script
+      - name: Install build dependencies (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gnu-getopt
+          brew link --force gnu-getopt
+
       - name: MSYS2 (Windows i386)
         if: runner.os == 'Windows' && matrix.target.cpu == 'i386'
         uses: msys2/setup-msys2@v2
@@ -193,3 +200,7 @@ jobs:
           build/fluffy --help
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} fluffy-test fluffy-test-reproducibility
+
+      - name: Run fluffy testnet
+        run: |
+          ./fluffy/scripts/launch_local_testnet.sh
