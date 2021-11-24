@@ -11,10 +11,11 @@ import
   std/os,
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient,
-  json_rpc/rpcproxy, stew/byteutils,
+  json_rpc/rpcproxy, stew/[byteutils, io2],
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./conf, ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api],
+  ./conf, ./common/common_utils,
+  ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./content_db
@@ -47,9 +48,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       # TODO: Ideally we don't have the Exception here
       except Exception as exc: raiseAssert exc.msg
 
+  var bootstrapRecords: seq[Record]
+  loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
+  bootstrapRecords.add(config.bootstrapNodes)
+
   let d = newProtocol(config.nodeKey,
           extIp, none(Port), extUdpPort,
-          bootstrapRecords = config.bootnodes,
+          bootstrapRecords = bootstrapRecords,
           bindIp = bindIp, bindPort = udpPort,
           enrAutoUpdate = config.enrAutoUpdate,
           rng = rng)
@@ -63,12 +68,23 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
+  var portalBootstrapRecords: seq[Record]
+  loadBootstrapFile(string config.portalBootstrapNodesFile, portalBootstrapRecords)
+  portalBootstrapRecords.add(config.portalBootstrapNodes)
+
   let
     stateNetwork = StateNetwork.new(d, db,
-      bootstrapRecords = config.portalBootnodes)
+      bootstrapRecords = portalBootstrapRecords)
     historyNetwork = HistoryNetwork.new(d, db,
-      bootstrapRecords = config.portalBootnodes)
+      bootstrapRecords = portalBootstrapRecords)
 
+  # TODO: If no new network key is generated then we should first check if an
+  # enr file exists, and in the case it does read out the seqNum from it and
+  # reuse that.
+  let enrFile = config.dataDir / "fluffy_node.enr"
+  if io2.writeFile(enrFile, d.localNode.record.toURI()).isErr:
+    fatal "Failed to write the enr file", file = enrFile
+    quit 1
 
   if config.metricsEnabled:
     let
