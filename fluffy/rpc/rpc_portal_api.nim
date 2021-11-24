@@ -12,26 +12,23 @@ import
   ../network/wire/portal_protocol,
   ./rpc_types
 
-# TODO:
-# Trying to make this dynamic by passing in a network sub string results in:
+export rpcserver
+
+# Note:
+# Using a string for the network parameter will give an error in the rpc macro:
 # Error: Invalid node kind nnkInfix for macros.`$`
-proc installPortalStateApiHandlers*(rpcServerWithProxy: var RpcProxy, p: PortalProtocol)
+# Using a static string works but some sandwich problem seems to be happening,
+# as the proc becomes generic, where the rpc macro from router.nim can no longer
+# be found, which is why we export rpcserver which should export router.
+proc installPortalApiHandlers*(
+    rpcServerWithProxy: var RpcProxy, p: PortalProtocol, network: static string)
     {.raises: [Defect, CatchableError].} =
   ## Portal routing table and portal wire json-rpc API is not yet defined but
   ## will look something similar as what exists here now:
   ## https://github.com/ethereum/portal-network-specs/pull/88
 
-  rpcServerWithProxy.rpc("portal_state_nodeInfo") do() -> NodeInfo:
+  rpcServerWithProxy.rpc("portal_" & network & "_nodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
 
-  rpcServerWithProxy.rpc("portal_state_routingTableInfo") do() -> RoutingTableInfo:
-    return getRoutingTableInfo(p.routingTable)
-
-proc installPortalHistoryApiHandlers*(rpcServerWithProxy: var RpcProxy, p: PortalProtocol)
-    {.raises: [Defect, CatchableError].} =
-
-  rpcServerWithProxy.rpc("portal_history_nodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
-
-  rpcServerWithProxy.rpc("portal_history_routingTableInfo") do() -> RoutingTableInfo:
+  rpcServerWithProxy.rpc("portal_" & network & "_routingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)
