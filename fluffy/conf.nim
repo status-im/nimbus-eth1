@@ -56,9 +56,14 @@ type
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
-    bootnodes* {.
-      desc: "ENR URI of node to bootstrap Discovery v5 with. Argument may be repeated"
-      name: "bootnode" .}: seq[Record]
+    bootstrapNodes* {.
+      desc: "ENR URI of node to bootstrap Discovery v5 from. Argument may be repeated"
+      name: "bootstrap-node" .}: seq[Record]
+
+    bootstrapNodesFile* {.
+      desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 from"
+      defaultValue: ""
+      name: "bootstrap-file" }: InputFile
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -88,9 +93,14 @@ type
 
     # Note: This will add bootstrap nodes for each enabled Portal network.
     # No distinction is being made on bootstrap nodes for a specific network.
-    portalBootnodes* {.
-      desc: "ENR URI of node to bootstrap the Portal protocols with. Argument may be repeated"
-      name: "portal-bootnode" .}: seq[Record]
+    portalBootstrapNodes* {.
+      desc: "ENR URI of node to bootstrap the Portal networks from. Argument may be repeated"
+      name: "portal-bootstrap-node" .}: seq[Record]
+
+    portalBootstrapNodesFile* {.
+      desc: "Specifies a line-delimited file of ENR URIs to bootstrap the Portal networks from"
+      defaultValue: ""
+      name: "portal-bootstrap-file" }: InputFile
 
     metricsEnabled* {.
       defaultValue: false

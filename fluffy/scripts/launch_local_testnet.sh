@@ -217,7 +217,6 @@ if [[ "${TIMEOUT_DURATION}" != "0" ]]; then
 fi
 
 PIDS=""
-BOOTSTRAP_TIMEOUT=30 # in seconds
 NUM_JOBS=${NUM_NODES}
 
 dump_logs() {
@@ -230,11 +229,8 @@ dump_logs() {
 }
 
 BOOTSTRAP_NODE=0
-# TODO:
-# For now we just hardcode a network key and the resulting ENR until fluffy
-# stores network keys and enrs locally in files.
-NETWORK_KEY="0x29738ba0c1a4397d6a65f292eee07f02df8e58d41594ba2be3cf84ce0fc58169"
-HARDCODED_BOOTSTRAP_ENR="enr:-IS4QDBoE7JdB3W9Jqc3Yoatk3Zw3PgkAcnhDKNFszdiPfm3IGNlvPl5CKiJLn9u5Kk-2QaieAGYvtMgR-EBqIWIqe0BgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQNStnoFzDBxNc8-0t6xLnFpoJbovjIq_QeEHCVcfOKck4N1ZHCCIyg"
+BOOTSTRAP_TIMEOUT=5 # in seconds
+BOOTSTRAP_ENR_FILE="${DATA_DIR}/node${BOOTSTRAP_NODE}/fluffy_node.enr"
 
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
@@ -245,10 +241,21 @@ done
 echo "Starting ${NUM_NODES} nodes."
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
-  if [[ ${NUM_NODE} == ${BOOTSTRAP_NODE} ]]; then
-    BOOTSTRAP_ARG="--nodekey:${NETWORK_KEY}"
-  else
-    BOOTSTRAP_ARG="--bootnode=${HARDCODED_BOOTSTRAP_ENR} --portal-bootnode=${HARDCODED_BOOTSTRAP_ENR}"
+
+  if [[ ${NUM_NODE} != ${BOOTSTRAP_NODE} ]]; then
+    BOOTSTRAP_ARG="--bootstrap-file=${BOOTSTRAP_ENR_FILE} --portal-bootstrap-file=${BOOTSTRAP_ENR_FILE}"
+
+    # Wait for the bootstrap node to write out its enr file
+    START_TIMESTAMP=$(date +%s)
+    while [[ ! -f "${BOOTSTRAP_ENR_FILE}" ]]; do
+      sleep 0.1
+      NOW_TIMESTAMP=$(date +%s)
+      if [[ "$(( NOW_TIMESTAMP - START_TIMESTAMP - GENESIS_OFFSET ))" -ge "$BOOTSTRAP_TIMEOUT" ]]; then
+        echo "Bootstrap node failed to start in ${BOOTSTRAP_TIMEOUT} seconds. Aborting."
+        dump_logs
+        exit 1
+      fi
+    done
   fi
 
   # Increasing the loopback address here with NUM_NODE as listen address to
