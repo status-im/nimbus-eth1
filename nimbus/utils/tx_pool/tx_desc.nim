@@ -139,13 +139,13 @@ const
                   autoZombifyUnpacked}
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
+proc init*(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor. The `miner` argument is
-  ## the fee beneficiary.
+  ## the fee beneficiary for informational purposes only.
   xp.startDate = getTime().utc.toTime
 
   xp.chain = TxChainRef.init(db, miner)
@@ -159,16 +159,6 @@ proc init(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
   xp.param.minFeePrice = txMinFeePrice
   xp.param.minTipPrice = txMinTipPrice
   xp.param.flags = txPoolFlags
-
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc init*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Constructor
-  new result
-  result.init(db,miner)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters

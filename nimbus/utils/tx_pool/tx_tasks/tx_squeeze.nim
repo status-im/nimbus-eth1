@@ -43,10 +43,6 @@ type
     nItems: int         ## Current number of items (for state root calculator)
 
 const
-  minEthAddress = block:
-    var rc: EthAddress
-    rc
-
   receiptsExtensionSize = ##\
     ## Number of items to extend the `receipts[]` sequence with.
     20
@@ -161,6 +157,11 @@ proc runTxFinish(ctx: var TxSqueezeCtx; item: TxItemRef; gasBurned: GasInt)
   if vmState.receipts.len <= ctx.nItems:
     vmState.receipts.setLen(ctx.nItems + receiptsExtensionSize)
     ctx.txs.setLen(ctx.nItems + receiptsExtensionSize)
+
+  #echo "*** runTxFinish",
+  #   " ctx.txs.len=", ctx.txs.len,
+  #   " vmState.receipts.len=", vmState.receipts.len,
+  #   " inx=", ctx.nItems
 
   ctx.txs[ctx.nItems] = item
   vmState.receipts[ctx.nItems] = vmState.makeReceipt(item.tx.txType)

@@ -54,17 +54,6 @@ type
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc joinXX(s: string): string =
-  ## Pretty printer, for debugging
-  if s.len <= 30:
-    return s
-  if (s.len and 1) == 0:
-    result = s[0 ..< 8]
-  else:
-    result = "0" & s[0 ..< 7]
-  result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len-16 ..< s.len]
-
-
 proc utcTime: Time =
   getTime().utc.toTime
 
@@ -76,6 +65,7 @@ proc `$`*(a: GasPrice): string {.borrow.}
 proc `<`*(a, b: GasPrice): bool {.borrow.}
 proc `<=`*(a, b: GasPrice): bool {.borrow.}
 proc `==`*(a, b: GasPrice): bool {.borrow.}
+proc `*`*(a, b: GasPrice): GasPrice {.borrow.}
 proc `+`*(a, b: GasPrice): GasPrice {.borrow.}
 proc `-`*(a, b: GasPrice): GasPrice {.borrow.}
 
@@ -271,7 +261,7 @@ proc `reject=`*(item: TxItemRef; val: TxInfo) =
 
 proc `$`*(w: TxItemRef): string =
   ## Visualise item ID (use for debugging)
-  "<" & w.itemID.data.mapIt(it.toHex(2)).join("").joinXX & ">"
+  "<" & w.itemID.data.mapIt(it.toHex(2)).join[24 .. 31].toLowerAscii & ">"
 
 # ------------------------------------------------------------------------------
 # End

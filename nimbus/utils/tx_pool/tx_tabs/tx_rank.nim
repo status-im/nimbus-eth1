@@ -53,8 +53,7 @@ proc init*(rt: var TxRankTab) =
 
 proc clear*(rt: var TxRankTab) =
   ## Flush tables
-  # rt.rankList.clear -- after stew update
-  rt.rankList = SortedSet[TxRank,TxRankAddrRef].init
+  rt.rankList.clear
   rt.addrTab.clear
 
 # ------------------------------------------------------------------------------

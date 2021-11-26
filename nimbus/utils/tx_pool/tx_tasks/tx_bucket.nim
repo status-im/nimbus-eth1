@@ -28,10 +28,6 @@ import
 {.push raises: [Defect].}
 
 const
-  minEthAddress = block:
-    var rc: EthAddress
-    rc
-
   minNonce = AccountNonce.low
 
 logScope:

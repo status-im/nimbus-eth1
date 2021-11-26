@@ -403,6 +403,7 @@
 
 import
   std/[sequtils, tables],
+  ../db/db_chain,
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_squeeze],
@@ -507,6 +508,17 @@ proc processJobs(xp: TxPoolRef): int
         let rcItem = xp.txDB.byItemID.eq(itemID)
         if rcItem.isOK:
           discard xp.txDB.dispose(rcItem.value, reason = args.reason)
+
+# ------------------------------------------------------------------------------
+# Public constructor/destructor
+# ------------------------------------------------------------------------------
+
+proc init*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Constructor, returns a new tx-pool descriptor. The `miner` argument is
+  ## the fee beneficiary for informational purposes only.
+  new result
+  tx_desc.init(result,db,miner)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser

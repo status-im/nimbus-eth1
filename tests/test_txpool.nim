@@ -366,6 +366,7 @@ proc runTxPoolTests(noisy = true) =
                            itemsPC = 35,       # arbitrary
                            delayMSecs = 100,   # large enough to process
                            noisy = noisy)
+
       # Set txs to pseudo random status. Note that this functon will cause
       # a violation of boundary conditions regarding nonces. So database
       # integrily check needs xq.txDB.verify() rather than xq.verify().
@@ -664,8 +665,9 @@ proc runTxPackerTests(noisy = true) =
           noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
 
         test &"Clear and re-pack bucket":
-          let saveState = xq.ethBlock.txs.mapIt((it.nonce,it.gasLimit))
-          check 0 < saveState.len
+          let
+            items0 = xq.toItems(txItemPacked)
+            saveState0 = foldl(@[0.GasInt] & items0.mapIt(it.tx.gasLimit), a+b)
           check 0 < xq.nItems.packed
 
           # flush packed bucket and trigger re-pack
@@ -677,7 +679,11 @@ proc runTxPackerTests(noisy = true) =
           xq.jobCommit(forceMaintenance = true)
           check xq.verify.isOK
 
-          check saveState == xq.ethBlock.txs.mapIt((it.nonce,it.gasLimit))
+          let
+            items1 = xq.toItems(txItemPacked)
+            saveState1 = foldl(@[0.GasInt] & items1.mapIt(it.tx.gasLimit), a+b)
+          check items0 == items1
+          check saveState0 == saveState1
 
         test &"Delete item and re-pack bucket/w lower minPrice={lowerPrice}":
           # verify that the test does not degenerate
@@ -722,8 +728,8 @@ proc runTxPackerTests(noisy = true) =
     # -------------------------------------------------
 
     block:
-      var
-        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
+      var xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
+
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 4)
@@ -774,7 +780,7 @@ proc runTxPackerTests(noisy = true) =
         echo ">>> ", xq.nItems.pp,
           " >> ", packerBucket.gasLimits,
           " >> ", xq.chain.vmState.cumulativeGasUsed
-        ]#
+        #]#
 
 # ------------------------------------------------------------------------------
 # Main function(s)
