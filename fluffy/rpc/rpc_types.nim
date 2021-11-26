@@ -16,28 +16,26 @@ export jsonmarshal, enr, routing_table
 
 type
   NodeInfo* = object
-    nodeId: string
-    nodeENR: string
+    nodeId: NodeId
+    nodeENR: Record
 
   RoutingTableInfo* = object
-    localKey: string
-    buckets: seq[seq[string]]
+    localKey: NodeId
+    buckets: seq[seq[NodeId]]
 
 proc getNodeInfo*(r: RoutingTable): NodeInfo =
-  let id = "0x" & r.localNode.id.toHex()
-  let enr = r.localNode.record.toURI()
-  return NodeInfo(nodeId: id, nodeENR: enr)
+  NodeInfo(nodeId: r.localNode.id, nodeENR: r.localNode.record)
 
 proc getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
   var info: RoutingTableInfo
   for b in r.buckets:
-    var bucket: seq[string]
+    var bucket: seq[NodeId]
     for n in b.nodes:
-      bucket.add("0x" & n.id.toHex())
+      bucket.add(n.id)
 
     info.buckets.add(bucket)
 
-  info.localKey = "0x" & r.localNode.id.toHex()
+  info.localKey = r.localNode.id
 
   info
 
