@@ -37,7 +37,6 @@ type
     ## Catch and relay exception error
 
   TxSqueezeCtx = object
-    txs: seq[TxItemRef] ## Squeezer result, return value
     xp: TxPoolRef       ## Descriptor
     tr: HexaryTrie      ## Local state database
     nItems: int         ## Current number of items (for state root calculator)
@@ -107,16 +106,12 @@ proc continueSqueezing(xp: TxPoolRef): bool
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(ctx: var TxSqueezeCtx; item: TxItemRef): GasInt
+proc runTx(xp: TxPoolRef; item: TxItemRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  let
-    xp = ctx.xp
-    gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
-
+  let gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
   if 0.GasPriceEx <= gasTip:
-
     let
       fork = xp.chain.nextFork
       vmState = xp.chain.vmState
@@ -146,124 +141,34 @@ proc runTx(ctx: var TxSqueezeCtx; item: TxItemRef): GasInt
       vmState.stateDB.persist(clearCache = false)
 
 
-proc runTxFinish(ctx: var TxSqueezeCtx; item: TxItemRef; gasBurned: GasInt)
+proc runTxFinish(xp: TxPoolRef;
+                 tr: var HexaryTrie; item: TxItemRef; gasBurned: GasInt): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Bool-keeping after executing argument `item` transaction.
+  ## Book keeping after executing argument `item` transaction in the VM. The
+  ## function returns the next number of items `nItems+1`.
   let
-    xp = ctx.xp
     vmState = xp.chain.vmState
+    inx = xp.txDB.byStatus.eq(txItemPacked).nItems
 
   # Update sequence sizes so it can be indexed
-  if vmState.receipts.len <= ctx.nItems:
-    vmState.receipts.setLen(ctx.nItems + receiptsExtensionSize)
-    ctx.txs.setLen(ctx.nItems + receiptsExtensionSize)
-
-  #echo "*** runTxFinish",
-  #   " ctx.txs.len=", ctx.txs.len,
-  #   " vmState.receipts.len=", vmState.receipts.len,
-  #   " inx=", ctx.nItems
-
-  ctx.txs[ctx.nItems] = item
-  vmState.receipts[ctx.nItems] = vmState.makeReceipt(item.tx.txType)
-
-  #echo "*** runTxFinish ", ctx.nItems,
-  #  " gas=", vmState.cumulativeGasUsed,
-  #  " -> ", vmState.cumulativeGasUsed + gasBurned,
-  #  " ", item.pp
+  if vmState.receipts.len <= inx:
+    vmState.receipts.setLen(inx + receiptsExtensionSize)
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   # Update totals
   vmState.cumulativeGasUsed += gasBurned
 
   # Incrementally build new state root
-  ctx.tr.put(rlp.encode(ctx.nItems), rlp.encode(item.tx))
-  ctx.nItems.inc
+  tr.put(rlp.encode(inx), rlp.encode(item.tx))
 
-# --------
-
-proc stepSqueezer(ctx: var TxSqueezeCtx;
-                  nonceList: TxStatusNonceRef; fromNonce = AccountNonce.low)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Try to compact items from the `nonceList` argument if there are any. These
-  ## items are executed and compacted against `gasBurned` in a loop as long as
-  ## the `spaceAvail()` constraint is not violated.
-  ##
-  ## For each loop step, the block chain can be rolled back. The loop stops
-  ## and the last block chain action is rolled back if there is a violation
-  ## of the packing constraints.
-  let xp = ctx.xp
-
-  var rc = nonceList.ge(fromNonce)
-  while rc.isOK:
-    let dbTx = xp.chain.db.db.beginTransaction
-    defer: dbTx.dispose
-
-    let
-      item = rc.value.data
-      gasBurned = ctx.runTx(item)
-
-    if gasBurned == 0:
-      # Failure: Move this one and higher nonces to pending pucket
-      xp.bucketItemsReassignPending(item.status, item.sender, item.tx.nonce)
-      # Automatic `tr` database roll back is implied by defer directive
-      return
-
-    if not xp.spaceAvail(gasBurned):
-      # Automatic `tr` database roll back is implied by defer directive
-      return
-
-    ctx.runTxFinish(item, gasBurned)
-    dbTx.commit
-
-    rc = nonceList.gt(item.tx.nonce)
-
-
-proc groupSqueezer(ctx: var TxSqueezeCtx; nonceList: TxStatusNonceRef;
-                   fromNonce = AccountNonce.low): AccountNonce
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Try to compact items from the `nonceList` argument if there are any. These
-  ## items are compacted against `gasLimit` and then executed in a loop as long
-  ## as the `spaceAvail()` constraint is not violated.
-  ##
-  ## The function returns the next nonce that might be processed. This is
-  ## `nonce+1` if `nonce` was the last nonce processed, ot `zero` otherwise.
-  let
-    xp = ctx.xp
-    nItems = ctx.nItems
-
-  var rc = nonceList.ge(fromNonce)
-  if rc.isOK:
-    let dbTx = xp.chain.db.db.beginTransaction
-    defer: dbTx.dispose
-
-    while rc.isOK:
-      let item = rc.value.data
-      if not xp.spaceAvail(item.tx.gasLimit):
-        # Will accept the current group of items, except the current one
-        break
-
-      let gasBurned = ctx.runTx(item)
-      if gasBurned == 0:
-        # Failure: Move this one and higher nonces to pending pucket
-        xp.bucketItemsReassignPending(item.status, item.sender, item.tx.nonce)
-        # Will accept the current group of items, except the current one
-        break
-
-      ctx.runTxFinish(item, gasBurned)
-      rc = nonceList.gt(item.tx.nonce)
-
-    # Accept group of compacred items
-    dbTx.commit
-
-    # Result
-    if nItems < ctx.nItems:
-      result = ctx.txs[ctx.nItems - 1].tx.nonce + 1
+  # Add the item to the `packed` bucket
+  xp.txDB.reassign(item,txItemPacked)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc squeezeVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute all transactios of the items in the `packed` bucket in the VM and
   ## compact them for ethernet block inclusion (updateing `vmState` etc.) Then
   ## compact some more from the `staged` bucket if possible. The function
@@ -281,59 +186,67 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
       db.applyDAOHardFork()
 
   # Internal descriptor
-  var ctx = TxSqueezeCtx(
-    txs: @[],
-    xp: xp,
-    tr: newMemoryDB().initHexaryTrie,
-    nItems: 0)
+  var tr = newMemoryDB().initHexaryTrie
 
-  # Try to compact items from the `packed` bucket as long as the
-  # `spaceAvail()` constraint is not violated.
-  for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
-    # Try/execute all items from the `packed` bucket. The squeezer executes
-    # the txs in the VM and then uses the sum of burned gas results as
-    # target function (subject to bundary conditions.) Txs are expected to
-    # run through so the whole group is run as an atomic action (can only
-    # roll back all.)
-    var nonce = ctx.groupSqueezer(nonceList)
+  # Flush `packed` bucket
+  xp.bucketFlushPacked
 
-    # Compact additional items from the `packed` bucket if incidentally
-    # there are more (change of packer optimisation flags?). As the result
-    # is unknown, each tx is run atomically with roll back possibilty.
-    ctx.stepSqueezer(nonceList, nonce)
+  # Greedily compact a group of items as long as the accumulated `gasLimit`
+  # values are below the block size.
+  block groupWise:
+    let subTx = xp.chain.db.db.beginTransaction
+    defer: subTx.dispose
+    block newTransaction:
 
-  # Improve packing by processing the `stages` bucket.
-  if xp.continueSqueezing:
-    let rcPacked = xp.txDB.byStatus.eq(txItemPacked)
-    var bothBuckets: seq[TxStatusNonceRef]
-    # Try to compact items from yet untouched accounts from `staged` bucket.
-    # The items tried first are the ones with accounts not in the `packed`
-    # bucket.
-    #
-    # FIXME: Omitting the accounts that share both buckets `staged` and
-    #        `packed` increases the number of accounts in the packed ethernet
-    #        block. Whether this leads to better or more desired packing
-    #        results is unclear.
+      for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
+        block newAccount:
+
+          for item in nonceList.incNonce:
+            if not xp.spaceAvail(item.tx.gasLimit):
+              # Will accept the current group of items, except the current one
+              break newTransaction
+
+            let gasBurned = xp.runTx(item)
+            if gasBurned == 0:
+              # Failure: Move this account and higher nonces to pending pucket
+              xp.bucketItemsReassignPending(item)
+              # Roll back the current `packed` bucket
+              xp.bucketFlushPacked
+              break groupWise
+
+            # Finish book-keeping and move item to `packed` bucket
+            discard xp.runTxFinish(tr, item, gasBurned)
+
+    # Accept group of items (for book-keeping)
+    subTx.commit
+
+  block stepWise:
     for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-      # Not trying this one if the account is in the `packed` bucket'.
-      if rcPacked.eq(account).isOk:
-        bothBuckets.add nonceList
-      else:
-        ctx.stepSqueezer(nonceList)
+      block newAccount:
 
-    if xp.continueSqueezing:
-      # Compact more, re-visit accounts from the `packed` bucket which
-      # are also in the `staged` bucket.
-      for nonceList in bothBuckets:
-        ctx.stepSqueezer(nonceList)
+        for item in nonceList.incNonce:
+          let subTx = xp.chain.db.db.beginTransaction
+          defer: subTx.dispose
 
-  xp.chain.nextTxRoot = ctx.tr.rootHash
+          let gasBurned = xp.runTx(item)
+          if gasBurned == 0:
+            # Failure: Move this account and higher nonces to pending pucket
+            xp.bucketItemsReassignPending(item)
+            # Accept the current group of items, except this last one
+            break newAccount # implies rollback
 
-  # Update flexi-arrays, set proper length
-  ctx.txs.setLen(ctx.nItems)
-  vmState.receipts.setLen(ctx.nItems)
+          if not xp.spaceAvail(gasBurned):
+            break newAccount # implies rollback
+
+          # Finish book-keeping and move item to `packed` bucket
+          discard xp.runTxFinish(tr, item, gasBurned)
+
+          subTx.commit
 
   #  # The following is not needed as the block chain is rolled back, anyway
+  #
+  # # Update flexi-arrays, set proper length
+  # vmState.receipts.setLen(ctx.nItems)
   #
   #  if not vmState.chainDB.config.poaEngine:
   #   # @[]: no uncles yet
@@ -345,8 +258,8 @@ proc squeezeVmExec*(xp:  TxPoolRef): seq[TxItemRef]
   #     db.collectWitnessData()
   #   db.persist(ClearCache in vmState.flags)
 
+  xp.chain.nextTxRoot = tr.rootHash
   # Block chain will roll back automatically
-  ctx.txs
 
 # ------------------------------------------------------------------------------
 # End

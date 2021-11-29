@@ -216,26 +216,6 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   true
 
 
-proc classifyPackerItem*(xp: TxPoolRef;
-                         item: TxItemRef; offset: GasInt): bool =
-  ## Classifier for incremental packing. This function checks whether the
-  ## current argument `item` would exceed packing size contraints.
-  if packItemsMaxGasLimit in xp.pFlags:
-    offset + item.tx.gasLimit < xp.chain.maxGasLimit
-  else:
-    offset + item.tx.gasLimit < xp.chain.trgGasLimit
-
-proc classifyPackerTryNext*(xp: TxPoolRef; offset: GasInt): bool =
-  ## Classifier for incremental packing. This function checks whether the
-  ## current packing level is still low enough to proceed trying to accumulate
-  ## more items.
-  if packItemsTryHarder in xp.pFlags:
-    if packItemsMaxGasLimit in xp.pFlags:
-      return offset < xp.chain.trgGasLimit
-    else:
-      return offset < xp.chain.lwmGasLimit
-
-
 proc classifySqueezer*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
   ## Classifier for incremental *sqeezing* (i.e. adding up `gasUsed` after
   ## executing in VM.) This function checks whether the argument `totalGasUsed`

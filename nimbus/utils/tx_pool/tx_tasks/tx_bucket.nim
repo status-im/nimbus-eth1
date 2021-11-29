@@ -48,6 +48,12 @@ proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
       discard xp.txDB.reassign(item, txItemPending)
 
 
+proc bucketItemsReassignPending*(xp: TxPoolRef; item: TxItemRef)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `bucketItemsReassignPending()`
+  xp.bucketItemsReassignPending(item.status, item.sender, item.tx.nonce)
+
+
 proc bucketUpdateAll*(xp: TxPoolRef): bool
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Update all buckets. The function returns `true` if some items were added
@@ -106,7 +112,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
       if not xp.classifyActive(item):
         # Larger nonces cannot be held in the `staged` bucket anymore for this
         # sender account. So they are moved back to the `pending` bucket.
-        xp.bucketItemsReassignPending(txItemStaged, item.sender, item.tx.nonce)
+        xp.bucketItemsReassignPending(item)
 
         # The nonces in the `staged` bucket are always smaller than the one in
         # the `pending` bucket. So, if the lower nonce items must go to the
@@ -124,9 +130,9 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
     for item in nonceList.incNonce:
 
       if not xp.classifyActive(item):
-        xp.bucketItemsReassignPending(txItemPacked, item.sender, item.tx.nonce)
+        xp.bucketItemsReassignPending(item)
 
-        # All staged items have smaller nonces for this sender, so they have
+        # For the `sender` all staged items have smaller nonces, so they have
         # to go to the `pending` bucket, as well.
         xp.bucketItemsReassignPending(txItemStaged, item.sender)
         stagedItemsAdded = true
@@ -150,28 +156,12 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
 
 # ---------------------------
 
-proc bucketUpdatePacked*(xp: TxPoolRef)
+proc bucketFlushPacked*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Attempt to pack a new block into the `packed` bucket not exceeding the
-  ## block size hard or soft limits (see `xp.pAlgoFlags`.)
-  var gasTotal = xp.txDB.byStatus.eq(txItemPacked).gasLimits
-
-  for (_,nonceList) in xp.txDB.decAccount(txItemStaged):
+  ## Move all items from the `packed` bucket to the `pending` bucket
+  for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
     for item in nonceList.incNonce:
-
-      if xp.classifyPackerItem(item, gasTotal):
-        if not xp.txDB.reassign(item, txItemPacked):
-          # Weird case, should not happen => try next sender
-          break # inner for()
-        gasTotal += item.tx.gasLimit
-
-      elif xp.classifyPackerTryNext(gasTotal):
-        # This one is too big, try next sender as suggested by classifier
-        break # inner for()
-
-      else:
-        # Acceptable packing level reached, already. Stop here
-        return
+      discard xp.txDB.reassign(item,txItemStaged)
 
 # ------------------------------------------------------------------------------
 # End

@@ -49,17 +49,6 @@ type
 
     # -----------
 
-    packItemsMaxGasLimit ##\
-      ## It set, the *packer* will collect items while accumulating `gasLimit`
-      ## as long as `maxGasLimit` is not exceeded. Otherwise it will only
-      ## accumulate up until `trgGasLimit` is reached.
-
-    packItemsTryHarder ##\
-      ## It set, the *packer* will *not* stop at the first instance when an
-      ## item cannot be added to the collection of items anymore because its
-      ## `gasLimit` is too large. Otherwise the packer will switch to another
-      ## account and continue trying.
-
     squeezeItemsMaxGasLimit ##\
       ## It set, the *sqeezer* will execute and collect additional items from
       ## the `staged` bucket while accumulating `gasUsed` as long as
@@ -79,10 +68,6 @@ type
       ## Automatically update the state buckets after running batch jobs if
       ## the `dirtyBuckets` flag is also set.
 
-    autoActivateTxsPacker ##\
-      ## Automatically pack transactions after running batch jobs if the
-      ## `stagedItems` flag is also set.
-
     autoZombifyUnpacked ##\
       ## Automatically dispose *pending* or *staged* txs that were queued
       ## at least `lifeTime` ago.
@@ -95,11 +80,9 @@ type
     minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
     minTipPrice: GasPrice       ## Desired tip-per-tx target, `effectiveGasTip`
     minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
-    moreStagedItems: bool       ## Some items were staged (since last check)
     dirtyBuckets: bool          ## Buckets need to be updated
     doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
     flags: set[TxPoolFlags]     ## Processing strategy symbols
-
 
   TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
@@ -132,10 +115,7 @@ const
   txPoolFlags = {stageItems1559MinTip,
                   stageItems1559MinFee,
                   stageItemsPlMinPrice,
-
                   autoUpdateBucketsDB,
-                  autoActivateTxsPacker,
-
                   autoZombifyUnpacked}
 
 # ------------------------------------------------------------------------------
@@ -197,10 +177,6 @@ proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
   ## Getter
   xp.param.minPlGasPrice
 
-proc pMoreStagedItems*(xp: TxPoolRef): bool =
-  ## Getter, some updates since last check
-  xp.param.moreStagedItems
-
 proc startDate*(xp: TxPoolRef): Time =
   ## Getter
   xp.startDate
@@ -240,10 +216,6 @@ proc `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
 proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
-
-proc `pMoreStagedItems=`*(xp: TxPoolRef; val: bool) =
-  ## Setter
-  xp.param.moreStagedItems = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

@@ -17,6 +17,8 @@
 ##   currently unsupported. For now, all txs are considered from `remote`
 ##   accounts.
 ##
+## * No uncles are handled by this pool
+##
 ## * There is no handling of *zero gas price* transactions yet
 ##
 ## * Provide unit tests provoking a nonce gap error after back tracking
@@ -148,13 +150,17 @@
 ##
 ## The packed transactions bucket
 ## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## ... **outdated** ...
+##
+#[
 ## Items in this bucket have `status` symbol `txItemPacked`. These items
 ## are incrementally updated regularly after new items wre added to the
 ## `staged` bucket. The packed transactions bucket is filled up with items
 ## while adding up the per transaction `gasLimit` values. The accumulated
 ## items in that bucket will not exceed the `maxGasLimit` hard limit which
 ## is derived from current state of the block chain.
-##
+]#
+
 ## The following boundary conditions holds:
 ##
 ## * For any *(sender0,nonce0)* pair from **Qpacked**, the pair
@@ -164,7 +170,6 @@
 ## latter condition implies that a *packed* per sender nonce has a predecessor
 ## in the very *packed* bucket or is a nonce as registered with the
 ## *sender account*.
-##
 ##
 ##
 ## Terminal state
@@ -303,17 +308,6 @@
 ##     Other items are considered underpriced and left or set pending. This
 ##     symbol affects pre-London tx items, only.
 ##
-##   *packItemsTrgGasLimitMax*
-##     It set, the *packer* will collect items while accumulating `gasLimit`
-##     as long as `maxGasLimit` is not exceeded. Otherwise it will only
-##     accumulate up until `trgGasLimit` is reached.
-##
-##   *packItemsTryHarder*
-##     It set, the *packer* will *not* stop at the first instance when an
-##     item cannot be added to the collection of items anymore because its
-##     `gasLimit` is too large. Otherwise the packer will switch to another
-##     account and continue trying.
-##
 ##   *squeezeItemsMaxGasLimit*
 ##     It set, the *sqeezer* will execute and collect additional items from
 ##     the `staged` bucket while accumulating `gasUsed` as long as
@@ -330,10 +324,6 @@
 ##   *autoUpdateBucketsDB*
 ##     Automatically update the state buckets after running batch jobs if the
 ##     `dirtyBuckets` flag is also set.
-##
-##   *autoActivateTxsPacker*
-##     Automatically pack transactions  after running batch jobs if the
-##    `stagedItems` flag is also set.
 ##
 ##   *autoZombifyUnpacked*
 ##     Automatically dispose *pending* or *staged* tx items that were added to
@@ -391,14 +381,10 @@
 ##   exceed this gas limit are stored into the pending bucket (waiting for the
 ##   next cycle.)
 ##
-## maxGasLimit, minGasLimit, trgGasLimit
+## lwmGasLimit, minGasLimit, maxGasLimit, trgGasLimit
 ##   These parameters are derived from the current block chain head. The limit
 ##   parameters set conditions on how many blocks from the packed bucket can be
 ##   packed into the body of a new block.
-##
-## moreStagedItems
-##   If `true`, the state buckets database is ready for a new rounf of packing
-##   staged items if the `autoActivateTxsPacker` flag is also set.
 ##
 
 import
@@ -465,18 +451,9 @@ proc maintenanceProcessing(xp: TxPoolRef)
     if xp.pDirtyBuckets:
       # For all items, re-calculate item status values (aka bucket labels).
       # If the `force` flag is set, re-calculation is done even though the
-      # change flag hes remained unset.
-      if xp.bucketUpdateAll:
-        xp.pMoreStagedItems = true # triggers packer
+      # change flag has remained unset.
+      discard xp.bucketUpdateAll
       xp.pDirtyBuckets = false
-
-  # Pack txs
-  if autoActivateTxsPacker in xp.pFlags:
-    if xp.pMoreStagedItems:
-      # Incrementally pack txs by appropriate fetching by items from
-      # the `staged` bucket.
-      xp.bucketUpdatePacked
-      xp.pMoreStagedItems = false
 
 
 proc processJobs(xp: TxPoolRef): int
@@ -496,9 +473,7 @@ proc processJobs(xp: TxPoolRef): int
     of txJobAddTxs:
       # Add a batch of txs to the database
       var args = task.data.addTxsArgs
-      let (stagedFlag,topItems) = xp.addTxs(args.txs, args.info)
-      if stagedFlag:
-        xp.pMoreStagedItems = true # triggers packer
+      let (_,topItems) = xp.addTxs(args.txs, args.info)
       xp.pDoubleCheckAdd topItems
 
     of txJobDelItemIDs:
@@ -616,22 +591,6 @@ proc triggerReorg*(xp: TxPoolRef) =
   ## `autoUpdateBucketsDB` flag is also set.
   xp.pDirtyBuckets = true
 
-proc triggerPacker*(xp: TxPoolRef; clear = false)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## This function triggers the packer that will attempt to add more txs to the
-  ## `packed` bucket with the next job queue maintenance-processing (see
-  ## `jobCommit()`) by setting the `moreStagedItems` parameter. The packer will
-  ## eventually run when the `autoActivateTxsPacker` flag is also set.
-  ##
-  ## If the `clear` argument is set `true`, all items from the `packed` bucket
-  ## are moved to the `staged` bucket. So the packer will work on an empty
-  ## `packed` bucket when eventually started.
-  xp.pMoreStagedItems = true
-  if clear:
-    for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
-      for item in nonceList.incNonce:
-        discard xp.txDB.reassign(item, txItemStaged)
-
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
@@ -658,8 +617,10 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   ##
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
-  result.txs = xp.squeezeVmExec.mapIt(it.tx) # updates vmState
+  xp.squeezeVmExec                           # updates vmState
   result.header = xp.chain.getHeader         # uses updated vmState
+  for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
+    result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
 
 proc gasCumulative*(xp: TxPoolRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -708,11 +669,6 @@ proc nItems*(xp: TxPoolRef): TxTabsItemsCount
   ## Getter, retrieves the current number of items per bucket and
   ## some totals.
   xp.txDB.nItems
-
-proc moreStagedItems*(xp: TxPoolRef): bool =
-  ## Getter, bucket database is ready for a new round of packing staged items
-  ## if the `autoActivateTxsPacker` flag is also set.
-  xp.pMoreStagedItems
 
 proc head*(xp: TxPoolRef): BlockHeader =
   ## Getter, cached block chain insertion point. Typocally, this should be the
@@ -782,7 +738,7 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
     xp.chain.head = val
     xp.txDB.baseFee = xp.chain.nextBaseFee
     xp.pDirtyBuckets = true
-    xp.pMoreStagedItems = true
+    xp.bucketFlushPacked
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations

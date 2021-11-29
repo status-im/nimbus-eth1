@@ -648,8 +648,8 @@ proc runTxPackerTests(noisy = true) =
           check xq.minPreLondonGasPrice == packPrice
 
           # employ packer
-          xq.flags = xq.flags + {packItemsTryHarder}
           xq.jobCommit(forceMaintenance = true)
+          xq.squeezeVmExec
           check xq.verify.isOK
 
           # verify that the test did not degenerate
@@ -670,13 +670,9 @@ proc runTxPackerTests(noisy = true) =
             saveState0 = foldl(@[0.GasInt] & items0.mapIt(it.tx.gasLimit), a+b)
           check 0 < xq.nItems.packed
 
-          # flush packed bucket and trigger re-pack
-          xq.triggerPacker(clear = true)
-          check xq.nItems.packed == 0
-          check xq.verify.isOK
-
           # re-pack bucket
           xq.jobCommit(forceMaintenance = true)
+          xq.squeezeVmExec
           check xq.verify.isOK
 
           let
@@ -705,8 +701,8 @@ proc runTxPackerTests(noisy = true) =
 
           # re-pack bucket, packer needs extra trigger because there is
           # not necessarily a buckets re-org resulting in a change
-          xq.triggerPacker
           xq.jobCommit(forceMaintenance = true)
+          xq.squeezeVmExec
           check xq.verify.isOK
 
           let
@@ -775,7 +771,7 @@ proc runTxPackerTests(noisy = true) =
             " < ", xq.chain.maxGasLimit,
             "\n"
 
-        echo ">>> ", xq.squeezeVmExec.len # mapIt(it.info)
+        xq.squeezeVmExec
 
         echo ">>> ", xq.nItems.pp,
           " >> ", packerBucket.gasLimits,
