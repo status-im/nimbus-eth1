@@ -51,7 +51,7 @@ SCRIPTS_DIR="fluffy/scripts/"
 
 print_help() {
   cat <<EOF
-Usage: $(basename "$0") [OPTIONS] -- [BEACON NODE OPTIONS]
+Usage: $(basename "$0") [OPTIONS] -- [FLUFFY OPTIONS]
 E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
 
   -h, --help                  this help message
