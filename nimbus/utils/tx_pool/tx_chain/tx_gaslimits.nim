@@ -15,15 +15,15 @@
 import
   std/[math],
   ../../../chain_config,
+  ../../../db/db_chain,
   ../../../constants,
   ../../../forks,
-  ../../../vm_types,
   eth/[common]
 
 {.push raises: [Defect].}
 
 type
-  TxPoolGasLimits* = tuple
+  TxChainGasLimits* = tuple
     minLimit: GasInt ## Minimum `gasLimit` for the packer
     lwmLimit: GasInt ## Low water mark for VM/exec extra packer
     trgLimit: GasInt ## The `gasLimit` for the packer, soft limit
@@ -46,7 +46,7 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setPostLondonLimits(gl: var TxPoolGasLimits; gasLimit: GasInt) =
+proc setPostLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
   ## EIP-1559 conformant gas limit update
   gl.trgLimit = max(gasLimit, GAS_LIMIT_MINIMUM)
 
@@ -62,7 +62,7 @@ proc setPostLondonLimits(gl: var TxPoolGasLimits; gasLimit: GasInt) =
     gl.trgLimit = (gl.minLimit + gl.maxLimit) div 2
 
 
-proc setPreLondonLimits(gl: var TxPoolGasLimits; gasLimit: GasInt) =
+proc setPreLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
   ## Pre-EIP-1559 conformant gas limit update
   gl.maxLimit = PRE_LONDON_GAS_LIMIT_MAX
 
@@ -81,12 +81,11 @@ proc setPreLondonLimits(gl: var TxPoolGasLimits; gasLimit: GasInt) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc gasLimitsGet*(vmState: BaseVMState;
-                   parentGasLimit: GasInt): TxPoolGasLimits =
+proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader;
+                   parentGasLimit: GasInt): TxChainGasLimits =
   ## Calculate gas limits for the next block header.
 
-  let nextFork =
-    vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber + 1)
+  let nextFork = db.config.toFork(parent.blockNumber + 1)
 
   if FkLondon <= nextFork:
     result.setPostLondonLimits(parentGasLimit)
@@ -96,6 +95,11 @@ proc gasLimitsGet*(vmState: BaseVMState;
   # VM/exec low water mark, optionally provided for packer
   result.lwmLimit = max(
     result.minLimit, (result.trgLimit * TRG_THRESHOLD_PER_CENT + 50) div 100)
+
+
+proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader): TxChainGasLimits =
+  ## Variant of `gasLimitsGet()`
+  db.gasLimitsGet(parent, parent.gasLimit)
 
 # ------------------------------------------------------------------------------
 # End

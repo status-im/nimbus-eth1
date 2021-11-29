@@ -106,8 +106,8 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   item.timeStamp = utcTime()
   item.reject = txInfoOk
 
-proc init*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
-            status: TxItemStatus; info: string): Result[T,void] =
+proc new*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
+          status: TxItemStatus; info: string): Result[T,void] =
   ## Create item descriptor.
   let rc = tx.ecRecover
   if rc.isErr:
@@ -119,8 +119,8 @@ proc init*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
        info:      info,
        status:    status))
 
-proc init*(T: type TxItemRef; tx: Transaction;
-            reject: TxInfo; status: TxItemStatus; info: string): T =
+proc new*(T: type TxItemRef; tx: Transaction;
+          reject: TxInfo; status: TxItemStatus; info: string): T =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
   T(tx:        tx,

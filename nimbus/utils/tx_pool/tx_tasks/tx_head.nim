@@ -56,7 +56,7 @@ proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
   for tx in xp.chain.db.getBlockBody(blockHash).transactions:
     kq.remTxs[tx.itemID] = true
 
-proc init(T: type TxHeadDiffRef): T =
+proc new(T: type TxHeadDiffRef): T =
   new result
 
 # ------------------------------------------------------------------------------
@@ -145,7 +145,7 @@ proc headDiff*(xp: TxPoolRef;
   # Equalise block numbers between branches (typically, these btanches
   # collapse and there is a single strain only)
   var
-    txDiffs = TxHeadDiffRef.init
+    txDiffs = TxHeadDiffRef.new
 
     curBranchHead = curHead
     curBranchHash = curHash

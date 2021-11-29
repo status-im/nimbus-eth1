@@ -128,9 +128,9 @@ proc init*(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
   ## the fee beneficiary for informational purposes only.
   xp.startDate = getTime().utc.toTime
 
-  xp.chain = TxChainRef.init(db, miner)
-  xp.txDB = TxTabsRef.init
-  xp.byJob = TxJobRef.init
+  xp.chain = TxChainRef.new(db, miner)
+  xp.txDB = TxTabsRef.new
+  xp.byJob = TxJobRef.new
 
   xp.lifeTime = txItemLifeTime
   xp.priceBump = txPriceBump

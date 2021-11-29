@@ -285,7 +285,7 @@ proc runTxPoolTests(noisy = true) =
 
     block:
       var
-        xq = TxPoolRef.init(bcDB,testAddress)
+        xq = TxPoolRef.new(bcDB,testAddress)
         testTxs: array[5,(TxItemRef,Transaction,Transaction)]
 
       test &"Superseding txs with sender and nonce variants":
@@ -765,17 +765,17 @@ proc runTxPackerTests(noisy = true) =
 
         echo ">>> ", xq.nItems.pp, " >> ", packerBucket.gasLimits
         echo ">>> packer",
-            " gasLimits ", xq.chain.minGasLimit,
-            " < ", xq.chain.lwmGasLimit,
-            " < ", xq.chain.trgGasLimit,
-            " < ", xq.chain.maxGasLimit,
+            " gasLimits ", xq.chain.limits.minLimit,
+            " < ", xq.chain.limits.lwmLimit,
+            " < ", xq.chain.limits.trgLimit,
+            " < ", xq.chain.limits.maxLimit,
             "\n"
 
         xq.squeezeVmExec
 
         echo ">>> ", xq.nItems.pp,
           " >> ", packerBucket.gasLimits,
-          " >> ", xq.chain.vmState.cumulativeGasUsed
+          " >> ", xq.gasCumulative
         #]#
 
 # ------------------------------------------------------------------------------

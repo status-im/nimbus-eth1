@@ -29,6 +29,11 @@
 ## * Implement disposing of items in *tx_tab* so that updating the rank table
 ##   can be optimised
 ##
+## * Layzily flush the `packed` bucket after `head=` is run.
+##
+## * Stop the sqeezer when the bucket is full enough. Currently it runs over
+##   all items in the `staged` bucket.
+##
 ##
 ## Transaction state database:
 ## ---------------------------
@@ -412,7 +417,6 @@ export
   TxTabsGasTotals,
   TxTabsItemsCount,
   results,
-  tx_desc.init,
   tx_desc.startDate,
   tx_info,
   tx_item.GasPrice,
@@ -488,12 +492,12 @@ proc processJobs(xp: TxPoolRef): int
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
+proc new*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns a new tx-pool descriptor. The `miner` argument is
   ## the fee beneficiary for informational purposes only.
   new result
-  tx_desc.init(result,db,miner)
+  result.init(db,miner)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser
@@ -597,7 +601,7 @@ proc triggerReorg*(xp: TxPoolRef) =
 
 proc baseFee*(xp: TxPoolRef): GasPrice =
   ## Getter, this parameter modifies/determines the expected gain when packing
-  xp.chain.nextBaseFee
+  xp.chain.baseFee
 
 proc dirtyBuckets*(xp: TxPoolRef): bool =
   ## Getter, bucket database is ready for re-org if the `autoUpdateBucketsDB`
@@ -626,7 +630,7 @@ proc gasCumulative*(xp: TxPoolRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the gas that will be burned in the block after
   ## retrieving it via `ethBlock()`
-  xp.chain.vmState.cumulativeGasUsed
+  xp.chain.gasUsed
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -639,7 +643,7 @@ proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
 
 proc maxGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
-  xp.chain.maxGasLimit
+  xp.chain.limits.maxLimit
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
 proc minFeePrice*(xp: TxPoolRef): GasPrice =
@@ -679,7 +683,7 @@ proc head*(xp: TxPoolRef): BlockHeader =
 proc trgGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, soft size limit when packing blocks (might be extended to
   ## `maxGasLimit`)
-  xp.chain.trgGasLimit
+  xp.chain.limits.trgLimit
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -694,7 +698,7 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
   ## update would be employed to do the job figuring out the proper value
   ## for the `baseFee`.
   xp.txDB.baseFee = val
-  xp.chain.nextBaseFee = val
+  xp.chain.baseFee = val
 
 proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
@@ -735,10 +739,10 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
   ## Setter, cached block chain insertion point. This will also update the
   ## internally cached `baseFee` (depends on the block chain state.)
   if xp.chain.head != val:
-    xp.chain.head = val
-    xp.txDB.baseFee = xp.chain.nextBaseFee
+    xp.chain.head = val # calculates the new baseFee
+    xp.txDB.baseFee = xp.chain.baseFee
     xp.pDirtyBuckets = true
-    xp.bucketFlushPacked
+    xp.bucketFlushPacked # FIXME: ineficient, better do it layzily
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations

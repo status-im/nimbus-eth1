@@ -98,7 +98,7 @@ proc toTxPool*(
               importBlocks(@[chain[0][inx]],@[chain[1][inx]])
               continue
             txPoolOk = true
-            result[0] = TxPoolRef.init(db,testAddress)
+            result[0] = TxPoolRef.new(db,testAddress)
             result[0].baseFee = baseFee
 
           # Load transactions, one-by-one
@@ -124,7 +124,7 @@ proc toTxPool*(
 
   doAssert not db.isNil
 
-  result = TxPoolRef.init(db,testAddress)
+  result = TxPoolRef.new(db,testAddress)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
@@ -158,7 +158,7 @@ proc toTxPool*(
   doAssert not db.isNil
   doAssert 0 < itemsPC and itemsPC < 100
 
-  result = TxPoolRef.init(db,testAddress)
+  result = TxPoolRef.new(db,testAddress)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 

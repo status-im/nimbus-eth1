@@ -110,7 +110,7 @@ proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxTabsRef): T =
+proc new*(T: type TxTabsRef): T =
   ## Constructor, returns new tx-pool descriptor.
   new result
   result.maxRejects = txTabMaxRejects
@@ -154,7 +154,7 @@ proc insert*(
     return err(txInfoErrAlreadyKnown)
   var item: TxItemRef
   block:
-    let rc = TxItemRef.init(tx, itemID, status, info)
+    let rc = TxItemRef.new(tx, itemID, status, info)
     if rc.isErr:
       return err(txInfoErrInvalidSender)
     item = rc.value
@@ -222,7 +222,7 @@ proc reject*(xp: TxTabsRef; tx: var Transaction;
   ## be inserted.)
   if xp.maxRejects <= xp.byRejects.len:
     discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
-  let item = TxItemRef.init(tx, reason, status, info)
+  let item = TxItemRef.new(tx, reason, status, info)
   xp.byRejects[item.itemID] = item
 
 proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo)

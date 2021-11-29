@@ -20,13 +20,10 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
+  tx_chain.TxChainGasLimits,
   tx_chain.db,
-  tx_chain.lwmGasLimit,
-  tx_chain.maxGasLimit,
-  tx_chain.minGasLimit,
+  tx_chain.limits,
   tx_chain.nextFork,
-  tx_chain.trgGasLimit,
-  tx_chain.vmState,
   tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,

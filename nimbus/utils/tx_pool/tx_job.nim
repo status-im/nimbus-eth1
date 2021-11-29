@@ -162,7 +162,7 @@ proc jobUnshift(jq: TxJobRef; data: TxJobDataRef): TxJobID
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxJobRef; initSize = 10): T =
+proc new*(T: type TxJobRef; initSize = 10): T =
   ## Constructor variant
   new result
   result.jobs.init(initSize)

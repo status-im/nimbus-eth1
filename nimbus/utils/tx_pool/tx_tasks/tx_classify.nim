@@ -103,9 +103,10 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool
 proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
-  if xp.chain.trgGasLimit < item.tx.gasLimit:
+  let trgLimit = xp.chain.limits.trgLimit
+  if trgLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
-      maxLimit = xp.chain.trgGasLimit,
+      maxLimit = trgLimit,
       gasLimit = item.tx.gasLimit
     return false
   true
@@ -113,7 +114,7 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
 proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   if item.tx.txType != TxLegacy:
-    if item.tx.maxFee.GasPriceEx < xp.chain.nextBaseFee:
+    if item.tx.maxFee.GasPriceEx < xp.chain.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
         baseFee = xp.chain.baseFee
@@ -152,7 +153,7 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
 
     elif stageItems1559MinTip in xp.pFlags:
       # Fall back transaction selector scheme
-       if item.tx.effectiveGasTip(xp.chain.nextBaseFee) < xp.pMinTipPrice:
+       if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
          return false
   true
 
@@ -161,7 +162,7 @@ proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
   if item.tx.txType != TxLegacy:
 
     if stageItems1559MinTip in xp.pFlags:
-      if item.tx.effectiveGasTip(xp.chain.nextBaseFee) < xp.pMinTipPrice:
+      if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
         return false
 
     if stageItems1559MinFee in xp.pFlags:
@@ -195,7 +196,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.effectiveGasTip(xp.chain.nextBaseFee) <= 0.GasPriceEx:
+  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.txGasCovered(item):
@@ -221,20 +222,20 @@ proc classifySqueezer*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
   ## executing in VM.) This function checks whether the argument `totalGasUsed`
   ## is still within acceptable constraints.
   if squeezeItemsMaxGasLimit in xp.pFlags:
-    totalGasUsed < xp.chain.maxGasLimit
+    totalGasUsed < xp.chain.limits.maxLimit
   else:
-    totalGasUsed < xp.chain.trgGasLimit
+    totalGasUsed < xp.chain.limits.trgLimit
 
-proc classifySqueezerTryNext*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
-  ##  Classifier for incremental *sqeezing* (see `classifySqueezer()`.) This
-  ## function checks whether the current squezzing level is still low enough
-  ## to proceed trying to accumulate more items.
-  if squeezeItemsTryHarder in xp.pFlags:
-    xp.classifySqueezer(totalGasUsed)
-  elif squeezeItemsMaxGasLimit in xp.pFlags:
-    totalGasUsed < xp.chain.trgGasLimit
-  else:
-    totalGasUsed < xp.chain.lwmGasLimit
+#proc classifySqueezerTryNext*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
+#  ##  Classifier for incremental *sqeezing* (see `classifySqueezer()`.) This
+#  ## function checks whether the current squezzing level is still low enough
+#  ## to proceed trying to accumulate more items.
+#  if squeezeItemsTryHarder in xp.pFlags:
+#    xp.classifySqueezer(totalGasUsed)
+#  elif squeezeItemsMaxGasLimit in xp.pFlags:
+#    totalGasUsed < xp.chain.limits.trgLimit
+#  else:
+#    totalGasUsed < xp.chain.limits.lwmLimit
 
 # ------------------------------------------------------------------------------
 # Public functionss

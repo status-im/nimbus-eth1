@@ -249,6 +249,10 @@ proc eq*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
 # Public array ops -- `AccountNonce` (level 2)
 # ------------------------------------------------------------------------------
 
+proc len*(nonceData: TxStatusNonceRef): int =
+  ## Getter, same as `nItems` (for last level list)
+  nonceData.nonceList.len
+
 proc nItems*(nonceData: TxStatusNonceRef): int =
   ## Getter, total number of items in the sub-list
   nonceData.nonceList.len

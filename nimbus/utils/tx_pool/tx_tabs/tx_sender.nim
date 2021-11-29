@@ -318,14 +318,6 @@ proc nItems*(gt: var TxSenderTab): int =
   gt.size
 
 
-proc gasLimits*(gt: var TxSenderTab; sender: EthAddress): GasInt
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Shortcut for `gt.eq(sender).any.gasLimits`.
-  if gt.addrList.hasKey(sender):
-    return gt.addrList[sender].allList.gasLimits
-  0
-
-
 proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## The *rank* of the `sender` argument address is some expected
