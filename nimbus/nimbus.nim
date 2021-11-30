@@ -234,7 +234,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
   if conf.rpcEnabled:
-    nimbus.rpcServer.stop()
+    await nimbus.rpcServer.stop()
   if conf.wsEnabled:
     nimbus.wsRpcServer.stop()
   if conf.graphqlEnabled:

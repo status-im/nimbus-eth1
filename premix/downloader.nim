@@ -20,8 +20,8 @@ type
 
 proc request*(methodName: string, params: JsonNode): JsonNode =
   var client = newRpcHttpClient()
-  client.httpMethod(MethodPost)
-  waitFor client.connect("127.0.0.1", Port(8545))
+  #client.httpMethod(MethodPost)
+  waitFor client.connect("127.0.0.1", Port(8545), false)
   result = waitFor client.call(methodName, params)
   waitFor client.close()
 
