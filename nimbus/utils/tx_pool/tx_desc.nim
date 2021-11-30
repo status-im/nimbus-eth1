@@ -49,18 +49,18 @@ type
 
     # -----------
 
-    squeezeItemsMaxGasLimit ##\
-      ## It set, the *sqeezer* will execute and collect additional items from
+    packItemsMaxGasLimit ##\
+      ## It set, the *packer* will execute and collect additional items from
       ## the `staged` bucket while accumulating `gasUsed` as long as
       ## `maxGasLimit` is not exceeded. Otherwise it will only accumulate up
       ## until `trgGasLimit` is reached.
 
-    squeezeItemsTryHarder ##\
-      ## It set, the *squeezer* will *not* stop accumulaing items up until
+    packItemsTryHarder ##\
+      ## It set, the *packer* will *not* stop accumulaing items up until
       ## the `maxGasLimit` or `trgGasLimit` is reached, depending on whether
-      ## the `squeezeItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
+      ## the `packItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
       ## until `lwmGasLimit` is reached and even more until `trgGasLimit`
-      ## is teached if `squeezeItemsMaxGasLimit` is set.
+      ## is teached if `packItemsMaxGasLimit` is set.
 
     # -----------
 
@@ -115,6 +115,7 @@ const
   txPoolFlags = {stageItems1559MinTip,
                   stageItems1559MinFee,
                   stageItemsPlMinPrice,
+                  packItemsTryHarder,
                   autoUpdateBucketsDB,
                   autoZombifyUnpacked}
 

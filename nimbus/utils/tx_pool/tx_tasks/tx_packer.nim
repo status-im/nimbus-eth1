@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Tasklets: Squeezer, VM execute and compact txs
-## ===============================================================
+## Transaction Pool Tasklets: Packer, VM execute and compact txs
+## =============================================================
 ##
 
 import
@@ -34,7 +34,7 @@ import
 {.push raises: [Defect].}
 
 type
-  TxSqueezeError* = object of CatchableError
+  TxPackerError* = object of CatchableError
     ## Catch and relay exception error
 
   # TODO: these types need to be removed
@@ -48,7 +48,7 @@ const
     20
 
 logScope:
-  topics = "tx-pool squeeze"
+  topics = "tx-pool packer"
 
 #[
 # ------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ template safeExecutor(info: string; code: untyped) =
     raise (ref Defect)(msg: e.msg)
   except:
     let e = getCurrentException()
-    raise newException(TxSqueezeError, info & "(): " & $e.name & " -- " & e.msg)
+    raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc gasBurned(xp: TxPoolRef; vmState: BaseVMState): GasInt =
   ## To be used instead of `vmState.cumulativeGasUsed` which is ignored as the
@@ -98,18 +98,6 @@ proc gasBurned(xp: TxPoolRef; vmState: BaseVMState): GasInt =
   let inx = xp.txDB.byStatus.eq(txItemPacked).nItems
   if 0 < inx:
     result = vmState.receipts[inx-1].cumulativeGasUsed
-
-proc spaceAvail(xp: TxPoolRef; vmState: BaseVMState; gasUsed: GasInt): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Packing/squeezing constraint for squeezer functions: Continue accumulating
-  ## items while this function returns `true`.
-  xp.classifySqueezer(xp.gasBurned(vmState) + gasUsed)
-
-#proc continueSqueezing(xp: TxPoolRef; vmState: BaseVMState): bool
-#    {.gcsafe,raises: [Defect,CatchableError].} =
-#  ## Packing/squeezing constraint for `stagedSqueezer()`: Continue accumulating
-#  ## items if this function returns `true`.
-#  xp.classifySqueezerTryNext(xp.gasBurned(vmState))
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -126,7 +114,7 @@ proc runTx(xp: TxPoolRef; vmState: BaseVMState; item: TxItemRef): GasInt
       miner = xp.chain.miner
 
     # Execute transaction, may return a wildcard `Exception`
-    safeExecutor "tx_squeeze.runTx":
+    safeExecutor "tx_packer.runTx":
       result = item.tx.txCallEvm(item.sender, vmState, fork)
 
     vmState.stateDB.addBalance(miner, (result * gasTip).uint64.u256)
@@ -190,7 +178,7 @@ proc runTxFinish(xp: TxPoolRef;
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc squeezeVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
+proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute all transactios of the items in the `packed` bucket in the VM and
   ## compact them for ethernet block inclusion (updateing `vmState` etc.) Then
   ## compact some more from the `staged` bucket if possible. The function
@@ -244,7 +232,7 @@ proc squeezeVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
             let gasBurned = xp.runTx(vmState, item)
             doAssert 0 <= gasBurned
 
-            if not xp.spaceAvail(vmState, gasBurned):
+            if not xp.classifyPacked(xp.gasBurned(vmState), gasBurned):
               # Undo collecting items for this account, so far
               for inx in 0 ..< aItems:
                 discard xp.txDB.reassign(itemList[inx],txItemStaged)
@@ -278,9 +266,13 @@ proc squeezeVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
           let gasBurned = xp.runTx(vmState, item)
           doAssert 0 <= gasBurned
 
-          if not xp.spaceAvail(vmState, gasBurned):
-            # rollback, continue with next account
-            break
+          let totalGas = xp.gasBurned(vmState)
+          if not xp.classifyPacked(totalGas, gasBurned):
+            if xp.classifyPackedNext(totalGas, gasBurned):
+              # rollback, continue with next account
+              break doItemWise
+            # otherwise rollback, and stop
+            break allAccounts
 
           # Finish book-keeping and move item to `packed` bucket
           discard xp.runTxFinish(vmState, item, gasBurned)

@@ -23,10 +23,19 @@ import
 {.push raises: [Defect].}
 
 type
+  TxChainGasLimitsPc* = tuple
+    lwmTrg: int ##\
+      ## VM executor may stop if this per centage of `trgLimit` has
+      ## been reached.
+    hwmMax: int ##\
+      ## VM executor may stop if this per centage of `maxLimit` has
+      ## been reached.
+
   TxChainGasLimits* = tuple
     minLimit: GasInt ## Minimum `gasLimit` for the packer
-    lwmLimit: GasInt ## Low water mark for VM/exec extra packer
+    lwmLimit: GasInt ## Low water mark for VM/exec packer
     trgLimit: GasInt ## The `gasLimit` for the packer, soft limit
+    hwmLimit: GasInt ## High water mark for VM/exec packer
     maxLimit: GasInt ## May increase the `gasLimit` a bit, hard limit
 
 const
@@ -37,10 +46,6 @@ const
   PRE_LONDON_GAS_LIMIT_MAX = ##\
     ## https://ethereum.org/en/developers/docs/blocks/#block-size
     30_000_000.GasInt
-
-  TRG_THRESHOLD_PER_CENT = ##\
-    ## VM executor stops if this per centage of `trgGasLimit` has been reached.
-    90
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -81,25 +86,29 @@ proc setPreLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader;
-                   parentGasLimit: GasInt): TxChainGasLimits =
+proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader; parentLimit: GasInt;
+                   pc: TxChainGasLimitsPc): TxChainGasLimits =
   ## Calculate gas limits for the next block header.
 
   let nextFork = db.config.toFork(parent.blockNumber + 1)
 
   if FkLondon <= nextFork:
-    result.setPostLondonLimits(parentGasLimit)
+    result.setPostLondonLimits(parentLimit)
   else:
-    result.setPreLondonLimits(parentGasLimit)
+    result.setPreLondonLimits(parentLimit)
 
-  # VM/exec low water mark, optionally provided for packer
+  # VM/exec low/high water marks, optionally provided for packer
   result.lwmLimit = max(
-    result.minLimit, (result.trgLimit * TRG_THRESHOLD_PER_CENT + 50) div 100)
+    result.minLimit, (result.trgLimit * pc.lwmTrg + 50) div 100)
+
+  result.hwmLimit = max(
+    result.trgLimit, (result.maxLimit * pc.hwmMax + 50) div 100)
 
 
-proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader): TxChainGasLimits =
+proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader;
+                   pc: TxChainGasLimitsPc): TxChainGasLimits =
   ## Variant of `gasLimitsGet()`
-  db.gasLimitsGet(parent, parent.gasLimit)
+  db.gasLimitsGet(parent, parent.gasLimit, pc)
 
 # ------------------------------------------------------------------------------
 # End

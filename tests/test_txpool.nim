@@ -11,7 +11,7 @@
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
   ../nimbus/[chain_config, config, db/db_chain],
-  ../nimbus/utils/[tx_pool, tx_pool/tx_item, tx_pool/tx_tasks/tx_squeeze],
+  ../nimbus/utils/[tx_pool, tx_pool/tx_item, tx_pool/tx_tasks/tx_packer],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
@@ -649,7 +649,7 @@ proc runTxPackerTests(noisy = true) =
 
           # employ packer
           xq.jobCommit(forceMaintenance = true)
-          xq.squeezeVmExec
+          xq.packerVmExec
           check xq.verify.isOK
 
           # verify that the test did not degenerate
@@ -672,7 +672,7 @@ proc runTxPackerTests(noisy = true) =
 
           # re-pack bucket
           xq.jobCommit(forceMaintenance = true)
-          xq.squeezeVmExec
+          xq.packerVmExec
           check xq.verify.isOK
 
           let
@@ -702,7 +702,7 @@ proc runTxPackerTests(noisy = true) =
           # re-pack bucket, packer needs extra trigger because there is
           # not necessarily a buckets re-org resulting in a change
           xq.jobCommit(forceMaintenance = true)
-          xq.squeezeVmExec
+          xq.packerVmExec
           check xq.verify.isOK
 
           let
@@ -763,15 +763,16 @@ proc runTxPackerTests(noisy = true) =
         #[
         let packerBucket = xq.txDB.byStatus.eq(txItemPacked)
 
-        echo ">>> ", xq.nItems.pp, " >> ", packerBucket.gasLimits
-        echo ">>> packer",
-            " gasLimits ", xq.chain.limits.minLimit,
-            " < ", xq.chain.limits.lwmLimit,
-            " < ", xq.chain.limits.trgLimit,
-            " < ", xq.chain.limits.maxLimit,
+        echo ">>> ", xq.nItems.pp, " flags=", xq.flags
+        echo ">>> gasLimits",
+            " min=", xq.chain.limits.minLimit,
+            " lwm=", xq.chain.limits.lwmLimit,
+            " trg=", xq.chain.limits.trgLimit,
+            " hwm=", xq.chain.limits.hwmLimit,
+            " max=", xq.chain.limits.maxLimit,
             "\n"
 
-        xq.squeezeVmExec
+        xq.packerVmExec
 
         echo ">>> ", xq.nItems.pp,
           " >> ", packerBucket.gasLimits,

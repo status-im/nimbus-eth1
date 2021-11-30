@@ -187,7 +187,6 @@ proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool
 
   true
 
-
 proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Check whether a valid transaction is ready to be held in the
@@ -216,26 +215,29 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
 
   true
 
-
-proc classifySqueezer*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
-  ## Classifier for incremental *sqeezing* (i.e. adding up `gasUsed` after
-  ## executing in VM.) This function checks whether the argument `totalGasUsed`
-  ## is still within acceptable constraints.
-  if squeezeItemsMaxGasLimit in xp.pFlags:
+proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
+  ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
+  ## in the VM.) This function checks whether the sum of the arguments
+  ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
+  let totalGasUsed = gasBurned + moreBurned
+  if packItemsMaxGasLimit in xp.pFlags:
     totalGasUsed < xp.chain.limits.maxLimit
   else:
     totalGasUsed < xp.chain.limits.trgLimit
 
-#proc classifySqueezerTryNext*(xp: TxPoolRef; totalGasUsed: GasInt): bool =
-#  ##  Classifier for incremental *sqeezing* (see `classifySqueezer()`.) This
-#  ## function checks whether the current squezzing level is still low enough
-#  ## to proceed trying to accumulate more items.
-#  if squeezeItemsTryHarder in xp.pFlags:
-#    xp.classifySqueezer(totalGasUsed)
-#  elif squeezeItemsMaxGasLimit in xp.pFlags:
-#    totalGasUsed < xp.chain.limits.trgLimit
-#  else:
-#    totalGasUsed < xp.chain.limits.lwmLimit
+proc classifyPackedNext*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
+  ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
+  ## in the VM.) This function returns `true` if the packing level is still
+  ## low enough to proceed trying to accumulate more items.
+  ##
+  ## This function is typically called as a follow up after a `false` return of
+  ## `classifyPack()`.
+  if packItemsTryHarder notin xp.pFlags:
+    xp.classifyPacked(gasBurned, moreBurned)
+  elif packItemsMaxGasLimit in xp.pFlags:
+    gasBurned < xp.chain.limits.hwmLimit
+  else:
+    gasBurned < xp.chain.limits.lwmLimit
 
 # ------------------------------------------------------------------------------
 # Public functionss

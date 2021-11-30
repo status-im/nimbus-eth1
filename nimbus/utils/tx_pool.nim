@@ -31,8 +31,6 @@
 ##
 ## * Layzily flush the `packed` bucket after `head=` is run.
 ##
-## * Stop the sqeezer when the bucket is full enough. Currently it runs over
-##   all items in the `staged` bucket.
 ##
 ##
 ## Transaction state database:
@@ -313,18 +311,18 @@
 ##     Other items are considered underpriced and left or set pending. This
 ##     symbol affects pre-London tx items, only.
 ##
-##   *squeezeItemsMaxGasLimit*
-##     It set, the *sqeezer* will execute and collect additional items from
+##   *packItemsMaxGasLimit*
+##     It set, the *packer* will execute and collect additional items from
 ##     the `staged` bucket while accumulating `gasUsed` as long as
 ##     `maxGasLimit` is not exceeded. Otherwise it will only accumulate up
 ##     until `trgGasLimit` is reached.
 ##
-##   *squeezeItemsTryHarder*
-##     It set, the *squeezer* will *not* stop accumulaing items up until
+##   *packItemsTryHarder*
+##     It set, the *packer* will *not* stop accumulaing items up until
 ##     the `maxGasLimit` or `trgGasLimit` is reached, depending on whether
-##     the `squeezeItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
+##     the `packItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
 ##     until `lwmGasLimit` is reached and even more until `trgGasLimit`
-##     is teached if `squeezeItemsMaxGasLimit` is set.
+##     is teached if `packItemsMaxGasLimit` is set.
 ##
 ##   *autoUpdateBucketsDB*
 ##     Automatically update the state buckets after running batch jobs if the
@@ -397,7 +395,7 @@ import
   ../db/db_chain,
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_squeeze],
+  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_packer],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results]
@@ -621,7 +619,7 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   ##
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
-  xp.squeezeVmExec                           # updates vmState
+  xp.packerVmExec                            # updates vmState
   result.header = xp.chain.getHeader         # uses updated vmState
   for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
     result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)

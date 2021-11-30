@@ -29,9 +29,21 @@ import
   nimcrypto
 
 export
-  TxChainGasLimits
+  TxChainGasLimits,
+  TxChainGasLimitsPc
 
 {.push raises: [Defect].}
+
+const
+  TRG_THRESHOLD_PER_CENT = ##\
+    ## VM executor may stop if this per centage of `trgLimit` has
+    ## been reached.
+    90
+
+  MAX_THRESHOLD_PER_CENT = ##\
+    ## VM executor may stop if this per centage of `maxLimit` has
+    ## been reached.
+    90
 
 type
   TxChainError* = object of CatchableError
@@ -49,6 +61,7 @@ type
     ## when updated.
     db: BaseChainDB          ## Block chain database
     miner: EthAddress        ## Address of fee beneficiary
+    lhwm: TxChainGasLimitsPc ## Hwm/lwm gas limit percentage
 
     parent: BlockHeader      ## Current block chain insertion point
     accounts: AccountsCache  ## Accounts cache, depending on insertion point
@@ -76,7 +89,7 @@ proc update(dh: TxChainRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   let db = dh.db
   dh.accounts = AccountsCache.init(db.db, dh.parent.stateRoot, db.pruneTrie)
-  dh.limits = db.gasLimitsGet(dh.parent)
+  dh.limits = db.gasLimitsGet(dh.parent, dh.lhwm)
   dh.child.reset
   dh.child.baseFee = db.config.baseFeeGet(dh.parent)
   dh.child.txRoot = BLANK_ROOT_HASH
@@ -93,6 +106,8 @@ proc new*(T: type TxChainRef; db: BaseChainDB; miner: EthAddress): T
   result.db = db
   result.parent = db.getCanonicalHead
   result.miner = miner
+  result.lhwm.lwmTrg = TRG_THRESHOLD_PER_CENT
+  result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
   result.update
 
 # ------------------------------------------------------------------------------
@@ -177,6 +192,10 @@ proc limits*(dh: TxChainRef): TxChainGasLimits =
   ## Getter
   dh.limits
 
+proc `lhwm=`*(dh: TxChainRef): TxChainGasLimitsPc =
+  ## Getter
+  dh.lhwm
+
 proc miner*(dh: TxChainRef): EthAddress =
   ## Getter
   dh.miner
@@ -218,6 +237,12 @@ proc `head=`*(dh: TxChainRef; val: BlockHeader)
   dh.parent = val
   dh.update
 
+proc `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
+  ## Setter, tuple `(lwmTrg,hwmMax)` will allow the packer to continue
+  ## up until the percentage level has been reached of the `trgLimit`, or
+  ## `maxLimit` depending on what has been activated.
+  dh.lhwm = val
+
 proc miner*(dh: TxChainRef; val: EthAddress) =
   ## Setter
   dh.miner = val
@@ -248,7 +273,7 @@ proc setNextGasLimit*(dh: TxChainRef; val: GasInt) =
   ## Temorarily overwrite (until next header update). The argument might be
   ## adjusted so that it is in the proper range. This function
   ## is intended to support debugging and testing.
-  dh.limits = dh.db.gasLimitsGet(dh.parent, val)
+  dh.limits = dh.db.gasLimitsGet(dh.parent, val, dh.lhwm)
 
 # ------------------------------------------------------------------------------
 # End
