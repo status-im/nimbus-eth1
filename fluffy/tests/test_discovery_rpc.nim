@@ -34,7 +34,7 @@ proc setupTest(rng: ref BrHmacDrbgContext): Future[TestCase] {.async.} =
   rpcHttpServerWithProxy.installDiscoveryApiHandlers(localDiscoveryNode)
 
   await rpcHttpServerWithProxy.start()
-  await client.connect(localSrvAddress, Port(localSrvPort))
+  await client.connect(localSrvAddress, Port(localSrvPort), false)
   return TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client)
 
 proc stop(t: TestCase) {.async.} =
