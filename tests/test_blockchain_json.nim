@@ -40,7 +40,7 @@ type
     debugData    : JsonNode
     network      : string
 
-var pow = PowRef.init
+var pow = PowRef.new
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 

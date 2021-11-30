@@ -33,7 +33,7 @@ from stew/byteutils
 
 export
   pow.PowRef,
-  pow.init,
+  pow.new,
   results
 
 const

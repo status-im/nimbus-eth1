@@ -173,36 +173,39 @@ proc init(tm: PowRef;
   if light.isSome:
     tm.lightByEpoch = light.get
   else:
-    tm.lightByEpoch = PowCacheRef.init
+    tm.lightByEpoch = PowCacheRef.new
 
   if full.isSome:
     tm.fullByEpoch = full.get
   else:
-    tm.fullByEpoch = PowDatasetRef.init(cache = tm.lightByEpoch)
+    tm.fullByEpoch = PowDatasetRef.new(cache = tm.lightByEpoch)
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type PowRef;
-            rng: ref BrHmacDrbgContext;
-                   cache: PowCacheRef;
-                   dataset: PowDatasetRef): T =
+proc new*(T: type PowRef;
+          rng: ref BrHmacDrbgContext;
+          cache: PowCacheRef;
+          dataset: PowDatasetRef): T =
   ## Constructor
   new result
-  result.init(some(rng), some(cache), some(dataset))
+  result.init(
+    some(rng), some(cache), some(dataset))
 
-proc init*(T: type PowRef; cache: PowCacheRef; dataset: PowDatasetRef): T =
+proc new*(T: type PowRef; cache: PowCacheRef; dataset: PowDatasetRef): T =
   ## Constructor
   new result
-  result.init(none(ref BrHmacDrbgContext), some(cache), some(dataset))
+  result.init(
+    none(ref BrHmacDrbgContext), some(cache), some(dataset))
 
-proc init*(T: type PowRef; rng: ref BrHmacDrbgContext): T =
+proc new*(T: type PowRef; rng: ref BrHmacDrbgContext): T =
   ## Constructor
   new result
-  result.init(some(rng), none(PowCacheRef), none(PowDatasetRef))
+  result.init(
+    some(rng), none(PowCacheRef), none(PowDatasetRef))
 
-proc init*(T: type PowRef): T =
+proc new*(T: type PowRef): T =
   ## Constructor
   new result
   result.init(

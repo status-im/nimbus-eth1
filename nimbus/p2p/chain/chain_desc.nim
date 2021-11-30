@@ -146,7 +146,7 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
 
   # Always initialise the PoW epoch cache even though it migh no be used
   # unless `extraValidation` is set `true`.
-  c.pow = PowRef.init
+  c.pow = PowRef.new
 
 # ------------------------------------------------------------------------------
 # Public constructors

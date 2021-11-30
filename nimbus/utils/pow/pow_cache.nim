@@ -61,7 +61,7 @@ proc init*(T: type PowCache; maxItems = nItemsMax): T =
   ## Constructor variant
   result.init(maxItems)
 
-proc init*(T: type PowCacheRef; maxItems = nItemsMax): T =
+proc new*(T: type PowCacheRef; maxItems = nItemsMax): T =
   ## Constructor variant
   new result
   result[].init(maxItems)

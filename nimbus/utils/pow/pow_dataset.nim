@@ -64,7 +64,7 @@ proc init(pd: var PowDataset;
   if cache.isSome:
     pd.cache = cache.get
   else:
-    pd.cache = PowCacheRef.init(nItemsInit)
+    pd.cache = PowCacheRef.new(nItemsInit)
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -88,12 +88,12 @@ proc init*(T: type PowDataset; maxItems = nItemsMax): T =
   result.init(some(maxItems), none(PowCacheRef))
 
 
-proc init*(T: type PowDatasetRef; maxItems = nItemsMax; cache: PowCacheRef): T =
+proc new*(T: type PowDatasetRef; maxItems = nItemsMax; cache: PowCacheRef): T =
   ## Constructor variant
   new result
   result[].init(some(maxItems), some(cache))
 
-proc init*(T: type PowDatasetRef; maxItems = nItemsMax): T =
+proc new*(T: type PowDatasetRef; maxItems = nItemsMax): T =
   ## Constructor for  PoW dataset reference
   new result
   result[].init(some(maxItems), none(PowCacheRef))

@@ -98,9 +98,9 @@ proc runPowTests(noisy = true; file = specsDump;
     filePath = file.findFilePath
     fileInfo = file.splitFile.name.split(".")[0]
 
-    powCache = PowCacheRef.init # so we can inspect the LRU caches
-    powDataset = PowDatasetRef.init(cache = powCache)
-    pow = PowRef.init(powCache, powDataset)
+    powCache = PowCacheRef.new # so we can inspect the LRU caches
+    powDataset = PowDatasetRef.new(cache = powCache)
+    pow = PowRef.new(powCache, powDataset)
 
   var
     specsList: seq[PowSpecs]
@@ -197,7 +197,7 @@ proc powMain*(noisy = defined(debug)) =
 when isMainModule:
   # Note:
   #   0 < nFakeMiner: allow ~20 minuntes for building lookup table
-  #   0 < nRealMiner: takes days ...
+  #   0 < nRealMiner: takes days/months/years ...
   true.runPowTests(nVerify = 200, nFakeMiner = 200, nRealMiner = 5)
 
 # ------------------------------------------------------------------------------
