@@ -265,7 +265,7 @@ proc `baseFee=`*(xp: TxTabsRef; val: GasPrice)
     # Build new rank table
     xp.byRank.clear
     for (address,rank) in xp.bySender.accounts:
-      discard xp.byRank.insert(rank.Txrank, address)
+      discard xp.byRank.insert(rank.TxRank, address)
 
 
 proc `maxRejects=`*(xp: TxTabsRef; val: int) =

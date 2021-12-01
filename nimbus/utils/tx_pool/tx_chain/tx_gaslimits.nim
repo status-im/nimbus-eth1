@@ -32,6 +32,7 @@ type
       ## been reached.
 
   TxChainGasLimits* = tuple
+    gasLimit: GasInt ## Parent gas limit, used as a base for others
     minLimit: GasInt ## Minimum `gasLimit` for the packer
     lwmLimit: GasInt ## Low water mark for VM/exec packer
     trgLimit: GasInt ## The `gasLimit` for the packer, soft limit
@@ -51,9 +52,9 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setPostLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
+proc setPostLondonLimits(gl: var TxChainGasLimits) =
   ## EIP-1559 conformant gas limit update
-  gl.trgLimit = max(gasLimit, GAS_LIMIT_MINIMUM)
+  gl.trgLimit = max(gl.gasLimit, GAS_LIMIT_MINIMUM)
 
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.md
   # find in box: block.gas_used
@@ -67,20 +68,20 @@ proc setPostLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
     gl.trgLimit = (gl.minLimit + gl.maxLimit) div 2
 
 
-proc setPreLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
+proc setPreLondonLimits(gl: var TxChainGasLimits) =
   ## Pre-EIP-1559 conformant gas limit update
   gl.maxLimit = PRE_LONDON_GAS_LIMIT_MAX
 
   const delta = (PRE_LONDON_GAS_LIMIT_TRG - GAS_LIMIT_MINIMUM) div 2
 
   # Just made up to be convenient for the packer
-  if gasLimit <= GAS_LIMIT_MINIMUM + delta:
-    gl.minLimit = max(gasLimit, GAS_LIMIT_MINIMUM)
+  if gl.gasLimit <= GAS_LIMIT_MINIMUM + delta:
+    gl.minLimit = max(gl.gasLimit, GAS_LIMIT_MINIMUM)
     gl.trgLimit = PRE_LONDON_GAS_LIMIT_TRG
   else:
     # This setting preserves the setting from the parent block
-    gl.minLimit = gasLimit - delta
-    gl.trgLimit = gasLimit
+    gl.minLimit = gl.gasLimit - delta
+    gl.trgLimit = gl.gasLimit
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -89,13 +90,14 @@ proc setPreLondonLimits(gl: var TxChainGasLimits; gasLimit: GasInt) =
 proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader; parentLimit: GasInt;
                    pc: TxChainGasLimitsPc): TxChainGasLimits =
   ## Calculate gas limits for the next block header.
+  result.gasLimit = parentLimit
 
   let nextFork = db.config.toFork(parent.blockNumber + 1)
 
   if FkLondon <= nextFork:
-    result.setPostLondonLimits(parentLimit)
+    result.setPostLondonLimits
   else:
-    result.setPreLondonLimits(parentLimit)
+    result.setPreLondonLimits
 
   # VM/exec low/high water marks, optionally provided for packer
   result.lwmLimit = max(

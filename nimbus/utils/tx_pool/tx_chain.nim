@@ -192,7 +192,7 @@ proc limits*(dh: TxChainRef): TxChainGasLimits =
   ## Getter
   dh.limits
 
-proc `lhwm=`*(dh: TxChainRef): TxChainGasLimitsPc =
+proc lhwm*(dh: TxChainRef): TxChainGasLimitsPc =
   ## Getter
   dh.lhwm
 
@@ -241,7 +241,9 @@ proc `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
   ## Setter, tuple `(lwmTrg,hwmMax)` will allow the packer to continue
   ## up until the percentage level has been reached of the `trgLimit`, or
   ## `maxLimit` depending on what has been activated.
-  dh.lhwm = val
+  if dh.lhwm != val:
+    dh.lhwm = val
+    dh.limits = dh.db.gasLimitsGet(dh.parent, dh.limits.gasLimit, dh.lhwm)
 
 proc miner*(dh: TxChainRef; val: EthAddress) =
   ## Setter

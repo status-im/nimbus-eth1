@@ -205,7 +205,7 @@ proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
 
 proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
   ## Variant of `effectiveGasTip()`
-  tx.effectiveGasTip(baseFee.truncate(uint64).GaSPrice)
+  tx.effectiveGasTip(baseFee.truncate(uint64).GasPrice)
 
 # ------------------------------------------------------------------------------
 # Public functions, item getters

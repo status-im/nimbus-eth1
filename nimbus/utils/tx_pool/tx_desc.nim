@@ -52,15 +52,20 @@ type
     packItemsMaxGasLimit ##\
       ## It set, the *packer* will execute and collect additional items from
       ## the `staged` bucket while accumulating `gasUsed` as long as
-      ## `maxGasLimit` is not exceeded. Otherwise it will only accumulate up
-      ## until `trgGasLimit` is reached.
+      ## `maxGasLimit` is not exceeded. If `packItemsTryHarder` flag is also
+      ## set, the *packer* will not stop until at least `hwmGasLimit` is
+      ## reached.
+      ##
+      ## Otherwise the *packer* will accumulate up until `trgGasLimit` is
+      ## not exceeded, and not stop until at least `lwmGasLimit` is reached
+      ## in case `packItemsTryHarder` is also set,
 
     packItemsTryHarder ##\
-      ## It set, the *packer* will *not* stop accumulaing items up until
-      ## the `maxGasLimit` or `trgGasLimit` is reached, depending on whether
-      ## the `packItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
-      ## until `lwmGasLimit` is reached and even more until `trgGasLimit`
-      ## is teached if `packItemsMaxGasLimit` is set.
+      ## It set, the *packer* will *not* stop accumulaing transactions up until
+      ## the `lwmGasLimit` or `hwmGasLimit` is reached, depending on whether
+      ## the `packItemsMaxGasLimit` is set. Otherwise, accumulating stops
+      ## immediately before the next transaction exceeds `trgGasLimit`, or
+      ## `maxGasLimit` depending on `packItemsMaxGasLimit`.
 
     # -----------
 

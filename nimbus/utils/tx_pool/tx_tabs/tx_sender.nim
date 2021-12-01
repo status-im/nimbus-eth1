@@ -323,27 +323,17 @@ proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
   ## The *rank* of the `sender` argument address is some expected
   ## *relative profitability* calculated as
   ## ::
-  ##     rank = profit(sender,baseFee) / gasLimits(sender)
-  ##
-  ## where the `gasLimits(sender)` is
-  ## ::
-  ##     gasLimits =  sum  item(sender,nonce).gasLimit
-  ##                 nonce
-  ##
-  ## and the `profit(sender,baseFee)` is
-  ## ::
-  ##     profit =  sum  item(sender,nonce).effectiveGasTip(baseFee)
-  ##              nonce
+  ##     rank =  sum  item(sender,nonce).effectiveGasTip(baseFee)
+  ##            nonce
   ##
   ## The latter is the aggregated `effectiveGasTip(baseFee)` value over all
   ## items for the argument `sender`. This value depends on the current value
-  ## of the `baseFee` parameter. So the *profit* and by implication the
-  ## return value of this `rank()` function should be seen as a temporary
-  ## snapshot, at best.
+  ## of the `baseFee` parameter. So the `rank()` function should be seen as
+  ## a temporary snapshot, at best.
   ##
   if gt.addrList.hasKey(sender):
     let schedData = gt.addrList[sender]
-    return ok(schedData.profit.int64 div schedData.allList.gasLimits)
+    return ok(schedData.profit.int64)
   err()
 
 

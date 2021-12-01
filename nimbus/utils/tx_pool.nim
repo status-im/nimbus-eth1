@@ -8,11 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool
-## ================
-##
 ## TODO:
-## -----
+## =====
 ## * Support `local` accounts the txs of which would be prioritised. This is
 ##   currently unsupported. For now, all txs are considered from `remote`
 ##   accounts.
@@ -31,193 +28,205 @@
 ##
 ## * Layzily flush the `packed` bucket after `head=` is run.
 ##
+## * Consider whether it is worth to calculate the account ranking over the
+##   non-pending txs (i.e. staged + packed), only.
 ##
 ##
-## Transaction state database:
-## ---------------------------
+## Transaction Pool
+## ================
+##
+## The transaction pool collects transactions and holds them in a database.
+## This database consists of the three buckets *pending*, *staged*, and
+## *packed* and a *waste basket*. These database entities are discussed in
+## more detail, below.
+##
+## At some point, there will be some transactions in the *staged* bucket.
+## Upon request, the pool will pack as many of those transactions as possible
+## into to *packed* bucket which will subsequently be used to generate a
+## new Ethereum block.
+##
+## When packing transactions from *staged* into *packed* bucked, the staged
+## transactions are sorted by *sender account* and *nonce*. The *sender
+## account* values are ordered by a *ranking* function (highest ranking first)
+## and the *nonce* values by their natural integer order. Then, transactions
+## are greedily picked from the ordered set until there are enough
+## transactions in the *packed* bucket. Some boundary condition applies which
+## roughly says that for a given account, all the transactions packed must
+## leave no gaps between nonce values when sorted.
+##
+## The rank function applied to the *sender account* sorting is chosen as a
+## guess for higher profitability which goes with a higher rank account.
+##
+##
+## Rank calculator
+## ---------------
+## Let *tx()* denote the mapping
 ## ::
-##  .     <Batch queue>  .   <Status buckets>      .    <Terminal state>
-##  .                    .                         .
-##  .                    .                         .    +----------+
-##  .  --> txJobAddTxs -------------------------------> |          |
-##  .              |     .        +-----------+    .    | disposed |
-##  .              +------- ----> |  pending  | ------> |          |
-##  .                    .        +-----------+    .    |          |
-##  .                    .          |  ^   ^       .    |  waste   |
-##  .                    .          v  |   |       .    |  basket  |
-##  .                    .   +----------+  |       .    |          |
-##  .                    .   |  staged  |  |       .    |          |
-##  .                    .   +----------+  |       .    |          |
-##  .                    .     |    |  ^   |       .    |          |
-##  .                    .     |    v  |   |       .    |          |
-##  .                    .     |  +----------+     .    |          |
-##  .                    .     |  |  packed  | -------> |          |
-##  .                    .     |  +----------+     .    |          |
-##  .                    .     +----------------------> |          |
-##  .                    .                         .    +----------+
+##   tx: (account,nonce) -> transaction
 ##
-## Discussion of transaction state database
-## ========================================
-## The three columns *Job queue*, *State bucket*, and *Terminal state*
-## represent three different accounting (or database) systems. Transactions
-## are bundled with meta data which holds the full datanbase state in addition
-## to other cached information like the sender account.
+## from a pair *(account,nonce)* to a transaction. Also, let
+## ::
+##   tip: (transaction,baseFee) -> transaction.effectiveGasTip(baseFee)
 ##
-## The transaction state database is continuosly updated while new
-## transactions are added.
+## be the parametrised transaction property of expected reward per gas burned
+## (given some external parameter *baseFee*.) Then the *rank* is calculated as
+## ::
+##   rank(account) = Σ tip(tx(account,ν))
+##                   ν
+##
+##
+##
+## Pool database:
+## --------------
+## ::
+##    <Batch queue>     .   <Status buckets>      .    <Terminal state>
+##                      .                         .
+##                      .                         .    +----------+
+##    --> txJobAddTxs -------------------------------> |          |
+##                |     .        +-----------+    .    | disposed |
+##                +------- ----> |  pending  | ------> |          |
+##                      .        +-----------+    .    |          |
+##                      .          |  ^   ^       .    |  waste   |
+##                      .          v  |   |       .    |  basket  |
+##                      .   +----------+  |       .    |          |
+##                      .   |  staged  |  |       .    |          |
+##                      .   +----------+  |       .    |          |
+##                      .     |    |  ^   |       .    |          |
+##                      .     |    v  |   |       .    |          |
+##                      .     |  +----------+     .    |          |
+##                      .     |  |  packed  | -------> |          |
+##                      .     |  +----------+     .    |          |
+##                      .     +----------------------> |          |
+##                      .                         .    +----------+
+##
+## The three columns *Batch queue*, *State bucket*, and *Terminal state*
+## represent three different accounting (or database) systems. The pool
+## database is continuosly updated while new transactions are added.
+## Transactions are bundled with meta data which holds the full datanbase
+## state in addition to other cached information like the sender account.
+##
 ##
 ## Batch Queue
 ## -----------
-## There is a batch queue of type `TxJobRef` which collects different types of
-## jobs (to be run in a batch.) When the batch queue worker `jobCommit()`
-## is invoked, all jobs are exeuted in *FIFO* mode until the queue is empty.
+## The batch queue holds different types of jobs to be run later in a batch.
+## When running at a time, all jobs are executed in *FIFO* mode until the queue
+## is empty.
 ##
-## New transactions are added to the pool by appending them to the batch
-## queue (as a job of type `txJobAddTxs`) while bundle them with meta
-## data as mentioned above. These bundles are called *item* of data type
-## `TxItemRef`. The items are forwarded to
+## When entering the pool, new transactions are bundled with meta data and
+## appended to the batch queue. These bundles are called *item*. When the
+## batch commits, items are forwarded to one of the following entites:
 ##
-## * the *staged* status bucket if the transaction is valid, and match some
-##   constraints on expected mining fees (or a semblance of that for *non-PoW*
+## * the *staged* bucket if the transaction is valid and match some constraints
+##   on expected minimum mining fees (or a semblance of that for *non-PoW*
 ##   networks)
-## * the *pending* status bucket if the transaction is valid but is not
-##   subject to be held in the *staged* status bucket
-## * the waste basket if the transaction is invalid
+## * the *pending* bucket if the transaction is valid but is not subject to be
+##   held in the *staged* bucket
+## * the *waste basket* if the transaction is invalid
 ##
-## If a valid transaction supersedes an existing one, the existing transaction
-## is moved to the waste basket and the new transaction replaces the existing
-## one in the current bucket if the gas price of the transaction is at least
-## `priceBump` per cent higher (see adjustable parameters, below.)
+## If a valid transaction item supersedes an existing one, the existing
+## item is moved to the waste basket and the new transaction replaces the
+## existing one in the current bucket if the gas price of the transaction is
+## at least `priceBump` per cent higher (see adjustable parameters, below.)
 ##
-## State buckets
-## -------------
+## Status buckets
+## --------------
 ## The term *bucket* is a nickname for a set of *items* (i.e. transactions
 ## bundled with meta data as mentioned earlier) all labelled with the same
 ## `status` symbol and not marked  *waste*. In particular, bucket membership
 ## for an item is encoded as
 ##
-## * the `status` field indicates the particular bucket label
-## * the `reject` field is reset/unset and has value `txInfoOk`
+## * the `status` field indicates the particular *bucket* membership
+## * the `reject` field is reset/unset and has zero-equivalent value
 ##
 ## The following boundary conditions hold for the union of all buckets:
 ##
-## * Let **T** be the union of all buckets and **Q** be the set of
-##   *(sender,nonce)* pairs derived from the items of **T**. Then
-##   **T** and **Q** are isomorphic, i.e. for each pair *(sender,nonce)*
-##   from **Q** there is exactly one item from **T**, and vice versa.
+## * *Unique index:*
+##    Let **T** be the union of all buckets and **Q** be the
+##    set of *(sender,nonce)* pairs derived from the items of **T**. Then
+##    **T** and **Q** are isomorphic, i.e. for each pair *(sender,nonce)*
+##    from **Q** there is exactly one item from **T**, and vice versa. 
 ##
-## * For each *(sender0,nonce0)* of **Q**, either *(sender0,nonce0-1)* is in
-##   **Q** or *nonce0* is the current nonce as registered with the *sender
-##   account* (implied by the block chain),
+## * *Consecutive nonces:*
+##     For each *(sender0,nonce0)* of **Q**, either
+##     *(sender0,nonce0-1)* is in  **Q** or *nonce0* is the current nonce as
+##     registered with the *sender account* (implied by the block chain),
 ##
-## The latter requirement involves the *sender account* which depends on the
-## current state of the block chain represented by the cached head (i.e.
-## insertion point where a new block is to be appended.)
+## The *consecutive nonces* requirement involves the *sender account*
+## which depends on the current state of the block chain as represented by the
+## internally cached head (i.e. insertion point where a new block is to be
+## appended.)
 ##
-## The following notation is used to describe the sets of *(sender,nonce)*
-## pairs derived from the transactions of the buckets. It will be used to
-## formulate per-bucket boundary conditions similar to the ones above.
+## The following notation describes sets of *(sender,nonce)* pairs for
+## per-bucket items. It will be used for boundary conditions similar to the
+## ones above.
 ##
-## * **Qpending** denotes the set of *(sender,nonce)* pairs for the
+## * **Pending** denotes the set of *(sender,nonce)* pairs for the
 ##   *pending* bucket
 ##
-## * **Qstaged** denotes the set of *(sender,nonce)* pairs for the
+## * **Staged** denotes the set of *(sender,nonce)* pairs for the
 ##   *staged* bucket
 ##
-## * **Qpacked** denotes the set of *(sender,nonce)* pairs for the
+## * **Packed** denotes the set of *(sender,nonce)* pairs for the
 ##   *packed* bucket
 ##
-## The pending transactions bucket
-## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-## Items in this bucket have `status` symbol `txItemPending`. These items
-## hold valid transactions that are not in any of the other buckets. All
-## itmes moght be promoted form here into other buckets if the global block
-## chain state changes.
+## The pending bucket
+## ^^^^^^^^^^^^^^^^^^
+## Items in this bucket hold valid transactions that are not in any of the
+## other buckets. All itmes might be promoted form here into other buckets if
+## the current state of the block chain as represented by the internally cached
+## head changes.
 ##
-## The staged transactions bucket
-## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-## Items in this bucket have `status` symbol `txItemStaged`. These items
-## are ready to be added to a new block. The transactions (as wrapped by the
-## items) are typycally above some expected mimum reward when mined on PoW
-## networks.
+## The staged bucket
+## ^^^^^^^^^^^^^^^^^
+## Items in this bucket are ready to be added to a new block. They typycally
+## imply some expected minimum reward when mined on PoW networks. Some
+## boundary condition holds:
 ##
-## The following boundary conditions holds:
+## * *Consecutive nonces:*
+##     For any *(sender0,nonce0)* pair from **Staged**, the pair
+##     *(sender0,nonce0-1)* is not in **Pending**.
 ##
-## * For any *(sender0,nonce0)* pair from **Qstaged**, the pair
-##   *(sender0,nonce0-1)* is not in **Qpending**.
+## Considering the respective boundary condition on the union of buckets
+## **T**, this condition here implies that a *staged* per sender nonce has a
+## predecessor in the *staged* or *packed* bucket or is a nonce as registered
+## with the *sender account*.
 ##
-## Considering the overall boundary condition on the union of buckets, the
-## latter condition implies that a *staged* per sender nonce has a predecessor
-## in the *staged* or *packed* bucket or is a nonce as registered with the
-## *sender account*.
+## The packed bucket
+## ^^^^^^^^^^^^^^^^^
+## All items from this bucket have been selected from the *staged* bucket, the
+## transactions of which (i.e. unwrapped items) can go right away into a new
+## ethernet block. How these items are selected was described at the beginning
+## of this chapter. The following boundary conditions holds:
 ##
-## The packed transactions bucket
-## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-## ... **outdated** ...
+## * *Consecutive nonces:*
+##     For any *(sender0,nonce0)* pair from **Packed**, the pair
+##     *(sender0,nonce0-1)* is neither in **Pending**, nor in **Staged**.
 ##
-#[
-## Items in this bucket have `status` symbol `txItemPacked`. These items
-## are incrementally updated regularly after new items wre added to the
-## `staged` bucket. The packed transactions bucket is filled up with items
-## while adding up the per transaction `gasLimit` values. The accumulated
-## items in that bucket will not exceed the `maxGasLimit` hard limit which
-## is derived from current state of the block chain.
-]#
-
-## The following boundary conditions holds:
-##
-## * For any *(sender0,nonce0)* pair from **Qpacked**, the pair
-##   *(sender0,nonce0-1)* is not in **Qpending** and not in **Qstaged**.
-##
-## Considering the overall boundary condition on the union of buckets, the
-## latter condition implies that a *packed* per sender nonce has a predecessor
-## in the very *packed* bucket or is a nonce as registered with the
+## Considering the respective boundary condition on the union of buckets
+## **T**, this condition here implies that a *packed* per-sender nonce has a
+## predecessor in the very *packed* bucket or is a nonce as registered with the
 ## *sender account*.
 ##
 ##
 ## Terminal state
 ## --------------
-## All items are disposed into a waste basket *FIFO* of a defined maximal
-## length. If this length is reached, the oldest item is deleted.
+## After use, items are disposed into a waste basket *FIFO* queue which has a
+## maximal length. If the length is exceeded, the oldest items are deleted.
+## The waste basket is used as a cache for discarded transactions that need to
+## re-enter the system. Recovering from the waste basket saves the effort of
+## recovering the sender account from the signature. An item is identified
+## *waste* if
 ##
-## An item is identified as waste if
+## * the `reject` field is explicitely set and has a value different
+##   from a zero-equivalent.
 ##
-## * the `reject` field has a value different from `txInfoOk`
+## So a *waste* item is clearly distinguishable from any active one as a
+## member of one of the *status buckets*.
 ##
-## Thus a *waste* item is clearly distinguishable from an active one while
-## member of one of the buckets described above.
-##
-## The items in the waste basket are used as a meta data cache in case that a
-## previously discarded transaction needs to re-enter the system. Recovering
-## from the waste basket saves the effort of recovering the sender account
-## from the signature.
-##
-##
-## Packing and squeezing
-## =====================
-## Boundary conditions assumed, the pool is challenged to pack together as
-## much transactions as possible into a single ethereum block. This is
-## accomplished by the two methods named *packing* and *squeezing*.
-##
-## While *packing* refers to continuously collecting items in the *packed*
-## bucket as described above, the result is rather poor given that the target
-## function is the summation of per-transaction `maxLimit` values. These
-## values are often way above the real gas used having the transactions
-## executed.
-##
-## So there is the second stage of transaction compacting called *squeezing*.
-## It relies on the somewhat expensive action of executing transactions in
-## order to find out about the real amount of gas burned. In this *squeezing*
-## stage, all transactions from the *packed* bucket are compacted and the
-## real value of gas needed is summed up. Remaining space is then filled up
-## by transactions taken from the *staged* bucket.
-##
-## This second stage is unavoidable anyway if the updated state root, receipt
-## root, etc. for a new block header is to be calculated.
 ##
 ## 
-## Interaction of components
-## =========================
+## Pool coding
+## ===========
 ## The idea is that there are concurrent *async* instances feeding transactions
 ## into a batch queue via `jobAddTxs()`. The batch queue is then processed on
 ## demand not until `jobCommit()` is run. A piece of code using this pool
@@ -241,7 +250,7 @@
 ##    let newBlock = xq.ethBlock             # fetch current mining block
 ##
 ##    ..
-##    mineThatBlock(newBlock) ...            # some external mining process
+##    mineThatBlock(newBlock) ...            # external mining & signing process
 ##    ..
 ##
 ##    let newTopHeader = db.getCanonicalHead # new head after mining
@@ -256,19 +265,15 @@
 ## a batch of jobs to be processed at a time when considered right. The
 ## processing is initiated with the `jobCommit()` directive.
 ##
-## There is the block packer which works incrementally moving blocks considered
-## apt to the *packed* bucket. It is typically invoked
-## implicitly by `jobCommit()` after some txs were processed. The currently
-## accumulated gas limits for all the buckets can always be inspected with
-## `gasTotals()`.
-##
 ## The `ethBlock()` directive retrieves a new block for mining derived
-## from the current pool state.
+## from the current pool state. It invokes the block packer whic accumulates
+## txs from the `pending` buscket into the `packed` bucket which then go
+## into the block.
 ##
-## Then mining takes place ...
+## Then mining and signing takes place ...
 ##
-## After mining, the view of the block chain as seen by the pool must be
-## updated to be ready for a new mining process. In the best case, the
+## After mining and signing, the view of the block chain as seen by the pool
+## must be updated to be ready for a new mining process. In the best case, the
 ## canonical head is just moved to the currently mined block which would imply
 ## just to discard the contents of the *packed* bucket with some additional
 ## transactions from the *staged* bucket. A more general block chain state
@@ -314,15 +319,20 @@
 ##   *packItemsMaxGasLimit*
 ##     It set, the *packer* will execute and collect additional items from
 ##     the `staged` bucket while accumulating `gasUsed` as long as
-##     `maxGasLimit` is not exceeded. Otherwise it will only accumulate up
-##     until `trgGasLimit` is reached.
+##     `maxGasLimit` is not exceeded. If `packItemsTryHarder` flag is also
+##     set, the *packer* will not stop until at least `hwmGasLimit` is
+##     reached.
+##
+##     Otherwise the *packer* will accumulate up until `trgGasLimit` is
+##     not exceeded, and not stop until at least `lwmGasLimit` is reached
+##     in case `packItemsTryHarder` is also set,
 ##
 ##   *packItemsTryHarder*
-##     It set, the *packer* will *not* stop accumulaing items up until
-##     the `maxGasLimit` or `trgGasLimit` is reached, depending on whether
-##     the `packItemsMaxGasLimit` is set. Otherwise, accumulating proceeds
-##     until `lwmGasLimit` is reached and even more until `trgGasLimit`
-##     is teached if `packItemsMaxGasLimit` is set.
+##     It set, the *packer* will *not* stop accumulaing transactions up until
+##     the `lwmGasLimit` or `hwmGasLimit` is reached, depending on whether
+##     the `packItemsMaxGasLimit` is set. Otherwise, accumulating stops
+##     immediately before the next transaction exceeds `trgGasLimit`, or
+##     `maxGasLimit` depending on `packItemsMaxGasLimit`.
 ##
 ##   *autoUpdateBucketsDB*
 ##     Automatically update the state buckets after running batch jobs if the
@@ -342,10 +352,18 @@
 ##   Cached block chain insertion point. Typocally, this should be the the
 ##   same header as retrieved by the `getCanonicalHead()`.
 ##
+## hwmTrgPercent
+##   This parameter implies the size of `hwmGasLimit` which is calculated
+##   as `max(trgGasLimit, maxGasLimit * lwmTrgPercent  / 100)`.
+##
 ## lifeTime
 ##   Txs that stay longer in one of the buckets will be  moved to a waste
 ##   basket. From there they will be eventually deleted oldest first when
 ##   the maximum size would be exceeded.
+##
+## lwmMaxPercent
+##   This parameter implies the size of `lwmGasLimit` which is calculated
+##   as `max(minGasLimit, trgGasLimit * lwmTrgPercent  / 100)`.
 ##
 ## minFeePrice
 ##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
@@ -371,9 +389,9 @@
 ## --------------------
 ##
 ## baseFee
-##   This parameter is derived from the current block chain head. The base fee
-##   parameter modifies/determines the expected gain when packing a new block
-##   (is set to *zero* for *pre-London* blocks.)
+##   This parameter is derived from the internally cached block chain state.
+##   The base fee parameter modifies/determines the expected gain when packing
+##   a new block (is set to *zero* for *pre-London* blocks.)
 ##
 ## dirtyBuckets
 ##   If `true`, the state buckets database is ready for re-org if the
@@ -381,13 +399,40 @@
 ##
 ## gasLimit
 ##   Taken or derived from the current block chain head, incoming txs that
-##   exceed this gas limit are stored into the pending bucket (waiting for the
-##   next cycle.)
+##   exceed this gas limit are stored into the *pending* bucket (maybe
+##   eligible for staging at the next cycle when the internally cached block
+##   chain state is updated.)
 ##
-## lwmGasLimit, minGasLimit, maxGasLimit, trgGasLimit
-##   These parameters are derived from the current block chain head. The limit
-##   parameters set conditions on how many blocks from the packed bucket can be
-##   packed into the body of a new block.
+## hwmGasLimit
+##   This parameter is at least `trgGasLimit` and does not exceed
+##   `maxGasLimit` and can be adjusted by means of setting `hwmMaxPercent`. It
+##   is used by the packer as a minimum block size if both flags
+##   `packItemsTryHarder` and `packItemsMaxGasLimit` are set.
+##
+## lwmGasLimit
+##   This parameter is at least `minGasLimit` and does not exceed
+##   `trgGasLimit` and can be adjusted by means of setting `lwmTrgPercent`. It
+##   is used by the packer as a minimum block size if the flag
+##   `packItemsTryHarder` is set and `packItemsMaxGasLimit` is unset.
+##
+## maxGasLimit
+##   This parameter is at least `hwmGasLimit`. It is calculated considering
+##   the current state of the block chain as represented by the internally
+##   cached head. This parameter is used by the *packer* as a size limit if
+##   `packItemsMaxGasLimit` is set.
+##
+## minGasLimit
+##   This parameter is calculated considering the current state of the block
+##   chain as represented by the internally cached head. It can be used for
+##   verifying that a generated block does not underflow minimum size.
+##   Underflow can only be happen if there are not enough transaction available
+##   in the pool.
+##
+## trgGasLimit
+##   This parameter is at least `lwmGasLimit` and does not exceed
+##   `maxGasLimit`. It is calculated considering the current state of the block
+##   chain as represented by the internally cached head. This parameter is
+##   used by the *packer* as a size limit if `packItemsMaxGasLimit` is unset.
 ##
 
 import
@@ -635,9 +680,19 @@ proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
+proc lwmTrgPercent*(xp: TxPoolRef): int =
+  ## Getter, `trgGasLimit` percentage for `lwmGasLimit` which is
+  ## `max(minGasLimit, trgGasLimit * lwmTrgPercent  / 100)`
+  xp.chain.lhwm.lwmTrg
+
 proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pFlags
+
+proc hwmMaxPercent*(xp: TxPoolRef): int =
+  ## Getter, `maxGasLimit` percentage for `hwmGasLimit` which is
+  ## `max(trgGasLimit, maxGasLimit * hwmMaxPercent  / 100)`
+  xp.chain.lhwm.hwmMax
 
 proc maxGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
@@ -698,9 +753,19 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
   xp.txDB.baseFee = val
   xp.chain.baseFee = val
 
+proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
+  ## Setter, `val` arguments outside `0..100` are ignored
+  if 0 <= val and val <= 100:
+    xp.chain.lhwm = (lwmTrg: val, hwmMax: xp.chain.lhwm.hwmMax)
+
 proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
+
+proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
+  ## Setter, `val` arguments outside `0..100` are ignored
+  if 0 <= val and val <= 100:
+    xp.chain.lhwm = (lwmTrg: xp.chain.lhwm.lwmTrg, hwmMax: val)
 
 proc `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
