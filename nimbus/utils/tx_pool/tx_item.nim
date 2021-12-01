@@ -65,7 +65,6 @@ proc `$`*(a: GasPrice): string {.borrow.}
 proc `<`*(a, b: GasPrice): bool {.borrow.}
 proc `<=`*(a, b: GasPrice): bool {.borrow.}
 proc `==`*(a, b: GasPrice): bool {.borrow.}
-proc `*`*(a, b: GasPrice): GasPrice {.borrow.}
 proc `+`*(a, b: GasPrice): GasPrice {.borrow.}
 proc `-`*(a, b: GasPrice): GasPrice {.borrow.}
 
@@ -78,22 +77,29 @@ proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 proc `+=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
 proc `-=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
 
-# mixed stuff
+# Multiplication/division of *price* and *commodity unit*
 
-proc `-`*(a: GasPrice; b: SomeUnsignedInt): GasPrice =
-  a - b.GasPrice # beware of underflow
+proc `*`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
+proc `*`*(a: SomeUnsignedInt; b: GasPrice): GasPrice {.borrow.}
 
-proc `*`*(a: SomeUnsignedInt; b: GasPrice): GasPrice =
-  (a * b.uint64).GasPrice # beware of overflow
+proc `div`*(a: GasPrice; b: SomeUnsignedInt): GasPrice =
+  (a.uint64 div b).GasPrice # beware of zero denominator
 
 proc `*`*(a: SomeInteger; b: GasPriceEx): GasPriceEx =
   (a * b.int64).GasPriceEx # beware of under/overflow
 
-proc `<`*(a: GasPriceEx|SomeInteger; b: GasPrice): bool =
-  if a.GasPriceEx < 0.GasPriceEx: true else: a.GasPrice < b
+# Mixed stuff, convenience ops
 
-proc `<`*(a: GasPriceEx; b: SomeInteger): bool =
-  a < b.GasPriceEx
+proc `-`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
+
+proc `<`*(a: GasPriceEx; b: SomeSignedInt): bool =
+  a.int64 < b
+
+proc `<`*(a: GasPriceEx|SomeSignedInt; b: GasPrice): bool =
+  if a.int64 < 0: true else: a.GasPrice < b
+
+proc `<=`*(a: SomeSignedInt; b: GasPriceEx): bool =
+  a < b.int64
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor

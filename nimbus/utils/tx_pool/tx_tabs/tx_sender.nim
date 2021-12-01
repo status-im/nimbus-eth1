@@ -13,6 +13,7 @@
 ##
 
 import
+  std/[math],
   ../tx_info,
   ../tx_item,
   eth/[common],
@@ -24,13 +25,13 @@ type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
-    gasLimits: GasInt                   ## Accumulated gas limits
+    gasLimits: GasInt     ## Accumulated gas limits
+    profit: float64       ## Aggregated `effectiveGasTip*gasLimit` values
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
     ## For a sender, items can be accessed by *nonce*, or *status,nonce*.
     size: int             ## Total number of items
-    profit: GasPriceEx    ## aggregated `effectiveGasTip()` values
     statusList: array[TxItemStatus,TxSenderNonceRef]
     allList: TxSenderNonceRef
 
@@ -43,7 +44,7 @@ type
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
-    txSenderAny = 0     ## All entries status (aka bucket name) ...
+    txSenderAny = 0       ## All entries status (aka bucket name) ...
     txSenderPending
     txSenderStaged
     txSenderPacked
@@ -72,7 +73,20 @@ proc nActive(rq: TxSenderSchedRef): int =
     if not rq.statusList[status].isNil:
       result.inc
 
-proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
+func differs(a, b: float64): bool =
+  ## Syntactic sugar, crude comparator for large integer values a and b coded
+  ## as `float64`. This function is mainly provided for the `verify()` function.
+  # note that later NIM compilers also provide `almostEqual()`
+  const
+    epsilon = 1.0e+15'f64           # just arbitrary, something small
+  let
+    x = max(a, b)
+    y = min(a, b)
+    z = if x == 0: 1'f64 else: x    # 1f64 covers the case x == y == 0.0
+  epsilon < (x - y) / z
+
+
+func toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
   case status
   of txItemPending:
     return txSenderPending
@@ -80,6 +94,42 @@ proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
     return txSenderStaged
   of txItemPacked:
     return txSenderPacked
+
+proc getRank(schedData: TxSenderSchedRef): int64 =
+  ## Rank calculator
+  let pendingData = schedData.statusList[txItemPending]
+
+  var
+    maxProfit = schedData.allList.profit
+    gasLimits = schedData.allList.gasLimits
+  if not pendingData.isNil:
+    maxProfit -= pendingData.profit
+    gasLimits -= pendingData.gasLimits
+
+  if gasLimits <= 0:
+    return int64.low
+  let profit = maxProfit / gasLimits.float64
+
+  # Beware of under/overflow
+  if profit < int64.low.float64:
+    return int64.low
+  if int64.high.float64 < profit:
+    return int64.high
+
+  profit.int64
+
+proc maxProfit(item: TxItemRef; baseFee: GasPrice): float64 =
+  ## Profit calculator
+  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64
+
+proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasPrice) =
+  ## Re-calculate profit value depending on `baseFee`
+  nonceData.profit = 0.0
+  var rc = nonceData.nonceList.ge(AccountNonce.low)
+  while rc.isOk:
+    let item = rc.value.data
+    nonceData.profit += item.maxProfit(baseFee)
+    rc = nonceData.nonceList.gt(item.tx.nonce)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -157,14 +207,18 @@ proc insert*(gt: var TxSenderTab; item: TxItemRef): bool
   ## transaction exists, already.
   let rc = gt.mkInxImpl(item)
   if rc.isOK:
-    let inx = rc.value
+    let
+      inx = rc.value
+      tip = item.maxProfit(gt.baseFee)
     gt.size.inc
 
     inx.schedData.size.inc
-    inx.schedData.profit += item.tx.effectiveGasTip(gt.baseFee)
 
     inx.statusNonce.gasLimits += item.tx.gasLimit
+    inx.statusNonce.profit += tip
+
     inx.allNonce.gasLimits += item.tx.gasLimit
+    inx.allNonce.profit += tip
     return true
 
 
@@ -172,11 +226,12 @@ proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = gt.getInxImpl(item)
   if rc.isOK:
-    let inx = rc.value
-
+    let
+      inx = rc.value
+      tip = item.maxProfit(gt.baseFee)
     gt.size.dec
+
     inx.schedData.size.dec
-    inx.schedData.profit -= item.tx.effectiveGasTip(gt.baseFee)
 
     discard inx.allNonce.nonceList.delete(item.tx.nonce)
     if inx.allNonce.nonceList.len == 0:
@@ -185,6 +240,7 @@ proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
       return true
 
     inx.allNonce.gasLimits -= item.tx.gasLimit
+    inx.allNonce.profit -= tip
 
     discard inx.statusNonce.nonceList.delete(item.tx.nonce)
     if inx.statusNonce.nonceList.len == 0:
@@ -192,12 +248,14 @@ proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
       return true
 
     inx.statusNonce.gasLimits -= item.tx.gasLimit
+    inx.statusNonce.profit -= tip
     return true
 
 
 proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Walk `EthAddress` > `TxSenderLocus` > `AccountNonce` > items
+
   block:
     let rc = gt.addrList.verify
     if rc.isErr:
@@ -218,6 +276,7 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
     var
       statusCount = 0
       statusGas = 0.GasInt
+      statusProfit = 0.0
     for status in TxItemStatus:
       let statusData = schedData.statusList[status]
 
@@ -227,7 +286,9 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           if rc.isErr:
             return err(txInfoVfySenderRbTree)
 
-        var rcNonce = statusData.nonceList.ge(AccountNonce.low)
+        var
+          rcNonce = statusData.nonceList.ge(AccountNonce.low)
+          bucketProfit = 0.0
         while rcNonce.isOK:
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = statusData.nonceList.gt(nonceKey)
@@ -235,15 +296,28 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           statusGas += item.tx.gasLimit
           statusCount.inc
 
+          bucketProfit += item.maxProfit(gt.baseFee)
+
+        statusProfit += bucketProfit
+
+        if differs(statusData.profit, bucketProfit):
+          echo "*** verify (1) ", statusData.profit," != ", bucketProfit
+          return err(txInfoVfySenderProfits)
+
+        # verify that `recalcProfit()` works
+        statusData.recalcProfit(gt.baseFee)
+        if differs(statusData.profit, bucketProfit):
+          echo "*** verify (2) ", statusData.profit," != ", bucketProfit
+          return err(txInfoVfySenderProfits)
+
     # allList
     # ----------------------------------------------------------------
     var
       allCount = 0
       allGas = 0.GasInt
+      allProfit = 0.0
     block:
-      var
-        allData = schedData.allList
-        perAddrSum: GasPriceEx
+      var allData = schedData.allList
 
       block:
         let rc = allData.nonceList.verify
@@ -255,13 +329,23 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = allData.nonceList.gt(nonceKey)
 
-          perAddrSum += item.tx.effectiveGasTip(gt.baseFee)
+          allProfit += item.maxProfit(gt.baseFee)
           allGas += item.tx.gasLimit
           allCount.inc
 
-      if schedData.profit != perAddrSum:
-        return err(txInfoVfySenderProfits)
+        if differs(allData.profit, allProfit):
+          echo "*** verify (3) ", allData.profit," != ", allProfit
+          return err(txInfoVfySenderProfits)
 
+        # verify that `recalcProfit()` works
+        allData.recalcProfit(gt.baseFee)
+        if differs(allData.profit, allProfit):
+          echo "*** verify (4) ", allData.profit," != ", allProfit
+          return err(txInfoVfySenderProfits)
+
+    if differs(allProfit, statusProfit):
+      echo "*** verify (5) ", allProfit," != ", statusProfit
+      return err(txInfoVfySenderProfits)
     if allGas != statusGas:
       return err(txInfoVfySenderTotal)
     if statusCount != schedData.size:
@@ -296,15 +380,16 @@ proc `baseFee=`*(gt: var TxSenderTab; val: GasPrice)
   gt.baseFee = val
 
   for p in gt.addrList.nextPairs:
-    let
-      schedData = p.data
-      nonceData = schedData.allList
-    var rc = nonceData.nonceList.ge(AccountNonce.low)
-    schedData.profit = 0.GasPriceEx
-    while rc.isOk:
-      let item = rc.value.data
-      schedData.profit += item.tx.effectiveGasTip(val)
-      rc = nonceData.nonceList.gt(item.tx.nonce)
+    let schedData = p.data
+
+    # statusList[]
+    for status in TxItemStatus:
+      let statusData = schedData.statusList[status]
+      if not statusData.isNil:
+        statusData.recalcProfit(val)
+
+    # allList
+    schedData.allList.recalcProfit(val)
 
 # ------------------------------------------------------------------------------
 # Public SortedSet ops -- `EthAddress` (level 0)
@@ -320,20 +405,14 @@ proc nItems*(gt: var TxSenderTab): int =
 
 proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## The *rank* of the `sender` argument address is some expected
-  ## *relative profitability* calculated as
+  ## The *rank* of the `sender` argument address is the
   ## ::
-  ##     rank =  sum  item(sender,nonce).effectiveGasTip(baseFee)
-  ##            nonce
+  ##    maxProfit() / gasLimits()
   ##
-  ## The latter is the aggregated `effectiveGasTip(baseFee)` value over all
-  ## items for the argument `sender`. This value depends on the current value
-  ## of the `baseFee` parameter. So the `rank()` function should be seen as
-  ## a temporary snapshot, at best.
+  ## calculated over all items of the `staged` and `packed` buckets.
   ##
   if gt.addrList.hasKey(sender):
-    let schedData = gt.addrList[sender]
-    return ok(schedData.profit.int64)
+    return ok(gt.addrList[sender].getRank)
   err()
 
 
@@ -441,9 +520,28 @@ proc gasLimits*(nonceData: TxSenderNonceRef): GasInt =
 
 proc gasLimits*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
               GasInt =
+  ## Getter variant of `gasLimits()`, returns `0` if `rc.isErr`
+  ## evaluates `true`.
   if rc.isOK:
     return rc.value.data.gasLimits
   0
+
+
+proc maxProfit*(nonceData: TxSenderNonceRef): float64 =
+  ## Getter, maximum profit value for the current item list. This is the
+  ## aggregated value of `item.effectiveGasTip(baseFee) * item.gasLimit`
+  ## over all items in the argument list `nonceData`. Note that this value
+  ## is typically pretty large and sort of rounded due to the resolution
+  ## of the `float64` data type.
+  nonceData.profit
+
+proc maxProfit*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
+              float64 =
+  ## Variant of `profit()`, returns `GasPriceEx.low` if `rc.isErr`
+  ## evaluates `true`.
+  if rc.isOK:
+    return rc.value.data.profit
+  float64.low
 
 
 proc eq*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
@@ -514,7 +612,7 @@ iterator accounts*(gt: var TxSenderTab): (EthAddress,int64)
   ## Sender account traversal, returns the account address and the rank
   ## for that account.
   for p in gt.addrList.nextPairs:
-    yield (p.key, p.data.profit.int64 div p.data.allList.gasLimits)
+    yield (p.key, p.data.getRank)
 
 # ------------------------------------------------------------------------------
 # End

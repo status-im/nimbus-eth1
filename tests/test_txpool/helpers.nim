@@ -24,6 +24,8 @@ export
   tx_chain.db,
   tx_chain.limits,
   tx_chain.nextFork,
+  tx_chain.profit,
+  tx_chain.reward,
   tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,
@@ -214,6 +216,11 @@ proc pp*(w: TxTabsItemsCount): string =
 
 proc pp*(w: TxTabsGasTotals): string =
   &"{w.pending}/{w.staged}/{w.packed}"
+
+proc pp*(w: TxChainGasLimits): string =
+  &"min={w.minLimit}" &
+    &" trg={w.lwmLimit}:{w.trgLimit}" &
+    &" max={w.hwmLimit}:{w.maxLimit}"
 
 # ------------------------------------------------------------------------------
 # Public functions, other

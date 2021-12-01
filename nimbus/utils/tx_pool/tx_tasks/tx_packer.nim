@@ -28,7 +28,7 @@ import
   ./tx_bucket,
   ./tx_classify,
   chronicles,
-  eth/[bloom, common, keys, rlp, trie, trie/db],
+  eth/[common, keys, rlp, trie, trie/db],
   stew/[sorted_set]
 
 {.push raises: [Defect].}
@@ -37,10 +37,11 @@ type
   TxPackerError* = object of CatchableError
     ## Catch and relay exception error
 
-  # TODO: these types need to be removed
-  # once eth/bloom and eth/common sync'ed
-  # Bloom = common.BloomFilter
-  # LogsBloom = bloom.BloomFilter
+  TxPackerStateRef = ref object
+    xp: TxPoolRef
+    tr: HexaryTrie
+    vmState: BaseVMState
+    stop: bool
 
 const
   receiptsExtensionSize = ##\
@@ -50,7 +51,7 @@ const
 logScope:
   topics = "tx-pool packer"
 
-#[
+# [
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
@@ -74,6 +75,11 @@ proc pp(item: TxItemRef): string =
     "," & item.sender.pp &
     "," & $item.tx.nonce &
     ")"
+
+template say(args: varargs[untyped]): untyped =
+  # echo "*** ", args
+  discard
+
 #]#
 
 # ------------------------------------------------------------------------------
@@ -91,206 +97,268 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
-proc gasBurned(xp: TxPoolRef; vmState: BaseVMState): GasInt =
+proc gasBurned(pst: TxPackerStateRef): GasInt =
   ## To be used instead of `vmState.cumulativeGasUsed` which is ignored as the
   ## same value is available as `vmState.receipts[inx-1].cumulativeGasUsed`.
   ## This makes it handy for transparently picking up after a rollback.
-  let inx = xp.txDB.byStatus.eq(txItemPacked).nItems
+  let inx = pst.xp.txDB.byStatus.eq(txItemPacked).nItems
   if 0 < inx:
-    result = vmState.receipts[inx-1].cumulativeGasUsed
+    result = pst.vmState.receipts[inx-1].cumulativeGasUsed
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(xp: TxPoolRef; vmState: BaseVMState; item: TxItemRef): GasInt
+proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  let gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
-  if 0.GasPriceEx <= gasTip:
-    let
-      fork = xp.chain.nextFork
-      miner = xp.chain.miner
-
+  safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
-    safeExecutor "tx_packer.runTx":
-      result = item.tx.txCallEvm(item.sender, vmState, fork)
+    result = item.tx.txCallEvm(item.sender, pst.vmState, pst.xp.chain.nextFork)
+  doAssert 0 <= result
 
-    vmState.stateDB.addBalance(miner, (result * gasTip).uint64.u256)
-
-    # Update account database
-    vmState.mutateStateDB:
-      for deletedAccount in vmState.selfDestructs:
-        db.deleteAccount deletedAccount
-
-      if FkSpurious <= fork:
-        vmState.touchedAccounts.incl(miner)
-        # EIP158/161 state clearing
-        for account in vmState.touchedAccounts:
-          if db.accountExists(account) and db.isEmptyAccount(account):
-            debug "state clearing", account
-            db.deleteAccount(account)
-
-    if vmState.generateWitness:
-      vmState.stateDB.collectWitnessData()
-      vmState.stateDB.persist(clearCache = false)
-
-
-proc runTxFinish(xp: TxPoolRef;
-                 vmState: BaseVMState; item: TxItemRef; gasBurned: GasInt): bool
+proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
-  let inx = xp.txDB.byStatus.eq(txItemPacked).nItems
-  var receipt: Receipt
+  let
+    xp = pst.xp
+    vmState = pst.vmState
+    inx = xp.txDB.byStatus.eq(txItemPacked).nItems
+    gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
 
-  # Update receipt, see `p2p/executor/executor_helper.makeReceipt()`
-  if xp.chain.nextFork < FkByzantium:
-    receipt.isHash = true
-    receipt.hash = vmState.stateDB.rootHash
-  else:
-    receipt.isHash = false
-    receipt.status = vmState.status
+  # The gas tip cannot get negative as all items in the `staged` bucket
+  # are vetted for profitability before entering that bucket.
+  assert 0 <= gasTip
+  vmState.stateDB.addBalance(xp.chain.miner, (gasBurned * gasTip).uint64.u256)
 
-  # copied from `p2p/executor/executor_helper.makeReceipt()`
-  func logsBloom(logs: openArray[Log]): bloom.BloomFilter =
-    for log in logs:
-      result.incl log.address
-      for topic in log.topics:
-        result.incl topic
+  # Update account database
+  vmState.mutateStateDB:
+    for deletedAccount in vmState.selfDestructs:
+      db.deleteAccount deletedAccount
 
-  receipt.receiptType = item.tx.txType
-  receipt.cumulativeGasUsed = xp.gasBurned(vmState) + gasBurned
-  receipt.logs = vmState.getAndClearLogEntries()
-  receipt.bloom = logsBloom(receipt.logs).value.toByteArrayBE
+    if FkSpurious <= xp.chain.nextFork:
+      vmState.touchedAccounts.incl(xp.chain.miner)
+      # EIP158/161 state clearing
+      for account in vmState.touchedAccounts:
+        if db.accountExists(account) and db.isEmptyAccount(account):
+          debug "state clearing", account
+
+  if vmState.generateWitness:
+    vmState.stateDB.collectWitnessData()
+
+  # Commit accounts
+  vmState.stateDB.persist(clearCache = false)
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
-  vmState.receipts[inx] = receipt
+
+  vmState.cumulativeGasUsed = pst.gasBurned + gasBurned
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+
+  # Update txRoot
+  pst.tr.put(rlp.encode(inx), rlp.encode(item.tx))
 
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.
-  xp.txDB.reassign(item,txItemPacked)
+  discard xp.txDB.reassign(item,txItemPacked)
+
+# ------------------------------------------------------------------------------
+# Private functions: packer loop
+# ------------------------------------------------------------------------------
+
+#[
+proc collectAccount(pst: TxPackerStateRef;
+                    nonceList: TxStatusNonceRef): bool
+    {.gcsafe,raises: [Defect,CatchableError].}  =
+  ## Make sure that the full account list goes into the block. Otherwise
+  ## proceed with per-item transaction/step-wise mode, below.
+  let
+    xp = pst.xp
+    vmState = pst.vmState
+
+  let dbTx = xp.chain.db.db.beginTransaction
+  defer:
+    say "db.dispose"
+    dbTx.dispose
+
+  # Keep a list of items added. It will be used either for rollback,
+  # or for the account-wise update of the txRoot.
+  var
+    allFuel = 0.GasInt
+    topOfList = 0
+    itemList = newSeq[TxItemRef](nonceList.len)
+
+  proc rollbackItems {.gcsafe,raises: [Defect,CatchableError].}  =
+    say "collectAccount rollback",
+      " account=", itemList[0].sender.pp, " len=", topOfList
+    for inx in 0 ..< topOfList:
+      discard xp.txDB.reassign(itemList[inx],txItemStaged)
+
+  # Need this setting for checking the final balance
+  let preBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+
+  # Collect items and pack
+  for item in nonceList.incNonce:
+    let accTx = vmState.stateDB.beginSavepoint
+    defer:
+      say "stateDB.dispose ", item.pp
+      vmState.stateDB.dispose(accTx)
+
+    itemList[topOfList] = item # FIXME, debugging only
+    let
+      totalGas = pst.gasBurned
+      gasUsed = pst.runTx(item)
+    if not xp.classifyPacked(totalGas, gasUsed):
+      # Undo collecting items for this account, so far
+      rollbackItems()
+      say "collectAccount item too big ", item.pp
+      return false
+
+    # Commit account state DB
+    vmState.stateDB.commit(accTx)
+
+    # Finish book-keeping and move item to `packed` bucket
+    pst.runTxCommit(item, gasUsed)
+
+    # Locally accumulate total gas
+    allFuel += gasUsed
+
+    # Collect item for post-processing and/or rollback
+    itemList[topOfList] = item
+    topOfList.inc
+
+  # Post process packed items. Verify that packing all of this account
+  # was sort of profitable, after all.
+  block acceptCollection:
+    if 0 < allFuel:
+      let
+        delta = vmState.readOnlyStateDB.getBalance(xp.chain.miner) - preBalance
+        profitability = (delta div allFuel.u256).truncate(uint64).GasPrice
+      if xp.pMinTipPrice <= profitability:
+        break acceptCollection
+
+    rollbackItems()
+    return false
+
+  # Accept full group of account items if profitable enough
+  dbTx.commit
+  true
+#]#
+
+proc collectItem(pst: TxPackerStateRef; item: TxItemRef): bool
+    {.gcsafe,raises: [Defect,CatchableError].}  =
+  ## Collect single item in its own transaction frame.
+  ##
+  ## if the return code is `false`, the descriptor variable `pst.stop` is
+  ## reset to `false` as a suggestion to continue packing the next account,
+  ## and `true` for termination.
+  let
+    xp = pst.xp
+    vmState = pst.vmState
+
+  let dbTx = xp.chain.db.db.beginTransaction
+  defer: dbTx.dispose
+
+  let accTx = vmState.stateDB.beginSavepoint
+  defer: vmState.stateDB.dispose(accTx)
+
+  let
+    totalGas = pst.gasBurned
+    gasUsed = pst.runTx(item)
+  if not xp.classifyPacked(totalGas, gasUsed):
+    pst.stop = not xp.classifyPackedNext(totalGas, gasUsed)
+    # otherwise rollback, and stop
+    return false
+
+  # Commit account state DB
+  vmState.stateDB.commit(accTx)
+
+  # Finish book-keeping and move item to `packed` bucket
+  pst.runTxCommit(item, gasUsed)
+
+  # Accept single item
+  dbTx.commit
+  true
+
+
+proc packerLoop(pst: TxPackerStateRef)
+    {.gcsafe,raises: [Defect,CatchableError].}  =
+  ## Greedily compact items as long as the accumulated `gasLimit` values
+  ## are below the block size
+
+  # Flush `packed` bucket
+  pst.xp.bucketFlushPacked
+
+  # Select items and move them to the `packed` bucket
+  for (account,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
+
+    # For the given account, try to execute all items of this account
+    # within a single transaction frame.
+    #
+    #say "packerVmExec account=", account.pp
+    #if pst.collectAccount(nonceList):
+    #  say "packerVmExec account=", account.pp, " => continue"
+    #  continue
+
+    # Otherwise execute items individually, each one within its own
+    # transaction frame.
+    for item in nonceList.incNonce:
+      if not pst.collectItem(item):
+        if pst.stop:
+          return
+        # stop inner loop and continue with next account
+        break
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Execute all transactios of the items in the `packed` bucket in the VM and
-  ## compact them for ethernet block inclusion (updateing `vmState` etc.) Then
-  ## compact some more from the `staged` bucket if possible. The function
-  ## returns the list of compacted items.
-  let
-    vmState = xp.chain.getVmState
-    nextBlockNum = xp.chain.head.blockNumber + 1
-    minerBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
-
+  ## Rebuild `packed` bucket by selection items from the `staged` bucket
+  ## after executing them in the VM.
   let dbTx = xp.chain.db.db.beginTransaction
   defer: dbTx.dispose()
 
+  # Internal descriptor
+  var pst = TxPackerStateRef(
+    xp: xp,
+    tr: newMemoryDB().initHexaryTrie,
+    vmState: xp.chain.getVmState)
+
+  let
+    nextBlockNum = xp.chain.head.blockNumber + 1
+    preBalance = pst.vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+
   if xp.chain.config.daoForkSupport and
      xp.chain.config.daoForkBlock == nextBlockNum:
-    vmState.mutateStateDB:
+    pst.vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  # Internal descriptor
-  var tr = newMemoryDB().initHexaryTrie
-
-  # Flush `packed` bucket
-  xp.bucketFlushPacked
-
-  # While set `true`, the all items for an account are tried to execute in a
-  # single transaction frame before trying single item transaction frames.
-  var fullAccountTransactionFirst = true
-
-  # Greedily compact a group of items as long as the accumulated `gasLimit`
-  # values are below the block size.
-  block allAccounts:
-    for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-
-      if fullAccountTransactionFirst:
-
-        # For the given account, try to execute all items of this account
-        # within a single transaction frame.
-        block doAccountWise:
-
-          # Make sure that the full account list goes into the block. Otherwise
-          # proceed with per-item transaction/step-wise mode, below
-          let accountTx = xp.chain.db.db.beginTransaction
-          defer: accountTx.dispose
-
-          # Keep a list of items added. It will be used either for rollback,
-          # or for the account-wise update of the txRoot.
-          var
-            aItems = 0
-            itemList = newSeq[TxItemRef](nonceList.len)
-
-          for item in nonceList.incNonce:
-            let gasBurned = xp.runTx(vmState, item)
-            doAssert 0 <= gasBurned
-
-            if not xp.classifyPacked(xp.gasBurned(vmState), gasBurned):
-              # Undo collecting items for this account, so far
-              for inx in 0 ..< aItems:
-                discard xp.txDB.reassign(itemList[inx],txItemStaged)
-              # rollback, continue with single step transaction frame
-              break doAccountWise
-
-            # Finish book-keeping and move item to `packed` bucket
-            discard xp.runTxFinish(vmState, item, gasBurned)
-
-            # Collect item for post-processing and/or rollback
-            itemList[aItems] = item
-            aItems.inc
-
-          # Accept full group of account items
-          accountTx.commit
-
-          # Update txRoot
-          let base = xp.txDB.byStatus.eq(txItemPacked).nItems - itemList.len
-          for inx,item in itemList.pairs:
-            tr.put(rlp.encode(base + inx), rlp.encode(item.tx))
-
-          # Get next account
-          continue
-
-      # Execute items individually, each one within its own transaction frame.
-      block doItemWise:
-        for item in nonceList.incNonce:
-          let itemTx = xp.chain.db.db.beginTransaction
-          defer: itemTx.dispose
-
-          let gasBurned = xp.runTx(vmState, item)
-          doAssert 0 <= gasBurned
-
-          let totalGas = xp.gasBurned(vmState)
-          if not xp.classifyPacked(totalGas, gasBurned):
-            if xp.classifyPackedNext(totalGas, gasBurned):
-              # rollback, continue with next account
-              break doItemWise
-            # otherwise rollback, and stop
-            break allAccounts
-
-          # Finish book-keeping and move item to `packed` bucket
-          discard xp.runTxFinish(vmState, item, gasBurned)
-
-          # Accept single item
-          itemTx.commit
-
-          # Update txRoot
-          let inx = xp.txDB.byStatus.eq(txItemPacked).nItems
-          tr.put(rlp.encode(inx - 1), rlp.encode(item.tx))
+  # Rebuild  `packed` bucket
+  pst.packerLoop
 
   # Update flexi-arrays, set proper length
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
-  vmState.receipts.setLen(nItems)
+  pst.vmState.receipts.setLen(nItems)
 
-  if not vmState.chainDB.config.poaEngine:
+  xp.chain.receipts = pst.vmState.receipts
+  xp.chain.txRoot = pst.tr.rootHash
+
+  proc balanceDelta: Uint256 =
+    let postBalance = pst.vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+    if preBalance < postBalance:
+      return postBalance - preBalance
+
+  xp.chain.profit = balanceDelta()
+
+  if not pst.vmState.chainDB.config.poaEngine:
     # @[]: no uncles yet
-    vmState.calculateReward(xp.chain.miner, nextBlockNum, @[])
+    pst.vmState.calculateReward(xp.chain.miner, nextBlockNum, @[])
+
+  xp.chain.reward = balanceDelta()
 
   #  # The following is not needed as the block chain is rolled back, anyway
   #
@@ -299,13 +367,6 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   #   if vmState.generateWitness:
   #     db.collectWitnessData()
   #   db.persist(ClearCache in vmState.flags)
-
-  xp.chain.txRoot = tr.rootHash
-  xp.chain.receipts = vmState.receipts
-
-  # calculate reward
-  let afterBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
-  xp.chain.reward = (afterBalance - minerBalance).truncate(int64).GasPriceEx
 
   # Block chain will roll back automatically
 

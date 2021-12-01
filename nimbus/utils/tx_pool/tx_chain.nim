@@ -52,7 +52,8 @@ type
   TxChainNextHeader = tuple
     baseFee: GasPrice        ## Base fee derived from `head`
     receipts: seq[Receipt]   ## `vmState.receipts` after packing
-    reward: GasPriceEx       ## Miner balance difference after packing
+    reward: Uint256          ## Miner balance difference after packing
+    profit: Uint256          ## Net reward (w/o PoW specific block rewards)
     txRoot: Hash256          ## `rootHash` after packing
 
   TxChainRef* = ref object ##\
@@ -64,7 +65,7 @@ type
     lhwm: TxChainGasLimitsPc ## Hwm/lwm gas limit percentage
 
     parent: BlockHeader      ## Current block chain insertion point
-    accounts: AccountsCache  ## Accounts cache, depending on insertion point
+    roAcc: ReadOnlyStateDB   ## Accounts cache, depending on insertion point
     limits: TxChainGasLimits ## Gas limits for packer and next header
     child: TxChainNextHeader ## Assorted parameters for the next header
 
@@ -87,8 +88,10 @@ template safeExecutor(info: string; code: untyped) =
 
 proc update(dh: TxChainRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  let db = dh.db
-  dh.accounts = AccountsCache.init(db.db, dh.parent.stateRoot, db.pruneTrie)
+  let
+    db = dh.db
+    acc = AccountsCache.init(db.db, dh.parent.stateRoot, db.pruneTrie)
+  dh.roAcc = ReadOnlyStateDB(acc)
   dh.limits = db.gasLimitsGet(dh.parent, dh.lhwm)
   dh.child.reset
   dh.child.baseFee = db.config.baseFeeGet(dh.parent)
@@ -117,13 +120,12 @@ proc new*(T: type TxChainRef; db: BaseChainDB; miner: EthAddress): T
 proc getBalance*(dh: TxChainRef; account: EthAddress): UInt256
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Wrapper around `getBalance()`
-  ReadOnlyStateDB(dh.accounts).getBalance(account)
+  dh.roAcc.getBalance(account)
 
 proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Wrapper around `getNonce()`
-  ReadOnlyStateDB(dh.accounts).getNonce(account)
-
+  dh.roAcc.getNonce(account)
 
 proc getHeader*(dh: TxChainRef): BlockHeader
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -170,7 +172,8 @@ proc getVmState*(dh: TxChainRef; pristine = false): BaseVMState
   ## Returns a copy of a clean `vmState` based on the current
   ## insertion point.
   safeExecutor "tx_chain.getVmState()":
-    result = dh.accounts.newBaseVMState(dh.parent, dh.db)
+    let acc = AccountsCache.init(dh.db.db, dh.parent.stateRoot, dh.db.pruneTrie)
+    result = acc.newBaseVMState(dh.parent, dh.db)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -214,11 +217,15 @@ proc gasUsed*(dh: TxChainRef): GasInt =
   if 0 < dh.child.receipts.len:
     return dh.child.receipts[^1].cumulativeGasUsed
 
+proc profit*(dh: TxChainRef): Uint256 =
+  ## Getter
+  dh.child.profit
+
 proc receipts*(dh: TxChainRef): seq[Receipt] =
   ## Getter, receipts for collected blocks
   dh.child.receipts
 
-proc reward*(dh: TxChainRef): GasPriceEx =
+proc reward*(dh: TxChainRef): Uint256 =
   ## Getter, reward for collected blocks
   dh.child.reward
 
@@ -229,6 +236,12 @@ proc txRoot*(dh: TxChainRef): Hash256 =
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
+
+proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
+  ## Setter, temorarily overwrites parameter until next `head=` update. This
+  ## function would be called in exceptional cases only as this parameter is
+  ## determined by the `head=` update.
+  dh.child.baseFee = val
 
 proc `head=`*(dh: TxChainRef; val: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -249,17 +262,15 @@ proc miner*(dh: TxChainRef; val: EthAddress) =
   ## Setter
   dh.miner = val
 
-proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
-  ## Setter, temorarily overwrites parameter until next `head=` update. This
-  ## function would be called in exceptional cases only as this parameter is
-  ## determined by the `head=` update.
-  dh.child.baseFee = val
+proc `profit=`*(dh: TxChainRef; val: Uint256) =
+  ## Setter
+  dh.child.profit = val
 
 proc `receipts=`*(dh: TxChainRef; val: seq[Receipt]) =
   ## Setter, implies `gasUsed`
   dh.child.receipts = val
 
-proc `reward=`*(dh: TxChainRef; val: GasPriceEx) =
+proc `reward=`*(dh: TxChainRef; val: Uint256) =
   ## Getter
   dh.child.reward = val
 

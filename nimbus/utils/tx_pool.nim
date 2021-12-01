@@ -28,9 +28,6 @@
 ##
 ## * Layzily flush the `packed` bucket after `head=` is run.
 ##
-## * Consider whether it is worth to calculate the account ranking over the
-##   non-pending txs (i.e. staged + packed), only.
-##
 ##
 ## Transaction Pool
 ## ================
@@ -62,17 +59,24 @@
 ## ---------------
 ## Let *tx()* denote the mapping
 ## ::
-##   tx: (account,nonce) -> transaction
+##   tx: (account,nonce) -> tx
 ##
-## from a pair *(account,nonce)* to a transaction. Also, let
+## from an index pair *(account,nonce)* to a transaction *tx*. Also, for some
+## external parameter *baseFee*, let
 ## ::
-##   tip: (transaction,baseFee) -> transaction.effectiveGasTip(baseFee)
+##   maxProfit: (tx,baseFee) -> tx.effectiveGasTip(baseFee) * tx.gasLimit
 ##
-## be the parametrised transaction property of expected reward per gas burned
-## (given some external parameter *baseFee*.) Then the *rank* is calculated as
+## be the maximal tip a single transation can achieve (where unit of the
+## *effectiveGasTip()* is a *price* and *gasLimit* is a *commodity value*.).
+## Then the rank function
 ## ::
-##   rank(account) = Σ tip(tx(account,ν))
-##                   ν
+##   rank(account) = Σ maxProfit(tx(account,ν),baseFee) / Σ tx(account,ν).gasLimit
+##                   ν                                    ν
+##
+## is a *price* estimate of the maximal avarage tip per gas unit over all
+## transactions for the given account. The nonces `ν` for the summation
+## run over all transactions from the *staged* and *packed* bucket.
+##
 ##
 ##
 ##
@@ -443,7 +447,8 @@ import
   ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_packer],
   chronicles,
   eth/[common, keys],
-  stew/[keyed_queue, results]
+  stew/[keyed_queue, results],
+  stint
 
 # hide complexity unless really needed
 when JobWaitEnabled:
@@ -672,7 +677,7 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
 proc gasCumulative*(xp: TxPoolRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the gas that will be burned in the block after
-  ## retrieving it via `ethBlock()`
+  ## retrieving it via `ethBlock`.
   xp.chain.gasUsed
 
 proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
@@ -688,6 +693,12 @@ proc lwmTrgPercent*(xp: TxPoolRef): int =
 proc flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pFlags
+
+proc head*(xp: TxPoolRef): BlockHeader =
+  ## Getter, cached block chain insertion point. Typocally, this should be the
+  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
+  ## middle of a mining update.)
+  xp.chain.head
 
 proc hwmMaxPercent*(xp: TxPoolRef): int =
   ## Getter, `maxGasLimit` percentage for `hwmGasLimit` which is
@@ -727,11 +738,16 @@ proc nItems*(xp: TxPoolRef): TxTabsItemsCount
   ## some totals.
   xp.txDB.nItems
 
-proc head*(xp: TxPoolRef): BlockHeader =
-  ## Getter, cached block chain insertion point. Typocally, this should be the
-  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
-  ## middle of a mining update.)
-  xp.chain.head
+proc profitability*(xp: TxPoolRef): GasPrice =
+  ## Getter, a calculation of the average *price* per gas to be rewarded after
+  ## packing the last block (see `ethBlock`). This *price* is only based on
+  ## execution transaction in the VM without *PoW* specific rewards. The net
+  ## profit (as opposed to the *PoW/PoA* specifc *reward*) can be calculated
+  ## as `gasCumulative * profitability`.
+  if 0 < xp.chain.gasUsed:
+    (xp.chain.profit div xp.chain.gasUsed.u256).truncate(uint64).GasPrice
+  else:
+    0.GasPrice
 
 proc trgGasLimit*(xp: TxPoolRef): GasInt =
   ## Getter, soft size limit when packing blocks (might be extended to

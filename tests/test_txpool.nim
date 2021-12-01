@@ -675,6 +675,8 @@ proc runTxPackerTests(noisy = true) =
           xq.packerVmExec
           check xq.verify.isOK
 
+          echo ">>> ", xq.nItems.pp
+
           let
             items1 = xq.toItems(txItemPacked)
             saveState1 = foldl(@[0.GasInt] & items1.mapIt(it.tx.gasLimit), a+b)
@@ -764,19 +766,22 @@ proc runTxPackerTests(noisy = true) =
         let packerBucket = xq.txDB.byStatus.eq(txItemPacked)
 
         echo ">>> ", xq.nItems.pp, " flags=", xq.flags
-        echo ">>> gasLimits",
-            " min=", xq.chain.limits.minLimit,
-            " lwm=", xq.chain.limits.lwmLimit,
-            " trg=", xq.chain.limits.trgLimit,
-            " hwm=", xq.chain.limits.hwmLimit,
-            " max=", xq.chain.limits.maxLimit,
-            "\n"
+        echo ">>> gasLimits ", xq.chain.limits.pp
 
+        xq.flags = xq.flags - {packItemsMaxGasLimit}
         xq.packerVmExec
 
-        echo ">>> ", xq.nItems.pp,
-          " >> ", packerBucket.gasLimits,
-          " >> ", xq.gasCumulative
+        echo ">>> trgLimit ", xq.nItems.pp,
+          " slack=", xq.chain.limits.trgLimit - xq.gasCumulative,
+          " $", xq.profitability, " per gas"
+
+        xq.flags = xq.flags + {packItemsMaxGasLimit}
+        xq.packerVmExec
+
+        echo ">>> maxLimit ", xq.nItems.pp,
+          " slack=", xq.chain.limits.maxLimit - xq.gasCumulative,
+          " $", xq.profitability, " per gas"
+
         #]#
 
 # ------------------------------------------------------------------------------
@@ -796,7 +801,7 @@ when isMainModule:
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
-  noisy.runTxLoader(capture = capts0)
+  noisy.runTxLoader(capture = capts1)
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 

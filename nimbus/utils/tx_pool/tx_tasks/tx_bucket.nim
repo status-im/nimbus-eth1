@@ -14,6 +14,8 @@
 
 import
   std/[tables],
+  ../../../constants,
+  ../tx_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -162,6 +164,12 @@ proc bucketFlushPacked*(xp: TxPoolRef)
   for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
     for item in nonceList.incNonce:
       discard xp.txDB.reassign(item,txItemStaged)
+
+  # Reset bucket status info
+  xp.chain.receipts = @[]
+  xp.chain.txRoot = BLANK_ROOT_HASH
+  xp.chain.profit = 0.u256
+  xp.chain.reward = 0.u256
 
 # ------------------------------------------------------------------------------
 # End
