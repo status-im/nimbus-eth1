@@ -54,7 +54,8 @@ proc execSubCreate(k: var Vm2Ctx; childMsg: Message;
     if child.isSuccess:
       c.merge(child)
       c.stack.top child.msg.contractAddress
-    else:
+    elif not child.error.burnsGas: # Means return was `REVERT`.
+      # From create, only use `outputData` if child returned with `REVERT`.
       c.returnData = child.output
 
 # ------------------------------------------------------------------------------

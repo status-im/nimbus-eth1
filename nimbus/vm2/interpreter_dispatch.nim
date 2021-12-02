@@ -159,10 +159,13 @@ proc beforeExecCreate(c: Computation): bool =
 
 proc afterExecCreate(c: Computation) =
   if c.isSuccess:
-    let fork = c.fork
-    let contractFailed = not c.writeContract(fork)
-    if contractFailed and fork >= FkHomestead:
-      c.setError(&"writeContract failed, depth={c.msg.depth}", true)
+    # This can change `c.isSuccess`.
+    c.writeContract()
+    # Contract code should never be returned to the caller.  Only data from
+    # `REVERT` is returned after a create.  Clearing in this branch covers the
+    # right cases, particularly important with EVMC where it must be cleared.
+    if c.output.len > 0:
+      c.output = @[]
 
   if c.isSuccess:
     c.commit()

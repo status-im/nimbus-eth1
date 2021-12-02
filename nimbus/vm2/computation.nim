@@ -163,20 +163,32 @@ proc rollback*(c: Computation) =
 proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
   c.error = Error(info: msg, burnsGas: burnsGas)
 
-proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
-  result = true
+proc writeContract*(c: Computation) =
+  template withExtra(tracer: untyped, args: varargs[untyped]) =
+    tracer args, newContract=($c.msg.contractAddress),
+      blockNumber=c.vmState.blockNumber, blockHash=($c.vmState.blockHash)
 
-  let contractCode = c.output
-  if contractCode.len == 0: return
+  # In each check below, they are guarded by `len > 0`.  This includes writing
+  # out the code, because the account already has zero-length code to handle
+  # nested calls (this is specified).  May as well simplify other branches.
+  let (len, fork) = (c.output.len, c.fork)
+  if len == 0:
+    return
 
-  if fork >= FkSpurious and contractCode.len > EIP170_MAX_CODE_SIZE:
-    debug "Contract code size exceeds EIP170",
-      max = EIP170_MAX_CODE_SIZE, actual = contractCode.len
-    return false
+  # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+  if fork >= FkLondon and c.output[0] == 0xEF.byte:
+    withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
+    # TODO: Return `EVMC_CONTRACT_VALIDATION_FAILURE` (like Silkworm).
+    c.setError("EVMC_CONTRACT_VALIDATION_FAILURE", true)
+    return
 
-  if fork >= FkLondon and contractCode[0] == 0xEF.byte:
-    debug "Contract code can't start with 0xEF byte"
-    return false
+  # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+  if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
+    withExtra trace, "New contract code exceeds EIP-170 limit",
+      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+    # TODO: Return `EVMC_OUT_OF_GAS` (like Silkworm).
+    c.setError("EVMC_OUT_OF_GAS", true)
+    return
 
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if
@@ -185,17 +197,26 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
   # gas difference matters.  The new code can be called later in the
   # transaction too, before self-destruction wipes the account at the end.
 
-  let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
+  let gasParams = GasParams(kind: Create, cr_memLength: len)
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
-  if c.gasMeter.gasRemaining >= codeCost:
-    c.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
+  if codeCost <= c.gasMeter.gasRemaining:
+    c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
     c.vmState.mutateStateDb:
-      db.setCode(c.msg.contractAddress, contractCode)
-    result = true
+      db.setCode(c.msg.contractAddress, c.output)
+    withExtra trace, "Writing new contract code"
+    return
+
+  if fork >= FkHomestead:
+    # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
+    # TODO: Return `EVMC_OUT_OF_GAS` (like Silkworm).
+    c.setError("EVMC_OUT_OF_GAS", true)
   else:
-    if fork < FkHomestead or FkByzantium <= fork:
-      c.output = @[]
-    result = false
+    # Before EIP-2, when out of gas for code storage, the account ends up with
+    # zero-length code and no error.  No gas is charged.  Code cited in EIP-2:
+    # https://github.com/ethereum/pyethereum/blob/d117c8f3fd93/ethereum/processblock.py#L304
+    # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
+    # The account already has zero-length code to handle nested calls.
+    withExtra trace, "New contract given empty code by pre-Homestead rules"
 
 template chainTo*(c, toChild: Computation, after: untyped) =
   c.child = toChild
