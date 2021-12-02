@@ -16,7 +16,7 @@ import
 export rpc_types # tasty sandwich
 
 type
-  PongResponse = object
+  PongResponse* = object
     enrSeq: uint64
     recipientIP: string
     recipientPort: uint16
@@ -114,8 +114,8 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
       return talkresp.get().toHex()
 
   rpcServer.rpc("discv5_recursiveFindNodes") do() -> seq[Record]:
-    # TODO: Not according to the specification currently. Should do a lookup
-    # here instead of query, and the node_id is a parameter to be passed.
-    # But in that case it would be very similar to discv5_lookupEnr.
-    let discovered = await d.queryRandom()
+    # TODO: Not according to the specification currently as the node_id is a
+    # parameter to be passed, but in that case it would be very similar to
+    # discv5_lookupEnr.
+    let discovered = await d.lookup(NodeId.random(d.rng[]))
     return discovered.map(proc(n: Node): Record = n.record)
