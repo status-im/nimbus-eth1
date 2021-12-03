@@ -57,6 +57,9 @@ task fluffy, "Build fluffy":
 task portalcli, "Build portalcli":
   buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 
+task test_portal_testnet, "Build test_portal_testnet":
+  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering"
+
 task testfluffy, "Run fluffy tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
   # start from, even though it only uses the MemoryDb.

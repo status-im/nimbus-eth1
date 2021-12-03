@@ -183,7 +183,9 @@ fi
 
 # Build the binaries
 BINARIES="fluffy"
-$MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES} NIMFLAGS="-d:chronicles_colors=off -d:chronicles_sinks=textlines" #V=2
+TEST_BINARIES="fluffy-test-portal-testnet"
+$MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES} NIMFLAGS="-d:chronicles_colors=off -d:chronicles_sinks=textlines"
+$MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES} NIMFLAGS="-d:chronicles_sinks=textlines"
 
 # Kill child processes on Ctrl-C/SIGTERM/exit, passing the PID of this shell
 # instance as the parent and the target process name as a pattern to the
@@ -304,35 +306,16 @@ if [[ "$BG_JOBS" != "$NUM_JOBS" ]]; then
   exit 1
 fi
 
-# TODO: Move this to a separate script or create nim process that is rpc client
-# once things get more complicated
-check_nodes() {
-  echo "Checking routing table of all nodes."
-  for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
-    if [[ ${NUM_NODE} == ${BOOTSTRAP_NODE} ]]; then
-      RPC_PORT="$(( BASE_RPC_PORT + NUM_NODE ))"
-      ROUTING_TABLE_NODES=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"id","method":"discv5_routingTableInfo","params":[]}' http://localhost:${RPC_PORT} | jq '.result.buckets' | jq 'flatten' | jq '. | length')
-      if [[ $ROUTING_TABLE_NODES != $(( NUM_NODES - 1 )) ]]; then
-        echo "Check for node ${NUM_NODE} failed."
-        return 1
-      fi
-    else
-      curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"id","method":"discv5_recursiveFindNodes","params":[]}' http://localhost:${RPC_PORT} &>/dev/null
-      ROUTING_TABLE_NODES=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"id","method":"discv5_routingTableInfo","params":[]}' http://localhost:${RPC_PORT} | jq '.result.buckets' | jq 'flatten' | jq '. | length')
-      if [[ $ROUTING_TABLE_NODES != $(( NUM_NODES - 1 )) ]]; then
-        echo "Check for node ${NUM_NODE} failed."
-        return 1
-      fi
-    fi
-  done
-}
-
 # launch htop and run until `TIMEOUT_DURATION` or check the nodes and quit.
 if [[ "$USE_HTOP" == "1" ]]; then
   htop -p "$PIDS"
   cleanup
 else
-  check_nodes
+  # Need to let to settle the network a bit, as currently at start discv5 and
+  # the Portal networks all send messages at once to the same nodes, causing
+  # messages to drop when handshakes are going on.
+  sleep 5
+  ./build/test_portal_testnet --node-count:${NUM_NODES}
   FAILED=$?
   if [[ "$FAILED" != "0" ]]; then
     dump_logs

@@ -12,16 +12,16 @@ import
   stew/results,
   eth/p2p/discoveryv5/[routing_table, enr, node]
 
-export jsonmarshal, enr, routing_table
+export jsonmarshal, routing_table, enr, node
 
 type
   NodeInfo* = object
-    nodeId: NodeId
-    nodeENR: Record
+    nodeId*: NodeId
+    nodeENR*: Record
 
   RoutingTableInfo* = object
-    localKey: NodeId
-    buckets: seq[seq[NodeId]]
+    localKey*: NodeId
+    buckets*: seq[seq[NodeId]]
 
 proc getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(nodeId: r.localNode.id, nodeENR: r.localNode.record)

@@ -156,6 +156,10 @@ fluffy-test: | build deps
 fluffy-tools: | build deps
 	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
 
+# Build fluffy test_portal_testnet
+fluffy-test-portal-testnet: | build deps
+	$(ENV_SCRIPT) nim test_portal_testnet $(NIM_PARAMS) nimbus.nims
+
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc,all_fluffy_tests,portalcli}
