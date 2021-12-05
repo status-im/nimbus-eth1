@@ -108,6 +108,18 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
+# `when` around an option doesn't work with confutils; it fails to compile.
+# Workaround that by setting the `ignore` pragma on EVMC-specific options.
+when defined(evmc_enabled):
+  {.pragma: includeIfEvmc.}
+else:
+  {.pragma: includeIfEvmc, ignore.}
+
+const sharedLibText = if defined(linux): " (*.so, *.so.N)"
+                      elif defined(windows): " (*.dll)"
+                      elif defined(macosx): " (*.dylib)"
+                      else: ""
+
 type
   PruneMode* {.pure.} = enum
     Full
@@ -177,10 +189,10 @@ type
       name: "verify-from" }: Option[uint64]
 
     evm* {.
-      desc: "Load alternative EVM from EVMC-compatible shared library (.so/.dll/.dylib)"
+      desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
-      defaultValueDesc: "Nimbus built-in EVM"
-      name: "evm" }: string
+      name: "evm"
+      includeIfEvmc }: string
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"

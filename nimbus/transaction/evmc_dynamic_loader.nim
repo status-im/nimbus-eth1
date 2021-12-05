@@ -16,12 +16,11 @@ import
 # The built-in Nimbus EVM, via imported C function.
 proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 
-# Import this module to pull in the definition of `evmc_create_nimbus_evm`.
+# Import this module to link in the definition of `evmc_create_nimbus_evm`.
 # Nim thinks the module is unused because the function is only called via
 # `.exportc` -> `.importc`.
 {.warning[UnusedImport]: off.}:
-  when defined(evmc_enabled):
-    import ./evmc_vm_glue
+  import ./evmc_vm_glue
 
 var evmcLibraryPath {.threadvar.}: string
   ## Library path set by `--evm` command line option.
