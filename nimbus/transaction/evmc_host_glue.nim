@@ -11,7 +11,7 @@
 when not declaredInScope(included_from_host_services):
   {.error: "Do not import this file directly, import host_services instead".}
 
-import evmc/evmc
+import evmc/evmc, ./evmc_dynamic_loader
 
 template toHost(p: evmc_host_context): TransactionHost =
   cast[TransactionHost](p)
@@ -94,19 +94,12 @@ let hostInterface = evmc_host_interface(
   access_storage: accessStorage,
 )
 
-# The built-in Nimbus EVM, via imported C function.
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
-
-# Pull in the definition of the above function because we're not building it as
-# a separate library yet.
-import ./evmc_vm_glue
-
 proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
   host.showCallEntry(host.msg)
 
-  let vm = evmc_create_nimbus_evm()
+  let vm = evmcLoadVMCached()
   if vm.isNil:
-    echo "Warning: No EVM"
+    warn "No EVM"
     # Nim defaults are fine for all other fields in the result object.
     result = EvmcResult(status_code: EVMC_INTERNAL_ERROR)
     host.showCallReturn(result)
@@ -138,3 +131,9 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
                         host.code.len.csize_t)
 
   host.showCallReturn(result)
+
+# This code assumes fields, methods and types of ABI version 9, and must be
+# checked for compatibility if the `import evmc/evmc` major version is updated.
+when EVMC_ABI_VERSION != 9:
+  {.error: ("This code assumes EVMC_ABI_VERSION 9;" &
+            " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}

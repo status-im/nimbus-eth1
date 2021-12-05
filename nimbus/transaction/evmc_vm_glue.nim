@@ -92,7 +92,7 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
   ## This is an exported C function.  EVMC specifies the function must
   ## have this name format when exported from a shared library.
   let vm = (ref evmc_vm)(
-    abi_version:      7,     # Not 8, we don't support ABI version 8 yet.
+    abi_version:      EVMC_ABI_VERSION,
     name:             evmcName,
     version:          evmcVersion,
     destroy:          evmcDestroy,
@@ -103,3 +103,9 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
   # Keep an extra reference on this, until `evmcDestroy` is called.
   GC_ref(vm)
   return cast[ptr evmc_vm](vm)
+
+# This code assumes fields, methods and types of ABI version 9, and must be
+# checked for compatibility if the `import evmc/evmc` major version is updated.
+when EVMC_ABI_VERSION != 9:
+  {.error: ("This code assumes EVMC_ABI_VERSION 9;" &
+            " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}

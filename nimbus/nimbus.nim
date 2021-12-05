@@ -20,6 +20,7 @@ import
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
+  transaction/evmc_dynamic_loader,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context,
   "."/[conf_utils, sealer, constants]
@@ -197,6 +198,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     let logFile = string conf.logFile.get()
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
+
+  evmcSetLibraryPath(conf.evm)
 
   createDir(string conf.dataDir)
   let trieDB = trieDB newChainDb(string conf.dataDir)

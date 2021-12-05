@@ -176,6 +176,12 @@ type
       defaultValueDesc: ""
       name: "verify-from" }: Option[uint64]
 
+    evm* {.
+      desc: "Load alternative EVM from EVMC-compatible shared library (.so/.dll/.dylib)"
+      defaultValue: ""
+      defaultValueDesc: "Nimbus built-in EVM"
+      name: "evm" }: string
+
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
       desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), other=custom)"
