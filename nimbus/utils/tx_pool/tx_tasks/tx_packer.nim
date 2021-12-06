@@ -144,6 +144,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
       for account in vmState.touchedAccounts:
         if db.accountExists(account) and db.isEmptyAccount(account):
           debug "state clearing", account
+          db.deleteAccount account
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
@@ -170,19 +171,11 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 # ------------------------------------------------------------------------------
 
 #[
-proc collectAccount(pst: TxPackerStateRef;
-                    nonceList: TxStatusNonceRef): bool
+proc collectAccount(pst: TxPackerStateRef; nonceList: TxStatusNonceRef): bool
     {.gcsafe,raises: [Defect,CatchableError].}  =
   ## Make sure that the full account list goes into the block. Otherwise
   ## proceed with per-item transaction/step-wise mode, below.
-  let
-    xp = pst.xp
-    vmState = pst.vmState
-
-  let dbTx = xp.chain.db.db.beginTransaction
-  defer:
-    say "db.dispose"
-    dbTx.dispose
+  let dbTx = pst.xp.chain.db.db.beginTransaction
 
   # Keep a list of items added. It will be used either for rollback,
   # or for the account-wise update of the txRoot.
@@ -191,37 +184,33 @@ proc collectAccount(pst: TxPackerStateRef;
     topOfList = 0
     itemList = newSeq[TxItemRef](nonceList.len)
 
-  proc rollbackItems {.gcsafe,raises: [Defect,CatchableError].}  =
-    say "collectAccount rollback",
-      " account=", itemList[0].sender.pp, " len=", topOfList
-    for inx in 0 ..< topOfList:
-      discard xp.txDB.reassign(itemList[inx],txItemStaged)
-
-  # Need this setting for checking the final balance
-  let preBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
-
   # Collect items and pack
   for item in nonceList.incNonce:
-    let accTx = vmState.stateDB.beginSavepoint
-    defer:
-      say "stateDB.dispose ", item.pp
-      vmState.stateDB.dispose(accTx)
-
-    itemList[topOfList] = item # FIXME, debugging only
     let
+      accTx = pst.vmState.stateDB.beginSavepoint
       totalGas = pst.gasBurned
       gasUsed = pst.runTx(item)
-    if not xp.classifyPacked(totalGas, gasUsed):
-      # Undo collecting items for this account, so far
-      rollbackItems()
-      say "collectAccount item too big ", item.pp
+
+    if not pst.xp.classifyPacked(totalGas, gasUsed):
+      # Roll back databases
+      pst.vmState.stateDB.rollback(accTx)
+      dbTx.rollback()
+
+      # Undo collecting items for this account
+      for n in 0 ..< topOfList:
+        discard pst.xp.txDB.reassign(itemList[n],txItemStaged)
+      say "collectAccount",
+        " item[", topOfList, "] too big ", item.pp,
+        " size=", totalGas, "+", gasUsed,
+        " => rollback"
       return false
 
     # Commit account state DB
-    vmState.stateDB.commit(accTx)
+    pst.vmState.stateDB.commit(accTx)
 
     # Finish book-keeping and move item to `packed` bucket
     pst.runTxCommit(item, gasUsed)
+    say "collectAccount", " item", item.pp, " => accepted"
 
     # Locally accumulate total gas
     allFuel += gasUsed
@@ -230,21 +219,13 @@ proc collectAccount(pst: TxPackerStateRef;
     itemList[topOfList] = item
     topOfList.inc
 
-  # Post process packed items. Verify that packing all of this account
-  # was sort of profitable, after all.
-  block acceptCollection:
-    if 0 < allFuel:
-      let
-        delta = vmState.readOnlyStateDB.getBalance(xp.chain.miner) - preBalance
-        profitability = (delta div allFuel.u256).truncate(uint64).GasPrice
-      if xp.pMinTipPrice <= profitability:
-        break acceptCollection
-
-    rollbackItems()
-    return false
-
-  # Accept full group of account items if profitable enough
+  # Accept account items
   dbTx.commit
+
+  say "collectAccount",
+    " ", itemList[0].sender.pp,
+    " baseFee=", pst.xp.chain.head.baseFee,
+    " len=", itemList.len, " => OK"
   true
 #]#
 
@@ -295,17 +276,19 @@ proc packerLoop(pst: TxPackerStateRef)
   # Select items and move them to the `packed` bucket
   for (account,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
 
+    #[
     # For the given account, try to execute all items of this account
     # within a single transaction frame.
     #
-    #say "packerVmExec account=", account.pp
-    #if pst.collectAccount(nonceList):
-    #  say "packerVmExec account=", account.pp, " => continue"
-    #  continue
+    # say "packerVmExec account=", account.pp
+    if pst.collectAccount(nonceList):
+      continue
+    #]#
 
     # Otherwise execute items individually, each one within its own
     # transaction frame.
     for item in nonceList.incNonce:
+      say "packerVmExec item=", item.pp
       if not pst.collectItem(item):
         if pst.stop:
           return

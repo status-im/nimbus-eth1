@@ -675,8 +675,6 @@ proc runTxPackerTests(noisy = true) =
           xq.packerVmExec
           check xq.verify.isOK
 
-          echo ">>> ", xq.nItems.pp
-
           let
             items1 = xq.toItems(txItemPacked)
             saveState1 = foldl(@[0.GasInt] & items1.mapIt(it.tx.gasLimit), a+b)
@@ -762,27 +760,45 @@ proc runTxPackerTests(noisy = true) =
         check stats.disposed == 0
         check stats.total + backTxs.len == xq.nItems.total
 
-        #[
-        let packerBucket = xq.txDB.byStatus.eq(txItemPacked)
+        #echo ">>>",
+        #  " canonical head #", canonicalHeader.blockNumber,
+        #  " insertion point #", backHeader.blockNumber
 
-        echo ">>> ", xq.nItems.pp, " flags=", xq.flags
-        echo ">>> gasLimits ", xq.chain.limits.pp
+
+      test &"Run packer, profitability will not increase with block size":
+
+        #echo ">>> ", xq.nItems.pp, " flags=", xq.flags
+        #echo ">>> gasLimits ", xq.chain.limits.pp
 
         xq.flags = xq.flags - {packItemsMaxGasLimit}
         xq.packerVmExec
+        let
+          smallerBlockProfitability = xq.profitability
+          smallerBlockSize = xq.gasCumulative
 
-        echo ">>> trgLimit ", xq.nItems.pp,
-          " slack=", xq.chain.limits.trgLimit - xq.gasCumulative,
-          " $", xq.profitability, " per gas"
+        noisy.say "***",
+          "profitability=", xq.profitability,
+          " block size=", xq.gasCumulative
+
+        #echo ">>> trgLimit ", xq.nItems.pp,
+        #  " slack=", xq.chain.limits.trgLimit - xq.gasCumulative,
+        #  " $", xq.profitability, " per gas"
 
         xq.flags = xq.flags + {packItemsMaxGasLimit}
         xq.packerVmExec
 
-        echo ">>> maxLimit ", xq.nItems.pp,
-          " slack=", xq.chain.limits.maxLimit - xq.gasCumulative,
-          " $", xq.profitability, " per gas"
+        # Well, this last inequality might fail by a small margin, though ..
+        check smallerBlockSize < xq.gasCumulative
+        check xq.profitability <= smallerBlockProfitability
 
-        #]#
+        noisy.say "***",
+          "profitability=", xq.profitability,
+          " block size=", xq.gasCumulative,
+          " size increase=", xq.gasCumulative - smallerBlockSize
+
+        #echo ">>> maxLimit ", xq.nItems.pp,
+        #  " slack=", xq.chain.limits.maxLimit - xq.gasCumulative,
+        #  " $", xq.profitability, " per gas"
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -801,9 +817,9 @@ when isMainModule:
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
-  noisy.runTxLoader(capture = capts1)
+  noisy.runTxLoader(capture = capts0)
   noisy.runTxPoolTests
-  noisy.runTxPackerTests
+  true.runTxPackerTests
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

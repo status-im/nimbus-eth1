@@ -16,7 +16,7 @@ import
   std/[times],
   ../../chain_config,
   ../../constants,
-  ../../db/[db_chain, accounts_cache],
+  ../../db/[accounts_cache, db_chain],
   ../../forks,
   ../../p2p/executor,
   ../../utils,
@@ -167,7 +167,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     fee:         feeOption)
 
 
-proc getVmState*(dh: TxChainRef; pristine = false): BaseVMState
+proc getVmState*(dh: TxChainRef): BaseVMState
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a copy of a clean `vmState` based on the current
   ## insertion point.
