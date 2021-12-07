@@ -311,14 +311,18 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   # id, and initiate an uTP stream with given uTP connection id to get the data
   # out.
 
-proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
+proc recordsFromBytes(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     var record: Record
     if record.fromBytes(r.asSeq()):
       records.add(record)
+    else:
+      # If any of the ENRs is invalid, fail immediatly. This is similar as what
+      # is done on the discovery v5 layer.
+      return err("Deserialization of an ENR failed")
 
-  records
+  ok(records)
 
 proc findNodeVerified*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]):
@@ -326,9 +330,12 @@ proc findNodeVerified*(
   let nodesMessage = await p.findNode(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
-
-    # TODO: distance function is wrong here for state, fix + tests
-    return ok(verifyNodesRecords(records, dst, EnrsResultLimit, distances))
+    if records.isOk():
+      # TODO: distance function is wrong here for state, fix + tests
+      return ok(verifyNodesRecords(
+        records.get(), dst, EnrsResultLimit, distances))
+    else:
+      return err(records.error)
   else:
     return err(nodesMessage.error)
 
@@ -414,14 +421,18 @@ proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     LookupResult(kind: Content, content: m.content)
   of enrsType:
     let records = recordsFromBytes(m.enrs)
-    let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
-    nodes.add(verifiedNodes)
+    if records.isOk():
+      let verifiedNodes =
+        verifyNodesRecords(records.get(), dst, EnrsResultLimit)
+      nodes.add(verifiedNodes)
 
-    for n in nodes:
-      # Attempt to add all nodes discovered
-      discard p.routingTable.addNode(n)
+      for n in nodes:
+        # Attempt to add all nodes discovered
+        discard p.routingTable.addNode(n)
 
-    LookupResult(kind: Nodes, nodes: nodes)
+      LookupResult(kind: Nodes, nodes: nodes)
+    else:
+      LookupResult(kind: Content)
 
 proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
     Future[LookupResult] {.async.} =
