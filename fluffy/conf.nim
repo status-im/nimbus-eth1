@@ -24,15 +24,15 @@ proc defaultDataDir*(): string =
   getHomeDir() / dataDir
 
 const
-  DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
-  DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
-  DefaultProxyAddress* = (static "http://127.0.0.1:8546")
-  DefaultClientConfig* = getHttpClientConfig(DefaultProxyAddress)
+  defaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
+  defaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
+  defaultProxyAddress* = (static "http://127.0.0.1:8546")
+  defaultClientConfig* = getHttpClientConfig(defaultProxyAddress)
 
-  DefaultListenAddressDesc = $DefaultListenAddress
-  DefaultAdminListenAddressDesc = $DefaultAdminListenAddress
-  DefaultDataDirDesc = defaultDataDir()
-  DefaultClientConfigDesc = $(DefaultClientConfig.httpUri)
+  defaultListenAddressDesc = $defaultListenAddress
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress
+  defaultDataDirDesc = defaultDataDir()
+  defaultClientConfigDesc = $(defaultClientConfig.httpUri)
 
 type
   PortalCmd* = enum
@@ -51,8 +51,8 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: DefaultListenAddress
-      defaultValueDesc: $DefaultListenAddressDesc
+      defaultValue: defaultListenAddress
+      defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
@@ -88,7 +88,7 @@ type
     dataDir* {.
       desc: "The directory where fluffy will store the content data"
       defaultValue: defaultDataDir()
-      defaultValueDesc: $DefaultDataDirDesc
+      defaultValueDesc: $defaultDataDirDesc
       name: "data-dir" }: OutDir
 
     # Note: This will add bootstrap nodes for each enabled Portal network.
@@ -108,8 +108,8 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: DefaultAdminListenAddress
-      defaultValueDesc: $DefaultAdminListenAddressDesc
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
       name: "metrics-address" .}: ValidIpAddress
 
@@ -130,8 +130,8 @@ type
 
     rpcAddress* {.
       desc: "Listening address of the RPC server"
-      defaultValue: DefaultAdminListenAddress
-      defaultValueDesc: $DefaultAdminListenAddressDesc
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
       name: "rpc-address" }: ValidIpAddress
 
     bridgeUri* {.
@@ -143,8 +143,8 @@ type
     # it makes little sense to have default value here in final release, but until then
     # it would be troublesome to add some fake uri param every time
     proxyUri* {.
-      defaultValue: DefaultClientConfig
-      defaultValueDesc: $DefaultClientConfigDesc
+      defaultValue: defaultClientConfig
+      defaultValueDesc: $defaultClientConfigDesc
       desc: "URI of eth client where to proxy unimplemented rpc methods to"
       name: "proxy-uri" .}: ClientConfig
 

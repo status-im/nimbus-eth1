@@ -23,16 +23,14 @@ logScope:
   topics = "portal_wire"
 
 const
-  Alpha = 3 ## Kademlia concurrency factor
-  LookupRequestLimit = 3 ## Amount of distances requested in a single Findnodes
-  ## message for a lookup or query
-  EnrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
+  alpha = 3 ## Kademlia concurrency factor
+  enrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
-  RefreshInterval = 5.minutes ## Interval of launching a random query to
+  refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  RevalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
-  InitialLookups = 1 ## Amount of lookups done when populating the routing table
+  initialLookups = 1 ## Amount of lookups done when populating the routing table
 
 type
   ContentResultKind* = enum
@@ -333,7 +331,7 @@ proc findNodesVerified*(
     if records.isOk():
       # TODO: distance function is wrong here for state, fix + tests
       return ok(verifyNodesRecords(
-        records.get(), dst, EnrsResultLimit, distances))
+        records.get(), dst, enrsResultLimit, distances))
     else:
       return err(records.error)
   else:
@@ -367,13 +365,13 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
     # Doing `alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < Alpha:
+    while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -423,7 +421,7 @@ proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     let records = recordsFromBytes(m.enrs)
     if records.isOk():
       let verifiedNodes =
-        verifyNodesRecords(records.get(), dst, EnrsResultLimit)
+        verifyNodesRecords(records.get(), dst, enrsResultLimit)
       nodes.add(verifiedNodes)
 
       for n in nodes:
@@ -464,13 +462,13 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[LookupResult]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[LookupResult]](alpha)
 
   while true:
     var i = 0
     # Doing `alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < Alpha:
+    while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.contentLookupWorker(n, target))
@@ -532,11 +530,11 @@ proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < Alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -593,7 +591,7 @@ proc populateTable(p: PortalProtocol) {.async.} =
   let selfQuery = await p.query(p.baseProtocol.localNode.id)
   trace "Discovered nodes in self target query", nodes = selfQuery.len
 
-  for i in 0..<InitialLookups:
+  for i in 0..<initialLookups:
     let randomQuery = await p.queryRandom()
     trace "Discovered nodes in random target query", nodes = randomQuery.len
 
@@ -618,7 +616,7 @@ proc revalidateLoop(p: PortalProtocol) {.async.} =
   ## message.
   try:
     while true:
-      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(RevalidateMax)))
+      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(revalidateMax)))
       let n = p.routingTable.nodeToRevalidate()
       if not n.isNil:
         asyncSpawn p.revalidateNode(n)
@@ -639,12 +637,12 @@ proc refreshLoop(p: PortalProtocol) {.async.} =
         await sleepAsync(5.seconds)
 
       let currentTime = now(chronos.Moment)
-      if currentTime > (p.lastLookup + RefreshInterval):
+      if currentTime > (p.lastLookup + refreshInterval):
         let randomQuery = await p.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in routing table", total = p.routingTable.len()
 
-      await sleepAsync(RefreshInterval)
+      await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
 

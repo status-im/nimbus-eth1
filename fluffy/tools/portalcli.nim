@@ -17,11 +17,11 @@ import
   ../network/state/state_content
 
 const
-  DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
-  DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
+  defaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
+  defaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
 
-  DefaultListenAddressDesc = $DefaultListenAddress
-  DefaultAdminListenAddressDesc = $DefaultAdminListenAddress
+  defaultListenAddressDesc = $defaultListenAddress
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
 type
   PortalCmd* = enum
@@ -43,8 +43,8 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: DefaultListenAddress
-      defaultValueDesc: $DefaultListenAddressDesc
+      defaultValue: defaultListenAddress
+      defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
@@ -82,8 +82,8 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: DefaultAdminListenAddress
-      defaultValueDesc: $DefaultAdminListenAddressDesc
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
       name: "metrics-address" .}: ValidIpAddress
 
