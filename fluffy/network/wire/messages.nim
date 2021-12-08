@@ -124,7 +124,7 @@ func fromSszBytes*(T: type UInt256, data: openArray[byte]):
 
   T.fromBytesLE(data)
 
-proc encodeMessage*[T: SomeMessage](m: T): seq[byte] =
+func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   # TODO: Could/should be macro'd away,
   # or we just use SSZ.encode(Message) directly
   when T is PingMessage: SSZ.encode(Message(kind: ping, ping: m))
@@ -136,7 +136,7 @@ proc encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
 
-proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
+func decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
   try:
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")
@@ -153,16 +153,16 @@ template innerMessage[T: SomeMessage](message: Message, expected: MessageKind): 
 # All our Message variants correspond to enum MessageKind, therefore we are able to
 # zoom in on inner structure of message by defining expected type T.
 # If expected variant is not active, return None
-proc getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
+func getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
   innerMessage[T](m, messageKind(T))
 
 # Simple conversion from Option to Result, looks like something which could live in
 # Result library.
-proc optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
+func optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
   if (opt.isSome()):
     ok(opt.unsafeGet())
   else:
     err(e)
 
-proc getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
+func getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
   optToResult(getInnnerMessage[T](m), errMessage)

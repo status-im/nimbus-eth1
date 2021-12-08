@@ -88,18 +88,17 @@ proc addNode*(p: PortalProtocol, r: Record): bool =
 
 func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 
-proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
+func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
-proc handlePing(p: PortalProtocol, ping: PingMessage):
-    seq[byte] =
+func handlePing(p: PortalProtocol, ping: PingMessage): seq[byte] =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let p = PongMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
     customPayload: ByteList(SSZ.encode(customPayload)))
 
   encodeMessage(p)
 
-proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
+func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
     let enrs = List[ByteList, 32](@[])
     encodeMessage(NodesMessage(total: 1, enrs: enrs))
@@ -155,7 +154,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     encodeMessage(ContentMessage(
       contentMessageType: contentType, content: content))
 
-proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
+func handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
