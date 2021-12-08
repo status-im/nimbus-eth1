@@ -27,7 +27,7 @@ type
   PortalCmd* = enum
     noCommand
     ping
-    findnode
+    findnodes
     findcontent
 
   DiscoveryConf* = object
@@ -102,16 +102,16 @@ type
         argument
         desc: "ENR URI of the node to a send ping message"
         name: "node" .}: Node
-    of findnode:
+    of findnodes:
       distance* {.
         defaultValue: 255
-        desc: "Distance parameter for the findNode message"
+        desc: "Distance parameter for the findNodes message"
         name: "distance" .}: uint16
       # TODO: Order here matters as else the help message does not show all the
       # information, see: https://github.com/status-im/nim-confutils/issues/15
-      findNodeTarget* {.
+      findNodesTarget* {.
         argument
-        desc: "ENR URI of the node to send a findNode message"
+        desc: "ENR URI of the node to send a findNodes message"
         name: "node" .}: Node
     of findcontent:
       findContentTarget* {.
@@ -210,9 +210,9 @@ proc run(config: DiscoveryConf) =
       echo pong.get()
     else:
       echo pong.error
-  of findnode:
+  of findnodes:
     let distances = List[uint16, 256](@[config.distance])
-    let nodes = waitFor portal.findNode(config.findNodeTarget, distances)
+    let nodes = waitFor portal.findNodes(config.findNodesTarget, distances)
 
     if nodes.isOk():
       echo nodes.get()
