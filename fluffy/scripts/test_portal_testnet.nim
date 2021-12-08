@@ -89,6 +89,25 @@ procSuite "Portal testnet tests":
       else: # Other nodes will have bootstrap node at this point, and maybe more
         check nodes.len > 0
 
+  asyncTest "Portal State - Random node lookup from each node":
+    let clients = await connectToRpcServers(config)
+
+    for client in clients:
+      # We need to run a recursive lookup for each node to kick-off the network
+      discard await client.portal_state_recursiveFindNodes()
+
+    for client in clients:
+      # grab a random json-rpc client and take its `NodeInfo`
+      let randomClient = sample(rng[], clients)
+      let nodeInfo = await randomClient.portal_state_nodeInfo()
+
+      var enr: Record
+      try:
+        enr = await client.portal_state_lookupEnr(nodeInfo.nodeId)
+      except ValueError as e:
+        echo e.msg
+      check enr == nodeInfo.nodeENR
+
   asyncTest "Portal History - RoutingTableInfo at start":
     let clients = await connectToRpcServers(config)
 
@@ -100,3 +119,22 @@ procSuite "Portal testnet tests":
         check nodes.len == config.nodeCount - 1
       else: # Other nodes will have bootstrap node at this point, and maybe more
         check nodes.len > 0
+
+  asyncTest "Portal History - Random node lookup from each node":
+    let clients = await connectToRpcServers(config)
+
+    for client in clients:
+      # We need to run a recursive lookup for each node to kick-off the network
+      discard await client.portal_history_recursiveFindNodes()
+
+    for client in clients:
+      # grab a random json-rpc client and take its `NodeInfo`
+      let randomClient = sample(rng[], clients)
+      let nodeInfo = await randomClient.portal_history_nodeInfo()
+
+      var enr: Record
+      try:
+        enr = await client.portal_history_lookupEnr(nodeInfo.nodeId)
+      except ValueError as e:
+        echo e.msg
+      check enr == nodeInfo.nodeENR

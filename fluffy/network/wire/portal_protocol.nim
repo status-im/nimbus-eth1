@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/results, chronicles, chronos, nimcrypto/hash,
+  stew/results, chronicles, chronos, nimcrypto/hash, bearssl,
   ssz_serialization,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   ./messages
@@ -159,9 +159,6 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
 
 proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
-    # TODO: Random ID that needs to be stored together with some buffer that
-    # gets shared with uTP session that needs to be set up (start listening)
-    connectionId = Bytes2([byte 0x01, 0x02])
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
     # by setting bits in this BitList.
@@ -170,8 +167,17 @@ proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
     contentKeys = ContentKeysBitList.init(a.contentKeys.len)
     # TODO: What if we don't want any of the content? Reply with empty bitlist
     # and a connectionId of all zeroes?
+  var connectionId: Bytes2
+  brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
+  # TODO: Random connection ID needs to be stored and linked with the uTP
+  # session that needs to be set up (start listening).
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
+
+  # TODO: Neighborhood gossip
+  # After data has been received and validated from an offer, we need to
+  # get the closest neighbours of that data from our routing table, select a
+  # random subset and offer the same data to them.
 
 proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
@@ -185,7 +191,11 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
     # Received a proper Portal message, check if this node exists in the base
     # routing table and add if so.
-    # TODO: Could add a findNodes with distance 0 call when not, and perhaps,
+    # When the node exists in the base discv5 routing table it is likely that
+    # it will/would end up in the portal routing tables too but that is not
+    # certain as more nodes might exists on the base layer, and it will depend
+    # on the distance, order of lookups, etc.
+    # Note: Could add a findNodes with distance 0 call when not, and perhaps,
     # optionally pass ENRs if the message was a discv5 handshake containing the
     # ENR.
     let node = p.baseProtocol.getNode(srcId)
@@ -297,37 +307,51 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
-  # TODO: Actually have to parse the offer message and get the uTP connection
+  # TODO: Actually have to parse the accept message and get the uTP connection
   # id, and initiate an uTP stream with given uTP connection id to get the data
   # out.
 
-proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
+proc recordsFromBytes(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     var record: Record
     if record.fromBytes(r.asSeq()):
       records.add(record)
+    else:
+      # If any of the ENRs is invalid, fail immediatly. This is similar as what
+      # is done on the discovery v5 layer.
+      return err("Deserialization of an ENR failed")
 
-  records
+  ok(records)
 
-proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
-    Future[seq[Node]] {.async.} =
-  var nodes: seq[Node]
-  # TODO: Distances are not correct here. Fix + tests
-  let distances = lookupDistances(target, destNode.id)
-
-  let nodesMessage = await p.findNode(destNode,  List[uint16, 256](distances))
+proc findNodeVerified*(
+    p: PortalProtocol, dst: Node, distances: seq[uint16]):
+    Future[PortalResult[seq[Node]]] {.async.} =
+  let nodesMessage = await p.findNode(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
-    # TODO: distance function is wrong inhere, fix + tests
-    let verifiedNodes = verifyNodesRecords(records, destNode, EnrsResultLimit, distances)
-    nodes.add(verifiedNodes)
+    if records.isOk():
+      # TODO: distance function is wrong here for state, fix + tests
+      return ok(verifyNodesRecords(
+        records.get(), dst, EnrsResultLimit, distances))
+    else:
+      return err(records.error)
+  else:
+    return err(nodesMessage.error)
 
+proc lookupWorker(
+    p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
+  let distances = lookupDistances(target, dst.id)
+  let nodesMessage = await p.findNodeVerified(dst, distances)
+  if nodesMessage.isOk():
+    let nodes = nodesMessage.get()
     # Attempt to add all nodes discovered
     for n in nodes:
       discard p.routingTable.addNode(n)
 
-  return nodes
+    return nodes
+  else:
+    return @[]
 
 proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
@@ -397,14 +421,18 @@ proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     LookupResult(kind: Content, content: m.content)
   of enrsType:
     let records = recordsFromBytes(m.enrs)
-    let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
-    nodes.add(verifiedNodes)
+    if records.isOk():
+      let verifiedNodes =
+        verifyNodesRecords(records.get(), dst, EnrsResultLimit)
+      nodes.add(verifiedNodes)
 
-    for n in nodes:
-      # Attempt to add all nodes discovered
-      discard p.routingTable.addNode(n)
+      for n in nodes:
+        # Attempt to add all nodes discovered
+        discard p.routingTable.addNode(n)
 
-    LookupResult(kind: Nodes, nodes: nodes)
+      LookupResult(kind: Nodes, nodes: nodes)
+    else:
+      LookupResult(kind: Content)
 
 proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
     Future[LookupResult] {.async.} =
@@ -579,13 +607,11 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
     let res = pong.get()
     if res.enrSeq > n.record.seqNum:
       # Request new ENR
-      let nodes = await p.findNode(n, List[uint16, 256](@[0'u16]))
-      if nodes.isOk():
-        let records = recordsFromBytes(nodes.get().enrs)
-        # TODO: distance function is wrong inhere, fix + tests
-        let verifiedNodes = verifyNodesRecords(records, n, EnrsResultLimit, @[0'u16])
-        if verifiedNodes.len > 0:
-          discard p.routingTable.addNode(verifiedNodes[0])
+      let nodesMessage = await p.findNodeVerified(n, @[0'u16])
+      if nodesMessage.isOk():
+        let nodes = nodesMessage.get()
+        if nodes.len > 0: # Normally a node should only return 1 record actually
+          discard p.routingTable.addNode(nodes[0])
 
 proc revalidateLoop(p: PortalProtocol) {.async.} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
@@ -631,3 +657,30 @@ proc stop*(p: PortalProtocol) =
     p.revalidateLoop.cancel()
   if not p.refreshLoop.isNil:
     p.refreshLoop.cancel()
+
+proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
+  ## Resolve a `Node` based on provided `NodeId`.
+  ##
+  ## This will first look in the own routing table. If the node is known, it
+  ## will try to contact if for newer information. If node is not known or it
+  ## does not reply, a lookup is done to see if it can find a (newer) record of
+  ## the node on the network.
+  if id == p.localNode.id:
+    return some(p.localNode)
+
+  let node = p.routingTable.getNode(id)
+  if node.isSome():
+    let nodesMessage = await p.findNodeVerified(node.get(), @[0'u16])
+    # TODO: Handle failures better. E.g. stop on different failures than timeout
+    if nodesMessage.isOk() and nodesMessage[].len > 0:
+      return some(nodesMessage[][0])
+
+  let discovered = await p.lookup(id)
+  for n in discovered:
+    if n.id == id:
+      if node.isSome() and node.get().record.seqNum >= n.record.seqNum:
+        return node
+      else:
+        return some(n)
+
+  return node

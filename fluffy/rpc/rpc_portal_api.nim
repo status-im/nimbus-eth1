@@ -34,6 +34,13 @@ proc installPortalApiHandlers*(
   rpcServer.rpc("portal_" & network & "_routingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)
 
+  rpcServer.rpc("portal_" & network & "_lookupEnr") do(nodeId: NodeId) -> Record:
+    let lookup = await p.resolve(nodeId)
+    if lookup.isSome():
+      return lookup.get().record
+    else:
+      raise newException(ValueError, "Record not found in DHT lookup.")
+
   rpcServer.rpc("portal_" & network & "_recursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()
     return discovered.map(proc(n: Node): Record = n.record)
