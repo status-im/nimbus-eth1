@@ -32,7 +32,7 @@ type
   MessageKind* = enum
     ping = 0x00
     pong = 0x01
-    findnode = 0x02
+    findnodes = 0x02
     nodes = 0x03
     findcontent = 0x04
     content = 0x05
@@ -52,7 +52,7 @@ type
     enrSeq*: uint64
     customPayload*: ByteList
 
-  FindNodeMessage* = object
+  FindNodesMessage* = object
     distances*: List[uint16, 256]
 
   NodesMessage* = object
@@ -85,8 +85,8 @@ type
       ping*: PingMessage
     of pong:
       pong*: PongMessage
-    of findnode:
-      findnode*: FindNodeMessage
+    of findnodes:
+      findnodes*: FindNodesMessage
     of nodes:
       nodes*: NodesMessage
     of findcontent:
@@ -100,14 +100,14 @@ type
 
   SomeMessage* =
     PingMessage or PongMessage or
-    FindNodeMessage or NodesMessage or
+    FindNodesMessage or NodesMessage or
     FindContentMessage or ContentMessage or
     OfferMessage or AcceptMessage
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong
-  elif T is FindNodeMessage: findnode
+  elif T is FindNodesMessage: findnodes
   elif T is NodesMessage: nodes
   elif T is FindContentMessage: findcontent
   elif T is ContentMessage: content
@@ -124,19 +124,19 @@ func fromSszBytes*(T: type UInt256, data: openArray[byte]):
 
   T.fromBytesLE(data)
 
-proc encodeMessage*[T: SomeMessage](m: T): seq[byte] =
+func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   # TODO: Could/should be macro'd away,
   # or we just use SSZ.encode(Message) directly
   when T is PingMessage: SSZ.encode(Message(kind: ping, ping: m))
   elif T is PongMessage: SSZ.encode(Message(kind: pong, pong: m))
-  elif T is FindNodeMessage: SSZ.encode(Message(kind: findnode, findnode: m))
+  elif T is FindNodesMessage: SSZ.encode(Message(kind: findnodes, findnodes: m))
   elif T is NodesMessage: SSZ.encode(Message(kind: nodes, nodes: m))
   elif T is FindContentMessage: SSZ.encode(Message(kind: findcontent, findcontent: m))
   elif T is ContentMessage: SSZ.encode(Message(kind: content, content: m))
   elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
 
-proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
+func decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
   try:
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")
@@ -153,16 +153,16 @@ template innerMessage[T: SomeMessage](message: Message, expected: MessageKind): 
 # All our Message variants correspond to enum MessageKind, therefore we are able to
 # zoom in on inner structure of message by defining expected type T.
 # If expected variant is not active, return None
-proc getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
+func getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
   innerMessage[T](m, messageKind(T))
 
 # Simple conversion from Option to Result, looks like something which could live in
 # Result library.
-proc optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
+func optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
   if (opt.isSome()):
     ok(opt.unsafeGet())
   else:
     err(e)
 
-proc getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
+func getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
   optToResult(getInnnerMessage[T](m), errMessage)

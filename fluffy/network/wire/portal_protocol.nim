@@ -23,16 +23,14 @@ logScope:
   topics = "portal_wire"
 
 const
-  Alpha = 3 ## Kademlia concurrency factor
-  LookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
-  ## message for a lookup or query
-  EnrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
+  alpha = 3 ## Kademlia concurrency factor
+  enrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
-  RefreshInterval = 5.minutes ## Interval of launching a random query to
+  refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  RevalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
-  InitialLookups = 1 ## Amount of lookups done when populating the routing table
+  initialLookups = 1 ## Amount of lookups done when populating the routing table
 
 type
   ContentResultKind* = enum
@@ -90,18 +88,17 @@ proc addNode*(p: PortalProtocol, r: Record): bool =
 
 func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 
-proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
+func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
-proc handlePing(p: PortalProtocol, ping: PingMessage):
-    seq[byte] =
+func handlePing(p: PortalProtocol, ping: PingMessage): seq[byte] =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let p = PongMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
     customPayload: ByteList(SSZ.encode(customPayload)))
 
   encodeMessage(p)
 
-proc handleFindNode(p: PortalProtocol, fn: FindNodeMessage): seq[byte] =
+func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
     let enrs = List[ByteList, 32](@[])
     encodeMessage(NodesMessage(total: 1, enrs: enrs))
@@ -157,7 +154,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     encodeMessage(ContentMessage(
       contentMessageType: contentType, content: content))
 
-proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
+func handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
@@ -205,8 +202,8 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     case message.kind
     of MessageKind.ping:
       p.handlePing(message.ping)
-    of MessageKind.findnode:
-      p.handleFindNode(message.findNode)
+    of MessageKind.findnodes:
+      p.handleFindNodes(message.findNodes)
     of MessageKind.findcontent:
       p.handleFindContent(message.findcontent)
     of MessageKind.offer:
@@ -284,13 +281,13 @@ proc ping*(p: PortalProtocol, dst: Node):
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
-proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
+proc findNodes*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
-  let fn = FindNodeMessage(distances: distances)
+  let fn = FindNodesMessage(distances: distances)
 
-  trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
+  trace "Send message request", dstId = dst.id, kind = MessageKind.findnodes
   # TODO Add nodes validation
-  return await reqResponse[FindNodeMessage, NodesMessage](p, dst, fn)
+  return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[ContentMessage]] {.async.} =
@@ -324,16 +321,16 @@ proc recordsFromBytes(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]]
 
   ok(records)
 
-proc findNodeVerified*(
+proc findNodesVerified*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]):
     Future[PortalResult[seq[Node]]] {.async.} =
-  let nodesMessage = await p.findNode(dst, List[uint16, 256](distances))
+  let nodesMessage = await p.findNodes(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
     if records.isOk():
       # TODO: distance function is wrong here for state, fix + tests
       return ok(verifyNodesRecords(
-        records.get(), dst, EnrsResultLimit, distances))
+        records.get(), dst, enrsResultLimit, distances))
     else:
       return err(records.error)
   else:
@@ -342,7 +339,7 @@ proc findNodeVerified*(
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let distances = lookupDistances(target, dst.id)
-  let nodesMessage = await p.findNodeVerified(dst, distances)
+  let nodesMessage = await p.findNodesVerified(dst, distances)
   if nodesMessage.isOk():
     let nodes = nodesMessage.get()
     # Attempt to add all nodes discovered
@@ -367,13 +364,13 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
     # Doing `alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < Alpha:
+    while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -423,7 +420,7 @@ proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     let records = recordsFromBytes(m.enrs)
     if records.isOk():
       let verifiedNodes =
-        verifyNodesRecords(records.get(), dst, EnrsResultLimit)
+        verifyNodesRecords(records.get(), dst, enrsResultLimit)
       nodes.add(verifiedNodes)
 
       for n in nodes:
@@ -464,13 +461,13 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[LookupResult]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[LookupResult]](alpha)
 
   while true:
     var i = 0
     # Doing `alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < Alpha:
+    while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.contentLookupWorker(n, target))
@@ -532,11 +529,11 @@ proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < Alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -593,7 +590,7 @@ proc populateTable(p: PortalProtocol) {.async.} =
   let selfQuery = await p.query(p.baseProtocol.localNode.id)
   trace "Discovered nodes in self target query", nodes = selfQuery.len
 
-  for i in 0..<InitialLookups:
+  for i in 0..<initialLookups:
     let randomQuery = await p.queryRandom()
     trace "Discovered nodes in random target query", nodes = randomQuery.len
 
@@ -607,7 +604,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
     let res = pong.get()
     if res.enrSeq > n.record.seqNum:
       # Request new ENR
-      let nodesMessage = await p.findNodeVerified(n, @[0'u16])
+      let nodesMessage = await p.findNodesVerified(n, @[0'u16])
       if nodesMessage.isOk():
         let nodes = nodesMessage.get()
         if nodes.len > 0: # Normally a node should only return 1 record actually
@@ -618,7 +615,7 @@ proc revalidateLoop(p: PortalProtocol) {.async.} =
   ## message.
   try:
     while true:
-      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(RevalidateMax)))
+      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(revalidateMax)))
       let n = p.routingTable.nodeToRevalidate()
       if not n.isNil:
         asyncSpawn p.revalidateNode(n)
@@ -639,12 +636,12 @@ proc refreshLoop(p: PortalProtocol) {.async.} =
         await sleepAsync(5.seconds)
 
       let currentTime = now(chronos.Moment)
-      if currentTime > (p.lastLookup + RefreshInterval):
+      if currentTime > (p.lastLookup + refreshInterval):
         let randomQuery = await p.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in routing table", total = p.routingTable.len()
 
-      await sleepAsync(RefreshInterval)
+      await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
 
@@ -670,7 +667,7 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
 
   let node = p.routingTable.getNode(id)
   if node.isSome():
-    let nodesMessage = await p.findNodeVerified(node.get(), @[0'u16])
+    let nodesMessage = await p.findNodesVerified(node.get(), @[0'u16])
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if nodesMessage.isOk() and nodesMessage[].len > 0:
       return some(nodesMessage[][0])

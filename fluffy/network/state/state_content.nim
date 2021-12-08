@@ -85,7 +85,7 @@ template computeContentId*(digestCtxType: type, body: untyped): ContentId =
   let idHash = finish(h)
   readUintBE[256](idHash.data)
 
-proc toContentId*(contentKey: ContentKey): ContentId =
+func toContentId*(contentKey: ContentKey): ContentId =
   case contentKey.contentType:
   of accountTrieNode: # sha256(path | node_hash)
     let key = contentKey.accountTrieNodeKey
@@ -120,7 +120,7 @@ proc toContentId*(contentKey: ContentKey): ContentId =
       h.update(key.address)
       h.update(key.codeHash.data)
 
-proc toContentId*(contentKey: ByteList): Option[ContentId] =
+func toContentId*(contentKey: ByteList): Option[ContentId] =
   let key = decode(contentKey)
   if key.isSome():
     some(key.get().toContentId())

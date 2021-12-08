@@ -52,10 +52,10 @@ suite "Portal Wire Protocol Message Encodings":
       message.pong.enrSeq == enrSeq
       message.pong.customPayload == customPayload
 
-  test "FindNode Request":
+  test "FindNodes Request":
     let
       distances = List[uint16, 256](@[0x0100'u16, 0x00ff'u16])
-      fn = FindNodeMessage(distances: distances)
+      fn = FindNodesMessage(distances: distances)
 
     let encoded = encodeMessage(fn)
     check encoded.toHex == "02040000000001ff00"
@@ -65,8 +65,8 @@ suite "Portal Wire Protocol Message Encodings":
 
     let message = decoded.get()
     check:
-      message.kind == findnode
-      message.findnode.distances == distances
+      message.kind == findnodes
+      message.findnodes.distances == distances
 
   test "Nodes Response - empty enr list":
     let

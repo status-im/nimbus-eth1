@@ -68,11 +68,11 @@ procSuite "Portal Wire Protocol Tests":
 
     await test.stopTest()
 
-  asyncTest "FindNode/Nodes":
+  asyncTest "FindNodes/Nodes":
     let test = defaultTestCase(rng)
   
     block: # Find itself
-      let nodes = await test.proto1.findNode(test.proto2.localNode,
+      let nodes = await test.proto1.findNodes(test.proto2.localNode,
         List[uint16, 256](@[0'u16]))
 
       check:
@@ -82,7 +82,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await test.proto1.findNode(test.proto2.localNode,
+      let nodes = await test.proto1.findNodes(test.proto2.localNode,
         List[uint16, 256](@[]))
 
       check:
@@ -102,7 +102,7 @@ procSuite "Portal Wire Protocol Tests":
       test.proto2.start()
 
       let distance = logDistance(test.node1.localNode.id, test.node2.localNode.id)
-      let nodes = await test.proto1.findNode(test.proto2.localNode,
+      let nodes = await test.proto1.findNodes(test.proto2.localNode,
         List[uint16, 256](@[distance]))
 
       check:

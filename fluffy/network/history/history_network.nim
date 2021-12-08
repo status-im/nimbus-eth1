@@ -14,7 +14,7 @@ import
   ./history_content
 
 const
-  HistoryProtocolId* = [byte 0x50, 0x0B]
+  historyProtocolId* = [byte 0x50, 0x0B]
 
 # TODO: Extract common parts from the different networks
 type HistoryNetwork* = ref object
@@ -60,7 +60,7 @@ proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, HistoryProtocolId, getHandler(contentDB), dataRadius,
+    baseProtocol, historyProtocolId, getHandler(contentDB), dataRadius,
     bootstrapRecords)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)

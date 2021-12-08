@@ -15,7 +15,7 @@ import
   ./state_distance
 
 const
-  StateProtocolId* = [byte 0x50, 0x0A]
+  stateProtocolId* = [byte 0x50, 0x0A]
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -63,7 +63,7 @@ proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, StateProtocolId, getHandler(contentDB), dataRadius,
+    baseProtocol, stateProtocolId, getHandler(contentDB), dataRadius,
     bootstrapRecords, stateDistanceCalculator)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)

@@ -92,7 +92,7 @@ procSuite "State Content Network":
 
   asyncTest "Find content in the network via content lookup":
     # TODO: Improve this test so it actually need to go through several
-    # findNode request, to properly test the lookup call.
+    # findNodes request, to properly test the lookup call.
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
       node1 = initDiscoveryNode(
@@ -172,7 +172,7 @@ procSuite "State Content Network":
     let distance = proto1.portalProtocol.routingTable.logDistance(
       node1.localNode.id, node2.localNode.id)
 
-    let nodes = await proto1.portalProtocol.findNode(
+    let nodes = await proto1.portalProtocol.findNodes(
         proto2.portalProtocol.localNode, List[uint16, 256](@[distance]))
 
     check:
