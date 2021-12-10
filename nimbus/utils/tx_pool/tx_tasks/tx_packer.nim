@@ -51,37 +51,6 @@ const
 logScope:
   topics = "tx-pool packer"
 
-# [
-# ------------------------------------------------------------------------------
-# Private debugging helpers
-# ------------------------------------------------------------------------------
-
-import std/[sequtils, strutils]
-
-proc pp(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).join[12 .. 19].toLowerAscii
-
-const statusInfo = block:
-  var rc: array[TxItemStatus,string]
-  rc[txItemPending] = "*"
-  rc[txItemStaged] = "S"
-  rc[txItemPacked] = "P"
-  rc
-
-proc pp(item: TxItemRef): string =
-  if item.isNil:
-    return "nil"
-  "(" & statusInfo[item.status] &
-    "," & item.sender.pp &
-    "," & $item.tx.nonce &
-    ")"
-
-template say(args: varargs[untyped]): untyped =
-  # echo "*** ", args
-  discard
-
-#]#
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -141,8 +110,13 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
 
-  # # Commit accounts => not needed
-  # vmState.stateDB.persist(clearCache = false)
+  # Save accounts via persist() is not needed unless the fork is smaller
+  # than `FkByzantium` in which case, the `rootHash()` function is called
+  # by `makeReceipt()`. As the `rootHash()` function asserts unconditionally
+  # that the account cache has been saved, the `persist()` call is
+  # obligatory here.
+  if xp.chain.nextFork < FkByzantium:
+    vmState.stateDB.persist(clearCache = false)
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
@@ -177,8 +151,6 @@ proc packerLoop(pst: TxPackerStateRef)
   # Select items and move them to the `packed` bucket
   for (_,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
     for item in nonceList.incNonce:
-      say "packerVmExec item=", item.pp
-
       let
         accTx = vmState.stateDB.beginSavepoint
         totalGas = vmState.cumulativeGasUsed

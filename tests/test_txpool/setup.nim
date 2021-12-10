@@ -34,6 +34,12 @@ proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
   if status != item.status:
     discard xp.txDB.reassign(item, status)
 
+proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody]): int =
+  if c.persistBlocks(h,b) != ValidationResult.OK:
+    raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
+  for body in b:
+    result += body.transactions.len
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -60,61 +66,57 @@ proc toTxPool*(
     noisy: bool): (TxPoolRef, int) =
 
   var
-    txPoolOk = false
     txCount = 0
     chainNo = 0
     chainDB = db.newChain
     nTxs = 0
 
   doAssert not db.isNil
+  result[0] = TxPoolRef.new(db,testAddress)
+  result[0].baseFee = baseFee
 
-  proc importBlocks(headers: seq[BlockHeader]; bodies: seq[BlockBody]) =
-    if not chainDB.persistBlocks(headers,bodies).isOK:
-      raiseAssert "persistBlocks() failed at block #" & $headers[0].blockNumber
-    for body in bodies:
-      nTxs += body.transactions.len
+  for chain in file.undumpNextGroup:
+    let leadBlkNum = chain[0][0].blockNumber
+    chainNo.inc
 
-  block allDone:
-    for chain in file.undumpNextGroup:
-      let leadBlkNum = chain[0][0].blockNumber
-      chainNo.inc
-      if leadBlkNum == 0.u256:
-        # Verify Genesis
-        doAssert chain[0][0] == db.getBlockHeader(0.u256)
+    if loadTxs <= txCount:
+      break
 
-      elif leadBlkNum < loadBlocks.u256 or nTxs < minBlockTxs:
-        importBlocks(chain[0],chain[1])
-      else:
-        # Import transactions
-        for inx in 0 ..< chain[0].len:
-          let
-            blkNum = chain[0][inx].blockNumber
-            txs = chain[1][inx].transactions
+    # Verify Genesis
+    if leadBlkNum == 0.u256:
+      doAssert chain[0][0] == db.getBlockHeader(0.u256)
+      continue
 
-          # Continue importing up until first non-trivial block
-          if not txPoolOk:
-            if txs.len < 1:
-              # collect empty blocks
-              importBlocks(@[chain[0][inx]],@[chain[1][inx]])
-              continue
-            txPoolOk = true
-            result[0] = TxPoolRef.new(db,testAddress)
-            result[0].baseFee = baseFee
+    if leadBlkNum < loadBlocks.u256 or nTxs < minBlockTxs:
+      nTxs += chainDB.importBlocks(chain[0],chain[1])
+      continue
 
-          # Load transactions, one-by-one
-          for n in 0 ..< txs.len:
-            txCount.inc
-            let
-              status = getStatus()
-              info = &"{txCount} #{blkNum}({chainNo}) "&
-                     &"{n}/{txs.len} {statusInfo[status]}"
-            noisy.showElapsed(&"insert: {info}"):
-              result[0].jobAddTx(txs[n], info)
-            if loadTxs <= txCount:
-              break allDone
+    # Import transactions
+    for inx in 0 ..< chain[0].len:
+      let
+        num = chain[0][inx].blockNumber
+        txs = chain[1][inx].transactions
+
+      # Continue importing up until first non-trivial block
+      if txCount == 0 and txs.len == 0:
+        nTxs += chainDB.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
+        continue
+
+      # Load transactions, one-by-one
+      for n in 0 ..< min(txs.len, loadTxs - txCount):
+        txCount.inc
+        let
+          status = statusInfo[getStatus()]
+          info = &"{txCount} #{num}({chainNo}) {n}/{txs.len} {status}"
+        noisy.showElapsed(&"insert: {info}"):
+          result[0].jobAddTx(txs[n], info)
+
+      if loadTxs <= txCount:
+        break
 
   result[0].jobCommit
   result[1] = nTxs
+
 
 proc toTxPool*(
     db: BaseChainDB;            ## to be modified, initialisier for `TxPool`

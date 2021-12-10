@@ -23,10 +23,17 @@
 ##
 ## * Impose a size limit to the bucket database. Which items would be removed?
 ##
-## * Implement disposing of items in *tx_tab* so that updating the rank table
-##   can be optimised
+## * There is a conceivable problem with the per-account optimisation. The
+##   algorithm chooses an account and does not stop packing until all txs
+##   of the account are packed or the block is full. In the lattter case,
+##   there might be some txs left unpacked from the account which might be
+##   the most lucrative ones. Should this be tackled (see also next item)?
 ##
-## * Layzily flush the `packed` bucket after `head=` is run.
+## * The classifier throws out all txs with negative gas tips. This implies
+##   that all subsequent txs must also be suspended for this account even
+##   though these following txs might be extraordinarily profitable so that
+##   packing the whole account might be woth wile. Should this be considered,
+##   somehow (see also previous item)?
 ##
 ##
 ## Transaction Pool
@@ -821,7 +828,7 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
     xp.chain.head = val # calculates the new baseFee
     xp.txDB.baseFee = xp.chain.baseFee
     xp.pDirtyBuckets = true
-    xp.bucketFlushPacked # FIXME: ineficient, better do it layzily
+    xp.bucketFlushPacked
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
