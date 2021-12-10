@@ -134,22 +134,39 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
   result = diff
 
 template calcDifficultyByzantium*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  ## "EIP-649: Metropolis Difficulty Bomb Delay and Block Reward Reduction"
+  ## <https://eips.ethereum.org/EIPS/eip-649>
   makeDifficultyCalculator(3_000_000, timeStamp, parent)
 
 template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  ## "EIP-1234: Constantinople Difficulty Bomb Delay and Block Reward Adjustment"
+  ## <https://eips.ethereum.org/EIPS/eip-1234>
+  ## Keep using Byzantium's rules but offset the bomb 5.0M blocks.
   makeDifficultyCalculator(5_000_000, timeStamp, parent)
 
 template calcDifficultyMuirGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-  # EIP-2384
+  ## "EIP-2384: Muir Glacier Difficulty Bomb Delay"
+  ## <https://eips.ethereum.org/EIPS/eip-2384>
+  ## Offset the bomb 4.0M more blocks than Constantinople, total 9.0M blocks.
   makeDifficultyCalculator(9_000_000, timeStamp, parent)
 
 template calcDifficultyLondon*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-  # EIP-3554
+  ## "EIP-3554: Difficulty Bomb Delay to December 2021"
+  ## <https://eips.ethereum.org/EIPS/eip-3554>
+  ## Offset the bomb a total of 9.7M blocks.
   makeDifficultyCalculator(9_700_000, timeStamp, parent)
+
+template calcDifficultyArrowGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  ## "EIP-4345: Difficulty Bomb Delay to June 2022"
+  ## <https://eips.ethereum.org/EIPS/eip-4345>
+  ## Offset the bomb a total of 10.7M blocks.
+  makeDifficultyCalculator(10_700_000, timeStamp, parent)
 
 func calcDifficulty*(c: ChainConfig, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= c.londonBlock:
+  if next >= c.arrowGlacierBlock:
+    result = calcDifficultyArrowGlacier(timeStamp, parent)
+  elif next >= c.londonBlock:
     result = calcDifficultyLondon(timeStamp, parent)
   elif next >= c.muirGlacierBlock:
     result = calcDifficultyMuirGlacier(timeStamp, parent)

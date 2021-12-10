@@ -23,8 +23,10 @@ import
   stint
 
 type
-  # Chain's forks not always equals to EVM's forks
   ChainFork* = enum
+    ## `ChainFork` has extra forks not in the EVM fork list.  These are the
+    ## unique `DAOFork`, and Glacier forks `MuirGlacier` and `ArrowGlacier`.
+    ## At the Glacier forks, only block difficulty calculation changed.
     Frontier,
     Homestead,
     DAOFork,
@@ -36,7 +38,8 @@ type
     Istanbul,
     MuirGlacier,
     Berlin,
-    London
+    London,
+    ArrowGlacier
 
   Chain* = ref object of AbstractChainDB
     db: BaseChainDB
@@ -85,7 +88,8 @@ func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
     toNextFork(c.istanbulBlock),
     toNextFork(c.muirGlacierBlock),
     toNextFork(c.berlinBlock),
-    toNextFork(c.londonBlock)
+    toNextFork(c.londonBlock),
+    toNextFork(c.arrowGlacierBlock)
   ]
 
   if fork == high(ChainFork):

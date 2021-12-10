@@ -145,6 +145,7 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.muirGlacierBlock    = number[FkBerlin]
     c.berlinBlock         = number[FkBerlin]
     c.londonBlock         = number[FkLondon]
+    c.arrowGlacierBlock   = number[FkLondon]
 
   case network
   of "EIP150":

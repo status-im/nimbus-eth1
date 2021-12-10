@@ -38,6 +38,7 @@ type
     muirGlacierBlock   : Option[BlockNumber]
     berlinBlock        : Option[BlockNumber]
     londonBlock        : Option[BlockNumber]
+    arrowGlacierBlock  : Option[BlockNumber]
     clique             : CliqueOptions
 
   ChainConfig* = object
@@ -60,6 +61,7 @@ type
     muirGlacierBlock*   : BlockNumber
     berlinBlock*        : BlockNumber
     londonBlock*        : BlockNumber
+    arrowGlacierBlock*  : BlockNumber
 
     poaEngine*          : bool
     cliquePeriod*       : int
@@ -202,7 +204,8 @@ proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
       error "Forks can't be assigned out of order", fork=fork
       return false
 
-  validateFork(londonBlock,         high(BlockNumber).toBlockNumber)
+  validateFork(arrowGlacierBlock,   high(BlockNumber))
+  validateFork(londonBlock,         cg.config.arrowGlacierBlock)
   validateFork(berlinBlock,         cg.config.londonBlock)
   validateFork(muirGlacierBlock,    cg.config.berlinBlock)
   validateFork(istanbulBlock,       cg.config.muirGlacierBlock)
@@ -227,6 +230,7 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool =
   return true
 
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
+  ## Map to EVM fork, which doesn't include the DAO or Glacier forks.
   if number >= c.londonBlock: FkLondon
   elif number >= c.berlinBlock: FkBerlin
   elif number >= c.istanbulBlock: FkIstanbul
@@ -245,76 +249,85 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
   result = case id
   of MainNet:
     ChainConfig(
-      poaEngine:      false,
-      chainId:        MainNet.ChainId,
-      homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
-      daoForkBlock:   1_920_000.toBlockNumber,
-      daoForkSupport: true,
-      eip150Block:    2_463_000.toBlockNumber, # 18/10/2016 17:19:31
-      eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
-      eip155Block:    2_675_000.toBlockNumber, # 22/11/2016 18:15:44
-      eip158Block:    2_675_000.toBlockNumber,
-      byzantiumBlock: 4_370_000.toBlockNumber, # 16/10/2017 09:22:11
-      constantinopleBlock: 7_280_000.toBlockNumber, # Never Occured in MainNet
-      petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
-      istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
-      muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
-      berlinBlock:    12_244_000.toBlockNumber, # 15/04/2021 10:07:03
-      londonBlock:    12_965_000.toBlockNumber, # 05/08/2021 12:33:42
+      poaEngine:           false,
+      chainId:             MainNet.ChainId,
+      # Genesis (Frontier):                          # 2015-07-30 15:26:13 UTC
+      # Frontier Thawing:  200_000.toBlockNumber,    # 2015-09-07 21:33:09 UTC
+      homesteadBlock:      1_150_000.toBlockNumber,  # 2016-03-14 18:49:53 UTC
+      daoForkBlock:        1_920_000.toBlockNumber,  # 2016-07-20 13:20:40 UTC
+      daoForkSupport:      true,
+      eip150Block:         2_463_000.toBlockNumber,  # 2016-10-18 13:19:31 UTC
+      eip150Hash:          toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+      eip155Block:         2_675_000.toBlockNumber,  # Same as EIP-158
+      eip158Block:         2_675_000.toBlockNumber,  # 2016-11-22 16:15:44 UTC
+      byzantiumBlock:      4_370_000.toBlockNumber,  # 2017-10-16 05:22:11 UTC
+      constantinopleBlock: 7_280_000.toBlockNumber,  # Skipped on Mainnet
+      petersburgBlock:     7_280_000.toBlockNumber,  # 2019-02-28 19:52:04 UTC
+      istanbulBlock:       9_069_000.toBlockNumber,  # 2019-12-08 00:25:09 UTC
+      muirGlacierBlock:    9_200_000.toBlockNumber,  # 2020-01-02 08:30:49 UTC
+      berlinBlock:         12_244_000.toBlockNumber, # 2021-04-15 10:07:03 UTC
+      londonBlock:         12_965_000.toBlockNumber, # 2021-08-05 12:33:42 UTC
+      arrowGlacierBlock:   13_773_000.toBlockNumber, # 2021-12-09 19:55:23 UTC
     )
   of RopstenNet:
     ChainConfig(
-      poaEngine:      false,
-      chainId:        RopstenNet.ChainId,
-      homesteadBlock: 0.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    0.toBlockNumber,
-      eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
-      eip155Block:    10.toBlockNumber,
-      eip158Block:    10.toBlockNumber,
-      byzantiumBlock: 1_700_000.toBlockNumber,
-      constantinopleBlock: 4_230_000.toBlockNumber,
-      petersburgBlock:4_939_394.toBlockNumber,
-      istanbulBlock:  6_485_846.toBlockNumber,
-      muirGlacierBlock: 7_117_117.toBlockNumber,
-      berlinBlock:      9_812_189.toBlockNumber,
-      londonBlock:    10_499_401.toBlockNumber # June 24, 2021
+      poaEngine:           false,
+      chainId:             RopstenNet.ChainId,
+      # Genesis:                                     # 2016-11-20 11:48:50 UTC
+      homesteadBlock:      0.toBlockNumber,          # Included in genesis
+      daoForkSupport:      false,
+      eip150Block:         0.toBlockNumber,          # Included in genesis
+      eip150Hash:          toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
+      eip155Block:         10.toBlockNumber,         # Same as EIP-158
+      eip158Block:         10.toBlockNumber,         # 2016-11-20 11:50:44 UTC
+      byzantiumBlock:      1_700_000.toBlockNumber,  # 2017-09-19 01:08:28 UTC
+      constantinopleBlock: 4_230_000.toBlockNumber,  # 2018-10-13 17:19:06 UTC
+      petersburgBlock:     4_939_394.toBlockNumber,  # 2019-02-02 07:39:08 UTC
+      istanbulBlock:       6_485_846.toBlockNumber,  # 2019-09-30 03:38:06 UTC
+      muirGlacierBlock:    7_117_117.toBlockNumber,  # 2020-01-13 06:37:37 UTC
+      berlinBlock:         9_812_189.toBlockNumber,  # 2021-03-10 13:32:08 UTC
+      londonBlock:         10_499_401.toBlockNumber, # 2021-06-24 02:03:37 UTC
+      arrowGlacierBlock:   high(BlockNumber),        # No current plan
     )
   of RinkebyNet:
     ChainConfig(
-      poaEngine:      true,
-      chainId:        RinkebyNet.ChainId,
-      homesteadBlock: 1.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    2.toBlockNumber,
-      eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
-      eip155Block:    3.toBlockNumber,
-      eip158Block:    3.toBlockNumber,
-      byzantiumBlock: 1_035_301.toBlockNumber,
-      constantinopleBlock: 3_660_663.toBlockNumber,
-      petersburgBlock:4_321_234.toBlockNumber,
-      istanbulBlock:  5_435_345.toBlockNumber,
-      muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
-      berlinBlock:      8_290_928.toBlockNumber,
-      londonBlock:    8_897_988.toBlockNumber # July 7, 2021
+      poaEngine:           true,
+      chainId:             RinkebyNet.ChainId,
+      # Genesis:                                     # 2017-04-12 15:20:50 UTC
+      homesteadBlock:      1.toBlockNumber,          # 2017-04-12 15:20:58 UTC
+      daoForkSupport:      false,
+      eip150Block:         2.toBlockNumber,          # 2017-04-12 15:21:14 UTC
+      eip150Hash:          toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
+      eip155Block:         3.toBlockNumber,          # Same as EIP-158
+      eip158Block:         3.toBlockNumber,          # 2017-04-12 15:21:29 UTC
+      byzantiumBlock:      1_035_301.toBlockNumber,  # 2017-10-09 12:08:23 UTC
+      constantinopleBlock: 3_660_663.toBlockNumber,  # 2019-01-09 13:00:55 UTC
+      petersburgBlock:     4_321_234.toBlockNumber,  # 2019-05-04 05:32:45 UTC
+      istanbulBlock:       5_435_345.toBlockNumber,  # 2019-11-13 18:21:53 UTC
+      muirGlacierBlock:    8_290_928.toBlockNumber,  # Skipped on Rinkeby
+      berlinBlock:         8_290_928.toBlockNumber,  # 2021-03-24 14:48:36 UTC
+      londonBlock:         8_897_988.toBlockNumber,  # 2021-07-08 01:27:32 UTC
+      arrowGlacierBlock:   high(BlockNumber),        # No current plan
     )
   of GoerliNet:
     ChainConfig(
-      poaEngine:      true,
-      chainId:        GoerliNet.ChainId,
-      homesteadBlock: 0.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    0.toBlockNumber,
-      eip150Hash:     toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
-      eip155Block:    0.toBlockNumber,
-      eip158Block:    0.toBlockNumber,
-      byzantiumBlock: 0.toBlockNumber,
-      constantinopleBlock: 0.toBlockNumber,
-      petersburgBlock: 0.toBlockNumber,
-      istanbulBlock:  1_561_651.toBlockNumber,
-      muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
-      berlinBlock:    4_460_644.toBlockNumber,
-      londonBlock:    5_062_605.toBlockNumber # June 30, 2021
+      poaEngine:           true,
+      chainId:             GoerliNet.ChainId,
+      # Genesis:                                     # 2015-07-30 15:26:13 UTC
+      homesteadBlock:      0.toBlockNumber,          # Included in genesis
+      daoForkSupport:      false,
+      eip150Block:         0.toBlockNumber,          # Included in genesis
+      eip150Hash:          toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
+      eip155Block:         0.toBlockNumber,          # Included in genesis
+      eip158Block:         0.toBlockNumber,          # Included in genesis
+      byzantiumBlock:      0.toBlockNumber,          # Included in genesis
+      constantinopleBlock: 0.toBlockNumber,          # Included in genesis
+      petersburgBlock:     0.toBlockNumber,          # Included in genesis
+      istanbulBlock:       1_561_651.toBlockNumber,  # 2019-10-30 13:53:05 UTC
+      muirGlacierBlock:    4_460_644.toBlockNumber,  # Skipped in Goerli
+      berlinBlock:         4_460_644.toBlockNumber,  # 2021-03-18 05:29:51 UTC
+      londonBlock:         5_062_605.toBlockNumber,  # 2021-07-01 03:19:39 UTC
+      arrowGlacierBlock:   high(BlockNumber),        # No current plan
     )
   else:
     ChainConfig()

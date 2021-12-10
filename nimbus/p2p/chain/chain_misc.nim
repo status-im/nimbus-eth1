@@ -24,7 +24,8 @@ import
 # ------------------------------------------------------------------------------
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
-  if number >= c.londonBlock: London
+  if number >= c.arrowGlacierBlock: ArrowGlacier
+  elif number >= c.londonBlock: London
   elif number >= c.berlinBlock: Berlin
   elif number >= c.muirGlacierBlock: MuirGlacier
   elif number >= c.istanbulBlock: Istanbul
