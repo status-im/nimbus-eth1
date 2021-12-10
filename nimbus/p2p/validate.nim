@@ -19,7 +19,7 @@ import
   ../vm_types,
   ../forks,
   ./dao,
-  ./validate/epoch_hash_cache,
+  ../utils/pow,
   ./gaslimit,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
@@ -32,31 +32,13 @@ from stew/byteutils
   import nil
 
 export
-  epoch_hash_cache.EpochHashCache,
-  epoch_hash_cache.initEpochHashCache,
+  pow.PowRef,
+  pow.new,
   results
 
 const
   daoForkBlockExtraData =
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
-
-type
-  MiningHeader = object
-    parentHash  : Hash256
-    ommersHash  : Hash256
-    coinbase    : EthAddress
-    stateRoot   : Hash256
-    txRoot      : Hash256
-    receiptRoot : Hash256
-    bloom       : common.BloomFilter
-    difficulty  : DifficultyInt
-    blockNumber : BlockNumber
-    gasLimit    : GasInt
-    gasUsed     : GasInt
-    timestamp   : EthTime
-    extraData   : Blob
-
-  Hash512 = MDigest[512]
 
 {.push raises: [Defect,CatchableError].}
 
@@ -64,87 +46,41 @@ type
 # Private Helpers
 # ------------------------------------------------------------------------------
 
-func toMiningHeader(header: BlockHeader): MiningHeader =
-  result.parentHash  = header.parentHash
-  result.ommersHash  = header.ommersHash
-  result.coinbase    = header.coinbase
-  result.stateRoot   = header.stateRoot
-  result.txRoot      = header.txRoot
-  result.receiptRoot = header.receiptRoot
-  result.bloom       = header.bloom
-  result.difficulty  = header.difficulty
-  result.blockNumber = header.blockNumber
-  result.gasLimit    = header.gasLimit
-  result.gasUsed     = header.gasUsed
-  result.timestamp   = header.timestamp
-  result.extraData   = header.extraData
-
-
-func hash(header: MiningHeader): Hash256 =
-  keccakHash(rlp.encode(header))
-
 func isGenesis(header: BlockHeader): bool =
   header.blockNumber == 0.u256 and
     header.parentHash == GENESIS_PARENT_HASH
 
 # ------------------------------------------------------------------------------
-# Private cache management functions
-# ------------------------------------------------------------------------------
-
-func cacheHash(x: EpochHashDigest): Hash256 =
-  var ctx: keccak256
-  ctx.init()
-
-  for a in x:
-    ctx.update(a.data[0].unsafeAddr, uint(a.data.len))
-
-  ctx.finish result.data
-  ctx.clear()
-
-# ------------------------------------------------------------------------------
 # Pivate validator functions
 # ------------------------------------------------------------------------------
 
-proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
-              nonce: BlockNonce; difficulty: DifficultyInt;
-              hashCache: var EpochHashCache): Result[void,string] =
-  let
-    blockNumber = blockNumber.truncate(uint64)
-    cache = hashCache.getEpochHash(blockNumber)
-    size = getDataSize(blockNumber)
-    miningOutput = hashimotoLight(
-      size, cache, miningHash, uint64.fromBytesBE(nonce))
+proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
+  let (expMixDigest,miningValue) = pow.getPowDigest(header)
 
-  if miningOutput.mixDigest != mixHash:
+  if expMixDigest != header.mixDigest:
+    let
+      miningHash = header.getPowSpecs.miningHash
+      (size, cachedHash) = pow.getPowCacheLookup(header.blockNumber)
     debug "mixHash mismatch",
-      actual = miningOutput.mixDigest,
-      expected = mixHash,
-      blockNumber = blockNumber,
+      actual = header.mixDigest,
+      expected = expMixDigest,
+      blockNumber = header.blockNumber,
       miningHash = miningHash,
-      nonce = nonce.toHex,
-      difficulty = difficulty,
+      nonce = header.nonce.toHex,
+      difficulty = header.difficulty,
       size = size,
-      cachedHash = cacheHash(cache)
+      cachedHash = cachedHash
     return err("mixHash mismatch")
 
-  let value = Uint256.fromBytesBE(miningOutput.value.data)
-  if value > Uint256.high div difficulty:
+  let value = Uint256.fromBytesBE(miningValue.data)
+  if value > Uint256.high div header.difficulty:
     return err("mining difficulty error")
 
-  result = ok()
-
-
-proc validateSeal(hashCache: var EpochHashCache;
-                  header: BlockHeader): Result[void,string] =
-  let miningHeader = header.toMiningHeader
-  let miningHash = miningHeader.hash
-
-  checkPOW(header.blockNumber, miningHash,
-           header.mixDigest, header.nonce, header.difficulty, hashCache)
+  ok()
 
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
                     numTransactions: int; checkSealOK: bool;
-                    hashCache: var EpochHashCache): Result[void,string] =
+                    pow: PowRef): Result[void,string] =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -178,7 +114,7 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
     return err("provided header difficulty is too low")
 
   if checkSealOK:
-    return hashCache.validateSeal(header)
+    return pow.validateSeal(header)
 
   result = ok()
 
@@ -202,7 +138,7 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
                     uncles: seq[BlockHeader]; checkSealOK: bool;
-                    hashCache: var EpochHashCache): Result[void,string] =
+                    pow: PowRef): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -258,7 +194,7 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
 
     # Now perform VM level validation of the uncle
     if checkSealOK:
-      result = hashCache.validateSeal(uncle)
+      result = pow.validateSeal(uncle)
       if result.isErr:
         return
 
@@ -351,7 +287,7 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
             uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
-            hashCache: var EpochHashCache): Result[void,string] =
+            pow: PowRef): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -359,7 +295,7 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
 
   let parent = chainDB.getBlockHeader(header.parentHash)
   result = chainDB.validateHeader(
-    header, parent, numTransactions, checkSealOK, hashCache)
+    header, parent, numTransactions, checkSealOK, pow)
   if result.isErr:
     return
 
@@ -369,22 +305,22 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
   if not chainDB.exists(header.stateRoot):
     return err("`state_root` was not found in the db.")
 
-  result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
+  result = chainDB.validateUncles(header, uncles, checkSealOK, pow)
   if result.isOk:
     result = chainDB.validateGasLimitOrBaseFee(header, parent)
 
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB;
                       header: BlockHeader; body: BlockBody; checkSealOK: bool;
-                      hashCache: var EpochHashCache): Result[void,string] =
+                      pow: PowRef): Result[void,string] =
   chainDB.validateHeaderAndKinship(
-    header, body.uncles, body.transactions.len, checkSealOK, hashCache)
+    header, body.uncles, body.transactions.len, checkSealOK, pow)
 
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
-        checkSealOK: bool; hashCache: var EpochHashCache): Result[void,string] =
+        checkSealOK: bool; pow: PowRef): Result[void,string] =
   chainDB.validateHeaderAndKinship(
-    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, hashCache)
+    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, pow)
 
 # ------------------------------------------------------------------------------
 # End

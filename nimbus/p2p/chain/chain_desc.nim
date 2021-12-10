@@ -13,10 +13,10 @@ import
   ../../db/db_chain,
   ../../genesis,
   ../../utils,
+  ../../utils/pow,
   ../../chain_config,
   ../clique,
   ../validate,
-  ../validate/epoch_hash_cache,
   chronicles,
   eth/[common, trie/db],
   stew/endians2,
@@ -53,8 +53,8 @@ type
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
 
-    cacheByEpoch: EpochHashCache ##\
-      ## Objects cache to speed up hash lookup in validation functions.
+    pow: PowRef ##\
+      ## Wrapper around `hashimotoLight()` and lookup cache
 
     poa: Clique ##\
       ## For non-PoA networks (when `db.config.poaEngine` is `false`),
@@ -144,9 +144,9 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
   # this descriptor is ignored.
   c.poa = db.newClique
 
-  # Always initialise the epoch cache even though it migh no be used
+  # Always initialise the PoW epoch cache even though it migh no be used
   # unless `extraValidation` is set `true`.
-  c.cacheByEpoch.initEpochHashCache
+  c.pow = PowRef.new
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -204,9 +204,9 @@ proc clique*(c: Chain): var Clique {.inline.} =
   ## Getter
   c.poa
 
-proc cacheByEpoch*(c: Chain): var EpochHashCache {.inline.} =
+proc pow*(c: Chain): PowRef {.inline.} =
   ## Getter
-  c.cacheByEpoch
+  c.pow
 
 proc db*(c: Chain): auto {.inline.} =
   ## Getter
