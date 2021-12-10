@@ -13,7 +13,7 @@
 ##
 
 import
-  ../../slst,
+  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   eth/[common],
@@ -23,7 +23,7 @@ type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
-    nonceList: Slst[AccountNonce,TxItemRef]
+    nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
@@ -35,7 +35,7 @@ type
   TxSenderTab* = object ##\
     ## Per address table
     size: int
-    addrList: SLst[EthAddress,TxSenderSchedRef]
+    addrList: SortedSet[EthAddress,TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
@@ -82,7 +82,7 @@ proc nActive(rq: TxSenderSchedRef): int {.inline.} =
       result.inc
 
 proc cmp(a,b: EthAddress): int {.inline.} =
-  ## mixin for SLst
+  ## mixin for SortedSet
   for n in 0 ..< EthAddress.len:
     if a[n] < b[n]:
       return -1
@@ -262,7 +262,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
   ok()
 
 # ------------------------------------------------------------------------------
-# Public SLst ops -- `EthAddress` (level 0)
+# Public SortedSet ops -- `EthAddress` (level 0)
 # ------------------------------------------------------------------------------
 
 proc len*(gt: var TxSenderTab): int {.inline.} =
@@ -273,23 +273,23 @@ proc nItems*(gt: var TxSenderTab): int {.inline.} =
   gt.size
 
 proc eq*(gt: var TxSenderTab; sender: EthAddress):
-       SLstResult[EthAddress,TxSenderSchedRef] {.inline.} =
+       SortedSetResult[EthAddress,TxSenderSchedRef] {.inline.} =
   gt.addrList.eq(sender)
 
 proc first*(gt: var TxSenderTab):
-          SLstResult[EthAddress,TxSenderSchedRef] {.inline.} =
+          SortedSetResult[EthAddress,TxSenderSchedRef] {.inline.} =
   gt.addrList.ge(minEthAddress)
 
 proc last*(gt: var TxSenderTab):
-          SLstResult[EthAddress,TxSenderSchedRef] {.inline.} =
+          SortedSetResult[EthAddress,TxSenderSchedRef] {.inline.} =
   gt.addrList.le(maxEthAddress)
 
 proc next*(gt: var TxSenderTab; key: EthAddress):
-          SLstResult[EthAddress,TxSenderSchedRef] {.inline.} =
+          SortedSetResult[EthAddress,TxSenderSchedRef] {.inline.} =
   gt.addrList.gt(key)
 
 proc prev*(gt: var TxSenderTab; key: EthAddress):
-          SLstResult[EthAddress,TxSenderSchedRef] {.inline.} =
+          SortedSetResult[EthAddress,TxSenderSchedRef] {.inline.} =
   gt.addrList.lt(key)
 
 # ------------------------------------------------------------------------------
@@ -304,22 +304,23 @@ proc nItems*(schedData: TxSenderSchedRef): int {.inline.} =
   ## Getter, total number of items in the sub-list
   schedData.size
 
-proc nItems*(rc: SLstResult[EthAddress,TxSenderSchedRef]): int {.inline.} =
+proc nItems*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]): int {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
   0
 
 
 proc eq*(schedData: TxSenderSchedRef; status: TxItemStatus):
-       SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+       SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Return by status sub-list
   let nonceData = schedData.statusList[status]
   if nonceData.isNil:
     return err(rbNotFound)
-  toSLstResult(key = status.toSenderSchedule, data = nonceData)
+  toSortedSetResult(key = status.toSenderSchedule, data = nonceData)
 
-proc eq*(rc: SLstResult[EthAddress,TxSenderSchedRef]; status: TxItemStatus):
-       SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
+         status: TxItemStatus):
+           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Return by status sub-list
   if rc.isOK:
     return rc.value.data.eq(status)
@@ -327,15 +328,15 @@ proc eq*(rc: SLstResult[EthAddress,TxSenderSchedRef]; status: TxItemStatus):
 
 
 proc any*(schedData: TxSenderSchedRef):
-        SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+        SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Return all-entries sub-list
   let nonceData = schedData.allList
   if nonceData.isNil:
     return err(rbNotFound)
-  toSLstResult(key = txSenderAny, data = nonceData)
+  toSortedSetResult(key = txSenderAny, data = nonceData)
 
-proc any*(rc: SLstResult[EthAddress,TxSenderSchedRef]):
-        SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+proc any*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]):
+        SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Return all-entries sub-list
   if rc.isOK:
     return rc.value.data.any
@@ -344,7 +345,7 @@ proc any*(rc: SLstResult[EthAddress,TxSenderSchedRef]):
 
 proc eq*(schedData: TxSenderSchedRef;
          key: TxSenderSchedule):
-           SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Variant of `eq()` using unified key schedule
   case key
   of txSenderAny:
@@ -356,15 +357,15 @@ proc eq*(schedData: TxSenderSchedRef;
   of txSenderStaged:
     return schedData.eq(txItemStaged)
 
-proc eq*(rc: SLstResult[EthAddress,TxSenderSchedRef];
+proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
          key: TxSenderSchedule):
-           SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
+           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.eq(key)
   err(rc.error)
 
 # ------------------------------------------------------------------------------
-# Public SLst ops -- `AccountNonce` (level 2)
+# Public SortedSet ops -- `AccountNonce` (level 2)
 # ------------------------------------------------------------------------------
 
 proc len*(nonceData: TxSenderNonceRef): int {.inline.} =
@@ -375,7 +376,7 @@ proc nItems*(nonceData: TxSenderNonceRef): int {.inline.} =
   ## Getter, total number of items in the sub-list
   nonceData.nonceList.len
 
-proc nItems*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef]):
+proc nItems*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
            int {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
@@ -383,60 +384,60 @@ proc nItems*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef]):
 
 
 proc eq*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.eq(nonce)
 
-proc eq*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+proc eq*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxItemRef] {.inline.} =
+           SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.eq(nonce)
   err(rc.error)
 
 
 proc ge*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.ge(nonce)
 
-proc ge*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+proc ge*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxItemRef] {.inline.} =
+           SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.ge(nonce)
   err(rc.error)
 
 
 proc gt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.gt(nonce)
 
-proc gt*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+proc gt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxItemRef] {.inline.} =
+           SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.gt(nonce)
   err(rc.error)
 
 
 proc le*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.le(nonce)
 
-proc le*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+proc le*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxItemRef] {.inline.} =
+           SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.le(nonce)
   err(rc.error)
 
 
 proc lt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.lt(nonce)
 
-proc lt*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+proc lt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxItemRef] {.inline.} =
+           SortedSetResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.lt(nonce)
   err(rc.error)

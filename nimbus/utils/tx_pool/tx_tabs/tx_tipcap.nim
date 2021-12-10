@@ -16,8 +16,7 @@
 ##
 
 import
-  ../../keequ,
-  ../../slst,
+  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   ./tx_leaf,
@@ -28,7 +27,7 @@ type
   TxTipCapTab* = object ##\
     ## Generic item list indexed by gas price
     size: int
-    gasList: SLst[GasPrice,TxLeafItemRef]
+    gasList: SortedSet[GasPrice,TxLeafItemRef]
 
 {.push raises: [Defect].}
 
@@ -106,7 +105,7 @@ proc txVerify*(gp: var TxTipCapTab): Result[void,TxInfo]
   ok()
 
 # ------------------------------------------------------------------------------
-# Public SLst ops -- `GasInt` (level 0)
+# Public SortedSet ops -- `GasInt` (level 0)
 # ------------------------------------------------------------------------------
 
 proc nItems*(gp: var TxTipCapTab): int {.inline.} =
@@ -116,23 +115,23 @@ proc len*(gp: var TxTipCapTab): int {.inline.} =
   gp.gasList.len
 
 proc eq*(gp: var TxTipCapTab; key: GasPrice):
-       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.eq(key)
 
 proc ge*(gp: var TxTipCapTab; key: GasPrice):
-       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.ge(key)
 
 proc gt*(gp: var TxTipCapTab; key: GasPrice):
-       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.gt(key)
 
 proc le*(gp: var TxTipCapTab; key: GasPrice):
-       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.le(key)
 
 proc lt*(gp: var TxTipCapTab; key: GasPrice):
-       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
+       SortedSetResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.lt(key)
 
 # ------------------------------------------------------------------------------

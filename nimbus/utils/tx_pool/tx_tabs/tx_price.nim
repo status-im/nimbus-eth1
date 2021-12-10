@@ -15,8 +15,8 @@
 ##
 
 import
-  ../../keequ,
-  ../../slst,
+  # ../../keyed_queue,
+  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   ./tx_leaf,
@@ -33,13 +33,13 @@ type
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
     size: int
-    nonceList: Slst[AccountNonce,TxLeafItemRef]
+    nonceList: SortedSet[AccountNonce,TxLeafItemRef]
 
   TxPriceTab* = object ##\
     ## Item list indexed by `GasInt` > `AccountNonce`
     size: int                     ## Total number of leaves
     update: TxPriceItemMap        ## e.g. for applying `baseFee` before insert
-    priceList: SLst[GasPriceEx,TxPriceNonceRef]
+    priceList: SortedSet[GasPriceEx,TxPriceNonceRef]
 
   TxPriceInx = object ##\
     ## Internal access data
@@ -241,7 +241,7 @@ proc `update=`*(gp: var TxPriceTab; val: TxPriceItemMap)
   gp.txReorg
 
 # ------------------------------------------------------------------------------
-# Public SLst ops -- `effectiveGasTip` (level 0)
+# Public SortedSet ops -- `effectiveGasTip` (level 0)
 # ------------------------------------------------------------------------------
 
 proc nItems*(gp: var TxPriceTab): int {.inline.} =
@@ -253,27 +253,27 @@ proc len*(gp: var TxPriceTab): int {.inline.} =
   gp.priceList.len
 
 proc eq*(gp: var TxPriceTab; effectiveGasTip: GasPriceEx):
-       SLstResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
+       SortedSetResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
   gp.priceList.eq(effectiveGasTip)
 
 proc ge*(gp: var TxPriceTab; effectiveGasTip: GasPriceEx):
-       SLstResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
+       SortedSetResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
   gp.priceList.ge(effectiveGasTip)
 
 proc gt*(gp: var TxPriceTab; effectiveGasTip: GasPriceEx):
-       SLstResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
+       SortedSetResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
   gp.priceList.gt(effectiveGasTip)
 
 proc le*(gp: var TxPriceTab; effectiveGasTip: GasPriceEx):
-       SLstResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
+       SortedSetResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
   gp.priceList.le(effectiveGasTip)
 
 proc lt*(gp: var TxPriceTab; effectiveGasTip: GasPriceEx):
-       SLstResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
+       SortedSetResult[GasPriceEx,TxPriceNonceRef] {.inline.} =
   gp.priceList.lt(effectiveGasTip)
 
 # ------------------------------------------------------------------------------
-# Public SLst ops -- nonce (level 1)
+# Public SortedSet ops -- nonce (level 1)
 # ------------------------------------------------------------------------------
 
 proc len*(nonceData: TxPriceNonceRef): int {.inline.} =
@@ -284,62 +284,62 @@ proc nItems*(nonceData: TxPriceNonceRef): int {.inline.} =
   ## Getter, total number of items in the sub-list
   nonceData.size
 
-proc nItems*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]): int {.inline.} =
+proc nItems*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]): int {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
   0
 
 
 proc eq*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.eq(nonce)
 
-proc eq*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc eq*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.eq(nonce)
   err(rc.error)
 
 
 proc ge*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.ge(nonce)
 
-proc ge*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc ge*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.ge(nonce)
   err(rc.error)
 
 
 proc gt*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.gt(nonce)
 
-proc gt*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc gt*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.gt(nonce)
   err(rc.error)
 
 
 proc le*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.le(nonce)
 
-proc le*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc le*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.le(nonce)
   err(rc.error)
 
 
 proc lt*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.lt(nonce)
 
-proc lt*(rc: SLstResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc lt*(rc: SortedSetResult[GasPriceEx,TxPriceNonceRef]; nonce: AccountNonce):
+       SortedSetResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.lt(nonce)
   err(rc.error)

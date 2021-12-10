@@ -13,7 +13,7 @@
 ##
 
 import
-  ../../keequ,
+  ../../keyed_queue,
   ../tx_desc,
   ../tx_gauge,
   ../tx_info,

@@ -8,24 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Key Queue, RLP Support
-## ======================
+## Keyed Queue, RLP Support
+## ========================
 ##
 ## Note that the underlying RLP driver does not support negative integers
 ## which causes problems when reading back. So these values should neither
 ## appear in any of the `K` (for key) or `V` (for value) data types (best
-## to avoid `int` altogether if serialisation is needed.)
+## to avoid `int` altogether for `KeyedQueue` if serialisation is needed.)
 
 import
   std/tables,
-  ../keequ,
+  ../keyed_queue,
   eth/rlp
 
 # ------------------------------------------------------------------------------
 # Public functions, RLP support
 # ------------------------------------------------------------------------------
 
-proc append*[K,V](rw: var RlpWriter; kq: KeeQu[K,V])
+proc append*[K,V](rw: var RlpWriter; kq: KeyedQueue[K,V])
     {.inline, raises: [Defect,KeyError].} =
   ## Generic support for `rlp.encode(kq)` for serialising a queue.
   ##
@@ -45,7 +45,7 @@ proc append*[K,V](rw: var RlpWriter; kq: KeeQu[K,V])
     if data.tab[key].kNxt != data.kLast:
       raiseAssert "Garbled queue next/prv references"
 
-proc read*[K,V](rlp: var Rlp; Q: type KeeQu[K,V]): Q
+proc read*[K,V](rlp: var Rlp; Q: type KeyedQueue[K,V]): Q
     {.inline, raises: [Defect,RlpError,KeyError].} =
   ## Generic support for `rlp.decode(bytes)` for loading a queue
   ## from a serialised data stream.

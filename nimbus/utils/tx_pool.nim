@@ -213,7 +213,7 @@
 ##
 
 import
-  ./keequ,
+  ./keyed_queue,
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks,

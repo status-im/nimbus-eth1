@@ -14,8 +14,8 @@
 
 import
   std/[hashes, tables],
-  ../keequ,
-  ../keequ/kq_debug,
+  ../keyed_queue,
+  ../keyed_queue/kq_debug,
   ./tx_info,
   ./tx_item,
   ./tx_tabs,
@@ -126,9 +126,9 @@ type
   TxJobRef* = ref object ##\
     ## Job queue with increasing job *ID* numbers (wrapping around at
     ## `TxJobIdMax`.)
-    topID: TxJobID                        ## Next job will have `topID+1`
-    jobQueue: KeeQu[TxJobID,TxJobDataRef] ## Job queue
-    eventQueue: KeeQu[TxJobID,AsyncEvent] ## Can wait for some jobs
+    topID: TxJobID                             ## Next job will have `topID+1`
+    jobQueue: KeyedQueue[TxJobID,TxJobDataRef] ## Job queue
+    eventQueue: KeyedQueue[TxJobID,AsyncEvent] ## Can wait for some jobs
 
 const
   txJobPriorityKind*: set[TxJobKind] = ##\

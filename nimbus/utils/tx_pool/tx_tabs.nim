@@ -20,9 +20,9 @@
 
 import
   std/[sequtils, tables],
-  ../keequ,
-  ../keequ/kq_debug,
-  ../slst,
+  ../keyed_queue,
+  ../keyed_queue/kq_debug,
+  ../sorted_set,
   ./tx_info,
   ./tx_item,
   ./tx_tabs/[tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap],
@@ -52,10 +52,10 @@ type
     byLocal*: Table[EthAddress,bool] ##\
       ## List of local accounts
 
-    byRejects*: KeeQu[Hash256,TxItemRef] ##\
+    byRejects*: KeyedQueue[Hash256,TxItemRef] ##\
       ## Rejects queue, waste basket
 
-    byItemID*: KeeQu[Hash256,TxItemRef] ##\
+    byItemID*: KeyedQueue[Hash256,TxItemRef] ##\
       ## Primary table, queued by arrival event
 
     # ----- index tables ------
@@ -138,8 +138,8 @@ proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
   result.baseFee = baseFee
 
   # result.byLocal -- Table, no need to init
-  # result.byItemID -- KeeQu, no need to init
-  # result.byRejects -- KeeQu, no need to init
+  # result.byItemID -- KeyedQueue, no need to init
+  # result.byRejects -- KeyedQueue, no need to init
 
   # index tables
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)

@@ -13,7 +13,7 @@ import
   ../nimbus/chain_config,
   ../nimbus/config,
   ../nimbus/db/db_chain,
-  ../nimbus/utils/[slst, tx_pool],
+  ../nimbus/utils/[sorted_set, tx_pool],
   ../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,

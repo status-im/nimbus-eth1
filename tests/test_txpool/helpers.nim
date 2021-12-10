@@ -10,7 +10,7 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/keequ,
+  ../../nimbus/utils/keyed_queue,
   ../../nimbus/utils/tx_pool/[tx_desc, tx_item, tx_tabs],
   ../replay/undump,
   eth/[common, keys],
@@ -19,7 +19,7 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
-  keequ,
+  keyed_queue,
   tx_desc.dbHead,
   tx_desc.txDB,
   tx_desc.verify,

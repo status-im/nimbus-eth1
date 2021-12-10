@@ -14,7 +14,7 @@
 
 import
   std/[times],
-  ../keequ,
+  ../keyed_queue,
   ./tx_desc,
   ./tx_gauge,
   ./tx_info,
@@ -33,7 +33,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc utcNow: Time =
-  now().utc.toTime
+  getTime().utc.toTime
 
 #proc pp(t: Time): string =
 #  t.format("yyyy-MM-dd'T'HH:mm:ss'.'fff", utc())

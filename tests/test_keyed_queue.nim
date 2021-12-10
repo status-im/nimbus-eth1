@@ -10,9 +10,8 @@
 
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
-  ../nimbus/utils/keequ,
-  ../nimbus/utils/keequ/[kq_debug, kq_rlp],
-  eth/rlp,
+  ../nimbus/utils/keyed_queue,
+  ../nimbus/utils/keyed_queue/kq_debug,
   unittest2
 
 const
@@ -33,7 +32,7 @@ const
 
 type
   KUQueue = # mind the kqueue module from the nim standard lib
-    KeeQu[uint,uint]
+    KeyedQueue[uint,uint]
 
   LruCache = object
     size: int
@@ -43,10 +42,10 @@ type
 # Debugging
 # ------------------------------------------------------------------------------
 
-proc `$`(rc: KeeQuPair[uint,uint]): string =
+proc `$`(rc: KeyedQueuePair[uint,uint]): string =
   "(" & $rc.key & "," & $rc.data & ")"
 
-proc `$`(rc: Result[KeeQuPair[uint,uint],void]): string =
+proc `$`(rc: Result[KeyedQueuePair[uint,uint],void]): string =
   result = "<"
   if rc.isOK:
     result &= $rc.value.key & "," & $rc.value.data
@@ -156,20 +155,21 @@ proc compileGenericFunctions(rq: var KUQueue) =
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runKeeQu(noisy = true) =
+proc runKeyedQueue(noisy = true) =
   let
     uniqueKeys = keyList.toUnique
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
-  suite "KeeQu: Data queue with keyed random access":
+  suite "KeyedQueue: Data queue with keyed random access":
+
     block:
       var
         fwdRq, revRq: KUQueue
         fwdRej, revRej: seq[int]
 
       test &"All functions smoke test":
-        var rq: KeeQu[uint,uint]
+        var rq: KeyedQueue[uint,uint]
         rq.compileGenericFunctions
 
       test &"Append/traverse {keyList.len} items, " &
@@ -182,7 +182,7 @@ proc runKeeQu(noisy = true) =
             rej.add n
           let check = rq.verify
           if check.isErr:
-            check check.error[2] == keeQuOk
+            check check.error[2] == kQOk
         check rq.len == numUniqeKeys
         check rej.len == numKeyDups
         check rq.len + rej.len == keyList.len
@@ -203,7 +203,7 @@ proc runKeeQu(noisy = true) =
             rej.add n
           let check = rq.verify
           if check.isErr:
-            check check.error[2] == keeQuOk
+            check check.error[2] == kQOk
         check rq.len == numUniqeKeys
         check rej.len == numKeyDups
         check rq.len + rej.len == keyList.len
@@ -256,10 +256,10 @@ proc runKeeQu(noisy = true) =
             seen.add key.fromKey
 
           if fwdRqCheck.isErr:
-            check fwdRqCheck.error[2] == keeQuOk
+            check fwdRqCheck.error[2] == kQOk
           check fwdData.isOk == canDeleteOk
           if revRqCheck.isErr:
-            check revRqCheck.error[2] == keeQuOk
+            check revRqCheck.error[2] == kQOk
           check revData.isOk == canDeleteOk
 
           if canDeleteOk:
@@ -438,8 +438,7 @@ proc runKeeQu(noisy = true) =
 
     # --------------------------------------
 
-    test &"Load/delete second entries from either queue end "&
-      "until only one left":
+    test &"Load/delete 2nd entries from either queue end until only one left":
       block:
         var rq = keyList.toQueue
         while true:
@@ -452,6 +451,7 @@ proc runKeeQu(noisy = true) =
           check rq.delete(key).isOK
           check rq.verify.isOK
         check rq.len == 1
+
       block:
         var rq = keyList.toQueue
         while true:
@@ -481,31 +481,8 @@ proc runKeeQu(noisy = true) =
       check rq.len == numUniqeKeys
       check rp.len + reduceLen == rq.len
 
-    test &"Rlp serialise + reload":
-      var
-        rp = [1, 2, 3].toQueue # keyList.toQueue
-        rq = rp
-      check rp == rq
 
-      var
-        sp = rlp.encode(rp)
-        sq = rlp.encode(rq)
-      check sp == sq
-
-      var
-        pr = sp.decode(type rp)
-        qr = sq.decode(type rq)
-
-      check pr.verify.isOK
-      check qr.verify.isOK
-
-      check pr == qr
-
-
-proc runLruCache(noisy = true) =
-  ## Test runner ported from test_lru_cache.nim
-
-  suite "KeeQu: Data queue as LRU cache":
+  suite "KeyedQueue: Data queue as LRU cache":
 
     test "Fill Up":
       var
@@ -544,60 +521,6 @@ proc runLruCache(noisy = true) =
 
     # --------------------
 
-    block:
-      proc append(rw: var RlpWriter; lru: LruCache)
-          {.inline, raises: [Defect,KeyError].} =
-        rw.append((lru.size,lru.q))
-      proc read(rlp: var Rlp; Q: type LruCache): Q
-          {.inline, raises: [Defect,KeyError,RlpError].} =
-        (result.size, result.q) = rlp.read((type result.size, type result.q))
-
-      test "Rlp serialise & load, append":
-        block:
-          var
-            c1 = keyList.toLruCache
-            s1 = rlp.encode(c1)
-            c2 = newSeq[int]().toLruCache
-
-          noisy.say &"serialised[{s1.len}]: {s1}"
-          c2.q.clear
-          check c1 != c2
-          check c1.q.verify.isOK
-          check c2.q.verify.isOK
-
-          c2 = s1.decode(type c2)
-          check c1 == c2
-          check c2.q.verify.isOK
-
-          noisy.say &"c2Specs: {c2.size} {c2.q.firstKey} {c2.q.lastKey} ..."
-          check s1 == rlp.encode(c2)
-
-        block:
-          var
-            c1 = keyList.toLruCache
-            value = c1.lruValue(77)
-            queue = toSeq(c1.q.nextPairs).mapIt(it.key)
-            values = toSeq(c1.q.nextPairs).mapIt(it.data)
-
-          noisy.say &"c1: append {value} => {queue}"
-          var
-            s1 = rlp.encode(c1)
-            c2 = keyList.toLruCache
-
-          noisy.say &"serialised[{s1.len}]: {s1}"
-          c2.q.clear
-          check c1 != c2
-          check c1.q.verify.isOK
-          check c2.q.verify.isOK
-
-          c2 = s1.decode(type c2)
-          check c1 == c2
-          noisy.say &"c2Specs: {c2.size} {c2.q.firstKey} {c2.q.lastKey} ..."
-          check s1 == rlp.encode(c2)
-          check c2.q.verify.isOK
-
-    # --------------------
-
     test "Random Access Delete":
       var
         c1 =  keyList.toLruCache
@@ -617,14 +540,12 @@ proc runLruCache(noisy = true) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc keeQuMain*(noisy = defined(debug)) =
-  noisy.runKeeQu
-  noisy.runLruCache
+proc keyedQueueMain*(noisy = defined(debug)) =
+  noisy.runKeyedQueue
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runKeeQu
-  noisy.runLruCache
+  noisy.runKeyedQueue
 
 # ------------------------------------------------------------------------------
 # End

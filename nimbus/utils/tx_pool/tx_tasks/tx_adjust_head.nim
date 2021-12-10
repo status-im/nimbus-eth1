@@ -15,7 +15,7 @@
 
 import
   ../../../db/db_chain,
-  ../../keequ,
+  ../../keyed_queue,
   ../tx_dbhead,
   ../tx_desc,
   ../tx_info,
@@ -27,8 +27,8 @@ import
 
 type
   UpdateTxs = object
-    addTxs: KeeQu[Hash256,Transaction] # txs to add
-    remItems: KeeQuNV[TxItemRef]       # items for obsoleted txs
+    addTxs: KeyedQueue[Hash256,Transaction] # txs to add
+    remItems: KeyedQueueNV[TxItemRef]       # items for obsoleted txs
 
 logScope:
   topics = "tx-pool adjust head"

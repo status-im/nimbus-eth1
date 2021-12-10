@@ -8,34 +8,34 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Key Queue, Debuugig support
-## ===========================
+## Keyed Queue, Debuugig support
+## =============================
 ##
 
 import
   std/tables,
-  ../keequ,
+  ../keyed_queue,
   stew/results
 
 type
-  KeeQuInfo* = enum ##\
+  KeyedQueueInfo* = enum ##\
     ## Error messages as returned by `verify()`
-    keeQuOk = 0
-    keeQuVfyFirstInconsistent
-    keeQuVfyLastInconsistent
-    keeQuVfyNoSuchTabItem
-    keeQuVfyNoPrvTabItem
-    keeQuVfyNxtPrvExpected
-    keeQuVfyLastExpected
-    keeQuVfyNoNxtTabItem
-    keeQuVfyPrvNxtExpected
-    keeQuVfyFirstExpected
+    kQOk = 0
+    kQVfyFirstInconsistent
+    kQVfyLastInconsistent
+    kQVfyNoSuchTabItem
+    kQVfyNoPrvTabItem
+    kQVfyNxtPrvExpected
+    kQVfyLastExpected
+    kQVfyNoNxtTabItem
+    kQVfyPrvNxtExpected
+    kQVfyFirstExpected
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc `$`*[K,V](item: KeeQuItem[K,V]): string =
+proc `$`*[K,V](item: KeyedQueueItem[K,V]): string =
   ## Pretty print data container item.
   ##
   ## :CAVEAT:
@@ -49,7 +49,7 @@ proc `$`*[K,V](item: KeeQuItem[K,V]): string =
   else:
     "(" & $item.value & ", link[" & $item.prv & "," & $item.kNxt & "])"
 
-proc verify*[K,V](rq: var KeeQu[K,V]): Result[void,(K,V,KeeQuInfo)]
+proc verify*[K,V](rq: var KeyedQueue[K,V]): Result[void,(K,V,KeyedQueueInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Check for consistency. Returns an error unless the argument
   ## queue `rq` is consistent.
@@ -59,10 +59,10 @@ proc verify*[K,V](rq: var KeeQu[K,V]): Result[void,(K,V,KeeQuInfo)]
 
   # Ckeck first and last items
   if rq.tab[rq.kFirst].kPrv != rq.tab[rq.kFirst].kNxt:
-    return err((rq.kFirst, rq.tab[rq.kFirst].data, keeQuVfyFirstInconsistent))
+    return err((rq.kFirst, rq.tab[rq.kFirst].data, kQVfyFirstInconsistent))
 
   if rq.tab[rq.kLast].kPrv != rq.tab[rq.kLast].kNxt:
-    return err((rq.kLast, rq.tab[rq.kLast].data, keeQuVfyLastInconsistent))
+    return err((rq.kLast, rq.tab[rq.kLast].data, kQVfyLastInconsistent))
 
   # Just a return value
   var any: V
@@ -71,27 +71,27 @@ proc verify*[K,V](rq: var KeeQu[K,V]): Result[void,(K,V,KeeQuInfo)]
   var key = rq.kFirst
   for _ in 1 .. tabLen:
     if not rq.tab.hasKey(key):
-      return err((key, any, keeQuVfyNoSuchTabItem))
+      return err((key, any, kQVfyNoSuchTabItem))
     if not rq.tab.hasKey(rq.tab[key].kNxt):
-      return err((rq.tab[key].kNxt, rq.tab[key].data, keeQuVfyNoNxtTabItem))
+      return err((rq.tab[key].kNxt, rq.tab[key].data, kQVfyNoNxtTabItem))
     if key != rq.kLast and key != rq.tab[rq.tab[key].kNxt].kPrv:
-      return err((key, rq.tab[rq.tab[key].kNxt].data, keeQuVfyNxtPrvExpected))
+      return err((key, rq.tab[rq.tab[key].kNxt].data, kQVfyNxtPrvExpected))
     key = rq.tab[key].kNxt
   if rq.tab[key].kNxt != rq.kLast:
-    return err((key, rq.tab[key].data, keeQuVfyLastExpected))
+    return err((key, rq.tab[key].data, kQVfyLastExpected))
 
   # Backwards walk item list
   key = rq.kLast
   for _ in 1 .. tabLen:
     if not rq.tab.hasKey(key):
-      return err((key, any, keeQuVfyNoSuchTabItem))
+      return err((key, any, kQVfyNoSuchTabItem))
     if not rq.tab.hasKey(rq.tab[key].kPrv):
-      return err((rq.tab[key].kPrv, rq.tab[key].data, keeQuVfyNoPrvTabItem))
+      return err((rq.tab[key].kPrv, rq.tab[key].data, kQVfyNoPrvTabItem))
     if key != rq.kFirst and key != rq.tab[rq.tab[key].kPrv].kNxt:
-      return err((key, rq.tab[rq.tab[key].kPrv].data, keeQuVfyPrvNxtExpected))
+      return err((key, rq.tab[rq.tab[key].kPrv].data, kQVfyPrvNxtExpected))
     key = rq.tab[key].kPrv
   if rq.tab[key].kPrv != rq.kFirst:
-    return err((key, rq.tab[key].data, keeQuVfyFirstExpected))
+    return err((key, rq.tab[key].data, kQVfyFirstExpected))
 
   ok()
 

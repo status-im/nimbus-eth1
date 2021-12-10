@@ -13,9 +13,9 @@
 ##
 
 import
-  ../../keequ,
-  ../../keequ/kq_debug,
-  ../../slst,
+  ../../keyed_queue,
+  ../../keyed_queue/kq_debug,
+  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   eth/common,
@@ -25,7 +25,7 @@ type
   TxLeafItemRef* = ref object ##\
     ## All transaction items accessed by the same index are chronologically
     ## queued.
-    itemList: KeeQuNV[TxItemRef]
+    itemList: KeyedQueueNV[TxItemRef]
 
 {.push raises: [Defect].}
 
@@ -74,13 +74,13 @@ proc txVerify*(leaf: TxLeafItemRef): Result[void,TxInfo]
   ok()
 
 # ------------------------------------------------------------------------------
-# Public KeeQu ops -- traversal functions
+# Public KeyedQueue ops -- traversal functions
 # ------------------------------------------------------------------------------
 
 proc nItems*(itemData: TxLeafItemRef): int {.inline.} =
   itemData.itemList.len
 
-proc nItems*[T](rc: SLstResult[T,TxLeafItemRef]): int {.inline.} =
+proc nItems*[T](rc: SortedSetResult[T,TxLeafItemRef]): int {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
   0
@@ -90,9 +90,9 @@ proc first*(itemData: TxLeafItemRef): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.first
 
-proc first*[T](rc: SLstResult[T,TxLeafItemRef]): Result[TxItemRef,void]
+proc first*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Seen as a sub-list to an `SLst` parent
+  ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.first
   err()
@@ -102,9 +102,9 @@ proc last*(itemData: TxLeafItemRef): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.last
 
-proc last*[T](rc: SLstResult[T,TxLeafItemRef]): Result[TxItemRef,void]
+proc last*[T](rc: SortedSetResult[T,TxLeafItemRef]): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Seen as a sub-list to an `SLst` parent
+  ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.last
   err()
@@ -115,10 +115,10 @@ proc next*(itemData: TxLeafItemRef;
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.next(item)
 
-proc next*[T](rc: SLstResult[T,TxLeafItemRef];
+proc next*[T](rc: SortedSetResult[T,TxLeafItemRef];
               item: TxItemRef): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Seen as a sub-list to an `SLst` parent
+  ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.next(item)
   err()
@@ -129,16 +129,16 @@ proc prev*(itemData: TxLeafItemRef; item: TxItemRef):
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.prev(item)
 
-proc prev*[T](rc: SLstResult[T,TxLeafItemRef];
+proc prev*[T](rc: SortedSetResult[T,TxLeafItemRef];
               item: TxItemRef): Result[TxItemRef,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Seen as a sub-list to an `SLst` parent
+  ## Seen as a sub-list to an `SortedSet` parent
   if rc.isOK:
     return rc.value.data.prev(item)
   err()
 
 # ------------------------------------------------------------------------------
-# Public KeeQu ops -- iterators
+# Public KeyedQueue ops -- iterators
 # ------------------------------------------------------------------------------
 
 iterator walkItems*(itemData: TxLeafItemRef): TxItemRef

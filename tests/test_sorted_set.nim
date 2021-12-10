@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, sequtils, strformat, tables],
-  ../nimbus/utils/slst,
+  ../nimbus/utils/sorted_set,
   unittest2
 
 const
@@ -32,30 +32,30 @@ const
 # Test Runners
 # ------------------------------------------------------------------------------
 
-iterator fwdItems(sl: var SLst[int,int]): int =
+iterator fwdItems(sl: var SortedSet[int,int]): int =
   var rc = sl.ge(0)
   while rc.isOk:
     yield rc.value.key
     rc = sl.gt(rc.value.key)
 
-iterator revItems(sl: var SLst[int,int]): int =
+iterator revItems(sl: var SortedSet[int,int]): int =
   var rc = sl.le(int.high)
   while rc.isOk:
     yield rc.value.key
     rc = sl.lt(rc.value.key)
 
-iterator fwdWalk(sl: var SLst[int,int]): int =
+iterator fwdWalk(sl: var SortedSet[int,int]): int =
   var
-    w = sl.newWalk
+    w = SortedSetWalkRef[int,int].init(sl)
     rc = w.first
   while rc.isOk:
     yield rc.value.key
     rc = w.next
   w.destroy
 
-iterator revWalk(sl: var SLst[int,int]): int =
+iterator revWalk(sl: var SortedSet[int,int]): int =
   var
-    w = sl.newWalk
+    w = SortedSetWalkRef[int,int].init(sl)
   var
     rc = w.last
   while rc.isOk:
@@ -64,14 +64,14 @@ iterator revWalk(sl: var SLst[int,int]): int =
   w.destroy
 
 
-proc runSLstTest(noisy = true) =
+proc runSortedSetTest(noisy = true) =
   let
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
-  suite "SLst: Sorted list based on red-black tree":
+  suite "SortedSet: Sorted list based on red-black tree":
     var
-      sl = init(type SLst[int,int])
+      sl = SortedSet[int,int].init
       rej: seq[int]
 
     test &"Insert {keyList.len} items, reject {numKeyDups} duplicates":
@@ -104,7 +104,7 @@ proc runSLstTest(noisy = true) =
       # check `sLstThis()`
       block:
         var
-          w = sl.newWalk
+          w = SortedSetWalkRef[int,int].init(sl)
           rc = w.first
         while rc.isOk:
           check rc == w.this
@@ -138,12 +138,12 @@ proc runSLstTest(noisy = true) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc sLstMain*(noisy = defined(debug)) =
-  noisy.runSLstTest
+proc sortedSetMain*(noisy = defined(debug)) =
+  noisy.runSortedSetTest
 
 when isMainModule:
   let noisy = true # defined(debug)
-  noisy.runSLstTest
+  noisy.runSortedSetTest
 
 # ------------------------------------------------------------------------------
 # End

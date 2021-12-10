@@ -16,7 +16,7 @@ import
   ../../../db/accounts_cache,
   ../../../forks,
   ../../../transaction,
-  ../../slst,
+  ../../sorted_set,
   ../tx_dbhead,
   ../tx_desc,
   ../tx_item,
