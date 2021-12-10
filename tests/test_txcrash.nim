@@ -38,10 +38,16 @@ const
     numBlocks: 5500,  # unconditionally load blocks
     numTxs:      10)  # txs following (not in block chain)
 
+  goerliCapture1: CaptureSpecs = (
+    GoerliNet, goerliCapture.file, 5500, 10000)
+
+  mainCapture: CaptureSpecs = (
+    MainNet, "mainnet843841.txt.gz", 50000, 3000)
+
 var
   xdb: BaseChainDB
   txs: seq[Transaction]
-  txi: seq[int] # index into txs[] with usable sender adresses
+  txi: seq[int] # selected index into txs[] (crashable sender addresses)
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -61,6 +67,17 @@ proc pp*(a: EthAddress): string =
 proc pp*(tx: Transaction): string =
   # "(" & tx.ecRecover.value.pp & "," & $tx.nonce & ")"
   "(" & tx.getSender.pp & "," & $tx.nonce & ")"
+
+proc pp*(h: KeccakHash): string =
+  h.data.mapIt(it.toHex(2)).join[52 .. 63].toLowerAscii
+
+proc pp*(tx: Transaction; vmState: BaseVMState): string =
+  let address = tx.getSender
+  "(" & address.pp &
+    "," & $tx.nonce &
+    ";" & $vmState.readOnlyStateDB.getNonce(address) &
+    "," & $vmState.readOnlyStateDB.getBalance(address) &
+    ")"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -94,62 +111,151 @@ proc modBalance(ac: var AccountsCache, address: EthAddress) =
   # ac.blindBalanceSetter(address)
   ac.addBalance(address, 1.u256)
 
-proc runStateDbTrial(vmState: BaseVMState;
-                     eAddr: EthAddress; rollbackOk: bool; noisy = false) =
+
+proc runTrial2ok(vmState: BaseVMState; inx: int) =
+  ## Run two blocks, the first one with *rollback*.
+  let eAddr = txs[inx].getSender
+
+  block:
+    let accTx = vmState.stateDB.beginSavepoint
+    vmState.stateDB.modBalance(eAddr)
+    vmState.stateDB.rollback(accTx)
+
+  block:
+    let accTx = vmState.stateDB.beginSavepoint
+    vmState.stateDB.modBalance(eAddr)
+    vmState.stateDB.commit(accTx)
+
+  vmState.stateDB.persist(clearCache = false)
+
+
+proc runTrial3(vmState: BaseVMState; inx: int; rollback: bool) =
   ## Run three blocks, the second one optionally with *rollback*.
-  block firstPairOfBlocks:
+  let eAddr = txs[inx].getSender
+
+  block:
+    let accTx = vmState.stateDB.beginSavepoint
+    vmState.stateDB.modBalance(eAddr)
+    vmState.stateDB.commit(accTx)
+    vmState.stateDB.persist(clearCache = false)
+
+  block:
+    let accTx = vmState.stateDB.beginSavepoint
+    vmState.stateDB.modBalance(eAddr)
+
+    if rollback:
+      vmState.stateDB.rollback(accTx)
+      break
+
+    vmState.stateDB.commit(accTx)
+    vmState.stateDB.persist(clearCache = false)
+
+  block:
+    let accTx = vmState.stateDB.beginSavepoint
+    vmState.stateDB.modBalance(eAddr)
+    vmState.stateDB.commit(accTx)
+    vmState.stateDB.persist(clearCache = false)
+
+
+proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
+  ## Run three blocks with extra db frames and *rollback*.
+  let eAddr = txs[inx].getSender
+
+  block:
     let dbTx = xdb.db.beginTransaction()
 
-    # First sub-block pair => commit
     block:
-      let
-        accTx1 = vmState.stateDB.beginSavepoint
-        accTx2 = vmState.stateDB.beginSavepoint
+      let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx2)
-      vmState.stateDB.commit(accTx1)
+      vmState.stateDB.commit(accTx)
+      vmState.stateDB.persist(clearCache = false)
 
-    vmState.stateDB.persist(clearCache = false)
-
-    # Second sub-block pair => rollback
     block:
-      let
-        accTx1 = vmState.stateDB.beginSavepoint
-        accTx2 = vmState.stateDB.beginSavepoint
+      let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx2)
+      vmState.stateDB.rollback(accTx)
 
-      if rollbackOk:
-        vmState.stateDB.rollback(accTx1)
-        dbTx.rollback()
-        break firstPairOfBlocks
+    # The following statement will cause a crash at the next `persist()` call.
+    dbTx.rollback()
 
-      vmState.stateDB.commit(accTx1)
+  # In order to survive without an exception in the next `persist()` call, the
+  # following function could be added to db/accounts_cache.nim:
+  #
+  #   proc clobberRootHash*(ac: AccountsCache; root: KeccakHash; prune = true) =
+  #     ac.trie = initSecureHexaryTrie(ac.db, rootHash, prune)
+  #
+  # Then, beginning this very function `runTrial3crash()` with
+  #
+  #   let stateRoot = vmState.stateDB.rootHash
+  #
+  # the survival statement would be to re-assign the state-root via
+  #
+  #   vmState.stateDB.clobberRootHash(stateRoot)
 
-    vmState.stateDB.persist(clearCache = false)
+  block:
+    let dbTx = xdb.db.beginTransaction()
+
+    block:
+      let accTx = vmState.stateDB.beginSavepoint
+      vmState.stateDB.modBalance(eAddr)
+      vmState.stateDB.commit(accTx)
+
+      try:
+        vmState.stateDB.persist(clearCache = false)
+      except AssertionError as e:
+        if noisy:
+          let msg = e.msg.rsplit($DirSep,1)[^1]
+          echo &"*** runVmExec({eAddr.pp}): {e.name}: {msg}"
+        dbTx.dispose()
+        raise e
+
+      vmState.stateDB.persist(clearCache = false)
+
     dbTx.commit()
 
-  block thirdBlock:
+
+proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
+  ## Like `runTrial3()` but with four blocks and extra db transaction frames.
+  let eAddr = txs[inx].getSender
+
+  block:
     let dbTx = xdb.db.beginTransaction()
 
-    # Block following => commit
     block:
-      let
-        accTx1 = vmState.stateDB.beginSavepoint
-        accTx2 = vmState.stateDB.beginSavepoint
+      let accTx = vmState.stateDB.beginSavepoint
       vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx2)
-      vmState.stateDB.commit(accTx1)
-
-    # Function crashes here (if at all)
-    try:
+      vmState.stateDB.commit(accTx)
       vmState.stateDB.persist(clearCache = false)
-    except AssertionError as e:
-      if noisy:
-        let msg = e.msg.rsplit($DirSep,1)[^1]
-        echo &"*** runVmExec({eAddr.pp}): {e.name}: {msg}"
-      dbTx.dispose()
-      raise e
+
+    block:
+      let accTx = vmState.stateDB.beginSavepoint
+      vmState.stateDB.modBalance(eAddr)
+      vmState.stateDB.commit(accTx)
+      vmState.stateDB.persist(clearCache = false)
+
+    block:
+      let accTx = vmState.stateDB.beginSavepoint
+      vmState.stateDB.modBalance(eAddr)
+
+      if rollback:
+        vmState.stateDB.rollback(accTx)
+        break
+
+      vmState.stateDB.commit(accTx)
+      vmState.stateDB.persist(clearCache = false)
+
+    # There must be no dbTx.rollback() here unless `vmState.stateDB` is
+    # discarded and/or re-initialised.
+    dbTx.commit()
+
+  block:
+    let dbTx = xdb.db.beginTransaction()
+
+    block:
+      let accTx = vmState.stateDB.beginSavepoint
+      vmState.stateDB.modBalance(eAddr)
+      vmState.stateDB.commit(accTx)
+      vmState.stateDB.persist(clearCache = false)
 
     dbTx.commit()
 
@@ -167,11 +273,10 @@ proc runner(noisy = true; capture = goerliCapture) =
   txs.reset
   xdb = capture.network.blockChainForTesting
 
-  suite &"StateDB crash scenario as seen by TxPool":
+  suite &"StateDB nesting scenarios":
+    var topNumber: BlockNumber
 
     test &"Import from {fileInfo}":
-      var topNumber: BlockNumber
-
       # Import minimum amount of blocks, then collect transactions
       for chain in filePath.undumpNextGroup:
         let leadBlkNum = chain[0][0].blockNumber
@@ -180,21 +285,19 @@ proc runner(noisy = true; capture = goerliCapture) =
         if loadTxs <= txs.len:
           break
 
-        if chain[0][0].blockNumber == 0.u256:
-          # Verify Genesis
+        # Verify Genesis
+        if leadBlkNum == 0.u256:
           doAssert chain[0][0] == xdb.getBlockHeader(0.u256)
           continue
 
+        # Import block chain blocks
         if leadBlkNum < loadBlocks:
-          # import block chain
           xdb.importBlocks(chain[0],chain[1])
           continue
 
         # Import transactions
         for inx in 0 ..< chain[0].len:
-          let
-            blkNum = chain[0][inx].blockNumber
-            blkTxs = chain[1][inx].transactions
+          let blkTxs = chain[1][inx].transactions
 
           # Continue importing up until first non-trivial block
           if txs.len == 0 and blkTxs.len == 0:
@@ -204,67 +307,52 @@ proc runner(noisy = true; capture = goerliCapture) =
           # Load transactions
           txs.add blkTxs
 
-      if noisy:
-        let n = xdb.getCanonicalHead.blockNumber
-        echo &"*** Block chain head=#{n} top=#{topNumber} txs={txs.len}"
 
-
-    test "Collect stateDB crasher addresses":
-      var als: Table[EthAddress,bool]
+    test &"Collect unique sender addresses from {txs.len} txs," &
+        &" head=#{xdb.getCanonicalHead.blockNumber}, top=#{topNumber}":
+      var seen: Table[EthAddress,bool]
       for n,tx in txs:
-        let dbTx = xdb.db.beginTransaction()
-        defer: dbTx.dispose()
+        let a = tx.getSender
+        if not seen.hasKey(a):
+          seen[a] = true
+          txi.add n
 
-        let
-          vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
-          address = tx.getSender
-
-        try:
-          vmState.runStateDbTrial(address, rollbackOk = true)
-        except:
-          if not als.hasKey(address):
-            als[address] = true
-            txi.add n
-
-      if noisy:
-        echo &"*** Found {txi.len} stateDB crasher addresses"
-
-
-    test &"Run {txi.len} stateDB trials with rollback" &
-        " throwing Assertion exceptions":
-      check 0 < txi.len
-
-      # makeNoise = true
-      # defer: makeNoise = false
-
+    test &"Run {txi.len} two-step trials with rollback":
+      let dbTx = xdb.db.beginTransaction()
+      defer: dbTx.dispose()
       for n in txi:
-        let dbTx = xdb.db.beginTransaction()
-        defer: dbTx.dispose()
+        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        vmState.runTrial2ok(n)
 
-        # Note that this crash scanario works with quite a few addresses
-        # different from the ones used here. Using the sender address is
-        # just a cheap way to create such tests scenario addresses.
+    test &"Run {txi.len} three-step trials with rollback":
+      let dbTx = xdb.db.beginTransaction()
+      defer: dbTx.dispose()
+      for n in txi:
+        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        vmState.runTrial3(n, rollback = true)
 
-        let
-          vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
-          testAddr = txs[n].getSender
-
+    test &"Run {txi.len} three-step trials with extra db frame rollback" &
+        " throwing Exceptions":
+      let dbTx = xdb.db.beginTransaction()
+      defer: dbTx.dispose()
+      for n in txi:
+        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
         expect AssertionError:
-          vmState.runStateDbTrial(testAddr, rollbackOk = true, noisy)
+          vmState.runTrial3crash(n, noisy)
 
-
-    test &"Run {txi.len} stateDB trials without rollback (no exceptions)":
-      check 0 < txi.len
-
+    test &"Run {txi.len} tree-step trials without rollback":
+      let dbTx = xdb.db.beginTransaction()
+      defer: dbTx.dispose()
       for n in txi:
-        let dbTx = xdb.db.beginTransaction()
-        defer: dbTx.dispose()
+        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        vmState.runTrial3(n, rollback = false)
 
-        let
-          vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
-          testAddr = txs[n].getSender # addr1
-
-        vmState.runStateDbTrial(testAddr, rollbackOk = false, noisy)
+    test &"Run {txi.len} four-step trials with rollback and db frames":
+      let dbTx = xdb.db.beginTransaction()
+      defer: dbTx.dispose()
+      for n in txi:
+        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        vmState.runTrial4(n, rollback = true)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -277,7 +365,8 @@ when isMainModule:
   var noisy = defined(debug)
   #noisy = true
 
-  noisy.runner
+  noisy.runner # mainCapture
+  # noisy.runner goerliCapture2
 
 # ------------------------------------------------------------------------------
 # End
