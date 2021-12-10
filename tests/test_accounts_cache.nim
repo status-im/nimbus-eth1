@@ -358,7 +358,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc txCrashMain*(noisy = defined(debug)) =
+proc accountsCacheMain*(noisy = defined(debug)) =
   noisy.runner
 
 when isMainModule:

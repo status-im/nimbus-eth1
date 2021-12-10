@@ -11,7 +11,7 @@ import ../test_macro
 
 cliBuilder:
   import  ./test_code_stream,
-          ./test_txcrash,
+          ./test_accounts_cache,
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
