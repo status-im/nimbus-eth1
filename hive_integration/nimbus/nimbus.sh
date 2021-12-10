@@ -28,9 +28,10 @@
 #  - [x] HIVE_FORK_CONSTANTINOPLE     block number for Constantinople transition
 #  - [x] HIVE_FORK_PETERSBURG         block number for ConstantinopleFix/PetersBurg transition
 #  - [x] HIVE_FORK_ISTANBUL           block number for Istanbul transition
-#  - [x] HIVE_FORK_MUIRGLACIER        block number for Muir Glacier transition
+#  - [x] HIVE_FORK_MUIR_GLACIER       block number for Muir Glacier transition
 #  - [x] HIVE_FORK_BERLIN             block number for Berlin transition
 #  - [x] HIVE_FORK_LONDON             block number for London transition
+#  - [x] HIVE_FORK_ARROW_GLACIER      block number for Arrow Glacier transition
 #
 # Clique PoA:
 #

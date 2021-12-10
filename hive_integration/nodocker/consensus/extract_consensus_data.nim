@@ -41,10 +41,14 @@ proc processNetWork(network: string): JsonNode =
     constantinopleBlock = 2000
     petersburgBlock     = 2000
     istanbulBlock       = 2000
+    muirGlacierBlock    = 2000
     berlinBlock         = 2000
     londonBlock         = 2000
+    arrowGlacierBlock   = 2000
 
   case network
+
+  # All the network forks, which includes all the EVM, DAO and Glacier forks.
   of "Frontier":
     discard
   of "Homestead":
@@ -90,6 +94,7 @@ proc processNetWork(network: string): JsonNode =
     constantinopleBlock = 0
     petersburgBlock = 0
     istanbulBlock = 0
+    muirGlacierBlock = 0
     berlinBlock   = 0
   of "London":
     homesteadBlock = 0
@@ -99,28 +104,37 @@ proc processNetWork(network: string): JsonNode =
     constantinopleBlock = 0
     petersburgBlock = 0
     istanbulBlock = 0
+    muirGlacierBlock = 0
     berlinBlock   = 0
     londonBlock = 0
+  of "ArrowGlacier":
+    homesteadBlock = 0
+    eip150Block    = 0
+    eip158Block    = 0
+    byzantiumBlock = 0
+    constantinopleBlock = 0
+    petersburgBlock = 0
+    istanbulBlock = 0
+    muirGlacierBlock = 0
+    berlinBlock   = 0
+    londonBlock = 0
+    arrowGlacierBlock = 0
+
+  # Just the subset of "At5" networks mentioned in the test suite.
   of "FrontierToHomesteadAt5":
     homesteadBlock = 5
-  of "HomesteadToEIP150At5":
-    homesteadBlock = 0
-    eip150Block = 5
   of "HomesteadToDaoAt5":
     homesteadBlock = 0
     daoForkSupport = true
     daoForkBlock   = 5
+  of "HomesteadToEIP150At5":
+    homesteadBlock = 0
+    eip150Block = 5
   of "EIP158ToByzantiumAt5":
     homesteadBlock = 0
     eip150Block = 0
     eip158Block = 0
     byzantiumBlock = 5
-  of "ByzantiumToConstantinopleAt5":
-    homesteadBlock = 0
-    eip150Block = 0
-    eip158Block = 0
-    byzantiumBlock = 0
-    constantinopleBlock = 5
   of "ByzantiumToConstantinopleFixAt5":
     homesteadBlock = 0
     eip150Block = 0
@@ -128,23 +142,6 @@ proc processNetWork(network: string): JsonNode =
     byzantiumBlock = 0
     constantinopleBlock = 5
     petersburgBlock = 5
-  of "ConstantinopleFixToIstanbulAt5":
-    homesteadBlock = 0
-    eip150Block = 0
-    eip158Block = 0
-    byzantiumBlock = 0
-    constantinopleBlock = 0
-    petersburgBlock = 0
-    istanbulBlock = 5
-  of "IstanbulToBerlinAt5":
-    homesteadBlock = 0
-    eip150Block = 0
-    eip158Block = 0
-    byzantiumBlock = 0
-    constantinopleBlock = 0
-    petersburgBlock = 0
-    istanbulBlock = 0
-    berlinBlock = 5
   of "BerlinToLondonAt5":
     homesteadBlock = 0
     eip150Block = 0
@@ -153,8 +150,10 @@ proc processNetWork(network: string): JsonNode =
     constantinopleBlock = 0
     petersburgBlock = 0
     istanbulBlock = 0
+    muirGlacierBlock = 0
     berlinBlock = 0
     londonBlock = 5
+
   else:
     doAssert(false, "unsupported network: " & network)
 
@@ -169,8 +168,10 @@ proc processNetWork(network: string): JsonNode =
   n["constantinopleBlock"] = newJInt(constantinopleBlock)
   n["petersburgBlock"]     = newJInt(petersburgBlock)
   n["istanbulBlock"]       = newJInt(istanbulBlock)
+  n["muirGlacierBlock"]    = newJInt(muirGlacierBlock)
   n["berlinBlock"]         = newJInt(berlinBlock)
   n["londonBlock"]         = newJInt(londonBlock)
+  n["arrowGlacierBlock"]   = newJInt(arrowGlacierBlock)
   n["chainId"]             = newJInt(1)
   result = n
 
