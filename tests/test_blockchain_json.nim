@@ -148,41 +148,48 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.arrowGlacierBlock   = number[FkLondon]
 
   case network
-  of "EIP150":
-    c.assignNumber(FkTangerine, Zero)
-  of "ConstantinopleFix":
-    c.assignNumber(FkPetersburg, Zero)
-  of "Homestead":
-    c.assignNumber(FkHomestead, Zero)
+
+  # All the network forks, which includes all the EVM, DAO and Glacier forks.
   of "Frontier":
     c.assignNumber(FkFrontier, Zero)
-  of "Byzantium":
-    c.assignNumber(FkByzantium, Zero)
-  of "EIP158ToByzantiumAt5":
-    c.assignNumber(FkByzantium, Five)
+  of "Homestead":
+    c.assignNumber(FkHomestead, Zero)
+  of "EIP150":
+    c.assignNumber(FkTangerine, Zero)
   of "EIP158":
     c.assignNumber(FkSpurious, Zero)
-  of "HomesteadToDaoAt5":
-    c.assignNumber(FkHomestead, Zero)
-    c.daoForkBlock = Five
-    c.daoForkSupport = true
+  of "Byzantium":
+    c.assignNumber(FkByzantium, Zero)
   of "Constantinople":
     c.assignNumber(FkConstantinople, Zero)
-  of "HomesteadToEIP150At5":
-    c.assignNumber(FkTangerine, Five)
-  of "FrontierToHomesteadAt5":
-    c.assignNumber(FkHomestead, Five)
-  of "ByzantiumToConstantinopleFixAt5":
-    c.assignNumber(FkPetersburg, Five)
-    c.constantinopleBlock = Five
+  of "ConstantinopleFix":
+    c.assignNumber(FkPetersburg, Zero)
   of "Istanbul":
     c.assignNumber(FkIstanbul, Zero)
   of "Berlin":
     c.assignNumber(FkBerlin, Zero)
   of "London":
     c.assignNumber(FkLondon, Zero)
+  of "ArrowGlacier":
+    c.assignNumber(FkLondon, Zero)
+
+  # Just the subset of "At5" networks mentioned in the test suite.
+  of "FrontierToHomesteadAt5":
+    c.assignNumber(FkHomestead, Five)
+  of "HomesteadToDaoAt5":
+    c.assignNumber(FkHomestead, Zero)
+    c.daoForkBlock = Five
+    c.daoForkSupport = true
+  of "HomesteadToEIP150At5":
+    c.assignNumber(FkTangerine, Five)
+  of "EIP158ToByzantiumAt5":
+    c.assignNumber(FkByzantium, Five)
+  of "ByzantiumToConstantinopleFixAt5":
+    c.assignNumber(FkPetersburg, Five)
+    c.constantinopleBlock = Five
   of "BerlinToLondonAt5":
     c.assignNumber(FkLondon, Five)
+
   else:
     raise newException(ValueError, "unsupported network " & network)
 
