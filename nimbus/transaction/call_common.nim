@@ -174,6 +174,28 @@ proc setupHost(call: CallParams): TransactionHost =
 
   return host
 
+when defined(evmc_enabled):
+  import ./host_services
+  proc doExecEvmc(host: TransactionHost, call: CallParams) =
+    var callResult = evmcExecComputation(host)
+    let c = host.computation
+
+    if callResult.status_code == EVMC_SUCCESS:
+      c.error = nil
+    elif callResult.status_code == EVMC_REVERT:
+      c.setError("EVMC_REVERT", false)
+    else:
+      c.setError($callResult.status_code, true)
+
+    c.gasMeter.gasRemaining = callResult.gas_left
+    c.msg.contractAddress = callResult.create_address.fromEvmc
+    c.output = if callResult.output_size <= 0: @[]
+               else: @(makeOpenArray(callResult.output_data,
+                                     callResult.output_size.int))
+    if not callResult.release.isNil:
+      {.gcsafe.}:
+        callResult.release(callResult)
+
 proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   let c = host.computation
@@ -188,7 +210,7 @@ proc runComputation*(call: CallParams): CallResult =
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
   when defined(evmc_enabled):
-    discard evmcExecComputation(host)
+    doExecEvmc(host, call)
   else:
     execComputation(host.computation)
 
