@@ -245,7 +245,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
 
   if [[ ${NUM_NODE} != ${BOOTSTRAP_NODE} ]]; then
-    BOOTSTRAP_ARG="--bootstrap-file=${BOOTSTRAP_ENR_FILE} --portal-bootstrap-file=${BOOTSTRAP_ENR_FILE}"
+    BOOTSTRAP_ARG="--bootstrap-file=${BOOTSTRAP_ENR_FILE}"
 
     # Wait for the bootstrap node to write out its enr file
     START_TIMESTAMP=$(date +%s)

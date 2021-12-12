@@ -61,7 +61,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
 
 proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
-    bootstrapRecords: openarray[Record] = []): T =
+    bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, getHandler(contentDB), dataRadius,
     bootstrapRecords, stateDistanceCalculator)

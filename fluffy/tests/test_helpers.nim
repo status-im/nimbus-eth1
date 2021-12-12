@@ -17,8 +17,8 @@ proc localAddress*(port: int): Address =
 proc initDiscoveryNode*(rng: ref BrHmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
-    bootstrapRecords: openarray[Record] = [],
-    localEnrFields: openarray[(string, seq[byte])] = [],
+    bootstrapRecords: openArray[Record] = [],
+    localEnrFields: openArray[(string, seq[byte])] = [],
     previousRecord = none[enr.Record]()): discv5_protocol.Protocol =
   # set bucketIpLimit to allow bucket split
   let tableIpLimits = TableIpLimits(tableIpLimit: 1000,  bucketIpLimit: 24)

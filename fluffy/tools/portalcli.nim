@@ -13,6 +13,7 @@ import
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
+  ../common/common_utils,
   ../network/wire/[messages, portal_protocol],
   ../network/state/state_content
 
@@ -30,7 +31,7 @@ type
     findnodes
     findcontent
 
-  DiscoveryConf* = object
+  PortalCliConf* = object
     logLevel* {.
       defaultValue: LogLevel.DEBUG
       defaultValueDesc: $LogLevel.DEBUG
@@ -48,9 +49,17 @@ type
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
-    bootnodes* {.
-      desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
-      name: "bootnode" .}: seq[enr.Record]
+    # Note: This will add bootstrap nodes for both Discovery v5 network and each
+    # enabled Portal network. No distinction is made on bootstrap nodes per
+    # specific network.
+    bootstrapNodes* {.
+      desc: "ENR URI of node to bootstrap Discovery v5 and the Portal networks from. Argument may be repeated"
+      name: "bootstrap-node" .}: seq[Record]
+
+    bootstrapNodesFile* {.
+      desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 and Portal networks from"
+      defaultValue: ""
+      name: "bootstrap-file" }: InputFile
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -71,10 +80,6 @@ type
       defaultValue: PrivateKey.random(keys.newRng()[])
       defaultValueDesc: "random"
       name: "nodekey" .}: PrivateKey
-
-    portalBootnodes* {.
-      desc: "ENR URI of node to bootstrap the Portal protocol with. Argument may be repeated"
-      name: "portal-bootnode" .}: seq[Record]
 
     metricsEnabled* {.
       defaultValue: false
@@ -169,7 +174,7 @@ proc testHandler(contentKey: state_content.ByteList): ContentResult =
     ContentResult(kind: ContentKeyValidationFailure,
       error: "Failed decoding content key")
 
-proc run(config: DiscoveryConf) =
+proc run(config: PortalCliConf) =
   let
     rng = newRng()
     bindIp = config.listenAddress
@@ -178,18 +183,23 @@ proc run(config: DiscoveryConf) =
     (extIp, _, extUdpPort) = setupAddress(config.nat,
       config.listenAddress, udpPort, udpPort, "dcli")
 
-  let d = newProtocol(config.nodeKey,
-          extIp, none(Port), extUdpPort,
-          bootstrapRecords = config.bootnodes,
-          bindIp = bindIp, bindPort = udpPort,
-          enrAutoUpdate = config.enrAutoUpdate,
-          rng = rng)
+  var bootstrapRecords: seq[Record]
+  loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
+  bootstrapRecords.add(config.bootstrapNodes)
+
+  let d = newProtocol(
+    config.nodeKey,
+    extIp, none(Port), extUdpPort,
+    bootstrapRecords = bootstrapRecords,
+    bindIp = bindIp, bindPort = udpPort,
+    enrAutoUpdate = config.enrAutoUpdate,
+    rng = rng)
 
   d.open()
 
   # TODO: Configurable protocol id
   let portal = PortalProtocol.new(d, [byte 0x50, 0x0A], testHandler,
-    bootstrapRecords = config.portalBootnodes)
+    bootstrapRecords = bootstrapRecords)
 
   if config.metricsEnabled:
     let
@@ -242,7 +252,7 @@ proc run(config: DiscoveryConf) =
     waitfor(discover(d))
 
 when isMainModule:
-  let config = DiscoveryConf.load()
+  let config = PortalCliConf.load()
 
   setLogLevel(config.logLevel)
 
