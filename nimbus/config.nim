@@ -185,12 +185,12 @@ type
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
       desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), other=custom)"
-      #[longDesc:
+      longDesc:
         "- mainnet: Ethereum main network\n" &
         "- ropsten: Test network (proof-of-work, the one most like Ethereum mainnet)\n" &
         "- rinkeby: Test network (proof-of-authority, for those running Geth clients)\n" &
         "- görli  : Test network (proof-of-authority, works across all clients)\n" &
-        "- kovan  : Test network (proof-of-authority, for those running OpenEthereum clients)"]#
+        "- kovan  : Test network (proof-of-authority, for those running OpenEthereum clients)"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
@@ -203,13 +203,13 @@ type
       name: "custom-network" }: Option[NetworkParams]
 
     networkId* {.
-      hidden # TODO: use ignore from confutils if its become available
-      defaultValue: MainNet
+      ignore # this field is not processed by confutils
+      defaultValue: MainNet # the defaultValue value is set by `makeConfig`
       name: "network-id"}: NetworkId
 
     networkParams* {.
-      hidden # TODO: use ignore from confutils if its become available
-      defaultValue: NetworkParams()
+      ignore # this field is not processed by confutils
+      defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
       name: "network-params"}: NetworkParams
 
     logLevel* {.
@@ -286,10 +286,10 @@ type
 
     discovery* {.
       desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
-      #[longDesc:
+      longDesc:
         "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
         "- V4  : Node Discovery Protocol v4(default)\n" &
-        "- V5  : Node Discovery Protocol v5"]#
+        "- V5  : Node Discovery Protocol v5"
       defaultValue: DiscoveryType.V4
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
