@@ -20,7 +20,8 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 # Nim thinks the module is unused because the function is only called via
 # `.exportc` -> `.importc`.
 {.warning[UnusedImport]: off.}:
-  import ./evmc_vm_glue
+  when defined(evmc_enabled):
+    import ./evmc_vm_glue
 
 var evmcLibraryPath {.threadvar.}: string
   ## Library path set by `--evm` command line option.
