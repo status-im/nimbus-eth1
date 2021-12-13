@@ -9,7 +9,7 @@
 
 import
   std/sequtils,
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   ../network/wire/portal_protocol,
   ./rpc_types
 
@@ -40,6 +40,28 @@ proc installPortalApiHandlers*(
       return lookup.get().record
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
+
+  rpcServer.rpc("portal_" & network & "_ping") do(
+      enr: Record) -> tuple[seqNum: uint64, customPayload: string]:
+    let
+      node = toNodeWithAddress(enr)
+      pong = await p.ping(node)
+
+    if pong.isErr():
+      raise newException(ValueError, $pong.error)
+    else:
+      let p = pong.get()
+      return (p.enrSeq, p.customPayload.asSeq().toHex())
+
+  rpcServer.rpc("portal_" & network & "_findNodes") do(
+      enr: Record, distances: seq[uint16]) -> seq[Record]:
+    let
+      node = toNodeWithAddress(enr)
+      nodes = await p.findNodesVerified(node, distances)
+    if nodes.isErr():
+      raise newException(ValueError, $nodes.error)
+    else:
+      return nodes.get().map(proc(n: Node): Record = n.record)
 
   rpcServer.rpc("portal_" & network & "_recursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()

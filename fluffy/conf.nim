@@ -82,11 +82,11 @@ type
             "This option allows to enable/disable this functionality"
       name: "enr-auto-update" .}: bool
 
-    nodeKey* {.
-      desc: "P2P node private key as hex",
+    networkKey* {.
+      desc: "Private key (secp256k1) for the p2p network, hex encoded. Safer keyfile support to be added.",
       defaultValue: PrivateKey.random(keys.newRng()[])
       defaultValueDesc: "random"
-      name: "nodekey" .}: PrivateKey
+      name: "network-key-unsafe" .}: PrivateKey
 
     dataDir* {.
       desc: "The directory where fluffy will store the content data"
@@ -116,7 +116,7 @@ type
       name: "rpc" }: bool
 
     rpcPort* {.
-      desc: "HTTP port for the JSON-RPC service"
+      desc: "HTTP port for the JSON-RPC server"
       defaultValue: 8545
       name: "rpc-port" }: Port
 
