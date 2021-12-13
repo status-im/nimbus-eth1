@@ -222,7 +222,7 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     contentHandler: ContentHandler,
     dataRadius = UInt256.high(),
-    bootstrapRecords: openarray[Record] = [],
+    bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator
     ): T =
   let proto = PortalProtocol(

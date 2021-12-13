@@ -52,12 +52,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
-  let d = newProtocol(config.nodeKey,
-          extIp, none(Port), extUdpPort,
-          bootstrapRecords = bootstrapRecords,
-          bindIp = bindIp, bindPort = udpPort,
-          enrAutoUpdate = config.enrAutoUpdate,
-          rng = rng)
+  let d = newProtocol(
+    config.nodeKey,
+    extIp, none(Port), extUdpPort,
+    bootstrapRecords = bootstrapRecords,
+    bindIp = bindIp, bindPort = udpPort,
+    enrAutoUpdate = config.enrAutoUpdate,
+    rng = rng)
 
   d.open()
 
@@ -68,15 +69,9 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
-  var portalBootstrapRecords: seq[Record]
-  loadBootstrapFile(string config.portalBootstrapNodesFile, portalBootstrapRecords)
-  portalBootstrapRecords.add(config.portalBootstrapNodes)
-
   let
-    stateNetwork = StateNetwork.new(d, db,
-      bootstrapRecords = portalBootstrapRecords)
-    historyNetwork = HistoryNetwork.new(d, db,
-      bootstrapRecords = portalBootstrapRecords)
+    stateNetwork = StateNetwork.new(d, db, bootstrapRecords = bootstrapRecords)
+    historyNetwork = HistoryNetwork.new(d, db, bootstrapRecords = bootstrapRecords)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and

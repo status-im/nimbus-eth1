@@ -136,7 +136,7 @@ func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
 
-func decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
+func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
   try:
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")

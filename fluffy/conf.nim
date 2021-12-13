@@ -56,12 +56,15 @@ type
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
+    # Note: This will add bootstrap nodes for both Discovery v5 network and each
+    # enabled Portal network. No distinction is made on bootstrap nodes per
+    # specific network.
     bootstrapNodes* {.
-      desc: "ENR URI of node to bootstrap Discovery v5 from. Argument may be repeated"
+      desc: "ENR URI of node to bootstrap Discovery v5 and the Portal networks from. Argument may be repeated"
       name: "bootstrap-node" .}: seq[Record]
 
     bootstrapNodesFile* {.
-      desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 from"
+      desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 and Portal networks from"
       defaultValue: ""
       name: "bootstrap-file" }: InputFile
 
@@ -90,17 +93,6 @@ type
       defaultValue: defaultDataDir()
       defaultValueDesc: $defaultDataDirDesc
       name: "data-dir" }: OutDir
-
-    # Note: This will add bootstrap nodes for each enabled Portal network.
-    # No distinction is being made on bootstrap nodes for a specific network.
-    portalBootstrapNodes* {.
-      desc: "ENR URI of node to bootstrap the Portal networks from. Argument may be repeated"
-      name: "portal-bootstrap-node" .}: seq[Record]
-
-    portalBootstrapNodesFile* {.
-      desc: "Specifies a line-delimited file of ENR URIs to bootstrap the Portal networks from"
-      defaultValue: ""
-      name: "portal-bootstrap-file" }: InputFile
 
     metricsEnabled* {.
       defaultValue: false

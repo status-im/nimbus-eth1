@@ -58,7 +58,7 @@ proc getContent*(n: HistoryNetwork, key: ContentKey):
 
 proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
-    bootstrapRecords: openarray[Record] = []): T =
+    bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, getHandler(contentDB), dataRadius,
     bootstrapRecords)
