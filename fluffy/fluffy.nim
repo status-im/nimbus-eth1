@@ -53,7 +53,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   bootstrapRecords.add(config.bootstrapNodes)
 
   let d = newProtocol(
-    config.nodeKey,
+    config.networkKey,
     extIp, none(Port), extUdpPort,
     bootstrapRecords = bootstrapRecords,
     bindIp = bindIp, bindPort = udpPort,

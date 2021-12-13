@@ -93,7 +93,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
         recipientPort: p.port
       )
 
-  rpcServer.rpc("discv5_findNodes") do(
+  rpcServer.rpc("discv5_findNode") do(
       enr: Record, distances: seq[uint16]) -> seq[Record]:
     let
       node = toNodeWithAddress(enr)
@@ -103,7 +103,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     else:
       return nodes.get().map(proc(n: Node): Record = n.record)
 
-  rpcServer.rpc("discv5_talk") do(enr: Record, protocol, payload: string) -> string:
+  rpcServer.rpc("discv5_talkReq") do(enr: Record, protocol, payload: string) -> string:
     let
       node = toNodeWithAddress(enr)
       talkresp = await d.talkreq(

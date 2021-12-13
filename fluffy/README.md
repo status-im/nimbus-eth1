@@ -22,6 +22,9 @@ Current status of specifications can be found in the
 To keep up to date with changes and development progress, follow the
 [Nimbus blog](https://our.status.im/tag/nimbus/).
 
+Monthly development updates are shared
+[here](https://hackmd.io/jRpxY4WBQJ-hnsKaPDYqTw).
+
 ## How to Build & Run
 
 ### Prerequisites
@@ -36,8 +39,8 @@ make fluffy
 # See available command line options
 ./build/fluffy --help
 
-# Example command: Run the client and connect to a bootnode.
-./build/fluffy --log-level:debug --bootnode:enr:<base64 encoding of ENR>
+# Example command: Run the client and connect to a bootstrap node.
+./build/fluffy --bootstrap-node:enr:<base64 encoding of ENR>
 ```
 
 ### Update and rebuild fluffy client
@@ -54,6 +57,11 @@ make fluffy
 ```bash
 # From the nimbus-eth1 repository
 make fluffy-test
+```
+
+### Run fluffy local testnet
+```bash
+./fluffy/scripts/launch_local_testnet.sh
 ```
 
 ### Windows support
@@ -79,6 +87,9 @@ can be found on the general nimbus-eth1 readme.
 
 The code follows the
 [Status Nim Style Guide](https://status-im.github.io/nim-style-guide/).
+
+Detailed document showing commands to
+[test client protocol interoperability](./docs/protocol_interop.md).
 
 ## License
 

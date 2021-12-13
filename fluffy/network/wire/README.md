@@ -44,11 +44,12 @@ git clone git@github.com:status-im/nimbus-eth1.git
 cd nimbus-eth1
 
 # Build the fluffy tools
-make tools-fluffy
+make fluffy-tools
 
 # See all options
 ./build/portalcli --help
 # Example command: Ping another node
 ./build/portalcli ping enr:<base64 encoding of ENR>
-# Example command: Run discovery + portal node
-./build/portalcli --log-level:debug --bootnode:enr:<base64 encoding of ENR>
+# Example command: Run a discovery + portal node
+./build/portalcli --log-level:debug --bootstrap-node:enr:<base64 encoding of ENR>
+```

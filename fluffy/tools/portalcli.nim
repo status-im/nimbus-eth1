@@ -15,7 +15,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../network/wire/[messages, portal_protocol],
-  ../network/state/state_content
+  ../network/state/[state_content, state_network]
 
 const
   defaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
@@ -75,11 +75,11 @@ type
             "This option allows to enable/disable this functionality"
       name: "enr-auto-update" .}: bool
 
-    nodeKey* {.
-      desc: "P2P node private key as hex",
+    networkKey* {.
+      desc: "Private key (secp256k1) for the p2p network, hex encoded.",
       defaultValue: PrivateKey.random(keys.newRng()[])
       defaultValueDesc: "random"
-      name: "nodekey" .}: PrivateKey
+      name: "network-key" .}: PrivateKey
 
     metricsEnabled* {.
       defaultValue: false
@@ -96,6 +96,11 @@ type
       defaultValue: 8008
       desc: "Listening HTTP port of the metrics server"
       name: "metrics-port" .}: Port
+
+    protocolId* {.
+      defaultValue: stateProtocolId
+      desc: "Portal wire protocol id for the network to connect to"
+      name: "protocol-id" .}: PortalProtocolId
 
     case cmd* {.
       command
@@ -157,13 +162,23 @@ proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
   return @[]
 
+proc parseCmdArg*(T: type PortalProtocolId, p: TaintedString): T =
+  try:
+    result = byteutils.hexToByteArray(string(p), 2)
+  except ValueError:
+    raise newException(ConfigurationError,
+      "Invalid protocol id, not a valid hex value")
+
+proc completeCmdArg*(T: type PortalProtocolId, val: TaintedString): seq[string] =
+  return @[]
+
 proc discover(d: discv5_protocol.Protocol) {.async.} =
   while true:
     let discovered = await d.queryRandom()
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-proc testHandler(contentKey: state_content.ByteList): ContentResult =
+proc testHandler(contentKey: ByteList): ContentResult =
   # Note: We don't incorperate storage in this tool so we always return
   # missing content. For now we are using the state network derivation but it
   # could be selective based on the network the tool is used for.
@@ -181,14 +196,14 @@ proc run(config: PortalCliConf) =
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
     (extIp, _, extUdpPort) = setupAddress(config.nat,
-      config.listenAddress, udpPort, udpPort, "dcli")
+      config.listenAddress, udpPort, udpPort, "portalcli")
 
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
   let d = newProtocol(
-    config.nodeKey,
+    config.networkKey,
     extIp, none(Port), extUdpPort,
     bootstrapRecords = bootstrapRecords,
     bindIp = bindIp, bindPort = udpPort,
@@ -197,8 +212,7 @@ proc run(config: PortalCliConf) =
 
   d.open()
 
-  # TODO: Configurable protocol id
-  let portal = PortalProtocol.new(d, [byte 0x50, 0x0A], testHandler,
+  let portal = PortalProtocol.new(d, config.protocolId, testHandler,
     bootstrapRecords = bootstrapRecords)
 
   if config.metricsEnabled:
