@@ -191,7 +191,13 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
   # the survival statement would be to re-assign the state-root via
   #
   #   vmState.stateDB.clobberRootHash(stateRoot)
-
+  #
+  # Also mind this comment from Andri:
+  #
+  #   [..] but as a reminder, only reinit the ac.trie is not enough, you
+  #   should consider the accounts in the cache too. if there is any accounts
+  #   in the cache they must in sync with the new rootHash.
+  #
   block:
     let dbTx = xdb.db.beginTransaction()
 
