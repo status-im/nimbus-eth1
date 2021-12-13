@@ -23,7 +23,7 @@ import
   ./test_clique/pool,
   ./replay/undump,
   eth/[common, keys],
-  stint, stew/byteutils,
+  stint,
   unittest2
 
 const
@@ -291,7 +291,7 @@ when isMainModule:
     #   `test_clique/indiump.dumpGroupNl()`
     # placed at the end of
     #   `p2p/chain/persist_blocks.persistBlocks()`.
-    captureFile = "goerli504192.txt.gz"
+    captureFile = goerliCapture
     #captureFile = "dump-stream.out.gz"
 
   proc goerliReplay(noisy = true; showElapsed = true;
@@ -302,7 +302,7 @@ when isMainModule:
       dir = dir, captureFile = captureFile,
       startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
 
-  when false: # true:
+  when true:
     # local path is: nimbus-eth1/tests
     let noisy = defined(debug)
 
