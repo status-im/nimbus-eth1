@@ -8,22 +8,28 @@
 {.used.}
 
 import
-  unittest2, stint, stew/[byteutils, results],
+  unittest2, stew/byteutils,
   ../network/history/history_content
 
 suite "History ContentKey Encodings":
   test "ContentKey":
-    var blockHash: BlockHash # All zeroes
-    let contentKey = ContentKey(chainId: 1'u16, contentType: BlockBody, blockHash: blockHash)
+    var blockHash: BlockHash
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+      "0x0100000000000000000000000000000000000000000000000000000000000000")
+    let contentKey =
+      ContentKey(chainId: 1'u16, contentType: BlockBody, blockHash: blockHash)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex ==
-      "0100020000000000000000000000000000000000000000000000000000000000000000"
+      "0100020100000000000000000000000000000000000000000000000000000000000000"
     let decoded = decode(encoded)
     check decoded.isSome()
 
-    let contentKey2 = decoded.get()
+    let contentKeyDecoded = decoded.get()
     check:
-      contentKey2.chainId == 1'u16
-      contentKey2.contentType == BlockBody
-      contentKey2.blockHash == blockHash
+      contentKeyDecoded.chainId == contentKey.chainId
+      contentKeyDecoded.contentType == contentKey.contentType
+      contentKeyDecoded.blockHash == contentKey.blockHash
+
+      toContentId(contentKey).toHex() ==
+        "36a55e9aa5125c5fecc16bcb0234d9d3d6065eabc890c0d3b24d413d6ae9f9da"

@@ -35,9 +35,6 @@ type
 template toSszType*(x: ContentType): uint8 =
   uint8(x)
 
-template toSszType*(x: auto): auto =
-  x
-
 func fromSszBytes*(T: type ContentType, data: openArray[byte]):
     T {.raises: [MalformedSszError, Defect].} =
   if data.len != sizeof(uint8):
