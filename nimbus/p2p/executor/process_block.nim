@@ -22,7 +22,8 @@ import
   ./process_transaction,
   chronicles,
   eth/[common, trie/db],
-  nimcrypto
+  nimcrypto,
+  stew/results
 
 {.push raises: [Defect].}
 
@@ -30,9 +31,10 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
-                     header: BlockHeader, body: BlockBody): bool
-                       {.gcsafe, raises: [Defect,CatchableError].} =
+proc procBlkPreamble(vmState: BaseVMState;
+                     header: BlockHeader; body: BlockBody): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+
   if vmState.chainDB.config.daoForkSupport and
      vmState.chainDB.config.daoForkBlock == header.blockNumber:
     vmState.mutateStateDB:
@@ -56,11 +58,12 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
       vmState.cumulativeGasUsed = 0
       for txIndex, tx in body.transactions:
         var sender: EthAddress
-        if tx.getSender(sender):
-          discard tx.processTransaction(sender, vmState)
-        else:
+        if not tx.getSender(sender):
           debug "Could not get sender",
             txIndex, tx
+          return false
+        let rc = vmState.processTransaction(tx, sender, header)
+        if rc.isErr:
           return false
         vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
 
@@ -79,9 +82,9 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
   return true
 
 
-proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
-                     header: BlockHeader, body: BlockBody): bool
-                       {.gcsafe, raises: [Defect,RlpError].} =
+proc procBlkEpilogue(vmState: BaseVMState;
+                     header: BlockHeader; body: BlockBody): bool
+    {.gcsafe, raises: [Defect,RlpError].} =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:
@@ -117,9 +120,11 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBlockNotPoA*(vmState: BaseVMState;
-                         header: BlockHeader, body: BlockBody): ValidationResult
-                     {.gcsafe, raises: [Defect,CatchableError].} =
+proc processBlockNotPoA*(
+    vmState: BaseVMState; ## Parent environment of header/body block
+    header:  BlockHeader; ## Header/body block to add to the blockchain
+    body:    BlockBody): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Processes `(header,body)` pair for a non-PoA network, only. This function
   ## will fail when applied to a PoA network like `Goerli`.
   if vmState.chainDB.config.poaEngine:
@@ -131,12 +136,12 @@ proc processBlockNotPoA*(vmState: BaseVMState;
   var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
-  if not vmState.procBlkPreamble(dbTx, header, body):
+  if not vmState.procBlkPreamble(header, body):
     return ValidationResult.Error
 
   vmState.calculateReward(header, body)
 
-  if not vmState.procBlkEpilogue(dbTx, header, body):
+  if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
   # `applyDeletes = false`
@@ -146,10 +151,15 @@ proc processBlockNotPoA*(vmState: BaseVMState;
   # `applyDeletes` have no effects.
   dbTx.commit(applyDeletes = false)
 
+  ValidationResult.OK
 
-proc processBlock*(vmState: BaseVMState; poa: Clique;
-                   header: BlockHeader, body: BlockBody): ValidationResult
-                     {.gcsafe, raises: [Defect,CatchableError].} =
+
+proc processBlock*(
+    vmState: BaseVMState;  ## Parent environment of header/body block
+    poa:     Clique;       ## PoA descriptor (if needed, at all)
+    header:  BlockHeader;  ## Header/body block to add to the blockchain
+    body:    BlockBody): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not. Currently there is no mining support so this
   ## function is mostly the same as `processBlockNotPoA()`.
@@ -158,7 +168,8 @@ proc processBlock*(vmState: BaseVMState; poa: Clique;
   ## verification in the `chain/persist_blocks.persistBlocks()` method. So
   ## the `poa` descriptor is currently unused and only provided for later
   ## implementations (but can be savely removed, as well.)
-
+  ## variant of `processBlock()` where the `header` argument is explicitely set.
+  ##
   # # Process PoA state transition first so there is no need to re-wind on
   # # an error.
   # if vmState.chainDB.config.poaEngine and
@@ -169,16 +180,18 @@ proc processBlock*(vmState: BaseVMState; poa: Clique;
   var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
-  if not vmState.procBlkPreamble(dbTx, header, body):
+  if not vmState.procBlkPreamble(header, body):
     return ValidationResult.Error
 
   if not vmState.chainDB.config.poaEngine:
     vmState.calculateReward(header, body)
 
-  if not vmState.procBlkEpilogue(dbTx, header, body):
+  if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
 
   dbTx.commit(applyDeletes = false)
+
+  ValidationResult.OK
 
 # ------------------------------------------------------------------------------
 # End

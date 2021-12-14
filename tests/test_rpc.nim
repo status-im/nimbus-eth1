@@ -85,7 +85,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
     let sender = tx.getSender()
-    discard processTransaction(tx, sender, vmState)
+    discard vmState.processTransaction(tx, sender, vmState.blockHeader)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let

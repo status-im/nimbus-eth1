@@ -2,7 +2,8 @@ import
   db/[db_chain, accounts_cache, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils,
-  chronicles, rpc/hexstrings, launcher
+  chronicles, rpc/hexstrings, launcher,
+  stew/results
 
 when defined(geth):
   import db/geth_db
@@ -122,7 +123,8 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    gasUsed = processTransaction(tx, sender, vmState)
+    let rc = vmState.processTransaction(tx, sender, header)
+    gasUsed = if rc.isOK: rc.value else: 0
 
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
@@ -232,8 +234,11 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
   var gasUsed = GasInt(0)
 
   for tx in body.transactions:
-    let sender = tx.getSender
-    gasUsed = gasUsed + processTransaction(tx, sender, vmState)
+    let
+      sender = tx.getSender
+      rc = vmState.processTransaction(tx, sender, header)
+    if rc.isOK:
+      gasUsed = gasUsed + rc.value
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed

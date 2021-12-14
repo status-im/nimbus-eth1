@@ -204,35 +204,35 @@ method getTrieDB*(c: Chain): TrieDatabaseRef {.gcsafe.} =
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
 
-proc clique*(c: Chain): var Clique {.inline.} =
+proc clique*(c: Chain): var Clique =
   ## Getter
   c.poa
 
-proc pow*(c: Chain): PowRef {.inline.} =
+proc pow*(c: Chain): PowRef =
   ## Getter
   c.pow
 
-proc db*(c: Chain): auto {.inline.} =
+proc db*(c: Chain): BaseChainDB =
   ## Getter
   c.db
 
-proc extraValidation*(c: Chain): auto {.inline.} =
+proc extraValidation*(c: Chain): bool =
   ## Getter
   c.extraValidation
 
-proc forkIds*(c: Chain): auto {.inline.} =
+proc forkIds*(c: Chain): array[ChainFork,ForkID] =
   ## Getter
   c.forkIds
 
-proc verifyFrom*(c: Chain): auto {.inline.} =
+proc verifyFrom*(c: Chain): BlockNumber =
   ## Getter
   c.verifyFrom
 
-proc lastBlockHash*(c: Chain): auto {.inline.} =
+proc lastBlockHash*(c: Chain): KeccakHash =
   ## Getter
   c.lastBlockHash
 
-proc parentStateRoot*(c: Chain): auto {.inline.} =
+proc parentStateRoot*(c: Chain): KeccakHash =
   ## Getter
   c.parentStateRoot
 
@@ -247,22 +247,26 @@ proc currentBlock*(c: Chain): BlockHeader
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
 
-proc `extraValidation=`*(c: Chain; extraValidation: bool) {.inline.} =
+proc `extraValidation=`*(c: Chain; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
 
-proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
+proc `verifyFrom=`*(c: Chain; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.
+  c.verifyFrom = verifyFrom
+
+proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) =
+  ## Variant of `verifyFrom=`
   c.verifyFrom = verifyFrom.u256
 
-proc `lastBlockHash=`*(c: Chain; blockHash: KeccakHash) {.inline.} =
+proc `lastBlockHash=`*(c: Chain; blockHash: KeccakHash) =
   ## Setter.
   c.lastBlockHash = blockHash
 
-proc `parentStateRoot=`*(c: Chain; stateRoot: KeccakHash) {.inline.} =
+proc `parentStateRoot=`*(c: Chain; stateRoot: KeccakHash) =
   ## Setter.
   c.parentStateRoot = stateRoot
 

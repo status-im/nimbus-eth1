@@ -18,7 +18,8 @@ import
   ../validate,
   ./executor_helpers,
   chronicles,
-  eth/common
+  eth/common,
+  stew/results
 
 {.push raises: [Defect].}
 
@@ -32,39 +33,72 @@ proc eip1559TxNormalization(tx: Transaction): Transaction =
     result.maxPriorityFee = tx.gasPrice
     result.maxFee = tx.gasPrice
 
+proc eip1559BaseFee(header: BlockHeader; fork: Fork): UInt256 =
+  ## Actually, `baseFee` should be 0 for pre-London headers already. But this
+  ## function just plays safe. In particular, the `test_general_state_json.nim`
+  ## module modifies this block header `baseFee` field unconditionally :(.
+  if FkLondon <= fork:
+    result = header.baseFee
 
-proc processTransactionImpl(tx: Transaction, sender: EthAddress,
-                            vmState: BaseVMState, fork: Fork): GasInt
-                              # wildcard exception, wrapped below
-                              {.gcsafe, raises: [Exception].} =
+proc processTransactionImpl(
+    vmState: BaseVMState; ## Parent accounts environment for transaction
+    tx:      Transaction; ## Transaction to validate
+    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    header:  BlockHeader; ## Header for the block containing the current tx
+    fork:    Fork): Result[GasInt,void]
+    # wildcard exception, wrapped below
+    {.gcsafe, raises: [Exception].} =
+  ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
+  ## which provides a backward compatible framwork for EIP1559.
+
   #trace "Sender", sender
-  #trace "txHash", rlpHash = tx.rlpHash
+  #trace "txHash", rlpHash = ty.rlpHash
 
-  var tx = eip1559TxNormalization(tx)
-  var priorityFee: GasInt
-  if fork >= FkLondon:
-    # priority fee is capped because the base fee is filled first
-    let baseFee = vmState.blockHeader.baseFee.truncate(GasInt)
+  var
+    tx = eip1559TxNormalization(tx)
+  let
+    roDB = vmState.readOnlyStateDB
+    baseFee256 = header.eip1559BaseFee(fork)
+    baseFee = baseFee256.truncate(int64)
     priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
-    # signer pays both the priority fee and the base fee
-    # tx.gasPrice now is the effective gasPrice
+    miner = vmState.coinbase()
+  if FkLondon <= fork:
+    # The signer pays both the priority fee and the base fee. So tx.gasPrice
+    # now is the effective gasPrice which also effects the `stateRoot` value.
     tx.gasPrice = priorityFee + baseFee
 
-  let miner = vmState.coinbase()
-  if validateTransaction(vmState, tx, sender, fork):
-    result = txCallEvm(tx, sender, vmState, fork)
+  # Return failure unless explicitely set `ok()`
+  result = err()
 
-    # miner fee
-    if fork >= FkLondon:
-      # miner only receives the priority fee;
-      # note that the base fee is not given to anyone (it is burned)
-      let txFee = result.u256 * priorityFee.u256
-      vmState.stateDB.addBalance(miner, txFee)
+  # Actually, the eip-1559 reference does not mention an early exit.
+  #
+  # Even though database was not changed yet but, a `persist()` directive
+  # before leaving is crucial for some unit tests that us a direct/deep call
+  # of the `processTransaction()` function. So there is no `return err()`
+  # statement, here.
+  if roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, fork):
+
+    # Execute the transaction.
+    let
+      accTx = vmState.stateDB.beginSavepoint
+      gasBurned = tx.txCallEvm(sender, vmState, fork)
+
+    # Make sure that the tx does not exceed the maximum cumulative limit as
+    # set in the block header. Again, the eip-1559 reference does not mention
+    # an early stop. It would rather detect differing values for the  block
+    # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
+    if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
+      vmState.stateDB.rollback(accTx)
+      debug "invalid tx: block header gasLimit reached",
+        maxLimit = header.gasLimit,
+        gasUsed  = vmState.cumulativeGasUsed,
+        addition = gasBurned
     else:
-      let txFee = result.u256 * tx.gasPrice.u256
-      vmState.stateDB.addBalance(miner, txFee)
-
-  vmState.cumulativeGasUsed += result
+      # Accept transaction and collect mining fee.
+      vmState.stateDB.commit(accTx)
+      vmState.stateDB.addBalance(miner, gasBurned.u256 * priorityFee.u256)
+      vmState.cumulativeGasUsed += gasBurned
+      result = ok(gasBurned)
 
   vmState.mutateStateDB:
     for deletedAccount in vmState.selfDestructs:
@@ -86,21 +120,48 @@ proc processTransactionImpl(tx: Transaction, sender: EthAddress,
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processTransaction*(tx: Transaction, sender: EthAddress,
-                         vmState: BaseVMState, fork: Fork): GasInt
-                            {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Process the transaction, write the results to db.
-  ## Returns amount of ETH to be rewarded to miner
+proc processTransaction*(
+    vmState: BaseVMState; ## Parent accounts environment for transaction
+    tx:      Transaction; ## Transaction to validate
+    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    header:  BlockHeader; ## Header for the block containing the current tx
+    fork:    Fork): Result[GasInt,void]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Process the transaction, write the results to accounts db. The function
+  ## returns the amount of gas burned if executed.
   safeExecutor("processTransaction"):
-    result = tx.processTransactionImpl(sender, vmState, fork)
+    result = vmState.processTransactionImpl(tx, sender, header, fork)
 
-proc processTransaction*(tx: Transaction, sender: EthAddress,
-                         vmState: BaseVMState): GasInt
-                            {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Same as the other prototype variant with the `fork` argument derived
-  ## from `vmState` in a canonical way
+proc processTransaction*(
+    vmState: BaseVMState; ## Parent accounts environment for transaction
+    tx:      Transaction; ## Transaction to validate
+    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    header:  BlockHeader): Result[GasInt,void]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `processTransaction()` with `*fork* derived
+  ## from the `vmState` argument.
+  var fork: Fork
   safeExecutor("processTransaction"):
-    result = tx.processTransaction(sender, vmState, vmState.getForkUnsafe)
+    fork = vmState.getForkUnsafe
+  vmState.processTransaction(tx, sender, header, fork)
+
+#[
+proc processTransaction*(tx: Transaction; sender: EthAddress;
+                         vmState: BaseVMState; fork: Fork):
+                           Result[GasInt,void]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Legacy variant of `processTransaction()` with `*header* derived
+  ## from the `vmState` argument.
+  vmState.processTransaction(tx, sender, vmState.blockHeader, fork)
+
+proc processTransaction*(tx: Transaction; sender: EthAddress;
+                         vmState: BaseVMState):
+                           Result[GasInt,void]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Legacy variant of `processTransaction()` with `*header* and *fork* derived
+  ## from the `vmState` argument.
+  vmState.processTransaction(tx, sender, vmState.blockHeader)
+#]#
 
 # ------------------------------------------------------------------------------
 # End
