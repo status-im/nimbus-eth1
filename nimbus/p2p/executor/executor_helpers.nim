@@ -61,16 +61,16 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
   result = bloom.value.toByteArrayBE
 
 proc getForkUnsafe*(vmState: BaseVMState): Fork
-                       {.inline, raises: [Exception].} =
+                       {.gcsafe, raises: [Exception].} =
   ## Shortcut for configured fork, deliberately not naming it toFork(). This
   ## function may throw an `Exception` and must be wrapped.
   vmState.chainDB.config.toFork(vmState.blockNumber)
 
 proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt
-                    {.inline, raises: [Defect,CatchableError].} =
+                    {.gcsafe, raises: [Defect,CatchableError].} =
 
   proc getFork(vmState: BaseVMState): Fork
-               {.inline, raises: [Defect,CatchableError].} =
+               {.gcsafe, raises: [Defect,CatchableError].} =
     safeExecutor("getFork"):
       result = vmState.getForkUnsafe
 

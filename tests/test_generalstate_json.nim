@@ -6,16 +6,19 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, strutils, tables, json, times, os, sets,
-  nimcrypto, options,
-  eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
+  std/[strutils, tables, json, times, os, sets, options],
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/p2p/executor, test_config,
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, utils],
-  ../nimbus/vm_internals,
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/forks
+  ../nimbus/forks,
+  chronicles,
+  eth/[rlp, common],
+  eth/trie/[db, trie_defs],
+  nimcrypto,
+  unittest2,
+  stew/results
 
 type
   Tester = object
@@ -114,7 +117,10 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
       tester.dumpDebugData(vmState, sender, gasUsed, success)
 
-  gasUsed = tester.tx.processTransaction(sender, vmState, tester.fork)
+  let rc = vmState.processTransaction(
+                tester.tx, sender, tester.header, tester.fork)
+  if rc.isOK:
+    gasUsed = rc.value
 
   # This is necessary due to the manner in which the state tests are
   # generated. State tests are generated from the BlockChainTest tests
