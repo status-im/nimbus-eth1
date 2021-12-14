@@ -76,6 +76,20 @@ let
     NimVersion
   ]
 
+# because nim-confutils not yet able to handle
+# `when` in object definition, we combine nim pragma pragma
+# and `ignore` attribute from nim-confutils
+# to achieve similar effect.
+when defined(evmc_enabled):
+  {.pragma: evmpragma
+    desc: "Load alternative EVM from EVMC-compatible shared library (.so/.dll/.dylib)"
+    defaultValue: ""
+    defaultValueDesc: "Nimbus built-in EVM"
+    name: "evm".}
+else:
+  {.pragma: evmpragma
+    ignore.}
+
 proc defaultDataDir*(): string =
   when defined(windows):
     getHomeDir() / "AppData" / "Roaming" / "Nimbus"
@@ -176,11 +190,8 @@ type
       defaultValueDesc: ""
       name: "verify-from" }: Option[uint64]
 
-    evm* {.
-      desc: "Load alternative EVM from EVMC-compatible shared library (.so/.dll/.dylib)"
-      defaultValue: ""
-      defaultValueDesc: "Nimbus built-in EVM"
-      name: "evm" }: string
+    # see evmpragma description above
+    evm* {.evmpragma.}: string
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
