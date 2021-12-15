@@ -11,6 +11,7 @@ import
   ./test_portal_wire_encoding,
   ./test_portal_wire_protocol,
   ./test_state_distance,
+  ./test_state_content,
   ./test_state_network,
   ./test_history_content,
   ./test_content_db,
