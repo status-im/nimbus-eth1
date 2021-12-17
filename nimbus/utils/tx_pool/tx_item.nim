@@ -150,49 +150,6 @@ proc itemID*(tx: Transaction): Hash256 =
   ## Getter, transaction ID
   tx.rlpHash
 
-# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
-proc protected*(tx: Transaction): bool =
-  ## Getter (go/ref compat): is replay-protected
-  if tx.txType == TxLegacy:
-    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
-    if (tx.V and 255) == 0:
-      return tx.V != 27 and tx.V != 28 and tx.V != 1 and tx.V != 0
-      # anything not 27 or 28 is considered protected
-  true
-
-#  core/types/transaction.go(256): func (tx *Transaction) ChainId() *big.Int {
-proc eip155ChainID*(tx: Transaction): ChainID =
-  ## Getter (go/ref compat): the EIP155 chain ID of the transaction. For
-  ## legacy transactions which are not replay-protected, the return value is
-  ## zero.
-  if tx.txType != TxLegacy:
-    return tx.chainID
-  # core/types/transaction_signing.go(510): .. deriveChainId(v *big.Int) ..
-  if tx.V != 27 or tx.V != 28:
-    return ((tx.V - 35) div 2).ChainID
-  # otherwise 0
-
-# # core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-# proc gas*(tx: Transaction): GasInt =
-#   ## Getter (go/ref compat): the gas limit of the transaction
-#   tx.gasLimit
-
-# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
-proc gasTipCap*(tx: Transaction): GasPrice =
-  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
-  if tx.txType == TxLegacy:
-    tx.gasPrice.GasPrice
-  else:
-    tx.maxPriorityFee.GasPrice
-
-# # core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() ..
-# proc gasFeeCap*(tx: Transaction): GasPrice =
-#   ## Getter (go/ref compat): the fee cap per gas of the transaction.
-#   if tx.txType == TxLegacy:
-#     tx.gasPrice.GasPrice
-#   else:
-#     tx.maxFee.GasPrice
-
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 =
   ## Getter (go/ref compat): gas * gasPrice + value.
@@ -203,7 +160,7 @@ proc cost*(tx: Transaction): UInt256 =
 proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
-  if tx.txType == TxLegacy:
+  if tx.txType != TxEip1559:
     (tx.gasPrice - baseFee.int64).GasPriceEx
   else:
     # London, EIP1559

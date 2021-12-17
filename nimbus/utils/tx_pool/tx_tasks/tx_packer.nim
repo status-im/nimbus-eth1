@@ -16,7 +16,7 @@ import
   std/[sets, tables],
   ../../../db/[accounts_cache, db_chain],
   ../../../forks,
-  ../../../p2p/[dao, executor],
+  ../../../p2p/[dao, executor, validate],
   ../../../transaction/call_evm,
   ../../../vm_state,
   ../../../vm_types,
@@ -41,11 +41,11 @@ type
     xp: TxPoolRef
     tr: HexaryTrie
     vmState: BaseVMState
-    stop: bool
+    cleanState: bool
 
 const
   receiptsExtensionSize = ##\
-    ## Number of items to extend the `receipts[]` sequence with.
+    ## Number of slots to extend the `receipts[]` at the same time.
     20
 
 logScope:
@@ -66,6 +66,19 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
+proc eip1559TxNormalization(tx: Transaction): Transaction =
+  result = tx
+  if tx.txType < TxEip1559:
+    result.maxPriorityFee = tx.gasPrice
+    result.maxFee = tx.gasPrice
+
+proc persist(pst: TxPackerStateRef)
+    {.gcsafe,raises: [Defect,RlpError].} =
+  ## Smart wrapper
+  if not pst.cleanState:
+    pst.vmState.stateDB.persist(clearCache = false)
+    pst.cleanState = true
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -74,10 +87,21 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
+  var
+    tx = item.tx.eip1559TxNormalization
+  let
+    fork = pst.xp.chain.nextFork
+    baseFee = pst.xp.chain.head.baseFee
+  if FkLondon <= fork:
+    tx.gasPrice = min(tx.maxPriorityFee + baseFee.truncate(int64), tx.maxFee)
+
   safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
-    result = item.tx.txCallEvm(item.sender, pst.vmState, pst.xp.chain.nextFork)
+    result = tx.txCallEvm(item.sender, pst.vmState, fork)
+
+  pst.cleanState = false
   doAssert 0 <= result
+
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -92,7 +116,8 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # The gas tip cannot get negative as all items in the `staged` bucket
   # are vetted for profitability before entering that bucket.
   assert 0 <= gasTip
-  vmState.stateDB.addBalance(xp.chain.miner, (gasBurned * gasTip).uint64.u256)
+  let reward = gasBurned.u256 * gasTip.uint64.u256
+  vmState.stateDB.addBalance(xp.chain.miner, reward)
 
   # Update account database
   vmState.mutateStateDB:
@@ -116,7 +141,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # that the account cache has been saved, the `persist()` call is
   # obligatory here.
   if xp.chain.nextFork < FkByzantium:
-    vmState.stateDB.persist(clearCache = false)
+    pst.persist
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
@@ -151,19 +176,27 @@ proc packerLoop(pst: TxPackerStateRef)
   # Select items and move them to the `packed` bucket
   for (_,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
     for item in nonceList.incNonce:
+
+      # Validate transaction relative to the current vmState
+      if not xp.classifyValidatePacked(vmState, item):
+        break # continue with next account
+
       let
         accTx = vmState.stateDB.beginSavepoint
-        totalGas = vmState.cumulativeGasUsed
         gasUsed = pst.runTx(item)
 
-      if not xp.classifyPacked(totalGas, gasUsed):
+      # Find out what to do next: accepting this tx or trying the next account
+      if not xp.classifyPacked(vmState.cumulativeGasUsed, gasUsed):
         vmState.stateDB.rollback(accTx)
-        if xp.classifyPackedNext(totalGas, gasUsed):
+        if xp.classifyPackedNext(vmState.cumulativeGasUsed, gasUsed):
           break # continue with next account
         return  # stop
 
       # Commit account state DB
       vmState.stateDB.commit(accTx)
+
+      vmState.stateDB.persist(clearCache = false)
+      let midRoot = vmState.stateDB.rootHash
 
       # Finish book-keeping and move item to `packed` bucket
       pst.runTxCommit(item, gasUsed)
@@ -195,13 +228,15 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
 
   # Rebuild  `packed` bucket
   pst.packerLoop
+  pst.persist
 
-  # Update flexi-arrays, set proper length
+  # Update flexi-array, set proper length
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
   pst.vmState.receipts.setLen(nItems)
 
   xp.chain.receipts = pst.vmState.receipts
   xp.chain.txRoot = pst.tr.rootHash
+  xp.chain.stateRoot = pst.vmState.stateDB.rootHash
 
   proc balanceDelta: Uint256 =
     let postBalance = pst.vmState.readOnlyStateDB.getBalance(xp.chain.miner)

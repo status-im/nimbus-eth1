@@ -14,7 +14,10 @@
 
 import
   ../../../forks,
+  ../../../p2p/validate,
   ../../../transaction,
+  ../../../vm_state,
+  ../../../vm_types,
   ../tx_chain,
   ../tx_desc,
   ../tx_item,
@@ -47,7 +50,7 @@ proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
       require = item.tx.intrinsicGas(xp.chain.fork)
     return false
 
-  if item.tx.txType != TxLegacy:
+  if item.tx.txType == TxEip1559:
     # The total must be the larger of the two
     if item.tx.maxFee < item.tx.maxPriorityFee:
       debug "invalid tx: maxFee is smaller than maPriorityFee",
@@ -113,7 +116,7 @@ proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
 
 proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
-  if item.tx.txType != TxLegacy:
+  if item.tx.txType == TxEip1559:
     if item.tx.maxFee.GasPriceEx < xp.chain.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
@@ -142,10 +145,10 @@ proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool
   true
 
 
-proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
+proc txPreLondonAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
   ## For legacy transactions check whether minimum gas price and tip are
   ## high enough. These checks are optional.
-  if item.tx.txType == TxLegacy:
+  if item.tx.txType != TxEip1559:
 
     if stageItemsPlMinPrice in xp.pFlags:
       if item.tx.gasPrice.GasPriceEx < xp.pMinPlGasPrice:
@@ -157,9 +160,9 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
          return false
   true
 
-proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool =
+proc txPostLondonAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef): bool =
   ## Helper for `classifyTxPacked()`
-  if item.tx.txType != TxLegacy:
+  if item.tx.txType == TxEip1559:
 
     if stageItems1559MinTip in xp.pFlags:
       if item.tx.effectiveGasTip(xp.chain.baseFee) < xp.pMinTipPrice:
@@ -207,13 +210,30 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txCostInBudget(item):
     return false
 
-  if not xp.txLegaAcceptableGasPrice(item):
+  if not xp.txPreLondonAcceptableGasPrice(item):
     return false
 
-  if not xp.txAcceptableTipAndFees(item):
+  if not xp.txPostLondonAcceptableTipAndFees(item):
     return false
 
   true
+
+
+proc classifyValidatePacked*(xp: TxPoolRef;
+                             vmState: BaseVMState; item: TxItemRef): bool =
+  ## Verify the argument `item` against the accounts database. This function
+  ## is a wrapper around the `verifyTransaction()` call to be used in a similar
+  ## fashion as in `processTransactionImpl()`.
+  let
+    roDB = vmState.readOnlyStateDB
+    baseFee = xp.chain.baseFee.uint64.u256
+    fork = xp.chain.nextFork
+    gasLimit = if packItemsMaxGasLimit in xp.pFlags:
+                 xp.chain.limits.maxLimit
+               else:
+                 xp.chain.limits.trgLimit
+
+  roDB.validateTransaction(item.tx, item.sender, gasLimit, baseFee, fork)
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing

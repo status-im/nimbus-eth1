@@ -166,10 +166,7 @@ proc bucketFlushPacked*(xp: TxPoolRef)
       discard xp.txDB.reassign(item,txItemStaged)
 
   # Reset bucket status info
-  xp.chain.receipts = @[]
-  xp.chain.txRoot = BLANK_ROOT_HASH
-  xp.chain.profit = 0.u256
-  xp.chain.reward = 0.u256
+  xp.chain.clearAccounts
 
 # ------------------------------------------------------------------------------
 # End

@@ -10,14 +10,19 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/[chain_config, config, db/db_chain],
-  ../nimbus/utils/[tx_pool, tx_pool/tx_item, tx_pool/tx_tasks/tx_packer],
+  ../nimbus/[chain_config, config, db/db_chain, vm_state],
+  ../nimbus/p2p/[clique, executor],
+  ../nimbus/utils/[tx_pool, tx_pool/tx_item],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
   stew/[keyed_queue, sorted_set],
   stint,
   unittest2
+
+# from ../nimbus/p2p/chain/persist_blocks import noisyPersistBlocks
+# from ../nimbus/utils/tx_pool/tx_tasks/tx_packer import noisyPacker
+# from ../nimbus/p2p/executor/process_block import noisyBlockProcessor
 
 type
   CaptureSpecs = tuple
@@ -52,6 +57,12 @@ const
   # 70% <= #addr-local/#addr-remote <= 1/70%
   # note: this ratio might vary due to timing race conditions
   addrGroupLocalRemotePC = 70
+
+  # With a large enough block size, decreasing it should not decrease the
+  # profitability (very much) as the the number of blocks availabe increases
+  # (and a better choice might be available?) A good value for the next
+  # parameter should be above 100%.
+  decreasingBlockProfitRatioPC = 92
 
   # test block chain
   networkId = GoerliNet # MainNet
@@ -724,11 +735,11 @@ proc runTxPackerTests(noisy = true) =
     # -------------------------------------------------
 
     block:
-      var xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
-
+      var
+        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
       let
         (nMinTxs, nTrgTxs) = (15, 15)
-        (nMinAccounts, nTrgAccounts) = (1, 4)
+        (nMinAccounts, nTrgAccounts) = (1, 8)
         canonicalHeader = xq.chain.db.getCanonicalHead
 
       test &"Back track block chain head (at least "&
@@ -760,15 +771,7 @@ proc runTxPackerTests(noisy = true) =
         check stats.disposed == 0
         check stats.total + backTxs.len == xq.nItems.total
 
-        #echo ">>>",
-        #  " canonical head #", canonicalHeader.blockNumber,
-        #  " insertion point #", backHeader.blockNumber
-
-
       test &"Run packer, profitability will not increase with block size":
-
-        #echo ">>> ", xq.nItems.pp, " flags=", xq.flags
-        #echo ">>> gasLimits ", xq.chain.limits.pp
 
         xq.flags = xq.flags - {packItemsMaxGasLimit}
         xq.packerVmExec
@@ -776,29 +779,88 @@ proc runTxPackerTests(noisy = true) =
           smallerBlockProfitability = xq.profitability
           smallerBlockSize = xq.gasCumulative
 
-        noisy.say "***",
-          "profitability=", xq.profitability,
-          " block size=", xq.gasCumulative
-
-        #echo ">>> trgLimit ", xq.nItems.pp,
-        #  " slack=", xq.chain.limits.trgLimit - xq.gasCumulative,
-        #  " $", xq.profitability, " per gas"
+        noisy.say "***", "trg-packing",
+          " profitability=", xq.profitability,
+          " used=", xq.gasCumulative,
+          " trg=", xq.trgGasLimit,
+          " slack=", xq.trgGasLimit - xq.gasCumulative
 
         xq.flags = xq.flags + {packItemsMaxGasLimit}
         xq.packerVmExec
 
-        # Well, this last inequality might fail by a small margin, though ..
+        noisy.say "***", "max-packing",
+          " profitability=", xq.profitability,
+          " used=", xq.gasCumulative,
+          " max=", xq.maxGasLimit,
+          " slack=", xq.maxGasLimit - xq.gasCumulative
+
         check smallerBlockSize < xq.gasCumulative
-        check xq.profitability <= smallerBlockProfitability
+        check 0 < xq.profitability
+
+        # Well, this ratio should be above 100 but might be slightly less
+        # with small data samples (pathological case.)
+        let blockProfitRatio =
+          (((smallerBlockProfitability.uint64 * 1000) div
+            (max(1u64,xq.profitability.uint64))) + 5) div 10
+        check decreasingBlockProfitRatioPC <= blockProfitRatio
+
+        noisy.say "***", "cmp",
+          " increase=", xq.gasCumulative - smallerBlockSize,
+          " trg/max=", blockProfitRatio, "%"
+
+      # if true: return
+      test "Store generated block in block chain database":
+
+        # Force maximal block size. Accidentally, the latest tx should have
+        # a `gasLimit` exceeding the available space on the block `gasLimit`
+        # which will be checked below.
+        xq.flags = xq.flags + {packItemsMaxGasLimit}
+
+        # Invoke packer
+        let blk = xq.ethBlock
+
+        # Make sure that there are at least two txs on the packed block so
+        # this test does not degenerate.
+        check 1 < xq.chain.receipts.len
+
+        var
+          hdr = blk.header.testKeySign
+        let
+          bdy = BlockBody(transactions: blk.txs)
+          mostlySize = xq.chain.receipts[^2].cumulativeGasUsed
+          lastGasLimit = blk.txs[^1].gasLimit
 
         noisy.say "***",
-          "profitability=", xq.profitability,
-          " block size=", xq.gasCumulative,
-          " size increase=", xq.gasCumulative - smallerBlockSize
+          "mostlySize=", mostlySize,
+          " lastGasLimit=", lastGasLimit,
+          " maxSlack=", mostlySize + lastGasLimit,
+          " MaxSize=", hdr.gasLimit
 
-        #echo ">>> maxLimit ", xq.nItems.pp,
-        #  " slack=", xq.chain.limits.maxLimit - xq.gasCumulative,
-        #  " $", xq.profitability, " per gas"
+        # Make certain that the last tx was set up so that its gasLimit
+        # overlaps the total block size. Of course, running it in the VM
+        # will burn much less than permitted so this block can be added.
+        check 0 < lastGasLimit
+        check lastGasLimit < hdr.gasLimit
+        if mostlySize + lastGasLimit <= hdr.gasLimit:
+          hdr.gasLimit = mostlySize + lastGasLimit - 1
+
+        let
+          poa = bcDB.newClique
+          parent = bcDB.getBlockHeader(hdr.parentHash)
+
+        bcDB.initStateDB(parent.stateRoot)
+        let vmState = bcDB.stateDB.newBaseVMState(hdr, bcDB)
+
+        check vmState.processBlock(poa, hdr, bdy) == ValidationResult.OK
+
+        #[
+        # Turn off block header verifiers and append that block
+        let chn = bcDB.newChain(extraValidation = false)
+        check chn.persistBlocks(@[hdr],@[bdy]) == ValidationResult.OK
+
+        # This block should now be the canonical one
+        check hdr.blockNumber ==  bcDB.getCanonicalHead.blockNumber
+        #]#
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -817,8 +879,8 @@ when isMainModule:
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
-  noisy.runTxLoader(capture = capts0)
-  noisy.runTxPoolTests
+  noisy.runTxLoader(capture = capts1)
+  #noisy.runTxPoolTests
   true.runTxPackerTests
 
   #noisy.runTxLoader(dir = ".")

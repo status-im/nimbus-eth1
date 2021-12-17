@@ -55,6 +55,7 @@ type
     reward: Uint256          ## Miner balance difference after packing
     profit: Uint256          ## Net reward (w/o PoW specific block rewards)
     txRoot: Hash256          ## `rootHash` after packing
+    stateRoot: Hash256       ## `stateRoot` after packing
 
   TxChainRef* = ref object ##\
     ## Cache the state of the block chain which serves as logical insertion
@@ -85,6 +86,11 @@ template safeExecutor(info: string; code: untyped) =
     raise newException(
       TxChainError, info & "(): " & $e.name & " -- " & e.msg)
 
+proc resetChild(dh: TxChainRef; baseFee: GasPrice) =
+  dh.child.reset
+  dh.child.baseFee = baseFee
+  dh.child.txRoot = BLANK_ROOT_HASH
+  dh.child.stateRoot = dh.parent.stateRoot
 
 proc update(dh: TxChainRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -93,9 +99,7 @@ proc update(dh: TxChainRef)
     acc = AccountsCache.init(db.db, dh.parent.stateRoot, db.pruneTrie)
   dh.roAcc = ReadOnlyStateDB(acc)
   dh.limits = db.gasLimitsGet(dh.parent, dh.lhwm)
-  dh.child.reset
-  dh.child.baseFee = db.config.baseFeeGet(dh.parent)
-  dh.child.txRoot = BLANK_ROOT_HASH
+  dh.resetChild(db.config.baseFeeGet(dh.parent))
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -152,7 +156,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     parentHash:  dh.parent.blockHash,
     ommersHash:  EMPTY_UNCLE_HASH,
     coinbase:    dh.miner,
-    stateRoot:   dh.parent.stateRoot,
+    stateRoot:   dh.child.stateRoot,
     txRoot:      dh.child.txRoot,
     receiptRoot: dh.child.receipts.calcReceiptRoot,
     bloom:       dh.child.receipts.createBloom,
@@ -174,6 +178,10 @@ proc getVmState*(dh: TxChainRef): BaseVMState
   safeExecutor "tx_chain.getVmState()":
     let acc = AccountsCache.init(dh.db.db, dh.parent.stateRoot, dh.db.pruneTrie)
     result = acc.newBaseVMState(dh.parent, dh.db)
+
+proc clearAccounts*(dh: TxChainRef) =
+  ## Reset cached accounts for `getHeader()`
+  dh.resetChild(dh.child.baseFee)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -229,6 +237,10 @@ proc reward*(dh: TxChainRef): Uint256 =
   ## Getter, reward for collected blocks
   dh.child.reward
 
+proc stateRoot*(dh: TxChainRef): Hash256 =
+  ## Getter, accounting DB state root hash for the next block header
+  dh.child.stateRoot
+
 proc txRoot*(dh: TxChainRef): Hash256 =
   ## Getter, transaction state root hash for the next block header
   dh.child.txRoot
@@ -273,6 +285,10 @@ proc `receipts=`*(dh: TxChainRef; val: seq[Receipt]) =
 proc `reward=`*(dh: TxChainRef; val: Uint256) =
   ## Getter
   dh.child.reward = val
+
+proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
+  ## Setter
+  dh.child.stateRoot = val
 
 proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter

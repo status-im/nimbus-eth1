@@ -478,7 +478,6 @@ export
   tx_item.`<=`,
   tx_item.`<`,
   tx_item.effectiveGasTip,
-  tx_item.gasTipCap,
   tx_item.info,
   tx_item.itemID,
   tx_item.sender,

@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  ../../nimbus/constants,
   ../../nimbus/utils/ec_recover,
   ../../nimbus/utils/tx_pool/tx_item,
   eth/[common, common/transaction, keys],
@@ -47,6 +48,14 @@ proc sign(tx: Transaction; key: PrivateKey): Transaction =
   result.R = R
   result.S = S
 
+
+proc sign(header: BlockHeader; key: PrivateKey): BlockHeader =
+  let
+    hashData = header.blockHash.data
+    signature = key.sign(SkMessage(hashData)).toRaw
+  result = header
+  result.extraData.add signature
+
 # ------------
 
 let
@@ -75,5 +84,9 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
     if rc.isErr or rc.value != testAddress:
       return
   (item,tx0Signed,tx1Signed)
+
+proc testKeySign*(header: BlockHeader): BlockHeader =
+  ## Sign the header and embed the signature in extra data
+  header.sign(prvTestKey)
 
 # End

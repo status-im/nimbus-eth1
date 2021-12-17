@@ -11,7 +11,7 @@
 import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
-  ../../nimbus/utils/tx_pool/tx_tasks/tx_recover,
+  ../../nimbus/utils/tx_pool/tx_tasks/[tx_packer, tx_recover],
   ../replay/undump,
   eth/[common, keys],
   stew/[keyed_queue, sorted_set],
@@ -22,14 +22,17 @@ import
 export
   tx_chain.TxChainGasLimits,
   tx_chain.db,
+  tx_chain.getVmState,
   tx_chain.limits,
   tx_chain.nextFork,
   tx_chain.profit,
+  tx_chain.receipts,
   tx_chain.reward,
   tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,
   tx_gauge,
+  tx_packer.packerVmExec,
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
   tx_tabs.any,
@@ -64,16 +67,6 @@ const
     rc[txItemPending] = "*"
     rc[txItemStaged] = "S"
     rc[txItemPacked] = "P"
-    rc
-
-  minEthAddress* = block:
-    var rc: EthAddress
-    rc
-
-  maxEthAddress* = block:
-    var rc: EthAddress
-    for n in 0 ..< rc.len:
-      rc[n] = 255
     rc
 
 # ------------------------------------------------------------------------------
@@ -148,10 +141,10 @@ proc pp*(a: BlockNonce): string =
   a.mapIt(it.toHex(2)).join.toLowerAscii
 
 proc pp*(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).join[12 .. 19].toLowerAscii
+  a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
 
 proc pp*(a: Hash256): string =
-  a.data.mapIt(it.toHex(2)).join[24 .. 31].toLowerAscii
+  a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
 proc pp*(q: seq[(EthAddress,int)]): string =
   "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"
