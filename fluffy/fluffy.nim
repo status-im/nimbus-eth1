@@ -99,7 +99,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     rpcHttpServerWithProxy.installEthApiHandlers()
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     rpcHttpServerWithProxy.installPortalApiHandlers(stateNetwork.portalProtocol, "state")
-    rpcHttpServerWithProxy.installPortalApiHandlers(stateNetwork.portalProtocol, "history")
+    rpcHttpServerWithProxy.installPortalApiHandlers(historyNetwork.portalProtocol, "history")
     # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
     # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
     waitFor rpcHttpServerWithProxy.start()

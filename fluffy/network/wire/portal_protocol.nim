@@ -24,7 +24,7 @@ logScope:
 
 const
   alpha = 3 ## Kademlia concurrency factor
-  enrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
+  enrsResultLimit* = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
@@ -308,7 +308,7 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   # id, and initiate an uTP stream with given uTP connection id to get the data
   # out.
 
-proc recordsFromBytes(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
+proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     var record: Record
