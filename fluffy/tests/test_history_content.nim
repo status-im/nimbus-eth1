@@ -11,17 +11,20 @@ import
   unittest2, stew/byteutils,
   ../network/history/history_content
 
+# According to test vectors:
+# TODO: Add link once test vectors are merged
 suite "History ContentKey Encodings":
-  test "ContentKey":
+  test "BlockHeader":
     var blockHash: BlockHash
     blockHash.data = hexToByteArray[sizeof(BlockHash)](
-      "0x0100000000000000000000000000000000000000000000000000000000000000")
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
     let contentKey =
-      ContentKey(chainId: 1'u16, contentType: BlockBody, blockHash: blockHash)
+      ContentKey(chainId: 15'u16, contentType: BlockHeader, blockHash: blockHash)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex ==
-      "0100020100000000000000000000000000000000000000000000000000000000000000"
+      "0f0001d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      # "010f00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -32,4 +35,50 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.blockHash == contentKey.blockHash
 
       toContentId(contentKey).toHex() ==
-        "36a55e9aa5125c5fecc16bcb0234d9d3d6065eabc890c0d3b24d413d6ae9f9da"
+        "9a310df5e6135cbd834041011be1b350e589ba013f11584ed527583bc39d3c27"
+
+  test "BlockBody":
+    var blockHash: BlockHash
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+    let contentKey =
+      ContentKey(chainId: 20'u16, contentType: BlockBody, blockHash: blockHash)
+
+    let encoded = encode(contentKey)
+    check encoded.asSeq.toHex ==
+      "140002d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      # "021400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    let decoded = decode(encoded)
+    check decoded.isSome()
+
+    let contentKeyDecoded = decoded.get()
+    check:
+      contentKeyDecoded.chainId == contentKey.chainId
+      contentKeyDecoded.contentType == contentKey.contentType
+      contentKeyDecoded.blockHash == contentKey.blockHash
+
+      toContentId(contentKey).toHex() ==
+        "42a9bb9fd974f4d3020fe81aa584277010a9e344bed52bf1610e9d360203380a"
+
+  test "Receipts":
+    var blockHash: BlockHash
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+    let contentKey =
+      ContentKey(chainId: 4'u16, contentType: Receipts, blockHash: blockHash)
+
+    let encoded = encode(contentKey)
+    check encoded.asSeq.toHex ==
+      "040003d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      # "030400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    let decoded = decode(encoded)
+    check decoded.isSome()
+
+    let contentKeyDecoded = decoded.get()
+    check:
+      contentKeyDecoded.chainId == contentKey.chainId
+      contentKeyDecoded.contentType == contentKey.contentType
+      contentKeyDecoded.blockHash == contentKey.blockHash
+
+      toContentId(contentKey).toHex() ==
+        "4b92510bafa02f62811ce6d0e27d2424ba34d41fbe38abc3ea4e274d6c76fa3e"

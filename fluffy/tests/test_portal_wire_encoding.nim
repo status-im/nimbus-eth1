@@ -11,6 +11,9 @@ import
   unittest2, stint, stew/[byteutils, results], eth/p2p/discoveryv5/enr,
   ../network/wire/messages
 
+# According to test vectors:
+# https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-test-vectors.md
+
 suite "Portal Wire Protocol Message Encodings":
   test "Ping Request":
     let
@@ -120,7 +123,7 @@ suite "Portal Wire Protocol Message Encodings":
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
-    
+
     let message = decoded.get()
     check:
       message.kind == findcontent
