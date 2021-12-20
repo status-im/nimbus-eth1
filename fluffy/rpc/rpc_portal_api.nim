@@ -10,6 +10,7 @@
 import
   std/sequtils,
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
+  eth/p2p/discoveryv5/nodes_verification,
   ../network/wire/portal_protocol,
   ./rpc_types
 
@@ -62,6 +63,49 @@ proc installPortalApiHandlers*(
       raise newException(ValueError, $nodes.error)
     else:
       return nodes.get().map(proc(n: Node): Record = n.record)
+
+  # TODO: This returns null values for the `none`s. Not sure what it should be
+  # according to spec, no k:v pair at all?
+  # Note: Would it not be nice to have a call that resturns either content or
+  # ENRs, and that the connection id is used in the background instead of this
+  # "raw" `findContent` call.
+  rpcServer.rpc("portal_" & network & "_findContent") do(
+      enr: Record, contentKey: string) -> tuple[
+        connectionId: Option[string],
+        content: Option[string],
+        enrs: Option[seq[Record]]]:
+    let
+      node = toNodeWithAddress(enr)
+      content = await p.findContent(
+        node, ByteList.init(hexToSeqByte(contentKey)))
+
+    if content.isErr():
+      raise newException(ValueError, $content.error)
+    else:
+      let contentMessage = content.get()
+      case contentMessage.contentMessageType:
+      of connectionIdType:
+        return (
+          some("0x" & contentMessage.connectionId.toHex()),
+          none(string),
+          none(seq[Record]))
+      of contentType:
+        return (
+          none(string),
+          some("0x" & contentMessage.content.asSeq().toHex()),
+          none(seq[Record]))
+      of enrsType:
+        let records = recordsFromBytes(contentMessage.enrs)
+        if records.isErr():
+          raise newException(ValueError, $records.error)
+        else:
+          return (
+            none(string),
+            none(string),
+            # Note: Could also pass not verified nodes
+            some(verifyNodesRecords(
+              records.get(), node, enrsResultLimit).map(
+                proc(n: Node): Record = n.record)))
 
   rpcServer.rpc("portal_" & network & "_recursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()
