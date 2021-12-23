@@ -19,32 +19,26 @@ export ssz_serialization, common_types
 
 type
   ContentType* = enum
-    BlockHeader = 0x01
-    BlockBody = 0x02
-    Receipts = 0x03
+    blockHeader = 0x00
+    blockBody = 0x01
+    receipts = 0x02
 
   BlockHash* = MDigest[32 * 8] # Bytes32
 
-  ContentKey* = object
+  ContentKeyType* = object
     chainId*: uint16
-    contentType*: ContentType
     blockHash*: BlockHash
 
+  ContentKey* = object
+    case contentType*: ContentType
+    of blockHeader:
+      blockHeaderKey*: ContentKeyType
+    of blockBody:
+      blockBodyKey*: ContentKeyType
+    of receipts:
+      receiptsKey*: ContentKeyType
+
   ContentId* = Uint256
-
-template toSszType*(x: ContentType): uint8 =
-  uint8(x)
-
-func fromSszBytes*(T: type ContentType, data: openArray[byte]):
-    T {.raises: [MalformedSszError, Defect].} =
-  if data.len != sizeof(uint8):
-    raiseIncorrectSize T
-
-  var contentType: T
-  if not checkedEnumAssign(contentType, data[0]):
-    raiseIncorrectSize T
-
-  contentType
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
