@@ -111,7 +111,7 @@ func toContentId*(contentKey: ContentKey): ContentId =
         h.update(key.address)
     let n2 =
       block: computeContentId keccak256:
-        h.update(toBytesLE(key.slot))
+        h.update(toBytesBE(key.slot))
 
     n1 + n2 # uint256 will wrap arround, practically applying the modulo 256
   of contractBytecode: # sha256(address | code_hash)
