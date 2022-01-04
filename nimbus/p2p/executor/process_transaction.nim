@@ -145,24 +145,6 @@ proc processTransaction*(
     fork = vmState.getForkUnsafe
   vmState.processTransaction(tx, sender, header, fork)
 
-#[
-proc processTransaction*(tx: Transaction; sender: EthAddress;
-                         vmState: BaseVMState; fork: Fork):
-                           Result[GasInt,void]
-    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Legacy variant of `processTransaction()` with `*header* derived
-  ## from the `vmState` argument.
-  vmState.processTransaction(tx, sender, vmState.blockHeader, fork)
-
-proc processTransaction*(tx: Transaction; sender: EthAddress;
-                         vmState: BaseVMState):
-                           Result[GasInt,void]
-    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Legacy variant of `processTransaction()` with `*header* and *fork* derived
-  ## from the `vmState` argument.
-  vmState.processTransaction(tx, sender, vmState.blockHeader)
-#]#
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

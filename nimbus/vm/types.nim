@@ -34,7 +34,10 @@ type
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
     chaindb*       : BaseChainDB
-    blockHeader*   : BlockHeader
+    parent*        : BlockHeader
+    timestamp*     : EthTime
+    gasLimit*      : GasInt
+    fee*           : Option[Uint256]
     name*          : string
     flags*         : set[VMFlag]
     tracer*        : TransactionTracer

@@ -54,16 +54,16 @@ proc setupTxContext(host: TransactionHost) =
   # vmState.coinbase now unused
   host.txContext.block_coinbase   = vmState.minerAddress.toEvmc
   # vmState.blockNumber now unused
-  host.txContext.block_number     = (vmState.blockHeader.blockNumber
+  host.txContext.block_number     = (vmState.blockNumber
                                      .truncate(typeof(host.txContext.block_number)))
   # vmState.timestamp now unused
-  host.txContext.block_timestamp  = vmState.blockHeader.timestamp.toUnix
+  host.txContext.block_timestamp  = vmState.timestamp.toUnix
   # vmState.gasLimit now unused
-  host.txContext.block_gas_limit  = vmState.blockHeader.gasLimit
+  host.txContext.block_gas_limit  = vmState.gasLimit
   # vmState.difficulty now unused
-  host.txContext.block_difficulty = vmState.blockHeader.difficulty.toEvmc
+  host.txContext.block_difficulty = vmState.difficulty.toEvmc
   host.txContext.chain_id         = vmState.chaindb.config.chainId.uint.u256.toEvmc
-  host.txContext.block_base_fee   = vmState.blockHeader.baseFee.toEvmc
+  host.txContext.block_base_fee   = vmState.baseFee.toEvmc
 
   # Most host functions do `flip256` in `evmc_host_glue`, but due to this
   # result being cached, it's better to do `flip256` when filling the cache.

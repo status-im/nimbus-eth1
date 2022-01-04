@@ -55,7 +55,8 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
   chainDB.stateDB.setCode(ks2, code)
   chainDB.stateDB.addBalance(signer, 9_000_000_000.u256)
   var
-    vmState = newBaseVMState(chainDB.stateDB, BlockHeader(parentHash: parentHash), chainDB)
+    vmHeader = BlockHeader(parentHash: parentHash)
+    vmState = newBaseVMState(chainDB.stateDB, vmHeader, chainDB)
     zeroAddress: EthAddress
 
   let
@@ -85,7 +86,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
     let sender = tx.getSender()
-    discard vmState.processTransaction(tx, sender, vmState.blockHeader)
+    discard vmState.processTransaction(tx, sender, vmHeader)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
