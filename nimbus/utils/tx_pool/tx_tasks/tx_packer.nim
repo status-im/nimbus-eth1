@@ -40,8 +40,8 @@ type
   TxPackerStateRef = ref object
     xp: TxPoolRef
     tr: HexaryTrie
-    vmState: BaseVMState
     cleanState: bool
+    balance: UInt256
 
 const
   receiptsExtensionSize = ##\
@@ -76,7 +76,7 @@ proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [Defect,RlpError].} =
   ## Smart wrapper
   if not pst.cleanState:
-    pst.vmState.stateDB.persist(clearCache = false)
+    pst.xp.chain.vmState.stateDB.persist(clearCache = false)
     pst.cleanState = true
 
 # ------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
 
   safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
-    result = tx.txCallEvm(item.sender, pst.vmState, fork)
+    result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
 
   pst.cleanState = false
   doAssert 0 <= result
@@ -109,7 +109,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   ## function returns the next number of items `nItems+1`.
   let
     xp = pst.xp
-    vmState = pst.vmState
+    vmState = xp.chain.vmState
     inx = xp.txDB.byStatus.eq(txItemPacked).nItems
     gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
 
@@ -147,7 +147,6 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
-  # vmState.cumulativeGasUsed = pst.gasBurned + gasBurned
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
@@ -159,47 +158,97 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   discard xp.txDB.reassign(item,txItemPacked)
 
 # ------------------------------------------------------------------------------
-# Private functions: packer loop
+# Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc packerLoop(pst: TxPackerStateRef)
-    {.gcsafe,raises: [Defect,CatchableError].}  =
-  ## Greedily compact items as long as the accumulated `gasLimit` values
-  ## are below the block size
-  let
-    xp = pst.xp
-    vmState = pst.vmState
+proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
+    {.gcsafe,raises: [Defect,CatchableError].} =
 
   # Flush `packed` bucket
   xp.bucketFlushPacked
 
-  # Select items and move them to the `packed` bucket
-  for (_,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
-    for item in nonceList.incNonce:
+  xp.chain.maxMode = (packItemsMaxGasLimit in xp.pFlags)
 
-      # Validate transaction relative to the current vmState
-      if not xp.classifyValidatePacked(vmState, item):
-        break # continue with next account
+  if xp.chain.config.daoForkSupport and
+     xp.chain.config.daoForkBlock == xp.chain.head.blockNumber + 1:
+    xp.chain.vmState.mutateStateDB:
+      db.applyDAOHardFork()
 
-      let
-        accTx = vmState.stateDB.beginSavepoint
-        gasUsed = pst.runTx(item)
+  TxPackerStateRef( # return value
+    xp: xp,
+    tr: newMemoryDB().initHexaryTrie,
+    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.miner))
 
-      # Find out what to do next: accepting this tx or trying the next account
-      if not xp.classifyPacked(vmState.cumulativeGasUsed, gasUsed):
-        vmState.stateDB.rollback(accTx)
-        if xp.classifyPackedNext(vmState.cumulativeGasUsed, gasUsed):
-          break # continue with next account
-        return  # stop
 
-      # Commit account state DB
-      vmState.stateDB.commit(accTx)
+proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
+    {.gcsafe,raises: [Defect,CatchableError].}  =
+  ## Greedily collect & compact items as long as the accumulated `gasLimit`
+  ## values are below the maximum block size.
+  let
+    xp = pst.xp
+    vmState = xp.chain.vmState
 
-      vmState.stateDB.persist(clearCache = false)
-      let midRoot = vmState.stateDB.rootHash
+  # Validate transaction relative to the current vmState
+  if not xp.classifyValidatePacked(vmState, item):
+    return ok(false) # continue with next account
 
-      # Finish book-keeping and move item to `packed` bucket
-      pst.runTxCommit(item, gasUsed)
+  let
+    accTx = vmState.stateDB.beginSavepoint
+    gasUsed = pst.runTx(item) # this is the crucial part, running the tx
+
+  # Find out what to do next: accepting this tx or trying the next account
+  if not xp.classifyPacked(vmState.cumulativeGasUsed, gasUsed):
+    vmState.stateDB.rollback(accTx)
+    if xp.classifyPackedNext(vmState.cumulativeGasUsed, gasUsed):
+      return ok(false) # continue with next account
+    return err()       # otherwise stop collecting
+
+  # Commit account state DB
+  vmState.stateDB.commit(accTx)
+
+  vmState.stateDB.persist(clearCache = false)
+  let midRoot = vmState.stateDB.rootHash
+
+  # Finish book-keeping and move item to `packed` bucket
+  pst.runTxCommit(item, gasUsed)
+
+  ok(true) # fetch the very next item
+
+
+proc vmExecCommit(pst: TxPackerStateRef)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  let
+    xp = pst.xp
+    vmState = xp.chain.vmState
+
+  if not vmState.chainDB.config.poaEngine:
+    let
+      number = xp.chain.head.blockNumber + 1
+      uncles: seq[BlockHeader] = @[] # no uncles yet
+    vmState.calculateReward(xp.chain.miner, number + 1, uncles)
+
+  # Reward beneficiary
+  vmState.mutateStateDB:
+    if vmState.generateWitness:
+      db.collectWitnessData()
+    # Finish up, then vmState.stateDB.rootHash may be accessed
+    db.persist(ClearCache in vmState.flags)
+
+  # Update flexi-array, set proper length
+  let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
+  vmState.receipts.setLen(nItems)
+
+  xp.chain.receipts = vmState.receipts
+  xp.chain.txRoot = pst.tr.rootHash
+  xp.chain.stateRoot = vmState.stateDB.rootHash
+
+  proc balanceDelta: Uint256 =
+    let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+    if pst.balance < postBalance:
+      return postBalance - pst.balance
+
+  xp.chain.profit = balanceDelta()
+  xp.chain.reward = balanceDelta()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -211,54 +260,21 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   let dbTx = xp.chain.db.db.beginTransaction
   defer: dbTx.dispose()
 
-  # Internal descriptor
-  var pst = TxPackerStateRef(
-    xp: xp,
-    tr: newMemoryDB().initHexaryTrie,
-    vmState: xp.chain.getVmState)
+  var pst = xp.vmExecInit
 
-  let
-    nextBlockNum = xp.chain.head.blockNumber + 1
-    preBalance = pst.vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+  block loop:
+    for (_,nonceList) in pst.xp.txDB.decAccount(txItemStaged):
 
-  if xp.chain.config.daoForkSupport and
-     xp.chain.config.daoForkBlock == nextBlockNum:
-    pst.vmState.mutateStateDB:
-      db.applyDAOHardFork()
+      block account:
+        for item in nonceList.incNonce:
 
-  # Rebuild  `packed` bucket
-  pst.packerLoop
-  pst.persist
+          let rc = pst.vmExecGrabItem(item)
+          if rc.isErr:
+            break loop    # stop
+          if not rc.value:
+            break account # continue with next account
 
-  # Update flexi-array, set proper length
-  let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
-  pst.vmState.receipts.setLen(nItems)
-
-  xp.chain.receipts = pst.vmState.receipts
-  xp.chain.txRoot = pst.tr.rootHash
-  xp.chain.stateRoot = pst.vmState.stateDB.rootHash
-
-  proc balanceDelta: Uint256 =
-    let postBalance = pst.vmState.readOnlyStateDB.getBalance(xp.chain.miner)
-    if preBalance < postBalance:
-      return postBalance - preBalance
-
-  xp.chain.profit = balanceDelta()
-
-  if not pst.vmState.chainDB.config.poaEngine:
-    # @[]: no uncles yet
-    pst.vmState.calculateReward(xp.chain.miner, nextBlockNum, @[])
-
-  xp.chain.reward = balanceDelta()
-
-  #  # The following is not needed as the block chain is rolled back, anyway
-  #
-  #  # Reward beneficiary
-  #  vmState.mutateStateDB:
-  #   if vmState.generateWitness:
-  #     db.collectWitnessData()
-  #   db.persist(ClearCache in vmState.flags)
-
+  pst.vmExecCommit
   # Block chain will roll back automatically
 
 # ------------------------------------------------------------------------------

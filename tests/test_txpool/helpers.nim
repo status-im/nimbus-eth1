@@ -21,13 +21,15 @@ import
 # to import `tx_pool/*` sup-modules
 export
   tx_chain.TxChainGasLimits,
+  tx_chain.`maxMode=`,
+  tx_chain.clearAccounts,
   tx_chain.db,
-  tx_chain.getVmState,
   tx_chain.limits,
   tx_chain.nextFork,
   tx_chain.profit,
   tx_chain.receipts,
   tx_chain.reward,
+  tx_chain.vmState,
   tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,
@@ -218,6 +220,9 @@ proc pp*(w: TxChainGasLimits): string =
 # ------------------------------------------------------------------------------
 # Public functions, other
 # ------------------------------------------------------------------------------
+
+proc isOK*(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
 
 proc toHex*(acc: EthAddress): string =
   acc.toSeq.mapIt(it.toHex(2)).join

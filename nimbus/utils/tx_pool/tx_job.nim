@@ -81,7 +81,7 @@ type
 
 
   TxJobRef* = ref object ##\
-    ## Job queue with increasing job *ID* numbers (wrapping around at
+    ## Job queue with increasing job *ID* numbers (wrapping around at\
     ## `TxJobIdMax`.)
     topID: TxJobID                         ## Next job will have `topID+1`
     jobs: KeyedQueue[TxJobID,TxJobDataRef] ## Job queue

@@ -10,8 +10,8 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/[chain_config, config, db/db_chain, vm_state],
-  ../nimbus/p2p/[clique, executor],
+  ../nimbus/[chain_config, config, db/db_chain, vm_state, vm_types],
+  ../nimbus/p2p/[chain, clique, executor],
   ../nimbus/utils/[tx_pool, tx_pool/tx_item],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
@@ -19,10 +19,6 @@ import
   stew/[keyed_queue, sorted_set],
   stint,
   unittest2
-
-# from ../nimbus/p2p/chain/persist_blocks import noisyPersistBlocks
-# from ../nimbus/utils/tx_pool/tx_tasks/tx_packer import noisyPacker
-# from ../nimbus/p2p/executor/process_block import noisyBlockProcessor
 
 type
   CaptureSpecs = tuple
@@ -740,7 +736,7 @@ proc runTxPackerTests(noisy = true) =
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 8)
-        canonicalHeader = xq.chain.db.getCanonicalHead
+        canonicalHead = xq.chain.db.getCanonicalHead
 
       test &"Back track block chain head (at least "&
           &"{nMinTxs} txs, {nMinAccounts} known accounts)":
@@ -823,44 +819,67 @@ proc runTxPackerTests(noisy = true) =
         # this test does not degenerate.
         check 1 < xq.chain.receipts.len
 
-        var
-          hdr = blk.header.testKeySign
-        let
-          bdy = BlockBody(transactions: blk.txs)
-          mostlySize = xq.chain.receipts[^2].cumulativeGasUsed
-          lastGasLimit = blk.txs[^1].gasLimit
+        var overlap = -1
+        for n in countDown(blk.txs.len - 1, 0):
+          let total = xq.chain.receipts[n].cumulativeGasUsed
+          if blk.header.gasUsed < total + blk.txs[n].gasLimit:
+            overlap = n
+            break
 
         noisy.say "***",
-          "mostlySize=", mostlySize,
-          " lastGasLimit=", lastGasLimit,
-          " maxSlack=", mostlySize + lastGasLimit,
-          " MaxSize=", hdr.gasLimit
+          "overlap=#", overlap,
+          " tx=#", blk.txs.len,
+          " gasUsed=", blk.header.gasUsed,
+          " gasLimit=", blk.header.gasLimit
 
-        # Make certain that the last tx was set up so that its gasLimit
-        # overlaps the total block size. Of course, running it in the VM
-        # will burn much less than permitted so this block can be added.
-        check 0 < lastGasLimit
-        check lastGasLimit < hdr.gasLimit
-        if mostlySize + lastGasLimit <= hdr.gasLimit:
-          hdr.gasLimit = mostlySize + lastGasLimit - 1
+        if 0 <= overlap:
+          let
+            n = overlap
+            mostlySize = xq.chain.receipts[n].cumulativeGasUsed
+          noisy.say "***", "overlap",
+            " size=", mostlySize + blk.txs[n].gasLimit - blk.header.gasUsed
 
         let
           poa = bcDB.newClique
-          parent = bcDB.getBlockHeader(hdr.parentHash)
+          bdy = BlockBody(transactions: blk.txs)
+          hdr = block:
+            var rc = blk.header
+            rc.gasLimit = blk.header.gasUsed
+            rc.testKeySign
 
-        bcDB.initStateDB(parent.stateRoot)
-        let vmState = bcDB.stateDB.newBaseVMState(hdr, bcDB)
+        # Make certain that some tx was set up so that its gasLimit overlaps
+        # with the total block size. Of course, running it in the VM will burn
+        # much less than permitted so this block will be accepted.
+        check 0 < overlap
 
-        check vmState.processBlock(poa, hdr, bdy) == ValidationResult.OK
+        # Test low-level function for adding the new block to the database
+        xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
+        xq.chain.clearAccounts
+        check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
 
-        #[
-        # Turn off block header verifiers and append that block
-        let chn = bcDB.newChain(extraValidation = false)
-        check chn.persistBlocks(@[hdr],@[bdy]) == ValidationResult.OK
+        # Re-allocate using VM environment from `persistBlocks()`
+        check BaseVMState.new(hdr, bcDB).processBlock(poa, hdr, bdy).isOK
 
-        # This block should now be the canonical one
-        check hdr.blockNumber ==  bcDB.getCanonicalHead.blockNumber
-        #]#
+        # This should not have changed
+        check canonicalHead == xq.chain.db.getCanonicalHead
+
+        # Using the high-level library function, re-append the block while
+        # turning off header verification.
+        let c = bcDB.newChain(extraValidation = false)
+        check c.persistBlocks(@[hdr], @[bdy]).isOK
+
+        # The canonical head will be set to hdr if it scores high enough
+        # (see implementation of db_chain.persistHeaderToDb()).
+        let
+          canonScore = xq.chain.db.getScore(canonicalHead.blockHash)
+          headerScore = xq.chain.db.getScore(hdr.blockHash)
+
+        if canonScore < headerScore:
+          # Note that the updated canonical head is equivalent to hdr but not
+          # necessarily binary equal.
+          check hdr.blockHash == xq.chain.db.getCanonicalHead.blockHash
+        else:
+          check canonicalHead == xq.chain.db.getCanonicalHead
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -879,8 +898,8 @@ when isMainModule:
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
 
-  noisy.runTxLoader(capture = capts1)
-  #noisy.runTxPoolTests
+  noisy.runTxLoader(capture = capts2)
+  noisy.runTxPoolTests
   true.runTxPackerTests
 
   #noisy.runTxLoader(dir = ".")

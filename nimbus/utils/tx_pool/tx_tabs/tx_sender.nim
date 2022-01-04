@@ -23,7 +23,7 @@ import
 
 type
   TxSenderNonceRef* = ref object ##\
-    ## Sub-list ordered by `AccountNonce` values containing transaction
+    ## Sub-list ordered by `AccountNonce` values containing transaction\
     ## item lists.
     gasLimits: GasInt     ## Accumulated gas limits
     profit: float64       ## Aggregated `effectiveGasTip*gasLimit` values
@@ -36,7 +36,7 @@ type
     allList: TxSenderNonceRef
 
   TxSenderTab* = object ##\
-    ## Per address table This is table provided as a keyed queue so deletion
+    ## Per address table This is table provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
     size: int             ## Total number of items
     baseFee: GasPrice     ## For aggregating `effectiveGasTip` => `gasTipSum`

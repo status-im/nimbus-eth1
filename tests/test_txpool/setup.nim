@@ -25,9 +25,6 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc isOK(rc: ValidationResult): bool =
-  rc == ValidationResult.OK
-
 proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Change/update the status of the transaction item.

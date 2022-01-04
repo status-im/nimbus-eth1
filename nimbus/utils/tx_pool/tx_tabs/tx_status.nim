@@ -26,7 +26,7 @@ type
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxStatusSenderRef* = ref object ##\
-    ## Per address table. This table is provided as a keyed queue so deletion
+    ## Per address table. This table is provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
     size: int                           ## Total number of items
     gasLimits: GasInt                   ## Accumulated gas limits

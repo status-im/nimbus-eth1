@@ -16,11 +16,6 @@
 ##
 ## * No uncles are handled by this pool
 ##
-## * There is no handling of *zero gas price* transactions yet
-##
-## * Provide unit tests provoking a nonce gap error after back tracking
-##   and moving the block chain head
-##
 ## * Impose a size limit to the bucket database. Which items would be removed?
 ##
 ## * There is a conceivable problem with the per-account optimisation. The
