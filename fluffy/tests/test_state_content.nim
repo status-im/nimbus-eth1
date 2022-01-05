@@ -15,6 +15,7 @@ import
 # TODO: Add link once test vectors are merged
 
 suite "State ContentKey Encodings":
+  # Common input
   const
     stateRoot = hexToByteArray[sizeof(Bytes32)](
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
@@ -22,10 +23,21 @@ suite "State ContentKey Encodings":
         "0x829bd824b016326a401d083b33d092293333a830")
 
   test "AccountTrieNode":
+    # Input
     var nodeHash: NodeHash
     nodeHash.data = hexToByteArray[sizeof(NodeHash)](
       "0xb8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2b")
-    let path = ByteList.init(@[byte 1, 2, 0, 1])
+    const
+      path = ByteList.init(@[byte 1, 2, 0, 1])
+
+    # Output
+      contentKeyHex =
+        "0044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001"
+      contentId =
+        "41237096982860596884042712109427867048220765019203857308279863638242761605893"
+      # or
+      contentIdHexBE =
+        "5b2b5ea9a7384491010c1aa459a0f967dcf8b69988adbfe7e0bed513e9bb8305"
 
     let
       accountTrieNodeKey = AccountTrieNodeKey(
@@ -34,8 +46,7 @@ suite "State ContentKey Encodings":
         contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
 
     let encoded = encode(contentKey)
-    check encoded.asSeq.toHex ==
-      "0044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001"
+    check encoded.asSeq.toHex == contentKeyHex
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -44,14 +55,26 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.accountTrieNodeKey == contentKey.accountTrieNodeKey
 
-      toContentId(contentKey).toHex() ==
-        "5b2b5ea9a7384491010c1aa459a0f967dcf8b69988adbfe7e0bed513e9bb8305"
+      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
 
   test "ContractStorageTrieNode":
+    # Input
     var nodeHash: NodeHash
     nodeHash.data = hexToByteArray[sizeof(NodeHash)](
       "0x3e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5")
-    let path = ByteList.init(@[byte 1, 0, 15, 14, 12, 0])
+    const
+      path = ByteList.init(@[byte 1, 0, 15, 14, 12, 0])
+
+    # Output
+      contentKeyHex =
+        "01829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00"
+      contentId =
+        "43529358882110548041037387588279806363134301284609868141745095118932570363585"
+      # or
+      contentIdHexBE =
+        "603cbe7902925ce359822378a4cb1b4b53e1bf19d003de2c26e55812d76956c1"
 
     let
       contractStorageTrieNodeKey = ContractStorageTrieNodeKey(
@@ -61,8 +84,7 @@ suite "State ContentKey Encodings":
         contractStorageTrieNodeKey: contractStorageTrieNodeKey)
 
     let encoded = encode(contentKey)
-    check encoded.asSeq.toHex ==
-      "01829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00"
+    check encoded.asSeq.toHex == contentKeyHex
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -72,10 +94,21 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contractStorageTrieNodeKey ==
         contentKey.contractStorageTrieNodeKey
 
-      toContentId(contentKey).toHex() ==
-        "603cbe7902925ce359822378a4cb1b4b53e1bf19d003de2c26e55812d76956c1"
+      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
 
   test "AccountTrieProof":
+    # Output
+    const
+      contentKeyHex =
+        "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      contentId =
+        "45301550050471302973396879294932122279426162994178563319590607565171451545101"
+      # or
+      contentIdHexBE =
+        "6427c4c8d42db15c2aca8dfc7dff7ce2c8c835441b566424fa3377dd031cc60d"
+
     let
       accountTrieProofKey = AccountTrieProofKey(
         address: address, stateRoot: stateRoot)
@@ -84,8 +117,7 @@ suite "State ContentKey Encodings":
         accountTrieProofKey: accountTrieProofKey)
 
     let encoded = encode(contentKey)
-    check encoded.asSeq.toHex ==
-      "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    check encoded.asSeq.toHex == contentKeyHex
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -94,11 +126,23 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.accountTrieProofKey == contentKey.accountTrieProofKey
 
-      toContentId(contentKey).toHex() ==
-        "6427c4c8d42db15c2aca8dfc7dff7ce2c8c835441b566424fa3377dd031cc60d"
+      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
 
   test "ContractStorageTrieProof":
-    let slot = 239304.stuint(256)
+    # Input
+    const
+      slot = 239304.stuint(256)
+
+    # Output
+      contentKeyHex =
+        "03829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      contentId =
+        "80413803151602881485894828440259195604313253842905231566803078625935967002376"
+      # or
+      contentIdHexBE =
+        "b1c89984803cebd325303ba035f9c4ca0d0d91b2cbfef84d455e7a847ade1f08"
 
     let
       contractStorageTrieProofKey = ContractStorageTrieProofKey(
@@ -108,8 +152,7 @@ suite "State ContentKey Encodings":
         contractStorageTrieProofKey: contractStorageTrieProofKey)
 
     let encoded = encode(contentKey)
-    check encoded.asSeq.toHex ==
-      "03829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    check encoded.asSeq.toHex == contentKeyHex
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -119,13 +162,25 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contractStorageTrieProofKey ==
         contentKey.contractStorageTrieProofKey
 
-      toContentId(contentKey).toHex() ==
-        "ce5a3a6bc958561da0015d92f2f6b4f5a2cf6a4ae3f6a75c97f05e9e2a6f4387"
+      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
 
   test "ContractBytecode":
+    # Input
     var codeHash: CodeHash
     codeHash.data = hexToByteArray[sizeof(CodeHash)](
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+
+    # Output
+    const
+      contentKeyHex =
+        "04829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      contentId =
+        "9243655320250466575533858917172702581481192615849913473767356296630272634800"
+      # or
+      contentIdHexBE =
+        "146fb937afe42bcf11d25ad57d67734b9a7138677d59eeec3f402908f54dafb0"
 
     let
       contractBytecodeKey = ContractBytecodeKey(
@@ -135,8 +190,7 @@ suite "State ContentKey Encodings":
         contractBytecodeKey: contractBytecodeKey)
 
     let encoded = encode(contentKey)
-    check encoded.asSeq.toHex ==
-      "04829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+    check encoded.asSeq.toHex == contentKeyHex
     let decoded = decode(encoded)
     check decoded.isSome()
 
@@ -145,5 +199,6 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.contractBytecodeKey == contentKey.contractBytecodeKey
 
-      toContentId(contentKey).toHex() ==
-        "146fb937afe42bcf11d25ad57d67734b9a7138677d59eeec3f402908f54dafb0"
+      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
