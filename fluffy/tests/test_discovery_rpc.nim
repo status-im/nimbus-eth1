@@ -12,15 +12,16 @@ import
   json_rpc/[rpcproxy, rpcserver], json_rpc/clients/httpclient,
   stint,eth/p2p/discoveryv5/enr, eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../rpc/rpc_discovery_api, ./test_helpers
+  ../rpc/rpc_discovery_api,
+  ./test_helpers
 
 type TestCase = ref object
-  localDiscovery: discv5_protocol.Protocol 
+  localDiscovery: discv5_protocol.Protocol
   server: RpcProxy
   client: RpcHttpClient
 
 proc setupTest(rng: ref BrHmacDrbgContext): Future[TestCase] {.async.} =
-  let 
+  let
     localSrvAddress = "127.0.0.1"
     localSrvPort = 8545
     ta = initTAddress(localSrvAddress, localSrvPort)

@@ -12,6 +12,7 @@ import
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/wire/portal_protocol,
+  ../content_db,
   ./test_helpers
 
 const protocolId = [byte 0x50, 0x00]
@@ -22,16 +23,13 @@ type Default2NodeTest = ref object
   proto1: PortalProtocol
   proto2: PortalProtocol
 
-proc testHandler(contentKey: ByteList): ContentResult =
-  let
-    idHash = sha256.digest("test")
-    id = readUintBE[256](idHash.data)
-  # TODO: Ideally we can return here a more valid content id. But that depends
+proc testHandler(contentKey: ByteList): Option[ContentId] =
+  # Note: Returning a static content id here, as in practice this depends
   # on the content key to content id derivation, which is different for the
   # different content networks. And we want these tests to be independent from
-  # that. Could do something specifically for these tests, when there is a test
-  # case that would actually test this.
-  ContentResult(kind: ContentMissing, contentId: id)
+  # that.
+  let idHash = sha256.digest("test")
+  some(readUintBE[256](idHash.data))
 
 proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
   let
@@ -40,8 +38,11 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     node2 = initDiscoveryNode(
       rng, PrivateKey.random(rng[]), localAddress(20303))
 
-    proto1 = PortalProtocol.new(node1, protocolId, testHandler)
-    proto2 = PortalProtocol.new(node2, protocolId, testHandler)
+    db1 = ContentDB.new("", inMemory = true)
+    db2 = ContentDB.new("", inMemory = true)
+
+    proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
+    proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
 
   Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
 
@@ -70,7 +71,7 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "FindNodes/Nodes":
     let test = defaultTestCase(rng)
-  
+
     block: # Find itself
       let nodes = await test.proto1.findNodes(test.proto2.localNode,
         List[uint16, 256](@[0'u16]))
@@ -109,7 +110,7 @@ procSuite "Portal Wire Protocol Tests":
         nodes.isOk()
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
-    
+
     await test.stopTest()
 
   asyncTest "FindContent/Content - send enrs":
@@ -193,9 +194,13 @@ procSuite "Portal Wire Protocol Tests":
         node3 = initDiscoveryNode(
           rng, PrivateKey.random(rng[]), localAddress(20304))
 
-        proto1 = PortalProtocol.new(node1, protocolId, testHandler)
-        proto2 = PortalProtocol.new(node2, protocolId, testHandler)
-        proto3 = PortalProtocol.new(node3, protocolId, testHandler)
+        db1 = ContentDB.new("", inMemory = true)
+        db2 = ContentDB.new("", inMemory = true)
+        db3 = ContentDB.new("", inMemory = true)
+
+        proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
+        proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
+        proto3 = PortalProtocol.new(node3, protocolId, db3, testHandler)
 
       # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
       check proto1.addNode(node2.localNode) == Added
@@ -220,8 +225,11 @@ procSuite "Portal Wire Protocol Tests":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      proto1 = PortalProtocol.new(node1, protocolId, testHandler)
-      proto2 = PortalProtocol.new(node2, protocolId, testHandler,
+      db1 = ContentDB.new("", inMemory = true)
+      db2 = ContentDB.new("", inMemory = true)
+
+      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
+      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler,
         bootstrapRecords = [node1.localNode.record])
 
     proto1.start()
@@ -241,8 +249,9 @@ procSuite "Portal Wire Protocol Tests":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
+      db = ContentDB.new("", inMemory = true)
       # No portal protocol for node1, hence an invalid bootstrap node
-      proto2 = PortalProtocol.new(node2, protocolId, testHandler,
+      proto2 = PortalProtocol.new(node2, protocolId, db, testHandler,
         bootstrapRecords = [node1.localNode.record])
 
     # seedTable to add node1 to the routing table

@@ -38,8 +38,6 @@ type
     of receipts:
       receiptsKey*: ContentKeyType
 
-  ContentId* = Uint256
-
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 

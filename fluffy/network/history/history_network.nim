@@ -8,7 +8,7 @@
 import
   std/[options, sugar],
   stew/results, chronos,
-  eth/p2p/discoveryv5/[protocol, node, enr],
+  eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../wire/portal_protocol,
   ./history_content
@@ -21,47 +21,41 @@ type HistoryNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
-proc getHandler(contentDB: ContentDB): ContentHandler =
-    return (proc (contentKey: history_content.ByteList): ContentResult =
-      let contentId = toContentId(contentKey)
-      let maybeContent = contentDB.get(contentId)
-      if (maybeContent.isSome()):
-        ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
-      else:
-        ContentResult(kind: ContentMissing, contentId: contentId))
+proc toContentIdHandler(contentKey: ByteList): Option[ContentId] =
+  some(toContentId(contentKey))
 
 proc getContent*(n: HistoryNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
     contentId = toContentId(keyEncoded)
+    contentInRange = n.portalProtocol.inRange(contentId)
 
-  let nodeId = n.portalProtocol.localNode.id
-
-  let distance = n.portalProtocol.routingTable.distance(nodeId, contentId)
-  let inRange = distance <= n.portalProtocol.dataRadius
-
-  # When the content id is in our radius range, try to look it up in our db.
-  if inRange:
+  # When the content id is in the radius range, try to look it up in the db.
+  if contentInRange:
     let contentFromDB = n.contentDB.get(contentId)
     if contentFromDB.isSome():
       return contentFromDB
 
   let content = await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
-  if content.isSome() and inRange:
+  # When content is found and is in the radius range, store it.
+  if content.isSome() and contentInRange:
     n.contentDB.put(contentId, content.get().asSeq())
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
   return content.map(x => x.asSeq())
 
-proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
-    contentDB: ContentDB , dataRadius = UInt256.high(),
+proc new*(
+    T: type HistoryNetwork,
+    baseProtocol: protocol.Protocol,
+    contentDB: ContentDB,
+    dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, historyProtocolId, getHandler(contentDB), dataRadius,
-    bootstrapRecords)
+    baseProtocol, historyProtocolId, contentDB, toContentIdHandler,
+    dataRadius, bootstrapRecords)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 

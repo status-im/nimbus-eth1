@@ -15,6 +15,7 @@ import
   stew/results, chronicles, chronos, nimcrypto/hash, bearssl,
   ssz_serialization,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
+  ../../content_db,
   ./messages
 
 export messages, routing_table
@@ -45,11 +46,8 @@ type
     of ContentKeyValidationFailure:
       error*: string
 
-  # Treating Result as typed union type. If the content is present the handler
-  # should return it, if not it should return the content id so that closest
-  # neighbours can be localized.
-  ContentHandler* =
-    proc(contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
+  ToContentIdHandler* =
+    proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
@@ -57,8 +55,9 @@ type
     protocolId: PortalProtocolId
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
+    contentDB*: ContentDB
+    toContentId: ToContentIdHandler
     dataRadius*: UInt256
-    handleContentRequest: ContentHandler
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
@@ -90,6 +89,10 @@ func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 
 func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
+
+func inRange*(p: PortalProtocol, contentId: ContentId): bool =
+  let distance = p.routingTable.distance(p.localNode.id, contentId)
+  distance <= p.dataRadius
 
 func handlePing(p: PortalProtocol, ping: PingMessage): seq[byte] =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
@@ -125,49 +128,61 @@ func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
-  # TODO: Should we first do a simple check on ContentId versus Radius?
-  # That would needs access to specific toContentId call, or we need to move it
-  # to handleContentRequest, which would need access to the Radius value.
-  let contentHandlingResult = p.handleContentRequest(fc.contentKey)
-  case contentHandlingResult.kind
-  of ContentFound:
-    # TODO: Need to provide uTP connectionId when content is too large for a
-    # single response.
-    let content = contentHandlingResult.content
-    encodeMessage(ContentMessage(
-      contentMessageType: contentType, content: ByteList(content)))
-  of ContentMissing:
+  let contentIdOpt = p.toContentId(fc.contentKey)
+  if contentIdOpt.isSome():
     let
-      contentId = contentHandlingResult.contentId
-      closestNodes = p.routingTable.neighbours(
-        NodeId(contentId), seenOnly = true)
-      enrs =
-        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
-    encodeMessage(ContentMessage(
-      contentMessageType: enrsType, enrs: List[ByteList, 32](List(enrs))))
+      contentId = contentIdOpt.get()
+      # TODO: Should we first do a simple check on ContentId versus Radius
+      # before accessing the database?
+      maybeContent = p.contentDB.get(contentId)
+    if maybeContent.isSome():
+      let content = maybeContent.get()
+       # TODO: properly calculate max content size
+      if content.len <= 1000:
+        encodeMessage(ContentMessage(
+          contentMessageType: contentType, content: ByteList(content)))
+      else:
+        var connectionId: Bytes2
+        brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
 
-  of ContentKeyValidationFailure:
-    # Return empty content response when content key validation fails
-    # TODO: Better would be to return no message at all, or we need to add a
-    # None type or so.
-    let content = ByteList(@[])
-    encodeMessage(ContentMessage(
-      contentMessageType: contentType, content: content))
+        encodeMessage(ContentMessage(
+          contentMessageType: connectionIdType, connectionId: connectionId))
+    else:
+      # Don't have the content, send closest neighbours to content id.
+      let
+        closestNodes = p.routingTable.neighbours(
+          NodeId(contentId), seenOnly = true)
+        enrs =
+          closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
+      encodeMessage(ContentMessage(
+        contentMessageType: enrsType, enrs: List[ByteList, 32](List(enrs))))
+  else:
+    # Return empty response when content key validation fails
+    # TODO: Better would be to return no message at all, needs changes on
+    # discv5 layer.
+    @[]
 
-func handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
-  let
-    # TODO: Not implemented: Based on the content radius and the content that is
-    # already stored, interest in provided content keys needs to be indicated
-    # by setting bits in this BitList.
-    # Do we need some protection here on a peer offering lots (64x) of content
-    # that fits our Radius but is actually bogus?
-    contentKeys = ContentKeysBitList.init(a.contentKeys.len)
-    # TODO: What if we don't want any of the content? Reply with empty bitlist
-    # and a connectionId of all zeroes?
+proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
+  var contentKeys = ContentKeysBitList.init(o.contentKeys.len)
+  # TODO: Do we need some protection against a peer offering lots (64x) of
+  # content that fits our Radius but is actually bogus?
+  # Additional TODO, but more of a specification clarification: What if we don't
+  # want any of the content? Reply with empty bitlist and a connectionId of
+  # all zeroes but don't actually allow an uTP connection?
+  for i, contentKey in o.contentKeys:
+    let contentIdOpt = p.toContentId(contentKey)
+    if contentIdOpt.isSome():
+      let contentId = contentIdOpt.get()
+      if p.inRange(contentId):
+        if not p.contentDB.contains(contentId):
+          contentKeys.setBit(i)
+    else:
+      # Return empty response when content key validation fails
+      return @[]
+
   var connectionId: Bytes2
   brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
-  # TODO: Random connection ID needs to be stored and linked with the uTP
-  # session that needs to be set up (start listening).
+
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
 
@@ -176,7 +191,7 @@ func handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   # get the closest neighbours of that data from our routing table, select a
   # random subset and offer the same data to them.
 
-proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
+proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
@@ -220,7 +235,8 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
-    contentHandler: ContentHandler,
+    contentDB: ContentDB,
+    toContentId: ToContentIdHandler,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator
@@ -231,14 +247,15 @@ proc new*(T: type PortalProtocol,
     routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
       DefaultTableIpLimits, baseProtocol.rng, distanceCalculator),
     baseProtocol: baseProtocol,
+    contentDB: contentDB,
+    toContentId: toContentId,
     dataRadius: dataRadius,
-    handleContentRequest: contentHandler,
     bootstrapRecords: @bootstrapRecords)
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
 
-  return proto
+  proto
 
 # Sends the discv5 talkreq nessage with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.

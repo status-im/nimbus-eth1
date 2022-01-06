@@ -14,6 +14,7 @@ import
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
+  ../content_db,
   ../network/wire/[messages, portal_protocol],
   ../network/state/[state_content, state_network]
 
@@ -178,16 +179,13 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-proc testHandler(contentKey: ByteList): ContentResult =
-  # Note: We don't incorperate storage in this tool so we always return
-  # missing content. For now we are using the state network derivation but it
-  # could be selective based on the network the tool is used for.
-  let contentId = toContentId(contentKey)
-  if contentId.isSome():
-    ContentResult(kind: ContentMissing, contentId: contentId.get())
-  else:
-    ContentResult(kind: ContentKeyValidationFailure,
-      error: "Failed decoding content key")
+proc testHandler(contentKey: ByteList): Option[ContentId] =
+  # Note: Returning a static content id here, as in practice this depends
+  # on the content key to content id derivation, which is different for the
+  # different content networks. And we want these tests to be independent from
+  # that.
+  let idHash = sha256.digest("test")
+  some(readUintBE[256](idHash.data))
 
 proc run(config: PortalCliConf) =
   let
@@ -212,7 +210,9 @@ proc run(config: PortalCliConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d, config.protocolId, testHandler,
+  let db = ContentDB.new("", inMemory = true)
+
+  let portal = PortalProtocol.new(d, config.protocolId, db, testHandler,
     bootstrapRecords = bootstrapRecords)
 
   if config.metricsEnabled:

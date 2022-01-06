@@ -8,7 +8,7 @@
 import
   std/[options, sugar],
   stew/results, chronos,
-  eth/p2p/discoveryv5/[protocol, node, enr],
+  eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../wire/portal_protocol,
   ./state_content,
@@ -21,50 +21,41 @@ type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
-proc getHandler(contentDB: ContentDB): ContentHandler =
-    return (proc (contentKey: state_content.ByteList): ContentResult =
-      let contentId = toContentId(contentKey)
-      if contentId.isSome():
-        let maybeContent = contentDB.get(contentId.get())
-        if (maybeContent.isSome()):
-          ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
-        else:
-          ContentResult(kind: ContentMissing, contentId: contentId.get())
-      else:
-        ContentResult(kind: ContentKeyValidationFailure, error: ""))
+proc toContentIdHandler(contentKey: ByteList): Option[ContentId] =
+  toContentId(contentKey)
 
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
     contentId = toContentId(key)
+    contentInRange = n.portalProtocol.inRange(contentId)
 
-  let nodeId = n.portalProtocol.localNode.id
-
-  let distance = n.portalProtocol.routingTable.distance(nodeId, contentId)
-  let inRange = distance <= n.portalProtocol.dataRadius
-
-  # When the content id is in our radius range, try to look it up in our db.
-  if inRange:
+  # When the content id is in the radius range, try to look it up in the db.
+  if contentInRange:
     let contentFromDB = n.contentDB.get(contentId)
     if contentFromDB.isSome():
       return contentFromDB
 
   let content = await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
-  if content.isSome() and inRange:
+  # When content is found on the network and is in the radius range, store it.
+  if content.isSome() and contentInRange:
     n.contentDB.put(contentId, content.get().asSeq())
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
   return content.map(x => x.asSeq())
 
-proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
-    contentDB: ContentDB , dataRadius = UInt256.high(),
+proc new*(
+    T: type StateNetwork,
+    baseProtocol: protocol.Protocol,
+    contentDB: ContentDB,
+    dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, stateProtocolId, getHandler(contentDB), dataRadius,
-    bootstrapRecords, stateDistanceCalculator)
+    baseProtocol, stateProtocolId, contentDB, toContentIdHandler,
+    dataRadius, bootstrapRecords, stateDistanceCalculator)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
