@@ -96,10 +96,7 @@ proc importBlocks(cdb: BaseChainDB; h: seq[BlockHeader]; b: seq[BlockBody]) =
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
 
 proc getVmState(cdb: BaseChainDB; number: BlockNumber): BaseVMState =
-  let
-    topHeader = cdb.getBlockHeader(number)
-    accounts = AccountsCache.init(cdb.db, topHeader.stateRoot, cdb.pruneTrie)
-  result = accounts.newBaseVMState(topHeader, cdb)
+  BaseVMState.new(cdb.getBlockHeader(number), cdb)
 
 # ------------------------------------------------------------------------------
 # Crash test function, finding out about how the transaction framework works ..

@@ -10,14 +10,14 @@
 
 when defined(evmc_enabled) or not defined(vm2_enabled):
   import
-    ./vm/types, # legacy -- newBaseVMState() below
+    # ./vm/types, # legacy -- newBaseVMState() below
     ./vm/state as vms
   export
     vms.setupTxContext
 
 else:
   import
-    ./vm2/types, # legacy -- newBaseVMState() below
+    # ./vm2/types, # legacy -- newBaseVMState() below
     ./vm2/state_transactions as vmx,
     ./vm2/state as vms
   export
@@ -38,7 +38,7 @@ export
   vms.getAncestorHash,
   vms.getAndClearLogEntries,
   vms.getTracingResult,
-  vms.legacyInit,
+  # vms.legacyInit,
   vms.mutateStateDB,
   vms.new,
   vms.readOnlyStateDB,
@@ -48,7 +48,7 @@ export
   vms.tracedAccounts,
   vms.tracedAccountsPairs
 
-# [
+#[
 import db/[accounts_cache, db_chain], eth/common
 proc init*(
       self:        BaseVMState;

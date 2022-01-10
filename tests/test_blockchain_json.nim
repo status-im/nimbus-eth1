@@ -240,11 +240,13 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   )
 
   deepCopy(result, preminedBlock)
-  # we need to reinit the state if the stateRoot appear to be different
-  # with the one in stateDB
-  chainDB.initStateDB(parentHeader.stateRoot)
-  let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
-  tester.vmState = newBaseVMState(chainDB.stateDB, baseHeaderForImport, chainDB, tracerFlags)
+
+  tester.vmState = BaseVMState.new(
+    parentHeader,
+    baseHeaderForImport,
+    chainDB,
+    (if tester.trace: {TracerFlags.EnableTracing} else: {}),
+    chainDB.pruneTrie)
 
   let body = BlockBody(
     transactions: result.txs,
@@ -386,12 +388,16 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
-    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = test_config.getConfiguration().pruning)
-    chainDB.initStateDB(emptyRlpHash)
-    setupStateDB(fixture["pre"], chainDB.stateDB)
-    chainDB.stateDB.persist()
 
-    check chainDB.stateDB.rootHash == tester.genesisHeader.stateRoot
+    let
+      pruneTrie = test_config.getConfiguration().pruning
+      chainDB = newBaseChainDB(newMemoryDb(), pruneTrie)
+      stateDB = AccountsCache.init(chainDB.db, emptyRlpHash, chainDB.pruneTrie)
+
+    setupStateDB(fixture["pre"], stateDB)
+    stateDB.persist()
+
+    check stateDB.rootHash == tester.genesisHeader.stateRoot
 
     tester.debugMode = debugMode
     tester.trace = trace

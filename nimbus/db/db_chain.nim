@@ -19,7 +19,7 @@ type
     networkId*: NetworkId
     config*   : ChainConfig
     genesis*  : Genesis
-    noStateDB : AccountsCache # deprecated, see getter below
+    # noStateDB : AccountsCache # deprecated, see getter below
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -50,7 +50,7 @@ proc `$`*(db: BaseChainDB): string =
 proc networkParams*(db: BaseChainDB): NetworkParams =
   NetworkParams(config: db.config, genesis: db.genesis)
 
-# [
+#[
 proc initStateDB*(db: BaseChainDB, stateRoot: Hash256)
     {.deprecated: "initStateDB: use seprarate AccountsCache variable".} =
   if db.noStateDB.isNil.not and db.noStateDB.rootHash == stateRoot:
