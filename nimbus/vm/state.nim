@@ -105,13 +105,7 @@ proc new*(
   ##
   ## This `new()` constructor and its variants (see below) provide a save
   ## `BaseVMState` environment where the account state cache is synchronised
-  ## with the `parent` block header. It is to be preferred over the legacy
-  ## `newBaseVMState()` function where there is no provision made that the
-  ## account state cache is in sync with the parent of the `header` argument.
-  ##
-  ## Moreover, the `header` might not even exist when it is to be constructed
-  ## by running transactions which leads to guessing what kind of made up
-  ## header might do.
+  ## with the `parent` block header.
   new result
   result.init(
     ac          = AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
@@ -122,6 +116,30 @@ proc new*(
     miner       = miner,
     chainDB     = chainDB,
     tracerFlags = tracerFlags)
+
+proc init*(
+      self:        BaseVMState;
+      parent:      BlockHeader;     ## parent header, account sync position
+      header:      BlockHeader;     ## header with tx environment data fields
+      chainDB:     BaseChainDB;     ## block chain database
+      tracerFlags: set[TracerFlags] = {},
+      pruneTrie:   bool = true)
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `new()` constructor above for in-place initalisation. The
+  ## `parent` argument is used to sync the accounts cache and the `header`
+  ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
+  ## values.
+  ##
+  ## It requires the `header` argument properly initalised so that for PoA
+  ## networks, the miner address is retrievable via `ecRecover()`.
+  self.init(AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
+            parent,
+            header.timestamp,
+            header.gasLimit,
+            header.fee,
+            chainDB.getMinerAddress(header),
+            chainDB,
+            tracerFlags)
 
 proc new*(
       T:           type BaseVMState;
@@ -137,12 +155,10 @@ proc new*(
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  BaseVMState.new(
+  new result
+  result.init(
     parent      = parent,
-    timestamp   = header.timestamp,
-    gasLimit    = header.gasLimit,
-    fee         = header.fee,
-    miner       = chainDB.getMinerAddress(header),
+    header      = header,
     chainDB     = chainDB,
     tracerFlags = tracerFlags,
     pruneTrie   = pruneTrie)
@@ -163,35 +179,6 @@ proc new*(
     chainDB     = chainDB,
     tracerFlags = tracerFlags,
     pruneTrie   = pruneTrie)
-
-proc legacyInit*(
-      self:        BaseVMState;
-      ac:          AccountsCache;   ## accounts db synced with header's parent
-      header:      BlockHeader;     ## header with tx environment data fields
-      chainDB:     BaseChainDB;     ## block chain database
-      tracerFlags: set[TracerFlags] = {})
-    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Legacy function for initialising the result of `newBaseVMState()`.
-  ##
-  ## If the `header` argument implies sort of a parent header, it is
-  ## initialised. On PoA networks, the miner address must be retrievable
-  ## from the `header` argument via `ecRecover()`.
-  var parent: BlockHeader
-  if header.parentHash != nilHash:
-    if not chainDB.getBlockHeader(header.parentHash, parent):
-      parent.blockNumber = header.blockNumber - 1
-  elif 1.u256 < header.blockNumber:
-    if not chainDB.getBlockHeader(header.blockNumber - 1.u256, parent):
-      parent.blockNumber = header.blockNumber - 1
-
-  self.init(ac,
-            parent,
-            header.timestamp,
-            header.gasLimit,
-            header.fee,
-            chainDB.getMinerAddress(header),
-            chainDB,
-            tracerFlags)
 
 
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =

@@ -10,14 +10,12 @@
 
 when defined(evmc_enabled) or not defined(vm2_enabled):
   import
-    # ./vm/types, # legacy -- newBaseVMState() below
     ./vm/state as vms
   export
     vms.setupTxContext
 
 else:
   import
-    # ./vm2/types, # legacy -- newBaseVMState() below
     ./vm2/state_transactions as vmx,
     ./vm2/state as vms
   export
@@ -38,7 +36,7 @@ export
   vms.getAncestorHash,
   vms.getAndClearLogEntries,
   vms.getTracingResult,
-  vms.legacyInit,
+  vms.init,
   vms.mutateStateDB,
   vms.new,
   vms.readOnlyStateDB,
@@ -47,30 +45,5 @@ export
   vms.`status=`,
   vms.tracedAccounts,
   vms.tracedAccountsPairs
-
-#[
-import db/[accounts_cache, db_chain], eth/common
-proc init*(
-      self:        BaseVMState;
-      ac:          AccountsCache;   ## accounts cache synced with parent
-      header:      BlockHeader;     ## child header _after_ insertion point
-      chainDB:     BaseChainDB;     ## block chain database
-      tracerFlags: set[TracerFlags] = {})
-    {.gcsafe,
-      deprecated: "use BaseVMState.new() for creating a VM envirionment",
-      raises: [Defect,CatchableError].} =
-  ## Legacy function, usage of which should be tapered out.
-  self.legacyInit(ac, header, chainDB, tracerFlags)
-
-proc newBaseVMState*(ac: AccountsCache, header: BlockHeader,
-                     chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}):
-                       BaseVMState
-    {.gcsafe,
-      deprecated: "use BaseVMState.new() for creating a VM envirionment",
-      raises: [Defect,CatchableError].} =
-  ## Legacy function, usage of which should be tapered out.
-  new result
-  result.legacyInit(ac, header, chainDB, tracerFlags)
-#]#
 
 # End
