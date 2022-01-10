@@ -13,7 +13,6 @@ import
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../transaction,
-  ../utils,
   ../utils/[difficulty, header],
   ../vm_state,
   ../vm_types,
@@ -22,8 +21,7 @@ import
   ../utils/pow,
   ./gaslimit,
   chronicles,
-  eth/[common, rlp, trie/trie_defs],
-  ethash,
+  eth/[common, rlp],
   nimcrypto,
   options,
   stew/[results, endians2]
@@ -36,11 +34,11 @@ export
   pow.new,
   results
 
+{.push raises: [Defect].}
+
 const
   daoForkBlockExtraData =
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
-
-{.push raises: [Defect,CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -54,7 +52,8 @@ func isGenesis(header: BlockHeader): bool =
 # Pivate validator functions
 # ------------------------------------------------------------------------------
 
-proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
+proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   let (expMixDigest,miningValue) = pow.getPowDigest(header)
 
   if expMixDigest != header.mixDigest:
@@ -80,7 +79,8 @@ proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
 
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
                     numTransactions: int; checkSealOK: bool;
-                    pow: PowRef): Result[void,string] =
+                    pow: PowRef): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -138,7 +138,8 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
                     uncles: seq[BlockHeader]; checkSealOK: bool;
-                    pow: PowRef): Result[void,string] =
+                    pow: PowRef): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -213,73 +214,105 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
-                          sender: EthAddress, fork: Fork): bool =
-  let balance = vmState.readOnlyStateDB.getBalance(sender)
-  let nonce = vmState.readOnlyStateDB.getNonce(sender)
+proc validateTransaction*(
+    roDB:     ReadOnlyStateDB; ## Accounts environment descriptor
+    tx:       Transaction;     ## tx to validate
+    sender:   EthAddress;      ## tx.getSender or tx.ecRecover
+    maxLimit: GasInt;          ## gasLimit from block header (for tx)
+    baseFee:  Uint256;         ## baseFee from block header (for tx)
+    fork:     Fork): bool =
+  let
+    balance = roDB.getBalance(sender)
+    nonce = roDB.getNonce(sender)
 
   if tx.txType == TxEip2930 and fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
-    return
+    return false
 
   if tx.txType == TxEip1559 and fork < FkLondon:
     debug "invalid tx: Eip1559 Tx type detected before London"
-    return
+    return false
 
-  if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
-    debug "invalid tx: block header gasLimit reached",
-      maxLimit=vmState.blockHeader.gasLimit,
-      gasUsed=vmState.cumulativeGasUsed,
-      addition=tx.gasLimit
-    return
+  # Note that the following check bears some plausibility but is _not_
+  # covered by the eip-1559 reference (sort of) pseudo code, for details
+  # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
+  #
+  # Rather this check is needed for surviving the post-London unit test
+  # eth_tests/GeneralStateTests/stEIP1559/lowGasLimit.json which seems to
+  # be sourced and generated from
+  # eth_tests/src/GeneralStateTestsFiller/stEIP1559/lowGasLimitFiller.yml
+  #
+  # Interestingly, the hive tests do not use this particular test but rather
+  # eth_tests/BlockchainTests/GeneralStateTests/stEIP1559/lowGasLimit.json
+  # from a parallel tests series which look like somehow expanded versions.
+  #
+  # The parallel lowGasLimit.json test never triggers the case checked below
+  # as the paricular transaction is omitted (the txs list is just set empty.)
+  if maxLimit < tx.gasLimit:
+    debug "invalid tx: block header gasLimit exceeded",
+      maxLimit,
+      gasLimit = tx.gasLimit
+    return false
 
   # ensure that the user was willing to at least pay the base fee
-  let baseFee = vmState.blockHeader.baseFee.truncate(GasInt)
-  if tx.maxFee < baseFee:
+  if tx.maxFee < baseFee.truncate(int64):
     debug "invalid tx: maxFee is smaller than baseFee",
-      maxFee=tx.maxFee,
-      baseFee=baseFee
-    return
+      maxFee = tx.maxFee,
+      baseFee
+    return false
 
   # The total must be the larger of the two
   if tx.maxFee < tx.maxPriorityFee:
     debug "invalid tx: maxFee is smaller than maPriorityFee",
-      maxFee=tx.maxFee,
-      maxPriorityFee=tx.maxPriorityFee
-    return
+      maxFee         = tx.maxFee,
+      maxPriorityFee = tx.maxPriorityFee
+    return false
 
-  # the signer must be able to afford the transaction
+  # the signer must be able to fully afford the transaction
   let gasCost = if tx.txType >= TxEip1559:
                   tx.gasLimit.u256 * tx.maxFee.u256
                 else:
                   tx.gasLimit.u256 * tx.gasPrice.u256
 
-  if gasCost > balance:
+  if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
-      available=balance,
-      require=gasCost
-    return
+      available = balance,
+      require   = gasCost
+    return false
 
-  if tx.value > balance - gasCost:
+  if balance - gasCost < tx.value:
     debug "invalid tx: not enough cash to send",
       available=balance,
       availableMinusGas=balance-gasCost,
       require=tx.value
-    return
+    return false
 
   if tx.gasLimit < tx.intrinsicGas(fork):
     debug "invalid tx: not enough gas to perform calculation",
       available=tx.gasLimit,
       require=tx.intrinsicGas(fork)
-    return
+    return false
 
   if tx.nonce != nonce:
     debug "invalid tx: account nonce mismatch",
       txNonce=tx.nonce,
       accountNonce=nonce
-    return
+    return false
 
-  result = true
+  true
+
+proc validateTransaction*(
+    vmState: BaseVMState;  ## Accounts environment descriptor
+    tx:      Transaction;  ## tx to validate
+    sender:  EthAddress;   ## tx.getSender or tx.ecRecover
+    header:  BlockHeader;  ## Header of blok containing tx
+    fork:    Fork): bool =
+  ## Variant of `validateTransaction()`
+  let
+    roDB = vmState.readOnlyStateDB
+    gasLimit = header.gasLimit
+    baseFee = header.baseFee
+  roDB.validateTransaction(tx, sender, gasLimit, baseFee, fork)
 
 # ------------------------------------------------------------------------------
 # Public functions, extracted from test_blockchain_json
@@ -287,7 +320,8 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
             uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
-            pow: PowRef): Result[void,string] =
+            pow: PowRef): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -312,13 +346,15 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB;
                       header: BlockHeader; body: BlockBody; checkSealOK: bool;
-                      pow: PowRef): Result[void,string] =
+                      pow: PowRef): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   chainDB.validateHeaderAndKinship(
     header, body.uncles, body.transactions.len, checkSealOK, pow)
 
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
-        checkSealOK: bool; pow: PowRef): Result[void,string] =
+        checkSealOK: bool; pow: PowRef): Result[void,string]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   chainDB.validateHeaderAndKinship(
     ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, pow)
 
