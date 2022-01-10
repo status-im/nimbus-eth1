@@ -1,6 +1,6 @@
 import
   json, os, stint, eth/trie/db, stew/byteutils, eth/common,
-  ../nimbus/db/[db_chain], chronicles, ../nimbus/vm_state,
+  ../nimbus/db/[db_chain], chronicles, ../nimbus/[vm_state, vm_types],
   ../nimbus/p2p/executor, premixcore, prestate, ../nimbus/tracer
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
@@ -22,9 +22,8 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
 
-  chainDB.initStateDB(parent.stateRoot)
   let
-    vmState = newBaseVMState(chainDB.stateDB, header, chainDB)
+    vmState = BaseVMState.new(parent, header, chainDB)
     validationResult = vmState.processBlockNotPoA(header, body)
 
   if validationResult != ValidationResult.OK:

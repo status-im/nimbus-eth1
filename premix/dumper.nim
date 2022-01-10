@@ -7,7 +7,7 @@ import
   configuration, stint, eth/common,
   ../nimbus/db/[db_chain, select_backend, capturedb],
   eth/trie/[hexary, db], ../nimbus/p2p/executor,
-  ../nimbus/[tracer, vm_state]
+  ../nimbus/[tracer, vm_state, vm_types]
 
 proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
   var
@@ -26,10 +26,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     header = captureChainDB.getBlockHeader(blockNumber)
     headerHash = header.blockHash
     body = captureChainDB.getBlockBody(headerHash)
-        
-  captureChainDB.initStateDB(parent.stateRoot)
-  let
-    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB)
+    vmState = BaseVMState.new(parent, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
   discard vmState.processBlockNotPoA(header, body)

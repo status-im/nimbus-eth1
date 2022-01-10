@@ -38,7 +38,7 @@ export
   vms.getAncestorHash,
   vms.getAndClearLogEntries,
   vms.getTracingResult,
-  # vms.legacyInit,
+  vms.legacyInit,
   vms.mutateStateDB,
   vms.new,
   vms.readOnlyStateDB,

@@ -66,9 +66,10 @@ type
 proc hash*(x: Uint256): Hash =
   result = hash(x.toByteArrayBE)
 
-proc newHunterVMState(ac: AccountsCache, header: BlockHeader, chainDB: BaseChainDB): HunterVMState =
+proc newHunterVMState(parent, header: BlockHeader, chainDB: BaseChainDB): HunterVMState =
   new result
-  result.init(ac, header, chainDB)
+  let ac = AccountsCache.init(chainDB.db, parent.stateRoot)
+  result.legacyInit(ac, header, chainDB)
   result.headers = initTable[BlockNumber, BlockHeader]()
 
 method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
@@ -96,12 +97,11 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
     chainDB = newBaseChainDB(memoryDB, false)
 
   chainDB.setHead(parentBlock.header, true)
-  chainDB.initStateDB(parentBlock.header.stateRoot)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = newHunterVMState(chainDB.stateDB, thisBlock.header, chainDB)
+    vmState = newHunterVMState(parentBlock.header, thisBlock.header, chainDB)
     validationResult = vmState.processBlockNotPoA(thisBlock.header, thisBlock.body)
 
   if validationResult != ValidationResult.OK:
