@@ -7,6 +7,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/times,
   eth/common/eth_types, stint, options, stew/byteutils, chronicles,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
   ".."/[db/db_chain, db/accounts_cache, transaction], eth/trie/db,
@@ -72,8 +73,12 @@ proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
 
 proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): CallResult =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let stateDB = AccountsCache.init(chainDB.db, header.stateRoot)
-  let vmState = newBaseVMState(stateDB, header, chainDB)
+  let topHeader = BlockHeader(
+    parentHash: header.blockHash,
+    timestamp:  getTime().utc.toTime,
+    gasLimit:   0.GasInt,          ## ???
+    fee:        Uint256.none())    ## ???
+  let vmState = BaseVMState.new(topHeader, chainDB)
   let params  = toCallParams(vmState, call, globalGasCap, header.fee)
 
   var dbTx = chainDB.db.beginTransaction()
@@ -83,8 +88,12 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): 
 
 proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB, gasCap: GasInt): GasInt =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let stateDB = AccountsCache.init(chainDB.db, header.stateRoot)
-  let vmState = newBaseVMState(stateDB, header, chainDB)
+  let topHeader = BlockHeader(
+    parentHash: header.blockHash,
+    timestamp:  getTime().utc.toTime,
+    gasLimit:   0.GasInt,          ## ???
+    fee:        Uint256.none())    ## ???
+  let vmState = BaseVMState.new(topHeader, chainDB)
   let fork    = chainDB.config.toFork(header.blockNumber)
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = toCallParams(vmState, cd, gasCap, header.fee)
