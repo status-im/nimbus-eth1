@@ -218,8 +218,8 @@ jobs:
           key: 'dlls-v2-${{ matrix.target.cpu }}'
 
       - name: Install DLLs dependencies (Windows)
+        # steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
         if: >
-          steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
           runner.os == 'Windows'
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
