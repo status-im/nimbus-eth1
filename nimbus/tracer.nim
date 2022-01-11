@@ -89,10 +89,8 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     captureTrieDB = trieDB captureDB
     networkParams = chainDB.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams) # prune or not prune?
-
-  captureChainDB.initStateDB(parent.stateRoot)
-  let
-    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, tracerFlags + {EnableAccount})
+    captureFlags = tracerFlags + {EnableAccount}
+    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
 
   var stateDb = vmState.stateDB
 
@@ -162,10 +160,8 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     networkParams = db.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, db.networkId, networkParams)
     # we only need stack dump if we want to scan for internal transaction address
-
-  captureChainDB.initStateDB(parent.stateRoot)
-  let
-    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
+    captureFlags = {EnableTracing, DisableMemory, DisableStorage, EnableAccount}
+    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
     miner = vmState.coinbase()
 
   var
@@ -222,10 +218,8 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     captureTrieDB = trieDB captureDB
     networkParams = chainDB.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
-
-  captureChainDB.initStateDB(parent.stateRoot)
-  let
-    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, tracerFlags + {EnableTracing})
+    captureFlags = tracerFlags + {EnableTracing}
+    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)

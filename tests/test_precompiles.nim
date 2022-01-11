@@ -12,6 +12,7 @@ import
 
   ../nimbus/[vm_computation,
     vm_state,
+    vm_types,
     forks,
     constants,
     vm_precompiles,
@@ -24,7 +25,7 @@ import
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
-template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): untyped =
+template doTest(fixture: JsonNode; vmState: BaseVMState; fork: Fork, address: PrecompileAddresses): untyped =
   for test in fixture:
     let
       expectedErr = test.hasKey("ExpectedError")
@@ -63,33 +64,32 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     fork  = parseEnum[Fork](fixtures["fork"].getStr.toLowerAscii)
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
-    header = BlockHeader(blockNumber: 1.u256)
-    chainDB = newBaseChainDB(newMemoryDb())
-
-  chainDB.initStateDB(header.stateRoot)
-  let vmState = newBaseVMState(chainDB.stateDB, header, chainDB)
+    vmState = BaseVMState.new(
+      BlockHeader(blockNumber: 1.u256),
+      BlockHeader(),
+      newBaseChainDB(newMemoryDb()))
 
   case toLowerAscii(label)
-  of "ecrecover": data.doTest(fork, paEcRecover)
-  of "sha256"   : data.doTest(fork, paSha256)
-  of "ripemd"   : data.doTest(fork, paRipeMd160)
-  of "identity" : data.doTest(fork, paIdentity)
-  of "modexp"   : data.doTest(fork, paModExp)
-  of "bn256add" : data.doTest(fork, paEcAdd)
-  of "bn256mul" : data.doTest(fork, paEcMul)
-  of "ecpairing": data.doTest(fork, paPairing)
-  of "blake2f"  : data.doTest(fork, paBlake2bf)
+  of "ecrecover": data.doTest(vmState, fork, paEcRecover)
+  of "sha256"   : data.doTest(vmState, fork, paSha256)
+  of "ripemd"   : data.doTest(vmState, fork, paRipeMd160)
+  of "identity" : data.doTest(vmState, fork, paIdentity)
+  of "modexp"   : data.doTest(vmState, fork, paModExp)
+  of "bn256add" : data.doTest(vmState, fork, paEcAdd)
+  of "bn256mul" : data.doTest(vmState, fork, paEcMul)
+  of "ecpairing": data.doTest(vmState, fork, paPairing)
+  of "blake2f"  : data.doTest(vmState, fork, paBlake2bf)
   # EIP 2537: disabled
   # reason: not included in berlin
-  #of "blsg1add" : data.doTest(fork, paBlsG1Add)
-  #of "blsg1mul" : data.doTest(fork, paBlsG1Mul)
-  #of "blsg1multiexp" : data.doTest(fork, paBlsG1MultiExp)
-  #of "blsg2add" : data.doTest(fork, paBlsG2Add)
-  #of "blsg2mul" : data.doTest(fork, paBlsG2Mul)
-  #of "blsg2multiexp": data.doTest(fork, paBlsG2MultiExp)
-  #of "blspairing": data.doTest(fork, paBlsPairing)
-  #of "blsmapg1": data.doTest(fork, paBlsMapG1)
-  #of "blsmapg2": data.doTest(fork, paBlsMapG2)
+  #of "blsg1add" : data.doTest(vmState, fork, paBlsG1Add)
+  #of "blsg1mul" : data.doTest(vmState, fork, paBlsG1Mul)
+  #of "blsg1multiexp" : data.doTest(vmState, fork, paBlsG1MultiExp)
+  #of "blsg2add" : data.doTest(vmState, fork, paBlsG2Add)
+  #of "blsg2mul" : data.doTest(vmState, fork, paBlsG2Mul)
+  #of "blsg2multiexp": data.doTest(vmState, fork, paBlsG2MultiExp)
+  #of "blspairing": data.doTest(vmState, fork, paBlsPairing)
+  #of "blsmapg1": data.doTest(vmState, fork, paBlsMapG1)
+  #of "blsmapg2": data.doTest(vmState, fork, paBlsMapG2)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED

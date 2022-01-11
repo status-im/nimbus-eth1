@@ -24,14 +24,12 @@ else:
 export
   vms.`$`,
   vms.blockNumber,
-  vms.blockhash,
   vms.buildWitness,
   vms.coinbase,
   vms.consensusEnginePoA,
   vms.difficulty,
   vms.disableTracing,
   vms.enableTracing,
-  vms.gasLimit,
   vms.baseFee,
   vms.generateWitness,
   vms.`generateWitness=`,
@@ -40,14 +38,12 @@ export
   vms.getTracingResult,
   vms.init,
   vms.mutateStateDB,
-  vms.newBaseVMState,
+  vms.new,
   vms.readOnlyStateDB,
   vms.removeTracedAccounts,
   vms.status,
   vms.`status=`,
-  vms.timestamp,
   vms.tracedAccounts,
-  vms.tracedAccountsPairs,
-  vms.updateBlockHeader
+  vms.tracedAccountsPairs
 
 # End

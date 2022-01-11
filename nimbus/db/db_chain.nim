@@ -10,7 +10,7 @@ import
   stew/[byteutils], eth/trie/[hexary, db],
   eth/[common, rlp, p2p], chronicles,
   ".."/[errors, constants, utils, chain_config],
-  "."/[storage_types, accounts_cache]
+  "."/storage_types
 
 type
   BaseChainDB* = ref object
@@ -19,7 +19,6 @@ type
     networkId*: NetworkId
     config*   : ChainConfig
     genesis*  : Genesis
-    stateDB*  : AccountsCache
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -49,11 +48,6 @@ proc `$`*(db: BaseChainDB): string =
 
 proc networkParams*(db: BaseChainDB): NetworkParams =
   NetworkParams(config: db.config, genesis: db.genesis)
-
-proc initStateDB*(db: BaseChainDB, stateRoot: Hash256) =
-  if db.stateDB.isNil.not and db.stateDB.rootHash == stateRoot:
-    return
-  db.stateDB = AccountsCache.init(db.db, stateRoot, db.pruneTrie)
 
 proc exists*(self: BaseChainDB, hash: Hash256): bool =
   self.db.contains(hash.data)

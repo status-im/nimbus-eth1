@@ -143,7 +143,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUInt[64], j.getStr)
   result = cast[int64](data)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountsCache) =
+proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:

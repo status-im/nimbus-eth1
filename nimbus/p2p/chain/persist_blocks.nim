@@ -11,6 +11,7 @@
 import
   ../../db/db_chain,
   ../../vm_state,
+  ../../vm_types,
   ../clique,
   ../executor,
   ../validate,
@@ -48,18 +49,9 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
   defer: c.clique.cliqueRestore(cliqueState)
 
   for i in 0 ..< headers.len:
-    let (header, body) = (headers[i], bodies[i])
-
-    if header.parentHash != c.lastBlockHash:
-      let parent = c.db.getBlockHeader(header.parentHash)
-      c.parentStateRoot = parent.stateRoot
-      
-    # initStateDB will return the last known state
-    # if the stateRoot is match
-    c.db.initStateDB(c.parentStateRoot)
-
-    let 
-      vmState = newBaseVMState(c.db.stateDB, header, c.db)
+    let
+      (header, body) = (headers[i], bodies[i])
+      vmState = BaseVMState.new(header, c.db)
       validationResult = vmState.processBlock(c.clique, header, body)
     
     when not defined(release):
