@@ -90,7 +90,7 @@
 ##                      .                         .    +----------+
 ##    --> txJobAddTxs -------------------------------> |          |
 ##                |     .        +-----------+    .    | disposed |
-##                +------- ----> |  pending  | ------> |          |
+##                +------------> |  pending  | ------> |          |
 ##                      .        +-----------+    .    |          |
 ##                      .          |  ^   ^       .    |  waste   |
 ##                      .          v  |   |       .    |  basket  |
@@ -246,7 +246,7 @@
 ##
 ##    ..
 ##
-##    var xq = TxPoolRef.init(db)            # initialise tx-pool
+##    var xq = TxPoolRef.new(db)             # initialise tx-pool
 ##    ..
 ##
 ##    xq.jobAddTxs(txs)                      # add transactions to be held

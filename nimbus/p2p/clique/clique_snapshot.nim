@@ -66,13 +66,20 @@ logScope:
 # Private debugging functions, pretty printing
 # ------------------------------------------------------------------------------
 
-proc say(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
+template say(d: var LocalSnaps; v: varargs[untyped]): untyped =
   discard
-  # uncomment body to enable
-  #d.c.cfg.say v
+  # uncomment body to enable, note that say() prints on <stderr>
+  # d.c.cfg.say v
 
+proc pp(a: Hash256): string =
+  if a == BLANK_ROOT_HASH:
+    "*blank-root*"
+  elif a == EMPTY_SHA3:
+    "*empty-sha3*"
+  else:
+    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
-proc pp(q: openArray[BlockHeader]; n: int): string {.inline.} =
+proc pp(q: openArray[BlockHeader]; n: int): string =
   result = "["
   if 5 < n:
     result &= toSeq(q[0 .. 2]).mapIt("#" & $it.blockNumber).join(", ")
@@ -81,38 +88,40 @@ proc pp(q: openArray[BlockHeader]; n: int): string {.inline.} =
     result &= toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ")
   result &= "]"
 
-proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string {.inline.} =
+proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string =
   "#" & $b & " + " & q.pp(n)
 
 
-proc pp(q: openArray[BlockHeader]): string {.inline.} =
+proc pp(q: openArray[BlockHeader]): string =
   q.pp(q.len)
 
-proc pp(b: BlockNumber, q: openArray[BlockHeader]): string {.inline.} =
+proc pp(b: BlockNumber, q: openArray[BlockHeader]): string =
   b.pp(q, q.len)
 
 
-proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string {.inline.} =
+proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string =
   "headers=(" & h.blockNumber.pp(q,n) & ")"
 
-proc pp(h: BlockHeader, q: openArray[BlockHeader]): string {.inline.} =
+proc pp(h: BlockHeader, q: openArray[BlockHeader]): string =
   h.pp(q,q.len)
 
-proc pp(t: var LocalPath; w: var LocalSubChain): string {.inline.} =
+proc pp(t: var LocalPath; w: var LocalSubChain): string =
   var (a, b) = (w.first, w.top)
   if a == 0 and b == 0: b = t.chain.len
   "trail=(#" & $t.snaps.blockNumber & " + " & t.chain[a ..< b].pp & ")"
 
-proc pp(t: var LocalPath): string {.inline.} =
+proc pp(t: var LocalPath): string =
   var w = LocalSubChain()
   t.pp(w)
+
+proc pp(err: CLiqueError): string =
+  "(" & $err[0] & "," & err[1] & ")"
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc maxCheckPointLe(d: var LocalSnaps;
-                     number: BlockNumber): BlockNumber {.inline.} =
+proc maxCheckPointLe(d: var LocalSnaps; number: BlockNumber): BlockNumber =
   let epc = number mod d.c.cfg.ckpInterval
   if epc < number:
     number - epc
@@ -120,16 +129,13 @@ proc maxCheckPointLe(d: var LocalSnaps;
     # epc == number  =>  number < ckpInterval
     0.u256
 
-proc isCheckPoint(d: var LocalSnaps;
-                  number: BlockNumber): bool {.inline.} =
+proc isCheckPoint(d: var LocalSnaps; number: BlockNumber): bool =
   (number mod d.c.cfg.ckpInterval) == 0
 
-proc isEpoch(d: var LocalSnaps;
-             number: BlockNumber): bool {.inline.} =
+proc isEpoch(d: var LocalSnaps; number: BlockNumber): bool =
   (number mod d.c.cfg.epoch) == 0
 
-proc isSnapshotPosition(d: var LocalSnaps;
-                        number: BlockNumber): bool {.inline.} =
+proc isSnapshotPosition(d: var LocalSnaps; number: BlockNumber): bool =
   # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
   if d.isEpoch(number):
     if number.isZero:
@@ -147,7 +153,7 @@ proc isSnapshotPosition(d: var LocalSnaps;
 # ------------------------------------------------------------------------------
 
 proc findSnapshot(d: var LocalSnaps): bool
-                    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Search for a snapshot starting at current header starting at the pivot
   ## value `d.start`. The snapshot returned in `trail` is a clone of the
   ## cached snapshot and can be modified later.
@@ -166,7 +172,7 @@ proc findSnapshot(d: var LocalSnaps): bool
 
     let number = header.blockNumber
 
-    # Check whether the snapshot was recently visited and cahed
+    # Check whether the snapshot was recently visited and cached
     if d.c.recents.hasLruSnaps(hash):
       let rc = d.c.recents.getLruSnaps(hash)
       if rc.isOK:
@@ -184,7 +190,7 @@ proc findSnapshot(d: var LocalSnaps): bool
       let rc = d.c.cfg.loadSnapshot(hash)
       if rc.isOk:
         d.trail.snaps = rc.value.cloneSnapshot
-        d.say "findSnapshot disked ", d.trail.pp
+        d.say "findSnapshot on disk ", d.trail.pp
         trace "Loaded voting snapshot from disk",
           blockNumber = number,
           blockHash = hash
@@ -196,7 +202,8 @@ proc findSnapshot(d: var LocalSnaps): bool
     if d.isSnapshotPosition(number):
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
       d.trail.snaps = d.c.cfg.newSnapshot(header)
-      if d.trail.snaps.storeSnapshot.isOK:
+      let rc = d.trail.snaps.storeSnapshot
+      if rc.isOK:
         d.say "findSnapshot <epoch> ", d.trail.pp
         info "Stored voting snapshot to disk",
           blockNumber = number,
@@ -230,7 +237,7 @@ proc findSnapshot(d: var LocalSnaps): bool
 
 
 proc applyTrail(d: var LocalSnaps): CliqueOkResult
-                  {.inline, gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Apply any `trail` headers on top of the snapshot `snap`
   if d.subChn.first < d.subChn.top:
     block:
@@ -239,7 +246,8 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
       let rc = d.trail.snaps.snapshotApplySeq(
         d.trail.chain, d.subChn.top-1, d.subChn.first)
       if rc.isErr:
-        d.say "applyTrail snaps=#",d.trail.snaps.blockNumber, " err=",$rc.error
+        d.say "applyTrail snaps=#", d.trail.snaps.blockNumber,
+          " err=", rc.error.pp
         return err(rc.error)
       d.say "applyTrail snaps=#", d.trail.snaps.blockNumber
 
@@ -250,7 +258,7 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
       if rc.isErr:
         return err(rc.error)
 
-      d.say "updateSnapshot <disk> chechkpoint #", d.trail.snaps.blockNumber
+      d.say "applyTrail <disk> chechkpoint #", d.trail.snaps.blockNumber
       trace "Stored voting snapshot to disk",
          blockNumber = d.trail.snaps.blockNumber,
          blockHash = d.trail.snaps.blockHash
@@ -258,7 +266,7 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
 
 
 proc updateSnapshot(d: var LocalSnaps): SnapshotResult
-                   {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Find snapshot for header `d.start.header` and assign it to the LRU cache.
   ## This function was expects thet the LRU cache already has a slot allocated
   ## for the snapshot having run `getLruSnaps()`.
@@ -406,7 +414,7 @@ proc cliqueSnapshot*(c: Clique;hash: Hash256;
   c.cliqueSnapshotSeq(hash,list)
 
 proc cliqueSnapshot*(c: Clique; header: Blockheader): SnapshotResult
-                         {.inline,gcsafe,raises: [Defect,CatchableError].} =
+                         {.gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,header,@[])`
   var blind: seq[Blockheader]
   c.cliqueSnapshotSeq(header, blind)

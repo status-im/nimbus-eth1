@@ -80,13 +80,13 @@ proc signersList(s: Snapshot): string =
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
 
-proc append[K,V](rw: var RlpWriter; tab: Table[K,V]) {.inline.} =
+proc append[K,V](rw: var RlpWriter; tab: Table[K,V]) =
   rw.startList(tab.len)
   for key,value in tab.pairs:
     rw.append((key,value))
 
 proc read[K,V](rlp: var Rlp;
-        Q: type Table[K,V]): Q {.inline, raises: [Defect,CatchableError].} =
+        Q: type Table[K,V]): Q {.raises: [Defect,CatchableError].} =
   for w in rlp.items:
     let (key,value) = w.read((K,V))
     result[key] = value
@@ -165,23 +165,23 @@ proc newSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc cfg*(s: Snapshot): CliqueCfg {.inline.} =
+proc cfg*(s: Snapshot): CliqueCfg =
   ## Getter
   s.cfg
 
-proc blockNumber*(s: Snapshot): BlockNumber {.inline.} =
+proc blockNumber*(s: Snapshot): BlockNumber =
   ## Getter
   s.data.blockNumber
 
-proc blockHash*(s: Snapshot): Hash256 {.inline.} =
+proc blockHash*(s: Snapshot): Hash256 =
   ## Getter
   s.data.blockHash
 
-proc recents*(s: Snapshot): var AddressHistory {.inline.} =
+proc recents*(s: Snapshot): var AddressHistory =
   ## Retrieves the list of recently added addresses
   s.data.recents
 
-proc ballot*(s: Snapshot): var Ballot {.inline.} =
+proc ballot*(s: Snapshot): var Ballot =
   ## Retrieves the ballot box descriptor with the votes
   s.data.ballot
 
@@ -189,11 +189,11 @@ proc ballot*(s: Snapshot): var Ballot {.inline.} =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `blockNumber=`*(s: Snapshot; number: BlockNumber) {.inline.} =
+proc `blockNumber=`*(s: Snapshot; number: BlockNumber) =
   ## Getter
   s.data.blockNumber = number
 
-proc `blockHash=`*(s: Snapshot; hash: Hash256) {.inline.} =
+proc `blockHash=`*(s: Snapshot; hash: Hash256) =
   ## Getter
   s.data.blockHash = hash
 
@@ -207,13 +207,22 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
-    s.data = s.cfg.db.db
-       .get(hash.cliqueSnapshotKey.toOpenArray)
-       .decode(SnapshotData)
+    let rlpData = s.cfg.db.db.get(hash.cliqueSnapshotKey.toOpenArray)
+
+    # The following check is only needed for Github/CI for 64bit Windows (not
+    # reproducible on my local Win7 -- jordan). What normally happens when
+    # `rlpData == @[]` holds is that the library function `eth.readImpl()`
+    # throws an `RlpTypeMismatch` error as the inner function `isList()` fails.
+    # On Github CI for 64bit Windows, the unit test crashes with a segmentation
+    # fault.
+    if rlpData.len == 0:
+      return err((errSnapshotLoad,""))
+
+    s.data = rlpData.decode(SnapshotData)
     s.data.ballot.debug = s.cfg.debug
   except CatchableError as e:
-    return err((errSnapshotLoad,e.msg))
-  result = ok(s)
+    return err((errSnapshotLoad, $e.name & ": " & e.msg))
+  ok(s)
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
 proc storeSnapshot*(s: Snapshot): CliqueOkResult {.gcsafe,raises: [Defect].} =
@@ -222,14 +231,14 @@ proc storeSnapshot*(s: Snapshot): CliqueOkResult {.gcsafe,raises: [Defect].} =
     s.cfg.db.db
        .put(s.data.blockHash.cliqueSnapshotKey.toOpenArray, rlp.encode(s.data))
   except CatchableError as e:
-    return err((errSnapshotStore,e.msg))
-  result = ok()
+    return err((errSnapshotStore, $e.name & ": " & e.msg))
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public deep copy
 # ------------------------------------------------------------------------------
 
-proc cloneSnapshot*(s: Snapshot): Snapshot {.inline.} =
+proc cloneSnapshot*(s: Snapshot): Snapshot =
   ## Clone the snapshot
   Snapshot(
     cfg: s.cfg,   # copy ref

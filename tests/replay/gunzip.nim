@@ -13,6 +13,10 @@ import
   stew/results,
   zlib
 
+const
+  lineBufStrLen = 512
+  outBufSize = 2048
+
 type
   GUnzip = object
     mz: ZStream
@@ -20,7 +24,7 @@ type
     # fields used in explode()
     inCache: string
     inCount: uint
-    outBuf: array[4096,char]
+    outBuf: array[outBufSize,char]
     outCount: uint
     outDoneOK: bool
 
@@ -107,7 +111,7 @@ proc open*(state: var GUnzip; fileName: string):
   state.reset
 
   var
-    strBuf = 1024.newString
+    strBuf = lineBufStrLen.newString
     start = 10
     rc = state.mz.inflateInit2(Z_RAW_DEFLATE)
   doAssert rc == Z_OK
