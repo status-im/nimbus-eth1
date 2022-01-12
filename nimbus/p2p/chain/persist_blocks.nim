@@ -63,7 +63,7 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
 
     let
       validationResult = vmState.processBlock(c.clique, header, body)
-    
+
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
