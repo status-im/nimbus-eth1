@@ -215,11 +215,13 @@ jobs:
         uses: actions/cache@v2
         with:
           path: external/dlls-${{ matrix.target.cpu }}
-          key: 'dlls-v2-${{ matrix.target.cpu }}'
+          # according to docu, idle caches are kept for up to 7 days
+          # so change dlls# to force new cache contents (for some number #)
+          key: dlls0-${{ matrix.target.cpu }}
 
       - name: Install DLLs dependencies (Windows)
-        # steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
         if: >
+          steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
           runner.os == 'Windows'
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
