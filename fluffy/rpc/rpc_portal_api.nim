@@ -76,7 +76,7 @@ proc installPortalApiHandlers*(
         enrs: Option[seq[Record]]]:
     let
       node = toNodeWithAddress(enr)
-      content = await p.findContent(
+      content = await p.findContentImpl(
         node, ByteList.init(hexToSeqByte(contentKey)))
 
     if content.isErr():
@@ -106,6 +106,40 @@ proc installPortalApiHandlers*(
             some(verifyNodesRecords(
               records.get(), node, enrsResultLimit).map(
                 proc(n: Node): Record = n.record)))
+
+  rpcServer.rpc("portal_" & network & "_findContentExt") do(
+      enr: Record, contentKey: string) -> tuple[
+        content: Option[string], enrs: Option[seq[Record]]]:
+    let
+      node = toNodeWithAddress(enr)
+      foundContentResult = await p.findContent(
+        node, ByteList.init(hexToSeqByte(contentKey)))
+
+    if foundContentResult.isErr():
+      raise newException(ValueError, $foundContentResult.error)
+    else:
+      let foundContent = foundContentResult.get()
+      case foundContent.kind:
+      of Content:
+        return (
+          some("0x" & foundContent.content.asSeq().toHex()),
+          none(seq[Record]))
+      of Nodes:
+        return (
+          none(string),
+          some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
+
+  rpcServer.rpc("portal_" & network & "_offerExt") do(
+      enr: Record, contentKey: string) -> bool:
+    # Only allow 1 content key for now
+    let
+      node = toNodeWithAddress(enr)
+      contentKeys = ContentKeysList(@[ByteList.init(hexToSeqByte(contentKey))])
+      accept = await p.offer(node, contentKeys)
+    if accept.isErr():
+      raise newException(ValueError, $accept.error)
+    else:
+      return true
 
   rpcServer.rpc("portal_" & network & "_recursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()

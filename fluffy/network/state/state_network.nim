@@ -10,7 +10,7 @@ import
   stew/results, chronos,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../wire/portal_protocol,
+  ../wire/[portal_protocol, portal_stream],
   ./state_content,
   ./state_distance
 
@@ -51,11 +51,12 @@ proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
+    portalStream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, contentDB, toContentIdHandler,
-    dataRadius, bootstrapRecords, stateDistanceCalculator)
+    portalStream, dataRadius, bootstrapRecords, stateDistanceCalculator)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 

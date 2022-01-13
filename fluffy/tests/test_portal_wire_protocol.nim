@@ -11,7 +11,7 @@ import
   chronos, testutils/unittests, stew/shims/net,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/wire/portal_protocol,
+  ../network/wire/[portal_protocol, portal_stream],
   ../content_db,
   ./test_helpers
 
@@ -41,8 +41,11 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     db1 = ContentDB.new("", inMemory = true)
     db2 = ContentDB.new("", inMemory = true)
 
-    proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-    proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
+    stream1 = PortalStream.new()
+    stream2 = PortalStream.new()
+
+    proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler, stream1)
+    proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler, stream2)
 
   Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
 
@@ -128,7 +131,7 @@ procSuite "Portal Wire Protocol Tests":
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
-    let content = await test.proto1.findContent(test.proto2.localNode,
+    let content = await test.proto1.findContentImpl(test.proto2.localNode,
       contentKey)
 
     check:
@@ -141,7 +144,7 @@ procSuite "Portal Wire Protocol Tests":
     let test = defaultTestCase(rng)
     let contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
 
-    let accept = await test.proto1.offer(
+    let accept = await test.proto1.offerImpl(
       test.proto2.baseProtocol.localNode, contentKeys)
 
     check:
@@ -198,9 +201,9 @@ procSuite "Portal Wire Protocol Tests":
         db2 = ContentDB.new("", inMemory = true)
         db3 = ContentDB.new("", inMemory = true)
 
-        proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-        proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
-        proto3 = PortalProtocol.new(node3, protocolId, db3, testHandler)
+        proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler, nil)
+        proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler, nil)
+        proto3 = PortalProtocol.new(node3, protocolId, db3, testHandler, nil)
 
       # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
       check proto1.addNode(node2.localNode) == Added
@@ -228,8 +231,8 @@ procSuite "Portal Wire Protocol Tests":
       db1 = ContentDB.new("", inMemory = true)
       db2 = ContentDB.new("", inMemory = true)
 
-      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler,
+      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler, nil)
+      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler, nil,
         bootstrapRecords = [node1.localNode.record])
 
     proto1.start()
@@ -251,7 +254,7 @@ procSuite "Portal Wire Protocol Tests":
 
       db = ContentDB.new("", inMemory = true)
       # No portal protocol for node1, hence an invalid bootstrap node
-      proto2 = PortalProtocol.new(node2, protocolId, db, testHandler,
+      proto2 = PortalProtocol.new(node2, protocolId, db, testHandler, nil,
         bootstrapRecords = [node1.localNode.record])
 
     # seedTable to add node1 to the routing table

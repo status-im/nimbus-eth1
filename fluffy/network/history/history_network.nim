@@ -10,7 +10,7 @@ import
   stew/results, chronos,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../wire/portal_protocol,
+  ../wire/[portal_protocol, portal_stream],
   ./history_content
 
 const
@@ -51,11 +51,12 @@ proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
+    portalStream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, contentDB, toContentIdHandler,
-    dataRadius, bootstrapRecords)
+    portalStream, dataRadius, bootstrapRecords)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 

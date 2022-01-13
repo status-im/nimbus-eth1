@@ -14,8 +14,10 @@ import
   std/[sequtils, sets, algorithm],
   stew/results, chronicles, chronos, nimcrypto/hash, bearssl,
   ssz_serialization,
-  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
+  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
+    nodes_verification],
   ../../content_db,
+  ./portal_stream,
   ./messages
 
 export messages, routing_table
@@ -34,18 +36,6 @@ const
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
 type
-  ContentResultKind* = enum
-    ContentFound, ContentMissing, ContentKeyValidationFailure
-
-  ContentResult* = object
-    case kind*: ContentResultKind
-    of ContentFound:
-      content*: seq[byte]
-    of ContentMissing:
-      contentId*: Uint256
-    of ContentKeyValidationFailure:
-      error*: string
-
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
@@ -62,18 +52,20 @@ type
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
+    stream: PortalStream
 
   PortalResult*[T] = Result[T, cstring]
 
-  LookupResultKind = enum
-    Nodes, Content
+  FoundContentKind* = enum
+    Nodes,
+    Content
 
-  LookupResult = object
-    case kind: LookupResultKind
-    of Nodes:
-      nodes: seq[Node]
+  FoundContent* = object
+    case kind*: FoundContentKind
     of Content:
-      content: ByteList
+      content*: ByteList
+    of Nodes:
+      nodes*: seq[Node]
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -144,6 +136,12 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
       else:
         var connectionId: Bytes2
         brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
+        # Note: This connection id passed is the `receive_conn_id` from the peer
+        # that is supposed to connect to this node, and thus this node its
+        # `send_conn_id`.
+        # uTP protocol uses BE for all values in the header, incl. connection id
+        let id = uint16.fromBytesBE(connectionId)
+        p.stream.contentRequests[id] = ByteList(content)
 
         encodeMessage(ContentMessage(
           contentMessageType: connectionIdType, connectionId: connectionId))
@@ -163,7 +161,8 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     @[]
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
-  var contentKeys = ContentKeysBitList.init(o.contentKeys.len)
+  var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+  var contentKeys = ContentKeysList.init(@[])
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -175,7 +174,8 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
       let contentId = contentIdOpt.get()
       if p.inRange(contentId):
         if not p.contentDB.contains(contentId):
-          contentKeys.setBit(i)
+          contentKeysBitList.setBit(i)
+          discard contentKeys.add(contentKey)
     else:
       # Return empty response when content key validation fails
       return @[]
@@ -183,8 +183,11 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
   var connectionId: Bytes2
   brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
 
+  let id = uint16.fromBytesBE(connectionId)
+  p.stream.contentOffers[id] = contentKeys
+
   encodeMessage(
-    AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
+    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
 
   # TODO: Neighborhood gossip
   # After data has been received and validated from an offer, we need to
@@ -237,6 +240,7 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
+    stream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator
@@ -249,6 +253,7 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
+    stream: stream,
     dataRadius: dataRadius,
     bootstrapRecords: @bootstrapRecords)
 
@@ -306,24 +311,20 @@ proc findNodes*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
   # TODO Add nodes validation
   return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
-proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
+proc findContentImpl*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[ContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
-proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
+proc offerImpl*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[AcceptMessage]] {.async.} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.offer
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
-
-  # TODO: Actually have to parse the accept message and get the uTP connection
-  # id, and initiate an uTP stream with given uTP connection id to get the data
-  # out.
 
 proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
@@ -337,6 +338,96 @@ proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]
       return err("Deserialization of an ENR failed")
 
   ok(records)
+
+proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
+    Future[PortalResult[FoundContent]] {.async.} =
+  let contentMessageResponse = await p.findContentImpl(dst, contentKey)
+
+  if contentMessageResponse.isOk():
+    let m = contentMessageResponse.get()
+    case m.contentMessageType:
+    of connectionIdType:
+      # uTP protocol uses BE for all values in the header, incl. connection id
+      let socketRes = await p.stream.transport.connectTo(
+          dst, uint16.fromBytesBE(m.connectionId))
+      if socketRes.isErr():
+        # TODO: get proper error mapped
+        return err("Error connecting to uTP socket")
+      let socket = socketRes.get()
+      if not socket.isConnected():
+        socket.close()
+        return err("Portal uTP socket is not in connected state")
+
+      # Read all bytes from the socket
+      # This will either end with a FIN, or because the read action times out.
+      # A FIN does not necessarily mean that the data read is complete. Further
+      # validation is required, using a length prefix here might be beneficial for
+      # this.
+      let readData = socket.read()
+      if await readData.withTimeout(1.seconds):
+        let content = readData.read
+        await socket.closeWait()
+        return ok(FoundContent(kind: Content, content: ByteList(content)))
+      else:
+        await socket.closeWait()
+        return err("Reading data from socket timed out, content request failed")
+    of contentType:
+      return ok(FoundContent(kind: Content, content: m.content))
+    of enrsType:
+      let records = recordsFromBytes(m.enrs)
+      if records.isOk():
+        let verifiedNodes =
+          verifyNodesRecords(records.get(), dst, enrsResultLimit)
+
+        return ok(FoundContent(kind: Nodes, nodes: verifiedNodes))
+      else:
+        return err("Content message returned invalid ENRs")
+
+# TODO: Depending on how this gets used, it might be better not to request
+# the data from the database here, but pass it as parameter. (like, if it was
+# just received it and now needs to be forwarded)
+proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
+    Future[PortalResult[void]] {.async.} =
+  let acceptMessageResponse = await p.offerImpl(dst, contentKeys)
+
+  if acceptMessageResponse.isOk():
+    let m = acceptMessageResponse.get()
+
+    let clientSocketRes = await p.stream.transport.connectTo(
+      dst, uint16.fromBytesBE(m.connectionId))
+    if clientSocketRes.isErr():
+      # TODO: get proper error mapped
+      return err("Error connecting to uTP socket")
+    let clientSocket = clientSocketRes.get()
+    if not clientSocket.isConnected():
+      clientSocket.close()
+      return err("Portal uTP socket is not in connected state")
+
+    # Filter contentKeys with bitlist
+    var requestedContentKeys: seq[ByteList]
+    for i, b in m.contentKeys:
+      if b:
+        requestedContentKeys.add(contentKeys[i])
+
+    for contentKey in requestedContentKeys:
+      let contentIdOpt = p.toContentId(contentKey)
+      if contentIdOpt.isSome():
+        let
+          contentId = contentIdOpt.get()
+          maybeContent = p.contentDB.get(contentId)
+        if maybeContent.isSome():
+          let content = maybeContent.get()
+          let dataWritten = await clientSocket.write(content)
+          if dataWritten.isErr:
+            error "Error writing requested data", error = dataWritten.error
+            # No point in trying to continue writing data
+            clientSocket.close()
+            return err("Error writing requested data")
+
+    await clientSocket.closeWait()
+    return ok()
+  else:
+    return err("No accept response")
 
 proc findNodesVerified*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]):
@@ -424,42 +515,6 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
-proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
-    dst: Node, nodes: var seq[Node]): LookupResult =
-  case m.contentMessageType:
-  of connectionIdType:
-    # TODO: We'd have to get the data through uTP, or wrap some proc around
-    # this call that does that.
-    LookupResult(kind: Content)
-  of contentType:
-    LookupResult(kind: Content, content: m.content)
-  of enrsType:
-    let records = recordsFromBytes(m.enrs)
-    if records.isOk():
-      let verifiedNodes =
-        verifyNodesRecords(records.get(), dst, enrsResultLimit)
-      nodes.add(verifiedNodes)
-
-      for n in nodes:
-        # Attempt to add all nodes discovered
-        discard p.routingTable.addNode(n)
-
-      LookupResult(kind: Nodes, nodes: nodes)
-    else:
-      LookupResult(kind: Content)
-
-proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
-    Future[LookupResult] {.async.} =
-  var nodes: seq[Node]
-
-  let contentMessageResponse = await p.findContent(destNode,  target)
-
-  if contentMessageResponse.isOk():
-    return handleFoundContentMessage(
-      p, contentMessageResponse.get(), destNode, nodes)
-  else:
-    return LookupResult(kind: Nodes, nodes: nodes)
-
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
@@ -478,7 +533,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[LookupResult]](alpha)
+  var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
 
   while true:
     var i = 0
@@ -487,7 +542,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
     while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
-        pendingQueries.add(p.contentLookupWorker(n, target))
+        pendingQueries.add(p.findContent(n, target))
       inc i
 
     trace "Pending lookup queries", total = pendingQueries.len
@@ -504,29 +559,35 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
     else:
       error "Resulting query should have been in the pending queries"
 
-    let lookupResult = query.read
+    let contentResult = query.read
 
-    # TODO: Remove node on timed-out query? To handle failure better, LookUpResult
-    # should have third enum option like failure.
-    case lookupResult.kind
-    of Nodes:
-      for n in lookupResult.nodes:
-        if not seen.containsOrIncl(n.id):
-          # If it wasn't seen before, insert node while remaining sorted
-          closestNodes.insert(n, closestNodes.lowerBound(n,
-            proc(x: Node, n: Node): int =
-              cmp(p.routingTable.distance(x.id, targetId),
-                p.routingTable.distance(n.id, targetId))
-          ))
+    if contentResult.isOk():
+      let content = contentResult.get()
 
-          if closestNodes.len > BUCKET_SIZE:
-            closestNodes.del(closestNodes.high())
-    of Content:
-      # cancel any pending queries as we have find the content
-      for f in pendingQueries:
-        f.cancel()
+      case content.kind
+      of Nodes:
+        for n in content.nodes:
+          if not seen.containsOrIncl(n.id):
+            discard p.routingTable.addNode(n)
+            # If it wasn't seen before, insert node while remaining sorted
+            closestNodes.insert(n, closestNodes.lowerBound(n,
+              proc(x: Node, n: Node): int =
+                cmp(p.routingTable.distance(x.id, targetId),
+                  p.routingTable.distance(n.id, targetId))
+            ))
 
-      return some(lookupResult.content)
+            if closestNodes.len > BUCKET_SIZE:
+              closestNodes.del(closestNodes.high())
+      of Content:
+        # cancel any pending queries as we have find the content
+        for f in pendingQueries:
+          f.cancel()
+
+        return some(content.content)
+    else:
+      # TODO: Should we do something with the node that failed responding our
+      # query?
+      discard
 
   return none[ByteList]()
 
