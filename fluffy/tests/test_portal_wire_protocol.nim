@@ -41,8 +41,8 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     db1 = ContentDB.new("", inMemory = true)
     db2 = ContentDB.new("", inMemory = true)
 
-    stream1 = PortalStream.new()
-    stream2 = PortalStream.new()
+    stream1 = PortalStream.new(node1)
+    stream2 = PortalStream.new(node2)
 
     proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler, stream1)
     proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler, stream2)

@@ -119,7 +119,8 @@ func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       let enrs = List[ByteList, 32](@[])
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
-proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
+proc handleFindContent(
+    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId): seq[byte] =
   let contentIdOpt = p.toContentId(fc.contentKey)
   if contentIdOpt.isSome():
     let
@@ -134,14 +135,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
         encodeMessage(ContentMessage(
           contentMessageType: contentType, content: ByteList(content)))
       else:
-        var connectionId: Bytes2
-        brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
-        # Note: This connection id passed is the `receive_conn_id` from the peer
-        # that is supposed to connect to this node, and thus this node its
-        # `send_conn_id`.
-        # uTP protocol uses BE for all values in the header, incl. connection id
-        let id = uint16.fromBytesBE(connectionId)
-        p.stream.contentRequests[id] = ByteList(content)
+        let connectionId = p.stream.addContentRequest(srcId, ByteList(content))
 
         encodeMessage(ContentMessage(
           contentMessageType: connectionIdType, connectionId: connectionId))
@@ -160,7 +154,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     # discv5 layer.
     @[]
 
-proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
+proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
   var contentKeys = ContentKeysList.init(@[])
   # TODO: Do we need some protection against a peer offering lots (64x) of
@@ -180,11 +174,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage): seq[byte] =
       # Return empty response when content key validation fails
       return @[]
 
-  var connectionId: Bytes2
-  brHmacDrbgGenerate(p.baseProtocol.rng[], connectionId)
-
-  let id = uint16.fromBytesBE(connectionId)
-  p.stream.contentOffers[id] = contentKeys
+  let connectionId = p.stream.addContentOffer(srcId, contentKeys)
 
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
@@ -223,9 +213,9 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     of MessageKind.findnodes:
       p.handleFindNodes(message.findNodes)
     of MessageKind.findcontent:
-      p.handleFindContent(message.findcontent)
+      p.handleFindContent(message.findcontent, srcId)
     of MessageKind.offer:
-      p.handleOffer(message.offer)
+      p.handleOffer(message.offer, srcId)
     else:
       # This would mean a that Portal wire response message is being send over a
       # discv5 talkreq message.

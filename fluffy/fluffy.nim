@@ -73,13 +73,11 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
     # One instance of PortalStream and thus UtpDiscv5Protocol is shared over all
     # the Portal networks.
-    portalStream = PortalStream.new()
+    portalStream = PortalStream.new(d)
     stateNetwork = StateNetwork.new(d, db, portalStream,
       bootstrapRecords = bootstrapRecords)
     historyNetwork = HistoryNetwork.new(d, db, portalStream,
       bootstrapRecords = bootstrapRecords)
-
-  portalStream.open(d)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and

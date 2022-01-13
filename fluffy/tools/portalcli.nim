@@ -212,7 +212,7 @@ proc run(config: PortalCliConf) =
 
   let
     db = ContentDB.new("", inMemory = true)
-    portalStream = PortalStream.new()
+    portalStream = PortalStream.new(d)
     portal = PortalProtocol.new(d, config.protocolId, db, testHandler,
       portalStream, bootstrapRecords = bootstrapRecords)
 
