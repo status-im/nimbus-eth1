@@ -15,9 +15,11 @@ import
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./conf, ./common/common_utils,
-  ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api],
+  ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api,
+    rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
+  ./network/wire/portal_stream,
   ./content_db
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
@@ -65,13 +67,17 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   # Store the database at contentdb prefixed with the first 8 chars of node id.
   # This is done because the content in the db is dependant on the `NodeId` and
   # the selected `Radius`.
-  let db =
-    ContentDB.new(config.dataDir / "db" / "contentdb_" &
+  let
+    db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
-  let
-    stateNetwork = StateNetwork.new(d, db, bootstrapRecords = bootstrapRecords)
-    historyNetwork = HistoryNetwork.new(d, db, bootstrapRecords = bootstrapRecords)
+    # One instance of PortalStream and thus UtpDiscv5Protocol is shared over all
+    # the Portal networks.
+    portalStream = PortalStream.new(d)
+    stateNetwork = StateNetwork.new(d, db, portalStream,
+      bootstrapRecords = bootstrapRecords)
+    historyNetwork = HistoryNetwork.new(d, db, portalStream,
+      bootstrapRecords = bootstrapRecords)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and
@@ -100,6 +106,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     rpcHttpServerWithProxy.installPortalApiHandlers(stateNetwork.portalProtocol, "state")
     rpcHttpServerWithProxy.installPortalApiHandlers(historyNetwork.portalProtocol, "history")
+    rpcHttpServerWithProxy.installPortalDebugApiHandlers(stateNetwork.portalProtocol, "state")
+    rpcHttpServerWithProxy.installPortalDebugApiHandlers(stateNetwork.portalProtocol, "history")
     # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
     # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
     waitFor rpcHttpServerWithProxy.start()

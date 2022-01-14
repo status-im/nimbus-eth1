@@ -15,7 +15,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../content_db,
-  ../network/wire/[messages, portal_protocol],
+  ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network]
 
 const
@@ -210,10 +210,11 @@ proc run(config: PortalCliConf) =
 
   d.open()
 
-  let db = ContentDB.new("", inMemory = true)
-
-  let portal = PortalProtocol.new(d, config.protocolId, db, testHandler,
-    bootstrapRecords = bootstrapRecords)
+  let
+    db = ContentDB.new("", inMemory = true)
+    portalStream = PortalStream.new(d)
+    portal = PortalProtocol.new(d, config.protocolId, db, testHandler,
+      portalStream, bootstrapRecords = bootstrapRecords)
 
   if config.metricsEnabled:
     let
