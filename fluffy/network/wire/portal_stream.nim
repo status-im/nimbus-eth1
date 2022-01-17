@@ -18,7 +18,8 @@ export utp_discv5_protocol
 
 const
   utpProtocolId = "utp".toBytes()
-  connectionTimeout = 5.seconds
+  defaultConnectionTimeout = 5.seconds
+  defaultReadTimeout = 2.seconds
 
 type
   ContentRequest = object
@@ -50,6 +51,8 @@ type
     # received data?
     contentRequests: seq[ContentRequest]
     contentOffers: seq[ContentOffer]
+    connectionTimeout: Duration
+    readTimeout*: Duration
     rng: ref BrHmacDrbgContext
 
 proc addContentOffer*(
@@ -63,7 +66,7 @@ proc addContentOffer*(
     connectionId: id,
     nodeId: nodeId,
     contentKeys: contentKeys,
-    timeout: Moment.now() + connectionTimeout)
+    timeout: Moment.now() + stream.connectionTimeout)
   stream.contentOffers.add(contentOffer)
 
   return connectionId
@@ -79,7 +82,7 @@ proc addContentRequest*(
     connectionId: id,
     nodeId: nodeId,
     content: content,
-    timeout: Moment.now() + connectionTimeout)
+    timeout: Moment.now() + stream.connectionTimeout)
   stream.contentRequests.add(contentRequest)
 
   return connectionId
@@ -91,14 +94,14 @@ proc writeAndClose(socket: UtpSocket[Node], data: seq[byte]) {.async.} =
 
   await socket.closeWait()
 
-proc readAndClose(socket: UtpSocket[Node]) {.async.} =
+proc readAndClose(socket: UtpSocket[Node], stream: PortalStream) {.async.} =
   # Read all bytes from the socket
   # This will either end with a FIN, or because the read action times out.
   # A FIN does not necessarily mean that the data read is complete. Further
   # validation is required, using a length prefix here might be beneficial for
   # this.
   var readData = socket.read()
-  if await readData.withTimeout(1.seconds):
+  if await readData.withTimeout(stream.readTimeout):
     # TODO: Content needs to be validated, stored and also offered again as part
     # of the neighborhood gossip. This will require access to the specific
     # Portal wire protocol for the network it was received on. Some async event
@@ -137,7 +140,7 @@ proc registerIncomingSocketCallback(
       for i, offer in stream.contentOffers:
         if offer.connectionId == client.connectionId and
             offer.nodeId == client.remoteAddress.id:
-          let fut = client.readAndClose()
+          let fut = client.readAndClose(stream)
           stream.contentOffers.del(i)
           return fut
 
@@ -164,9 +167,15 @@ proc allowRegisteredIdCallback(
             x.connectionId == connectionId and x.nodeId == remoteAddress.id)
   )
 
-proc new*(T: type PortalStream, baseProtocol: protocol.Protocol): T =
+proc new*(
+    T: type PortalStream, baseProtocol: protocol.Protocol,
+    connectionTimeout = defaultConnectionTimeout,
+    readTimeout = defaultReadTimeout): T =
   let
-    stream = PortalStream(rng: baseProtocol.rng)
+    stream = PortalStream(
+      connectionTimeout: connectionTimeout,
+      readTimeout: readTimeout,
+      rng: baseProtocol.rng)
     socketConfig = SocketConfig.init(
       incomingSocketReceiveTimeout = none(Duration))
 
