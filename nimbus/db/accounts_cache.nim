@@ -82,6 +82,10 @@ proc rootHash*(ac: AccountsCache): KeccakHash =
   doAssert(ac.isDirty == false)
   ac.trie.rootHash
 
+proc isTopLevelClean*(ac: AccountsCache): bool =
+  ## Getter, returns `true` if all pending data have been commited.
+  not ac.isDirty and ac.savePoint.parentSavePoint.isNil
+
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
   result.cache = initTable[EthAddress, RefAccount]()

@@ -16,7 +16,7 @@ import
   ../nimbus/transaction,
   ../nimbus/vm_state,
   ../nimbus/vm_types,
-  ./test_clique/undump,
+  ./replay/undump,
   eth/[common, p2p, trie/db],
   unittest2
 
@@ -33,8 +33,7 @@ const
 
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
-    # file: "goerli68161.txt.gz",
-    file: "goerli51840.txt.gz",
+    file: "goerli68161.txt.gz",
     numBlocks: 5500,  # unconditionally load blocks
     numTxs:      10)  # txs following (not in block chain)
 

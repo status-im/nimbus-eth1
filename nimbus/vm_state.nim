@@ -39,6 +39,7 @@ export
   vms.init,
   vms.mutateStateDB,
   vms.new,
+  vms.reinit,
   vms.readOnlyStateDB,
   vms.removeTracedAccounts,
   vms.status,

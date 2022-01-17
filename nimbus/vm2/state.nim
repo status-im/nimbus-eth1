@@ -60,7 +60,7 @@ proc init(
       fee:         Option[Uint256];
       miner:       EthAddress;
       chainDB:     BaseChainDB;
-      tracerFlags: set[TracerFlags])
+      tracer:      TransactionTracer)
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialisation helper
   self.prevHeaders = @[]
@@ -70,11 +70,34 @@ proc init(
   self.gasLimit = gasLimit
   self.fee = fee
   self.chaindb = chainDB
-  self.tracer.initTracer(tracerFlags)
+  self.tracer = tracer
   self.logEntries = @[]
   self.stateDB = ac
   self.touchedAccounts = initHashSet[EthAddress]()
   self.minerAddress = miner
+
+proc init(
+      self:        BaseVMState;
+      ac:          AccountsCache;
+      parent:      BlockHeader;
+      timestamp:   EthTime;
+      gasLimit:    GasInt;
+      fee:         Option[Uint256];
+      miner:       EthAddress;
+      chainDB:     BaseChainDB;
+      tracerFlags: set[TracerFlags])
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  var tracer: TransactionTracer
+  tracer.initTracer(tracerFlags)
+  self.init(
+    ac        = ac,
+    parent    = parent,
+    timestamp = timestamp,
+    gasLimit  = gasLimit,
+    fee       = fee,
+    miner     = miner,
+    chainDB   = chainDB,
+    tracer    = tracer)
 
 # --------------
 
@@ -116,8 +139,75 @@ proc new*(
     chainDB     = chainDB,
     tracerFlags = tracerFlags)
 
+proc reinit*(self:      BaseVMState;     ## Object descriptor
+             parent:    BlockHeader;     ## parent header, account sync pos.
+             timestamp: EthTime;         ## tx env: time stamp
+             gasLimit:  GasInt;          ## tx env: gas limit
+             fee:       Option[Uint256]; ## tx env: optional base fee
+             miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
+             pruneTrie: bool = true): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Re-initialise state descriptor. The `AccountsCache` database is
+  ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
+  ## already. Accumulated state data are reset.
+  ##
+  ## This function returns `true` unless the `AccountsCache` database could be
+  ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
+  ## this function returns `false`, the function argument `self` is left
+  ## untouched.
+  if self.stateDB.isTopLevelClean:
+    let
+      tracer = self.tracer
+      db     = self.chainDB
+      ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
+               else: AccountsCache.init(db.db, parent.stateRoot, pruneTrie)
+    self[].reset
+    self.init(
+      ac          = ac,
+      parent      = parent,
+      timestamp   = timestamp,
+      gasLimit    = gasLimit,
+      fee         = fee,
+      miner       = miner,
+      chainDB     = db,
+      tracer      = tracer)
+    return true
+  # else: false
+
+proc reinit*(self:      BaseVMState; ## Object descriptor
+             parent:    BlockHeader; ## parent header, account sync pos.
+             header:    BlockHeader; ## header with tx environment data fields
+             pruneTrie: bool = true): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
+  ## cache and the `header` is used as a container to pass the `timestamp`,
+  ## `gasLimit`, and `fee` values.
+  ##
+  ## It requires the `header` argument properly initalised so that for PoA
+  ## networks, the miner address is retrievable via `ecRecover()`.
+  self.reinit(
+    parent    = parent,
+    timestamp = header.timestamp,
+    gasLimit  = header.gasLimit,
+    fee       = header.fee,
+    miner     = self.chainDB.getMinerAddress(header),
+    pruneTrie = pruneTrie)
+
+proc reinit*(self:      BaseVMState; ## Object descriptor
+             header:    BlockHeader; ## header with tx environment data fields
+             pruneTrie: bool = true): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## This is a variant of the `reinit()` function above where the field
+  ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
+  ## used in the `update()` variant, above.
+  self.reinit(
+    parent    = self.chainDB.getBlockHeader(header.parentHash),
+    header    = header,
+    pruneTrie = pruneTrie)
+
+
 proc init*(
-      self:        BaseVMState;
+      self:        BaseVMState;     ## Object descriptor
       parent:      BlockHeader;     ## parent header, account sync position
       header:      BlockHeader;     ## header with tx environment data fields
       chainDB:     BaseChainDB;     ## block chain database

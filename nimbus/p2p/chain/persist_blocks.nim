@@ -48,10 +48,20 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
   var cliqueState = c.clique.cliqueSave
   defer: c.clique.cliqueRestore(cliqueState)
 
+  # Note that `0 < headers.len`, assured when called from `persistBlocks()`
+  var vmState = BaseVMState.new(headers[0], c.db)
+
   for i in 0 ..< headers.len:
     let
       (header, body) = (headers[i], bodies[i])
-      vmState = BaseVMState.new(header, c.db)
+
+    if not vmState.reinit(header):
+      debug "Cannot update VmState",
+        blockNumber = header.blockNumber,
+        item = i
+      return ValidationResult.Error
+
+    let
       validationResult = vmState.processBlock(c.clique, header, body)
     
     when not defined(release):

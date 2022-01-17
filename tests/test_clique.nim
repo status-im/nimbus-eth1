@@ -20,13 +20,17 @@ import
   ],
   ../nimbus/utils/ec_recover,
   ../nimbus/[config, utils, constants, context],
-  ./test_clique/[pool, undump],
+  ./test_clique/pool,
+  ./replay/undump,
   eth/[common, keys],
-  stint, stew/byteutils,
+  stint,
   unittest2
 
 const
-  goerliCapture = "test_clique" / "goerli51840.txt.gz"
+  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
+  repoDir = ["test_clique", "replay", "status"]     # alternative repos
+
+  goerliCapture = "goerli68161.txt.gz"
   groupReplayTransactions = 7
 
 # ------------------------------------------------------------------------------
@@ -49,6 +53,14 @@ proc ppSecs(elapsed: Duration): string =
 proc ppRow(elapsed: Duration): string =
   let ms = elapsed.inMilliSeconds + 500
   "x".repeat(ms div 1000)
+
+proc findFilePath(file: string): string =
+  result = "?unknown?" / file
+  for dir in baseDir:
+    for repo in repoDir:
+      let path = dir / repo / file
+      if path.fileExists:
+        return path
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -114,7 +126,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: int) =
 
 
 proc runGoerliReplay(noisy = true; showElapsed = false,
-                     dir = "tests"; captureFile = goerliCapture,
+                     captureFile = goerliCapture,
                      startAtBlock = 0u64; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
@@ -122,15 +134,19 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
     cInx = 0
     stoppedOk = false
 
+  let
+    fileInfo = captureFile.splitFile.name.split(".")[0]
+    filePath = captureFile.findFilePath
+
   pool.debug = noisy
   pool.verifyFrom = startAtBlock
 
   let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
                       else: stopAfterBlock.u256
 
-  suite "Replay Goerli Chain":
+  suite &"Replay Goerli chain from {fileInfo} capture":
 
-    for w in (dir / captureFile).undumpNextGroup:
+    for w in filePath.undumpNextGroup:
 
       if w[0][0].blockNumber == 0.u256:
         # Verify Genesis
@@ -197,7 +213,7 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
 
 
 proc runGoerliBaybySteps(noisy = true;
-                         dir = "tests"; captureFile = goerliCapture,
+                         captureFile = goerliCapture,
                          stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
@@ -205,12 +221,15 @@ proc runGoerliBaybySteps(noisy = true;
 
   pool.debug = noisy
 
-  let stopThreshold = if stopAfterBlock == 0u64: 20.u256
-                      else: stopAfterBlock.u256
+  let
+    fileInfo = captureFile.splitFile.name.split(".")[0]
+    filePath = captureFile.findFilePath
+    stopThreshold = if stopAfterBlock == 0u64: 20.u256
+                    else: stopAfterBlock.u256
 
-  suite "Replay Goerli Chain Transactions Single Blockwise":
+  suite &"Replay Goerli chain from {fileInfo} capture, single blockwise":
 
-    for w in (dir / captureFile).undumpNextGroup:
+    for w in filePath.undumpNextGroup:
       if stoppedOk:
         break
       if w[0][0].blockNumber == 0.u256:
@@ -238,13 +257,14 @@ proc runGoerliBaybySteps(noisy = true;
         discard
 
 proc cliqueMiscTests() =
+  let
+    prvKeyFile = "private.key".findFilePath
+
   suite "clique misc":
     test "signer func":
-      const
-        engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
-        privateKey   = "tests" / "test_clique" / "private.key"
-
       let
+        engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
+        privateKey   = prvKeyFile
         conf = makeConfig(@["--engine-signer:" & engineSigner, "--import-key:" & privateKey])
         ctx  = newEthContext()
 
@@ -292,24 +312,32 @@ when isMainModule:
     #   `test_clique/indiump.dumpGroupNl()`
     # placed at the end of
     #   `p2p/chain/persist_blocks.persistBlocks()`.
-    captureFile = "goerli504192.txt.gz"
+    captureFile = goerliCapture
     #captureFile = "dump-stream.out.gz"
 
-  proc goerliReplay(noisy = true; showElapsed = true;
-                    dir = "/status"; captureFile = captureFile;
-                    startAtBlock = 0u64; stopAfterBlock = 0u64) =
+  proc goerliReplay(noisy = true;
+                    showElapsed = true;
+                    captureFile = captureFile;
+                    startAtBlock = 0u64;
+                    stopAfterBlock = 0u64) =
     runGoerliReplay(
-      noisy = noisy, showElapsed = showElapsed,
-      dir = dir, captureFile = captureFile,
-      startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
+      noisy          = noisy,
+      showElapsed    = showElapsed,
+      captureFile    = captureFile,
+      startAtBlock   = startAtBlock,
+      stopAfterBlock = stopAfterBlock)
 
-  #[let noisy = defined(debug)
+  # local path is: nimbus-eth1/tests
+  let noisy = defined(debug)
+
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
-  noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)]#
+  noisy.runGoerliBaybySteps
+  noisy.runGoerliReplay(startAtBlock = 31100u64)
+
   #noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
+
   cliqueMiscTests()
 
 # ------------------------------------------------------------------------------
