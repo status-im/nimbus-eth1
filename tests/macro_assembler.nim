@@ -213,9 +213,7 @@ proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
       difficulty: db.config.calcDifficulty(timestamp, parent),
       gasLimit: 100_000
     )
-
-  db.initStateDB(parent.stateRoot)
-  let vmState = newBaseVMState(db.stateDB, header, db)
+    vmState = BaseVMState.new(header, db)
 
   (vmState, db)
 

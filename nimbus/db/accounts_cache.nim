@@ -82,6 +82,10 @@ proc rootHash*(ac: AccountsCache): KeccakHash =
   doAssert(ac.isDirty == false)
   ac.trie.rootHash
 
+proc isTopLevelClean*(ac: AccountsCache): bool =
+  ## Getter, returns `true` if all pending data have been commited.
+  not ac.isDirty and ac.savePoint.parentSavePoint.isNil
+
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
   result.cache = initTable[EthAddress, RefAccount]()
@@ -371,28 +375,28 @@ proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
   else:
     result = acc.isEmpty()
 
-proc setBalance*(ac: var AccountsCache, address: EthAddress, balance: UInt256) =
+proc setBalance*(ac: AccountsCache, address: EthAddress, balance: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   if acc.account.balance != balance:
     ac.makeDirty(address).account.balance = balance
 
-proc addBalance*(ac: var AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
   ac.setBalance(address, ac.getBalance(address) + delta)
 
-proc subBalance*(ac: var AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
   ac.setBalance(address, ac.getBalance(address) - delta)
 
-proc setNonce*(ac: var AccountsCache, address: EthAddress, nonce: AccountNonce) =
+proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   if acc.account.nonce != nonce:
     ac.makeDirty(address).account.nonce = nonce
 
-proc incNonce*(ac: var AccountsCache, address: EthAddress) {.inline.} =
+proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.setNonce(address, ac.getNonce(address) + 1)
 
-proc setCode*(ac: var AccountsCache, address: EthAddress, code: seq[byte]) =
+proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   let codeHash = keccakHash(code)
@@ -402,7 +406,7 @@ proc setCode*(ac: var AccountsCache, address: EthAddress, code: seq[byte]) =
     acc.code = code
     acc.flags.incl CodeChanged
 
-proc setStorage*(ac: var AccountsCache, address: EthAddress, slot, value: UInt256) =
+proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   let oldValue = acc.storageValue(slot, ac.db)
@@ -411,20 +415,20 @@ proc setStorage*(ac: var AccountsCache, address: EthAddress, slot, value: UInt25
     acc.overlayStorage[slot] = value
     acc.flags.incl StorageChanged
 
-proc clearStorage*(ac: var AccountsCache, address: EthAddress) =
+proc clearStorage*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   if acc.account.storageRoot != emptyRlpHash:
     # there is no point to clone the storage since we want to remove it
     ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
 
-proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
+proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc persist*(ac: var AccountsCache, clearCache: bool = true) =
+proc persist*(ac: AccountsCache, clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
   var cleanAccounts = initHashSet[EthAddress]()

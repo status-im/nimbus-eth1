@@ -65,3 +65,6 @@ type
 
   StaticContextError* = object of VMError
     ## State changes not allowed in static call context
+
+  VmStateError* = object of VMError
+    ## VM state error relay

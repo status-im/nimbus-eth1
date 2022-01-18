@@ -5,7 +5,7 @@ import
 
 import
   ../nimbus/db/[db_chain, select_backend],
-  ../nimbus/vm_state,
+  ../nimbus/[vm_state, vm_types],
   ../nimbus/p2p/executor
 
 const
@@ -26,13 +26,12 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
   let transaction = chainDB.db.beginTransaction()
   defer: transaction.dispose()
 
-  chainDB.initStateDB(parent.stateRoot)
   for i in 0 ..< numBlocks:
     stdout.write blockNumber + i.u256
     stdout.write "\r"
 
     let
-      vmState = newBaseVMState(chainDB.stateDB, headers[i], chainDB)
+      vmState = BaseVMState.new(parent, headers[i], chainDB)
       validationResult = vmState.processBlockNotPoA(headers[i], bodies[i])
 
     if validationResult != ValidationResult.OK:

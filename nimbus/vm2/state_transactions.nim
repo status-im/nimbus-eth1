@@ -45,7 +45,7 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     if forkOverride.isSome:
       forkOverride.get
     else:
-      vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
+      vmState.chainDB.config.toFork(vmState.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
 
 

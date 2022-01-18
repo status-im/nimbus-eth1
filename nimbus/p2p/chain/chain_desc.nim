@@ -44,9 +44,9 @@ type
   Chain* = ref object of AbstractChainDB
     db: BaseChainDB
     forkIds: array[ChainFork, ForkID]
-    blockZeroHash: KeccakHash
-    lastBlockHash: KeccakHash
-    parentStateRoot: KeccakHash
+
+    blockZeroHash: KeccakHash ##\
+      ## Overload cache for `genesisHash()` method
 
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
@@ -228,14 +228,6 @@ proc verifyFrom*(c: Chain): BlockNumber =
   ## Getter
   c.verifyFrom
 
-proc lastBlockHash*(c: Chain): KeccakHash =
-  ## Getter
-  c.lastBlockHash
-
-proc parentStateRoot*(c: Chain): KeccakHash =
-  ## Getter
-  c.parentStateRoot
-
 proc currentBlock*(c: Chain): BlockHeader
   {.gcsafe, raises: [Defect,CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
@@ -261,14 +253,6 @@ proc `verifyFrom=`*(c: Chain; verifyFrom: BlockNumber) =
 proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) =
   ## Variant of `verifyFrom=`
   c.verifyFrom = verifyFrom.u256
-
-proc `lastBlockHash=`*(c: Chain; blockHash: KeccakHash) =
-  ## Setter.
-  c.lastBlockHash = blockHash
-
-proc `parentStateRoot=`*(c: Chain; stateRoot: KeccakHash) =
-  ## Setter.
-  c.parentStateRoot = stateRoot
 
 # ------------------------------------------------------------------------------
 # End

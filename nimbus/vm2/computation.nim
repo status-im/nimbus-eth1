@@ -166,7 +166,8 @@ proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
-      blockNumber=c.vmState.blockNumber, blockHash=($c.vmState.blockHash)
+      blockNumber=c.vmState.blockNumber,
+      parentHash=($c.vmState.parent.blockHash)
 
   # In each check below, they are guarded by `len > 0`.  This includes writing
   # out the code, because the account already has zero-length code to handle

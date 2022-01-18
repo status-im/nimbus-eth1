@@ -33,17 +33,11 @@ type
     trace: bool
     index: int
 
-  GST_VMState = ref object of BaseVMState
-
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-proc newGST_VMState(ac: AccountsCache, header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags]): GST_VMState =
-  new result
-  result.init(ac, header, chainDB, tracerFlags)
-
-method getAncestorHash*(vmState: GST_VMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
   if blockNumber >= vmState.blockNumber:
     return
   elif blockNumber < 0:
@@ -90,11 +84,15 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
   writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
-  var tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
+  let
+    chainDB = newBaseChainDB(newMemoryDb(), getConfiguration().pruning)
+    vmState = BaseVMState.new(
+      parent      = BlockHeader(stateRoot: emptyRlpHash),
+      header      = tester.header,
+      chainDB     = chainDB,
+      tracerFlags = (if tester.trace: {TracerFlags.EnableTracing} else: {}),
+      pruneTrie   = chainDB.pruneTrie)
 
-  var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = getConfiguration().pruning)
-  chainDB.initStateDB(emptyRlpHash)
-  var vmState = newGST_VMState(chainDB.stateDB, tester.header, chainDB, tracerFlags)
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
 

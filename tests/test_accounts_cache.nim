@@ -16,7 +16,7 @@ import
   ../nimbus/transaction,
   ../nimbus/vm_state,
   ../nimbus/vm_types,
-  ./test_clique/undump,
+  ./replay/undump,
   eth/[common, p2p, trie/db],
   unittest2
 
@@ -33,8 +33,7 @@ const
 
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
-    # file: "goerli68161.txt.gz",
-    file: "goerli51840.txt.gz",
+    file: "goerli68161.txt.gz",
     numBlocks: 5500,  # unconditionally load blocks
     numTxs:      10)  # txs following (not in block chain)
 
@@ -96,10 +95,7 @@ proc importBlocks(cdb: BaseChainDB; h: seq[BlockHeader]; b: seq[BlockBody]) =
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
 
 proc getVmState(cdb: BaseChainDB; number: BlockNumber): BaseVMState =
-  let
-    topHeader = cdb.getBlockHeader(number)
-    accounts = AccountsCache.init(cdb.db, topHeader.stateRoot, cdb.pruneTrie)
-  result = accounts.newBaseVMState(topHeader, cdb)
+  BaseVMState.new(cdb.getBlockHeader(number), cdb)
 
 # ------------------------------------------------------------------------------
 # Crash test function, finding out about how the transaction framework works ..

@@ -11,7 +11,8 @@ import
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
-  ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
+  ../nimbus/[constants, config, genesis, utils, transaction,
+             vm_state, vm_types],
   ../nimbus/db/[accounts_cache, db_chain],
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/sync/protocol_eth65,
@@ -30,6 +31,11 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 ## For testing, ethcallsigs needs to be kept in sync with ../nimbus/rpc/[common, p2p]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
+
+const
+  zeroAddress = block:
+    var rc: EthAddress
+    rc
 
 type
   TestEnv = object
@@ -51,12 +57,16 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     PUSH1 "0x1C"        # RETURN OFFSET at 28
     RETURN
 
-  chainDB.initStateDB(parent.stateRoot)
-  chainDB.stateDB.setCode(ks2, code)
-  chainDB.stateDB.addBalance(signer, 9_000_000_000.u256)
-  var
-    vmState = newBaseVMState(chainDB.stateDB, BlockHeader(parentHash: parentHash), chainDB)
-    zeroAddress: EthAddress
+  let
+    vmHeader = BlockHeader(parentHash: parentHash)
+    vmState = BaseVMState.new(
+      parent    = BlockHeader(stateRoot: parent.stateRoot),
+      header    = vmHeader,
+      chainDB   = chainDB,
+      pruneTrie = chainDB.pruneTrie)
+
+  vmState.stateDB.setCode(ks2, code)
+  vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
 
   let
     unsignedTx1 = Transaction(
@@ -85,7 +95,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
     let sender = tx.getSender()
-    discard vmState.processTransaction(tx, sender, vmState.blockHeader)
+    discard vmState.processTransaction(tx, sender, vmHeader)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
