@@ -40,4 +40,5 @@ cliBuilder:
           ./test_lru_cache,
           ./test_clique,
           ./test_pow,
-          ./test_configuration
+          ./test_configuration,
+          ./test_keyed_queue_rlp
