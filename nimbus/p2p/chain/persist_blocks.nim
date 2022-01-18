@@ -104,8 +104,6 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
-    c.lastBlockHash = header.blockHash
-    c.parentStateRoot = header.stateRoot
     
   transaction.commit()
 
