@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[sequtils, strformat, strutils],
+  std/[os, sequtils, strformat, strutils],
   ../../nimbus/db/db_chain,
   ./gunzip,
   eth/[common, rlp],
@@ -94,6 +94,9 @@ iterator undumpNextGroup*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
     start = 0u
     top = 0u
     waitFor = "transaction"
+
+  if not gzFile.fileExists:
+    raiseAssert &"No such file: \"{gzFile}\""
 
   for lno,line in gzFile.gunzipLines:
     if line.len == 0 or line[0] == '#':

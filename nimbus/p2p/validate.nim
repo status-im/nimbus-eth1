@@ -215,11 +215,11 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
 # ------------------------------------------------------------------------------
 
 proc validateTransaction*(
-    roDB:     ReadOnlyStateDB; ## Accounts environment descriptor
+    roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   EthAddress;      ## tx.getSender or tx.ecRecover
-    maxLimit: GasInt;          ## gasLimit from block header (for tx)
-    baseFee:  Uint256;         ## baseFee from block header (for tx)
+    maxLimit: GasInt;          ## gasLimit from block header
+    baseFee:  Uint256;         ## baseFee from block header
     fork:     Fork): bool =
   let
     balance = roDB.getBalance(sender)
@@ -302,10 +302,10 @@ proc validateTransaction*(
   true
 
 proc validateTransaction*(
-    vmState: BaseVMState;  ## Accounts environment descriptor
+    vmState: BaseVMState;  ## Parent accounts environment for transaction
     tx:      Transaction;  ## tx to validate
     sender:  EthAddress;   ## tx.getSender or tx.ecRecover
-    header:  BlockHeader;  ## Header of blok containing tx
+    header:  BlockHeader;  ## Header for the block containing the current tx
     fork:    Fork): bool =
   ## Variant of `validateTransaction()`
   let

@@ -22,7 +22,11 @@ type
     errMissingSignature = ##\
       ## is returned if the `extraData` header field does not seem to contain
       ## a 65 byte secp256k1 signature.
-        "extraData 65 byte signature suffix missing"
+      "extraData 65 byte signature suffix missing"
+
+    errSigPrefixError = ##\
+      ## Unsupported value of the (R,S) signature prefix V.
+      "unsupported (R,S) signature prefix V value"
 
     errSkSigResult = ##\
       ## eth/keys subsytem error: signature
@@ -31,6 +35,10 @@ type
     errSkPubKeyResult = ##\
       ## eth/keys subsytem error: public key
       "public key error"
+
+    errItemNotFound = ##\
+      ## database lookup failed
+      "not found"
 
   UtilsError* = ##\
     ## Error message, tinned component + explanatory text (if any)

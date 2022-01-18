@@ -79,7 +79,7 @@ proc procBlkPreamble(vmState: BaseVMState;
       debug "Uncle hash mismatch"
       return false
 
-  return true
+  true
 
 
 proc procBlkEpilogue(vmState: BaseVMState;
@@ -114,7 +114,7 @@ proc procBlkEpilogue(vmState: BaseVMState;
       expected = header.receiptRoot
     return false
 
-  return true
+  true
 
 # ------------------------------------------------------------------------------
 # Public functions
