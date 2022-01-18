@@ -11,12 +11,15 @@
 
 import
   ./executor/[
+    calculate_reward,
     executor_helpers,
     process_block,
     process_transaction]
 
 export
+  calculate_reward,
   executor_helpers.createBloom,
+  executor_helpers.makeReceipt,
   process_block,
   process_transaction
 
