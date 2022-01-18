@@ -118,7 +118,9 @@ template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
 
 func fromSszBytes*(T: type UInt256, data: openArray[byte]):
-    T {.raises: [MalformedSszError, Defect].} =
+    # TODO: These two SSZ Errors (order matters ugh!) is because of raisesssz
+    # pragma on raiseIncorrectSize(). Need to fix that there.
+    T {.raises: [Defect, MalformedSszError, SszSizeMismatchError].} =
   if data.len != sizeof(result):
     raiseIncorrectSize T
 
