@@ -57,6 +57,12 @@ task fluffy, "Build fluffy":
 task portalcli, "Build portalcli":
   buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 
+task utp_test_app, "Build uTP test app":
+  buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
+
+task utp_test, "Run uTP integraion tests ":
+  test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite"
+
 task test_portal_testnet, "Build test_portal_testnet":
   buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering"
 

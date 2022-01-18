@@ -1,0 +1,107 @@
+version: "3.5"
+
+# TODO Add possibility to configure ports by env vcariables 
+services:
+  sim:
+    # TODO for now we are using simulator which is also used in quic, ultimatly
+    # it would be convinient to have our own
+    image: martenseemann/quic-network-simulator
+    container_name: sim
+    hostname: sim
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./logs/sim:/logs
+    environment:
+      - SCENARIO=$SCENARIO
+    cap_add: 
+      - NET_ADMIN
+    expose:
+      - "57832"
+    networks:
+      leftnet:
+        ipv4_address: 193.167.0.2
+        ipv6_address: fd00:cafe:cafe:0::2
+      rightnet:
+        ipv4_address: 193.167.100.2
+        ipv6_address: fd00:cafe:cafe:100::2
+
+  server:
+    # TODO add building of docker images based on variable
+    # build: ./$SERVER
+    image: test-utp
+    # this arg will go to container entry point
+    command: "--udp-listen-address=193.167.100.100 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041"
+    container_name: server
+    hostname: server
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./logs/server:/logs
+    environment:
+      - ROLE=server
+      - CLIENT_PARAMS=--udp-listen-address=193.167.100.100 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
+    depends_on:
+      - sim
+    cap_add: 
+      - NET_ADMIN
+    ports:
+      - "9041:9041"
+    networks:
+      rightnet:
+        ipv4_address: 193.167.100.100
+        ipv6_address: fd00:cafe:cafe:100::100
+    extra_hosts:
+      - "client4:193.167.0.100"
+      - "client6:fd00:cafe:cafe:0::100"
+      - "client46:193.167.0.100"
+      - "client46:fd00:cafe:cafe:0::100"
+
+  client:
+    # build: ./$CLIENT
+    image: test-utp
+    command: "--udp-listen-address=193.167.0.100 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042"
+    container_name: client
+    hostname: client
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./logs/client:/logs
+    environment:
+      - ROLE=client
+      - CLIENT_PARAMS=--udp-listen-address=193.167.0.100 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
+    depends_on:
+      - sim
+    cap_add: 
+      - NET_ADMIN
+    ports:
+      - "9042:9042"
+    networks:
+      leftnet:
+        ipv4_address: 193.167.0.100
+        ipv6_address: fd00:cafe:cafe:0::100
+    extra_hosts:
+      - "server4:193.167.100.100"
+      - "server6:fd00:cafe:cafe:100::100"
+      - "server46:193.167.100.100"
+      - "server46:fd00:cafe:cafe:100::100"
+
+networks:
+  leftnet:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: 'false'
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 193.167.0.0/24
+        - subnet: fd00:cafe:cafe:0::/64
+  rightnet:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: 'false'
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 193.167.100.0/24
+        - subnet: fd00:cafe:cafe:100::/64

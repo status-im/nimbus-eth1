@@ -156,6 +156,14 @@ fluffy-test: | build deps
 fluffy-tools: | build deps
 	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
 
+# builds the fluffy tools
+utp-test-app: | build deps
+	$(ENV_SCRIPT) nim utp_test_app $(NIM_PARAMS) nimbus.nims
+
+# builds and runs the utp integration test suite
+utp-test: | build deps
+	$(ENV_SCRIPT) nim utp_test $(NIM_PARAMS) nimbus.nims
+
 # Build fluffy test_portal_testnet
 fluffy-test-portal-testnet: | build deps
 	$(ENV_SCRIPT) nim test_portal_testnet $(NIM_PARAMS) nimbus.nims
