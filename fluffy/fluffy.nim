@@ -19,7 +19,7 @@ import
     rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
-  ./network/wire/portal_stream,
+  ./network/wire/[portal_stream, portal_protocol_config],
   ./content_db
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
@@ -73,11 +73,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
     # One instance of PortalStream and thus UtpDiscv5Protocol is shared over all
     # the Portal networks.
+    portalConfig = PortalProtocolConfig.init(
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
     portalStream = PortalStream.new(d)
     stateNetwork = StateNetwork.new(d, db, portalStream,
-      bootstrapRecords = bootstrapRecords)
+      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
     historyNetwork = HistoryNetwork.new(d, db, portalStream,
-      bootstrapRecords = bootstrapRecords)
+      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and

@@ -17,7 +17,7 @@ import
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification],
   ../../content_db,
-  ./portal_stream,
+  "."/[portal_stream, portal_protocol_config],
   ./messages
 
 export messages, routing_table
@@ -233,13 +233,16 @@ proc new*(T: type PortalProtocol,
     stream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
-    distanceCalculator: DistanceCalculator = XorDistanceCalculator
+    distanceCalculator: DistanceCalculator = XorDistanceCalculator,
+    config: PortalProtocolConfig = defaultPortalProtocolConfig
     ): T =
+
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
-    routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
-      DefaultTableIpLimits, baseProtocol.rng, distanceCalculator),
+    routingTable: RoutingTable.init(
+      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits,
+      baseProtocol.rng, distanceCalculator),
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
@@ -354,7 +357,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       # validation is required, using a length prefix here might be beneficial for
       # this.
       let readData = socket.read()
-      if await readData.withTimeout(1.seconds):
+      if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
         await socket.closeWait()
         return ok(FoundContent(kind: Content, content: ByteList(content)))

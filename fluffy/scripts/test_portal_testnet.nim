@@ -53,7 +53,12 @@ procSuite "Portal testnet tests":
       let routingTableInfo = await client.discv5_routingTableInfo()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
-      if i == 0: # bootstrap node has all nodes (however not all verified)
+      if i == 0:
+        # bootstrap node has all nodes (however not all verified), however this
+        # is highly dependent on the bits per hop and the amount of nodes
+        # launched and can thus easily fail.
+        # TODO: Set up the network with multiple bootstrap nodes to have a more
+        # robust set-up.
         check nodes.len == config.nodeCount - 1
       else: # Other nodes will have bootstrap node at this point, and maybe more
         check nodes.len > 0

@@ -54,7 +54,7 @@ type
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
-      name: "listen-address" }: ValidIpAddress
+      name: "listen-address" .}: ValidIpAddress
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
@@ -66,7 +66,7 @@ type
     bootstrapNodesFile* {.
       desc: "Specifies a line-delimited file of ENR URIs to bootstrap Discovery v5 and Portal networks from"
       defaultValue: ""
-      name: "bootstrap-file" }: InputFile
+      name: "bootstrap-file" .}: InputFile
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -92,7 +92,7 @@ type
       desc: "The directory where fluffy will store the content data"
       defaultValue: defaultDataDir()
       defaultValueDesc: $defaultDataDirDesc
-      name: "data-dir" }: OutDir
+      name: "data-dir" .}: OutDir
 
     metricsEnabled* {.
       defaultValue: false
@@ -113,18 +113,18 @@ type
     rpcEnabled* {.
       desc: "Enable the JSON-RPC server"
       defaultValue: false
-      name: "rpc" }: bool
+      name: "rpc" .}: bool
 
     rpcPort* {.
       desc: "HTTP port for the JSON-RPC server"
       defaultValue: 8545
-      name: "rpc-port" }: Port
+      name: "rpc-port" .}: Port
 
     rpcAddress* {.
       desc: "Listening address of the RPC server"
       defaultValue: defaultAdminListenAddress
       defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "rpc-address" }: ValidIpAddress
+      name: "rpc-address" .}: ValidIpAddress
 
     bridgeUri* {.
       defaultValue: none(string)
@@ -139,6 +139,24 @@ type
       defaultValueDesc: $defaultClientConfigDesc
       desc: "URI of eth client where to proxy unimplemented rpc methods to"
       name: "proxy-uri" .}: ClientConfig
+
+    tableIpLimit* {.
+      hidden
+      desc: "Maximum amount of nodes with the same IP in the routing tables"
+      defaultValue: DefaultTableIpLimit
+      name: "table-ip-limit" .}: uint
+
+    bucketIpLimit* {.
+      hidden
+      desc: "Maximum amount of nodes with the same IP in the routing tables buckets"
+      defaultValue: DefaultBucketIpLimit
+      name: "bucket-ip-limit" .}: uint
+
+    bitsPerHop* {.
+      hidden
+      desc: "Kademlia's b variable, increase for less hops per lookup"
+      defaultValue: DefaultBitsPerHop
+      name: "bits-per-hop" .}: int
 
     case cmd* {.
       command
@@ -182,7 +200,7 @@ proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T 
+proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
       {.raises: [Defect, ConfigurationError].} =
   let uri = parseUri(p)
   if (uri.scheme == "http" or uri.scheme == "https"):
