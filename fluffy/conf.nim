@@ -37,6 +37,7 @@ const
 type
   PortalCmd* = enum
     noCommand
+    populateHistoryDb
 
   PortalConf* = object
     logLevel* {.
@@ -163,6 +164,17 @@ type
       defaultValue: noCommand .}: PortalCmd
     of noCommand:
       discard
+    of populateHistoryDb:
+      # Note: we could use the existing data dir here, but it would require
+      # also to properly store the network key and default use the one available
+      dbDir* {.
+        desc: "The directory of the fluffy content database"
+        defaultValue: ""
+        name: "db-dir" }: OutDir
+      dataFile* {.
+        desc: "Specify a json file with a map of k:v pairs representing BlockHash : Rlp encoded block"
+        defaultValue: ""
+        name: "data-file" }: InputFile
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T
     {.raises: [Defect, ConfigurationError].} =
