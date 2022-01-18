@@ -20,7 +20,7 @@ import
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/wire/[portal_stream, portal_protocol_config],
-  ./content_db
+  "."/[content_db, populate_db]
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
@@ -130,4 +130,10 @@ when isMainModule:
   setLogLevel(config.logLevel)
 
   case config.cmd
-  of noCommand: run(config)
+  of PortalCmd.noCommand:
+    run(config)
+  of PortalCmd.populateHistoryDb:
+    let res = populateHistoryDb(config.dbDir.string, config.dataFile.string)
+    if res.isErr():
+      fatal "Failed populating the history content db", error = $res.error
+      quit 1
