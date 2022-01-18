@@ -121,10 +121,12 @@ docs/ex/%.png : %.png
 	@mkdir -p $(dir $@)
 	@set -x; cp "$<" "$@"
 
+docs/dochack.js docs/nimdoc.out.css:
+	cp docs.static/$(notdir $@) $@
 
 .PHONY: docs-index-helper
 .SILENT: docs-index-helper
-docs-index-helper:
+docs-index-helper: docs/dochack.js docs/nimdoc.out.css
 	nim=$(NIM_EXE); \
 	$$nim --version | sed q ; set -x ;\
 	$$nim --skipProjCfg buildIndex -o:docs/theindex.html \
