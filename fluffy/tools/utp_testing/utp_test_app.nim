@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,7 +16,7 @@ import
   eth/p2p/discoveryv5/protocol,
   eth/p2p/discoveryv5/enr,
   eth/utp/[utp_discv5_protocol, utp_router],
-   eth/keys
+  eth/keys
 
 const
   defaultListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
@@ -93,8 +93,7 @@ proc installHandlers(
   t: ref Table[SKey, UtpSocket[Node]]) {.raises: [Defect, CatchableError].} =
 
   srv.rpc("get_record") do() -> enr.Record:
-    let rec = d.getRecord()
-    return rec
+    return d.getRecord()
 
   srv.rpc("add_record") do(r: enr.Record) -> bool:
     let node = newNode(r)
@@ -191,15 +190,12 @@ when isMainModule:
   let conf = AppConf.load()
   {.push raises: [Defect].}
 
-  let protName = "test-utp".toBytes()
-
-  let la = initTAddress(conf.rpcListenAddress, conf.rpcPort)
-
-  let key = PrivateKey.random(rng[])
-
-  let discAddress = conf.udpListenAddress
-
-  let srv = newRpcHttpServer(@[la], RpcRouter.init())
+  let 
+    protName = "test-utp".toBytes()
+    la = initTAddress(conf.rpcListenAddress, conf.rpcPort)
+    key = PrivateKey.random(rng[])
+    discAddress = conf.udpListenAddress
+    srv = newRpcHttpServer(@[la], RpcRouter.init())
 
   srv.start()
 
@@ -213,9 +209,9 @@ when isMainModule:
 
   d.open()
 
-  let cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
-
-  let utp = UtpDiscv5Protocol.new(d, protName, buildAcceptConnection(table), socketConfig = cfg)
+  let 
+    cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
+    utp = UtpDiscv5Protocol.new(d, protName, buildAcceptConnection(table), socketConfig = cfg)
 
   srv.installHandlers(d, utp, table)
 

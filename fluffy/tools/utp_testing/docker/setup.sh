@@ -11,7 +11,7 @@ IP=$(hostname -I | cut -f1 -d" ")
 GATEWAY="${IP%.*}.2"
 echo "Gateway is $GATEWAY"
 UNNEEDED_ROUTE="${IP%.*}.0"
-echo "Unnededroute  is $UNNEEDED_ROUTE"
+echo "Unneeded route  is $UNNEEDED_ROUTE"
 
 echo "Endpoint's IPv4 address is $IP"
 
@@ -20,7 +20,7 @@ echo "ROUTE ADDED"
 
 # delete unused route
 route del -net $UNNEEDED_ROUTE netmask 255.255.255.0
-echo "ROUTE DELEDED"
+echo "ROUTE DELETED"
 
 # TODO figure out if we need ipv6 configs
 # # this relies on the IPv6 address being second in the "hostname -I" output

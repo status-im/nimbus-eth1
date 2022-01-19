@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,13 +10,13 @@ import
   json_rpc/rpcclient, stew/byteutils,
   eth/keys
 
-proc generateByteArray(rng: var BrHmacDrbgContext, length: int): seq[byte] =
+proc generateByteSeq(rng: var BrHmacDrbgContext, length: int): seq[byte] =
   var bytes = newSeq[byte](length)
   brHmacDrbgGenerate(rng, bytes)
   return bytes
 
-proc generateByteArrayHex(rng: var BrHmacDrbgContext, length: int): string =
-  generateByteArray(rng, length).toHex()
+proc generateByteSeqHex(rng: var BrHmacDrbgContext, length: int): string =
+  generateByteSeq(rng, length).toHex()
 
 # Before running the suit, there need to be two instances of utp_test_app running
 # under provided ports (9042, 9041).
@@ -34,8 +34,8 @@ procSuite "Utp integration tests":
   let serverContainerAddress = "127.0.0.1"
   let serverContainerPort = Port(9041)
 
-  # to avoid influencing utp tests by dicv5 sessions negotiation, at least one ping
-  # should be succesfull
+  # to avoid influencing uTP tests by discv5 sessions negotiation, at least one ping
+  # should be successful
   proc pingTillSuccess(client: RpcHttpClient, enr: JsonNode): Future[void] {.async.}=
     var failed = true
     while failed:
@@ -58,7 +58,7 @@ procSuite "Utp integration tests":
     let serverAddRes = await server.call("add_record", %[clientEnr])
 
     # we need to have successfull ping to have proper session on both sides, otherwise
-    # whoareyou packet exchange may influance testing of utp
+    # whoareyou packet exchange may influence testing of utp
     await client.pingTillSuccess(serverEnr)
 
     let connectRes = await client.call("connect", %[serverEnr])
@@ -68,17 +68,13 @@ procSuite "Utp integration tests":
     check:
       len(srvConns) == 1
 
-    let clientKey = srvConns[0]
-
-    let numBytes = 5000
-
-    let bytes = generateByteArrayHex(rng[], numBytes)
-
-    let writeRes = await client.call("write", %[connectRes, %bytes])
-
-    let readRes = await server.call("read", %[clientKey, %numBytes])
-   
-    let bytesReceived = readRes.getStr()
+    let
+      clientKey = srvConns[0]
+      numBytes = 5000
+      bytes = generateByteSeqHex(rng[], numBytes)
+      writeRes = await client.call("write", %[connectRes, %bytes])
+      readRes = await server.call("read", %[clientKey, %numBytes])
+      bytesReceived = readRes.getStr()
 
     check:
       bytes == bytesReceived
