@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [Defect].}
+
 import
   std/sequtils,
   chronos, stew/byteutils, chronicles,
@@ -100,6 +102,7 @@ proc readAndClose(socket: UtpSocket[Node], stream: PortalStream) {.async.} =
   # A FIN does not necessarily mean that the data read is complete. Further
   # validation is required, using a length prefix here might be beneficial for
   # this.
+  # TODO: Should also limit the amount of data to read and/or total time.
   var readData = socket.read()
   if await readData.withTimeout(stream.readTimeout):
     # TODO: Content needs to be validated, stored and also offered again as part
@@ -108,10 +111,15 @@ proc readAndClose(socket: UtpSocket[Node], stream: PortalStream) {.async.} =
     # will probably be required for this.
     let content = readData.read
     echo content.toHex()
+    # Destroy socket and not closing as we already received. Closing would send
+    # also a FIN from our side, see also:
+    # https://github.com/status-im/nim-eth/blob/b2dab4be0839c95ca2564df9eacf81995bf57802/eth/utp/utp_socket.nim#L1223
+    await socket.destroyWait()
   else:
     debug "Reading data from socket timed out, content request failed"
-
-  await socket.closeWait()
+    # Even though reading timed out, lets be nice and still send a FIN.
+    # Not waiting here for its ACK however, so no `closeWait`
+    socket.close()
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
