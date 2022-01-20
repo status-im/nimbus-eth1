@@ -27,7 +27,7 @@ type
   ContentRequest = object
     connectionId: uint16
     nodeId: NodeId
-    content: ByteList
+    content: seq[byte]
     timeout: Moment
 
   ContentOffer = object
@@ -74,7 +74,7 @@ proc addContentOffer*(
   return connectionId
 
 proc addContentRequest*(
-    stream: PortalStream, nodeId: NodeId, content: ByteList): Bytes2 =
+    stream: PortalStream, nodeId: NodeId, content: seq[byte]): Bytes2 =
   var connectionId: Bytes2
   brHmacDrbgGenerate(stream.rng[], connectionId)
 
@@ -141,7 +141,7 @@ proc registerIncomingSocketCallback(
       for i, request in stream.contentRequests:
         if request.connectionId == client.connectionId and
             request.nodeId == client.remoteAddress.id:
-          let fut = client.writeAndClose(request.content.asSeq())
+          let fut = client.writeAndClose(request.content)
           stream.contentRequests.del(i)
           return fut
 

@@ -122,7 +122,7 @@ proc installPortalApiHandlers*(
       case foundContent.kind:
       of Content:
         return (
-          some("0x" & foundContent.content.asSeq().toHex()),
+          some("0x" & foundContent.content.toHex()),
           none(seq[Record]))
       of Nodes:
         return (
