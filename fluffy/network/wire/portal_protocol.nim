@@ -66,7 +66,7 @@ type
   FoundContent* = object
     case kind*: FoundContentKind
     of Content:
-      content*: ByteList
+      content*: seq[byte]
     of Nodes:
       nodes*: seq[Node]
 
@@ -149,7 +149,7 @@ proc handleFindContent(
         encodeMessage(ContentMessage(
           contentMessageType: contentType, content: ByteList(content)))
       else:
-        let connectionId = p.stream.addContentRequest(srcId, ByteList(content))
+        let connectionId = p.stream.addContentRequest(srcId, content)
 
         encodeMessage(ContentMessage(
           contentMessageType: connectionIdType, connectionId: connectionId))
@@ -392,12 +392,12 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
         await socket.destroyWait()
-        return ok(FoundContent(kind: Content, content: ByteList.init(content)))
+        return ok(FoundContent(kind: Content, content: content))
       else:
         socket.close()
         return err("Reading data from socket timed out, content request failed")
     of contentType:
-      return ok(FoundContent(kind: Content, content: m.content))
+      return ok(FoundContent(kind: Content, content: m.content.asSeq()))
     of enrsType:
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
@@ -544,7 +544,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
 proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[Option[ByteList]] {.async.} =
+    Future[Option[seq[byte]]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -614,7 +614,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       # query?
       discard
 
-  return none[ByteList]()
+  return none[seq[byte]]()
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =

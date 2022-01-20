@@ -41,11 +41,11 @@ proc getContent*(n: StateNetwork, key: ContentKey):
 
   # When content is found on the network and is in the radius range, store it.
   if content.isSome() and contentInRange:
-    n.contentDB.put(contentId, content.get().asSeq())
+    n.contentDB.put(contentId, content.get())
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
-  return content.map(x => x.asSeq())
+  return content
 
 proc new*(
     T: type StateNetwork,
