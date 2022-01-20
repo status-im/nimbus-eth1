@@ -391,10 +391,10 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       let readData = socket.read()
       if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
-        await socket.closeWait()
-        return ok(FoundContent(kind: Content, content: ByteList(content)))
+        await socket.destroyWait()
+        return ok(FoundContent(kind: Content, content: ByteList.init(content)))
       else:
-        await socket.closeWait()
+        socket.close()
         return err("Reading data from socket timed out, content request failed")
     of contentType:
       return ok(FoundContent(kind: Content, content: m.content))
