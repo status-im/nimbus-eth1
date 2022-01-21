@@ -12,6 +12,7 @@ import ../test_macro
 cliBuilder:
   import  ./test_code_stream,
           ./test_accounts_cache,
+          ./test_kintsugi,
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
