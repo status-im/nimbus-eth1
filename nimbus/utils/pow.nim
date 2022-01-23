@@ -228,7 +228,7 @@ proc getPowSpecs*(header: BlockHeader): PowSpecs =
 
 proc getPowCacheLookup*(tm: PowRef;
                         blockNumber: BlockNumber): (uint64, Hash256)
-    {.gcsafe, raises: [KeyError, Defect].} =
+    {.gcsafe, raises: [KeyError, Defect, CatchableError].} =
   ## Returns the pair `(size,digest)` derived from the lookup cache for the
   ## `hashimotoLight()` function for the given block number. The `size` is the
   ## full size of the dataset (the cache represents) as passed on to the

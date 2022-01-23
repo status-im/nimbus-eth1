@@ -13,6 +13,7 @@ import
   ../../../nimbus/sync/protocol_eth65,
   ../../../nimbus/[genesis, config, conf_utils, context],
   ../../../nimbus/graphql/ethapi, ../../../tests/test_helpers,
+  ../../../nimbus/utils/tx_pool,
   graphql, ../sim_utils
 
 const
@@ -75,10 +76,11 @@ proc main() =
       conf.networkId,
       conf.networkParams
     )
+    txPool = TxPoolRef.new(chainDB, conf.engineSigner)
 
   initializeEmptyDb(chainDB)
   discard importRlpBlock(blocksFile, chainDB)
-  let ctx = setupGraphqlContext(chainDB, ethNode)
+  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
 
   runTest("GraphQL", caseFolder):
     let node = parseFile(fileName)

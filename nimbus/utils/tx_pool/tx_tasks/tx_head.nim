@@ -137,9 +137,9 @@ proc headDiff*(xp: TxPoolRef;
       return err(txInfoErrAncestorMissing)
     debug "Tx-pool reset with detached current head",
       curHeader = curHash,
-      curNumber = curHeader.blockNumber,
+      curNumber = curHead.blockNumber,
       newHeader = newHash,
-      newNumber = newHeader.blockNumber
+      newNumber = newHead.blockNumber
     return err(txInfoErrChainHeadMissing)
 
   # Equalise block numbers between branches (typically, these btanches

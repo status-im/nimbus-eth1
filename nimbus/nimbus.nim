@@ -22,7 +22,7 @@ import
   ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
-  graphql/ethapi, context,
+  graphql/ethapi, context, utils/tx_pool,
   "."/[conf_utils, sealer, constants, utils]
 
 when defined(evmc_enabled):
@@ -47,6 +47,7 @@ type
     sealingEngine: SealingEngineRef
     ctx: EthContext
     chainRef: Chain
+    txPool: TxPoolRef
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -132,6 +133,12 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
+
+  # app wide TxPool singleton
+  # TODO: disable some of txPool internal mechanism if
+  # the engineSigner is zero.
+  nimbus.txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -151,7 +158,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     # Enable RPC APIs based on RPC flags and protocol flags
     let rpcFlags = conf.getRpcFlags()
     if RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols:
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.rpcServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.rpcServer)
     if RpcFlag.Debug in rpcFlags:
       setupDebugRpc(chainDB, nimbus.rpcServer)
 
@@ -170,14 +177,14 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     # Enable Websocket RPC APIs based on RPC flags and protocol flags
     let wsFlags = conf.getWsFlags()
     if RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols:
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.wsRpcServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.wsRpcServer)
     if RpcFlag.Debug in wsFlags:
       setupDebugRpc(chainDB, nimbus.wsRpcServer)
 
     nimbus.wsRpcServer.start()
 
   if conf.graphqlEnabled:
-    nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode)
+    nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode, nimbus.txPool)
     nimbus.graphqlServer.start()
 
   if conf.engineSigner != ZERO_ADDRESS:
@@ -206,7 +213,9 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         EngineStopped
     nimbus.sealingEngine = SealingEngineRef.new(
       # TODO: Implement the initial state correctly
-      nimbus.chainRef, nimbus.ctx, conf.engineSigner, initialSealingEngineState)
+      nimbus.chainRef, nimbus.ctx, conf.engineSigner,
+      nimbus.txPool, initialSealingEngineState
+    )
     nimbus.sealingEngine.start()
 
     if conf.engineApiEnabled:

@@ -47,7 +47,7 @@ proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   if item.tx.gasLimit < item.tx.intrinsicGas(xp.chain.nextFork):
     debug "invalid tx: not enough gas to perform calculation",
       available = item.tx.gasLimit,
-      require = item.tx.intrinsicGas(xp.chain.fork)
+      require = item.tx.intrinsicGas(xp.chain.nextFork)
     return false
 
   if item.tx.txType == TxEip1559:

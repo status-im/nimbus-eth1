@@ -17,7 +17,8 @@ import
   graphql/instruments/query_complexity,
   ../db/[db_chain, state_db], ../rpc/rpc_utils,
   ".."/[utils, transaction, vm_state, config, constants],
-  ../transaction/call_evm
+  ../transaction/call_evm,
+  ../utils/tx_pool
 
 from eth/p2p import EthereumNode
 export httpserver
@@ -64,6 +65,7 @@ type
     ids: array[EthTypes, Name]
     chainDB: BaseChainDB
     ethNode: EthereumNode
+    txPool: TxPoolRef
 
 proc toHash(n: Node): Hash256 =
   result.data = hexToByteArray[32](n.stringVal)
@@ -1295,19 +1297,24 @@ proc initEthApi(ctx: GraphqlContextRef) =
     echo res.error
     quit(QuitFailure)
 
-proc setupGraphqlContext*(chainDB: BaseChainDB, ethNode: EthereumNode): GraphqlContextRef =
+proc setupGraphqlContext*(chainDB: BaseChainDB,
+                          ethNode: EthereumNode,
+                          txPool: TxPoolRef): GraphqlContextRef =
   let ctx = GraphqlContextRef(
     chainDB: chainDB,
-    ethNode: ethNode
+    ethNode: ethNode,
+    txPool: txPool
   )
   graphql.init(ctx)
   ctx.initEthApi()
   ctx
 
 proc setupGraphqlHttpServer*(conf: NimbusConf,
-                             chainDB: BaseChainDB, ethNode: EthereumNode): GraphqlHttpServerRef =
+                             chainDB: BaseChainDB,
+                             ethNode: EthereumNode,
+                             txPool: TxPoolRef): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
-  let ctx = setupGraphqlContext(chainDB, ethNode)
+  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
   let address = initTAddress(conf.graphqlAddress, conf.graphqlPort)
   let sres = GraphqlHttpServerRef.new(ctx, address, socketFlags = socketFlags)
   if sres.isErr():

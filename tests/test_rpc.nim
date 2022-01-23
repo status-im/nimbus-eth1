@@ -16,7 +16,7 @@ import
   ../nimbus/db/[accounts_cache, db_chain],
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/sync/protocol_eth65,
-  ../nimbus/utils/difficulty,
+  ../nimbus/utils/[difficulty, tx_pool],
   ../nimbus/[context, chain_config],
    ./test_helpers, ./macro_assembler
 
@@ -106,7 +106,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
 
   # call persist() before we get the rootHash
   vmState.stateDB.persist()
-  
+
   var header = BlockHeader(
     parentHash  : parentHash,
     #coinbase*:      EthAddress
@@ -171,8 +171,10 @@ proc rpcMain*() =
     var
       rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
       client = newRpcSocketClient()
+      txPool = TxPoolRef.new(chain, conf.engineSigner)
+
     setupCommonRpc(ethNode, conf, rpcServer)
-    setupEthRpc(ethNode, ctx, chain, rpcServer)
+    setupEthRpc(ethNode, ctx, chain, txPool, rpcServer)
 
     # Begin tests
     rpcServer.start()

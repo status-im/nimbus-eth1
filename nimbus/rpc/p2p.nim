@@ -14,7 +14,8 @@ import
   ".."/[transaction, vm_state, constants, utils, context],
   ../db/[db_chain, state_db],
   rpc_types, rpc_utils,
-  ../transaction/call_evm
+  ../transaction/call_evm,
+  ../utils/tx_pool
 
 #[
   Note:
@@ -25,7 +26,7 @@ import
       type cast to avoid extra processing.
 ]#
 
-proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , server: RpcServer) =
+proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPool: TxPoolRef, server: RpcServer) =
 
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head

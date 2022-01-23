@@ -15,7 +15,8 @@ import
   ../nimbus/sync/protocol_eth65,
   ../nimbus/[genesis, config, chain_config, context],
   ../nimbus/db/[db_chain],
-  ../nimbus/p2p/chain, ./test_helpers
+  ../nimbus/p2p/chain, ./test_helpers,
+  ../nimbus/utils/tx_pool
 
 type
   EthBlock = object
@@ -100,8 +101,9 @@ proc graphqlMain*() =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = setupChain()
+    txPool  = TxPoolRef.new(chainDB, conf.engineSigner)
 
-  let ctx = setupGraphqlContext(chainDB, ethNode)
+  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:

@@ -60,6 +60,7 @@ proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
       miningHash = header.getPowSpecs.miningHash
       (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
                            except KeyError: return err("Unknown block")
+                           except CatchableError as e: return err(e.msg)
     debug "mixHash mismatch",
       actual = header.mixDigest,
       expected = expMixDigest,

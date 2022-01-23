@@ -71,7 +71,7 @@ proc new*(T: type PowCacheRef; maxItems = nItemsMax): T =
 # ------------------------------------------------------------------------------
 
 proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef
-    {.gcsafe, raises: [Defect].} =
+    {.gcsafe, raises: [Defect, CatchableError].} =
   ## Return a cache derived from argument `blockNumber` ready to be used
   ## for the `hashimotoLight()` method.
   let
@@ -91,7 +91,8 @@ proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef
 
   pc.cache.lruAppend(key, pair, pc.cacheMax)
 
-proc get*(pcr: PowCacheRef; bn: BlockNumber): PowCacheItemRef =
+proc get*(pcr: PowCacheRef; bn: BlockNumber): PowCacheItemRef
+    {.gcsafe, raises: [Defect, CatchableError].} =
   ## Variant of `getCache()`
   pcr[].get(bn)
 

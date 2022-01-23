@@ -17,7 +17,8 @@ import
     clique_cfg,
     clique_sealer],
   ./p2p/gaslimit,
-  "."/[chain_config, utils, context]
+  "."/[chain_config, utils, context],
+  "."/utils/tx_pool
 
 from web3/ethtypes as web3types import nil
 from web3/engine_api_types import ExecutionPayload, PayloadAttributes
@@ -40,6 +41,7 @@ type
     chain*: Chain
     ctx: EthContext
     signer: EthAddress
+    txPool: TxPoolRef
 
 template asEthHash*(hash: Web3BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
@@ -253,11 +255,13 @@ proc new*(_: type SealingEngineRef,
           chain: Chain,
           ctx: EthContext,
           signer: EthAddress,
+          txPool: TxPoolRef,
           initialState: EngineState): SealingEngineRef =
   SealingEngineRef(
     chain: chain,
     ctx: ctx,
     signer: signer,
+    txPool: txPool,
     state: initialState
   )
 
