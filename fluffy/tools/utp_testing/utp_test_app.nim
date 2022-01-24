@@ -83,14 +83,14 @@ proc hash(x: SKey): Hash =
   h = h !& x.nodeId.hash
   !$h
 
-func toSKey(k: UtpSocketKey[Node]): SKey =
-  SKey(id: k.rcvId, nodeId: k.remoteAddress.id)
+func toSKey(k: UtpSocketKey[NodeAddress]): SKey =
+  SKey(id: k.rcvId, nodeId: k.remoteAddress.nodeId)
 
 proc installHandlers(
   srv: RpcHttpServer,
   d: protocol.Protocol, 
   s: UtpDiscv5Protocol, 
-  t: ref Table[SKey, UtpSocket[Node]]) {.raises: [Defect, CatchableError].} =
+  t: ref Table[SKey, UtpSocket[NodeAddress]]) {.raises: [Defect, CatchableError].} =
 
   srv.rpc("get_record") do() -> enr.Record:
     return d.getRecord()
@@ -118,11 +118,12 @@ proc installHandlers(
   srv.rpc("connect") do(r: enr.Record) -> SKey:
     let
       nodeRes = newNode(r)
-
+      
     if nodeRes.isOk():
       let node = nodeRes.get()
+      let nodeAddress = NodeAddress.init(node).unsafeGet()
       discard d.addNode(node)
-      let connResult = await s.connectTo(node)
+      let connResult = await s.connectTo(nodeAddress)
       if (connresult.isOk()):
         let socket = connresult.get()
         let sKey = socket.socketKey.toSKey()
@@ -171,9 +172,9 @@ proc installHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[Node]]): AcceptConnectionCallback[Node] = 
+proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[NodeAddress]]): AcceptConnectionCallback[NodeAddress] = 
   return (
-    proc (server: UtpRouter[Node], client: UtpSocket[Node]): Future[void] =
+    proc (server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
       let fut = newFuture[void]()
       let key = client.socketKey.toSKey()
       t[key] = client
@@ -182,7 +183,7 @@ proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[Node]]): AcceptConnectio
   )
 
 when isMainModule:
-  var table = newTable[SKey, UtpSocket[Node]]()
+  var table = newTable[SKey, UtpSocket[NodeAddress]]()
 
   let rng = newRng()
 
