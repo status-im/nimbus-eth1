@@ -16,12 +16,12 @@ import
     clique_desc,
     clique_cfg,
     clique_sealer],
-  ./p2p/gaslimit,
+  ./p2p/[gaslimit, validate],
   "."/[chain_config, utils, context],
   "."/utils/tx_pool
 
 from web3/ethtypes as web3types import nil
-from web3/engine_api_types import ExecutionPayload, PayloadAttributes
+from web3/engine_api_types import ExecutionPayloadV1, PayloadAttributesV1
 
 type
   EngineState* = enum
@@ -85,8 +85,7 @@ proc prepareHeader(engine: SealingEngineRef,
       parent.gasLimit,
       gasFloor = DEFAULT_GAS_LIMIT,
       gasCeil = DEFAULT_GAS_LIMIT),
-    # TODO: extraData can be configured via cli
-    #extraData : engine.extra,
+    extraData  : daoForkBlockExtraData,
     coinbase   : coinbase,
     timestamp  : timestamp,
     ommersHash : EMPTY_UNCLE_HASH,
@@ -106,30 +105,29 @@ proc prepareHeader(engine: SealingEngineRef,
     # TODO: desiredLimit can be configured by user, gasCeil
     header.gasLimit = calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
 
-  # TODO Post merge, clique should not be executing
-  let clique = engine.chain.clique
-  let res = clique.prepare(parent, header)
-  if res.isErr:
-    return err($res.error)
-
-  if engine.chain.isBlockAfterTtd(header.blockNumber):
+  if engine.chain.isBlockAfterTtd(header):
     header.difficulty = DifficultyInt.zero
+    header.mixDigest = default(Hash256)
+    header.nonce = default(BlockNonce)
+  else:
+    let res = engine.chain.clique.prepare(parent, header)
+    if res.isErr:
+      return err($res.error)
 
   ok(header)
 
 proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    parentBlockHeader: BlockHeader,
-                   outBlock: var EthBlock): Result[void, string] =
+                   outBlock: var EthBlock,
+                   timestamp = getTime()): Result[void, string] =
   # deviation from standard block generator
   # - no local and remote transactions inclusion(need tx pool)
   # - no receipts from tx
   # - no DAO hard fork
   # - no local and remote uncles inclusion
 
-  let clique = engine.chain.clique
-  let time = getTime()
-  let res = prepareHeader(engine, coinbase, parentBlockHeader, time)
+  let res = prepareHeader(engine, coinbase, parentBlockHeader, timestamp)
   if res.isErr:
     return err("error prepare header")
 
@@ -137,10 +135,11 @@ proc generateBlock(engine: SealingEngineRef,
     header: res.get()
   )
 
-  # TODO Post merge, Clique should not be executing
-  let sealRes = clique.seal(outBlock)
-  if sealRes.isErr:
-    return err("error sealing block header: " & $sealRes.error)
+  if not engine.chain.isBlockAfterTtd(outBlock.header):
+    # TODO Post merge, Clique should not be executing
+    let sealRes = engine.chain.clique.seal(outBlock)
+    if sealRes.isErr:
+      return err("error sealing block header: " & $sealRes.error)
 
   debug "generated block",
         blockNumber = outBlock.header.blockNumber,
@@ -151,10 +150,11 @@ proc generateBlock(engine: SealingEngineRef,
 proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    parentHash: Hash256,
-                   outBlock: var EthBlock): Result[void, string] =
+                   outBlock: var EthBlock,
+                   timestamp = getTime()): Result[void, string] =
   var parentBlockHeader: BlockHeader
   if engine.chain.db.getBlockHeader(parentHash, parentBlockHeader):
-    generateBlock(engine, coinbase, parentBlockHeader, outBlock)
+    generateBlock(engine, coinbase, parentBlockHeader, outBlock, timestamp)
   else:
     # TODO:
     # This hack shouldn't be necessary if the database can find
@@ -167,8 +167,10 @@ proc generateBlock(engine: SealingEngineRef,
 
 proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
-                   outBlock: var EthBlock): Result[void, string] =
-  generateBlock(engine, coinbase, engine.chain.currentBlock(), outBlock)
+                   outBlock: var EthBlock,
+                   timestamp = getTime()): Result[void, string] =
+  generateBlock(engine, coinbase, engine.chain.currentBlock(),
+                outBlock, timestamp)
 
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
   let clique = engine.chain.clique
@@ -217,13 +219,22 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
     info "block generated", number=blk.header.blockNumber
 
+template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
+  int64 q
+
 proc generateExecutionPayload*(engine: SealingEngineRef,
-                               payloadAttrs: PayloadAttributes,
-                               payloadRes: var ExecutionPayload): Result[void, string] =
+                               payloadAttrs: PayloadAttributesV1,
+                               payloadRes: var ExecutionPayloadV1): Result[void, string] =
+  let headBlock = try: engine.chain.db.getCanonicalHead()
+                  except CatchableError: return err "No head block in database"
+
   var blk: EthBlock
-  let blkRes = engine.generateBlock(EthAddress payloadAttrs.feeRecipient,
-                                    payloadAttrs.parentHash.asEthHash,
-                                    blk)
+  let blkRes = engine.generateBlock(
+    EthAddress payloadAttrs.suggestedFeeRecipient,
+    headBlock,
+    blk,
+    fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64))
+
   if blkRes.isErr:
     error "sealing engine generateBlock error", msg = blkRes.error
     return blkRes
@@ -233,10 +244,12 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   ])
 
   payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
-  payloadRes.coinbase = Web3Address blk.header.coinbase
+  payloadRes.feeRecipient = Web3Address blk.header.coinbase
   payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
-  payloadRes.receiptRoot = Web3BlockHash blk.header.receiptRoot.data
+  payloadRes.receiptsRoot = Web3BlockHash blk.header.receiptRoot.data
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
+  # TODO Check the extra data length here
+  # payloadres.extraData = web3types.DynamicBytes[256] blk.header.extraData
   payloadRes.random = web3types.FixedBytes[32](payloadAttrs.random)
   payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit

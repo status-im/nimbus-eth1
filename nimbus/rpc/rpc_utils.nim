@@ -137,7 +137,7 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
   result.parentHash = header.parentHash
   result.nonce = some(hexDataStr(header.nonce))
   result.sha3Uncles = header.ommersHash
-  result.logsBloom = some(header.bloom)
+  result.logsBloom = FixedBytes[256] header.bloom
   result.transactionsRoot = header.txRoot
   result.stateRoot = header.stateRoot
   result.receiptsRoot = header.receiptRoot
@@ -183,7 +183,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
       result.contractAddress = some(contractAddress)
 
   result.logs = receipt.logs
-  result.logsBloom = receipt.bloom
+  result.logsBloom = FixedBytes[256] receipt.bloom
 
   # post-transaction stateroot (pre Byzantium).
   if receipt.hasStateRoot:

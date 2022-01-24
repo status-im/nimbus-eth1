@@ -74,7 +74,8 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
       return validationResult
 
     if c.extraValidation and c.verifyFrom <= header.blockNumber:
-      if c.db.config.poaEngine:
+      let isBlockAfterTtd = c.isBlockAfterTtd(header)
+      if c.db.config.poaEngine and not isBlockAfterTtd:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
         let rc = c.clique.cliqueVerify(header,parent)
         if rc.isOK:
@@ -90,7 +91,7 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
           header,
           body,
           checkSealOK = false, # TODO: how to checkseal from here
-          ttdReached = c.isBlockAfterTtd(header.blockNumber),
+          ttdReached = isBlockAfterTtd,
           pow = c.pow)
         if res.isErr:
           debug "block validation error",

@@ -20,6 +20,7 @@ $SCRIPT_DIR/../../build/nimbus \
   --custom-network:"$SCRIPT_DIR/amphora-interop-genesis-m1.json" \
   --network:0 \
   --engine-api \
+  --engine-api-port:8545 \
   --rpc \
   --nat:none --discovery:none \
   --import-key:"$SCRIPT_DIR/signer-key.txt" \

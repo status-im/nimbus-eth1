@@ -80,8 +80,9 @@ func toNextFork(n: BlockNumber): uint64 =
   else:
     result = n.truncate(uint64)
 
-func isBlockAfterTtd*(c: Chain, blockNum: BlockNumber): bool =
-  c.ttdReachedAt.isSome and blockNum > c.ttdReachedAt.get
+func isBlockAfterTtd*(c: Chain, blockHeader: BlockHeader): bool =
+  # TODO: This should be fork aware
+  c.ttdReachedAt.isSome and blockHeader.blockNumber > c.ttdReachedAt.get
 
 func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
   let next: array[ChainFork, uint64] = [

@@ -1,6 +1,11 @@
 import
   hexstrings, options, eth/[common, keys, rlp], json
 
+from
+  web3/ethtypes import FixedBytes
+
+export FixedBytes
+
 #[
   Notes:
     * Some of the types suppose 'null' when there is no appropriate value.
@@ -49,7 +54,7 @@ type
     parentHash*: Hash256            # hash of the parent block.
     nonce*: Option[HexDataStr]      # hash of the generated proof-of-work. null when its pending block.
     sha3Uncles*: Hash256            # SHA3 of the uncles data in the block.
-    logsBloom*: Option[BloomFilter] # the bloom filter for the logs of the block. null when its pending block.
+    logsBloom*: FixedBytes[256]     # the bloom filter for the logs of the block. null when its pending block.
     transactionsRoot*: Hash256      # the root of the transaction trie of the block.
     stateRoot*: Hash256             # the root of the final state trie of the block.
     receiptsRoot*: Hash256          # the root of the receipts trie of the block.
@@ -107,7 +112,7 @@ type
     gasUsed*: HexQuantityStr              # the amount of gas used by this specific transaction alone.
     contractAddress*: Option[EthAddress]  # the contract address created, if the transaction was a contract creation, otherwise null.
     logs*: seq[Log]                       # list of log objects which this transaction generated.
-    logsBloom*: BloomFilter               # bloom filter for light clients to quickly retrieve related logs.
+    logsBloom*: FixedBytes[256]           # bloom filter for light clients to quickly retrieve related logs.
     root*: Option[Hash256]                # post-transaction stateroot (pre Byzantium).
     status*: Option[int]                  # 1 = success, 0 = failure.
 

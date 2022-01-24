@@ -40,6 +40,7 @@ type
   NimbusNode = ref object
     rpcServer: RpcHttpServer
     engineApiServer: RpcHttpServer
+    engineApiWsServer: RpcWebSocketServer
     ethNode: EthereumNode
     state: NimbusState
     graphqlServer: GraphqlHttpServerRef
@@ -157,7 +158,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     # Enable RPC APIs based on RPC flags and protocol flags
     let rpcFlags = conf.getRpcFlags()
-    if RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols:
+    if (RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols) or
+       (conf.engineApiPort == conf.rpcPort):
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.rpcServer)
     if RpcFlag.Debug in rpcFlags:
       setupDebugRpc(chainDB, nimbus.rpcServer)
@@ -176,7 +178,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     # Enable Websocket RPC APIs based on RPC flags and protocol flags
     let wsFlags = conf.getWsFlags()
-    if RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols:
+    if (RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols) or
+       (conf.engineApiWsPort == conf.wsPort):
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.wsRpcServer)
     if RpcFlag.Debug in wsFlags:
       setupDebugRpc(chainDB, nimbus.wsRpcServer)
@@ -219,12 +222,29 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.sealingEngine.start()
 
     if conf.engineApiEnabled:
-      nimbus.engineApiServer = newRpcHttpServer([
-        initTAddress(conf.engineApiAddress, conf.engineApiPort)
-      ])
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
-      nimbus.engineAPiServer.start()
+      if conf.engineApiPort != conf.rpcPort:
+        nimbus.engineApiServer = newRpcHttpServer([
+          initTAddress(conf.engineApiAddress, conf.engineApiPort)
+        ])
+        setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
+        setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
+        nimbus.engineApiServer.start()
+      else:
+        setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer)
+
       info "Starting engine API server", port = conf.engineApiPort
+
+    if conf.engineApiWsEnabled:
+      if conf.engineApiWsPort != conf.wsPort:
+        nimbus.engineApiWsServer = newRpcWebSocketServer(
+          initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort))
+        setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
+        setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
+        nimbus.engineApiWsServer.start()
+      else:
+        setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
+
+      info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 
   # metrics server
   if conf.metricsEnabled:
@@ -283,6 +303,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.engineAPiServer.stop()
   if conf.wsEnabled:
     nimbus.wsRpcServer.stop()
+  if conf.engineApiWsEnabled:
+    nimbus.engineApiWsServer.stop()
   if conf.graphqlEnabled:
     await nimbus.graphqlServer.stop()
   if conf.engineSigner != ZERO_ADDRESS:

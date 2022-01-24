@@ -8,8 +8,10 @@
 # those terms.
 
 import
-  times, options, tables,
+  times, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
+  json_serialization, web3/conversions, json_serialization/std/options,
+  eth/common/eth_types_json_serialization,
   eth/[common, keys, rlp, p2p], nimcrypto,
   ".."/[transaction, vm_state, constants, utils, context],
   ../db/[db_chain, state_db],
@@ -297,7 +299,9 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       hash = data.toHash
 
     if chain.getBlockHeader(hash, header):
-      result = some(populateBlockObject(header, chain, fullTransactions))
+      result = some populateBlockObject(header, chain, fullTransactions)
+    else:
+      result = none BlockObject
 
   server.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by block number.

@@ -103,6 +103,7 @@ const
   defaultEthWsPort         = 8546
   defaultEthGraphqlPort    = 8547
   defaultEngineApiPort     = 8550
+  defaultEngineApiWsPort   = 8551
   defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
   defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
   defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
@@ -327,6 +328,23 @@ type
       defaultValue: defaultAdminListenAddress
       defaultValueDesc: defaultAdminListenAddressDesc
       name: "engine-api-address" .}: ValidIpAddress
+
+    engineApiWsEnabled* {.
+      desc: "Enable the WebSocket Engine API"
+      defaultValue: false
+      name: "engine-api-ws" .}: bool
+
+    engineApiWsPort* {.
+      desc: "Listening port for the WebSocket Engine API"
+      defaultValue: defaultEngineApiWsPort
+      defaultValueDesc: $defaultEngineApiWsPort
+      name: "engine-api-ws-port" .}: Port
+
+    engineApiWsAddress* {.
+      desc: "Listening address for the WebSocket Engine API"
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: defaultAdminListenAddressDesc
+      name: "engine-api-ws-address" .}: ValidIpAddress
 
     nodeKeyHex* {.
       desc: "P2P node private key (as 32 bytes hex string)"

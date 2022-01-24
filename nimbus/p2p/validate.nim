@@ -34,7 +34,7 @@ export
 {.push raises: [Defect].}
 
 const
-  daoForkBlockExtraData =
+  daoForkBlockExtraData* =
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 # ------------------------------------------------------------------------------

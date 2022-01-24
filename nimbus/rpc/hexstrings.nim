@@ -27,7 +27,9 @@
 ]#
 
 import
-  stint, stew/byteutils, eth/[keys, rlp], eth/common/eth_types
+  stint, stew/byteutils, eth/[keys, rlp],
+  eth/common/eth_types,
+  json_serialization
 
 type
   HexQuantityStr* = distinct string
@@ -300,3 +302,15 @@ proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
 
 proc fromJson*(n: JsonNode, argName: string, result: var JsonNode) =
   result = n
+
+proc writeValue*(writer: var JsonWriter, value: HexQuantityStr) =
+  writeValue(writer, string value)
+
+proc writeValue*(writer: var JsonWriter, value: HexDataStr) =
+  writeValue(writer, string value)
+
+proc writeValue*(writer: var JsonWriter, value: EthAddressStr) =
+  writeValue(writer, string value)
+
+proc writeValue*(writer: var JsonWriter, value: EthHashStr) =
+  writeValue(writer, string value)

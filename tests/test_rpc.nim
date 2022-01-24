@@ -9,7 +9,7 @@ import
   asynctest, json, strformat, strutils, options, tables, os,
   nimcrypto, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
-  eth/[rlp, keys, trie/db, p2p/private/p2p_types],
+  eth/[rlp, keys, trie/db, p2p/private/p2p_types], web3/conversions,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, config, genesis, utils, transaction,
              vm_state, vm_types],
