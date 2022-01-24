@@ -87,14 +87,14 @@ proc addContentRequest*(
 
   return connectionId
 
-proc writeAndClose(socket: UtpSocket[Node], data: seq[byte]) {.async.} =
+proc writeAndClose(socket: UtpSocket[NodeAddress], data: seq[byte]) {.async.} =
   let dataWritten =  await socket.write(data)
   if dataWritten.isErr():
     debug "Error writing requested data", error = dataWritten.error
 
   await socket.closeWait()
 
-proc readAndClose(socket: UtpSocket[Node], stream: PortalStream) {.async.} =
+proc readAndClose(socket: UtpSocket[NodeAddress], stream: PortalStream) {.async.} =
   # Read all bytes from the socket
   # This will either end with a FIN, or because the read action times out.
   # A FIN does not necessarily mean that the data read is complete. Further
@@ -124,22 +124,22 @@ proc pruneAllowedConnections(stream: PortalStream) =
 
 # TODO: I think I'd like it more if we weren't to capture the stream.
 proc registerIncomingSocketCallback(
-    stream: PortalStream): AcceptConnectionCallback[Node] =
+    stream: PortalStream): AcceptConnectionCallback[NodeAddress] =
   return (
-    proc(server: UtpRouter[Node], client: UtpSocket[Node]): Future[void] =
+    proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
       # Note: Connection id of uTP SYN is different from other packets, it is
       # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
       # other packets.
       for i, request in stream.contentRequests:
         if request.connectionId == client.connectionId and
-            request.nodeId == client.remoteAddress.id:
+            request.nodeId == client.remoteAddress.nodeId:
           let fut = client.writeAndClose(request.content.asSeq())
           stream.contentRequests.del(i)
           return fut
 
       for i, offer in stream.contentOffers:
         if offer.connectionId == client.connectionId and
-            offer.nodeId == client.remoteAddress.id:
+            offer.nodeId == client.remoteAddress.nodeId:
           let fut = client.readAndClose(stream)
           stream.contentOffers.del(i)
           return fut
@@ -152,19 +152,19 @@ proc registerIncomingSocketCallback(
   )
 
 proc allowRegisteredIdCallback(
-    stream: PortalStream): AllowConnectionCallback[Node] =
+    stream: PortalStream): AllowConnectionCallback[NodeAddress] =
   return (
-    proc(r: UtpRouter[Node], remoteAddress: Node, connectionId: uint16): bool =
+    proc(r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16): bool =
       # stream.pruneAllowedConnections()
       # `connectionId` is the connection id ofthe uTP SYN packet header, thus
       # the peers `send_conn_id`.
       return
         stream.contentRequests.any(
           proc (x: ContentRequest): bool =
-            x.connectionId == connectionId and x.nodeId == remoteAddress.id) or
+            x.connectionId == connectionId and x.nodeId == remoteAddress.nodeId) or
         stream.contentOffers.any(
           proc (x: ContentOffer): bool =
-            x.connectionId == connectionId and x.nodeId == remoteAddress.id)
+            x.connectionId == connectionId and x.nodeId == remoteAddress.nodeId)
   )
 
 proc new*(

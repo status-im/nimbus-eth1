@@ -373,8 +373,16 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     case m.contentMessageType:
     of connectionIdType:
       # uTP protocol uses BE for all values in the header, incl. connection id
+      let nodeAddress = NodeAddress.init(dst)
+
+      if nodeAddress.isNone():
+        # we are already after FINDCONTENT/CONTENT, this should not happen
+        error "Not known address for node",
+          id = dst.id
+        return err("Node address is unknown")
+
       let socketRes = await p.stream.transport.connectTo(
-          dst, uint16.fromBytesBE(m.connectionId))
+          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
       if socketRes.isErr():
         # TODO: get proper error mapped
         return err("Error connecting to uTP socket")
@@ -418,8 +426,17 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
 
+    let nodeAddress = NodeAddress.init(dst)
+
+    if nodeAddress.isNone():
+      # we are already after FINDCONTENT/CONTENT, this should not happen
+      error "Not known address for node",
+        id = dst.id
+      return err("Node address is unknown")
+
     let clientSocketRes = await p.stream.transport.connectTo(
-      dst, uint16.fromBytesBE(m.connectionId))
+      nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
+      
     if clientSocketRes.isErr():
       # TODO: get proper error mapped
       return err("Error connecting to uTP socket")
