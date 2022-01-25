@@ -21,30 +21,30 @@ jobs:
           - os: linux
             cpu: i386
             evmc: nimevm
-          - os: macos
-            cpu: amd64
-            evmc: nimevm
-          - os: windows
-            cpu: amd64
-            evmc: nimevm
-          - os: windows
-            cpu: i386
-            evmc: nimevm
+          #- os: macos
+          #  cpu: amd64
+          #  evmc: nimevm
+          #- os: windows
+          #  cpu: amd64
+          #  evmc: nimevm
+          #- os: windows
+          #  cpu: i386
+          #  evmc: nimevm
           - os: linux
             cpu: amd64
             evmc: evmc
           - os: linux
             cpu: i386
             evmc: evmc
-          - os: macos
-            cpu: amd64
-            evmc: evmc
-          - os: windows
-            cpu: amd64
-            evmc: evmc
-          - os: windows
-            cpu: i386
-            evmc: evmc
+          #- os: macos
+          #  cpu: amd64
+          #  evmc: evmc
+          #- os: windows
+          #  cpu: amd64
+          #  evmc: evmc
+          #- os: windows
+          #  cpu: i386
+          #  evmc: evmc
           # vm2
           - os: linux
             cpu: amd64
@@ -52,28 +52,28 @@ jobs:
           - os: linux
             cpu: i386
             evmc: nimvm2
-          - os: windows
-            cpu: amd64
-            evmc: nimvm2
-          - os: windows
-            cpu: i386
-            evmc: nimvm2
-          - os: macos
-            cpu: amd64
-            evmc: nimvm2
+          #- os: windows
+          #  cpu: amd64
+          #  evmc: nimvm2
+          #- os: windows
+          #  cpu: i386
+          #  evmc: nimvm2
+          #- os: macos
+          #  cpu: amd64
+          #  evmc: nimvm2
         include:
           - target:
               os: linux
             builder: ubuntu-18.04
             shell: bash
-          - target:
-              os: macos
-            builder: macos-10.15
-            shell: bash
-          - target:
-              os: windows
-            builder: windows-latest
-            shell: msys2 {0}
+          #- target:
+          #    os: macos
+          #  builder: macos-10.15
+          #  shell: bash
+          #- target:
+          #    os: windows
+          #  builder: windows-latest
+          #  shell: msys2 {0}
 
     defaults:
       run:
@@ -279,10 +279,17 @@ jobs:
       - name: Run nimbus-eth1 tests (Linux)
         if: runner.os == 'Linux'
         run: |
+          lsb_release -a || true
+          uname -a
+          dpkg-architecture || true
+          dpkg --print-architecture || true
+          dpkg --print-foreign-architectures || true
+          gcc --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu} USE_MIRACL=${USE_MIRACL} ENABLE_EVMC=${ENABLE_EVMC}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS}
           build/nimbus --help
+          file build/* || true
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
           env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test test-reproducibility
 
