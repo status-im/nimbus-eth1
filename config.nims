@@ -20,10 +20,20 @@ if defined(windows):
 # and larger arithmetic use cases, along with register starvation issues. When
 # engineering a more portable binary release, this should be tweaked but still
 # use at least -msse2 or -msse3.
+#
+# https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#ssse3-supplemental-sse3
+# suggests that SHA256 hashing with SSSE3 is 20% faster than without SSSE3, so
+# given its near-ubiquity in the x86 installed base, it renders a distribution
+# build more viable on an overall broader range of hardware.
+#
 if defined(disableMarchNative):
   if defined(i386) or defined(amd64):
-    switch("passC", "-msse3")
-    switch("passL", "-msse3")
+    switch("passC", "-mssse3")
+    switch("passL", "-mssse3")
+elif defined(macosx) and defined(arm64):
+  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
+  switch("passC", "-mcpu=apple-a14")
+  switch("passL", "-mcpu=apple-a14")
 else:
   switch("passC", "-march=native")
   switch("passL", "-march=native")
