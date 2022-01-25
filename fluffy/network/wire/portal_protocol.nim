@@ -373,8 +373,16 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     case m.contentMessageType:
     of connectionIdType:
       # uTP protocol uses BE for all values in the header, incl. connection id
+      let nodeAddress = NodeAddress.init(dst)
+      if nodeAddress.isNone():
+        # It should not happen as we are already after succesfull talkreq/talkresp
+        # cycle
+        error "Trying to connect to node with unknown address",
+          id = dst.id
+        return err("Trying to connect to node with unknown address")
+
       let socketRes = await p.stream.transport.connectTo(
-          dst, uint16.fromBytesBE(m.connectionId))
+          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
       if socketRes.isErr():
         # TODO: get proper error mapped
         return err("Error connecting to uTP socket")
@@ -418,8 +426,16 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
 
+    let nodeAddress = NodeAddress.init(dst)
+    if nodeAddress.isNone():
+      # It should not happen as we are already after succesfull talkreq/talkresp
+      # cycle
+      error "Trying to connect to node with unknown address",
+        id = dst.id
+      return err("Trying to connect to node with unknown address")
+
     let clientSocketRes = await p.stream.transport.connectTo(
-      dst, uint16.fromBytesBE(m.connectionId))
+      nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
     if clientSocketRes.isErr():
       # TODO: get proper error mapped
       return err("Error connecting to uTP socket")
