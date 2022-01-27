@@ -20,9 +20,14 @@ const
   repoDir = ["status", "replay"]                    # alternative repo paths
   jFile = "nimbus_kintsugi.json"
 
-let
-  isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
+when defined(windows):
+  const isUbuntu32bit = false
+else:
+  # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
+  # error when running the system command `lsb_release -d` in the background.
+  let isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
 
+let
   # There is a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
   # was present. The Github/CI set up for Linux/i386 is
