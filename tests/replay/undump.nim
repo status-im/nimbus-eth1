@@ -64,7 +64,7 @@ proc dumpGroupBeginNl*(db: BaseChainDB;
 proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
                   bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
-  ## `p2p/chain.persist_blocks.persistBlocksImpl()`:
+  ## `p2p/chain/persist_blocks.persistBlocksImpl()`:
   ## ::
   ##   dumpStream.write c.db.dumpGroupNl(headers,bodies)
   ##
@@ -72,7 +72,8 @@ proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
   ## that could be initialised with
   ## ::
   ##   var dumpStream: File
-  ##   dumpStream.open("./dump-stream.out", fmWrite)
+  ##   if dumpStream.isNil:
+  ##     doAssert dumpStream.open("./dump-stream.out", fmWrite)
   ##
   db.dumpGroupBeginNl(headers) &
     toSeq(countup(0, headers.len-1))
