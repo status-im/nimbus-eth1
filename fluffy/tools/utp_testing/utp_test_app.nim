@@ -16,7 +16,8 @@ import
   eth/p2p/discoveryv5/protocol,
   eth/p2p/discoveryv5/enr,
   eth/utp/[utp_discv5_protocol, utp_router],
-  eth/keys
+  eth/keys,
+  ../../rpc/rpc_discovery_api
 
 const
   defaultListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
@@ -86,36 +87,13 @@ proc hash(x: SKey): Hash =
 func toSKey(k: UtpSocketKey[NodeAddress]): SKey =
   SKey(id: k.rcvId, nodeId: k.remoteAddress.nodeId)
 
-proc installHandlers(
+proc installUtpHandlers(
   srv: RpcHttpServer,
   d: protocol.Protocol, 
   s: UtpDiscv5Protocol, 
   t: ref Table[SKey, UtpSocket[NodeAddress]]) {.raises: [Defect, CatchableError].} =
 
-  srv.rpc("get_record") do() -> enr.Record:
-    return d.getRecord()
-
-  srv.rpc("add_record") do(r: enr.Record) -> bool:
-    let node = newNode(r)
-
-    if node.isOk():
-      return d.addNode(node.get())
-    else:
-      raise newException(ValueError, "Bad enr")
-  
-  srv.rpc("ping") do(r: enr.Record) -> bool:
-    let nodeRes = newNode(r)
-
-    if nodeRes.isOk():
-      let node = nodeRes.get()
-      discard d.addNode(nodeRes.get())
-      let pingRes = await d.ping(node)
-      
-      return pingRes.isOk()
-    else:
-      raise newException(ValueError, "Bad enr")
-
-  srv.rpc("connect") do(r: enr.Record) -> SKey:
+  srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
     let
       nodeRes = newNode(r)
       
@@ -134,10 +112,11 @@ proc installHandlers(
     else:
       raise newException(ValueError, "Bad enr")
 
-  srv.rpc("write") do(k: SKey, b: string) -> bool:
+  srv.rpc("utp_write") do(k: SKey, b: string) -> bool:
     let sock = t.getOrDefault(k)
     let bytes = hexToSeqByte(b)
     if sock != nil:
+      # TODO consider doing it async to avoid json-rpc timeouts in case of large writes
       let res = await sock.write(bytes)
       if res.isOk():
         return true
@@ -147,7 +126,7 @@ proc installHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-  srv.rpc("get_connections") do() -> seq[SKey]:
+  srv.rpc("utp_get_connections") do() -> seq[SKey]:
     var keys = newSeq[SKey]()
 
     for k in t.keys:
@@ -155,7 +134,7 @@ proc installHandlers(
     
     return keys
 
-  srv.rpc("read") do(k: SKey, n: int) -> string:
+  srv.rpc("utp_read") do(k: SKey, n: int) -> string:
     let sock = t.getOrDefault(k)
     if sock != nil:
       let res = await sock.read(n)
@@ -164,7 +143,7 @@ proc installHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-  srv.rpc("close") do(k: SKey) -> bool:
+  srv.rpc("utp_close") do(k: SKey) -> bool:
     let sock = t.getOrDefault(k)
     if sock != nil:
       await sock.closeWait()
@@ -214,6 +193,9 @@ when isMainModule:
     cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
     utp = UtpDiscv5Protocol.new(d, protName, buildAcceptConnection(table), socketConfig = cfg)
 
-  srv.installHandlers(d, utp, table)
+  # needed for some of the discovery api: nodeInfo, setEnr, ping
+  srv.installDiscoveryApiHandlers(d)
+
+  srv.installUtpHandlers(d, utp, table)
 
   runForever()

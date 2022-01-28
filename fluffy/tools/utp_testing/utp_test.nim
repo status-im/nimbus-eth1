@@ -6,9 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/[options, sequtils, sugar],
   unittest2, testutils, chronos,
   json_rpc/rpcclient, stew/byteutils,
-  eth/keys
+  eth/keys,
+  ./utp_test_client
 
 proc generateByteSeq(rng: var BrHmacDrbgContext, length: int): seq[byte] =
   var bytes = newSeq[byte](length)
@@ -36,45 +38,68 @@ procSuite "Utp integration tests":
 
   # to avoid influencing uTP tests by discv5 sessions negotiation, at least one ping
   # should be successful
-  proc pingTillSuccess(client: RpcHttpClient, enr: JsonNode): Future[void] {.async.}=
+  proc pingTillSuccess(client: RpcHttpClient, enr: Record): Future[void] {.async.}=
     var failed = true
     while failed:
-      let pingRes = (await client.call("ping", %[enr])).getBool()
-      if pingRes:
-        failed = false
+      let futRes = client.discv5_ping(enr)
+      yield futRes
+      if futRes.completed():
+        break
   
+  proc findServerConnection(
+    connections: openArray[SKey],
+    clientId: NodeId,
+    clientConnectionId: uint16): Option[Skey] = 
+    let conns: seq[SKey] = 
+      connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId)
+    if len(conns) == 0:
+      none[Skey]()
+    else:
+      some[Skey](conns[0])
+
+  # Sometimes to packet loss connection can fail, to make sure it will work correctly
+  # we must repeat it untill success
+  proc utp_connectTillSuccess(client: RpcHttpClient, enr: Record): Future[Skey] {.async.} =
+    var failed = true
+    while failed:
+      let connectFuture = client.utp_connect(enr)
+      yield connectFuture
+
+      if connectFuture.failed():
+        continue
+      else:
+        return connectFuture.read()
+
   # TODO add more scenarios
-  asyncTest "Transfer 5000B of data over utp stream":
+  asyncTest "Transfer 100k bytes of data over utp stream":
     let client = newRpcHttpClient()
     let server = newRpcHttpClient()
+    let numOfBytes = 100000
 
     await client.connect(clientContainerAddress, clientContainerPort, false)
     await server.connect(serverContainerAddress, serverContainerPort, false)
 
-    # TODO add file to generate nice api calls
-    let clientEnr = await client.call("get_record", %[])
-    let serverEnr = await server.call("get_record", %[])
+    let clientInfo = await client.discv5_nodeInfo()
+    let serverInfo = await server.discv5_nodeInfo()
 
-    let serverAddRes = await server.call("add_record", %[clientEnr])
+    # nodes need to have established session before the utp try
+    await client.pingTillSuccess(serverInfo.nodeEnr)
 
-    # we need to have successfull ping to have proper session on both sides, otherwise
-    # whoareyou packet exchange may influence testing of utp
-    await client.pingTillSuccess(serverEnr)
-
-    let connectRes = await client.call("connect", %[serverEnr])
-
-    let srvConns = (await server.call("get_connections", %[])).getElems()
+    let 
+      clientConnectionKey = await client.utp_connectTillSuccess(serverInfo.nodeEnr)
+      serverConnections = await server.utp_get_connections()
+      maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
 
     check:
-      len(srvConns) == 1
+      maybeServerConnectionKey.isSome()
+
+    let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
     let
-      clientKey = srvConns[0]
-      numBytes = 5000
-      bytes = generateByteSeqHex(rng[], numBytes)
-      writeRes = await client.call("write", %[connectRes, %bytes])
-      readRes = await server.call("read", %[clientKey, %numBytes])
-      bytesReceived = readRes.getStr()
+      bytesToWrite = generateByteSeqHex(rng[], numOfBytes)
+      writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
+      readData = await server.utp_read(serverConnectionKey, numOfBytes)
 
     check:
-      bytes == bytesReceived
+      writeRes == true
+      readData == bytesToWrite
