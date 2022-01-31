@@ -14,4 +14,4 @@ import
 export utp_rpc_types, rpc_types
 
 createRpcSigs(RpcClient, currentSourcePath.parentDir / "utp_test_rpc_calls.nim")
-createRpcSigs(RpcClient, currentSourcePath.parentDir.parentDir.parentDir / "rpc" / "rpc_calls" / "rpc_discovery_calls.nim")
+createRpcSigs(RpcClient, currentSourcePath.parentDir /../ "" /../ "rpc" / "rpc_calls" / "rpc_discovery_calls.nim")
