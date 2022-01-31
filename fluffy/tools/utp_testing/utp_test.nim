@@ -35,10 +35,12 @@ procSuite "Utp integration tests":
 
   let serverContainerAddress = "127.0.0.1"
   let serverContainerPort = Port(9041)
+  
+  type FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
 
   # combinator which repeatadly calls passed closure until returned future is 
   # successfull
-  proc repeatTillSuccess[A](f: proc (): Future[A] {.gcsafe.}): Future[A] {.async.}=
+  proc repeatTillSuccess[A](f: FutureCallback[A]): Future[A] {.async.}=
     while true:
       let resFut = f()
       yield resFut
