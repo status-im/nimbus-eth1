@@ -72,9 +72,6 @@ if not defined(macosx):
     # light-weight stack traces using libbacktrace and libunwind
     --define:nimStackTraceOverride
     switch("import", "libbacktrace")
-  else:
-    --stacktrace:on
-    --linetrace:on
 
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
 # libnimbus.so needs position-independent code
