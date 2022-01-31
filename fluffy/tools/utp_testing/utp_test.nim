@@ -42,16 +42,13 @@ procSuite "Utp integration tests":
   # successfull
   proc repeatTillSuccess[A](f: FutureCallback[A]): Future[A] {.async.}=
     while true:
-      let resFut = f()
-      yield resFut
-
-      if resFut.failed():
+      try:
+        let res = await f()
+        return res
+      except CatchableError:
         continue
-      else:
-        when A is void:
-          return
-        else:
-          return resFut.read()
+      except CancelledError as canc:
+        raise canc
 
   proc findServerConnection(
     connections: openArray[SKey],
