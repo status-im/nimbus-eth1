@@ -36,16 +36,21 @@ procSuite "Utp integration tests":
   let serverContainerAddress = "127.0.0.1"
   let serverContainerPort = Port(9041)
 
-  # to avoid influencing uTP tests by discv5 sessions negotiation, at least one ping
-  # should be successful
-  proc pingTillSuccess(client: RpcHttpClient, enr: Record): Future[void] {.async.}=
-    var failed = true
-    while failed:
-      let futRes = client.discv5_ping(enr)
-      yield futRes
-      if futRes.completed():
-        break
-  
+  # combinator which repeatadly calls passed closure until returned future is 
+  # successfull
+  proc repeatTillSuccess[A](f: proc (): Future[A] {.gcsafe.}): Future[A] {.async.}=
+    while true:
+      let resFut = f()
+      yield resFut
+
+      if resFut.failed():
+        continue
+      else:
+        when A is void:
+          return
+        else:
+          return resFut.read()
+
   proc findServerConnection(
     connections: openArray[SKey],
     clientId: NodeId,
@@ -56,19 +61,6 @@ procSuite "Utp integration tests":
       none[Skey]()
     else:
       some[Skey](conns[0])
-
-  # Sometimes to packet loss connection can fail, to make sure it will work correctly
-  # we must repeat it untill success
-  proc utp_connectTillSuccess(client: RpcHttpClient, enr: Record): Future[Skey] {.async.} =
-    var failed = true
-    while failed:
-      let connectFuture = client.utp_connect(enr)
-      yield connectFuture
-
-      if connectFuture.failed():
-        continue
-      else:
-        return connectFuture.read()
 
   # TODO add more scenarios
   asyncTest "Transfer 100k bytes of data over utp stream":
@@ -83,11 +75,11 @@ procSuite "Utp integration tests":
     let serverInfo = await server.discv5_nodeInfo()
 
     # nodes need to have established session before the utp try
-    await client.pingTillSuccess(serverInfo.nodeEnr)
+    discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.nodeEnr))
 
     let 
-      clientConnectionKey = await client.utp_connectTillSuccess(serverInfo.nodeEnr)
-      serverConnections = await server.utp_get_connections()
+      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
+      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
 
     check:
