@@ -53,6 +53,11 @@ const
     k.cpt.stack.push:
       k.cpt.getDifficulty
 
+  randomOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x44, Get the block's randomness
+    k.cpt.stack.push:
+      k.cpt.getRandom
+
   gasLimitOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x45, Get the block's gas limit
     k.cpt.stack.push:
@@ -113,7 +118,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Difficulty,      ## 0x44, Block difficulty
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpPostMergeAndLater,
      name: "difficulty",
      info: "Get the block's difficulty",
      exec: (prep: vm2OpIgnore,
@@ -144,12 +149,20 @@ const
             run:  selfBalanceOp,
             post: vm2OpIgnore)),
 
-    (opCode: BaseFee,     ## 0x48, EIP-1559 Block base fee.
+    (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.
      forks: Vm2OpLondonAndLater,
      name: "baseFee",
      info: "Get current block's EIP-1559 base fee",
      exec: (prep: vm2OpIgnore,
             run:  baseFeeOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Random,          ## 0x44, EIP-4399 Block randomness.
+     forks: Vm2OpPostMergeAndLater,
+     name: "random",
+     info: "Get current block's EIP-4399 randomness",
+     exec: (prep: vm2OpIgnore,
+            run:  randomOp,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------

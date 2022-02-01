@@ -81,6 +81,9 @@ const
   Vm2OpLondonAndLater* =
     Vm2OpBerlinAndLater - {FkBerlin}
 
+  Vm2OpPostMergeAndLater* =
+    Vm2OpLondonAndLater - {FkLondon}
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

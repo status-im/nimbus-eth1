@@ -209,6 +209,10 @@ type
     SelfDestruct =   0xff  ## Halt execution and register account for later
                            ## deletion.
 
+const
+  # EIP-4399 new opcode
+  Random* = Difficulty
+  
 # ------------------------------------------------------------------------------
 # Verify that Op is contiguous and sym names follow some standards
 # ------------------------------------------------------------------------------
