@@ -24,6 +24,7 @@ const
   eth5 = 5.eth
   eth3 = 3.eth
   eth2 = 2.eth
+  eth0 = 0.u256
 
   # Note than the `blockRewards` were previously exported but nowhere
   # used otherwise.
@@ -37,7 +38,8 @@ const
     eth2, # FkPetersburg
     eth2, # FkIstanbul
     eth2, # FkBerlin
-    eth2  # FkLondon
+    eth2, # FkLondon
+    eth0  # FkPostMerge
   ]
 
 {.push raises: [Defect].}

@@ -78,7 +78,11 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
     parent    = parent,
     timestamp = getTime().utc.toTime,
     gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
-    fee       = fee,
+    fee       = fee,    
+    # EIP-4399 extra complexity
+    # TODO: make sure from where or what value
+    # this `random` param should be
+    random    = Hash256(), 
     miner     = dh.miner,
     chainDB   = dh.db)
 

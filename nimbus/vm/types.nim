@@ -38,6 +38,7 @@ type
     timestamp*     : EthTime
     gasLimit*      : GasInt
     fee*           : Option[Uint256]
+    random*        : Hash256
     name*          : string
     flags*         : set[VMFlag]
     tracer*        : TransactionTracer

@@ -249,10 +249,17 @@ let BerlinOpDispatch {.compileTime.}: array[Op, NimNode] = genBerlinJumpTable(Is
 
 proc genLondonJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
-  # incoming EIP-3198 and EIP-3529
+  # EIP-3198 and EIP-3529
   result[BaseFee] = newIdentNode "baseFee"
 
 let LondonOpDispatch {.compileTime.}: array[Op, NimNode] = genLondonJumpTable(BerlinOpDispatch)
+
+proc genPostMergeJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  # EIP-4399
+  result[Random] = newIdentNode "randomEIP4399"
+
+let PostMergeOpDispatch {.compileTime.}: array[Op, NimNode] = genPostMergeJumpTable(LondonOpDispatch)
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
 
@@ -345,6 +352,9 @@ macro genBerlinDispatch(c: Computation): untyped =
 macro genLondonDispatch(c: Computation): untyped =
   result = opTableToCaseStmt(LondonOpDispatch, c)
 
+macro genPostMergeDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(PostMergeOpDispatch, c)
+
 proc frontierVM(c: Computation) =
   genFrontierDispatch(c)
 
@@ -375,6 +385,9 @@ proc berlinVM(c: Computation) {.gcsafe.} =
 proc londonVM(c: Computation) {.gcsafe.} =
   genLondonDispatch(c)
 
+proc postMergeVM(c: Computation) {.gcsafe.} =
+  genPostMergeDispatch(c)
+
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -396,8 +409,10 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     c.istanbulVM()
   of FkBerlin:
     c.berlinVM()
-  else:
+  of FkLondon:
     c.londonVM()
+  else:
+    c.postMergeVM()
 
 proc executeOpcodes(c: Computation) =
   let fork = c.fork

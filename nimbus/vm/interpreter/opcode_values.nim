@@ -188,3 +188,7 @@ fill_enum_holes:
       Revert =         0xfd, # Halt execution reverting state changes but returning data and remaining gas.
       Invalid =        0xfe, # Designated invalid instruction.
       SelfDestruct =   0xff  # Halt execution and register account for later deletion.
+
+const
+  # EIP-4399 new opcode
+  Random* = Difficulty

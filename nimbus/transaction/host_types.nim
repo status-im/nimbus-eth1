@@ -94,6 +94,9 @@ template isCreate*(kind: EvmcCallKind): bool =
 template isStatic*(msg: EvmcMessage): bool =
   EVMC_STATIC in msg.flags
 
+template isZero*(n: evmc_bytes32): bool =
+  n == default(evmc_bytes32)
+
 # Nim quirks: Exporting `evmc_status_code` (etc) are needed to access the enum
 # values, even though alias `EnumStatusCode` is already exported.  Exporting
 # `evmc_flags` won't export the flags, `evmc_flag_bit_shifts` must be used.
