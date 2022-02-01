@@ -9,18 +9,40 @@
 # according to those terms.
 
 import
-  std/[os, strformat, strutils],
+  std/[distros, os, strformat, strutils],
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend],
   eth/[common, p2p, trie/db],
   unittest2
 
 const
-  isLinux32bit = defined(linux) and int.sizeof == 4
-
   baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
   repoDir = ["status", "replay"]                    # alternative repo paths
   jFile = "nimbus_kintsugi.json"
+
+when defined(windows):
+  const isUbuntu32bit = false
+else:
+  # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
+  # error when running the system command `lsb_release -d` in the background.
+  let isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
+
+let
+  # There is a problem with the Github/CI which results in spurious crashes
+  # when leaving the `runner()` if the persistent BaseChainDB initialisation
+  # was present. The Github/CI set up for Linux/i386 is
+  #
+  #    Ubuntu 10.04.06 LTS
+  #       with repo kernel 5.4.0-1065-azure (see  'uname -a')
+  #
+  #    base OS architecture is amd64
+  #       with i386 foreign architecture
+  #
+  #    nimbus binary is an
+  #       ELF 32-bit LSB shared object,
+  #       Intel 80386, version 1 (SYSV), dynamically linked,
+  #
+  disablePersistentDB = isUbuntu32bit
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -53,27 +75,16 @@ proc runner(noisy = true; file = jFile) =
     fileInfo = file.splitFile.name.split(".")[0]
     filePath = file.findFilePath
 
-  # There is a crash problem with the persistent BaseChainDB initialisation
-  # and clean up on the Github/CI Linux/i386 engines running Ubuntu 18.04.06.
-  # It will result in spurious segfaults for some reason.
-  #
-  # This could not be reproduced on a virtual Qemu machine running
-  # Debian/bullseye i386, see also
-  # https://github.com/status-im/nimbus-eth2/issues/3121, some observations
-  # similar to this one.
-  when isLinux32bit:
-    let tmpDir = "*notused*"
-  else:
-    let tmpDir = filePath.splitFile.dir / "tmp"
-    defer: tmpDir.flushDbDir
+    tmpDir = if disablePersistentDB: "*notused*"
+             else: filePath.splitFile.dir / "tmp"
+
+  defer:
+    if not disablePersistentDB: tmpDir.flushDbDir
 
   suite &"Kintsugi test scenario":
     var
       params: NetworkParams
-      mdb: BaseChainDB
-
-    when not isLinux32bit:
-      var ddb: BaseChainDB
+      mdb, ddb: BaseChainDB
 
     test &"Load params from {fileInfo}":
       check filePath.loadNetworkParams(params)
@@ -85,11 +96,7 @@ proc runner(noisy = true; file = jFile) =
         params = params)
 
     test &"Construct persistent BaseChainDB on {tmpDir}":
-      when isLinux32bit:
-        # Crazy enough, on the Github/CI Linux/i386 engines running
-        # Ubuntu 18.04.06, some of the VM variants crash already if
-        # the constructor below is present without even applying it
-        # (e.g. as `ddb.initializeEmptyDb`.)
+      if disablePersistentDB:
         skip()
       else:
         # Before allocating the database, the data directory needs to be
@@ -115,12 +122,20 @@ proc runner(noisy = true; file = jFile) =
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
 
+    #[
     test "Initialise persistent Genesis, expect AssertionError":
-      when isLinux32bit:
+      if disablePersistentDB:
         skip()
       else:
         expect AssertionError:
           ddb.initializeEmptyDb
+    #]#
+
+    test "Initialise persistent Genesis (kludge)":
+      if disablePersistentDB:
+        skip()
+      else:
+        ddb.initializeEmptyDb
 
 # ------------------------------------------------------------------------------
 # Main function(s)
