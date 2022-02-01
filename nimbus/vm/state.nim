@@ -59,6 +59,7 @@ proc init(
       timestamp:   EthTime;
       gasLimit:    GasInt;
       fee:         Option[Uint256];
+      random:      Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       tracer:      TransactionTracer)
@@ -70,6 +71,7 @@ proc init(
   self.timestamp = timestamp
   self.gasLimit = gasLimit
   self.fee = fee
+  self.random = random
   self.chaindb = chainDB
   self.tracer = tracer
   self.logEntries = @[]
@@ -84,6 +86,7 @@ proc init(
       timestamp:   EthTime;
       gasLimit:    GasInt;
       fee:         Option[Uint256];
+      random:      Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       tracerFlags: set[TracerFlags])
@@ -96,6 +99,7 @@ proc init(
     timestamp = timestamp,
     gasLimit  = gasLimit,
     fee       = fee,
+    random    = random,
     miner     = miner,
     chainDB   = chainDB,
     tracer    = tracer)
@@ -117,6 +121,7 @@ proc new*(
       timestamp:   EthTime;         ## tx env: time stamp
       gasLimit:    GasInt;          ## tx env: gas limit
       fee:         Option[Uint256]; ## tx env: optional base fee
+      random:      Hash256;          ## tx env: POS block randomness
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
       tracerFlags: set[TracerFlags] = {};
@@ -136,6 +141,7 @@ proc new*(
     timestamp   = timestamp,
     gasLimit    = gasLimit,
     fee         = fee,
+    random      = random,
     miner       = miner,
     chainDB     = chainDB,
     tracerFlags = tracerFlags)
@@ -145,6 +151,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              timestamp: EthTime;         ## tx env: time stamp
              gasLimit:  GasInt;          ## tx env: gas limit
              fee:       Option[Uint256]; ## tx env: optional base fee
+             random:    Hash256;         ## tx env: POS block randomness
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              pruneTrie: bool = true): bool
     {.gcsafe, raises: [Defect,CatchableError].} =
@@ -169,6 +176,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       timestamp   = timestamp,
       gasLimit    = gasLimit,
       fee         = fee,
+      random      = random,
       miner       = miner,
       chainDB     = db,
       tracer      = tracer)
@@ -191,6 +199,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
     timestamp = header.timestamp,
     gasLimit  = header.gasLimit,
     fee       = header.fee,
+    random    = header.random,
     miner     = self.chainDB.getMinerAddress(header),
     pruneTrie = pruneTrie)
 
@@ -227,6 +236,7 @@ proc init*(
             header.timestamp,
             header.gasLimit,
             header.fee,
+            header.random,
             chainDB.getMinerAddress(header),
             chainDB,
             tracerFlags)

@@ -412,6 +412,11 @@ op difficulty, inline = true:
   ## 0x44, Get the block's difficulty
   push: c.getDifficulty()
 
+op randomEIP4399, inline = true:
+  ## since EIP-4399 0x44 renamed from `DIFFICULTY` to `RANDOM`
+  ## 0x44, Get the block's randomness
+  push: c.getRandom()
+
 op gasLimit, inline = true:
   ## 0x45, Get the block's gas limit
   push: c.getGasLimit()
