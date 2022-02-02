@@ -54,13 +54,17 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
-  let d = newProtocol(
-    config.networkKey,
-    extIp, none(Port), extUdpPort,
-    bootstrapRecords = bootstrapRecords,
-    bindIp = bindIp, bindPort = udpPort,
-    enrAutoUpdate = config.enrAutoUpdate,
-    rng = rng)
+  let
+    discoveryConfig = DiscoveryConfig.init(
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
+    d = newProtocol(
+      config.networkKey,
+      extIp, none(Port), extUdpPort,
+      bootstrapRecords = bootstrapRecords,
+      bindIp = bindIp, bindPort = udpPort,
+      enrAutoUpdate = config.enrAutoUpdate,
+      config = discoveryConfig,
+      rng = rng)
 
   d.open()
 

@@ -42,6 +42,16 @@ proc installPortalApiHandlers*(
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
 
+  rpcServer.rpc("portal_" & network & "_addEnrs") do(enrs: seq[Record]) -> bool:
+    for enr in enrs:
+      let nodeRes = newNode(enr)
+      if nodeRes.isOk():
+        let node = nodeRes.get()
+        discard p.addNode(node)
+        p.routingTable.setJustSeen(node)
+
+    return true
+
   rpcServer.rpc("portal_" & network & "_ping") do(
       enr: Record) -> tuple[seqNum: uint64, customPayload: string]:
     let
