@@ -37,7 +37,7 @@ OPTS="h:n:d"
 LONGOPTS="help,nodes:,data-dir:,enable-htop,log-level:,base-port:,base-rpc-port:,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
 
 # default values
-NUM_NODES="17"
+NUM_NODES="64"
 DATA_DIR="local_testnet_data"
 USE_HTOP="0"
 LOG_LEVEL="TRACE"
@@ -260,20 +260,12 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     done
   fi
 
-  # Increasing the loopback address here with NUM_NODE as listen address to
-  # avoid hitting the IP limits in the routing tables.
-  # TODO: This simple increase will limit the amount of max nodes to 255.
-  # Could also fix this by having a compiler flag that starts the routing tables
-  # in fluffy with a very high limit or simply an adjustment in the routing
-  # table code that disable the checks on loopback address.
-
-  # macOS doesn't have these default
-  if uname | grep -qi darwin; then
-    sudo ifconfig lo0 alias 127.0.0.$((1 + NUM_NODE))
-  fi
+  # Running with bits-per-hop of 1 to make the lookups more likely requiring
+  # to request to nodes over the network instead of having most of them in the
+  # own routing table.
   ./build/fluffy \
-    --listen-address:127.0.0.$((1 + NUM_NODE)) \
-    --nat:extip:127.0.0.$((1 + NUM_NODE)) \
+    --listen-address:127.0.0.1 \
+    --nat:extip:127.0.0.1 \
     --log-level="${LOG_LEVEL}" \
     --udp-port=$(( BASE_PORT + NUM_NODE )) \
     --data-dir="${NODE_DATA_DIR}" \
@@ -284,7 +276,9 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --metrics \
     --metrics-address="127.0.0.1" \
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \
-    --bits-per-hop=5 \
+    --table-ip-limit=1024 \
+    --bucket-ip-limit=24 \
+    --bits-per-hop=1 \
     ${EXTRA_ARGS} \
     > "${DATA_DIR}/log${NUM_NODE}.txt" 2>&1 &
 

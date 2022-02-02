@@ -48,11 +48,18 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
 
     return d.routingTable.getNodeInfo()
 
-  rpcServer.rpc("discv5_setEnr") do(enr: Record) -> bool:
-    if d.addNode(enr):
-      return true
-    else:
-      raise newException(ValueError, "Could not add node with this ENR to routing table")
+  rpcServer.rpc("discv5_addEnrs") do(enrs: seq[Record]) -> bool:
+    # TODO: We could also adjust the API of addNode & newNode to accept a seen
+    # parameter, but perhaps only if that makes sense on other locations in
+    # discv5/portal that are not testing/debug related.
+    for enr in enrs:
+      let nodeRes = newNode(enr)
+      if nodeRes.isOk():
+        let node = nodeRes.get()
+        discard d.addNode(node)
+        d.routingTable.setJustSeen(node)
+
+    return true
 
   rpcServer.rpc("discv5_getEnr") do(nodeId: NodeId) -> Record:
     let node = d.getNode(nodeId)
