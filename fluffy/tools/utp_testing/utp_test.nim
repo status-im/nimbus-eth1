@@ -27,7 +27,7 @@ proc generateByteSeqHex(rng: var BrHmacDrbgContext, length: int): string =
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
 # or 
 # 1. running in docker dir: docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
-# 2. running in docke dir: SCENARIO="scenario name and params " docker-compose up
+# 2. running in docker dir: SCENARIO="scenario name and params " docker-compose up
 procSuite "Utp integration tests":
   let rng = newRng()
   let clientContainerAddress = "127.0.0.1"
@@ -40,13 +40,21 @@ procSuite "Utp integration tests":
 
   # combinator which repeatadly calls passed closure until returned future is 
   # successfull
-  proc repeatTillSuccess[A](f: FutureCallback[A]): Future[A] {.async.}=
+  # TODO: currently works only for non void types
+  proc repeatTillSuccess[A](f: FutureCallback[A], maxTries: int = 10): Future[A] {.async.} =
+    var i = 0
     while true:
       try:
         let res = await f()
         return res
-      except CatchableError:
-        continue
+      except CatchableError as exc:
+        echo "Call failed due to " & exc.msg
+        inc i
+
+        if i < maxTries:
+          continue
+        else:
+          raise exc
       except CancelledError as canc:
         raise canc
 
@@ -70,8 +78,10 @@ procSuite "Utp integration tests":
     await client.connect(clientContainerAddress, clientContainerPort, false)
     await server.connect(serverContainerAddress, serverContainerPort, false)
 
-    let clientInfo = await client.discv5_nodeInfo()
-    let serverInfo = await server.discv5_nodeInfo()
+    # we may need to retry few times if the simm is not ready yet
+    let clientInfo = await repeatTillSuccess(() => client.discv5_nodeInfo(), 10)
+
+    let serverInfo = await repeatTillSuccess(() => server.discv5_nodeInfo(), 10)
 
     # nodes need to have established session before the utp try
     discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.nodeEnr))
