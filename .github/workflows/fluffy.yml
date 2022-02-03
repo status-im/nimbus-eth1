@@ -8,6 +8,72 @@ on:
       'Makefile', 'nimbus.nimble', '!fluffy/**/*.md']
 
 jobs:
+  # separate job so it can run concurrently with other tests
+  testutp:
+    # whole test setup runs on ubuntu so we do not need multiple arch setup here
+    runs-on: ubuntu-latest
+    # TODO: for now only push event as this way it is easier to get branch name
+    # to build container
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v2
+
+      - name: Install modprobe
+        run: |
+          sudo apt-get install -y kmod
+
+      # It is required to correctly run the simulation
+      - name: Load iptables6 kernel modules
+        run: |
+          sudo modprobe ip6table_filter
+
+      - name: Get latest nimbus-build-system commit hash
+        id: versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          nbsHash=$(getHash status-im/nimbus-build-system)
+          echo "::set-output name=nimbus_build_system::$nbsHash"
+
+      - name: Restore prebuilt Nim binaries from cache
+        id: nim-cache
+        uses: actions/cache@v2
+        with:
+          path: NimBinaries
+          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}'
+
+      - name: Build Nim and Nimbus-eth1 dependencies
+        run: |
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
+
+      - name: build uTP test app container
+        run: |
+          docker build -t test-utp --no-cache --build-arg BRANCH_NAME=${{ github.ref_name }} fluffy/tools/utp_testing/docker
+      
+      - name: run test app with simulator
+        run: |
+          SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=10 --rate_to_server=10" docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml up -d
+      
+      - name: wait 5 seconds for containers to start
+        run: |
+          sleep 5
+
+      - name: check containers
+        run: |
+          docker ps -a
+          
+      - name: run uTP test
+        run: |
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} utp-test
+
+      - name: Stop containers
+        if: always()
+        run: docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml down
+
   build:
     strategy:
       fail-fast: false
