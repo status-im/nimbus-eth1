@@ -1,7 +1,9 @@
-FROM ubuntu:20.04
+FROM debian:buster-slim AS build
 
-RUN apt-get update && \
-  apt-get install -y build-essential wget net-tools iputils-ping tcpdump ethtool iperf iproute2 make git libpcre3-dev librocksdb-dev curl
+RUN apt-get update \
+ && apt-get install -y --fix-missing build-essential make git libpcre3-dev librocksdb-dev \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ARG BRANCH_NAME=master
 ENV NPROC=2
@@ -15,6 +17,15 @@ RUN git clone https://github.com/status-im/nimbus-eth1.git \
 RUN cd nimbus-eth1 && \
     make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" utp-test-app && \
     mv build/utp_test_app /bin/
+
+FROM debian:buster-slim AS deploy
+
+RUN apt-get update \
+ && apt-get install -y ethtool net-tools \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY --from=build /bin/utp_test_app /bin/utp_test_app
 
 COPY setup.sh .
 RUN chmod +x setup.sh
