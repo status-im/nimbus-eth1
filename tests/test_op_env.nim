@@ -1,7 +1,7 @@
 import
   macro_assembler, unittest2, macros,
   stew/byteutils, eth/common,
-  ../nimbus/vm_state,
+  ../nimbus/[vm_state, constants],
   ../nimbus/db/accounts_cache
 
 proc opEnvMain*() =
@@ -323,6 +323,28 @@ proc opEnvMain*() =
         "0xc862129bffb73168481c6a51fd36afb8342887fbc5314c763ac731c732d7310c"
       fork: berlin
       gasused: 2603
+
+    when not defined(evmc_enabled):
+      # TODO: enable this test for EVMC when EVMC
+      # support this EVM version
+      assembler:
+        title: "EIP-4399 RANDOM 0"
+        code:
+          Random
+          STOP
+        stack:
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        fork: postmerge
+
+      vmState.random = EMPTY_UNCLE_HASH
+      assembler:
+        title: "EIP-4399 RANDOM: EMPTY_UNCLE_HASH"
+        code:
+          Random
+          STOP
+        stack:
+          "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        fork: postmerge
 
 when isMainModule:
   opEnvMain()

@@ -46,7 +46,10 @@ const
 static:
   for n in Op:
     idToOpcode[$n] = newLit(ord(n))
-
+    
+  # EIP-4399 new opcode
+  idToOpcode["Random"] = newLit(ord(Difficulty))
+  
 proc validateVMWord(val: string, n: NimNode): VMWord =
   if val.len <= 2 or val.len > 66: error("invalid hex string", n)
   if not (val[0] == '0' and val[1] == 'x'): error("invalid hex string", n)
