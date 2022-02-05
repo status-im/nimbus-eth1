@@ -308,7 +308,11 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
   vmState.parent.blockNumber + 1
 
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
-  vmState.chainDB.config.calcDifficulty(vmState.timestamp, vmState.parent)
+  if vmState.fork >= FkPostMerge:
+    # EIP-4399/EIP-3675
+    0.u256
+  else:
+    vmState.chainDB.config.calcDifficulty(vmState.timestamp, vmState.parent)
 
 method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.fee.isSome:

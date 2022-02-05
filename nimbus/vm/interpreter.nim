@@ -12,7 +12,7 @@
 import
   ./interpreter/opcode_values as vmo
 export
-  vmo.Op
+  vmo.Op, vmo.Random
 
 
 # see vm_message
