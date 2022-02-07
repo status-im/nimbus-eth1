@@ -41,7 +41,7 @@ procSuite "Utp integration tests":
   # combinator which repeatadly calls passed closure until returned future is 
   # successfull
   # TODO: currently works only for non void types
-  proc repeatTillSuccess[A](f: FutureCallback[A], maxTries: int = 10): Future[A] {.async.} =
+  proc repeatTillSuccess[A](f: FutureCallback[A], maxTries: int = 20): Future[A] {.async.} =
     var i = 0
     while true:
       try:
@@ -133,9 +133,9 @@ procSuite "Utp integration tests":
       writeRes == true
       readData == bytesToWrite
 
-  asyncTest "Multiple 50k bytes transfers over utp stream":
+  asyncTest "Multiple 10k bytes transfers over utp stream":
     let (client, clientInfo, server, serverInfo) = await setupTest()
-    let numOfBytes = 50000
+    let numOfBytes = 10000
     let 
       clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
