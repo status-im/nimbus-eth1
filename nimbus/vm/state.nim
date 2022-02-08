@@ -62,6 +62,7 @@ proc init(
       random:      Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
+      ttdReached:  bool;
       tracer:      TransactionTracer)
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialisation helper
@@ -73,6 +74,7 @@ proc init(
   self.fee = fee
   self.random = random
   self.chaindb = chainDB
+  self.ttdReached = ttdReached
   self.tracer = tracer
   self.logEntries = @[]
   self.stateDB = ac
@@ -89,6 +91,7 @@ proc init(
       random:      Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
+      ttdReached:  bool;
       tracerFlags: set[TracerFlags])
     {.gcsafe, raises: [Defect,CatchableError].} =
   var tracer: TransactionTracer
@@ -102,6 +105,7 @@ proc init(
     random    = random,
     miner     = miner,
     chainDB   = chainDB,
+    ttdReached= ttdReached,
     tracer    = tracer)
 
 # --------------
@@ -121,9 +125,10 @@ proc new*(
       timestamp:   EthTime;         ## tx env: time stamp
       gasLimit:    GasInt;          ## tx env: gas limit
       fee:         Option[Uint256]; ## tx env: optional base fee
-      random:      Hash256;          ## tx env: POS block randomness
+      random:      Hash256;         ## tx env: POS block randomness
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
+      ttdReached:  bool;            ## total terminal difficulty reached
       tracerFlags: set[TracerFlags] = {};
       pruneTrie:   bool = true): T
     {.gcsafe, raises: [Defect,CatchableError].} =
@@ -144,6 +149,7 @@ proc new*(
     random      = random,
     miner       = miner,
     chainDB     = chainDB,
+    ttdReached  = ttdReached,
     tracerFlags = tracerFlags)
 
 proc reinit*(self:      BaseVMState;     ## Object descriptor
@@ -153,6 +159,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              fee:       Option[Uint256]; ## tx env: optional base fee
              random:    Hash256;         ## tx env: POS block randomness
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
+             ttdReached:bool;            ## total terminal difficulty reached
              pruneTrie: bool = true): bool
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Re-initialise state descriptor. The `AccountsCache` database is
@@ -179,9 +186,16 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       random      = random,
       miner       = miner,
       chainDB     = db,
+      ttdReached  = ttdReached,
       tracer      = tracer)
     return true
   # else: false
+
+proc ttd(chainDB: BaseChainDB): DifficultyInt =
+  if chainDB.config.terminalTotalDifficulty.isSome:
+    chainDB.config.terminalTotalDifficulty.get()
+  else:
+    high(DifficultyInt)
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
              parent:    BlockHeader; ## parent header, account sync pos.
@@ -194,6 +208,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
+  let ttdReached = self.chainDB.totalDifficulty + header.difficulty > self.chainDB.ttd
   self.reinit(
     parent    = parent,
     timestamp = header.timestamp,
@@ -201,6 +216,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
     fee       = header.fee,
     random    = header.random,
     miner     = self.chainDB.getMinerAddress(header),
+    ttdReached= ttdReached,
     pruneTrie = pruneTrie)
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
@@ -231,6 +247,7 @@ proc init*(
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
+  let ttdReached = chainDB.totalDifficulty + header.difficulty > chainDB.ttd
   self.init(AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
             parent,
             header.timestamp,
@@ -239,6 +256,7 @@ proc init*(
             header.random,
             chainDB.getMinerAddress(header),
             chainDB,
+            ttdReached,
             tracerFlags)
 
 proc new*(
@@ -308,9 +326,9 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
   vmState.parent.blockNumber + 1
 
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
-  if vmState.fork >= FkPostMerge:
+  if vmState.ttdReached:
     # EIP-4399/EIP-3675
-    0.u256
+    UInt256.fromBytesBE(vmState.random.data, allowPadding = false)
   else:
     vmState.chainDB.config.calcDifficulty(vmState.timestamp, vmState.parent)
 

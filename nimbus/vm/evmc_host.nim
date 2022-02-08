@@ -20,10 +20,7 @@ proc hostGetTxContextImpl(ctx: Computation): nimbus_tx_context {.cdecl.} =
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE
   let difficulty = toEvmc(vmstate.difficulty)
-  if difficulty == default(evmc_bytes32): # or difficulty.isZero
-    result.block_difficulty = vmState.random.toEvmc
-  else:
-    result.block_difficulty = difficulty
+  result.block_difficulty = difficulty
 
   result.chain_id = toEvmc(vmstate.chaindb.config.chainId.uint.u256)
   result.block_base_fee = toEvmc(vmstate.baseFee)

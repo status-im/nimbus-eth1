@@ -38,9 +38,8 @@ const
     eth2, # FkPetersburg
     eth2, # FkIstanbul
     eth2, # FkBerlin
-    eth2, # FkLondon
-    eth0  # FkPostMerge
-  ]
+    eth2  # FkLondon
+   ]
 
 {.push raises: [Defect].}
 

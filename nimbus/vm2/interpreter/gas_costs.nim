@@ -730,10 +730,8 @@ const
     FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
     FkBerlin: BerlinGasFees,
-    FkLondon: LondonGasFees,
-    FkPostMerge: LondonGasFees
+    FkLondon: LondonGasFees
   ]
-
 
 gasCosts(FkFrontier, base, BaseGasCosts)
 gasCosts(FkHomestead, homestead, HomesteadGasCosts)
@@ -743,7 +741,6 @@ gasCosts(FkConstantinople, constantinople, ConstantinopleGasCosts)
 gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
 gasCosts(FkBerlin, berlin, BerlinGasCosts)
 gasCosts(FkLondon, london, LondonGasCosts)
-gasCosts(FkPostMerge, postMerge, PostMergeGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
   if fork < FkHomestead:
@@ -760,10 +757,8 @@ proc forkToSchedule*(fork: Fork): GasCosts =
     IstanbulGasCosts
   elif fork < FkLondon:
     BerlinGasCosts
-  elif fork < FkPostMerge:
-    LondonGasCosts
   else:
-    PostMergeGasCosts
+    LondonGasCosts
 
 const
   ## Precompile costs

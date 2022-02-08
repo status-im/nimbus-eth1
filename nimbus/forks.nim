@@ -18,6 +18,3 @@ type
     FkIstanbul       = "Istanbul"
     FkBerlin         = "Berlin"
     FkLondon         = "London"
-    # TODO: PostMerge is a temporary name
-    # until we have an official name
-    FkPostMerge      = "PostMerge"

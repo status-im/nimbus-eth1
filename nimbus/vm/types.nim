@@ -39,6 +39,7 @@ type
     gasLimit*      : GasInt
     fee*           : Option[Uint256]
     random*        : Hash256
+    ttdReached*    : bool
     name*          : string
     flags*         : set[VMFlag]
     tracer*        : TransactionTracer

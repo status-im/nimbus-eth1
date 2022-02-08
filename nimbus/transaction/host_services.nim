@@ -73,11 +73,7 @@ proc setupTxContext(host: TransactionHost) =
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE
   let difficulty = vmState.difficulty.toEvmc
-  if difficulty.isZero:
-    # no flipping, because hash is a 32 bytes array
-    host.txContext.block_difficulty = vmState.random.toEvmc
-  else:
-    host.txContext.block_difficulty = flip256(difficulty)
+  host.txContext.block_difficulty = flip256(difficulty)
 
   host.cachedTxContext = true
 

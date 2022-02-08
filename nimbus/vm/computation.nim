@@ -51,15 +51,6 @@ template getDifficulty*(c: Computation): DifficultyInt =
   else:
     c.vmState.difficulty
 
-template getRandom*(c: Computation): Hash256 =
-  when evmc_enabled:
-    # EIP-4399
-    # no flipping because `block_difficulty` in this context
-    # is a 32 bytes array
-    Hash256.fromEvmc c.host.getTxContext().block_difficulty
-  else:
-    c.vmState.random
-
 template getGasLimit*(c: Computation): GasInt =
   when evmc_enabled:
     c.host.getTxContext().block_gas_limit.GasInt

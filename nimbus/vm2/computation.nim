@@ -58,9 +58,6 @@ template getBlockNumber*(c: Computation): Uint256 =
 template getDifficulty*(c: Computation): DifficultyInt =
   c.vmState.difficulty
 
-template getRandom*(c: Computation): Hash256 =
-  c.vmState.random
-
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.gasLimit
 

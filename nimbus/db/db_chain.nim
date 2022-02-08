@@ -19,6 +19,7 @@ type
     networkId*: NetworkId
     config*   : ChainConfig
     genesis*  : Genesis
+    totalDifficulty*: DifficultyInt
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -29,6 +30,16 @@ type
   TransactionKey = tuple
     blockNumber: BlockNumber
     index: int
+
+proc getTotalDifficulty*(self: BaseChainDB): UInt256 =
+  # this is actually a combination of `getHash` and `getScore`
+  const key = canonicalHeadHashKey()
+  let data = self.db.get(key.toOpenArray)
+  if data.len == 0:
+    return 0.u256
+
+  let blockHash = rlp.decode(data, Hash256)
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), Uint256)
 
 proc newBaseChainDB*(
        db: TrieDatabaseRef,
@@ -42,6 +53,7 @@ proc newBaseChainDB*(
   result.networkId = id
   result.config    = params.config
   result.genesis   = params.genesis
+  result.totalDifficulty = result.getTotalDifficulty()
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
@@ -335,6 +347,7 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
     return self.setAsCanonicalChainHead(headerHash)
 
   if score > headScore:
+    self.totalDifficulty = score
     result = self.setAsCanonicalChainHead(headerHash)
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =

@@ -66,6 +66,10 @@ type
     limits: TxChainGasLimits ## Gas limits for packer and next header
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
 
+    # EIP-4399 and EIP-3675
+    ttdReached: bool         ## Total Terminal Difficulty reached
+    random: Hash256          ## POS block randomness
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -78,13 +82,11 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
     parent    = parent,
     timestamp = getTime().utc.toTime,
     gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
-    fee       = fee,    
-    # EIP-4399 extra complexity
-    # TODO: make sure from where or what value
-    # this `random` param should be
-    random    = Hash256(), 
+    fee       = fee,
+    random    = dh.random,
     miner     = dh.miner,
-    chainDB   = dh.db)
+    chainDB   = dh.db,
+    ttdReached= dh.ttdReached)
 
   dh.txEnv.txRoot = BLANK_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
@@ -306,6 +308,14 @@ proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
+
+proc `ttdReached=`*(dh: TxChainRef; val: bool) =
+  ## Setter
+  dh.ttdReached = val
+
+proc `random=`*(dh: TxChainRef; val: Hash256) =
+  ## Setter
+  dh.random = val
 
 # ------------------------------------------------------------------------------
 # End

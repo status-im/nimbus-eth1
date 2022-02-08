@@ -324,27 +324,27 @@ proc opEnvMain*() =
       fork: berlin
       gasused: 2603
 
-    when not defined(evmc_enabled):
-      # TODO: enable this test for EVMC when EVMC
-      # support this EVM version
-      assembler:
-        title: "EIP-4399 RANDOM 0"
-        code:
-          Random
-          STOP
-        stack:
-          "0x0000000000000000000000000000000000000000000000000000000000000000"
-        fork: postmerge
+    vmState.ttdReached = true
+    assembler:
+      title: "EIP-4399 RANDOM 0"
+      code:
+        Random
+        STOP
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork: london
 
-      vmState.random = EMPTY_UNCLE_HASH
-      assembler:
-        title: "EIP-4399 RANDOM: EMPTY_UNCLE_HASH"
-        code:
-          Random
-          STOP
-        stack:
-          "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-        fork: postmerge
+    vmState.random = EMPTY_UNCLE_HASH
+    assembler:
+      title: "EIP-4399 RANDOM: EMPTY_UNCLE_HASH"
+      code:
+        Random
+        STOP
+      stack:
+        "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+      fork: london
+
+    vmState.ttdReached = false
 
 when isMainModule:
   opEnvMain()
