@@ -220,8 +220,10 @@ proc vmExecCommit(pst: TxPackerStateRef)
   let
     xp = pst.xp
     vmState = xp.chain.vmState
+    disableReward = vmState.chainDB.config.poaEngine or
+                    vmState.ttdReached # EIP-3675: no reward for miner
 
-  if not vmState.chainDB.config.poaEngine:
+  if not disableReward:
     let
       number = xp.chain.head.blockNumber + 1
       uncles: seq[BlockHeader] = @[] # no uncles yet

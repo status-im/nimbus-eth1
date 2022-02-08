@@ -139,7 +139,8 @@ proc processBlockNotPoA*(
   if not vmState.procBlkPreamble(header, body):
     return ValidationResult.Error
 
-  vmState.calculateReward(header, body)
+  if not vmState.ttdReached: # EIP-3675: no reward for miner
+    vmState.calculateReward(header, body)
 
   if not vmState.procBlkEpilogue(header, body):
     return ValidationResult.Error
@@ -183,7 +184,10 @@ proc processBlock*(
   if not vmState.procBlkPreamble(header, body):
     return ValidationResult.Error
 
-  if not vmState.chainDB.config.poaEngine:
+  let disableReward = vmState.chainDB.config.poaEngine or
+                      vmState.ttdReached # EIP-3675: no reward for miner
+
+  if not disableReward:
     vmState.calculateReward(header, body)
 
   if not vmState.procBlkEpilogue(header, body):
