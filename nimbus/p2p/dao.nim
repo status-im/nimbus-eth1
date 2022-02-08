@@ -1,5 +1,8 @@
 import eth/common, stew/byteutils, ../db/accounts_cache
 
+when defined(evmc_enabled):
+  import ../transaction/db_compare
+
 const
   # DAOForkBlockExtra is the block header extra-data field to set for the DAO fork
   # point and a number of consecutive blocks to allow fast/light syncers to correctly
@@ -135,9 +138,16 @@ const
 # ApplyDAOHardFork modifies the state database according to the DAO hard-fork
 # rules, transferring all balances of a set of DAO accounts to a single refund
 # contract.
-proc applyDAOHardFork*(statedb: var AccountsCache) =
+proc applyDAOHardFork*(statedb: var AccountsCache, blockNumber: BlockNumber) =
   const zero = 0.u256
+
   # Move every DAO account and extra-balance account funds into the refund contract
   for address in DAODrainList:
-    statedb.addBalance(DAORefundContract, statedb.getBalance(address))
+    # NOTE: We read the balances, so must include them in `dbCompare` read-set.
+    let balance = statedb.getBalance(address)
+    when defined(evmc_enabled):
+      if dbCompareEnabled:
+        blockNumber.dbCompareBalance(address, balance)
+
+    statedb.addBalance(DAORefundContract, balance)
     statedb.setBalance(address, zero)

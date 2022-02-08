@@ -16,8 +16,18 @@ const
   # address zero by accident, unrecoverably, due to poor user interface issues.
   ZERO_ADDRESS* =                           default(EthAddress)
 
-  # ZERO_HASH256 is the parent hash of genesis blocks.
-  ZERO_HASH256* =                           Hash256()
+  # Uses as parent block hash of genesis blocks and other places where "no hash"
+  # is represented.  This is all zero digits.
+  ZERO_HASH256* =                           "0000000000000000000000000000000000000000000000000000000000000000".toDigest
+
+  # Used for root of empty hexary trie: keccak256(RLP("")) == keccak256(0x80).
+  BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
+
+  # Used as code hash for contracts with no code: keccak256("").
+  EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
+
+  # Used for empty `ommersHash` in block headers: keccak256(RLP([])) == keccak256(0xc0).
+  EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
 
@@ -27,8 +37,6 @@ const
 
   MAX_UNCLE_DEPTH* =                        6.u256
   MAX_UNCLES* =                             2
-
-  EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
   GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
@@ -41,9 +49,6 @@ const
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      high(GasInt)
   DEFAULT_GAS_LIMIT* =                      8_000_000
-
-  BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
-  EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
 

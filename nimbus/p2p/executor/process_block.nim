@@ -24,6 +24,9 @@ import
   eth/[common, trie/db],
   nimcrypto
 
+when defined(evmc_enabled):
+  import ../../transaction/db_compare
+
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
@@ -33,10 +36,13 @@ import
 proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
                      header: BlockHeader, body: BlockBody): bool
                        {.gcsafe, raises: [Defect,CatchableError].} =
+  when defined(evmc_enabled):
+    dbCompareResetSeen()
+
   if vmState.chainDB.config.daoForkSupport and
      vmState.chainDB.config.daoForkBlock == header.blockNumber:
     vmState.mutateStateDB:
-      db.applyDAOHardFork()
+      db.applyDAOHardFork(header.blockNumber)
 
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot",

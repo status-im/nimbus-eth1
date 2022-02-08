@@ -28,6 +28,9 @@ import
   options,
   stew/[results, endians2]
 
+when defined(evmc_enabled):
+  import ../transaction/db_compare
+
 from stew/byteutils
   import nil
 
@@ -217,6 +220,14 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
                           sender: EthAddress, fork: Fork): bool =
   let balance = vmState.readOnlyStateDB.getBalance(sender)
   let nonce = vmState.readOnlyStateDB.getNonce(sender)
+  # NOTE: We read balance and nonce so must add them to `dbCompare`.
+  when defined(evmc_enabled):
+    if dbCompareEnabled:
+      vmState.blockHeader.blockNumber.dbCompareBalance(sender, balance)
+      vmState.blockHeader.blockNumber.dbCompareNonce(sender, nonce)
+
+  # NOTE: Not comparing balance and nonce here against the compact db.
+  # They will be read again when executing the transaction.
 
   if tx.txType == TxEip2930 and fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"

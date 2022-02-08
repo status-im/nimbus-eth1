@@ -494,6 +494,9 @@ when not evmc_enabled:
 when evmc_enabled:
   template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
     let
+      # NOTE: `dbCompareAccountStorage` relies on the c.getStorage(slot)` here
+      # to add the storage to the read-set.  The next line is redundant for
+      # other purposes but it's necessary for `dbCompare`.
       currentValue {.inject.} = c.getStorage(slot)
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)

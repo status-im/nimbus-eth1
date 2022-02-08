@@ -40,6 +40,7 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
     result.add receipt.toJson
 
 proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: string) =
+  # TODO: It might be useful to add dbCompare here.
   var jaccount = newJObject()
   jaccount["name"] = %name
   jaccount["address"] = %("0x" & $address)

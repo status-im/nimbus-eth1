@@ -128,6 +128,7 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
+    blockExec
 
   ProtocolFlag* {.pure.} = enum
     ## Protocol flags
@@ -244,6 +245,13 @@ type
       desc: "Interval at which to log metrics, in seconds"
       defaultValue: 10
       name: "log-metrics-interval" .}: int
+
+    dbCompare* {.
+      desc: "Specify path of an archive-mode state history file and check all executed transaction states against that archive. " &
+            "This option is experimental, currently read-only, and the format is likely to change often"
+      defaultValue: ""
+      name: "db-compare"
+      includeIfEvmc }: string
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
@@ -418,6 +426,19 @@ type
         defaultValue: ""
         name: "blocks-file" }: InputFile
 
+    of blockExec:
+
+      blockNumberStart* {.
+        argument
+        desc: "Execute from local database starting with this block number",
+        defaultValueDesc: "0"
+        name: "start-block" }: Option[uint64]
+
+      blockNumberEnd* {.
+        argument
+        desc: "Execution stops at this block number",
+        defaultValueDesc: "no limit"
+        name: "end-block" }: Option[uint64]
 
 proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
   parseInt(p.string).T

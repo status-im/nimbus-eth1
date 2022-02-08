@@ -16,6 +16,8 @@ import
   ./executor_helpers,
   eth/common
 
+when defined(evmc_enabled):
+  import ../../transaction/db_compare
 
 func eth(n: int): Uint256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)

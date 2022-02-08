@@ -20,6 +20,9 @@ import
   chronicles,
   eth/common
 
+when defined(evmc_enabled):
+  import ../../transaction/db_compare
+
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
@@ -31,7 +34,6 @@ proc eip1559TxNormalization(tx: Transaction): Transaction =
   if tx.txType < TxEip1559:
     result.maxPriorityFee = tx.gasPrice
     result.maxFee = tx.gasPrice
-
 
 proc processTransactionImpl(tx: Transaction, sender: EthAddress,
                             vmState: BaseVMState, fork: Fork): GasInt

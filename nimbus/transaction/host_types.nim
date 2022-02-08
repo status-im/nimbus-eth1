@@ -7,7 +7,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sets, stint, evmc/evmc, eth/common/eth_types, ../vm_types
+  sets, tables, stint, evmc/evmc, eth/common/eth_types, ../vm_types
 
 # Object `TransactionHost` represents "EVMC host" to the EVM.  "Host services"
 # manage account state outside EVM such as balance transfers, storage, logs and
@@ -65,6 +65,8 @@ type
     depth*:           int
     saveComputation*: seq[Computation]
     hostInterface*:   ptr evmc_host_interface
+    when defined(evmc_enabled):
+      dbCompare*:       bool
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_
@@ -100,3 +102,7 @@ template isStatic*(msg: EvmcMessage): bool =
 export
   evmc_status_code, evmc_call_kind,
   evmc_flag_bit_shifts, evmc_storage_status, evmc_access_status
+
+when defined(evmc_enabled):
+  import ./db_compare
+  export db_compare

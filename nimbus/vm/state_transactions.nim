@@ -12,6 +12,13 @@ import
   ./computation, ./interpreter, ./state, ./types
 
 proc execComputation*(c: Computation) =
+  when defined(evmc_enabled):
+    if not c.msg.isCreate and c.transactionHost.dbCompare:
+      # NOTE: Because we `incNonce` we must add nonce to the `dbCompare` read-set
+      # first.  For nonce we need to call `dbCompareNonce` directly.
+      let nonce = c.vmState.readOnlyStateDB.getNonce(c.msg.sender)
+      c.transactionHost.dbCompareNonce(c.msg.sender, nonce)
+
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)

@@ -11,7 +11,7 @@ import
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/accounts_cache, forks],
-  ./host_types
+  ./host_types, ./db_compare
 
 when defined(evmc_enabled):
   import ".."/[utils]
@@ -133,6 +133,10 @@ proc setupHost(call: CallParams): TransactionHost =
     # All other defaults in `TransactionHost` are fine.
   )
 
+  when defined(evmc_enabled):
+    if dbCompareEnabled:
+      host.dbCompare = true
+
   # Generate new contract address, prepare code, and update message `destination`
   # with the contract address.  This differs from the previous Nimbus EVM API.
   # Guarded under `evmc_enabled` for now so it doesn't break vm2.
@@ -140,8 +144,11 @@ proc setupHost(call: CallParams): TransactionHost =
     var code: seq[byte]
     if call.isCreate:
       let sender = call.sender
-      let contractAddress =
-        generateAddress(sender, call.vmState.readOnlyStateDB.getNonce(sender))
+      let nonce = call.vmState.readOnlyStateDB.getNonce(sender)
+      # NOTE: Because we read nonce we must add it to the `dbCompare` read-set.
+      if host.dbCompare:
+        host.dbCompareNonce(sender, nonce)
+      let contractAddress = generateAddress(sender, nonce)
       host.msg.destination = contractAddress.toEvmc
       host.msg.input_size = 0
       host.msg.input_data = nil
@@ -150,6 +157,9 @@ proc setupHost(call: CallParams): TransactionHost =
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
       code = host.vmState.readOnlyStateDB.getCode(host.msg.destination.fromEvmc)
+      if host.dbCompare:
+        let codeHash = host.vmState.readOnlyStateDB.getCodeHash(host.msg.destination.fromEvmc)
+        host.dbCompareCodeHash(host.msg.destination.fromEvmc, codeHash)
       if call.input.len > 0:
         host.msg.input_size = call.input.len.csize_t
         # Must copy the data so the `host.msg.input_data` pointer
@@ -206,6 +216,10 @@ proc runComputation*(call: CallParams): CallResult =
 
   # Charge for gas.
   if not call.noGasCharge:
+    when defined(evmc_enabled):
+      if dbCompareEnabled:
+        let balance = host.vmState.readOnlyStateDB.getBalance(call.sender)
+        host.dbCompareBalance(call.sender, balance)
     host.vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 

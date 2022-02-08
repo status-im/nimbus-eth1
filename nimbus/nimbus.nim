@@ -22,7 +22,8 @@ import
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context,
-  "."/[conf_utils, sealer, constants]
+  "."/[conf_utils, sealer, constants],
+  ./transaction/[db_compare, db_exec_range]
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -203,6 +204,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
+    if conf.dbCompare.len > 0:
+      dbCompareOpen(conf.dbCompare)
 
   createDir(string conf.dataDir)
   let trieDB = trieDB newChainDb(string conf.dataDir)
@@ -222,6 +225,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, chainDB)
+  of NimbusCmd.blockExec:
+    dbCompareExecBlocks(chainDB, conf.blockNumberStart, conf.blockNumberEnd)
   else:
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, chainDB, protocols)
@@ -279,4 +284,6 @@ when isMainModule:
   let conf = makeConfig()
 
   nimbus.start(conf)
-  nimbus.process(conf)
+
+  if conf.cmd == noCommand:
+    nimbus.process(conf)

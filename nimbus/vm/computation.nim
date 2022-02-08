@@ -20,6 +20,15 @@ when defined(chronicles_log_level):
 
 when defined(evmc_enabled):
   import evmc/evmc, evmc_helpers, evmc_api, stew/ranges/ptr_arith
+  # Let `dbCompare` be called from `Computation` inside the EVMC API boundary.
+  # TODO: The logic which calls these in `Computation` should not be there at
+  # all.  Removing it will clear up EVMC compatibility bugs, but that requires
+  # a transformation of the nested call code and we're focused on the DB.
+  from ../transaction/host_types import
+    TransactionHost, dbCompareNonce, dbCompareClearStorage
+  template transactionHost*(c: Computation): TransactionHost =
+    cast[TransactionHost](c.host.context)
+  export dbCompareNonce
 
 logScope:
   topics = "vm computation"
@@ -139,6 +148,10 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
 proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
   if c.msg.kind == evmcCreate:
     let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
+    # NOTE: This path should not be reached in EVMC mode, so no need to add
+    # nonce to the `dbCompare` read-set here.  Anyway, `c.transactionHost`
+    # isn't value here.
+    doAssert not evmc_enabled
     result = generateAddress(c.msg.sender, creationNonce)
   else:
     result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
@@ -264,6 +277,13 @@ proc writeContract*(c: Computation) =
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
   if codeCost <= c.gasMeter.gasRemaining:
     c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
+    when evmc_enabled:
+      if c.transactionHost.dbCompare:
+        # NOTE: The execution is not a function of the old account codeHash,
+        # but `c.getCodeHash` is needed to tell `dbCompare` not to read
+        # codeHash again after it's set below, so that it won't see wrong
+        # values for this block.
+        discard c.getCodeHash(c.msg.contractAddress)
     c.vmState.mutateStateDb:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
@@ -289,6 +309,12 @@ proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == evmcCall:
     c.vmState.mutateStateDb:
+      # NOTE: The balance updates here must be added to the `dbCompare`
+      # read-set.  `c.getBalance` indirectly tells the `dbCompare` code.
+      when evmc_enabled:
+        if c.transactionHost.dbCompare:
+          discard c.getBalance(c.msg.sender)
+          discard c.getBalance(c.msg.contractAddress)
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
@@ -309,6 +335,12 @@ proc afterExecCall(c: Computation) =
     c.rollback()
 
 proc beforeExecCreate(c: Computation): bool =
+  # NOTE: Because we `incNonce` we must add nonce to the `dbCompare` read-set
+  # first.  For nonce we need to call `dbCompareNonce` directly.
+  when evmc_enabled:
+    if c.transactionHost.dbCompare:
+      let nonce = c.vmState.readOnlyStateDB.getNonce(c.msg.sender)
+      c.transactionHost.dbCompareNonce(c.msg.sender, nonce)
   c.vmState.mutateStateDB:
     db.incNonce(c.msg.sender)
 
@@ -320,10 +352,35 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
+  when evmc_enabled:
+    if c.transactionHost.dbCompare:
+      # NOTE: `hasCodeOrNonce` below reads nonce and codeHash so they must be
+      # added to the `dbCompare` read-set.  For the nonce we need to call
+      # `dbCompareNonce` directly. `c.getCodeHash` does it indirectly via EVMC.
+      let nonce = c.vmState.readOnlyStateDB.getNonce(c.msg.contractAddress)
+      c.transactionHost.dbCompareNonce(c.msg.contractAddress, nonce)
+      let codeHash = c.getCodeHash(c.msg.contractAddress)
+
   if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
     c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
     c.rollback()
     return true
+
+  # NOTE: The balance updates under `mutateStateDB` after the next section read
+  # balances, so must be added to the `dbCompare` read-set.  `c.getBalance`
+  # indirectly tells the `dbCompare` code via EVMC.  `dbCompareClearStorage` is
+  # needed to tell `dbCompare` not to read storage slots again after they are
+  # cleared below, so that it won't see wrong values for this block.
+  when evmc_enabled:
+    if c.transactionHost.dbCompare:
+      discard c.getBalance(c.msg.sender)
+      discard c.getBalance(c.msg.contractAddress)
+      c.transactionHost.dbCompareClearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        # NOTE: Because we `incNonce` we must add nonce to the `dbCompare`
+        # read-set first.  For nonce we need to call `dbCompareNonce` directly.
+        let nonce = c.vmState.readOnlyStateDB.getNonce(c.msg.contractAddress)
+        c.transactionHost.dbCompareNonce(c.msg.contractAddress, nonce)
 
   c.vmState.mutateStateDb:
     db.subBalance(c.msg.sender, c.msg.value)

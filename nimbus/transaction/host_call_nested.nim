@@ -11,7 +11,7 @@
 import
   sets, stint, chronicles, stew/ranges/ptr_arith,
   eth/common/eth_types,
-  ".."/[vm_types, vm_computation, utils],
+  ".."/[vm_types, vm_state, vm_computation, utils, db/accounts_cache],
   ./host_types, ./host_trace
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
@@ -26,10 +26,22 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     gas: m.gas,
     sender: m.sender.fromEvmc,
     value: m.value.fromEvmc,
-    data: @(makeOpenArray(m.inputData, m.inputSize.int))
+    data: @[]
   )
+
+  if m.kind == EVMC_CREATE2:
+    let salt = cast[ContractSalt](m.create2_salt)
+    childMsg.contractAddress = generateSafeAddress(childMsg.sender, salt,
+                                                   childMsg.data)
+  else:
+    let creationNonce = host.vmState.readOnlyStateDB.getNonce(childMsg.sender)
+    # NOTE: The nonce is read so it must be added to the `dbCompare` read-set.
+    if host.dbCompare:
+      host.dbCompareNonce(childMsg.sender, creationNonce)
+    childMsg.contractAddress = generateAddress(childMsg.sender, creationNonce)
+
   return newComputation(host.vmState, childMsg,
-                        cast[ContractSalt](m.create2_salt))
+                        @(makeOpenArray(m.inputData, m.inputSize.int)))
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =
