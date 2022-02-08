@@ -110,8 +110,9 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
       return err("header extra data should be marked DAO")
 
   if ttdReached:
-    if not header.mixDigest.isZeroMemory:
-      return err("Non-zero mix hash in a post-merge block")
+    # EIP-4399 and EIP-3675
+    # no need to check mixDigest because EIP-4399 override this field
+    # checking rule
 
     if not header.difficulty.isZero:
       return err("Non-zero difficulty in a post-merge block")
