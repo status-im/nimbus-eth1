@@ -21,6 +21,9 @@ type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
+func setStreamTransport*(n: StateNetwork, transport: UtpDiscv5Protocol) =
+  setTransport(n.portalProtocol.stream, transport)
+
 proc toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   toContentId(contentKey)
 
@@ -51,13 +54,12 @@ proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
-    portalStream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, contentDB, toContentIdHandler,
-    portalStream, dataRadius, bootstrapRecords, stateDistanceCalculator,
+    dataRadius, bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)

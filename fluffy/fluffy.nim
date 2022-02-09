@@ -75,15 +75,30 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
-    # One instance of PortalStream and thus UtpDiscv5Protocol is shared over all
-    # the Portal networks.
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
-    portalStream = PortalStream.new(d)
-    stateNetwork = StateNetwork.new(d, db, portalStream,
+    stateNetwork = StateNetwork.new(d, db,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
-    historyNetwork = HistoryNetwork.new(d, db, portalStream,
+    historyNetwork = HistoryNetwork.new(d, db,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
+
+  # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.
+  let
+    socketConfig = SocketConfig.init(
+      incomingSocketReceiveTimeout = none(Duration))
+    streamTransport = UtpDiscv5Protocol.new(
+      d,
+      utpProtocolId,
+      registerIncomingSocketCallback(@[
+        stateNetwork.portalProtocol.stream,
+        historyNetwork.portalProtocol.stream]),
+      allowRegisteredIdCallback(@[
+        stateNetwork.portalProtocol.stream,
+        historyNetwork.portalProtocol.stream]),
+      socketConfig)
+
+  stateNetwork.setStreamTransport(streamTransport)
+  historyNetwork.setStreamTransport(streamTransport)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and
@@ -108,12 +123,12 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   if config.rpcEnabled:
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
     var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
-    rpcHttpServerWithProxy.installEthApiHandlers()
+    rpcHttpServerWithProxy.installEthApiHandlers(historyNetwork)
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     rpcHttpServerWithProxy.installPortalApiHandlers(stateNetwork.portalProtocol, "state")
     rpcHttpServerWithProxy.installPortalApiHandlers(historyNetwork.portalProtocol, "history")
     rpcHttpServerWithProxy.installPortalDebugApiHandlers(stateNetwork.portalProtocol, "state")
-    rpcHttpServerWithProxy.installPortalDebugApiHandlers(stateNetwork.portalProtocol, "history")
+    rpcHttpServerWithProxy.installPortalDebugApiHandlers(historyNetwork.portalProtocol, "history")
     # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
     # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
     waitFor rpcHttpServerWithProxy.start()
@@ -137,7 +152,9 @@ when isMainModule:
   of PortalCmd.noCommand:
     run(config)
   of PortalCmd.populateHistoryDb:
-    let res = populateHistoryDb(config.dbDir.string, config.dataFile.string)
+    let
+      db = ContentDB.new(config.dbDir.string)
+      res = populateHistoryDb(db, config.dataFile.string)
     if res.isErr():
       fatal "Failed populating the history content db", error = $res.error
       quit 1

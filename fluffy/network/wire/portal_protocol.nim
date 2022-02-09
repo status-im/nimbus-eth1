@@ -54,7 +54,7 @@ type
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
-    stream: PortalStream
+    stream*: PortalStream
     radiusCache: RadiusCache
 
   PortalResult*[T] = Result[T, cstring]
@@ -239,12 +239,15 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
+proc processContent(
+    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
+    {.gcsafe, raises: [Defect].}
+
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
-    stream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
@@ -260,13 +263,17 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
-    stream: stream,
     dataRadius: dataRadius,
     bootstrapRecords: @bootstrapRecords,
     radiusCache: RadiusCache.init(256))
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
+
+  let stream = PortalStream.new(
+    processContent, udata = proto, rng = proto.baseProtocol.rng)
+
+  proto.stream = stream
 
   proto
 
@@ -484,6 +491,49 @@ proc findNodesVerified*(
       return err(records.error)
   else:
     return err(nodesMessage.error)
+
+proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.async.} =
+  let contentKey = contentKeys[0] # for now only 1 item is considered
+  let contentIdOpt = p.toContentId(contentKey)
+  if contentIdOpt.isNone():
+    return
+
+  let contentId = contentIdOpt.get()
+  # gossip content to closest neighbours to target:
+  # Selected closest 6 now. Better is perhaps to select 16 closest and then
+  # select 6 random out of those.
+  # TODO: Might actually have to do here closest to the local node, else data
+  # will not propagate well over to nodes with "large" Radius?
+  let closestNodes = p.routingTable.neighbours(
+    NodeId(contentId), k = 6, seenOnly = false)
+  echo closestNodes.len()
+  for node in closestNodes:
+    # Not doing anything if this fails
+    discard await p.offer(node, contentKeys)
+
+proc processContent(
+    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
+    {.gcsafe, raises: [Defect].} =
+  let p = getUserData[PortalProtocol](stream)
+
+  # TODO: validate content
+  # - check amount of content items according to ContentKeysList
+  # - History Network specific: each content item, if header, check hash:
+  #   this part of thevalidation will be specific per network & type and should
+  #   be thus be custom per network
+
+  # TODO: for now we only consider 1 item being offered
+  if contentKeys.len() == 1:
+    let contentKey = contentKeys[0]
+    let contentIdOpt = p.toContentId(contentKey)
+    if contentIdOpt.isNone():
+      return
+
+    let contentId = contentIdOpt.get()
+    # Store content, should we recheck radius?
+    p.contentDB.put(contentId, content)
+
+    asyncSpawn neighborhoodGossip(p, contentKeys)
 
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =

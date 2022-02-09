@@ -9,7 +9,10 @@ import
   std/sequtils,
   unittest2, testutils, confutils, chronos,
   eth/p2p/discoveryv5/random2, eth/keys,
-  ../rpc/portal_rpc_client
+  ../../nimbus/rpc/hexstrings,
+  ../rpc/portal_rpc_client,
+  ../rpc/eth_rpc_client,
+  ../populate_db
 
 type
   PortalTestnetConf* = object
@@ -158,3 +161,28 @@ procSuite "Portal testnet tests":
       except CatchableError as e:
         echo e.msg
       check enr == randomNodeInfo.nodeENR
+
+  asyncTest "Portal History - Propagate blocks and do content lookups":
+    let clients = await connectToRpcServers(config)
+
+    var nodeInfos: seq[NodeInfo]
+    for client in clients:
+      let nodeInfo = await client.portal_history_nodeInfo()
+      nodeInfos.add(nodeInfo)
+
+    const dataFile = "./fluffy/scripts/test_data/mainnet_blocks_1-5.json"
+    # This will fill the first node its db with blocks from the data file. Next,
+    # this node wil offer all these blocks their headers one by one.
+    check (await clients[0].portal_history_propagate(dataFile))
+
+    let blockData = readBlockData(dataFile)
+    check blockData.isOk()
+
+    for client in clients:
+      # Note: Once there is the Canonical Indices Network, we don't need to
+      # access this file anymore here for the block hashes.
+      for hash in blockData.get().blockHashes():
+        let content = await client.eth_getBlockByHash(
+          hash.ethHashStr(), false)
+        check content.isSome()
+        check content.get().hash.get() == hash
