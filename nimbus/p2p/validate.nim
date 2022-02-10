@@ -322,6 +322,18 @@ proc validateTransaction*(
       accountNonce=nonce
     return false
 
+  # EIP-3607 Reject transactions from senders with deployed code
+  # The EIP spec claims this attack never happened before
+  # Clients might choose to disable this rule for RPC calls like 
+  # `eth_call` and `eth_estimateGas`
+  # EOA = Externally Owned Account
+  let codeHash = roDB.getCodeHash(sender)
+  if codeHash != EMPTY_SHA3:
+    debug "invalid tx: sender is not an EOA",
+      sender=sender.toHex,
+      codeHash=codeHash.data.toHex
+    return false
+
   true
 
 proc validateTransaction*(
