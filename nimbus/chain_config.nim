@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, strutils, options, times],
+  std/[tables, strutils,sequtils, options, times],
   eth/[common, rlp, p2p], stint, stew/[byteutils],
   nimcrypto/hash,
   json_serialization, chronicles,
@@ -139,16 +139,26 @@ func decodePrealloc*(data: seq[byte]): GenesisAlloc =
   for tup in rlp.decode(data, seq[AddressBalance]):
     result[tup.address] = tup.account
 
-proc readValue(reader: var JsonReader, value: var BlockNumber) =
+proc readValue(reader: var JsonReader, value: var UInt256) =
+  ## Mixin for `Json.loadFile()`. Note that this driver applies the same
+  ## to `BlockNumber` fields as well as generic `UInt265` fields like the
+  ## account `balance`.
   let tok = reader.lexer.tok
   if tok == tkInt:
-    value = toBlockNumber(reader.lexer.absintVal)
+    value = reader.lexer.absintVal.u256
     reader.lexer.next()
   elif tok == tkString:
-    value = UInt256.fromHex(reader.lexer.strVal)
+    # Make sure that "0x11" decodes to 17, "b" and "11" decode to 11.
+    if reader.lexer.strVal.filterIt(it.isDigit.not).len == 0:
+      try:    value = reader.lexer.strVal.parse(UInt256, radix = 10)
+      except: reader.raiseUnexpectedValue("int string overflow")
+    else:
+      # note that radix is static, so 16 (or 10) cannot be a variable
+      try:    value = reader.lexer.strVal.parse(UInt256, radix = 16)
+      except: reader.raiseUnexpectedValue("hex string parse error")
     reader.lexer.next()
   else:
-    reader.raiseUnexpectedValue("expect int or hex string")
+    reader.raiseUnexpectedValue("expect int or hex/int string")
 
 proc readValue(reader: var JsonReader, value: var ChainId) =
   value = reader.readValue(int).ChainId

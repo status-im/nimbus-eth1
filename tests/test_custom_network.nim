@@ -25,12 +25,19 @@ import
   ../nimbus/db/[db_chain, select_backend],
   ./replay/pp,
   eth/[common, p2p, trie/db],
+  nimcrypto/hash,
   unittest2
 
 const
   baseDir = [".", "tests", ".." / "tests", $DirSep]     # path containg repo
   repoDir = ["test_custom_network", "status", "replay"] # alternative repo paths
+
+  # Run time path for testing `loadNetworkParams()` function
   jFile = "kintsugi-network.json"
+
+  # Using `slurp()` => compile time file path argument
+  gHash = ("test_custom_network" / "kintsugi-genesis-hash.txt")
+              .slurp.splitLines.toSeq[0].strip.toDigest
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -84,6 +91,10 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, args.toSeq.join
 
 # ------------------------------------------------------------------------------
+# Privat functions
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # Test Runner
 # ------------------------------------------------------------------------------
 
@@ -98,15 +109,16 @@ proc runner(noisy = true; file = jFile) =
   defer:
     if not disablePersistentDB: tmpDir.flushDbDir
 
-  suite &"Kintsugi test scenario":
+  suite "Kintsugi custom network test scenario":
     var
       params: NetworkParams
       mdb, ddb: BaseChainDB
 
     test &"Load params from {fileInfo}":
+      noisy.say "***", "custom-file=", filePath
       check filePath.loadNetworkParams(params)
 
-    test &"Construct in-memory BaseChainDB":
+    test "Construct in-memory BaseChainDB":
       mdb = newBaseChainDB(
         newMemoryDb(),
         id = params.config.chainID.NetworkId,
@@ -132,13 +144,14 @@ proc runner(noisy = true; file = jFile) =
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
       noisy.say "***", "genesisHash=", mdb.getBlockHash(0.u256).pp
+      check mdb.getBlockHash(0.u256) == gHash
 
     test "Initialise persistent Genesis (kludge)":
       if disablePersistentDB:
         skip()
       else:
         ddb.initializeEmptyDb
-        check mdb.getBlockHash(0.u256) == ddb.getBlockHash(0.u256)
+        check ddb.getBlockHash(0.u256) == gHash
 
 # ------------------------------------------------------------------------------
 # Main function(s)
