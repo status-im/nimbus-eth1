@@ -341,9 +341,10 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + testOpcode_E0.json                                              OK
 + testOpcode_F0.json                                              OK
 + transactionFromNotExistingAccount.json                          OK
++ transactionFromSelfDestructedContract.json                      OK
 + txCost-sec73.json                                               OK
 ```
-OK: 86/87 Fail: 0/87 Skip: 1/87
+OK: 87/88 Fail: 0/88 Skip: 1/88
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -919,8 +920,10 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + codesizeInit.json                                               OK
 + codesizeOOGInvalidSize.json                                     OK
 + codesizeValid.json                                              OK
++ create2CodeSizeLimit.json                                       OK
++ createCodeSizeLimit.json                                        OK
 ```
-OK: 3/3 Fail: 0/3 Skip: 0/3
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stCreate2
 ```diff
 + CREATE2_Bounds.json                                             OK
@@ -929,7 +932,11 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
 + CREATE2_EOF1.json                                               OK
 + CREATE2_FirstByte_loop.json                                     OK
++ CREATE2_HighNonce.json                                          OK
++ CREATE2_HighNonceDelegatecall.json                              OK
++ CREATE2_HighNonceMinus1.json                                    OK
 + CREATE2_Suicide.json                                            OK
++ Create2OOGFromCallRefunds.json                                  OK
 + Create2OOGafterInitCode.json                                    OK
 + Create2OOGafterInitCodeReturndata.json                          OK
 + Create2OOGafterInitCodeReturndata2.json                         OK
@@ -972,7 +979,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 47/48 Fail: 0/48 Skip: 1/48
+OK: 51/52 Fail: 0/52 Skip: 1/52
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -995,10 +1002,14 @@ OK: 47/48 Fail: 0/48 Skip: 1/48
 + CREATE_EmptyContractWithStorageAndCallIt_0wei.json              OK
 + CREATE_EmptyContractWithStorageAndCallIt_1wei.json              OK
 + CREATE_FirstByte_loop.json                                      OK
++ CREATE_HighNonce.json                                           OK
++ CREATE_HighNonceMinus1.json                                     OK
 + CREATE_empty000CreateinInitCode_Transaction.json                OK
 + CodeInConstructor.json                                          OK
 + CreateCollisionResults.json                                     OK
 + CreateCollisionToEmpty.json                                     OK
++ CreateOOGFromCallRefunds.json                                   OK
++ CreateOOGFromEOARefunds.json                                    OK
 + CreateOOGafterInitCode.json                                     OK
 + CreateOOGafterInitCodeReturndata.json                           OK
 + CreateOOGafterInitCodeReturndata2.json                          OK
@@ -1006,13 +1017,14 @@ OK: 47/48 Fail: 0/48 Skip: 1/48
 + CreateOOGafterInitCodeReturndataSize.json                       OK
 + CreateOOGafterInitCodeRevert.json                               OK
 + CreateOOGafterInitCodeRevert2.json                              OK
++ CreateOOGafterMaxCodesize.json                                  OK
 + CreateResults.json                                              OK
 + TransactionCollisionToEmpty.json                                OK
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 + createFailResult.json                                           OK
 ```
-OK: 36/36 Fail: 0/36 Skip: 0/36
+OK: 41/41 Fail: 0/41 Skip: 0/41
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -1144,6 +1156,15 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + variedContext.json                                              OK
 ```
 OK: 7/7 Fail: 0/7 Skip: 0/7
+## stEIP3607
+```diff
++ initCollidingWithNonEmptyAccount.json                           OK
++ transactionCollidingWithNonEmptyAccount_calls.json              OK
++ transactionCollidingWithNonEmptyAccount_callsItself.json        OK
++ transactionCollidingWithNonEmptyAccount_init.json               OK
++ transactionCollidingWithNonEmptyAccount_send.json               OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stExample
 ```diff
 + accessListExample.json                                          OK
@@ -1151,13 +1172,14 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + add11_yml.json                                                  OK
 + basefeeExample.json                                             OK
 + eip1559.json                                                    OK
++ indexesOmitExample.json                                         OK
 + invalidTr.json                                                  OK
 + labelsExample.json                                              OK
 + rangesExample.json                                              OK
 + solidityExample.json                                            OK
 + yulExample.json                                                 OK
 ```
-OK: 10/10 Fail: 0/10 Skip: 0/10
+OK: 11/11 Fail: 0/11 Skip: 0/11
 ## stExtCodeHash
 ```diff
 + callToNonExistent.json                                          OK
@@ -1434,6 +1456,7 @@ OK: 71/71 Fail: 0/71 Skip: 0/71
 OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
++ blake2B.json                                                    OK
 + idPrecomps.json                                                 OK
 + identity_to_bigger.json                                         OK
 + identity_to_smaller.json                                        OK
@@ -1442,7 +1465,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + precompsEIP2929.json                                            OK
 + sec80.json                                                      OK
 ```
-OK: 7/7 Fail: 0/7 Skip: 0/7
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## stPreCompiledContracts2
 ```diff
 + CALLBlake2f.json                                                OK
@@ -1831,6 +1854,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest381.json                                         OK
 + randomStatetest382.json                                         OK
 + randomStatetest383.json                                         OK
++ randomStatetest384.json                                         OK
 + randomStatetest39.json                                          OK
 + randomStatetest4.json                                           OK
 + randomStatetest41.json                                          OK
@@ -1882,7 +1906,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 309/313 Fail: 0/313 Skip: 4/313
+OK: 310/314 Fail: 0/314 Skip: 4/314
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -2150,6 +2174,7 @@ OK: 22/22 Fail: 0/22 Skip: 0/22
 + call_outsize_then_create_successful_then_returndatasize.json    OK
 + call_then_call_value_fail_then_returndatasize.json              OK
 + call_then_create_successful_then_returndatasize.json            OK
++ clearReturnBuffer.json                                          OK
 + create_callprecompile_returndatasize.json                       OK
 + modexp_modsize0_returndatasize.json                             OK
 + returndatacopy_0_0_following_successful_create.json             OK
@@ -2185,8 +2210,9 @@ OK: 22/22 Fail: 0/22 Skip: 0/22
 + returndatasize_initial_zero_read.json                           OK
 + revertRetDataSize.json                                          OK
 + subcallReturnMoreThenExpected.json                              OK
++ tooLongReturnDataCopy.json                                      OK
 ```
-OK: 39/39 Fail: 0/39 Skip: 0/39
+OK: 41/41 Fail: 0/41 Skip: 0/41
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -2305,6 +2331,7 @@ OK: 6/6 Fail: 0/6 Skip: 0/6
 + sar_2^256-1_255.json                                            OK
 + sar_2^256-1_256.json                                            OK
 + shiftCombinations.json                                          OK
++ shiftSignedCombinations.json                                    OK
 + shl01-0100.json                                                 OK
 + shl01-0101.json                                                 OK
 + shl01-ff.json                                                   OK
@@ -2328,7 +2355,7 @@ OK: 6/6 Fail: 0/6 Skip: 0/6
 + shr_2^255_256.json                                              OK
 + shr_2^255_257.json                                              OK
 ```
-OK: 41/41 Fail: 0/41 Skip: 0/41
+OK: 42/42 Fail: 0/42 Skip: 0/42
 ## stSolidityTest
 ```diff
 + AmbiguousMethod.json                                            OK
@@ -2788,6 +2815,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + CreateTransactionSuccess.json                                   OK
 + EmptyTransaction3.json                                          OK
 + HighGasLimit.json                                               OK
++ HighGasPrice.json                                               OK
 + InternalCallHittingGasLimit.json                                OK
 + InternalCallHittingGasLimit2.json                               OK
 + InternalCallHittingGasLimitSuccess.json                         OK
@@ -2795,6 +2823,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + InternlCallStoreClearsSucces.json                               OK
 + Opcodes_TransactionInit.json                                    OK
 + OverflowGasRequire2.json                                        OK
++ PointAtInfinityECRecover.json                                   OK
 + StoreClearsAndInternlCallStoreClearsOOG.json                    OK
 + StoreClearsAndInternlCallStoreClearsSuccess.json                OK
 + StoreGasOnCreate.json                                           OK
@@ -2809,8 +2838,9 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + TransactionSendingToZero.json                                   OK
 + TransactionToAddressh160minusOne.json                           OK
 + TransactionToItself.json                                        OK
++ ValueOverflow.json                                              OK
 ```
-OK: 29/29 Fail: 0/29 Skip: 0/29
+OK: 32/32 Fail: 0/32 Skip: 0/32
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -3229,6 +3259,7 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + codecopy.json                                                   OK
 + gas.json                                                        OK
 + jump.json                                                       OK
++ jumpToPush.json                                                 OK
 + jumpi.json                                                      OK
 + loop_stacklimit.json                                            OK
 + loopsConditionals.json                                          OK
@@ -3241,7 +3272,7 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + return.json                                                     OK
 + sstore_sload.json                                               OK
 ```
-OK: 14/14 Fail: 0/14 Skip: 0/14
+OK: 15/15 Fail: 0/15 Skip: 0/15
 ## vmLogTest
 ```diff
 + log0.json                                                       OK
@@ -3275,4 +3306,4 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2832/2937 Fail: 0/2937 Skip: 105/2937
+OK: 2859/2964 Fail: 0/2964 Skip: 105/2964
