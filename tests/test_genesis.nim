@@ -3,45 +3,51 @@ import
   unittest2, eth/common, nimcrypto/hash,
   ../nimbus/[genesis, config, chain_config]
 
-const dataFolder = "tests" / "customgenesis"
+const
+  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
+  repoDir = ["customgenesis", "status"]             # alternative repo paths
+
+proc findFilePath(file: string): string =
+  result = "?unknown?" / file
+  for dir in baseDir:
+    for repo in repoDir:
+      let path = dir / repo / file
+      if path.fileExists:
+        return path
 
 proc genesisTest() =
   suite "Genesis":
     test "Correct mainnet hash":
-      let g = networkParams(MainNet).genesis
-      let b = g.toBlock
+      let b = networkParams(MainNet).toBlockHeader
       check(b.blockHash == "D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3".toDigest)
 
     test "Correct ropstennet hash":
-      let g = networkParams(RopstenNet).genesis
-      let b = g.toBlock
+      let b = networkParams(RopstenNet).toBlockHeader
       check(b.blockHash == "41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d".toDigest)
 
     test "Correct rinkebynet hash":
-      let g = networkParams(RinkebyNet).genesis
-      let b = g.toBlock
+      let b = networkParams(RinkebyNet).toBlockHeader
       check(b.blockHash == "6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177".toDigest)
 
     test "Correct goerlinet hash":
-      let g = networkParams(GoerliNet).genesis
-      let b = g.toBlock
+      let b = networkParams(GoerliNet).toBlockHeader
       check(b.blockHash == "bf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a".toDigest)
 
 proc customGenesisTest() =
   suite "Custom Genesis":
     test "loadCustomGenesis":
       var cga, cgb, cgc: NetworkParams
-      check loadNetworkParams(dataFolder / "berlin2000.json", cga)
-      check loadNetworkParams(dataFolder / "chainid7.json", cgb)
-      check loadNetworkParams(dataFolder / "noconfig.json", cgc)
+      check loadNetworkParams("berlin2000.json".findFilePath, cga)
+      check loadNetworkParams("chainid7.json".findFilePath, cgb)
+      check loadNetworkParams("noconfig.json".findFilePath, cgc)
       check cga.config.poaEngine == false
       check cgb.config.poaEngine == false
       check cgc.config.poaEngine == false
 
     test "calaveras.json":
       var cg: NetworkParams
-      check loadNetworkParams(dataFolder / "calaveras.json", cg)
-      let h = toBlock(cg.genesis, nil)
+      check loadNetworkParams("calaveras.json".findFilePath, cg)
+      let h = cg.toBlockHeader
       let stateRoot = "664c93de37eb4a72953ea42b8c046cdb64c9f0b0bca5505ade8d970d49ebdb8c".toDigest
       let genesisHash = "eb9233d066c275efcdfed8037f4fc082770176aefdbcb7691c71da412a5670f2".toDigest
       check h.stateRoot == stateRoot
@@ -49,6 +55,16 @@ proc customGenesisTest() =
       check cg.config.poaEngine == true
       check cg.config.cliquePeriod == 30
       check cg.config.cliqueEpoch == 30000
+
+    test "kintsugi.json":
+      var cg: NetworkParams
+      check loadNetworkParams("kintsugi.json".findFilePath, cg)
+      let h = cg.toBlockHeader
+      let stateRoot = "3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e".toDigest
+      let genesisHash = "a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399".toDigest
+      check h.stateRoot == stateRoot
+      check h.blockHash == genesisHash
+      check cg.config.poaEngine == false
 
 proc genesisMain*() =
   genesisTest()

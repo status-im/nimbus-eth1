@@ -132,7 +132,7 @@ func calculateForkIds(c: ChainConfig,
 
 proc setForkId(c: Chain)
   {. raises: [Defect,CatchableError].} =
-  c.blockZeroHash = toBlock(c.db.genesis).blockHash
+  c.blockZeroHash = c.db.genesis.toBlockHeader(c.db.config).blockHash
   let genesisCRC = crc32(0, c.blockZeroHash.data)
   c.forkIds = calculateForkIds(c.db.config, genesisCRC)
 

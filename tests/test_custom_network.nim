@@ -29,15 +29,10 @@ import
   unittest2
 
 const
-  baseDir = [".", "tests", ".." / "tests", $DirSep]     # path containg repo
-  repoDir = ["test_custom_network", "status", "replay"] # alternative repo paths
+  baseDir = [".", "tests", ".." / "tests", $DirSep]   # path containg repo
+  repoDir = ["customgenesis", "."]                    # alternative repo paths
+  jFile = "kintsugi.json"
 
-  # Run time path for testing `loadNetworkParams()` function
-  jFile = "kintsugi-network.json"
-
-  # Using `slurp()` => compile time file path argument
-  gHash = ("test_custom_network" / "kintsugi-genesis-hash.txt")
-              .slurp.splitLines.toSeq[0].strip.toDigest
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -91,10 +86,6 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, args.toSeq.join
 
 # ------------------------------------------------------------------------------
-# Privat functions
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
 # Test Runner
 # ------------------------------------------------------------------------------
 
@@ -143,15 +134,27 @@ proc runner(noisy = true; file = jFile) =
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
-      noisy.say "***", "genesisHash=", mdb.getBlockHash(0.u256).pp
-      check mdb.getBlockHash(0.u256) == gHash
 
-    test "Initialise persistent Genesis (kludge)":
+      # Verify variant of `toBlockHeader()`. The function `pp()` is used
+      # (rather than blockHash()) for readable error report (if any).
+      let
+        storedhHeaderPP = mdb.getBlockHeader(0.u256).pp
+        onTheFlyHeaderPP = mdb.genesis.toBlockHeader(mdb.config).pp
+      check storedhHeaderPP == onTheFlyHeaderPP
+
+    test "Initialise persistent Genesis":
       if disablePersistentDB:
         skip()
       else:
         ddb.initializeEmptyDb
-        check ddb.getBlockHash(0.u256) == gHash
+
+        # Must be the same as the in-memory DB value
+        check ddb.getBlockHash(0.u256) == mdb.getBlockHash(0.u256)
+
+        let
+          storedhHeaderPP = ddb.getBlockHeader(0.u256).pp
+          onTheFlyHeaderPP = ddb.genesis.toBlockHeader(mdb.config).pp
+        check storedhHeaderPP == onTheFlyHeaderPP
 
 # ------------------------------------------------------------------------------
 # Main function(s)
