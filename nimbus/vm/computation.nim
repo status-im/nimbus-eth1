@@ -311,7 +311,11 @@ proc afterExecCall(c: Computation) =
 
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateStateDB:
-    db.incNonce(c.msg.sender)
+    let nonce = db.getNonce(c.msg.sender)
+    if nonce+1 < nonce:
+      c.setError(&"Nonce overflow when sender={c.msg.sender.toHex} wants to create contract", false)
+      return true
+    db.setNonce(c.msg.sender, nonce+1)
 
     # We add this to the access list _before_ taking a snapshot.
     # Even if the creation fails, the access-list change should not be rolled back
@@ -322,7 +326,7 @@ proc beforeExecCreate(c: Computation): bool =
   c.snapshot()
 
   if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
-    c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
+    c.setError(&"Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
     c.rollback()
     return true
 
