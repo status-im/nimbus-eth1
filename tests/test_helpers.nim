@@ -219,7 +219,10 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   if rawTo != "":
     toAddr = some(rawTo.parseAddress)
 
-  let value = fromHex(UInt256, j["value"][valueIndex].getStr)
+  let hexStr = j["value"][valueIndex].getStr
+  # stTransactionTest/ValueOverflow.json
+  # prevent parsing exception and subtitute it with max uint256
+  let value = if ':' in hexStr: high(UInt256) else: fromHex(UInt256, hexStr)
   let payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
   var secretKey = j["secretKey"].getStr
