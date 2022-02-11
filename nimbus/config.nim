@@ -268,6 +268,13 @@ type
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
 
+    staticPeersFile {.
+      desc: "Specifies a line-delimited file of trusted peers addresses(enode URL)" &
+            "to be added to the --staticPeers list. If the first line equals to the word `override`, "&
+            "the file contents will replace the --staticPeers list"
+      defaultValue: ""
+      name: "static-peers-file" }: InputFile
+
     listenAddress* {.
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
@@ -529,7 +536,7 @@ iterator strippedLines(filename: string): (int, string) =
       yield (i, stripped)
       inc i
 
-proc loadBootstrapFile(fileName: string, output: var seq[Enode]) =
+proc loadEnodeFile(fileName: string; output: var seq[Enode]; info: string) =
   if fileName.len == 0:
     return
 
@@ -542,14 +549,20 @@ proc loadBootstrapFile(fileName: string, output: var seq[Enode]) =
 
       let res = ENode.fromString(ln)
       if res.isErr:
-        warn "Ignoring invalid bootstrap address", address=ln, line=i, file=fileName
+        warn "Ignoring invalid address", address=ln, line=i, file=fileName, purpose=info
         continue
 
       output.add res.get()
 
   except IOError as e:
-    error "Could not read bootstrap file", msg = e.msg
+    error "Could not read file", msg = e.msg, purpose = info
     quit 1
+
+proc loadBootstrapFile(fileName: string, output: var seq[Enode]) =
+  fileName.loadEnodeFile(output, "bootstrap")
+
+proc loadStaticPeersFile(fileName: string, output: var seq[Enode]) =
+  fileName.loadEnodeFile(output, "static peers")
 
 proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   if conf.network.len == 0:
@@ -628,6 +641,7 @@ proc getBootNodes*(conf: NimbusConf): seq[Enode] =
 
 proc getStaticPeers*(conf: NimbusConf): seq[Enode] =
   result.append(conf.staticPeers)
+  loadStaticPeersFile(string conf.staticPeersFile, result)
 
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   {.push warning[ProveInit]: off.}
