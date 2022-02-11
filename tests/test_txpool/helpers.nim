@@ -12,7 +12,7 @@ import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
   ../../nimbus/utils/tx_pool/tx_tasks/[tx_packer, tx_recover],
-  ../replay/undump,
+  ../replay/[pp, undump],
   eth/[common, keys],
   stew/[keyed_queue, sorted_set],
   stint
@@ -20,6 +20,7 @@ import
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
+  pp,
   tx_chain.TxChainGasLimits,
   tx_chain.`maxMode=`,
   tx_chain.clearAccounts,
@@ -103,50 +104,8 @@ proc toXX(v: int64; r,s: UInt256): string =
   v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
 
 # ------------------------------------------------------------------------------
-# Public functions, units pretty printer
-# ------------------------------------------------------------------------------
-
-proc ppMs*(elapsed: Duration): string =
-  result = $elapsed.inMilliSeconds
-  let ns = elapsed.inNanoSeconds mod 1_000_000
-  if ns != 0:
-    # to rounded deca milli seconds
-    let dm = (ns + 5_000i64) div 10_000i64
-    result &= &".{dm:02}"
-  result &= "ms"
-
-proc ppSecs*(elapsed: Duration): string =
-  result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000
-  if ns != 0:
-    # to rounded decs seconds
-    let ds = (ns + 5_000_000i64) div 10_000_000i64
-    result &= &".{ds:02}"
-  result &= "s"
-
-proc toKMG*[T](s: T): string =
-  proc subst(s: var string; tag, new: string): bool =
-    if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
-      s = s[0 ..< s.len - tag.len] & new
-      return true
-  result = $s
-  for w in [("000", "K"),("000K","M"),("000M","G"),("000G","T"),
-            ("000T","P"),("000P","E"),("000E","Z"),("000Z","Y")]:
-    if not result.subst(w[0],w[1]):
-      return
-
-# ------------------------------------------------------------------------------
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
-
-proc pp*(a: BlockNonce): string =
-  a.mapIt(it.toHex(2)).join.toLowerAscii
-
-proc pp*(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
-
-proc pp*(a: Hash256): string =
-  a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
 proc pp*(q: seq[(EthAddress,int)]): string =
   "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"

@@ -8,19 +8,33 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+## This unit test was roughly inspired by repeated failings of running nimbus
+## similar to
+## ::
+##    nimbus \
+##       --data-dir:./kintsugi/tmp \
+##       --custom-network:kintsugi-network.json \
+##       --bootstrap-file:kintsugi-bootnodes.txt \
+##       --prune-mode:full ...
+##
+## from `issue 932` <https://github.com/status-im/nimbus-eth1/issues/932>`_.
+
 import
-  std/[distros, os, strformat, strutils],
+  std/[distros, os, strformat, strutils, sequtils],
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend],
+  ./replay/pp,
   eth/[common, p2p, trie/db],
+  nimcrypto/hash,
   unittest2
 
 const
-  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
-  repoDir = ["status", "replay"]                    # alternative repo paths
-  jFile = "nimbus_kintsugi.json"
+  baseDir = [".", "tests", ".." / "tests", $DirSep]   # path containg repo
+  repoDir = ["customgenesis", "."]                    # alternative repo paths
+  jFile = "kintsugi.json"
 
-when defined(windows):
+
+when not defined(linux):
   const isUbuntu32bit = false
 else:
   # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
@@ -62,9 +76,14 @@ proc flushDbDir(s: string) =
     # Typically under Windows: there might be stale file locks.
     try: dataDir.removeDir except: discard
 
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
+proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+  if noisy:
+    if args.len == 0:
+      echo "*** ", pfx
+    elif 0 < pfx.len and pfx[^1] != ' ':
+      echo pfx, " ", args.toSeq.join
+    else:
+      echo pfx, args.toSeq.join
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -81,15 +100,16 @@ proc runner(noisy = true; file = jFile) =
   defer:
     if not disablePersistentDB: tmpDir.flushDbDir
 
-  suite &"Kintsugi test scenario":
+  suite "Kintsugi custom network test scenario":
     var
       params: NetworkParams
       mdb, ddb: BaseChainDB
 
     test &"Load params from {fileInfo}":
+      noisy.say "***", "custom-file=", filePath
       check filePath.loadNetworkParams(params)
 
-    test &"Construct in-memory BaseChainDB":
+    test "Construct in-memory BaseChainDB":
       mdb = newBaseChainDB(
         newMemoryDb(),
         id = params.config.chainID.NetworkId,
@@ -105,49 +125,47 @@ proc runner(noisy = true; file = jFile) =
         # previous clean up.
         tmpDir.flushDbDir
 
-        # The effect of this constructor is roughly equivalent to the command
-        # line invocation of nimbus as
-        #
-        #    nimbus \
-        #       --data-dir:$tmpDir \
-        #       --custom-network:$filePath \
-        #       --prune-mode:full ...
-        #
-        # as described in https://github.com/status-im/nimbus-eth1/issues/932.
+        # Constructor ...
         ddb = newBaseChainDB(
           tmpDir.newChainDb.trieDB,
           id = params.config.chainID.NetworkId,
+          pruneTrie = true,
           params = params)
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
 
-    #[
-    test "Initialise persistent Genesis, expect AssertionError":
-      if disablePersistentDB:
-        skip()
-      else:
-        expect AssertionError:
-          ddb.initializeEmptyDb
-    #]#
+      # Verify variant of `toBlockHeader()`. The function `pp()` is used
+      # (rather than blockHash()) for readable error report (if any).
+      let
+        storedhHeaderPP = mdb.getBlockHeader(0.u256).pp
+        onTheFlyHeaderPP = mdb.toGenesisHeader.pp
+      check storedhHeaderPP == onTheFlyHeaderPP
 
-    test "Initialise persistent Genesis (kludge)":
+    test "Initialise persistent Genesis":
       if disablePersistentDB:
         skip()
       else:
         ddb.initializeEmptyDb
 
+        # Must be the same as the in-memory DB value
+        check ddb.getBlockHash(0.u256) == mdb.getBlockHash(0.u256)
+
+        let
+          storedhHeaderPP = ddb.getBlockHeader(0.u256).pp
+          onTheFlyHeaderPP = ddb.toGenesisHeader.pp
+        check storedhHeaderPP == onTheFlyHeaderPP
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc kintsugiMain*(noisy = defined(debug)) =
+proc customNetworkMain*(noisy = defined(debug)) =
   noisy.runner
 
 when isMainModule:
   var noisy = defined(debug)
-  #noisy = true
-
+  noisy = true
   noisy.runner
 
 # ------------------------------------------------------------------------------
