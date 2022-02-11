@@ -26,3 +26,11 @@ proc installPortalDebugApiHandlers*(
     p.contentDB.put(hexToSeqByte(contentId), hexToSeqByte(content))
 
     return true
+
+  rpcServer.rpc("portal_" & network & "_propagate") do(
+      dataFile: string) -> bool:
+    let res = await p.propagateHistoryDb(dataFile)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)

@@ -64,6 +64,9 @@ make fluffy-test
 ./fluffy/scripts/launch_local_testnet.sh
 ```
 
+Find more details on the usage and workings of the local testnet script
+[here](./docs/local_testnet.md).
+
 ### Windows support
 
 Follow the steps outlined [here](../README.md#windows) to build fluffy on Windows.

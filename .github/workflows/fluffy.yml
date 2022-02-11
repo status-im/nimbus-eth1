@@ -1,11 +1,28 @@
 name: fluffy CI
 on:
   push:
-    paths: ['fluffy/**', '.github/workflows/fluffy.yml', 'vendor/**',
-      'Makefile', 'nimbus.nimble', '!fluffy/**/*.md']
+    paths:
+      - '.github/workflows/fluffy.yml'
+      - 'fluffy/**'
+      - '!fluffy/**.md'
+      - '!fluffy/docs/**'
+      - 'nimbus/rpc/hexstrings.nim'
+      - 'nimbus/rpc/rpc_*.nim'
+      - 'vendor/**'
+      - 'Makefile'
+      - 'nimbus.nimble'
+
   pull_request:
-    paths: ['fluffy/**', '.github/workflows/fluffy.yml', 'vendor/**',
-      'Makefile', 'nimbus.nimble', '!fluffy/**/*.md']
+    paths:
+      - '.github/workflows/fluffy.yml'
+      - 'fluffy/**'
+      - '!fluffy/**.md'
+      - '!fluffy/docs/**'
+      - 'nimbus/rpc/hexstrings.nim'
+      - 'nimbus/rpc/rpc_*.nim'
+      - 'vendor/**'
+      - 'Makefile'
+      - 'nimbus.nimble'
 
 jobs:
   # separate job so it can run concurrently with other tests
@@ -51,11 +68,11 @@ jobs:
       - name: build uTP test app container
         run: |
           docker build -t test-utp --no-cache --build-arg BRANCH_NAME=${{ github.ref_name }} fluffy/tools/utp_testing/docker
-      
+
       - name: run test app with simulator
         run: |
           SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=10 --rate_to_server=10" docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml up -d
-      
+
       - name: wait 5 seconds for containers to start
         run: |
           sleep 5
@@ -63,7 +80,7 @@ jobs:
       - name: check containers
         run: |
           docker ps -a
-          
+
       - name: run uTP test
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"

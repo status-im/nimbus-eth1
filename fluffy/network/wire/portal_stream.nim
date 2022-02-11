@@ -19,7 +19,7 @@ import
 export utp_discv5_protocol
 
 const
-  utpProtocolId = "utp".toBytes()
+  utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
   defaultReadTimeout = 2.seconds
 
@@ -35,6 +35,10 @@ type
     nodeId: NodeId
     contentKeys: ContentKeysList
     timeout: Moment
+
+  ContentHandlerCallback* = proc(
+    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
+    {.gcsafe, raises: [Defect].}
 
   PortalStream* = ref object
     transport*: UtpDiscv5Protocol
@@ -56,6 +60,12 @@ type
     connectionTimeout: Duration
     readTimeout*: Duration
     rng: ref BrHmacDrbgContext
+    udata: pointer
+    contentHandler: ContentHandlerCallback
+
+proc getUserData*[T](stream: PortalStream): T =
+  ## Obtain user data stored in ``stream`` object.
+  cast[T](stream.udata)
 
 proc addContentOffer*(
     stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList): Bytes2 =
@@ -89,14 +99,18 @@ proc addContentRequest*(
 
   return connectionId
 
-proc writeAndClose(socket: UtpSocket[NodeAddress], data: seq[byte]) {.async.} =
-  let dataWritten =  await socket.write(data)
+proc writeAndClose(
+    socket: UtpSocket[NodeAddress], stream: PortalStream,
+    request: ContentRequest) {.async.} =
+  let dataWritten =  await socket.write(request.content)
   if dataWritten.isErr():
     debug "Error writing requested data", error = dataWritten.error
 
   await socket.closeWait()
 
-proc readAndClose(socket: UtpSocket[NodeAddress], stream: PortalStream) {.async.} =
+proc readAndClose(
+    socket: UtpSocket[NodeAddress], stream: PortalStream,
+    offer: ContentOffer) {.async.} =
   # Read all bytes from the socket
   # This will either end with a FIN, or because the read action times out.
   # A FIN does not necessarily mean that the data read is complete. Further
@@ -105,12 +119,10 @@ proc readAndClose(socket: UtpSocket[NodeAddress], stream: PortalStream) {.async.
   # TODO: Should also limit the amount of data to read and/or total time.
   var readData = socket.read()
   if await readData.withTimeout(stream.readTimeout):
-    # TODO: Content needs to be validated, stored and also offered again as part
-    # of the neighborhood gossip. This will require access to the specific
-    # Portal wire protocol for the network it was received on. Some async event
-    # will probably be required for this.
     let content = readData.read
-    echo content.toHex()
+    if not stream.contentHandler.isNil():
+      stream.contentHandler(stream, offer.contentKeys, content)
+
     # Destroy socket and not closing as we already received. Closing would send
     # also a FIN from our side, see also:
     # https://github.com/status-im/nim-eth/blob/b2dab4be0839c95ca2564df9eacf81995bf57802/eth/utp/utp_socket.nim#L1223
@@ -120,6 +132,27 @@ proc readAndClose(socket: UtpSocket[NodeAddress], stream: PortalStream) {.async.
     # Even though reading timed out, lets be nice and still send a FIN.
     # Not waiting here for its ACK however, so no `closeWait`
     socket.close()
+
+proc new*(
+    T: type PortalStream,
+    contentHandler: ContentHandlerCallback,
+    udata: ref,
+    connectionTimeout = defaultConnectionTimeout,
+    readTimeout = defaultReadTimeout,
+    rng = newRng()): T =
+  GC_ref(udata)
+  let
+    stream = PortalStream(
+      contentHandler: contentHandler,
+      udata: cast[pointer](udata),
+      connectionTimeout: connectionTimeout,
+      readTimeout: readTimeout,
+      rng: rng)
+
+  stream
+
+func setTransport*(stream: PortalStream, transport: UtpDiscv5Protocol) =
+  stream.transport = transport
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
@@ -131,26 +164,27 @@ proc pruneAllowedConnections(stream: PortalStream) =
     x.timeout > now)
 
 # TODO: I think I'd like it more if we weren't to capture the stream.
-proc registerIncomingSocketCallback(
-    stream: PortalStream): AcceptConnectionCallback[NodeAddress] =
+proc registerIncomingSocketCallback*(
+    streams: seq[PortalStream]): AcceptConnectionCallback[NodeAddress] =
   return (
     proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
-      # Note: Connection id of uTP SYN is different from other packets, it is
-      # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
-      # other packets.
-      for i, request in stream.contentRequests:
-        if request.connectionId == client.connectionId and
-            request.nodeId == client.remoteAddress.nodeId:
-          let fut = client.writeAndClose(request.content)
-          stream.contentRequests.del(i)
-          return fut
+      for stream in streams:
+        # Note: Connection id of uTP SYN is different from other packets, it is
+        # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
+        # other packets.
+        for i, request in stream.contentRequests:
+          if request.connectionId == client.connectionId and
+              request.nodeId == client.remoteAddress.nodeId:
+            let fut = client.writeAndClose(stream, request)
+            stream.contentRequests.del(i)
+            return fut
 
-      for i, offer in stream.contentOffers:
-        if offer.connectionId == client.connectionId and
-            offer.nodeId == client.remoteAddress.nodeId:
-          let fut = client.readAndClose(stream)
-          stream.contentOffers.del(i)
-          return fut
+        for i, offer in stream.contentOffers:
+          if offer.connectionId == client.connectionId and
+              offer.nodeId == client.remoteAddress.nodeId:
+            let fut = client.readAndClose(stream, offer)
+            stream.contentOffers.del(i)
+            return fut
 
       # TODO: Is there a scenario where this can happen,
       # considering `allowRegisteredIdCallback`? If not, doAssert?
@@ -159,39 +193,22 @@ proc registerIncomingSocketCallback(
       return fut
   )
 
-proc allowRegisteredIdCallback(
-    stream: PortalStream): AllowConnectionCallback[NodeAddress] =
+proc allowedConnection(
+    stream: PortalStream, address: NodeAddress, connectionId: uint16): bool =
+  return
+    stream.contentRequests.any(
+      proc (x: ContentRequest): bool =
+        x.connectionId == connectionId and x.nodeId == address.nodeId) or
+    stream.contentOffers.any(
+      proc (x: ContentOffer): bool =
+        x.connectionId == connectionId and x.nodeId == address.nodeId)
+
+proc allowRegisteredIdCallback*(
+    streams: seq[PortalStream]): AllowConnectionCallback[NodeAddress] =
   return (
     proc(r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16): bool =
-      # stream.pruneAllowedConnections()
-      # `connectionId` is the connection id ofthe uTP SYN packet header, thus
-      # the peers `send_conn_id`.
-      return
-        stream.contentRequests.any(
-          proc (x: ContentRequest): bool =
-            x.connectionId == connectionId and x.nodeId == remoteAddress.nodeId) or
-        stream.contentOffers.any(
-          proc (x: ContentOffer): bool =
-            x.connectionId == connectionId and x.nodeId == remoteAddress.nodeId)
+      for stream in streams:
+        # stream.pruneAllowedConnections()
+        if allowedConnection(stream, remoteAddress, connectionId):
+          return true
   )
-
-proc new*(
-    T: type PortalStream, baseProtocol: protocol.Protocol,
-    connectionTimeout = defaultConnectionTimeout,
-    readTimeout = defaultReadTimeout): T =
-  let
-    stream = PortalStream(
-      connectionTimeout: connectionTimeout,
-      readTimeout: readTimeout,
-      rng: baseProtocol.rng)
-    socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration))
-
-  stream.transport = UtpDiscv5Protocol.new(
-      baseProtocol,
-      utpProtocolId,
-      registerIncomingSocketCallback(stream),
-      allowRegisteredIdCallback(stream),
-      socketConfig)
-
-  stream

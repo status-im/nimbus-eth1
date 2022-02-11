@@ -21,6 +21,9 @@ type HistoryNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
+func setStreamTransport*(n: HistoryNetwork, transport: UtpDiscv5Protocol) =
+  setTransport(n.portalProtocol.stream, transport)
+
 proc toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   some(toContentId(contentKey))
 
@@ -51,13 +54,12 @@ proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
-    portalStream: PortalStream,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, contentDB, toContentIdHandler,
-    portalStream, dataRadius, bootstrapRecords,
+    dataRadius, bootstrapRecords,
     config = portalConfig)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
