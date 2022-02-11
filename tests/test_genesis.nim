@@ -18,19 +18,19 @@ proc findFilePath(file: string): string =
 proc genesisTest() =
   suite "Genesis":
     test "Correct mainnet hash":
-      let b = networkParams(MainNet).toBlockHeader
+      let b = networkParams(MainNet).toGenesisHeader
       check(b.blockHash == "D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3".toDigest)
 
     test "Correct ropstennet hash":
-      let b = networkParams(RopstenNet).toBlockHeader
+      let b = networkParams(RopstenNet).toGenesisHeader
       check(b.blockHash == "41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d".toDigest)
 
     test "Correct rinkebynet hash":
-      let b = networkParams(RinkebyNet).toBlockHeader
+      let b = networkParams(RinkebyNet).toGenesisHeader
       check(b.blockHash == "6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177".toDigest)
 
     test "Correct goerlinet hash":
-      let b = networkParams(GoerliNet).toBlockHeader
+      let b = networkParams(GoerliNet).toGenesisHeader
       check(b.blockHash == "bf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a".toDigest)
 
 proc customGenesisTest() =
@@ -47,7 +47,7 @@ proc customGenesisTest() =
     test "calaveras.json":
       var cg: NetworkParams
       check loadNetworkParams("calaveras.json".findFilePath, cg)
-      let h = cg.toBlockHeader
+      let h = cg.toGenesisHeader
       let stateRoot = "664c93de37eb4a72953ea42b8c046cdb64c9f0b0bca5505ade8d970d49ebdb8c".toDigest
       let genesisHash = "eb9233d066c275efcdfed8037f4fc082770176aefdbcb7691c71da412a5670f2".toDigest
       check h.stateRoot == stateRoot
@@ -59,7 +59,7 @@ proc customGenesisTest() =
     test "kintsugi.json":
       var cg: NetworkParams
       check loadNetworkParams("kintsugi.json".findFilePath, cg)
-      let h = cg.toBlockHeader
+      let h = cg.toGenesisHeader
       let stateRoot = "3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e".toDigest
       let genesisHash = "a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399".toDigest
       check h.stateRoot == stateRoot

@@ -90,7 +90,7 @@ proc initDbAccounts(db: BaseChainDB): BlockHeader
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toBlockHeader*(params: NetworkParams): BlockHeader
+proc toGenesisHeader*(params: NetworkParams): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Generate the genesis block header from the `params` argument value.
   newBaseChainDB(
@@ -99,21 +99,13 @@ proc toBlockHeader*(params: NetworkParams): BlockHeader
     params    = params,
     pruneTrie = true).initDbAccounts
 
-proc toBlockHeader*(g: Genesis; config: ChainConfig): BlockHeader
+proc toGenesisHeader*(db: BaseChainDB): BlockHeader
     {.raises: [Defect, RlpError].} =
-  ## Variant of `toBlockHeader()` for generating the genesis block header.
-  ##
-  ## The second argument `config` is ignored if the `g` argument value has
-  ## the optional `baseFeePerGas` explicitly set, i.e. `isSome()` evaluates
-  ## `true` on that field.
-  ##
-  ## Otherwise, settings depend on whether the genesis block #0 is on the
-  ## pre- or the post-London fork which in turn is implied by the `config`
-  ## argument.
-  ##
+  ## Generate the genesis block header from the `genesis` and `config`
+  ## fields of the argument `db` descriptor.
   NetworkParams(
-    config:  config,
-    genesis: g).toBlockHeader
+    config:  db.config,
+    genesis: db.genesis).toGenesisHeader
 
 proc initializeEmptyDb*(db: BaseChainDB)
     {.raises: [Defect, CatchableError].} =

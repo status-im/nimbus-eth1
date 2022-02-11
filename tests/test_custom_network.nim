@@ -139,7 +139,7 @@ proc runner(noisy = true; file = jFile) =
       # (rather than blockHash()) for readable error report (if any).
       let
         storedhHeaderPP = mdb.getBlockHeader(0.u256).pp
-        onTheFlyHeaderPP = mdb.genesis.toBlockHeader(mdb.config).pp
+        onTheFlyHeaderPP = mdb.toGenesisHeader.pp
       check storedhHeaderPP == onTheFlyHeaderPP
 
     test "Initialise persistent Genesis":
@@ -153,7 +153,7 @@ proc runner(noisy = true; file = jFile) =
 
         let
           storedhHeaderPP = ddb.getBlockHeader(0.u256).pp
-          onTheFlyHeaderPP = ddb.genesis.toBlockHeader(mdb.config).pp
+          onTheFlyHeaderPP = ddb.toGenesisHeader.pp
         check storedhHeaderPP == onTheFlyHeaderPP
 
 # ------------------------------------------------------------------------------
