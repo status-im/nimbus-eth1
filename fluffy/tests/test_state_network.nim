@@ -30,7 +30,7 @@ proc genesisToTrie(filePath: string): HexaryTrie =
   )
   # TODO: this actually also creates a HexaryTrie and AccountStateDB, which we
   # could skip
-  let header = toBlock(cn.genesis, chainDB)
+  let header = toGenesisHeader(chainDB)
 
   # Trie exists already in flat db, but need to provide the root
   initHexaryTrie(chainDB.db, header.stateRoot, chainDB.pruneTrie)

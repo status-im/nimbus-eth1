@@ -90,11 +90,11 @@ proc initDbAccounts(db: BaseChainDB): BlockHeader
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toGenesisHeader*(params: NetworkParams): BlockHeader
+proc toGenesisHeader*(params: NetworkParams, db = newMemoryDb()): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Generate the genesis block header from the `params` argument value.
   newBaseChainDB(
-    newMemoryDb(),
+    db        = db,
     id        = params.config.chainID.NetworkId,
     params    = params,
     pruneTrie = true).initDbAccounts
@@ -105,7 +105,7 @@ proc toGenesisHeader*(db: BaseChainDB): BlockHeader
   ## fields of the argument `db` descriptor.
   NetworkParams(
     config:  db.config,
-    genesis: db.genesis).toGenesisHeader
+    genesis: db.genesis).toGenesisHeader(db.db)
 
 proc initializeEmptyDb*(db: BaseChainDB)
     {.raises: [Defect, CatchableError].} =
