@@ -8,10 +8,12 @@ import
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Public functions
 # ------------------------------------------------------------------------------
+proc newStateDB*(db: TrieDatabaseRef, pruneTrie: bool): AccountStateDB =
+  newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
-proc initDbAccounts(db: BaseChainDB): BlockHeader
+proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
@@ -24,7 +26,6 @@ proc initDbAccounts(db: BaseChainDB): BlockHeader
   # function `eth/trie/db.trieDB()`.
   db.db.put(emptyRlpHash.data, emptyRlp)
 
-  var sdb = newAccountStateDB(db.db, emptyRlpHash, db.pruneTrie)
   let g = db.genesis
 
   for address, account in g.alloc:
@@ -86,18 +87,16 @@ proc initDbAccounts(db: BaseChainDB): BlockHeader
   if g.difficulty.isZero:
     result.difficulty = GENESIS_DIFFICULTY
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc toGenesisHeader*(params: NetworkParams, db = newMemoryDb()): BlockHeader
+proc toGenesisHeader*(params: NetworkParams): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Generate the genesis block header from the `params` argument value.
-  newBaseChainDB(
-    db        = db,
+  let cdb = newBaseChainDB(
+    db        = newMemoryDb(),
     id        = params.config.chainID.NetworkId,
     params    = params,
-    pruneTrie = true).initDbAccounts
+    pruneTrie = true)
+  let sdb = newStateDB(cdb.db, cdb.pruneTrie)
+  cdb.toGenesisHeader(sdb)
 
 proc toGenesisHeader*(db: BaseChainDB): BlockHeader
     {.raises: [Defect, RlpError].} =
@@ -105,14 +104,17 @@ proc toGenesisHeader*(db: BaseChainDB): BlockHeader
   ## fields of the argument `db` descriptor.
   NetworkParams(
     config:  db.config,
-    genesis: db.genesis).toGenesisHeader(db.db)
+    genesis: db.genesis).toGenesisHeader()
 
-proc initializeEmptyDb*(db: BaseChainDB)
+proc initializeEmptyDb*(cdb: BaseChainDB)
     {.raises: [Defect, CatchableError].} =
   trace "Writing genesis to DB"
-  let b = db.initDbAccounts
-  doAssert(b.blockNumber.isZero, "can't commit genesis block with number > 0")
-  discard db.persistHeaderToDb(b)
+  let sdb = newStateDB(cdb.db, cdb.pruneTrie)
+  let header = cdb.toGenesisHeader(sdb)
+  doAssert(header.blockNumber.isZero, "can't commit genesis block with number > 0")
+  # faster lookup of curent total difficulty
+  cdb.totalDifficulty = header.difficulty
+  discard cdb.persistHeaderToDb(header)
 
 # ------------------------------------------------------------------------------
 # End

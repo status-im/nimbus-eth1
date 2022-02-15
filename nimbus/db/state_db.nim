@@ -72,6 +72,12 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
   when aleth_compat:
     result.cleared = initHashSet[EthAddress]()
 
+proc getTrie*(db: AccountStateDB): HexaryTrie =
+  HexaryTrie db.trie
+
+proc getSecureTrie*(db: AccountStateDB): SecureHexaryTrie =
+  db.trie
+
 proc getAccount*(db: AccountStateDB, address: EthAddress): Account =
   let recordFound = db.trie.get(address)
   if recordFound.len > 0:
@@ -93,15 +99,15 @@ proc getBalance*(db: AccountStateDB, address: EthAddress): UInt256 =
   let account = db.getAccount(address)
   account.balance
 
-proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) =
+proc setBalance*(db: AccountStateDB, address: EthAddress, balance: UInt256) =
   var account = db.getAccount(address)
   account.balance = balance
   db.setAccount(address, account)
 
-proc addBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+proc addBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
-proc subBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+proc subBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) - delta)
 
 template createTrieKeyFromSlot(slot: UInt256): auto =
@@ -120,7 +126,7 @@ template getAccountTrie(db: AccountStateDB, account: Account): auto =
   # see nim-eth#9
   initSecureHexaryTrie(trieDB(db), account.storageRoot, false)
 
-proc clearStorage*(db: var AccountStateDB, address: EthAddress) =
+proc clearStorage*(db: AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
   account.storageRoot = emptyRlpHash
   db.setAccount(address, account)
@@ -131,7 +137,7 @@ proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =
   var account = db.getAccount(address)
   account.storageRoot
 
-proc setStorage*(db: var AccountStateDB,
+proc setStorage*(db: AccountStateDB,
                  address: EthAddress,
                  slot: UInt256, value: UInt256) =
   var account = db.getAccount(address)

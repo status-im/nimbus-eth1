@@ -10,7 +10,7 @@ import
   testutils/unittests, chronos,
   eth/[keys, trie/db, trie/hexary],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[genesis, chain_config, config, db/db_chain],
+  ../../nimbus/[genesis, chain_config, config, db/db_chain, db/state_db],
   ../network/wire/portal_protocol,
   ../network/state/[state_content, state_network],
   ../content_db,
@@ -28,12 +28,11 @@ proc genesisToTrie(filePath: string): HexaryTrie =
     CustomNet,
     cn
   )
-  # TODO: this actually also creates a HexaryTrie and AccountStateDB, which we
-  # could skip
-  let header = toGenesisHeader(chainDB)
 
-  # Trie exists already in flat db, but need to provide the root
-  initHexaryTrie(chainDB.db, header.stateRoot, chainDB.pruneTrie)
+  let sdb = newStateDB(chainDB.db, chainDB.pruneTrie)
+  let header = toGenesisHeader(chainDB, sdb)
+
+  sdb.getTrie
 
 procSuite "State Content Network":
   let rng = newRng()
