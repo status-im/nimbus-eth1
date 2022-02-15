@@ -44,9 +44,9 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(VmStateError, info & "(): " & $e.name & " -- " & e.msg)
 
-proc getMinerAddress(chainDB: BaseChainDB; header: BlockHeader): EthAddress
+proc getMinerAddress(chainDB: BaseChainDB; header: BlockHeader, ttdReached: bool): EthAddress
     {.gcsafe, raises: [Defect,CatchableError].} =
-  if not chainDB.config.poaEngine:
+  if not chainDB.config.poaEngine or ttdReached:
     return header.coinbase
 
   let account = header.ecRecover
@@ -195,12 +195,6 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
     return true
   # else: false
 
-proc ttd(chainDB: BaseChainDB): DifficultyInt =
-  if chainDB.config.terminalTotalDifficulty.isSome:
-    chainDB.config.terminalTotalDifficulty.get()
-  else:
-    high(DifficultyInt)
-
 proc reinit*(self:      BaseVMState; ## Object descriptor
              parent:    BlockHeader; ## parent header, account sync pos.
              header:    BlockHeader; ## header with tx environment data fields
@@ -213,13 +207,15 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let ttdReached = self.chainDB.totalDifficulty + header.difficulty > self.chainDB.ttd
+  let miner = self.chainDB.getMinerAddress(header, ttdReached)
+
   self.reinit(
     parent    = parent,
     timestamp = header.timestamp,
     gasLimit  = header.gasLimit,
     fee       = header.fee,
     prevRandao= header.prevRandao,
-    miner     = self.chainDB.getMinerAddress(header),
+    miner     = miner,
     ttdReached= ttdReached,
     pruneTrie = pruneTrie)
 
@@ -252,13 +248,14 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let ttdReached = chainDB.totalDifficulty + header.difficulty > chainDB.ttd
+  let miner = chainDB.getMinerAddress(header, ttdReached)
   self.init(AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
             parent,
             header.timestamp,
             header.gasLimit,
             header.fee,
             header.prevRandao,
-            chainDB.getMinerAddress(header),
+            miner,
             chainDB,
             ttdReached,
             tracerFlags)

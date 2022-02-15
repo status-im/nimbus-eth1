@@ -58,6 +58,12 @@ proc newBaseChainDB*(
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
+proc ttd*(db: BaseChainDB): DifficultyInt =
+  if db.config.terminalTotalDifficulty.isSome:
+    db.config.terminalTotalDifficulty.get()
+  else:
+    high(DifficultyInt)
+
 proc networkParams*(db: BaseChainDB): NetworkParams =
   NetworkParams(config: db.config, genesis: db.genesis)
 
