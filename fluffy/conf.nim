@@ -141,6 +141,13 @@ type
       desc: "URI of eth client where to proxy unimplemented rpc methods to"
       name: "proxy-uri" .}: ClientConfig
 
+    logRadius* {.
+      desc: "Hardcoded (logarithmic) radius for each Portal network. This is " &
+            "a temporary development option which will be replaced in the " &
+            "future by e.g. a storage size limit"
+      defaultValue: 256
+      name: "radius" .}: uint16
+
     tableIpLimit* {.
       hidden
       desc: "Maximum amount of nodes with the same IP in the routing tables"

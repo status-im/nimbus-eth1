@@ -22,6 +22,11 @@ import
   ./network/wire/[portal_stream, portal_protocol_config],
   "."/[content_db, populate_db]
 
+proc fromLogRadius(T: type UInt256, logRadius: uint16): T =
+  # Get the max value of the logRadius range
+  pow((2).stuint(256), logRadius) - 1
+  # For the min value do `pow((2).stuint(256), logRadius - 1)`
+
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
     if (maybeUri.isSome()):
@@ -72,14 +77,15 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   # This is done because the content in the db is dependant on the `NodeId` and
   # the selected `Radius`.
   let
+    radius = UInt256.fromLogRadius(config.logRadius)
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
-    stateNetwork = StateNetwork.new(d, db,
+    stateNetwork = StateNetwork.new(d, db, radius,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
-    historyNetwork = HistoryNetwork.new(d, db,
+    historyNetwork = HistoryNetwork.new(d, db, radius,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
   # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.
