@@ -192,21 +192,8 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
+proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
     bool {.raises: [Defect].} =
-  var cc: CustomChain
-  try:
-    cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)
-  except IOError as e:
-    error "Network params I/O error", fileName, msg=e.msg
-    return false
-  except JsonReaderError as e:
-    error "Invalid network params file format", fileName, msg=e.formatMsg("")
-    return false
-  except:
-    var msg = getCurrentExceptionMsg()
-    error "Error loading network params file", fileName, msg
-    return false
 
   cg.genesis               = cc.genesis
   cg.config.chainId        = cc.config.chainId
@@ -252,6 +239,40 @@ proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
   validateFork(homesteadBlock,      cg.config.daoForkBlock)
 
   return true
+
+proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
+    bool {.raises: [Defect].} =
+  var cc: CustomChain
+  try:
+    cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)
+  except IOError as e:
+    error "Network params I/O error", fileName, msg=e.msg
+    return false
+  except JsonReaderError as e:
+    error "Invalid network params file format", fileName, msg=e.formatMsg("")
+    return false
+  except:
+    var msg = getCurrentExceptionMsg()
+    error "Error loading network params file", fileName, msg
+    return false
+
+  loadNetworkParams(cc, cg)
+
+proc decodeNetworkParams*(jsonString: string, cg: var NetworkParams):
+    bool {.raises: [Defect].} =
+
+  var cc: CustomChain
+  try:
+    cc = Json.decode(jsonString, CustomChain, allowUnknownFields = true)
+  except JsonReaderError as e:
+    error "Invalid network params format", msg=e.formatMsg("")
+    return false
+  except:
+    var msg = getCurrentExceptionMsg()
+    error "Error decoding network params", msg
+    return false
+
+  loadNetworkParams(cc, cg)
 
 proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool =
   try:
