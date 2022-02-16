@@ -42,6 +42,26 @@ proc connectToRpcServers(config: PortalTestnetConf):
 
   return clients
 
+# Note:
+# When doing json-rpc requests following `RpcPostError` can occur:
+# "Failed to send POST Request with JSON-RPC." when a `HttpClientRequestRef`
+# POST request is send in the json-rpc http client.
+# This error is raised when the httpclient hits error:
+# "Could not send request headers", which in its turn is caused by the
+# "Incomplete data sent or received" in `AsyncStream`, which is caused by
+# `ECONNRESET` or `EPIPE` error (see `isConnResetError()`) on the TCP stream.
+# This can occur when the server side closes the connection, which happens after
+# a `httpHeadersTimeout` of default 10 seconds (set on `HttpServerRef.new()`).
+# In order to avoid here hitting this timeout a `close()` is done after each
+# json-rpc call. Because the first json-rpc call opens up the connection, and it
+# remains open until a close() (or timeout). No need to do another connect
+# before any new call as the proc `connectToRpcServers` doesn't actually connect
+# to servers, as client.connect doesn't do that. It just sets the `httpAddress`.
+# Yes, this client json rpc API couldn't be more confusing.
+# Could also just retry each call on failure, which would set up a new
+# connection.
+
+
 # We are kind of abusing the unittest2 here to run json rpc tests against other
 # processes. Needs to be compiled with `-d:unittest2DisableParamFiltering` or
 # the confutils cli will not work.
@@ -55,6 +75,7 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.discv5_nodeInfo()
+      await client.close()
       nodeInfos.add(nodeInfo)
 
     # Kick off the network by trying to add all records to each node.
@@ -65,16 +86,13 @@ procSuite "Portal testnet tests":
     # Note 2: One could also ping all nodes but that is much slower and more
     # error prone
     for client in clients:
-      try:
-        discard await client.discv5_addEnrs(nodeInfos.map(
-          proc(x: NodeInfo): Record = x.nodeENR))
-      except CatchableError as e:
-        # Call shouldn't fail, unless there are json rpc server/client issues
-        echo e.msg
-        raise e
+      discard await client.discv5_addEnrs(nodeInfos.map(
+        proc(x: NodeInfo): Record = x.nodeENR))
+      await client.close()
 
     for client in clients:
       let routingTableInfo = await client.discv5_routingTableInfo()
+      await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
       # A node will have at least the first bucket filled. One could increase
@@ -85,11 +103,9 @@ procSuite "Portal testnet tests":
     let randomNodeInfo = sample(rng[], nodeInfos)
     for client in clients:
       var enr: Record
-      try:
-        enr = await client.discv5_lookupEnr(randomNodeInfo.nodeId)
-      except CatchableError as e:
-        echo e.msg
+      enr = await client.discv5_lookupEnr(randomNodeInfo.nodeId)
       check enr == randomNodeInfo.nodeENR
+      await client.close()
 
   asyncTest "Portal State - Random node lookup from each node":
     let clients = await connectToRpcServers(config)
@@ -97,19 +113,17 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.portal_state_nodeInfo()
+      await client.close()
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      try:
-        discard await client.portal_state_addEnrs(nodeInfos.map(
-          proc(x: NodeInfo): Record = x.nodeENR))
-      except CatchableError as e:
-        # Call shouldn't fail, unless there are json rpc server/client issues
-        echo e.msg
-        raise e
+      discard await client.portal_state_addEnrs(nodeInfos.map(
+        proc(x: NodeInfo): Record = x.nodeENR))
+      await client.close()
 
     for client in clients:
       let routingTableInfo = await client.portal_state_routingTableInfo()
+      await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
       check nodes.len >= (min(config.nodeCount - 1, 16))
@@ -128,6 +142,7 @@ procSuite "Portal testnet tests":
       # further investigated.
       skip()
       # check enr == randomNodeInfo.nodeENR
+      await client.close()
 
   asyncTest "Portal History - Random node lookup from each node":
     let clients = await connectToRpcServers(config)
@@ -135,19 +150,17 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.portal_history_nodeInfo()
+      await client.close()
       nodeInfos.add(nodeInfo)
 
     for client in clients:
-      try:
-        discard await client.portal_history_addEnrs(nodeInfos.map(
-          proc(x: NodeInfo): Record = x.nodeENR))
-      except CatchableError as e:
-        # Call shouldn't fail, unless there are json rpc server/client issues
-        echo e.msg
-        raise e
+      discard await client.portal_history_addEnrs(nodeInfos.map(
+        proc(x: NodeInfo): Record = x.nodeENR))
+      await client.close()
 
     for client in clients:
       let routingTableInfo = await client.portal_history_routingTableInfo()
+      await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
       check nodes.len >= (min(config.nodeCount - 1, 16))
@@ -156,10 +169,8 @@ procSuite "Portal testnet tests":
     let randomNodeInfo = sample(rng[], nodeInfos)
     for client in clients:
       var enr: Record
-      try:
-        enr = await client.portal_history_lookupEnr(randomNodeInfo.nodeId)
-      except CatchableError as e:
-        echo e.msg
+      enr = await client.portal_history_lookupEnr(randomNodeInfo.nodeId)
+      await client.close()
       check enr == randomNodeInfo.nodeENR
 
   asyncTest "Portal History - Propagate blocks and do content lookups":
@@ -168,12 +179,14 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.portal_history_nodeInfo()
+      await client.close()
       nodeInfos.add(nodeInfo)
 
     const dataFile = "./fluffy/scripts/test_data/mainnet_blocks_1-5.json"
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
     check (await clients[0].portal_history_propagate(dataFile))
+    await clients[0].close()
 
     let blockData = readBlockData(dataFile)
     check blockData.isOk()
@@ -186,3 +199,5 @@ procSuite "Portal testnet tests":
           hash.ethHashStr(), false)
         check content.isSome()
         check content.get().hash.get() == hash
+
+      await client.close()
