@@ -83,17 +83,23 @@ type
             "This option allows to enable/disable this functionality"
       name: "enr-auto-update" .}: bool
 
-    networkKey* {.
-      desc: "Private key (secp256k1) for the p2p network, hex encoded. Safer keyfile support to be added.",
-      defaultValue: PrivateKey.random(keys.newRng()[])
-      defaultValueDesc: "random"
-      name: "network-key-unsafe" .}: PrivateKey
-
     dataDir* {.
       desc: "The directory where fluffy will store the content data"
       defaultValue: defaultDataDir()
       defaultValueDesc: $defaultDataDirDesc
       name: "data-dir" .}: OutDir
+
+    networkKeyFile* {.
+      desc: "Source of network (secp256k1) private key file"
+      defaultValue: config.dataDir / "netkey",
+      name: "netkey-file" }: string
+
+    networkKey* {.
+      hidden
+      desc: "Private key (secp256k1) for the p2p network, hex encoded.",
+      defaultValue: none(PrivateKey)
+      defaultValueDesc: "none"
+      name: "netkey-unsafe" .}: Option[PrivateKey]
 
     metricsEnabled* {.
       defaultValue: false

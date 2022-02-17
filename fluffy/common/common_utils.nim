@@ -9,7 +9,7 @@
 
 import
   std/[os, strutils],
-  chronicles,
+  chronicles, stew/io2,
   eth/p2p/discoveryv5/enr
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
@@ -43,3 +43,45 @@ proc loadBootstrapFile*(bootstrapFile: string,
   else:
     fatal "Unknown bootstrap file format", ext
     quit 1
+
+# Note:
+# Currently just works with the network private key stored as hex in a file.
+# In the future it would be nice to re-use keystore from nimbus-eth2 for this.
+# However that would require the pull the keystore.nim and parts of
+# keystore_management.nim out of nimbus-eth2.
+proc getPersistentNetKey*(
+    rng: var BrHmacDrbgContext, keyFilePath: string, dataDir: string):
+    PrivateKey =
+  if fileAccessible(keyFilePath, {AccessFlags.Find}):
+    info "Network key file is present, reading key", key_file = keyFilePath
+
+    let readResult = readAllChars(keyFilePath)
+    if readResult.isErr():
+      fatal "Could not load network key file", key_file = keyFilePath
+      quit QuitFailure
+
+    let netKeyInHex = readResult.get()
+    if netKeyInHex.len() == 64:
+      let netKey = PrivateKey.fromHex(netkeyInHex)
+      if netKey.isOk():
+        info "Network key was successfully read", key_file = keyFilePath
+        netKey.get()
+      else:
+        fatal "Invalid private key length in file", key_file = keyFilePath
+        quit QuitFailure
+    else:
+      fatal "Invalid private key from file", key_file = keyFilePath
+      quit QuitFailure
+
+  else:
+    info "Network key file is missing, creating a new one",
+      key_file = keyFilePath
+    let key = PrivateKey.random(rng)
+
+    if io2.writeFile(keyFilePath, $key).isErr:
+      fatal "Failed to write the network key file", key_file = keyFilePath
+      quit 1
+
+    info "New network key file was created", key_file = keyFilePath
+
+    key
