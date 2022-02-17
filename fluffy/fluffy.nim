@@ -54,6 +54,11 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       except CatchableError as exc: raise exc
       # TODO: Ideally we don't have the Exception here
       except Exception as exc: raiseAssert exc.msg
+    netkey =
+      if config.networkKey.isSome():
+        config.networkKey.get()
+      else:
+        getPersistentNetKey(rng[], config.networkKeyFile, config.dataDir.string)
 
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
@@ -63,7 +68,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     discoveryConfig = DiscoveryConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
     d = newProtocol(
-      config.networkKey,
+      netkey,
       extIp, none(Port), extUdpPort,
       bootstrapRecords = bootstrapRecords,
       bindIp = bindIp, bindPort = udpPort,
