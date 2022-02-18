@@ -9,7 +9,7 @@ import
   std/sequtils,
   unittest2, testutils, confutils, chronos,
   eth/p2p/discoveryv5/random2, eth/keys,
-  ../../nimbus/rpc/hexstrings,
+  ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../populate_db
@@ -182,7 +182,7 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataFile = "./fluffy/scripts/test_data/mainnet_blocks_1-5.json"
+    const dataFile = "./fluffy/scripts/test_data/mainnet_blocks_selected.json"
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
     check (await clients[0].portal_history_propagate(dataFile))
@@ -198,6 +198,14 @@ procSuite "Portal testnet tests":
         let content = await client.eth_getBlockByHash(
           hash.ethHashStr(), false)
         check content.isSome()
-        check content.get().hash.get() == hash
+        let blockObj = content.get()
+        check blockObj.hash.get() == hash
+
+        for tx in blockObj.transactions:
+          var txObj: TransactionObject
+          tx.fromJson("tx", txObj)
+          check txObj.blockHash.get() == hash
+
+        # TODO: check uncles hash when there are
 
       await client.close()
