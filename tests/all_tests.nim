@@ -43,4 +43,6 @@ cliBuilder:
           ./test_pow,
           ./test_configuration,
           ./test_keyed_queue_rlp,
-          ./test_txpool
+          ./test_txpool,
+          ./test_merge
+

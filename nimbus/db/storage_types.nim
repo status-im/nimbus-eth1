@@ -11,6 +11,8 @@ type
     slotHashToSlot
     contractHash
     cliqueSnapshot
+    transitionStatus
+    terminalHash
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -57,6 +59,15 @@ proc cliqueSnapshotKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(cliqueSnapshot)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
+
+proc transitionStatusKey*(): DbKey =
+  # ETH-2 Transition Status
+  result.data[0] = byte ord(transitionStatus)
+  result.dataEndPos = uint8 1
+
+proc terminalHashKey*(): DbKey =
+  result.data[0] = byte ord(terminalHash)
+  result.dataEndPos = uint8 1
 
 template toOpenArray*(k: DbKey): openarray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

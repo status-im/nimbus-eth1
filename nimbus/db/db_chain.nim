@@ -119,6 +119,10 @@ proc getBlockHash*(self: BaseChainDB, n: BlockNumber): Hash256 {.inline.} =
   if not self.getHash(blockNumberToHashKey(n), result):
     raise newException(BlockNotFound, "No block hash for number " & $n)
 
+proc getCurrentBlockHash*(self: BaseChainDB): Hash256 =
+  if not self.getHash(blockNumberToHashKey(self.currentBlock), result):
+    result = Hash256()
+
 proc getBlockHeader*(self: BaseChainDB; n: BlockNumber, output: var BlockHeader): bool =
   ## Returns the block header with the given number in the canonical chain.
   var blockHash: Hash256
@@ -132,6 +136,15 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
 
 proc getScore*(self: BaseChainDB; blockHash: Hash256): Uint256 =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), Uint256)
+
+proc getTd*(self: BaseChainDB; blockHash: Hash256, td: var Uint256): bool =
+  let bytes = self.db.get(blockHashToScoreKey(blockHash).toOpenArray)
+  if bytes.len == 0: return false
+  try:
+    td = rlp.decode(bytes, Uint256)
+  except RlpError:
+    return false
+  return true
 
 proc getAncestorsHashes*(self: BaseChainDB, limit: Uint256, header: BlockHeader): seq[Hash256] =
   var ancestorCount = min(header.blockNumber, limit).truncate(int)
@@ -332,6 +345,28 @@ iterator getReceipts*(self: BaseChainDB; receiptRoot: Hash256): Receipt =
       break
     inc receiptIdx
 
+proc readTerminalHash*(self: BaseChainDB; h: var Hash256): bool =
+  let bytes = self.db.get(terminalHashKey().toOpenArray)
+  if bytes.len == 0:
+    return false
+  try:
+    h = rlp.decode(bytes, Hash256)
+  except RlpError:
+    return false
+
+  true
+
+proc writeTerminalHash*(self: BaseChainDB; h: Hash256) =
+  self.db.put(terminalHashKey().toOpenArray, rlp.encode(h))
+
+proc currentTerminalHeader*(self: BaseChainDB; header: var BlockHeader): bool =
+  var terminalHash: Hash256
+  if not self.readTerminalHash(terminalHash):
+    return false
+  if not self.getBlockHeader(terminalHash, header):
+    return false
+  true
+
 proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader] =
   let isGenesis = header.parentHash == GENESIS_PARENT_HASH
   let headerHash = header.blockHash
@@ -352,9 +387,18 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   except CanonicalHeadNotFound:
     return self.setAsCanonicalChainHead(headerHash)
 
+  let ttd = self.ttd()
+  if headScore < ttd and score >= ttd:
+    self.writeTerminalHash(headerHash)
+
   if score > headScore:
     self.totalDifficulty = score
     result = self.setAsCanonicalChainHead(headerHash)
+
+proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
+  let headerHash = header.blockHash
+  self.addBlockNumberToHashLookup(header)
+  self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.

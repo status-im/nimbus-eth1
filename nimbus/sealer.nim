@@ -10,18 +10,23 @@
 
 import
   std/[times, tables, typetraits],
-  pkg/[chronos, stew/results, chronicles, eth/common, eth/keys],
-  "."/[config, db/db_chain, p2p/chain, constants, utils/header],
+  pkg/[chronos, stew/results, chronicles, eth/common, eth/keys, eth/rlp],
+  "."/[config,
+    db/db_chain,
+    p2p/chain,
+    constants,
+    utils/header],
   "."/p2p/clique/[clique_defs,
     clique_desc,
     clique_cfg,
     clique_sealer],
   ./p2p/[gaslimit, validate],
   "."/[chain_config, utils, context],
-  "."/utils/tx_pool
+  "."/utils/tx_pool,
+  "."/merge/mergetypes
 
 from web3/ethtypes as web3types import nil
-from web3/engine_api_types import ExecutionPayloadV1, PayloadAttributesV1
+from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1
 
 type
   EngineState* = enum
@@ -43,7 +48,7 @@ type
     signer: EthAddress
     txPool: TxPoolRef
 
-template asEthHash*(hash: Web3BlockHash): Hash256 =
+template asEthHash(hash: Web3BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
 
 proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[void, string] =
@@ -135,8 +140,11 @@ proc generateBlock(engine: SealingEngineRef,
     header: res.get()
   )
 
-  if not engine.chain.isBlockAfterTtd(outBlock.header):
-    # TODO Post merge, Clique should not be executing
+  if engine.chain.isBlockAfterTtd(outBlock.header):
+    # Stop the block generator if we reach TTD
+    engine.state = EnginePostMerge
+  else:
+    # Post merge, Clique should not be executing
     let sealRes = engine.chain.clique.seal(outBlock)
     if sealRes.isErr:
       return err("error sealing block header: " & $sealRes.error)
@@ -209,6 +217,10 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
       error "sealing engine generateBlock error", msg=blkRes.error
       break
 
+    # if TTD reached during block generation, stop the sealer
+    if engine.state != EngineRunning:
+      break
+
     let res = engine.chain.persistBlocks([blk.header], [
       BlockBody(transactions: blk.txs, uncles: blk.uncles)
     ])
@@ -243,24 +255,26 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     BlockBody(transactions: blk.txs, uncles: blk.uncles)
   ])
 
+  if blk.header.extraData.len > 32:
+    return err "extraData length should not exceed 32 bytes"
+
   payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
   payloadRes.feeRecipient = Web3Address blk.header.coinbase
   payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
   payloadRes.receiptsRoot = Web3BlockHash blk.header.receiptRoot.data
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
-  # TODO Check the extra data length here
-  # payloadres.extraData = web3types.DynamicBytes[256] blk.header.extraData
   payloadRes.prevRandao  = web3types.FixedBytes[32](payloadAttrs.prevRandao)
   payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
   payloadRes.timestamp = payloadAttrs.timestamp
-  # TODO
-  # res.extraData
+  payloadres.extraData = web3types.DynamicBytes[0, 32] blk.header.extraData
   payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
   payloadRes.blockHash = Web3BlockHash rlpHash(blk.header).data
-  # TODO
-  # res.transactions*: seq[TypedTransaction]
+
+  for tx in blk.txs:
+    let txData = rlp.encode(tx)
+    payloadRes.transactions.add web3types.TypedTransaction(txData)
 
   return ok()
 

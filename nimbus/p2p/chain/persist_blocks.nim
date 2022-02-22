@@ -72,8 +72,8 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
 
     if validationResult != ValidationResult.OK:
       return validationResult
-
-    if c.extraValidation and c.verifyFrom <= header.blockNumber:
+      
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:    
       let isBlockAfterTtd = c.isBlockAfterTtd(header)
       if c.db.config.poaEngine and not isBlockAfterTtd:
         var parent = if 0 < i: @[headers[i-1]] else: @[]

@@ -48,7 +48,7 @@ proc getMinerAddress(chainDB: BaseChainDB; header: BlockHeader, ttdReached: bool
     {.gcsafe, raises: [Defect,CatchableError].} =
   if not chainDB.config.poaEngine or ttdReached:
     return header.coinbase
-
+  
   let account = header.ecRecover
   if account.isErr:
     let msg = "Could not recover account address: " & $account.error

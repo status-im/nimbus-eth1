@@ -206,18 +206,12 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     # TODO: There should be a better place to initialize this
     nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
-
-    let initialSealingEngineState =
-      if conf.networkParams.config.terminalTotalDifficulty.isSome and
-         conf.networkParams.config.terminalTotalDifficulty.get.isZero:
-        nimbus.chainRef.ttdReachedAt = some(BlockNumber.zero)
-        EnginePostMerge
-      else:
-        EngineStopped
+    var initialState = EngineStopped
+    if chainDB.totalDifficulty > chainDB.ttd:
+       initialState = EnginePostMerge
     nimbus.sealingEngine = SealingEngineRef.new(
-      # TODO: Implement the initial state correctly
       nimbus.chainRef, nimbus.ctx, conf.engineSigner,
-      nimbus.txPool, initialSealingEngineState
+      nimbus.txPool, initialState
     )
     nimbus.sealingEngine.start()
 
