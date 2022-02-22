@@ -206,6 +206,8 @@ procSuite "Portal testnet tests":
           tx.fromJson("tx", txObj)
           check txObj.blockHash.get() == hash
 
-        # TODO: check uncles hash when there are
+        # TODO: Check ommersHash, need the headers and not just the hashes
+        # for uncle in blockObj.uncles:
+        #   discard
 
       await client.close()

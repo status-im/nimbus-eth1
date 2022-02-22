@@ -10,7 +10,7 @@
 import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], nimcrypto/keccak, chronos, chronicles,
-  eth/rlp,
+  eth/[rlp, common/eth_types],
   ./content_db,
   ./network/wire/portal_protocol,
   ./network/history/history_content
@@ -66,8 +66,12 @@ iterator blocks*(
         error "Invalid hex for rlp data", error = e.msg, number = v.number
         continue
 
+    # The data is currently formatted as an rlp encoded `EthBlock`, thus
+    # containing header, txs and uncles: [header, txs, uncles]. No receipts are
+    # available.
+    # TODO: Change to format to rlp data as it gets stored and send over the
+    # network over the network. I.e. [header, [txs, uncles], receipts]
     if rlp.enterList():
-      # List that contains 3 items: Block header, body and receipts.
       var blockHash: BlockHash
       try:
         blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
@@ -98,16 +102,24 @@ iterator blocks*(
             contentType: blockBody,
             blockBodyKey: contentKeyType)
 
-          res.add((contentKey, @(rlp.rawData())))
-          rlp.skipElem()
+          # Note: Temporary until the data format gets changed.
+          let blockBody = BlockBody(
+            transactions: rlp.read(seq[Transaction]),
+            uncles: rlp.read(seq[BlockHeader]))
+          let rlpdata = encode(blockBody)
+          echo rlpdata.toHex()
+          res.add((contentKey, rlpdata))
+          # res.add((contentKey, @(rlp.rawData())))
+          # rlp.skipElem()
 
-        block:
-          let contentKey = ContentKey(
-            contentType: receipts,
-            receiptsKey: contentKeyType)
+        # Note: No receipts yet in the data set
+        # block:
+          # let contentKey = ContentKey(
+          #   contentType: receipts,
+          #   receiptsKey: contentKeyType)
 
-          res.add((contentKey, @(rlp.rawData())))
-          rlp.skipElem()
+          # res.add((contentKey, @(rlp.rawData())))
+          # rlp.skipElem()
 
       except RlpError as e:
         error "Invalid rlp data", number = v.number, error = e.msg

@@ -97,7 +97,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
+  # rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber")
 
@@ -187,12 +187,42 @@ proc installEthApiHandlers*(
 
     if bodyContent.isSome():
       var rlp = rlpFromBytes(bodyContent.get())
-
-      # This should be just `rlp.read(BlockBody)` but the current data set used
-      # does not hold an rlp list of transactions list and uncles list but
-      # instead just an rlp list of transactions.
-      let blockBody = BlockBody(transactions: rlp.read(seq[Transaction]))
+      let blockBody = rlp.read(BlockBody)
 
       return some(buildBlockObject(blockHeader, blockBody))
     else:
       return none(BlockObject)
+
+  rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
+      data: EthHashStr) -> HexQuantityStr:
+    ## Returns the number of transactions in a block from a block matching the
+    ## given block hash.
+    ##
+    ## data: hash of a block
+    ## Returns integer of the number of transactions in this block.
+    let
+      blockHash = data.toHash()
+      contentKeyType = ContentKeyType(chainId: 1'u16, blockHash: blockHash)
+      contentKeyBody =
+        ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
+
+    let bodyContent = await historyNetwork.getContent(contentKeyBody)
+
+    if bodyContent.isSome():
+      var rlp = rlpFromBytes(bodyContent.get())
+      let blockBody = rlp.read(BlockBody)
+
+      var txCount:uint = 0
+      for tx in blockBody.transactions:
+        txCount.inc()
+
+      return encodeQuantity(txCount)
+    else:
+      raise newException(ValueError, "Could not find block with requested hash")
+
+  # Note: can't implement this yet as the fluffy node doesn't know the relation
+  # of tx hash -> block number -> block hash, in order to get the receipt
+  # from from the block with that block hash. The Canonical Indices Network
+  # would need to be implemented to get this information.
+  # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
+  #     data: EthHashStr) -> Option[ReceiptObject]:
