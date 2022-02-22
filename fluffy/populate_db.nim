@@ -10,7 +10,7 @@
 import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], nimcrypto/keccak, chronos, chronicles,
-  eth/rlp,
+  eth/[rlp, common/eth_types],
   ./content_db,
   ./network/wire/portal_protocol,
   ./network/history/history_content
@@ -45,50 +45,98 @@ proc readBlockData*(dataFile: string): Result[BlockDataTable, string] =
 
 iterator blockHashes*(blockData: BlockDataTable): BlockHash =
   for k,v in blockData:
+    var blockHash: BlockHash
     try:
-      var blockHash: BlockHash
       blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
-      yield blockHash
     except ValueError as e:
       error "Invalid hex for block hash", error = e.msg, number = v.number
+      continue
 
-iterator blockHeaders*(
-    blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
+    yield blockHash
+
+iterator blocks*(
+    blockData: BlockDataTable, verify = false): seq[(ContentKey, seq[byte])] =
   for k,v in blockData:
-    try:
-      var rlp = rlpFromHex(v.rlp)
+    var res: seq[(ContentKey, seq[byte])]
 
-      if rlp.enterList():
-        # List that contains 3 items: Block header, body and receipts.
-        # Only make block header available for now.
-        # When we want others, can use `rlp.skipElem()` and `rlp.rawData()`.
+    var rlp =
+      try:
+        rlpFromHex(v.rlp)
+      except ValueError as e:
+        error "Invalid hex for rlp data", error = e.msg, number = v.number
+        continue
 
-        # Prepare content key
-        var blockHash: BlockHash
+    # The data is currently formatted as an rlp encoded `EthBlock`, thus
+    # containing header, txs and uncles: [header, txs, uncles]. No receipts are
+    # available.
+    # TODO: Change to format to rlp data as it gets stored and send over the
+    # network over the network. I.e. [header, [txs, uncles], receipts]
+    if rlp.enterList():
+      var blockHash: BlockHash
+      try:
         blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
+      except ValueError as e:
+        error "Invalid hex for block hash", error = e.msg, number = v.number
+        continue
 
-        let contentKey = ContentKey(
-          contentType: blockHeader,
-          blockHeaderKey: ContentKeyType(chainId: 1'u16, blockHash: blockHash))
+      let contentKeyType =
+        ContentKeyType(chainId: 1'u16, blockHash: blockHash)
 
-        # If wanted we can verify the hash for the corresponding header
+      try:
+        # If wanted the hash for the corresponding header can be verified
         if verify:
           if keccak256.digest(rlp.rawData()) != blockHash:
-            error "Data is not matching hash, skipping"
+            error "Data is not matching hash, skipping", number = v.number
             continue
 
-        yield (contentKey, @(rlp.rawData()))
-    except CatchableError as e:
-      error "Failed decoding block hash or data", error = e.msg,
-        number = v.number
+        block:
+          let contentKey = ContentKey(
+            contentType: blockHeader,
+            blockHeaderKey: contentKeyType)
+
+          res.add((contentKey, @(rlp.rawData())))
+          rlp.skipElem()
+
+        block:
+          let contentKey = ContentKey(
+            contentType: blockBody,
+            blockBodyKey: contentKeyType)
+
+          # Note: Temporary until the data format gets changed.
+          let blockBody = BlockBody(
+            transactions: rlp.read(seq[Transaction]),
+            uncles: rlp.read(seq[BlockHeader]))
+          let rlpdata = encode(blockBody)
+          echo rlpdata.toHex()
+          res.add((contentKey, rlpdata))
+          # res.add((contentKey, @(rlp.rawData())))
+          # rlp.skipElem()
+
+        # Note: No receipts yet in the data set
+        # block:
+          # let contentKey = ContentKey(
+          #   contentType: receipts,
+          #   receiptsKey: contentKeyType)
+
+          # res.add((contentKey, @(rlp.rawData())))
+          # rlp.skipElem()
+
+      except RlpError as e:
+        error "Invalid rlp data", number = v.number, error = e.msg
+        continue
+
+      yield res
+    else:
+      error "Item is not a valid rlp list", number = v.number
 
 proc populateHistoryDb*(
     db: ContentDB, dataFile: string, verify = false): Result[void, string] =
   let blockData = ? readBlockData(dataFile)
 
-  for k,v in blockHeaders(blockData, verify):
-    # Note: This is the slowest part due to the hashing that takes place.
-    db.put(history_content.toContentId(k), v)
+  for b in blocks(blockData, verify):
+    for value in b:
+      # Note: This is the slowest part due to the hashing that takes place.
+      db.put(history_content.toContentId(value[0]), value[1])
 
   ok()
 
@@ -98,13 +146,14 @@ proc propagateHistoryDb*(
   let blockData = readBlockData(dataFile)
 
   if blockData.isOk():
-    for k,v in blockHeaders(blockData.get(), verify):
-      # Note: This is the slowest part due to the hashing that takes place.
-      p.contentDB.put(history_content.toContentId(k), v)
+    for b in blocks(blockData.get(), verify):
+      for value in b:
+        # Note: This is the slowest part due to the hashing that takes place.
+        p.contentDB.put(history_content.toContentId(value[0]), value[1])
 
-      # TODO: This call will get the content we just stored in the db, so it
-      # might be an improvement to directly pass it.
-      await p.neighborhoodGossip(ContentKeysList(@[encode(k)]))
+        # TODO: This call will get the content we just stored in the db, so it
+        # might be an improvement to directly pass it.
+        await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]))
     return ok()
   else:
     return err(blockData.error)

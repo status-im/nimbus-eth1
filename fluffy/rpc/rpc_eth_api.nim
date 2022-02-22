@@ -8,13 +8,14 @@
 {.push raises: [Defect].}
 
 import
-  std/times,
-  json_rpc/[rpcproxy, rpcserver],
+  std/[times, sequtils],
+  json_rpc/[rpcproxy, rpcserver], nimcrypto/[hash, keccak],
   web3/conversions, # sigh, for FixedBytes marshalling
-  eth/common/eth_types,
+  eth/[common/eth_types, rlp],
   # TODO: Using the Nimbus json-rpc helpers, but they could use some rework as
   # they bring a whole lot of other stuff with them.
   ../../nimbus/rpc/[rpc_types, hexstrings, rpc_utils],
+  ../../nimbus/errors, # for ValidationError, should be exported instead
   ../network/history/[history_network, history_content]
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
@@ -29,7 +30,10 @@ import
 
 # Note: Similar as `populateBlockObject` from rpc_utils, but more limited as
 # there is currently only access to the block header.
-proc buildBlockObject*(header: BlockHeader): BlockObject =
+proc buildBlockObject*(
+    header: BlockHeader, body: BlockBody,
+    fullTx = true, isUncle = false):
+    BlockObject {.raises: [Defect, ValidationError].} =
   let blockHash = header.blockHash
 
   result.number = some(encodeQuantity(header.blockNumber))
@@ -57,6 +61,19 @@ proc buildBlockObject*(header: BlockHeader): BlockObject =
   result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
   result.timestamp = encodeQuantity(header.timeStamp.toUnix.uint64)
 
+  if not isUncle:
+    result.uncles = body.uncles.map(proc(h: BlockHeader): Hash256 = h.blockHash)
+
+    if fullTx:
+      var i = 0
+      for tx in body.transactions:
+        # ValidationError from tx.getSender in populateTransactionObject
+        result.transactions.add %(populateTransactionObject(tx, header, i))
+        inc i
+    else:
+      for tx in body.transactions:
+        result.transactions.add %(keccak256.digest(rlp.encode(tx)))
+
 proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
     # holding all the networks.
@@ -80,7 +97,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
+  # rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber")
 
@@ -150,17 +167,62 @@ proc installEthApiHandlers*(
     ## Note: transactions and uncles are currently not implemented.
     ##
     ## Returns BlockObject or nil when no block was found.
-    let blockHash = data.toHash()
+    let
+      blockHash = data.toHash()
+      contentKeyType = ContentKeyType(chainId: 1'u16, blockHash: blockHash)
 
-    let contentKey = ContentKey(
-      contentType: blockHeader,
-      blockHeaderKey: ContentKeyType(chainId: 1'u16, blockHash: blockHash))
+      contentKeyHeader =
+        ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType)
+      contentKeyBody =
+        ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
 
-    let content = await historyNetwork.getContent(contentKey)
-    if content.isSome():
-      var rlp = rlpFromBytes(content.get())
-      let blockHeader = rlp.read(BlockHeader)
+    let headerContent = await historyNetwork.getContent(contentKeyHeader)
+    if headerContent.isNone():
+      return none(BlockObject)
 
-      return some(buildBlockObject(blockHeader))
+    var rlp = rlpFromBytes(headerContent.get())
+    let blockHeader = rlp.read(BlockHeader)
+
+    let bodyContent = await historyNetwork.getContent(contentKeyBody)
+
+    if bodyContent.isSome():
+      var rlp = rlpFromBytes(bodyContent.get())
+      let blockBody = rlp.read(BlockBody)
+
+      return some(buildBlockObject(blockHeader, blockBody))
     else:
       return none(BlockObject)
+
+  rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
+      data: EthHashStr) -> HexQuantityStr:
+    ## Returns the number of transactions in a block from a block matching the
+    ## given block hash.
+    ##
+    ## data: hash of a block
+    ## Returns integer of the number of transactions in this block.
+    let
+      blockHash = data.toHash()
+      contentKeyType = ContentKeyType(chainId: 1'u16, blockHash: blockHash)
+      contentKeyBody =
+        ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
+
+    let bodyContent = await historyNetwork.getContent(contentKeyBody)
+
+    if bodyContent.isSome():
+      var rlp = rlpFromBytes(bodyContent.get())
+      let blockBody = rlp.read(BlockBody)
+
+      var txCount:uint = 0
+      for tx in blockBody.transactions:
+        txCount.inc()
+
+      return encodeQuantity(txCount)
+    else:
+      raise newException(ValueError, "Could not find block with requested hash")
+
+  # Note: can't implement this yet as the fluffy node doesn't know the relation
+  # of tx hash -> block number -> block hash, in order to get the receipt
+  # from from the block with that block hash. The Canonical Indices Network
+  # would need to be implemented to get this information.
+  # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
+  #     data: EthHashStr) -> Option[ReceiptObject]:
