@@ -89,6 +89,11 @@ NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
 endif
 endif
 
+# disabled by default, enable with NOCOLORS=1
+ifneq ($(if $(NOCOLORS),$(NOCOLORS),0),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_colors=off
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
