@@ -276,7 +276,8 @@ type
       name: "static-peers-file" }: InputFile
 
     listenAddress* {.
-      desc: "Listening IP address for Ethereum P2P and Discovery traffic"
+      desc: "Placeholder, currently unsupported"
+      # desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
       name: "listen-address" }: ValidIpAddress
@@ -310,7 +311,8 @@ type
       longDesc:
         "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
         "- V4  : Node Discovery Protocol v4(default)\n" &
-        "- V5  : Node Discovery Protocol v5"
+        "- V5  : Placeholder, currently unsupported"
+        # "- V5  : Node Discovery Protocol v5"
       defaultValue: DiscoveryType.V4
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
@@ -333,7 +335,7 @@ type
     engineApiAddress* {.
       desc: "Listening address for the Engine API"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: defaultAdminListenAddressDesc
+      defaultValueDesc: $defaultAdminListenAddressDesc
       name: "engine-api-address" .}: ValidIpAddress
 
     engineApiWsEnabled* {.
@@ -350,7 +352,7 @@ type
     engineApiWsAddress* {.
       desc: "Listening address for the WebSocket Engine API"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: defaultAdminListenAddressDesc
+      defaultValueDesc: $defaultAdminListenAddressDesc
       name: "engine-api-ws-address" .}: ValidIpAddress
 
     nodeKeyHex* {.
