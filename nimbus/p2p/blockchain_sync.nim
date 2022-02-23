@@ -43,6 +43,7 @@ type
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
+    minSyncPeers: int           # default value is `minPeersToStartSync`
 
 proc hash*(p: Peer): Hash = hash(cast[pointer](p))
 
@@ -172,12 +173,14 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult =
       receivedBlocks
     return ValidationResult.Error
 
-proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext =
+proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool,
+                    minSyncPeers = minPeersToStartSync): SyncContext =
   new result
   result.chain = chain
   result.peerPool = peerPool
   result.trustedPeers = initHashSet[Peer]()
   result.finalizedBlock = chain.getBestBlockHeader().blockNumber
+  result.minSyncPeers = max(1,minSyncPeers)
 
 proc handleLostPeer(ctx: SyncContext) =
   # TODO: ask the PeerPool for new connections and then call
@@ -193,7 +196,7 @@ proc getBestBlockNumber(p: Peer): Future[BlockNumber] {.async.} =
     reverse: true)
 
   tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=p,
-    startBlock=request.startBlock.hash, max=request.maxResults
+    startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await p.getBlockHeaders(request)
 
   if latestBlock.isSome:
@@ -324,7 +327,7 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
     reverse: true)
 
   tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=a,
-    startBlock=request.startBlock.hash, max=request.maxResults
+    startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await a.getBlockHeaders(request)
 
   result = latestBlock.isSome and latestBlock.get.headers.len > 0
@@ -344,7 +347,7 @@ proc randomTrustedPeer(ctx: SyncContext): Peer =
 
 proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
   trace "start sync", peer, trustedPeers = ctx.trustedPeers.len
-  if ctx.trustedPeers.len >= minPeersToStartSync:
+  if ctx.trustedPeers.len >= ctx.minSyncPeers:
     # We have enough trusted peers. Validate new peer against trusted
     if await peersAgreeOnChain(peer, ctx.randomTrustedPeer()):
       ctx.trustedPeers.incl(peer)
@@ -382,7 +385,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
     else:
       trace "Peer not trusted for sync", peer
 
-    if ctx.trustedPeers.len == minPeersToStartSync:
+    if ctx.trustedPeers.len == ctx.minSyncPeers:
       for p in ctx.trustedPeers:
         asyncCheck ctx.obtainBlocksFromPeer(p)
 
@@ -432,12 +435,14 @@ proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
 
   result = (bestPeer, bestBlockDifficulty)
 
-proc fastBlockchainSync*(node: EthereumNode): Future[SyncStatus] {.async.} =
+proc fastBlockchainSync*(node: EthereumNode;
+                         minSyncPeers = minPeersToStartSync):
+                           Future[SyncStatus] {.async.} =
   ## Code for the fast blockchain sync procedure:
   ## https://github.com/ethereum/wiki/wiki/Parallel-Block-Downloads
   ## https://github.com/ethereum/go-ethereum/pull/1889
   # TODO: This needs a better interface. Consider removing this function and
   # exposing SyncCtx
-  var syncCtx = newSyncContext(node.chain, node.peerPool)
+  var syncCtx = newSyncContext(node.chain, node.peerPool, minSyncPeers)
   syncCtx.startSync()
 
