@@ -17,6 +17,17 @@ import
   eth/[common, trie/trie_defs]
 
 # ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
+
+proc reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
+  var top = 0
+  while top < q.len:
+    let w = top
+    top = min(w + itemsPerSegment, q.len)
+    result.add q[w ..< top]
+
+# ------------------------------------------------------------------------------
 # Public functions, units pretty printer
 # ------------------------------------------------------------------------------
 
@@ -64,6 +75,12 @@ proc pp*(s: string; hex = false): string =
     (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
+proc pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
+  doAssert q == q.reGroup(itemsPerLine).concat
+  q.reGroup(itemsPerLine)
+   .mapIt(it.mapIt(&"0x{it:02x}").join(", "))
+   .join("," & lineSep)
+
 proc pp*(b: Blob): string =
   b.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
 
@@ -78,6 +95,9 @@ proc pp*(a: Hash256; collapse = true): string =
     "EMPTY_SHA3"
   else:
     a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
+
+proc pp*(a: openArray[Hash256]; collapse = true): string =
+  "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
 
 proc pp*(a: EthAddress): string =
   a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
@@ -119,11 +139,17 @@ proc pp*(g: Genesis; sep = " "): string =
     &"parentHash={g.parentHash.pp}{sep}" &
     &"baseFeePerGas={g.baseFeePerGas}"
 
+
+
+
 proc pp*(h: BlockHeader; indent: int): string =
   h.pp("\n" & " ".repeat(max(1,indent)))
 
 proc pp*(g: Genesis; indent: int): string =
   g.pp("\n" & " ".repeat(max(1,indent)))
+
+proc pp*(q: openArray[int]; itemsPerLine: int; indent: int): string =
+  q.pp(itemsPerLine = itemsPerLine, lineSep = "\n" & " ".repeat(max(1,indent)))
 
 # ------------------------------------------------------------------------------
 # End
