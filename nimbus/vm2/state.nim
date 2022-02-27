@@ -21,6 +21,10 @@ import
   ./types,
   eth/[common, keys]
 
+# a temporary solution until nim-eth bumped
+when not compiles(common.prevRandao):
+  import ../merge/eth_common_overload
+  
 {.push raises: [Defect].}
 
 const
@@ -58,7 +62,7 @@ proc init(
       timestamp:   EthTime;
       gasLimit:    GasInt;
       fee:         Option[Uint256];
-      random:      Hash256;
+      prevRandao:  Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       ttdReached:  bool;
@@ -71,7 +75,7 @@ proc init(
   self.timestamp = timestamp
   self.gasLimit = gasLimit
   self.fee = fee
-  self.random = random
+  self.prevRandao = prevRandao
   self.chaindb = chainDB
   self.ttdReached = ttdReached
   self.tracer = tracer
@@ -87,7 +91,7 @@ proc init(
       timestamp:   EthTime;
       gasLimit:    GasInt;
       fee:         Option[Uint256];
-      random:      Hash256;
+      prevRandao:  Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       ttdReached:  bool;
@@ -101,7 +105,7 @@ proc init(
     timestamp = timestamp,
     gasLimit  = gasLimit,
     fee       = fee,
-    random    = random,
+    prevRandao= prevRandao,
     miner     = miner,
     chainDB   = chainDB,
     ttdReached= ttdReached,
@@ -124,7 +128,7 @@ proc new*(
       timestamp:   EthTime;         ## tx env: time stamp
       gasLimit:    GasInt;          ## tx env: gas limit
       fee:         Option[Uint256]; ## tx env: optional base fee
-      random:      Hash256;         ## tx env: POS block randomness
+      prevRandao:  Hash256;         ## tx env: POS block randomness
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
       ttdReached:  bool;            ## total terminal difficulty reached
@@ -145,7 +149,7 @@ proc new*(
     timestamp   = timestamp,
     gasLimit    = gasLimit,
     fee         = fee,
-    random      = random,
+    prevRandao  = prevRandao,
     miner       = miner,
     chainDB     = chainDB,
     ttdReached  = ttdReached,
@@ -156,7 +160,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              timestamp: EthTime;         ## tx env: time stamp
              gasLimit:  GasInt;          ## tx env: gas limit
              fee:       Option[Uint256]; ## tx env: optional base fee
-             random:    Hash256;         ## tx env: POS block randomness
+             prevRandao:Hash256;         ## tx env: POS block randomness
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              ttdReached:bool;            ## total terminal difficulty reached
              pruneTrie: bool = true): bool
@@ -182,7 +186,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       timestamp   = timestamp,
       gasLimit    = gasLimit,
       fee         = fee,
-      random      = random,
+      prevRandao  = prevRandao,
       miner       = miner,
       chainDB     = db,
       ttdReached  = ttdReached,
@@ -213,7 +217,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
     timestamp = header.timestamp,
     gasLimit  = header.gasLimit,
     fee       = header.fee,
-    random    = header.random,
+    prevRandao= header.prevRandao,
     miner     = self.chainDB.getMinerAddress(header),
     ttdReached= ttdReached,
     pruneTrie = pruneTrie)
@@ -252,7 +256,7 @@ proc init*(
             header.timestamp,
             header.gasLimit,
             header.fee,
-            header.random,
+            header.prevRandao,
             chainDB.getMinerAddress(header),
             chainDB,
             ttdReached,
@@ -315,7 +319,7 @@ method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.ttdReached:
     # EIP-4399/EIP-3675
-    UInt256.fromBytesBE(vmState.random.data, allowPadding = false)
+    UInt256.fromBytesBE(vmState.prevRandao.data, allowPadding = false)
   else:
     vmState.chainDB.config.calcDifficulty(vmState.timestamp, vmState.parent)
 

@@ -191,4 +191,4 @@ fill_enum_holes:
 
 const
   # EIP-4399 new opcode
-  Random* = Difficulty
+  PrevRandao* = Difficulty

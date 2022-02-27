@@ -326,19 +326,19 @@ proc opEnvMain*() =
 
     vmState.ttdReached = true
     assembler:
-      title: "EIP-4399 RANDOM 0"
+      title: "EIP-4399 PrevRandao 0"
       code:
-        Random
+        PrevRandao
         STOP
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
       fork: london
 
-    vmState.random = EMPTY_UNCLE_HASH
+    vmState.prevRandao = EMPTY_UNCLE_HASH
     assembler:
-      title: "EIP-4399 RANDOM: EMPTY_UNCLE_HASH"
+      title: "EIP-4399 PrevRandao: EMPTY_UNCLE_HASH"
       code:
-        Random
+        PrevRandao
         STOP
       stack:
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"

@@ -38,7 +38,7 @@ type
     timestamp*     : EthTime
     gasLimit*      : GasInt
     fee*           : Option[Uint256]
-    random*        : Hash256
+    prevRandao*    : Hash256
     ttdReached*    : bool
     name*          : string
     flags*         : set[VMFlag]

@@ -68,7 +68,7 @@ type
 
     # EIP-4399 and EIP-3675
     ttdReached: bool         ## Total Terminal Difficulty reached
-    random: Hash256          ## POS block randomness
+    prevRandao: Hash256      ## POS block randomness
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -83,7 +83,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
     timestamp = getTime().utc.toTime,
     gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
     fee       = fee,
-    random    = dh.random,
+    prevRandao= dh.prevRandao,
     miner     = dh.miner,
     chainDB   = dh.db,
     ttdReached= dh.ttdReached)
@@ -313,9 +313,9 @@ proc `ttdReached=`*(dh: TxChainRef; val: bool) =
   ## Setter
   dh.ttdReached = val
 
-proc `random=`*(dh: TxChainRef; val: Hash256) =
+proc `prevRandao=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
-  dh.random = val
+  dh.prevRandao = val
 
 # ------------------------------------------------------------------------------
 # End

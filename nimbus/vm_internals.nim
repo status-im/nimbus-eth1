@@ -133,7 +133,7 @@ else:
     eGmt.refundGas,
     eGmt.returnGas,
     fVmo.Op,
-    fVmo.Random,
+    fVmo.PrevRandao,
     gVmg.isCreate,
     hStk.Stack,
     hStk.`$`,

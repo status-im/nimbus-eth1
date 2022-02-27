@@ -41,7 +41,7 @@ proc calcRootHashRlp*(items: openArray[seq[byte]]): Hash256 =
   return tr.rootHash()
 
 proc toBlockHeader(payload: ExecutionPayloadV1): eth_types.BlockHeader =
-  discard payload.random # TODO: What should this be used for?
+  discard payload.prevRandao # TODO: What should this be used for?
 
   let transactions = seq[seq[byte]](payload.transactions)
   let txRoot = calcRootHashRlp(transactions)
@@ -84,7 +84,7 @@ proc setupEngineAPI*(
     return payloads[int payloadId]
 
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.5/src/engine/specification.md#engine_executepayloadv1
-  server.rpc("engine_executePayloadV1") do(payload: ExecutionPayloadV1) -> ExecutePayloadResponse:
+  #[server.rpc("engine_executePayloadV1") do(payload: ExecutionPayloadV1) -> ExecutePayloadResponse:
     # TODO
     if payload.transactions.len > 0:
       # Give us a break, a block with transcations? instructions to execute?
@@ -140,4 +140,4 @@ proc setupEngineAPI*(
       return ForkchoiceUpdatedResponse(status: ForkchoiceUpdatedStatus.success,
                                        payloadId: some payloadId.toBytesBE.PayloadID)
     else:
-      return ForkchoiceUpdatedResponse(status: ForkchoiceUpdatedStatus.success)
+      return ForkchoiceUpdatedResponse(status: ForkchoiceUpdatedStatus.success)]#

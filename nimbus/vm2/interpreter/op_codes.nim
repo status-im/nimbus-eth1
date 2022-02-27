@@ -211,7 +211,7 @@ type
 
 const
   # EIP-4399 new opcode
-  Random* = Difficulty
+  PrevRandao* = Difficulty
   
 # ------------------------------------------------------------------------------
 # Verify that Op is contiguous and sym names follow some standards

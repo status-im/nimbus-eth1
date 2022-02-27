@@ -250,7 +250,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
   # TODO Check the extra data length here
   # payloadres.extraData = web3types.DynamicBytes[256] blk.header.extraData
-  payloadRes.random = web3types.FixedBytes[32](payloadAttrs.random)
+  payloadRes.prevRandao  = web3types.FixedBytes[32](payloadAttrs.prevRandao)
   payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
