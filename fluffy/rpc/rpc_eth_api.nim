@@ -169,29 +169,15 @@ proc installEthApiHandlers*(
     ## Returns BlockObject or nil when no block was found.
     let
       blockHash = data.toHash()
-      contentKeyType = ContentKeyType(chainId: 1'u16, blockHash: blockHash)
 
-      contentKeyHeader =
-        ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType)
-      contentKeyBody =
-        ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
+    let maybeHeaderAndBody = await historyNetwork.getBlock(1'u16, blockHash)
 
-    let headerContent = await historyNetwork.getContent(contentKeyHeader)
-    if headerContent.isNone():
+    if maybeHeaderAndBody.isNone():
       return none(BlockObject)
-
-    var rlp = rlpFromBytes(headerContent.get())
-    let blockHeader = rlp.read(BlockHeader)
-
-    let bodyContent = await historyNetwork.getContent(contentKeyBody)
-
-    if bodyContent.isSome():
-      var rlp = rlpFromBytes(bodyContent.get())
-      let blockBody = rlp.read(BlockBody)
-
-      return some(buildBlockObject(blockHeader, blockBody))
     else:
-      return none(BlockObject)
+      let (header, body) = maybeHeaderAndBody.unsafeGet()
+      return some(buildBlockObject(header, body))
+
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: EthHashStr) -> HexQuantityStr:
@@ -202,23 +188,18 @@ proc installEthApiHandlers*(
     ## Returns integer of the number of transactions in this block.
     let
       blockHash = data.toHash()
-      contentKeyType = ContentKeyType(chainId: 1'u16, blockHash: blockHash)
-      contentKeyBody =
-        ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
 
-    let bodyContent = await historyNetwork.getContent(contentKeyBody)
+    let maybeHeaderAndBody = await historyNetwork.getBlock(1'u16, blockHash)
 
-    if bodyContent.isSome():
-      var rlp = rlpFromBytes(bodyContent.get())
-      let blockBody = rlp.read(BlockBody)
-
+    if maybeHeaderAndBody.isNone():
+      raise newException(ValueError, "Could not find block with requested hash")
+    else:
+      let (_, body) = maybeHeaderAndBody.unsafeGet()
       var txCount:uint = 0
-      for tx in blockBody.transactions:
+      for tx in body.transactions:
         txCount.inc()
 
       return encodeQuantity(txCount)
-    else:
-      raise newException(ValueError, "Could not find block with requested hash")
 
   # Note: can't implement this yet as the fluffy node doesn't know the relation
   # of tx hash -> block number -> block hash, in order to get the receipt
