@@ -94,6 +94,11 @@ ifneq ($(if $(NOCOLORS),$(NOCOLORS),0),0)
 NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_colors=off
 endif
 
+# experimentally compile for eth/66, enable with NOCOLORS=1
+ifneq ($(if $(ENABLE_ETH66),$(ENABLE_ETH66),0),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:eth66_enabled
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace

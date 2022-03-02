@@ -11,7 +11,7 @@ port=30309
 # -------- no need to change, below -------------
 
 # More Nimbus option arguments
-min_peers=1
+min_peers=2
 ttd=5000000000
 
 # Log spooler capacity settings
@@ -40,7 +40,7 @@ find_exe() { # Syntax: <exe-name> <subdir> ...
     shift
     for pfx in $find_prefix; do
 	for sub; do
-	    find \
+	    find -L \
 		"$pfx/$sub" \
 		-maxdepth 2 -type f -name "$exe" -perm /111 -print \
 		2>/dev/null
@@ -62,7 +62,7 @@ find_file() { # Syntax: <file-name> <subdir> ...
     shift
     for pfx in $find_prefix; do
 	for sub; do
-	    find \
+	    find -L \
 		"$pfx/$sub" \
 		-maxdepth 2 -type f -name "$file" -print \
 		2>/dev/null
@@ -122,34 +122,33 @@ nohup=no
 start=no
 stop=no
 flush=no
-help=yes
+logs=no
+help=no
+
+test $# -ne 0 ||
+    help=yes
 
 for arg
 do
     case "$arg" in
     stop)
 	stop=yes
-	help=no
 	;;
     flush)
 	flush=yes
-	help=no
 	;;
     start)
-	logs=yes
 	start=yes
-	help=no
 	;;
     daemon)
 	nohup=yes
 	start=yes
-	help=no
 	;;
     logs)
 	logs=yes
-	help=no
 	;;
     help|'')
+	help=yes
 	;;
   *)
       exec >&2
@@ -173,13 +172,17 @@ $self:
      sh $self start
 
    which will run Nimbus in the background and print the logs on the console.
-   With ctrl-C shortly after starting, the foreground logger is stopped while
-   the "nimbus" program still keeps running. The command line becomes free
-   (at a later stage Nimbus will also tear down.) Logging can be resumed with
+   With ctrl-C, the program is stopped. In order to run in the background, the
+   the "nimbus" program is started with
+
+     sh $self start
+
+   Continuous logging can then be displayed on the console (hit ctrl-C to stop)
+   with
 
       sh $self logs
 
-   A running session is stopped with
+   A running background session is stopped with
 
       sh $self stop
 
@@ -244,6 +247,15 @@ test yes != "$stop" || {
   exit
 }
 
+if [ yes = "$nohup" ]
+then
+  # Restore console after disabling ctrl-C for nimbus
+  stty_save=`stty --save </dev/tty`
+else
+  # Set logging unless deamon enabled
+  logs=yes
+fi
+
 # Start a new nimbus session in the background
 test yes != "$start" || (
   mkdir -p $datadir/log $datadir/data
@@ -255,19 +267,19 @@ test yes != "$start" || (
   test yes != "$nohup" || {
      trap "echo '*** $self: NOHUP ignored'" HUP
      trap "echo '*** $self: terminating ..';exit"  INT TERM QUIT
+     stty intr "" </dev/tty
   }
   (
-    runner=$PWD/tests/replay/run-devnet4-sync.sh
     cd $datadir
 
     mv ./log/config ./log/config~ 2>/dev/null || true
     {
-       echo s$80000000
+       echo s$logfile_max
        echo n$num_backlogs
     } >./log/config
 
     set -x
-    $nimbus \
+    ${nimbus:-nimbus} \
       --data-dir:./data \
       --custom-network:"$genesis" \
       --bootstrap-file:"$bootstrap" \
@@ -287,6 +299,11 @@ test yes != "$start" || {
     pid=`get_pid_svlogd`
     test -z "$pid" || kill -HUP $pid
     echo
+}
+
+# Restore console after disabling ctrl-C for nimbus
+test yes != "$nohup" || {
+    stty $stty_save </dev/tty
 }
 
 # Logging ...

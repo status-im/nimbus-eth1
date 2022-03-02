@@ -18,7 +18,15 @@ func vmName(): string =
 
 const
   VmName* = vmName()
-  warningMSg = "*** Compiling with " & VmName & " enabled"
+  warningMSg = block:
+    const chronicles_colors {.strdefine.} = "*"
+    var rc = "*** Compiling with " & VmName
+    when defined(eth66_enabled):
+      rc &= ", eth/66"
+    when chronicles_colors in ["no", "0", "off", "false", "none"]:
+      rc &= ", decolourised-logging"
+    rc &= " enabled"
+    rc
 
 {.warning: warningMsg.}
 

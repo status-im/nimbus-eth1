@@ -9,8 +9,14 @@ import
   std/[sets, options, random, hashes, sequtils],
   chronos, chronicles,
   eth/common/eth_types,
-  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool],
-  ../sync/protocol_eth65
+  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
+
+when defined(eth66_enabled):
+  import ../sync/protocol_eth66
+  export         protocol_eth66
+else:
+  import ../sync/protocol_eth65
+  export         protocol_eth65
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this

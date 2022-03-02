@@ -218,8 +218,12 @@ engine is compiled. The variables are listed with decreasing priority (in
 case of doubt, the lower prioritised variable is ignored when the higher on is
 available.)
 
- * NOCOLORS=1
-   Suppress colourised logging (handy for log data post-processing)
+ * NOCOLORS=1<br>
+   Disables colourised logging (handy for log data post-processing in case that
+   the program `ansi2txt` is not available.)
+
+ * ENABLE_ETH66=1<br>
+   Enable wire protocol `eth/66` (multi-protocol is un-supported.)
 
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native nim VM

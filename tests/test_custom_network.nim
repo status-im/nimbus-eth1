@@ -327,10 +327,8 @@ when isMainModule:
   noisy.showElapsed("customNetwork"):
     defer: ddbCleanUp()
     noisy.genesisLoadRunner
-    # ddbCleanUp()
     noisy.testnetChainRunner(
       memoryDB = false,
-      # importFailBlock = ddbCrashBlockNumber,
       stopAfterBlock = ddbCrashBlockNumber)
 
 # ------------------------------------------------------------------------------
