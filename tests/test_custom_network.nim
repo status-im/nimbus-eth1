@@ -20,19 +20,24 @@
 ## from `issue 932` <https://github.com/status-im/nimbus-eth1/issues/932>`_.
 
 import
-  std/[distros, os, strformat, strutils, sequtils],
+  std/[distros, os],
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend],
-  ./replay/pp,
+  ../nimbus/p2p/chain,
+  ./replay/[undump, pp],
+  chronicles,
   eth/[common, p2p, trie/db],
   nimcrypto/hash,
+  stew/results,
   unittest2
 
 const
   baseDir = [".", "tests", ".." / "tests", $DirSep]   # path containg repo
-  repoDir = ["customgenesis", "."]                    # alternative repo paths
-  jFile = "kintsugi.json"
+  repoDir = ["replay", "customgenesis", "."]          # alternative repo paths
 
+  fancyName = "Devnet4"
+  genesisFile = "devnet4.json"
+  captureFile = "devnetfour5664.txt.gz"
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -58,6 +63,20 @@ let
   #
   disablePersistentDB = isUbuntu32bit
 
+# Block chains shared between test suites
+var
+  mdb: BaseChainDB # memory DB
+  ddb: BaseChainDB # perstent DB on disk
+  ddbDir: string   # data directory for disk database
+
+const
+  # Will not fail anymore at this one on `Devnet4` replay.
+  terminalPowBlockNumber = 5646
+
+  # Persistent database crash on `Devnet4` replay if the database directory
+  # was acidentally deleted (due to a stray "defer:" directive.)
+  ddbCrashBlockNumber = 2105
+
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
@@ -71,10 +90,11 @@ proc findFilePath(file: string): string =
         return path
 
 proc flushDbDir(s: string) =
-  let dataDir = s / "nimbus"
-  if (dataDir / "data").dirExists:
-    # Typically under Windows: there might be stale file locks.
-    try: dataDir.removeDir except: discard
+  if s != "":
+    let dataDir = s / "nimbus"
+    if (dataDir / "data").dirExists:
+      # Typically under Windows: there might be stale file locks.
+      try: dataDir.removeDir except: discard
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
@@ -85,37 +105,93 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
+proc setTraceLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc ddbCleanUp(dir: string) =
+  if not disablePersistentDB:
+    ddbDir = dir
+    dir.flushDbDir
+
+proc ddbCleanUp =
+  ddbDir.ddbCleanUp
+
+proc isOK(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
+
+proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
+                  noisy = false): Result[void,BlockNumber] =
+  ## On error, the block number of the failng block is returned
+  let
+    (first, last) = (h[0].blockNumber, h[^1].blockNumber)
+    nTxs = b.mapIt(it.transactions.len).foldl(a+b)
+    nUnc = b.mapIt(it.uncles.len).foldl(a+b)
+    bRng = if 1 < h.len: &"range [#{first}..#{last}]={h.len}"
+           else:         &"#{first}"
+    blurb = &"persistBlocks([#{first}..#"
+
+  noisy.say "***", &"block {bRng} #txs={nTxs} #uncles={nUnc}"
+
+  catchException("persistBlocks()", trace = true):
+    if c.persistBlocks(h, b).isOk:
+      return ok()
+
+  proc importOk(pv: int): bool =
+    catchException("persistBlocks()"):
+      result = c.persistBlocks(h[0 .. pv], b[0 .. pv]).isOk
+    noisy.say "***", &"{blurb}{first+pv.u256}]={pv+1}) => {result}"
+
+  # Try to import as much as possible by successively shrinking the interval.
+  # This is quite a time consuming approach but it is not assumed that the
+  # result is equivalent to importing single blocks.
+  var pivot = h.high
+  while 0 < pivot and not (pivot - 1).importOk:
+    pivot.dec
+
+  err(first + pivot.u256)
+
 # ------------------------------------------------------------------------------
 # Test Runner
 # ------------------------------------------------------------------------------
 
-proc runner(noisy = true; file = jFile) =
+proc genesisLoadRunner(noisy = true;
+                       genesisFile = genesisFile; persistPruneTrie = true) =
   let
-    fileInfo = file.splitFile.name.split(".")[0]
-    filePath = file.findFilePath
+    gFileInfo = genesisFile.splitFile.name.split(".")[0]
+    gFilePath = genesisFile.findFilePath
 
     tmpDir = if disablePersistentDB: "*notused*"
-             else: filePath.splitFile.dir / "tmp"
+             else: gFilePath.splitFile.dir / "tmp"
 
-  defer:
-    if not disablePersistentDB: tmpDir.flushDbDir
+    persistPruneInfo = if persistPruneTrie: "pruning enabled"
+                       else:                "no pruning"
 
-  suite "Kintsugi custom network test scenario":
+  suite &"{fancyName} custom network genesis & database setup":
     var
       params: NetworkParams
-      mdb, ddb: BaseChainDB
 
-    test &"Load params from {fileInfo}":
-      noisy.say "***", "custom-file=", filePath
-      check filePath.loadNetworkParams(params)
+    test &"Load params from {gFileInfo}":
+      noisy.say "***", "custom-file=", gFilePath
+      check gFilePath.loadNetworkParams(params)
 
-    test "Construct in-memory BaseChainDB":
+    test "Construct in-memory BaseChainDB, pruning enabled":
       mdb = newBaseChainDB(
         newMemoryDb(),
         id = params.config.chainID.NetworkId,
         params = params)
 
-    test &"Construct persistent BaseChainDB on {tmpDir}":
+    test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
         skip()
       else:
@@ -123,13 +199,13 @@ proc runner(noisy = true; file = jFile) =
         # cleared. There might be left overs from a previous crash or
         # because there were file locks under Windows which prevented a
         # previous clean up.
-        tmpDir.flushDbDir
+        tmpDir.ddbCleanUp
 
         # Constructor ...
         ddb = newBaseChainDB(
           tmpDir.newChainDb.trieDB,
           id = params.config.chainID.NetworkId,
-          pruneTrie = true,
+          pruneTrie = persistPruneTrie,
           params = params)
 
     test "Initialise in-memory Genesis":
@@ -156,17 +232,106 @@ proc runner(noisy = true; file = jFile) =
           onTheFlyHeaderPP = ddb.toGenesisHeader.pp
         check storedhHeaderPP == onTheFlyHeaderPP
 
+
+proc testnetChainRunner(noisy = true;
+                        memoryDB = true; chainDump = captureFile;
+                        importFailBlock = 999999999;
+                        stopAfterBlock = 999999999) =
+  let
+    cFileInfo = chainDump.splitFile.name.split(".")[0]
+    cFilePath = chainDump.findFilePath
+    dbInfo = if memoryDB: "in-memory" else: "persistent"
+    pivotBlockNumber = importFailBlock.u256
+    lastBlockNumber = stopAfterBlock.u256
+
+  suite &"Block chain DB inspector for {fancyName}":
+    var
+      bdb: BaseChainDB
+      chn: Chain
+      pivotHeader: BlockHeader
+      pivotBody: BlockBody
+
+    test &"Inherit {dbInfo} block chain DB from previous session":
+      check not mdb.isNil
+      check not ddb.isNil
+
+      # Whatever DB suits, mdb: in-memory, ddb: persistet/on-disk
+      bdb = if memoryDB: mdb else: ddb
+
+      chn = bdb.newChain
+      noisy.say "***", "ttd",
+        " chn.ttdReachedAt=", chn.ttdReachedAt,
+        " db.config.TTD=", chn.db.config.terminalTotalDifficulty
+        # " db.arrowGlacierBlock=0x", chn.db.config.arrowGlacierBlock.toHex
+
+    test &"Replay {cFileInfo} capture, may fail ~#{pivotBlockNumber} "&
+        &"(slow -- time for coffee break)":
+      noisy.say "***", "capture-file=", cFilePath
+      discard
+
+    test &"Processing {fancyName} blocks":
+      for w in cFilePath.undumpNextGroup:
+        let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
+
+        # Install & verify Genesis
+        if w[0][0].blockNumber == 0.u256:
+          doAssert w[0][0] == bdb.getBlockHeader(0.u256)
+          continue
+
+        # Persist blocks, full range before `pivotBlockNumber`
+        if toBlock < pivotBlockNumber:
+          let rc = chn.importBlocks(w[0], w[1], noisy)
+          if rc.isErr:
+            # The error return value is the first block that failed
+            let top = (rc.error - fromBlock).truncate(uint64).int
+            (pivotHeader, pivotBody) = (w[0][top],w[1][top])
+            break
+          if lastBlockNumber <= toBlock:
+            break
+
+        else:
+          let top = (pivotBlockNumber - fromBlock).truncate(uint64).int
+
+          # Load the blocks before the pivot block
+          if 0 < top:
+            check chn.importBlocks(w[0][0 ..< top],w[1][0 ..< top], noisy).isOk
+
+          (pivotHeader, pivotBody) = (w[0][top],w[1][top])
+          break
+
+    test &"Processing {fancyName} block #{pivotHeader.blockNumber}, "&
+        &"persistBlocks() will fail":
+
+      setTraceLevel()
+
+      if pivotHeader.blockNumber == 0:
+        skip()
+      else:
+        # Expecting that the import fails at the current block ...
+        check chn.importBlocks(@[pivotHeader], @[pivotBody], noisy).isErr
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc customNetworkMain*(noisy = defined(debug)) =
-  noisy.runner
+  defer: ddbCleanUp()
+  noisy.genesisLoadRunner
+  # noisy.testnetChainRunner
 
 when isMainModule:
   var noisy = defined(debug)
   noisy = true
-  noisy.runner
+  setErrorLevel()
+
+  noisy.showElapsed("customNetwork"):
+    defer: ddbCleanUp()
+    noisy.genesisLoadRunner
+    # ddbCleanUp()
+    noisy.testnetChainRunner(
+      memoryDB = false,
+      # importFailBlock = ddbCrashBlockNumber,
+      stopAfterBlock = ddbCrashBlockNumber)
 
 # ------------------------------------------------------------------------------
 # End

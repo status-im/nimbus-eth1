@@ -186,16 +186,6 @@ proc isOK*(rc: ValidationResult): bool =
 proc toHex*(acc: EthAddress): string =
   acc.toSeq.mapIt(it.toHex(2)).join
 
-template showElapsed*(noisy: bool; info: string; code: untyped) =
-  let start = getTime()
-  code
-  if noisy:
-    let elpd {.inject.} = getTime() - start
-    if 0 < elpd.inSeconds:
-      echo "*** ", info, &": {elpd.ppSecs:>4}"
-    else:
-      echo "*** ", info, &": {elpd.ppMs:>4}"
-
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
     if args.len == 0:
