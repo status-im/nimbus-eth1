@@ -14,6 +14,7 @@ import
   ./test_state_content,
   ./test_state_network,
   ./test_history_content,
+  ./test_history_validation,
   ./test_content_db,
   ./test_discovery_rpc,
   ./test_bridge_parser
