@@ -12,6 +12,14 @@ import
   ../network/state/state_content,
   ../content_db
 
+proc genByteSeq(length: int): seq[byte] = 
+  var i = 0
+  var resultSeq = newSeq[byte](length)
+  while i < length:
+    resultSeq[i] = byte(i)
+    inc i
+  return resultSeq
+
 suite "Content Database":
   # Note: We are currently not really testing something new here just basic
   # underlying kvstore.
@@ -43,3 +51,21 @@ suite "Content Database":
       check:
         val.isNone()
         db.contains(key) == false
+
+  test "ContentDB size":
+    let
+      db = ContentDB.new("", inMemory = true)
+
+    let numBytes = 10000
+    let size1 = db.size()
+    db.put(@[1'u8], genByteSeq(numBytes))
+    let size2 = db.size()
+    db.put(@[2'u8], genByteSeq(numBytes))
+    let size3 = db.size()
+    db.put(@[2'u8], genByteSeq(numBytes))
+    let size4 = db.size()
+
+    check:
+      size2 > size1
+      size3 > size2
+      size3 == size4
