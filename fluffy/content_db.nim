@@ -33,6 +33,7 @@ type
   ContentDB* = ref object
     kv: KvStoreRef
     sizeStmt: SqliteStmt[NoParams, int64]
+    vacStmt: SqliteStmt[NoParams, void]
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -51,7 +52,18 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64).get()
 
-  ContentDB(kv: kvStore db.openKvStore().expectDb(), sizeStmt: getSizeStmt)
+  let vacStmt = db.prepareStmt(
+    "VACUUM;",
+    NoParams, void).get()
+
+  ContentDB(kv: kvStore db.openKvStore().expectDb(), sizeStmt: getSizeStmt, vacStmt: vacStmt)
+
+proc reclaimSpace*(db: ContentDB): void =
+  ## Runs sqlie VACUMM commands which rebuilds db, repacking it into a minimal amount of disk space
+  ## Ideal mode of operation, is to run it after several deletes.
+  ## Another options would be to run 'PRAGMA auto_vacuum = FULL;' statement at the start of 
+  ## db to leave it in sqlite power to clean up
+  db.vacStmt.exec().expectDb()
 
 proc size*(db: ContentDB): int64 =
   ## Retrun current size of DB as product of sqlite page_count and page_size

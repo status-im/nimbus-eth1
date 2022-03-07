@@ -69,3 +69,19 @@ suite "Content Database":
       size2 > size1
       size3 > size2
       size3 == size4
+
+    db.del(@[2'u8])
+    db.del(@[1'u8])
+    
+    let size5 = db.size()
+    
+    check:
+      size4 == size5
+
+    db.reclaimSpace()
+
+    let size6 = db.size()
+
+    check:
+      # After space reclamation size of db should be equal to initial size
+      size6 == size1
