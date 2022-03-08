@@ -316,7 +316,8 @@ type
       name: "discovery" .}: DiscoveryType
 
     terminalTotalDifficulty* {.
-      desc: "The terminal total difficulty of the eth2 merge transition block"
+      desc: "The terminal total difficulty of the eth2 merge transition block." &
+            " It takes precedence over terminalTotalDifficulty in config file."
       name: "terminal-total-difficulty" .}: Option[UInt256]
 
     engineApiEnabled* {.
@@ -673,6 +674,11 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
 
   if result.customNetwork.isNone:
     result.networkParams = networkParams(result.networkId)
+
+  # ttd from cli takes precedence over ttd from config-file
+  if result.terminalTotalDifficulty.isSome:
+    result.networkParams.config.terminalTotalDifficulty =
+      result.terminalTotalDifficulty
 
   if result.cmd == noCommand:
     if result.udpPort == Port(0):
