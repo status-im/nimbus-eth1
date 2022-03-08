@@ -334,7 +334,7 @@ type
     engineApiAddress* {.
       desc: "Listening address for the Engine API"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: defaultAdminListenAddressDesc
+      defaultValueDesc: $defaultAdminListenAddressDesc
       name: "engine-api-address" .}: ValidIpAddress
 
     engineApiWsEnabled* {.
@@ -351,7 +351,7 @@ type
     engineApiWsAddress* {.
       desc: "Listening address for the WebSocket Engine API"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: defaultAdminListenAddressDesc
+      defaultValueDesc: $defaultAdminListenAddressDesc
       name: "engine-api-ws-address" .}: ValidIpAddress
 
     nodeKeyHex* {.
