@@ -25,7 +25,7 @@ import
 # a temporary solution until nim-eth bumped
 when not compiles(common.prevRandao):
   import ../merge/eth_common_overload
-  
+
 {.push raises: [Defect].}
 
 const
@@ -44,11 +44,11 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(VmStateError, info & "(): " & $e.name & " -- " & e.msg)
 
-proc getMinerAddress(chainDB: BaseChainDB; header: BlockHeader, ttdReached: bool): EthAddress
+proc getMinerAddress(chainDB: BaseChainDB; header: BlockHeader): EthAddress
     {.gcsafe, raises: [Defect,CatchableError].} =
-  if not chainDB.config.poaEngine or ttdReached:
+  if not chainDB.config.poaEngine or chainDB.isTtdReached:
     return header.coinbase
-  
+
   let account = header.ecRecover
   if account.isErr:
     let msg = "Could not recover account address: " & $account.error
@@ -95,7 +95,6 @@ proc init(
       prevRandao:  Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
-      ttdReached:  bool;
       tracerFlags: set[TracerFlags])
     {.gcsafe, raises: [Defect,CatchableError].} =
   var tracer: TransactionTracer
@@ -109,7 +108,7 @@ proc init(
     prevRandao= prevRandao,
     miner     = miner,
     chainDB   = chainDB,
-    ttdReached= ttdReached,
+    ttdReached= chainDB.isTtdReached,
     tracer    = tracer)
 
 # --------------
@@ -132,7 +131,6 @@ proc new*(
       prevRandao:  Hash256;         ## tx env: POS block randomness
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
-      ttdReached:  bool;            ## total terminal difficulty reached
       tracerFlags: set[TracerFlags] = {};
       pruneTrie:   bool = true): T
     {.gcsafe, raises: [Defect,CatchableError].} =
@@ -153,7 +151,6 @@ proc new*(
     prevRandao  = prevRandao,
     miner       = miner,
     chainDB     = chainDB,
-    ttdReached  = ttdReached,
     tracerFlags = tracerFlags)
 
 proc reinit*(self:      BaseVMState;     ## Object descriptor
@@ -163,7 +160,6 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              fee:       Option[Uint256]; ## tx env: optional base fee
              prevRandao:Hash256;         ## tx env: POS block randomness
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
-             ttdReached:bool;            ## total terminal difficulty reached
              pruneTrie: bool = true): bool
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Re-initialise state descriptor. The `AccountsCache` database is
@@ -190,7 +186,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       prevRandao  = prevRandao,
       miner       = miner,
       chainDB     = db,
-      ttdReached  = ttdReached,
+      ttdReached  = db.isTtdReached,
       tracer      = tracer)
     return true
   # else: false
@@ -206,17 +202,13 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  let ttdReached = self.chainDB.totalDifficulty + header.difficulty > self.chainDB.ttd
-  let miner = self.chainDB.getMinerAddress(header, ttdReached)
-
-  self.reinit(
+  result = self.reinit(
     parent    = parent,
     timestamp = header.timestamp,
     gasLimit  = header.gasLimit,
     fee       = header.fee,
     prevRandao= header.prevRandao,
-    miner     = miner,
-    ttdReached= ttdReached,
+    miner     = self.chainDB.getMinerAddress(header),
     pruneTrie = pruneTrie)
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
@@ -247,18 +239,16 @@ proc init*(
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  let ttdReached = chainDB.totalDifficulty + header.difficulty > chainDB.ttd
-  let miner = chainDB.getMinerAddress(header, ttdReached)
-  self.init(AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
-            parent,
-            header.timestamp,
-            header.gasLimit,
-            header.fee,
-            header.prevRandao,
-            miner,
-            chainDB,
-            ttdReached,
-            tracerFlags)
+  self.init(
+    ac          = AccountsCache.init(chainDB.db, parent.stateRoot, pruneTrie),
+    parent      = parent,
+    timestamp   = header.timestamp,
+    gasLimit    = header.gasLimit,
+    fee         = header.fee,
+    prevRandao  = header.prevRandao,
+    miner       = chainDB.getMinerAddress(header),
+    chainDB     = chainDB,
+    tracerFlags = tracerFlags)
 
 proc new*(
       T:           type BaseVMState;
