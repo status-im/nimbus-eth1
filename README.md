@@ -222,8 +222,9 @@ available.)
    Disables colourised logging (handy for log data post-processing in case that
    the program `ansi2txt` is not available.)
 
- * ENABLE_ETH66=1<br>
-   Enable wire protocol `eth/66` (multi-protocol is un-supported.)
+ * ENABLE_ETH65=1<br>
+   Enable wire protocol `eth/65` rather than the default `eth/66`
+   (multi-protocol mode is un-supported.)
 
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native nim VM

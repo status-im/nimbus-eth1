@@ -11,12 +11,14 @@ import
   eth/common/eth_types,
   eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
 
-when defined(eth66_enabled):
-  import ../sync/protocol_eth66
-  export         protocol_eth66
-else:
+when defined(eth65_enabled):
   import ../sync/protocol_eth65
   export         protocol_eth65
+else:
+  import ../sync/protocol_eth66
+  export         protocol_eth66
+
+{.push raises: [Defect].}
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this
@@ -27,6 +29,9 @@ type
     syncSuccess
     syncNotEnoughPeers
     syncTimeOut
+
+  BlockchainSyncDefect* = object of Defect
+    ## Catch and relay exception
 
   WantedBlocksState = enum
     Initial,
@@ -50,6 +55,18 @@ type
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
     minSyncPeers: int           # default value is `minPeersToStartSync`
+
+template catchException(info: string; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raise (ref CatchableError)(msg: e.msg)
+  except Defect as e:
+    raise (ref Defect)(msg: e.msg)
+  except:
+    let e = getCurrentException()
+    raise newException(
+      BlockchainSyncDefect, info & "(): " & $e.name & " -- " & e.msg)
 
 proc hash*(p: Peer): Hash = hash(cast[pointer](p))
 
@@ -101,8 +118,10 @@ proc availableWorkItem(ctx: SyncContext): int =
     numBlocks = maxHeadersFetch
   ctx.workQueue[result] = WantedBlocks(startIndex: nextRequestedBlock, numBlocks: numBlocks.uint, state: Initial)
 
-proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult =
-  result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
+proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  catchException("persistBlocks"):
+    result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
   case result
   of ValidationResult.OK:
     ctx.finalizedBlock = wi.endIndex
@@ -113,7 +132,8 @@ proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult =
   wi.headers = @[]
   wi.bodies = @[]
 
-proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult) =
+proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   var nextStartIndex = ctx.finalizedBlock + 1
   var keepRunning = true
   var hasOutOfOrderBlocks = false
@@ -141,7 +161,8 @@ proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult) =
 
   ctx.hasOutOfOrderBlocks = hasOutOfOrderBlocks
 
-proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult =
+proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
   let wi = addr ctx.workQueue[workItem]
   let askedBlocks = wi.numBlocks.int
   let receivedBlocks = wi.headers.len
@@ -180,7 +201,8 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult =
     return ValidationResult.Error
 
 proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool,
-                    minSyncPeers = minPeersToStartSync): SyncContext =
+                    minSyncPeers = minPeersToStartSync): SyncContext
+    {.gcsafe, raises: [Defect,CatchableError].} =
   new result
   result.chain = chain
   result.peerPool = peerPool

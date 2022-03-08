@@ -21,7 +21,9 @@ const
   warningMSg = block:
     const chronicles_colors {.strdefine.} = "*"
     var rc = "*** Compiling with " & VmName
-    when defined(eth66_enabled):
+    when defined(eth65_enabled):
+      rc &= ", eth/65"
+    else:
       rc &= ", eth/66"
     when chronicles_colors in ["no", "0", "off", "false", "none"]:
       rc &= ", decolourised-logging"
