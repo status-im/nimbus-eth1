@@ -396,7 +396,12 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
     result = self.setAsCanonicalChainHead(headerHash)
 
 proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
+  let isGenesis = header.parentHash == GENESIS_PARENT_HASH
   let headerHash = header.blockHash
+  let score = if isGenesis: header.difficulty
+              else: self.getScore(header.parentHash) + header.difficulty
+
+  self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
   self.addBlockNumberToHashLookup(header)
   self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
