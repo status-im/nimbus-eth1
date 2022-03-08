@@ -76,6 +76,16 @@ proc customGenesisTest() =
       check h.blockHash == genesisHash
       check cg.config.poaEngine == false
 
+    test "Devnet5.json":
+      var cg: NetworkParams
+      check loadNetworkParams("devnet5.json".findFilePath, cg)
+      let h = cg.toGenesisHeader
+      let stateRoot = "52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62".toDigest
+      let genesisHash = "51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8".toDigest
+      check h.stateRoot == stateRoot
+      check h.blockHash == genesisHash
+      check cg.config.poaEngine == false
+
 proc genesisMain*() =
   genesisTest()
   customGenesisTest()

@@ -1,12 +1,19 @@
 #! /bin/sh
 
-self=`basename "$0"`
+self=${NIMBUS_SESSION_SELF:-`basename "$0"`}
 
-# Unique log data and database folder (relative to current directory)
-datadir=./datadir-devnet4
+# Network name (used below for easy setup)
+name=${NIMBUS_SESSION_NAME:-devnet4}
 
 # Unique Nimbus TCP/UDP communication port
-port=30309
+port=${NIMBUS_SESSION_PORT:-30309}
+
+# Unique log data and database folder (relative to current directory)
+datadir=./datadir-${name}
+
+# Name of custom genesis and bootstrap files
+genesis_json=${name}.json
+bootstrap_txt=${name}-enode.txt
 
 # -------- no need to change, below -------------
 
@@ -25,10 +32,6 @@ find_prefix="`dirname $0` . .. ../.. nimbus-eth1"
 find_nimbus=". build"
 find_genesis=". tests/customgenesis"
 find_bootstrap=". tests/customgenesis"
-
-# Name of custom genesis and bootstrap files
-genesis_json=devnet4.json
-bootstrap_txt=devnet4-enode.txt
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -175,7 +178,7 @@ $self:
    With ctrl-C, the program is stopped. In order to run in the background, the
    the "nimbus" program is started with
 
-     sh $self start
+     sh $self daemon
 
    Continuous logging can then be displayed on the console (hit ctrl-C to stop)
    with
@@ -192,8 +195,8 @@ $self:
 
    Available commands (can be combined irrespective of order):
 
-      start   start the Nimbus session (as descibed above)
-      daemon  like start without termninating on logout (for ssh sessions)
+      start   start the Nimbus session in the foreground
+      daemon  background session (without termninating on logout, e.g. from ssh)
       stop    stop the Nimbus session (as descibed above)
       logs    resume console logging (as descibed above)
       flush   delete all log and blockchain data
