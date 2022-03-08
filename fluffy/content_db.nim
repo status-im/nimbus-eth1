@@ -32,6 +32,8 @@ export kvstore_sqlite3
 type
   ContentDB* = ref object
     kv: KvStoreRef
+    sizeStmt: SqliteStmt[NoParams, int64]
+    vacStmt: SqliteStmt[NoParams, void]
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -46,7 +48,36 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
     else:
       SqStoreRef.init(path, "fluffy").expectDb()
 
-  ContentDB(kv: kvStore db.openKvStore().expectDb())
+  let getSizeStmt = db.prepareStmt(
+    "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
+    NoParams, int64).get()
+
+  let vacStmt = db.prepareStmt(
+    "VACUUM;",
+    NoParams, void).get()
+
+  ContentDB(kv: kvStore db.openKvStore().expectDb(), sizeStmt: getSizeStmt, vacStmt: vacStmt)
+
+proc reclaimSpace*(db: ContentDB): void =
+  ## Runs sqlie VACUMM commands which rebuilds db, repacking it into a minimal amount of disk space
+  ## Ideal mode of operation, is to run it after several deletes.
+  ## Another options would be to run 'PRAGMA auto_vacuum = FULL;' statement at the start of 
+  ## db to leave it in sqlite power to clean up
+  db.vacStmt.exec().expectDb()
+
+proc size*(db: ContentDB): int64 =
+  ## Retrun current size of DB as product of sqlite page_count and page_size
+  ## https://www.sqlite.org/pragma.html#pragma_page_count
+  ## https://www.sqlite.org/pragma.html#pragma_page_size
+  ## It returns total size of db i.e both data and metadata used to store content
+  ## also it is worth noting that when deleting content, size may lags behind due
+  ## to the way how deleting works in sqlite.
+  ## Good description can be found in: https://www.sqlite.org/lang_vacuum.html
+
+  var size: int64 = 0
+  discard (db.sizeStmt.exec do(res: int64):
+    size = res).expectDb()
+  return size
 
 proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
   var res: Option[seq[byte]]
