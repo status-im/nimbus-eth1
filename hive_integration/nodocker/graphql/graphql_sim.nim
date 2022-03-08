@@ -76,9 +76,10 @@ proc main() =
       conf.networkId,
       conf.networkParams
     )
-    txPool = TxPoolRef.new(chainDB, conf.engineSigner)
 
   initializeEmptyDb(chainDB)
+
+  let txPool = TxPoolRef.new(chainDB, conf.engineSigner)
   discard importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
 
