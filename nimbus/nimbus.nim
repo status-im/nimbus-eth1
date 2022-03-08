@@ -191,6 +191,13 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.graphqlServer.start()
 
   if conf.engineSigner != ZERO_ADDRESS:
+    let res = nimbus.ctx.am.getAccount(conf.engineSigner)
+    if res.isErr:
+      error "Failed to get account",
+         msg = res.error,
+         hint = "--key-store or --import-key"
+      quit(QuitFailure)
+
     let rs = validateSealer(conf, nimbus.ctx, nimbus.chainRef)
     if rs.isErr:
       echo rs.error
@@ -239,6 +246,10 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
 
       info "Starting WebSocket engine API server", port = conf.engineApiWsPort
+  else:
+    if conf.engineApiEnabled or conf.engineApiWsEnabled:
+      warn "Cannot enable engine API without sealing engine",
+        hint = "use --engine-signer to enable sealing engine"      
 
   # metrics server
   if conf.metricsEnabled:
