@@ -18,7 +18,14 @@ func vmName(): string =
 
 const
   VmName* = vmName()
-  warningMSg = "*** Compiling with " & VmName & " enabled"
+  warningMSg = block:
+    var rc = "*** Compiling with " & VmName
+    when defined(eth65_enabled):
+      rc &= ", eth/65"
+    else:
+      rc &= ", eth/66"
+    rc &= " enabled"
+    rc
 
 {.warning: warningMsg.}
 

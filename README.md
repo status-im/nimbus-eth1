@@ -218,6 +218,10 @@ engine is compiled. The variables are listed with decreasing priority (in
 case of doubt, the lower prioritised variable is ignored when the higher on is
 available.)
 
+ * ENABLE_ETH65=1<br>
+   Enable wire protocol `eth/65` rather than the default `eth/66`
+   (multi-protocol mode is un-supported.)
+
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native nim VM
 
