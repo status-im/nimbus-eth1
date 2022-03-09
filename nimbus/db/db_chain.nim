@@ -59,7 +59,7 @@ proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
 proc ttd*(db: BaseChainDB): DifficultyInt =
-  if not db.config.poaEngine and db.config.terminalTotalDifficulty.isSome:
+  if db.config.terminalTotalDifficulty.isSome:
     db.config.terminalTotalDifficulty.get()
   else:
     high(DifficultyInt)
@@ -67,7 +67,7 @@ proc ttd*(db: BaseChainDB): DifficultyInt =
 proc isTtdReached*(db: BaseChainDB): bool =
   ## Returns `true` iff the cached total difficulty has reached the
   ## termial total difficulty, see EIP3675.
-  if not db.config.poaEngine and db.config.terminalTotalDifficulty.isSome:
+  if db.config.terminalTotalDifficulty.isSome:
     return db.config.terminalTotalDifficulty.get <= db.totalDifficulty
 
 proc networkParams*(db: BaseChainDB): NetworkParams =
@@ -406,8 +406,7 @@ proc isBlockAfterTtd*(db: BaseChainDB; blockHeader: BlockHeader): bool =
   ## parent is the canonical head.
 
   # Easy cases: check whether applicable or TTD reached, already.
-  if not db.config.poaEngine or
-     db.config.terminalTotalDifficulty.isNone or
+  if db.config.terminalTotalDifficulty.isNone or
      db.config.terminalTotalDifficulty.get <= db.totalDifficulty:
     return false
 

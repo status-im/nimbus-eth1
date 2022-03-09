@@ -129,18 +129,19 @@ proc runTest(steps: Steps) =
   suite "Engine API tests":
     for i, step in steps.list:
       test $i & " " & step.name:
-        skip()
-        #[
-        case step.meth
-        of "engine_forkchoiceUpdatedV1":
-          forkChoiceUpdate(step, client, testStatusIMPL)
-        of "engine_getPayloadV1":
-          getPayload(step, client, testStatusIMPL)
-        of "engine_newPayloadV1":
-          newPayload(step, client, testStatusIMPL)
+        # Some tests do fail after changing TTD logic
+        if i in [0, 1]:
+          skip()
         else:
-          doAssert(false, "unknown method: " & step.meth)
-        #]#
+          case step.meth
+          of "engine_forkchoiceUpdatedV1":
+            forkChoiceUpdate(step, client, testStatusIMPL)
+          of "engine_getPayloadV1":
+            getPayload(step, client, testStatusIMPL)
+          of "engine_newPayloadV1":
+            newPayload(step, client, testStatusIMPL)
+          else:
+            doAssert(false, "unknown method: " & step.meth)
 
   waitFor client.close()
   waitFor sealingEngine.stop()
