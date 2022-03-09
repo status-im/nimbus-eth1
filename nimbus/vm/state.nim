@@ -22,10 +22,6 @@ import
   ./types,
   eth/[common, keys]
 
-# a temporary solution until nim-eth bumped
-when not compiles(common.prevRandao):
-  import ../merge/eth_common_overload
-  
 {.push raises: [Defect].}
 
 const
