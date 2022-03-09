@@ -134,6 +134,16 @@ proc findFilePath(file: string): string =
       if path.fileExists:
         return path
 
+proc setTraceLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -897,6 +907,8 @@ when isMainModule:
     capts1: CaptureSpecs = (GoerliNet, "goerli504192.txt.gz", 30000, 500, 1500)
     # Note: mainnet has the leading 45k blocks without any transactions
     capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
+
+  setErrorLevel()
 
   noisy.runTxLoader(capture = capts2)
   noisy.runTxPoolTests
