@@ -191,7 +191,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
 
     # If we're taking too much time (ecrecover), notify the user once a while
     if s.cfg.logInterval < getTime() - logged:
-      info "Reconstructing voting history",
+      debug "Reconstructing voting history",
         processed = headersIndex,
         total = headers.len,
         elapsed = getTime() - start
@@ -199,7 +199,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
 
   let sinceStart = getTime() - start
   if s.cfg.logInterval < sinceStart:
-    info "Reconstructed voting history",
+    debug "Reconstructed voting history",
       processed = headers.len,
       elapsed = sinceStart
 
