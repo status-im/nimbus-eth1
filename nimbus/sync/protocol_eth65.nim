@@ -40,7 +40,7 @@ const
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
-  ethVersion = 65
+  ethVersion* = 65
 
 func toHex*(x: KeccakHash): string = x.data.toHex
 macro tracePacket*(msg: static[string], args: varargs[untyped]) =

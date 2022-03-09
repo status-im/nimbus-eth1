@@ -14,8 +14,7 @@ import
   ../nimbus/[constants, config, genesis, utils, transaction,
              vm_state, vm_types],
   ../nimbus/db/[accounts_cache, db_chain],
-  ../nimbus/p2p/[chain, executor, executor/executor_helpers],
-  ../nimbus/sync/protocol_eth65,
+  ../nimbus/p2p/[blockchain_sync, chain, executor, executor/executor_helpers],
   ../nimbus/utils/[difficulty, tx_pool],
   ../nimbus/[context, chain_config],
    ./test_helpers, ./macro_assembler
@@ -217,7 +216,7 @@ proc rpcMain*() =
       # same expression as the client can hide issues when the value is wrong
       # in both places.  When the expected value genuinely changes, it'll be
       # obvious.  Just change this number.
-      check res == "65"
+      check res == $ethVersion
 
     test "eth_syncing":
       let res = await client.eth_syncing()

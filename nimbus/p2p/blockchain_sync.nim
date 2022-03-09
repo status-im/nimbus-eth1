@@ -12,6 +12,9 @@ import
   eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool],
   ../sync/protocol_eth65
 
+export
+  protocol_eth65
+
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this
                            # number of peers before syncing

@@ -15,7 +15,7 @@ import
   stew/results,
   chronos, json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/db/db_chain,
-  ../../../nimbus/sync/protocol_eth65,
+  ../../../nimbus/p2p/blockchain_sync,
   ../../../nimbus/[config, context, genesis],
   ../../../nimbus/rpc/[common, p2p, debug],
   ../../../tests/test_helpers,
