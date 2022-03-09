@@ -233,6 +233,10 @@ available.)
  * ENABLE_VM2=1<br>
    Enable new re-factored version of the native nim VM.
 
+ * ENABLE_COLORS=0<br>
+   Disables colourised logging (handy for log data post-processing when
+   the program `ansi2txt` is not available.)
+
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 

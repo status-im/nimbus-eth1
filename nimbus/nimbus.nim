@@ -291,7 +291,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
     if ProtocolFlag.Eth in protocols:
       # TODO: temp code until the CLI/RPC interface is fleshed out
-      let status = waitFor nimbus.ethNode.fastBlockchainSync()
+      let status = waitFor nimbus.ethNode.fastBlockchainSync(conf.minSyncPeers)
       if status != syncSuccess:
         debug "Block sync failed: ", status
 

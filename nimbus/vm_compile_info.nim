@@ -24,6 +24,9 @@ const
       rc &= ", eth/65"
     else:
       rc &= ", eth/66"
+    const chronicles_colors {.strdefine.} = "*"
+    when chronicles_colors in ["no", "0", "off", "false", "none"]:
+      rc &= ", decolourised-logging"
     rc &= " enabled"
     rc
 

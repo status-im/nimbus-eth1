@@ -89,6 +89,11 @@ NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
 endif
 endif
 
+# enabled by default, disable with ENABLE_COLORS=0
+ifeq ($(if $(ENABLE_COLORS),$(ENABLE_COLORS),1),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_colors=off
+endif
+
 # default compile for eth/66, disable/fallback with ENABLE_ETH65=1
 ifneq ($(if $(ENABLE_ETH65),$(ENABLE_ETH65),0),0)
 NIM_PARAMS := $(NIM_PARAMS) -d:eth65_enabled

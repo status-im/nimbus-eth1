@@ -16,6 +16,7 @@ import
     stew/byteutils,
     confutils/std/net
   ],
+  ./p2p/blockchain_sync,
   stew/shims/net as stewNet,
   eth/[p2p, common, net/nat, p2p/bootnodes],
   "."/[db/select_backend, chain_config,
@@ -104,6 +105,7 @@ const
   defaultEthGraphqlPort    = 8547
   defaultEngineApiPort     = 8550
   defaultEngineApiWsPort   = 8551
+  defaultMinSyncPeers      = minPeersToStartSync
   defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
   defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
   defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
@@ -316,6 +318,14 @@ type
       defaultValue: DiscoveryType.V4
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
+
+    minSyncPeers* {.
+      desc: "Minimum positive number of trusted peers needed for " &
+            "syncing. For debugging and syncing against a local node, " &
+            "this number might be set to 1. "
+      defaultValue: defaultMinSyncPeers
+      defaultValueDesc: $defaultMinSyncPeers
+      name: "min-sync-peers" }: int
 
     terminalTotalDifficulty* {.
       desc: "The terminal total difficulty of the eth2 merge transition block." &
@@ -686,6 +696,11 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
+
+  if result.minSyncPeers < 1:
+    error "Option minSyncPeers: value ignored",
+      value = result.minSyncPeers
+    result.minSyncPeers = defaultMinSyncPeers
 
 when isMainModule:
   # for testing purpose
