@@ -29,8 +29,8 @@ type
 const
   prngSeed = 42
 
-  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
-  repoDir = ["replay", "status"]                    # alternative repos
+  baseDir = [".", "..", ".."/"..", $DirSep]
+  repoDir = [".", "tests"/"replay", "nimbus-eth1-blobs"/"replay"]
 
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
@@ -904,13 +904,13 @@ when isMainModule:
   const
     noisy = defined(debug)
     capts0: CaptureSpecs = goerliCapture
-    capts1: CaptureSpecs = (GoerliNet, "goerli504192.txt.gz", 30000, 500, 1500)
+    capts1: CaptureSpecs = (GoerliNet, "goerli482304.txt.gz", 30000, 500, 1500)
     # Note: mainnet has the leading 45k blocks without any transactions
-    capts2: CaptureSpecs = (MainNet, "mainnet843841.txt.gz", 30000, 500, 1500)
+    capts2: CaptureSpecs = (MainNet, "mainnet332160.txt.gz", 30000, 500, 1500)
 
   setErrorLevel()
 
-  noisy.runTxLoader(capture = capts2)
+  noisy.runTxLoader(capture = capts1)
   noisy.runTxPoolTests
   true.runTxPackerTests
 

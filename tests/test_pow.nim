@@ -10,59 +10,20 @@
 
 import
   std/[os, sequtils, strformat, strutils, times],
-  ./replay/gunzip,
+  ./replay/[pp, gunzip],
   ../nimbus/utils/[pow, pow/pow_cache, pow/pow_dataset],
   eth/[common],
   unittest2
 
 const
   baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
-  repoDir = ["test_pow", "status"]                  # alternative repos
+  repoDir = ["replay"]                              # alternative repos
 
   specsDump = "mainspecs2k.txt.gz"
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
-
-proc ppMs*(elapsed: Duration): string =
-  result = $elapsed.inMilliSeconds
-  let ns = elapsed.inNanoSeconds mod 1_000_000
-  if ns != 0:
-    # to rounded deca milli seconds
-    let dm = (ns + 5_000i64) div 10_000i64
-    result &= &".{dm:02}"
-  result &= "ms"
-
-proc ppSecs*(elapsed: Duration): string =
-  result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000
-  if ns != 0:
-    # to rounded decs seconds
-    let ds = (ns + 5_000_000i64) div 10_000_000i64
-    result &= &".{ds:02}"
-  result &= "s"
-
-proc toKMG*[T](s: T): string =
-  proc subst(s: var string; tag, new: string): bool =
-    if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
-      s = s[0 ..< s.len - tag.len] & new
-      return true
-  result = $s
-  for w in [("000", "K"),("000K","M"),("000M","G"),("000G","T"),
-            ("000T","P"),("000P","E"),("000E","Z"),("000Z","Y")]:
-    if not result.subst(w[0],w[1]):
-      return
-
-template showElapsed*(noisy: bool; info: string; code: untyped) =
-  let start = getTime()
-  code
-  if noisy:
-    let elpd {.inject.} = getTime() - start
-    if 0 < elpd.inSeconds:
-      echo "*** ", info, &": {elpd.ppSecs:>4}"
-    else:
-      echo "*** ", info, &": {elpd.ppMs:>4}"
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
@@ -72,13 +33,6 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, " ", args.toSeq.join
     else:
       echo pfx, args.toSeq.join
-
-proc pp*(a: BlockNonce): string =
-  a.mapIt(it.toHex(2)).join.toLowerAscii
-
-proc pp*(a: Hash256): string =
-  a.data.mapIt(it.toHex(2)).join[24 .. 31].toLowerAscii
-
 
 proc findFilePath(file: string): string =
   result = "?unknown?" / file

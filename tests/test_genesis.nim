@@ -4,8 +4,8 @@ import
   ../nimbus/[genesis, config, chain_config]
 
 const
-  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
-  repoDir = ["customgenesis", "status"]             # alternative repo paths
+  baseDir = [".", "tests", ".."/"tests", $DirSep]  # path containg repo
+  repoDir = [".", "customgenesis"]                 # alternative repo paths
 
 proc findFilePath(file: string): string =
   result = "?unknown?" / file
@@ -56,16 +56,6 @@ proc customGenesisTest() =
       check cg.config.cliquePeriod == 30
       check cg.config.cliqueEpoch == 30000
 
-    test "kintsugi.json":
-      var cg: NetworkParams
-      check loadNetworkParams("kintsugi.json".findFilePath, cg)
-      let h = cg.toGenesisHeader
-      let stateRoot = "3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e".toDigest
-      let genesisHash = "a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399".toDigest
-      check h.stateRoot == stateRoot
-      check h.blockHash == genesisHash
-      check cg.config.poaEngine == false
-
     test "Devnet4.json (aka Kintsugi in all but chainId)":
       var cg: NetworkParams
       check loadNetworkParams("devnet4.json".findFilePath, cg)
@@ -76,7 +66,7 @@ proc customGenesisTest() =
       check h.blockHash == genesisHash
       check cg.config.poaEngine == false
 
-    test "Devnet5.json":
+    test "Devnet5.json (aka Kiln in all but chainId and TTD)":
       var cg: NetworkParams
       check loadNetworkParams("devnet5.json".findFilePath, cg)
       let h = cg.toGenesisHeader

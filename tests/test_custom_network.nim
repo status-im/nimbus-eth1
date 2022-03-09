@@ -31,13 +31,29 @@ import
   stew/results,
   unittest2
 
-const
-  baseDir = [".", "tests", ".." / "tests", $DirSep]   # path containg repo
-  repoDir = ["replay", "customgenesis", "."]          # alternative repo paths
+type
+  ReplaySession = object
+    fancyName: string     # display name
+    genesisFile: string   # json file base name
+    captureFile: string   # gzipped RPL data dump
+    ttdReachedAt: uint64  # block number where total difficulty becomes `true`
 
-  fancyName = "Devnet4"
-  genesisFile = "devnet4.json"
-  captureFile = "devnetfour5664.txt.gz"
+const
+  baseDir = [".", "..", ".."/"..", $DirSep]
+  repoDir = [".", "tests"/"replay", "tests"/"customgenesis",
+             "nimbus-eth1-blobs"/"replay"]
+
+  devnet4 = ReplaySession(
+    fancyName: "Devnet4",
+    genesisFile: "devnet4.json",
+    captureFile: "devnetfour5664.txt.gz",
+    ttdReachedAt: 5645)
+
+  devnet5 = ReplaySession(
+    fancyName: "Devnet5",
+    genesisFile: "devnet5.json",
+    captureFile: "devnetfive43968.txt.gz",
+    ttdReachedAt: 43711)
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -65,13 +81,14 @@ let
 
 # Block chains shared between test suites
 var
-  mdb: BaseChainDB # memory DB
-  ddb: BaseChainDB # perstent DB on disk
-  ddbDir: string   # data directory for disk database
+  mdb: BaseChainDB         # memory DB
+  ddb: BaseChainDB         # perstent DB on disk
+  ddbDir: string           # data directory for disk database
+  sSpcs: ReplaySession     # current replay session specs
 
 const
   # FIXED: Will fail at this one on `Devnet4` replay (`state.nim` needs update)
-  failBlockNumber = 5645
+  failBlockNumber = devnet4.ttdReachedAt
 
   # FIXED: Persistent database crash on `Devnet4` replay if the database
   # directory was acidentally deleted (due to a stray "defer:" directive.)
@@ -137,14 +154,16 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
     (first, last) = (h[0].blockNumber, h[^1].blockNumber)
     nTxs = b.mapIt(it.transactions.len).foldl(a+b)
     nUnc = b.mapIt(it.uncles.len).foldl(a+b)
-    bRng = if 1 < h.len: &"range [#{first}..#{last}]={h.len}"
-           else:         &"#{first}"
+    tddOk = c.db.isTtdReached
+    bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &" #{first}"
     blurb = &"persistBlocks([#{first}..#"
 
-  noisy.say "***", &"block {bRng} #txs={nTxs} #uncles={nUnc}"
+  noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc}"
 
   catchException("persistBlocks()", trace = true):
     if c.persistBlocks(h, b).isOk:
+      if not tddOk and c.db.isTtdReached:
+        noisy.say "***", &"block{bRng} => tddReached"
       return ok()
 
   proc importOk(pv: int): bool =
@@ -166,10 +185,13 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
 # ------------------------------------------------------------------------------
 
 proc genesisLoadRunner(noisy = true;
-                       genesisFile = genesisFile; persistPruneTrie = true) =
+                       captureSession = devnet4;
+                       persistPruneTrie = true) =
+  sSpcs = captureSession
+
   let
-    gFileInfo = genesisFile.splitFile.name.split(".")[0]
-    gFilePath = genesisFile.findFilePath
+    gFileInfo = sSpcs.genesisFile.splitFile.name.split(".")[0]
+    gFilePath = sSpcs.genesisFile.findFilePath
 
     tmpDir = if disablePersistentDB: "*notused*"
              else: gFilePath.splitFile.dir / "tmp"
@@ -177,7 +199,7 @@ proc genesisLoadRunner(noisy = true;
     persistPruneInfo = if persistPruneTrie: "pruning enabled"
                        else:                "no pruning"
 
-  suite &"{fancyName} custom network genesis & database setup":
+  suite &"{sSpcs.fancyName} custom network genesis & database setup":
     var
       params: NetworkParams
 
@@ -234,17 +256,18 @@ proc genesisLoadRunner(noisy = true;
 
 
 proc testnetChainRunner(noisy = true;
-                        memoryDB = true; chainDump = captureFile;
+                        memoryDB = true;
                         importFailBlock = 999999999;
                         stopAfterBlock = 999999999) =
   let
-    cFileInfo = chainDump.splitFile.name.split(".")[0]
-    cFilePath = chainDump.findFilePath
+    cFileInfo = sSpcs.captureFile.splitFile.name.split(".")[0]
+    cFilePath = sSpcs.captureFile.findFilePath
     dbInfo = if memoryDB: "in-memory" else: "persistent"
     pivotBlockNumber = importFailBlock.u256
     lastBlockNumber = stopAfterBlock.u256
+    ttdBlockNumber = sSpcs.ttdReachedAt.u256
 
-  suite &"Block chain DB inspector for {fancyName}":
+  suite &"Block chain DB inspector for {sSpcs.fancyName}":
     var
       bdb: BaseChainDB
       chn: Chain
@@ -268,7 +291,7 @@ proc testnetChainRunner(noisy = true;
       noisy.say "***", "capture-file=", cFilePath
       discard
 
-    test &"Processing {fancyName} blocks":
+    test &"Processing {sSpcs.fancyName} blocks":
       for w in cFilePath.undumpNextGroup:
         let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
 
@@ -285,6 +308,10 @@ proc testnetChainRunner(noisy = true;
             let top = (rc.error - fromBlock).truncate(uint64).int
             (pivotHeader, pivotBody) = (w[0][top],w[1][top])
             break
+          if chn.db.isTtdReached:
+            check ttdBlockNumber <= toBlock
+          else:
+            check toBlock < ttdBlockNumber
           if lastBlockNumber <= toBlock:
             break
 
@@ -298,7 +325,7 @@ proc testnetChainRunner(noisy = true;
           (pivotHeader, pivotBody) = (w[0][top],w[1][top])
           break
 
-    test &"Processing {fancyName} block #{pivotHeader.blockNumber}, "&
+    test &"Processing {sSpcs.fancyName} block #{pivotHeader.blockNumber}, "&
         &"persistBlocks() will fail":
 
       setTraceLevel()
@@ -316,16 +343,20 @@ proc testnetChainRunner(noisy = true;
 proc customNetworkMain*(noisy = defined(debug)) =
   defer: ddbCleanUp()
   noisy.genesisLoadRunner
-  # noisy.testnetChainRunner
 
 when isMainModule:
-  var noisy = defined(debug)
-  noisy = true
+  let noisy = defined(debug) or true
   setErrorLevel()
 
   noisy.showElapsed("customNetwork"):
     defer: ddbCleanUp()
-    noisy.genesisLoadRunner
+
+    noisy.genesisLoadRunner(
+      # any of: devnet4, devnet5, etc.
+      captureSession = devnet4)
+
+    # Note that the `testnetChainRunner()` finds the replay dump files
+    # typically on the `nimbus-eth1-blobs` module.
     noisy.testnetChainRunner(
       # importFailBlock = failBlockNumber,
       stopAfterBlock = 999999999)
