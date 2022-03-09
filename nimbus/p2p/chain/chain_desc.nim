@@ -75,9 +75,10 @@ func toNextFork(n: BlockNumber): uint64 =
   else:
     result = n.truncate(uint64)
 
-func isBlockAfterTtd*(c: Chain, blockHeader: BlockHeader): bool =
-  c.db.totalDifficulty + blockHeader.difficulty > c.db.ttd
-  
+proc isBlockAfterTtd*(c: Chain; blockHeader: BlockHeader): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  c.db.isBlockAfterTtd(blockHeader)
+
 func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
   let next: array[ChainFork, uint64] = [
     0'u64,

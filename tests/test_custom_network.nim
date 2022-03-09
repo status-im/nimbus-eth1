@@ -70,7 +70,7 @@ var
   ddbDir: string   # data directory for disk database
 
 const
-  # Will fail at this one on `Devnet4` replay (`state.nim` needs update)
+  # FIXED: Will fail at this one on `Devnet4` replay (`state.nim` needs update)
   failBlockNumber = 5645
 
   # FIXED: Persistent database crash on `Devnet4` replay if the database
@@ -327,7 +327,7 @@ when isMainModule:
     defer: ddbCleanUp()
     noisy.genesisLoadRunner
     noisy.testnetChainRunner(
-      importFailBlock = failBlockNumber,
+      # importFailBlock = failBlockNumber,
       stopAfterBlock = 999999999)
 
 # ------------------------------------------------------------------------------

@@ -64,6 +64,12 @@ proc ttd*(db: BaseChainDB): DifficultyInt =
   else:
     high(DifficultyInt)
 
+proc isTtdReached*(db: BaseChainDB): bool =
+  ## Returns `true` iff the cached total difficulty has reached the
+  ## termial total difficulty, see EIP3675.
+  if db.config.terminalTotalDifficulty.isSome:
+    return db.config.terminalTotalDifficulty.get <= db.totalDifficulty
+
 proc networkParams*(db: BaseChainDB): NetworkParams =
   NetworkParams(config: db.config, genesis: db.genesis)
 
@@ -394,6 +400,29 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if score > headScore:
     self.totalDifficulty = score
     result = self.setAsCanonicalChainHead(headerHash)
+
+proc isBlockAfterTtd*(db: BaseChainDB; blockHeader: BlockHeader): bool =
+  ## Check whether the argument block is the *terminal PoW block* and the
+  ## parent is the canonical head.
+
+  # Easy cases: check whether applicable or TTD reached, already.
+  if db.config.terminalTotalDifficulty.isNone or
+     db.config.terminalTotalDifficulty.get <= db.totalDifficulty:
+    return false
+
+  let
+    canonHash = db.getCanonicalHead.blockHash
+    canonScore = db.getScore(canonHash)
+    headerScore = db.getScore(blockHeader.blockHash)
+
+  # TTD has not been reached by the canonical head, yet. Check whether
+  # the new header applies, at all.
+  if canonHash != blockHeader.parentHash or headerScore <= canonScore:
+    # No, it does not apply
+    return false
+
+  # Now, headerScore is the new total difficulty
+  db.config.terminalTotalDifficulty.get <= headerScore
 
 proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
   let headerHash = header.blockHash
