@@ -71,7 +71,7 @@ var
 
 const
   # Will not fail anymore at this one on `Devnet4` replay.
-  terminalPowBlockNumber = 5646
+  failBlockNumber = 5645
 
   # Persistent database crash on `Devnet4` replay if the database directory
   # was acidentally deleted (due to a stray "defer:" directive.)
@@ -328,8 +328,8 @@ when isMainModule:
     noisy.genesisLoadRunner
     noisy.testnetChainRunner(
       memoryDB = false,
-      # importFailBlock = ddbCrashBlockNumber,
-      stopAfterBlock = ddbCrashBlockNumber)
+      # importFailBlock = failBlockNumber,
+      stopAfterBlock = 999999999)
 
 # ------------------------------------------------------------------------------
 # End
