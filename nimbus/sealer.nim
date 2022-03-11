@@ -10,7 +10,13 @@
 
 import
   std/[times, tables, typetraits],
-  pkg/[chronos, stew/results, chronicles, eth/common, eth/keys, eth/rlp],
+  pkg/[chronos,
+    stew/results,
+    stew/byteutils,
+    chronicles,
+    eth/common,
+    eth/keys,
+    eth/rlp],
   "."/[config,
     db/db_chain,
     p2p/chain,
@@ -114,6 +120,7 @@ proc prepareHeader(engine: SealingEngineRef,
     header.difficulty = DifficultyInt.zero
     header.mixDigest = default(Hash256)
     header.nonce = default(BlockNonce)
+    header.extraData = @[] # TODO: probably this should be configurable by user?
   else:
     let res = engine.chain.clique.prepare(parent, header)
     if res.isErr:
@@ -251,9 +258,17 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     error "sealing engine generateBlock error", msg = blkRes.error
     return blkRes
 
+  # make sure both generated block header and payloadRes(ExecutionPayloadV1)
+  # produce the same blockHash
+  blk.header.prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
+
   let res = engine.chain.persistBlocks([blk.header], [
     BlockBody(transactions: blk.txs, uncles: blk.uncles)
   ])
+
+  let blockHash = rlpHash(blk.header)
+  if res != ValidationResult.OK:
+    return err("Error when validating generated block. hash=" & blockHash.data.toHex)
 
   if blk.header.extraData.len > 32:
     return err "extraData length should not exceed 32 bytes"
@@ -270,7 +285,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   payloadRes.timestamp = payloadAttrs.timestamp
   payloadres.extraData = web3types.DynamicBytes[0, 32] blk.header.extraData
   payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
-  payloadRes.blockHash = Web3BlockHash rlpHash(blk.header).data
+  payloadRes.blockHash = Web3BlockHash blockHash.data
 
   for tx in blk.txs:
     let txData = rlp.encode(tx)
