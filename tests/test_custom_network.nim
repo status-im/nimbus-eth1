@@ -37,23 +37,35 @@ type
     genesisFile: string   # json file base name
     captureFile: string   # gzipped RPL data dump
     ttdReachedAt: uint64  # block number where total difficulty becomes `true`
+    failBlockAt:  uint64  # stop here and expect that block to fail
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests"/"replay", "tests"/"customgenesis",
-             "nimbus-eth1-blobs"/"replay"]
+             "nimbus-eth1-blobs"/"replay",
+             "nimbus-eth1-blobs"/"custom-network"]
 
   devnet4 = ReplaySession(
-    fancyName: "Devnet4",
-    genesisFile: "devnet4.json",
-    captureFile: "devnetfour5664.txt.gz",
-    ttdReachedAt: 5645)
+    fancyName:    "Devnet4",
+    genesisFile:  "devnet4.json",
+    captureFile:  "devnetfour5664.txt.gz",
+    ttdReachedAt: 5645,
+    # Previously failed at `ttdReachedAt` (needed `state.nim` fix/update)
+    failBlockAt:  99999999)
 
   devnet5 = ReplaySession(
-    fancyName: "Devnet5",
-    genesisFile: "devnet5.json",
-    captureFile: "devnetfive43968.txt.gz",
-    ttdReachedAt: 43711)
+    fancyName:    "Devnet5",
+    genesisFile:  "devnet5.json",
+    captureFile:  "devnetfive43968.txt.gz",
+    ttdReachedAt: 43711,
+    failBlockAt:  99999999)
+
+  kiln = ReplaySession(
+    fancyName:    "Kiln",
+    genesisFile:  "kiln.json",
+    captureFile:  "kiln25872.txt.gz",
+    ttdReachedAt: 25870,
+    failBlockAt:  25871)
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -87,11 +99,8 @@ var
   sSpcs: ReplaySession     # current replay session specs
 
 const
-  # Will not fail anymore at this one on `Devnet4` replay.
-  failBlockNumber = devnet4.ttdReachedAt
-
-  # Persistent database crash on `Devnet4` replay if the database directory
-  # was acidentally deleted (due to a stray "defer:" directive.)
+  # FIXED: Persistent database crash on `Devnet4` replay if the database
+  # directory was acidentally deleted (due to a stray "defer:" directive.)
   ddbCrashBlockNumber = 2105
 
 # ------------------------------------------------------------------------------
@@ -148,7 +157,7 @@ proc isOK(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
 proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
-                  noisy = false): Result[void,BlockNumber] =
+                  noisy = false): bool =
   ## On error, the block number of the failng block is returned
   let
     (first, last) = (h[0].blockNumber, h[^1].blockNumber)
@@ -164,21 +173,7 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
     if c.persistBlocks(h, b).isOk:
       if not tddOk and c.db.isTtdReached:
         noisy.say "***", &"block{bRng} => tddReached"
-      return ok()
-
-  proc importOk(pv: int): bool =
-    catchException("persistBlocks()"):
-      result = c.persistBlocks(h[0 .. pv], b[0 .. pv]).isOk
-    noisy.say "***", &"{blurb}{first+pv.u256}]={pv+1}) => {result}"
-
-  # Try to import as much as possible by successively shrinking the interval.
-  # This is quite a time consuming approach but it is not assumed that the
-  # result is equivalent to importing single blocks.
-  var pivot = h.high
-  while 0 < pivot and not (pivot - 1).importOk:
-    pivot.dec
-
-  err(first + pivot.u256)
+      return true
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -257,13 +252,13 @@ proc genesisLoadRunner(noisy = true;
 
 proc testnetChainRunner(noisy = true;
                         memoryDB = true;
-                        importFailBlock = 999999999;
                         stopAfterBlock = 999999999) =
   let
     cFileInfo = sSpcs.captureFile.splitFile.name.split(".")[0]
     cFilePath = sSpcs.captureFile.findFilePath
     dbInfo = if memoryDB: "in-memory" else: "persistent"
-    pivotBlockNumber = importFailBlock.u256
+
+    pivotBlockNumber = sSpcs.failBlockAt.u256
     lastBlockNumber = stopAfterBlock.u256
     ttdBlockNumber = sSpcs.ttdReachedAt.u256
 
@@ -302,11 +297,9 @@ proc testnetChainRunner(noisy = true;
 
         # Persist blocks, full range before `pivotBlockNumber`
         if toBlock < pivotBlockNumber:
-          let rc = chn.importBlocks(w[0], w[1], noisy)
-          if rc.isErr:
-            # The error return value is the first block that failed
-            let top = (rc.error - fromBlock).truncate(uint64).int
-            (pivotHeader, pivotBody) = (w[0][top],w[1][top])
+          if not chn.importBlocks(w[0], w[1], noisy):
+            # Just a guess -- might be any block in that range
+            (pivotHeader, pivotBody) = (w[0][0],w[1][0])
             break
           if chn.db.isTtdReached:
             check ttdBlockNumber <= toBlock
@@ -320,7 +313,7 @@ proc testnetChainRunner(noisy = true;
 
           # Load the blocks before the pivot block
           if 0 < top:
-            check chn.importBlocks(w[0][0 ..< top],w[1][0 ..< top], noisy).isOk
+            check chn.importBlocks(w[0][0 ..< top],w[1][0 ..< top], noisy)
 
           (pivotHeader, pivotBody) = (w[0][top],w[1][top])
           break
@@ -334,7 +327,7 @@ proc testnetChainRunner(noisy = true;
         skip()
       else:
         # Expecting that the import fails at the current block ...
-        check chn.importBlocks(@[pivotHeader], @[pivotBody], noisy).isErr
+        check not chn.importBlocks(@[pivotHeader], @[pivotBody], noisy)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -352,14 +345,12 @@ when isMainModule:
     defer: ddbCleanUp()
 
     noisy.genesisLoadRunner(
-      # any of: devnet4, devnet5, etc.
-      captureSession = devnet4)
+      # any of: devnet4, devnet5, kiln, etc.
+      captureSession = kiln)
 
     # Note that the `testnetChainRunner()` finds the replay dump files
     # typically on the `nimbus-eth1-blobs` module.
     noisy.testnetChainRunner(
-      memoryDB = false,
-      # importFailBlock = failBlockNumber,
       stopAfterBlock = 999999999)
 
 # ------------------------------------------------------------------------------
