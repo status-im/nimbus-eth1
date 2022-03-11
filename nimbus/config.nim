@@ -278,8 +278,7 @@ type
       name: "static-peers-file" }: InputFile
 
     listenAddress* {.
-      desc: "Placeholder, currently unsupported"
-      # desc: "Listening IP address for Ethereum P2P and Discovery traffic"
+      desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
       name: "listen-address" }: ValidIpAddress
