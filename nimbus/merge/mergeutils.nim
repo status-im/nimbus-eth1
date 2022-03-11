@@ -93,4 +93,6 @@ proc invalidStatus*(validHash: Hash256, msg: string): PayloadStatusV1 =
 
 proc toBlockBody*(payload: ExecutionPayloadV1): BlockBody =
   # TODO the transactions from the payload have to be converted here
-  discard payload.transactions
+  result.transactions.setLen(payload.transactions.len)
+  for i, tx in payload.transactions:
+    result.transactions[i] = rlp.decode(distinctBase tx, Transaction)

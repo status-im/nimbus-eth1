@@ -34,7 +34,7 @@ when not defined(release):
 # ------------------------------------------------------------------------------
 
 proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
-                       bodies: openarray[BlockBody]): ValidationResult
+                       bodies: openarray[BlockBody], setHead: bool = true): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [Exception].} =
   c.db.highestBlock = headers[^1].blockNumber
@@ -72,8 +72,8 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
 
     if validationResult != ValidationResult.OK:
       return validationResult
-      
-    if c.extraValidation and c.verifyFrom <= header.blockNumber:    
+
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:
       let isBlockAfterTtd = c.isBlockAfterTtd(header)
       if c.db.config.poaEngine and not isBlockAfterTtd:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
@@ -98,7 +98,11 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
             msg = res.error
           return ValidationResult.Error
 
-    discard c.db.persistHeaderToDb(header)
+    if setHead:
+      discard c.db.persistHeaderToDb(header)
+    else:
+      c.db.persistHeaderToDbWithoutSetHead(header)
+
     discard c.db.persistTransactions(header.blockNumber, body.transactions)
     discard c.db.persistReceipts(vmState.receipts)
 
@@ -106,8 +110,19 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
-    
+
   transaction.commit()
+
+# ------------------------------------------------------------------------------
+# Public `ChainDB` methods
+# ------------------------------------------------------------------------------
+
+proc insertBlockWithoutSetHead*(c: Chain, header: BlockHeader,
+                                body: BlockBody): ValidationResult
+                                {.gcsafe, raises: [Defect,CatchableError].} =
+
+  safeP2PChain("persistBlocks"):
+    result = c.persistBlocksImpl([header], [body], setHead = false)
 
 # ------------------------------------------------------------------------------
 # Public `AbstractChainDB` overload method

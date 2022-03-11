@@ -93,7 +93,10 @@ proc setupEngineAPI*(
 
     trace "Inserting block without sethead",
       hash = blockHash.data.toHex, number = header.blockNumber
-    db.persistHeaderToDbWithoutSetHead(header)
+    let body = toBlockBody(payload)
+    let vres = sealingEngine.chain.insertBlockWithoutSetHead(header, body)
+    if vres != ValidationResult.OK:
+      return invalidStatus(db.getCurrentBlockHash(), "Failed to insert block")
 
     # We've accepted a valid payload from the beacon client. Mark the local
     # chain transitions to notify other subsystems (e.g. downloader) of the
