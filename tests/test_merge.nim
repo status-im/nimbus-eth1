@@ -137,7 +137,7 @@ proc toId(x: int): PayloadId =
 proc `==`(a, b: Quantity): bool =
   uint64(a) == uint64(b)
 
-proc main() =
+proc testEngineApiSupport() =
   var db = newBaseChainDB(newMemoryDB())
   var api = EngineAPI.new()
   let
@@ -170,7 +170,9 @@ proc main() =
       check eh2.gasLimit == hdr2.gasLimit
 
 proc mergeMain*() =
-  testEngineAPI()
+  # temporary disable it until engine API more stable
+  # testEngineAPI()
+  testEngineApiSupport()
 
 when isMainModule:
   mergeMain()
