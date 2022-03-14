@@ -407,22 +407,14 @@ proc isBlockAfterTtd*(db: BaseChainDB; blockHeader: BlockHeader): bool =
 
   # Easy cases: check whether applicable or TTD reached, already.
   if db.config.terminalTotalDifficulty.isNone or
-     db.config.terminalTotalDifficulty.get <= db.totalDifficulty:
+     # the following cond, should cover the case
+     #    blockHeader.parentHash == GENESIS_PARENT_HASH
+     db.config.terminalTotalDifficulty.get <= db.totalDifficulty or
+     db.getCanonicalHead.blockHash != blockHeader.parentHash:
     return false
 
-  let
-    canonHash = db.getCanonicalHead.blockHash
-    canonScore = db.getScore(canonHash)
-    headerScore = db.getScore(blockHeader.blockHash)
-
-  # TTD has not been reached by the canonical head, yet. Check whether
-  # the new header applies, at all.
-  if canonHash != blockHeader.parentHash or headerScore <= canonScore:
-    # No, it does not apply
-    return false
-
-  # Now, headerScore is the new total difficulty
-  db.config.terminalTotalDifficulty.get <= headerScore
+  let canonScore = db.getScore(blockHeader.parentHash)
+  db.config.terminalTotalDifficulty.get <= canonScore + blockHeader.difficulty
 
 proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
   let headerHash = header.blockHash
