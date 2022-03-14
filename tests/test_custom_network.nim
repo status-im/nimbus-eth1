@@ -35,6 +35,7 @@ type
   ReplaySession = object
     fancyName: string     # display name
     genesisFile: string   # json file base name
+    termTotalDff: UInt256 # terminal total difficulty (to verify)
     captureFile: string   # gzipped RPL data dump
     ttdReachedAt: uint64  # block number where total difficulty becomes `true`
     failBlockAt:  uint64  # stop here and expect that block to fail
@@ -49,6 +50,7 @@ const
     fancyName:    "Devnet4",
     genesisFile:  "devnet4.json",
     captureFile:  "devnetfour5664.txt.gz",
+    termTotalDff: 5_000_000_000.u256,
     ttdReachedAt: 5645,
     # Previously failed at `ttdReachedAt` (needed `state.nim` fix/update)
     failBlockAt:  99999999)
@@ -57,6 +59,7 @@ const
     fancyName:    "Devnet5",
     genesisFile:  "devnet5.json",
     captureFile:  "devnetfive43968.txt.gz",
+    termTotalDff: 500_000_000_000.u256,
     ttdReachedAt: 43711,
     failBlockAt:  99999999)
 
@@ -64,8 +67,9 @@ const
     fancyName:    "Kiln",
     genesisFile:  "kiln.json",
     captureFile:  "kiln25872.txt.gz",
-    ttdReachedAt: 25870,
-    failBlockAt:  25871)
+    termTotalDff: 20_000_000_000_000.u256,
+    ttdReachedAt: 9999999,
+    failBlockAt:  9999999) # 25871)
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -164,7 +168,7 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
     nTxs = b.mapIt(it.transactions.len).foldl(a+b)
     nUnc = b.mapIt(it.uncles.len).foldl(a+b)
     tddOk = c.db.isTtdReached
-    bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &" #{first}"
+    bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &"   #{first}"
     blurb = &"persistBlocks([#{first}..#"
 
   noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc}"
@@ -208,6 +212,8 @@ proc genesisLoadRunner(noisy = true;
         id = params.config.chainID.NetworkId,
         params = params)
 
+      check mdb.ttd == sSpcs.termTotalDff
+
     test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
         skip()
@@ -224,6 +230,8 @@ proc genesisLoadRunner(noisy = true;
           id = params.config.chainID.NetworkId,
           pruneTrie = persistPruneTrie,
           params = params)
+
+        check mdb.ttd == sSpcs.termTotalDff
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
