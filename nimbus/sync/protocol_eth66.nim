@@ -6,9 +6,9 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-## This module implements Ethereum Wire Protocol version 65, `eth/65`.
+## This module implements Ethereum Wire Protocol version 66, `eth/66`.
 ## Specification:
-##   https://github.com/ethereum/devp2p/blob/master/caps/eth.md
+##   `eth/66 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
 
 import
   chronos, stint, chronicles, stew/byteutils, macros,
@@ -26,6 +26,10 @@ type
     forkHash: array[4, byte] # The RLP encoding must be exactly 4 bytes.
     forkNext: BlockNumber    # The RLP encoding must be variable-length
 
+  NewBlockAndTotalDiff* = object
+    ethBlock: EthBlock
+    totalDifficulty: DifficultyInt
+
   PeerState = ref object
     initialized*: bool
     bestBlockHash*: KeccakHash
@@ -40,7 +44,7 @@ const
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
-  ethVersion = 65
+  ethVersion* = 66
 
 func toHex*(x: KeccakHash): string = x.data.toHex
 macro tracePacket*(msg: static[string], args: varargs[untyped]) =
@@ -50,7 +54,7 @@ macro tracePacket*(msg: static[string], args: varargs[untyped]) =
 
 p2pProtocol eth(version = ethVersion,
                 peerState = PeerState,
-                useRequestIds = false):
+                useRequestIds = true):
 
   onPeerConnected do (peer: Peer):
     let
@@ -60,8 +64,7 @@ p2pProtocol eth(version = ethVersion,
       chainForkId = chain.getForkId(bestBlock.blockNumber)
       forkId = ForkId(
         forkHash: chainForkId.crc.toBytesBe,
-        forkNext: chainForkId.nextFork.u256,
-      )
+        forkNext: chainForkId.nextFork.u256)
 
     tracePacket ">> Sending eth.Status (0x00) [eth/" & $ethVersion & "]",
       peer, td=bestBlock.difficulty,
@@ -155,7 +158,7 @@ p2pProtocol eth(version = ethVersion,
     proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
 
   requestResponse:
-    # User message 0x05: GetBlockBodies.
+    # User message 0x05: GetBlockBodhasheses.
     proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) =
       tracePacket "<< Received eth.GetBlockBodies (0x05)",
         peer, count=hashes.len
@@ -184,7 +187,8 @@ p2pProtocol eth(version = ethVersion,
     # because either `p2pProtocol` or RLPx doesn't work with an alias.)
     tracePacket "<< Discarding eth.NewBlock (0x07)",
       peer, totalDifficulty,
-      blockNumber=bh.header.blockNumber, blockDifficulty=bh.header.difficulty
+      blockNumber = bh.header.blockNumber,
+      blockDifficulty = bh.header.difficulty
     discard
 
   # User message 0x08: NewPooledTransactionHashes.

@@ -9,8 +9,16 @@ import
   std/[sets, options, random, hashes, sequtils],
   chronos, chronicles,
   eth/common/eth_types,
-  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool],
-  ../sync/protocol_eth65
+  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
+
+# Link to actual wire protocol stacs. This should be the only place where the
+# protocol specs file is linked in. Subsequent module imports should rely on
+# the `ethVersion` constant (set in *protocol_ethXX*) if protocool details are
+# needed to be known.
+import ../sync/protocol_eth66
+export         protocol_eth66
+
+{.push raises: [Defect].}
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this
@@ -21,6 +29,9 @@ type
     syncSuccess
     syncNotEnoughPeers
     syncTimeOut
+
+  BlockchainSyncDefect* = object of Defect
+    ## Catch and relay exception
 
   WantedBlocksState = enum
     Initial,
@@ -43,6 +54,18 @@ type
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
+
+template catchException(info: string; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raise (ref CatchableError)(msg: e.msg)
+  except Defect as e:
+    raise (ref Defect)(msg: e.msg)
+  except:
+    let e = getCurrentException()
+    raise newException(
+      BlockchainSyncDefect, info & "(): " & $e.name & " -- " & e.msg)
 
 proc hash*(p: Peer): Hash = hash(cast[pointer](p))
 
@@ -89,13 +112,15 @@ proc availableWorkItem(ctx: SyncContext): int =
 
   # Create new work item when queue was increased, reset when selected work item
   # is at Persisted state.
-  var numBlocks = (ctx.endBlockNumber - nextRequestedBlock).toInt
+  var numBlocks = (ctx.endBlockNumber - nextRequestedBlock).truncate(int)
   if numBlocks > maxHeadersFetch:
     numBlocks = maxHeadersFetch
   ctx.workQueue[result] = WantedBlocks(startIndex: nextRequestedBlock, numBlocks: numBlocks.uint, state: Initial)
 
-proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult =
-  result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
+proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  catchException("persistBlocks"):
+    result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
   case result
   of ValidationResult.OK:
     ctx.finalizedBlock = wi.endIndex
@@ -106,7 +131,8 @@ proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult =
   wi.headers = @[]
   wi.bodies = @[]
 
-proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult) =
+proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   var nextStartIndex = ctx.finalizedBlock + 1
   var keepRunning = true
   var hasOutOfOrderBlocks = false
@@ -134,7 +160,8 @@ proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult) =
 
   ctx.hasOutOfOrderBlocks = hasOutOfOrderBlocks
 
-proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult =
+proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
   let wi = addr ctx.workQueue[workItem]
   let askedBlocks = wi.numBlocks.int
   let receivedBlocks = wi.headers.len
@@ -172,7 +199,8 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult =
       receivedBlocks
     return ValidationResult.Error
 
-proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext =
+proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext
+    {.gcsafe, raises: [Defect,CatchableError].} =
   new result
   result.chain = chain
   result.peerPool = peerPool
@@ -193,7 +221,7 @@ proc getBestBlockNumber(p: Peer): Future[BlockNumber] {.async.} =
     reverse: true)
 
   tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=p,
-    startBlock=request.startBlock.hash, max=request.maxResults
+    startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await p.getBlockHeaders(request)
 
   if latestBlock.isSome:
@@ -324,7 +352,7 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
     reverse: true)
 
   tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=a,
-    startBlock=request.startBlock.hash, max=request.maxResults
+    startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await a.getBlockHeaders(request)
 
   result = latestBlock.isSome and latestBlock.get.headers.len > 0

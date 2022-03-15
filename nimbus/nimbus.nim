@@ -19,7 +19,6 @@ import
   eth/p2p/rlpx_protocols/les_protocol,
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   ./p2p/clique/[clique_desc, clique_sealer],
-  ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context, utils/tx_pool,

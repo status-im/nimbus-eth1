@@ -12,10 +12,9 @@ import
   stew/byteutils, unittest2,
   eth/[p2p, common, trie/db, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
-  ../nimbus/sync/protocol_eth65,
   ../nimbus/[genesis, config, chain_config, context],
   ../nimbus/db/[db_chain],
-  ../nimbus/p2p/chain, ./test_helpers,
+  ../nimbus/p2p/[blockchain_sync, chain], ./test_helpers,
   ../nimbus/utils/tx_pool
 
 type
@@ -25,7 +24,7 @@ type
     uncles: seq[BlockHeader]
 
 const
-  caseFolder = "tests" / "graphql"
+  caseFolder = "tests" / "graphql" / "eth" & $ethVersion
   dataFolder  = "tests" / "fixtures" / "eth_tests" / "BlockchainTests" / "ValidBlocks" / "bcUncleTest"
 
 proc toBlock(n: JsonNode, key: string): EthBlock =
