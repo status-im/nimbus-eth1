@@ -67,6 +67,7 @@ proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:
   ## ::
   ##   dumpStream.write c.db.dumpGroupNl(headers,bodies)
+  ##   dumpStream.flushFile
   ##
   ## where `dumpStream` is some stream (think of `stdout`) of type `File`
   ## that could be initialised with
