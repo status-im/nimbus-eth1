@@ -158,7 +158,7 @@ p2pProtocol eth(version = ethVersion,
     proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
 
   requestResponse:
-    # User message 0x05: GetBlockBodhasheses.
+    # User message 0x05: GetBlockBodies.
     proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) =
       tracePacket "<< Received eth.GetBlockBodies (0x05)",
         peer, count=hashes.len

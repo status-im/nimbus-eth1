@@ -18,7 +18,7 @@ import
 import ../sync/protocol_eth66
 export         protocol_eth66
 
-{.push raises: [Defect].}
+{.push raises:[Defect].}
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this
@@ -62,8 +62,7 @@ template catchException(info: string; code: untyped) =
     raise (ref CatchableError)(msg: e.msg)
   except Defect as e:
     raise (ref Defect)(msg: e.msg)
-  except:
-    let e = getCurrentException()
+  except Exception as e:
     raise newException(
       BlockchainSyncDefect, info & "(): " & $e.name & " -- " & e.msg)
 
@@ -118,7 +117,7 @@ proc availableWorkItem(ctx: SyncContext): int =
   ctx.workQueue[result] = WantedBlocks(startIndex: nextRequestedBlock, numBlocks: numBlocks.uint, state: Initial)
 
 proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises:[Defect,CatchableError].} =
   catchException("persistBlocks"):
     result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
   case result
@@ -132,7 +131,7 @@ proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
   wi.bodies = @[]
 
 proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises:[Defect,CatchableError].} =
   var nextStartIndex = ctx.finalizedBlock + 1
   var keepRunning = true
   var hasOutOfOrderBlocks = false
@@ -161,7 +160,7 @@ proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
   ctx.hasOutOfOrderBlocks = hasOutOfOrderBlocks
 
 proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises:[Defect,CatchableError].} =
   let wi = addr ctx.workQueue[workItem]
   let askedBlocks = wi.numBlocks.int
   let receivedBlocks = wi.headers.len
@@ -200,7 +199,7 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
     return ValidationResult.Error
 
 proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises:[Defect,CatchableError].} =
   new result
   result.chain = chain
   result.peerPool = peerPool
