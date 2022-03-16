@@ -275,19 +275,24 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
-proc setupEthNode*(conf: NimbusConf, ctx: EthContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
+proc setupEthNode*(
+    conf: NimbusConf, ctx: EthContext,
+    capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   let keypair = ctx.hexToKeyPair(conf.nodeKeyHex).tryGet()
-  var srvAddress: Address
-  srvAddress.ip = conf.listenAddress
-  srvAddress.tcpPort = conf.tcpPort
-  srvAddress.udpPort = conf.udpPort
-  result = newEthereumNode(
+  let srvAddress = Address(
+    ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
+
+  var node = newEthereumNode(
     keypair, srvAddress,
     conf.networkId,
     nil, conf.agentString,
-    addAllCapabilities = false)
+    addAllCapabilities = false,
+    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort)
+
   for capability in capabilities:
-    result.addCapability capability
+    node.addCapability capability
+
+  node
 
 proc makeTestConfig*(): NimbusConf =
   # commandLineParams() will not works inside all_tests

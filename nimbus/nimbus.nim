@@ -103,10 +103,15 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
 
-  nimbus.ethNode = newEthereumNode(keypair, address, conf.networkId,
-                                   nil, conf.agentString,
-                                   addAllCapabilities = false,
-                                   minPeers = conf.maxPeers)
+  let bootstrapNodes = conf.getBootNodes()
+
+  nimbus.ethNode = newEthereumNode(
+    keypair, address, conf.networkId, nil, conf.agentString,
+    addAllCapabilities = false, minPeers = conf.maxPeers,
+    bootstrapNodes = bootstrapNodes,
+    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
+    bindIp = conf.listenAddress)
+
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability eth
@@ -126,11 +131,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   for enode in staticPeers:
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
-  # Connect via discovery
-  let bootNodes = conf.getBootNodes()
-  if bootNodes.len > 0:
-    waitFor nimbus.ethNode.connectToNetwork(bootNodes,
-      enableDiscovery = conf.discovery != DiscoveryType.None)
+  # Start Eth node
+  waitFor nimbus.ethNode.connectToNetwork(
+    enableDiscovery = conf.discovery != DiscoveryType.None)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
