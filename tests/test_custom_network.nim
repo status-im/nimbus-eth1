@@ -20,19 +20,56 @@
 ## from `issue 932` <https://github.com/status-im/nimbus-eth1/issues/932>`_.
 
 import
-  std/[distros, os, strformat, strutils, sequtils],
+  std/[distros, os],
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend],
-  ./replay/pp,
+  ../nimbus/p2p/chain,
+  ./replay/[undump, pp],
+  chronicles,
   eth/[common, p2p, trie/db],
   nimcrypto/hash,
+  stew/results,
   unittest2
 
-const
-  baseDir = [".", "tests", ".." / "tests", $DirSep]   # path containg repo
-  repoDir = ["customgenesis", "."]                    # alternative repo paths
-  jFile = "kintsugi.json"
+type
+  ReplaySession = object
+    fancyName: string     # display name
+    genesisFile: string   # json file base name
+    termTotalDff: UInt256 # terminal total difficulty (to verify)
+    captureFile: string   # gzipped RPL data dump
+    ttdReachedAt: uint64  # block number where total difficulty becomes `true`
+    failBlockAt:  uint64  # stop here and expect that block to fail
 
+const
+  baseDir = [".", "..", ".."/"..", $DirSep]
+  repoDir = [".", "tests"/"replay", "tests"/"customgenesis",
+             "nimbus-eth1-blobs"/"replay",
+             "nimbus-eth1-blobs"/"custom-network"]
+
+  devnet4 = ReplaySession(
+    fancyName:    "Devnet4",
+    genesisFile:  "devnet4.json",
+    captureFile:  "devnetfour5664.txt.gz",
+    termTotalDff: 5_000_000_000.u256,
+    ttdReachedAt: 5645,
+    # Previously failed at `ttdReachedAt` (needed `state.nim` fix/update)
+    failBlockAt:  99999999)
+
+  devnet5 = ReplaySession(
+    fancyName:    "Devnet5",
+    genesisFile:  "devnet5.json",
+    captureFile:  "devnetfive43968.txt.gz",
+    termTotalDff: 500_000_000_000.u256,
+    ttdReachedAt: 43711,
+    failBlockAt:  99999999)
+
+  kiln = ReplaySession(
+    fancyName:    "Kiln",
+    genesisFile:  "kiln.json",
+    captureFile:  "kiln25872.txt.gz",
+    termTotalDff: 20_000_000_000_000.u256,
+    ttdReachedAt: 9999999,
+    failBlockAt:  9999999)
 
 when not defined(linux):
   const isUbuntu32bit = false
@@ -58,6 +95,18 @@ let
   #
   disablePersistentDB = isUbuntu32bit
 
+# Block chains shared between test suites
+var
+  mdb: BaseChainDB         # memory DB
+  ddb: BaseChainDB         # perstent DB on disk
+  ddbDir: string           # data directory for disk database
+  sSpcs: ReplaySession     # current replay session specs
+
+const
+  # FIXED: Persistent database crash on `Devnet4` replay if the database
+  # directory was acidentally deleted (due to a stray "defer:" directive.)
+  ddbCrashBlockNumber = 2105
+
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
@@ -71,10 +120,11 @@ proc findFilePath(file: string): string =
         return path
 
 proc flushDbDir(s: string) =
-  let dataDir = s / "nimbus"
-  if (dataDir / "data").dirExists:
-    # Typically under Windows: there might be stale file locks.
-    try: dataDir.removeDir except: discard
+  if s != "":
+    let dataDir = s / "nimbus"
+    if (dataDir / "data").dirExists:
+      # Typically under Windows: there might be stale file locks.
+      try: dataDir.removeDir except: discard
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
@@ -85,37 +135,90 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
+proc setTraceLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc ddbCleanUp(dir: string) =
+  if not disablePersistentDB:
+    ddbDir = dir
+    dir.flushDbDir
+
+proc ddbCleanUp =
+  ddbDir.ddbCleanUp
+
+proc isOK(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
+
+proc ttdReached(db: BaseChainDB): bool =
+  if db.config.terminalTotalDifficulty.isSome:
+    return db.config.terminalTotalDifficulty.get <= db.totalDifficulty
+
+proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
+                  noisy = false): bool =
+  ## On error, the block number of the failng block is returned
+  let
+    (first, last) = (h[0].blockNumber, h[^1].blockNumber)
+    nTxs = b.mapIt(it.transactions.len).foldl(a+b)
+    nUnc = b.mapIt(it.uncles.len).foldl(a+b)
+    tddOk = c.db.ttdReached
+    bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &"   #{first}"
+    blurb = &"persistBlocks([#{first}..#"
+
+  noisy.say "***", &"block{bRng} #txs={nTxs} #uncles={nUnc}"
+
+  catchException("persistBlocks()", trace = true):
+    if c.persistBlocks(h, b).isOk:
+      if not tddOk and c.db.ttdReached:
+        noisy.say "***", &"block{bRng} => tddReached"
+      return true
+
 # ------------------------------------------------------------------------------
 # Test Runner
 # ------------------------------------------------------------------------------
 
-proc runner(noisy = true; file = jFile) =
+proc genesisLoadRunner(noisy = true;
+                       captureSession = devnet4;
+                       persistPruneTrie = true) =
+  sSpcs = captureSession
+
   let
-    fileInfo = file.splitFile.name.split(".")[0]
-    filePath = file.findFilePath
+    gFileInfo = sSpcs.genesisFile.splitFile.name.split(".")[0]
+    gFilePath = sSpcs.genesisFile.findFilePath
 
     tmpDir = if disablePersistentDB: "*notused*"
-             else: filePath.splitFile.dir / "tmp"
+             else: gFilePath.splitFile.dir / "tmp"
 
-  defer:
-    if not disablePersistentDB: tmpDir.flushDbDir
+    persistPruneInfo = if persistPruneTrie: "pruning enabled"
+                       else:                "no pruning"
 
-  suite "Kintsugi custom network test scenario":
+  suite &"{sSpcs.fancyName} custom network genesis & database setup":
     var
       params: NetworkParams
-      mdb, ddb: BaseChainDB
 
-    test &"Load params from {fileInfo}":
-      noisy.say "***", "custom-file=", filePath
-      check filePath.loadNetworkParams(params)
+    test &"Load params from {gFileInfo}":
+      noisy.say "***", "custom-file=", gFilePath
+      check gFilePath.loadNetworkParams(params)
 
-    test "Construct in-memory BaseChainDB":
+    test "Construct in-memory BaseChainDB, pruning enabled":
       mdb = newBaseChainDB(
         newMemoryDb(),
         id = params.config.chainID.NetworkId,
         params = params)
 
-    test &"Construct persistent BaseChainDB on {tmpDir}":
+      check mdb.ttd == sSpcs.termTotalDff
+
+    test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
         skip()
       else:
@@ -123,14 +226,16 @@ proc runner(noisy = true; file = jFile) =
         # cleared. There might be left overs from a previous crash or
         # because there were file locks under Windows which prevented a
         # previous clean up.
-        tmpDir.flushDbDir
+        tmpDir.ddbCleanUp
 
         # Constructor ...
         ddb = newBaseChainDB(
           tmpDir.newChainDb.trieDB,
           id = params.config.chainID.NetworkId,
-          pruneTrie = true,
+          pruneTrie = persistPruneTrie,
           params = params)
+
+        check mdb.ttd == sSpcs.termTotalDff
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
@@ -156,17 +261,109 @@ proc runner(noisy = true; file = jFile) =
           onTheFlyHeaderPP = ddb.toGenesisHeader.pp
         check storedhHeaderPP == onTheFlyHeaderPP
 
+
+proc testnetChainRunner(noisy = true;
+                        memoryDB = true;
+                        stopAfterBlock = 999999999) =
+  let
+    cFileInfo = sSpcs.captureFile.splitFile.name.split(".")[0]
+    cFilePath = sSpcs.captureFile.findFilePath
+    dbInfo = if memoryDB: "in-memory" else: "persistent"
+
+    pivotBlockNumber = sSpcs.failBlockAt.u256
+    lastBlockNumber = stopAfterBlock.u256
+    ttdBlockNumber = sSpcs.ttdReachedAt.u256
+
+  suite &"Block chain DB inspector for {sSpcs.fancyName}":
+    var
+      bdb: BaseChainDB
+      chn: Chain
+      pivotHeader: BlockHeader
+      pivotBody: BlockBody
+
+    test &"Inherit {dbInfo} block chain DB from previous session":
+      check not mdb.isNil
+      check not ddb.isNil
+
+      # Whatever DB suits, mdb: in-memory, ddb: persistet/on-disk
+      bdb = if memoryDB: mdb else: ddb
+
+      chn = bdb.newChain
+      noisy.say "***", "ttd",
+        " db.config.TTD=", chn.db.config.terminalTotalDifficulty
+        # " db.arrowGlacierBlock=0x", chn.db.config.arrowGlacierBlock.toHex
+
+    test &"Replay {cFileInfo} capture, may fail ~#{pivotBlockNumber} "&
+        &"(slow -- time for coffee break)":
+      noisy.say "***", "capture-file=", cFilePath
+      discard
+
+    test &"Processing {sSpcs.fancyName} blocks":
+      for w in cFilePath.undumpNextGroup:
+        let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
+
+        # Install & verify Genesis
+        if w[0][0].blockNumber == 0.u256:
+          doAssert w[0][0] == bdb.getBlockHeader(0.u256)
+          continue
+
+        # Persist blocks, full range before `pivotBlockNumber`
+        if toBlock < pivotBlockNumber:
+          if not chn.importBlocks(w[0], w[1], noisy):
+            # Just a guess -- might be any block in that range
+            (pivotHeader, pivotBody) = (w[0][0],w[1][0])
+            break
+          if chn.db.ttdReached:
+            check ttdBlockNumber <= toBlock
+          else:
+            check toBlock < ttdBlockNumber
+          if lastBlockNumber <= toBlock:
+            break
+
+        else:
+          let top = (pivotBlockNumber - fromBlock).truncate(uint64).int
+
+          # Load the blocks before the pivot block
+          if 0 < top:
+            check chn.importBlocks(w[0][0 ..< top],w[1][0 ..< top], noisy)
+
+          (pivotHeader, pivotBody) = (w[0][top],w[1][top])
+          break
+
+    test &"Processing {sSpcs.fancyName} block #{pivotHeader.blockNumber}, "&
+        &"persistBlocks() will fail":
+
+      setTraceLevel()
+
+      if pivotHeader.blockNumber == 0:
+        skip()
+      else:
+        # Expecting that the import fails at the current block ...
+        check not chn.importBlocks(@[pivotHeader], @[pivotBody], noisy)
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc customNetworkMain*(noisy = defined(debug)) =
-  noisy.runner
+  defer: ddbCleanUp()
+  noisy.genesisLoadRunner
 
 when isMainModule:
-  var noisy = defined(debug)
-  noisy = true
-  noisy.runner
+  let noisy = defined(debug) or true
+  setErrorLevel()
+
+  noisy.showElapsed("customNetwork"):
+    defer: ddbCleanUp()
+
+    noisy.genesisLoadRunner(
+      # any of: devnet4, devnet5, kiln, etc.
+      captureSession = devnet4)
+
+    # Note that the `testnetChainRunner()` finds the replay dump files
+    # typically on the `nimbus-eth1-blobs` module.
+    noisy.testnetChainRunner(
+      stopAfterBlock = 999999999)
 
 # ------------------------------------------------------------------------------
 # End
