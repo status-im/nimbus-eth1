@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/results, chronicles, chronos, nimcrypto/hash, bearssl,
+  stew/[results, byteutils], chronicles, chronos, nimcrypto/hash, bearssl,
   ssz_serialization,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
@@ -69,6 +69,9 @@ type
       content*: seq[byte]
     of Nodes:
       nodes*: seq[Node]
+
+func `$`(id: PortalProtocolId): string =
+  id.toHex()
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -202,6 +205,9 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
+  logScope:
+    protocolId = p.protocolId
+
   let p = PortalProtocol(protocol)
 
   let decoded = decodeMessage(request)
@@ -281,11 +287,16 @@ proc new*(T: type PortalProtocol,
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol,
-    toNode: Node,
+    dst: Node,
     request: Request
     ): Future[PortalResult[Response]] {.async.} =
+  logScope:
+    protocolId = p.protocolId
+
+  trace "Send message request", dstId = dst.id, kind = messageKind(Request)
+
   let talkresp =
-    await talkreq(p.baseProtocol, toNode, @(p.protocolId), encodeMessage(request))
+    await talkreq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
 
   # Note: Failure of `decodeMessage` might also simply mean that the peer is
   # not supporting the specific talk protocol, as according to specification
@@ -299,13 +310,13 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
 
   if messageResponse.isOk():
-    trace "Received message response", srcId = toNode.id,
-      srcAddress = toNode.address, kind = messageKind(Response)
-    p.routingTable.setJustSeen(toNode)
+    trace "Received message response", srcId = dst.id,
+      srcAddress = dst.address, kind = messageKind(Response)
+    p.routingTable.setJustSeen(dst)
   else:
     debug "Error receiving message response", error = messageResponse.error,
-      srcId = toNode.id, srcAddress = toNode.address
-    p.routingTable.replaceNode(toNode)
+      srcId = dst.id, srcAddress = dst.address
+    p.routingTable.replaceNode(dst)
 
   return messageResponse
 
@@ -315,14 +326,12 @@ proc pingImpl*(p: PortalProtocol, dst: Node):
   let ping = PingMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
     customPayload: ByteList(SSZ.encode(customPayload)))
 
-  trace "Send message request", dstId = dst.id, kind = MessageKind.ping
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
 proc findNodes*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
   let fn = FindNodesMessage(distances: distances)
 
-  trace "Send message request", dstId = dst.id, kind = MessageKind.findnodes
   # TODO Add nodes validation
   return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
@@ -330,14 +339,11 @@ proc findContentImpl*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[ContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
-  trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offerImpl*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[AcceptMessage]] {.async.} =
   let offer = OfferMessage(contentKeys: contentKeys)
-
-  trace "Send message request", dstId = dst.id, kind = MessageKind.offer
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
@@ -744,6 +750,8 @@ proc seedTable*(p: PortalProtocol) =
   # bootstrap the portal networks, however it would require a flag in the ENR to
   # be added and there might be none in the routing table due to low amount of
   # Portal nodes versus other nodes.
+  logScope:
+    protocolId = p.protocolId
 
   for record in p.bootstrapRecords:
     if p.addNode(record):
@@ -756,6 +764,9 @@ proc seedTable*(p: PortalProtocol) =
 proc populateTable(p: PortalProtocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.
   # start with a self target query (neighbour nodes)
+  logScope:
+    protocolId = p.protocolId
+
   let selfQuery = await p.query(p.baseProtocol.localNode.id)
   trace "Discovered nodes in self target query", nodes = selfQuery.len
 
@@ -795,6 +806,9 @@ proc refreshLoop(p: PortalProtocol) {.async.} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
+  logScope:
+    protocolId = p.protocolId
+
   try:
     while true:
       # TODO: It would be nicer and more secure if this was event based and/or
