@@ -40,9 +40,9 @@
       "gasLimit":"0x1c95111",
       "gasUsed":"0x0",
       "timestamp":"0x5",
-      "extraData":"0x64616f2d686172642d666f726b",
+      "extraData":"0x",
       "baseFeePerGas":"0x7",
-      "blockHash":"0x29671a05d0e18797905296bba15941c96edefc2aefe2240253cd33cf3eda80c0",
+      "blockHash":"0x6359b8381a370e2f54072a5784ddd78b6ed024991558c511d4452eb4f6ac898c",
       "transactions":[]
     }
   },

@@ -171,7 +171,7 @@ proc testEngineApiSupport() =
 
 proc mergeMain*() =
   # temporary disable it until engine API more stable
-  # testEngineAPI()
+  testEngineAPI()
   testEngineApiSupport()
 
 when isMainModule:
