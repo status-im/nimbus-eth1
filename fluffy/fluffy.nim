@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@ import
   json_rpc/rpcproxy, stew/[byteutils, io2],
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./conf, ./common/common_utils,
+  ./conf, ./network_metadata, ./common/common_utils,
   ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api,
     rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
@@ -63,6 +63,15 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
+
+  case config.portalNetwork
+  of testnet0:
+    for enrURI in testnet0BootstrapNodes:
+      var record: Record
+      if fromURI(record, enrURI):
+        bootstrapRecords.add(record)
+  else:
+    discard
 
   let
     discoveryConfig = DiscoveryConfig.init(
