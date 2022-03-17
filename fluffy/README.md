@@ -59,7 +59,38 @@ make fluffy
 make fluffy-test
 ```
 
-### Run fluffy local testnet
+### Run fluffy on (Nimbus) public testnet0
+
+There is a fleet of fluffy nodes deployed, and to easily join these, the
+`--network:testnet0` option can be used.
+
+```bash
+./build/fluffy --network:testnet0 --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
+```
+
+> **_Note:_** This `--network` option will merely select a static set of
+specific bootstrap nodes belonging to a "testnet". Currently `testnet0` is the
+only option, which results in connecting to designated fluffy bootstrap nodes.
+It should be noted that there is no real way to distinguish a "specific" Portal
+network, and as long as the same Portal protocols are supported, nodes can
+simply connect to it and no real separation can be made.
+
+The `table-ip-limit` and `bucket-ip-limit` options are needed to allow more
+nodes with the same IPs in the routing tables. This is needed because the fleet
+of fluffy nodes runs on only 2 machines / network interfaces.
+
+
+The network is currently storing only the first 2500 mainnet blocks. This can be
+tested by using the JSON-RPC call `eth_getBlockByHash`:
+```
+# Get the hash of a block from your favorite block explorer, e.g.:
+# 0x8dda3a641653c0454569c3b5be529f58b14d2a5b5d87956664c746ce1e367c21
+# Run command to get this block:
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["0x8dda3a641653c0454569c3b5be529f58b14d2a5b5d87956664c746ce1e367c21", false]}' http://localhost:8545 | jq
+```
+
+
+### Run fluffy local testnet script
 ```bash
 ./fluffy/scripts/launch_local_testnet.sh
 ```
