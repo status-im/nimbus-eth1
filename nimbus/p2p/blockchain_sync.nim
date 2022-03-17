@@ -16,7 +16,7 @@ import
 # the `ethVersion` constant (set in *protocol_ethXX*) if protocool details are
 # needed to be known.
 import ../sync/protocol_eth66
-export         protocol_eth66
+export protocol_eth66
 
 {.push raises:[Defect].}
 
