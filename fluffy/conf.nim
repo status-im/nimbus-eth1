@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -39,6 +39,10 @@ type
     noCommand
     populateHistoryDb
 
+  PortalNetwork* = enum
+    none
+    testnet0
+
   PortalConf* = object
     logLevel* {.
       defaultValue: LogLevel.DEBUG
@@ -56,6 +60,14 @@ type
       defaultValueDesc: $defaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" .}: ValidIpAddress
+
+    portalNetwork* {.
+      desc:
+        "Select which Portal network to join. This will currently only " &
+        "set the network specific bootstrap nodes automatically"
+      defaultValue: PortalNetwork.none
+      defaultValueDesc: "none"
+      name: "network" }: PortalNetwork
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
