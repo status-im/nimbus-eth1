@@ -68,7 +68,7 @@ proc installPortalApiHandlers*(
       enr: Record, distances: seq[uint16]) -> seq[Record]:
     let
       node = toNodeWithAddress(enr)
-      nodes = await p.findNodesVerified(node, distances)
+      nodes = await p.findNodes(node, distances)
     if nodes.isErr():
       raise newException(ValueError, $nodes.error)
     else:
@@ -76,10 +76,9 @@ proc installPortalApiHandlers*(
 
   # TODO: This returns null values for the `none`s. Not sure what it should be
   # according to spec, no k:v pair at all?
-  # Note: Would it not be nice to have a call that resturns either content or
-  # ENRs, and that the connection id is used in the background instead of this
-  # "raw" `findContent` call.
-  rpcServer.rpc("portal_" & network & "_findContent") do(
+  # Note: `*_findContentRaw` is actually `*_findContent` call according to
+  # WIP Portal JSON-RPC API specification. Not sure about the best naming here.
+  rpcServer.rpc("portal_" & network & "_findContentRaw") do(
       enr: Record, contentKey: string) -> tuple[
         connectionId: Option[string],
         content: Option[string],
@@ -117,7 +116,7 @@ proc installPortalApiHandlers*(
               records.get(), node, enrsResultLimit).map(
                 proc(n: Node): Record = n.record)))
 
-  rpcServer.rpc("portal_" & network & "_findContentExt") do(
+  rpcServer.rpc("portal_" & network & "_findContent") do(
       enr: Record, contentKey: string) -> tuple[
         content: Option[string], enrs: Option[seq[Record]]]:
     let
@@ -139,7 +138,7 @@ proc installPortalApiHandlers*(
           none(string),
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
-  rpcServer.rpc("portal_" & network & "_offerExt") do(
+  rpcServer.rpc("portal_" & network & "_offer") do(
       enr: Record, contentKey: string) -> bool:
     # Only allow 1 content key for now
     let

@@ -330,7 +330,7 @@ proc pingImpl*(p: PortalProtocol, dst: Node):
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
-proc findNodes*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
+proc findNodesImpl*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
   let fn = FindNodesMessage(distances: distances)
 
@@ -378,6 +378,21 @@ proc ping*(p: PortalProtocol, dst: Node):
     p.radiusCache.put(dst.id, customPayloadDecoded.dataRadius)
 
   return pongResponse
+
+proc findNodes*(
+    p: PortalProtocol, dst: Node, distances: seq[uint16]):
+    Future[PortalResult[seq[Node]]] {.async.} =
+  let nodesMessage = await p.findNodesImpl(dst, List[uint16, 256](distances))
+  if nodesMessage.isOk():
+    let records = recordsFromBytes(nodesMessage.get().enrs)
+    if records.isOk():
+      # TODO: distance function is wrong here for state, fix + tests
+      return ok(verifyNodesRecords(
+        records.get(), dst, enrsResultLimit, distances))
+    else:
+      return err(records.error)
+  else:
+    return err(nodesMessage.error)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[FoundContent]] {.async.} =
@@ -489,21 +504,6 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   else:
     return err("No accept response")
 
-proc findNodesVerified*(
-    p: PortalProtocol, dst: Node, distances: seq[uint16]):
-    Future[PortalResult[seq[Node]]] {.async.} =
-  let nodesMessage = await p.findNodes(dst, List[uint16, 256](distances))
-  if nodesMessage.isOk():
-    let records = recordsFromBytes(nodesMessage.get().enrs)
-    if records.isOk():
-      # TODO: distance function is wrong here for state, fix + tests
-      return ok(verifyNodesRecords(
-        records.get(), dst, enrsResultLimit, distances))
-    else:
-      return err(records.error)
-  else:
-    return err(nodesMessage.error)
-
 proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.async.} =
   let contentKey = contentKeys[0] # for now only 1 item is considered
   let contentIdOpt = p.toContentId(contentKey)
@@ -550,7 +550,7 @@ proc processContent(
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let distances = lookupDistances(target, dst.id)
-  let nodesMessage = await p.findNodesVerified(dst, distances)
+  let nodesMessage = await p.findNodes(dst, distances)
   if nodesMessage.isOk():
     let nodes = nodesMessage.get()
     # Attempt to add all nodes discovered
@@ -790,7 +790,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
     let res = pong.get()
     if res.enrSeq > n.record.seqNum:
       # Request new ENR
-      let nodesMessage = await p.findNodesVerified(n, @[0'u16])
+      let nodesMessage = await p.findNodes(n, @[0'u16])
       if nodesMessage.isOk():
         let nodes = nodesMessage.get()
         if nodes.len > 0: # Normally a node should only return 1 record actually
@@ -856,7 +856,7 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
 
   let node = p.routingTable.getNode(id)
   if node.isSome():
-    let nodesMessage = await p.findNodesVerified(node.get(), @[0'u16])
+    let nodesMessage = await p.findNodes(node.get(), @[0'u16])
     # TODO: Handle failures better. E.g. stop on different failures than timeout
     if nodesMessage.isOk() and nodesMessage[].len > 0:
       return some(nodesMessage[][0])

@@ -244,11 +244,12 @@ proc run(config: PortalCliConf) =
     else:
       echo pong.error
   of findnodes:
-    let distances = List[uint16, 256](@[config.distance])
+    let distances = @[config.distance]
     let nodes = waitFor portal.findNodes(config.findNodesTarget, distances)
 
     if nodes.isOk():
-      echo nodes.get()
+      for node in nodes.get():
+        echo $node.record & " - " & shortLog(node)
     else:
       echo nodes.error
   of findcontent:
