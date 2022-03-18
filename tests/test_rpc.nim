@@ -9,8 +9,8 @@ import
   asynctest, json, strformat, strutils, options, tables, os,
   nimcrypto, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
-  eth/[rlp, keys, trie/db, p2p/private/p2p_types], web3/conversions,
-  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
+  eth/[rlp, keys, trie/db, p2p/private/p2p_types],
+  ../nimbus/rpc/[common, p2p, rpc_utils],
   ../nimbus/[constants, config, genesis, utils, transaction,
              vm_state, vm_types],
   ../nimbus/db/[accounts_cache, db_chain],
@@ -18,19 +18,7 @@ import
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/utils/[difficulty, tx_pool],
   ../nimbus/[context, chain_config],
-   ./test_helpers, ./macro_assembler
-
-# Perform checks for hex string validation
-#doHexStrTests()
-
-from os import getCurrentDir, DirSep
-from strutils import rsplit
-template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
-
-## Generate client convenience marshalling wrappers from forward declarations
-## For testing, ethcallsigs needs to be kept in sync with ../nimbus/rpc/[common, p2p]
-const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
-createRpcSigs(RpcSocketClient, sigPath)
+   ./test_helpers, ./macro_assembler, ./rpcclient/eth_api
 
 const
   zeroAddress = block:
