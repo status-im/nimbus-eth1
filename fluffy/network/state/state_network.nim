@@ -65,6 +65,8 @@ proc new*(
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
 proc start*(n: StateNetwork) =
+  info "Starting Portal state sub-network",
+    protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
 proc stop*(n: StateNetwork) =

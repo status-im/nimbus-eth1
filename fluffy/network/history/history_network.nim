@@ -21,7 +21,7 @@ const
   historyProtocolId* = [byte 0x50, 0x0B]
 
 # TODO: Extract common parts from the different networks
-type 
+type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
@@ -40,8 +40,8 @@ func encodeKey(k: ContentKey): (ByteList, ContentId) =
 
 func getEncodedKeyForContent(cType: ContentType, chainId: uint16, hash: BlockHash): (ByteList, ContentId) =
   let contentKeyType = ContentKeyType(chainId: chainId, blockHash: hash)
-  
-  let contentKey = 
+
+  let contentKey =
     case cType
     of blockHeader:
       ContentKey(contentType: cType, blockHeaderKey: contentKeyType)
@@ -49,7 +49,7 @@ func getEncodedKeyForContent(cType: ContentType, chainId: uint16, hash: BlockHas
       ContentKey(contentType: cType, blockBodyKey: contentKeyType)
     of receipts:
       ContentKey(contentType: cType, receiptsKey: contentKeyType)
-    
+
   return encodeKey(contentKey)
 
 proc validateHeaderBytes*(bytes: seq[byte], hash: BlockHash): Option[BlockHeader] =
@@ -57,12 +57,12 @@ proc validateHeaderBytes*(bytes: seq[byte], hash: BlockHash): Option[BlockHeader
     var rlp = rlpFromBytes(bytes)
 
     let blockHeader = rlp.read(BlockHeader)
-    
+
     if not (blockHeader.blockHash() == hash):
       # TODO: Header with different hash than expected maybe we should punish peer which sent
-      # us this ? 
+      # us this ?
       return none(BlockHeader)
-    
+
     return some(blockHeader)
 
   except MalformedRlpError, UnsupportedRlpError, RlpTypeMismatch:
@@ -74,7 +74,7 @@ proc validateBodyBytes*(bytes: seq[byte], txRoot: KeccakHash, ommersHash: Keccak
     var rlp = rlpFromBytes(bytes)
 
     let blockBody = rlp.read(BlockBody)
-    
+
     let calculatedTxRoot = calcTxRoot(blockBody.transactions)
     let calculatedOmmersHash = rlpHash(blockBody.uncles)
 
@@ -82,7 +82,7 @@ proc validateBodyBytes*(bytes: seq[byte], txRoot: KeccakHash, ommersHash: Keccak
       # we got block body (bundle of transactions and uncles) which do not match 
       # header. For now just ignore it, but maybe we should penalize peer sending us such data?
       return none(BlockBody)
-    
+
     return some(blockBody)
 
   except RlpError, MalformedRlpError, UnsupportedRlpError, RlpTypeMismatch:
@@ -114,10 +114,10 @@ proc getBlockHeader*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Futur
     return maybeHeaderFromDb
 
   let maybeHeaderContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
-  
+
   if maybeHeaderContent.isNone():
     return none(BlockHeader)
-  
+
   let headerContent = maybeHeaderContent.unsafeGet()
 
   let maybeHeader = validateHeaderBytes(headerContent, hash)
@@ -127,7 +127,7 @@ proc getBlockHeader*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Futur
      h.contentDB.put(contentId, headerContent)
 
   return maybeHeader
-  
+
 proc getBlock*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Future[Option[Block]] {.async.} = 
   let maybeHeader = await h.getBlockHeader(chainId, hash)
 
@@ -135,7 +135,7 @@ proc getBlock*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Future[Opti
     # we do not have header for given hash,so we would not be able to validate
     # that received body really belong it
     return none(Block)
-  
+
   let header = maybeHeader.unsafeGet()
 
   let (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
@@ -149,7 +149,7 @@ proc getBlock*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Future[Opti
 
   if maybeBodyContent.isNone():
     return none(Block)
-  
+
   let bodyContent = maybeBodyContent.unsafeGet()
 
   let maybeBody = validateBodyBytes(bodyContent, header.txRoot, header.ommersHash)
@@ -182,6 +182,8 @@ proc new*(
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
 proc start*(p: HistoryNetwork) =
+  info "Starting Portal history sub-network",
+    protocolId = p.portalProtocol.protocolId
   p.portalProtocol.start()
 
 proc stop*(p: HistoryNetwork) =
