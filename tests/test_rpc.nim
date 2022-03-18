@@ -14,7 +14,8 @@ import
   ../nimbus/[constants, config, genesis, utils, transaction,
              vm_state, vm_types],
   ../nimbus/db/[accounts_cache, db_chain],
-  ../nimbus/p2p/[blockchain_sync, chain, executor, executor/executor_helpers],
+  ../nimbus/sync/protocol_ethxx,
+  ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/utils/[difficulty, tx_pool],
   ../nimbus/[context, chain_config],
    ./test_helpers, ./macro_assembler

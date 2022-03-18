@@ -17,6 +17,7 @@ import
   eth/common as eth_common, eth/p2p as eth_p2p,
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/les_protocol,
+  ./sync/protocol_ethxx,
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   ./p2p/clique/[clique_desc, clique_sealer],
   config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,

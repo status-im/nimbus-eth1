@@ -8,15 +8,9 @@
 import
   std/[sets, options, random, hashes, sequtils],
   chronos, chronicles,
+  ../sync/protocol_ethxx,
   eth/common/eth_types,
   eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
-
-# Link to actual wire protocol stacs. This should be the only place where the
-# protocol specs file is linked in. Subsequent module imports should rely on
-# the `ethVersion` constant (set in *protocol_ethXX*) if protocool details are
-# needed to be known.
-import ../sync/protocol_eth66
-export protocol_eth66
 
 {.push raises:[Defect].}
 
