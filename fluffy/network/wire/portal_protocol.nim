@@ -191,15 +191,17 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       # Return empty response when content key validation fails
       return @[]
 
-  let connectionId = p.stream.addContentOffer(srcId, contentKeys)
+  let connectionId =
+    if contentKeysBitList.countOnes() != 0:
+      p.stream.addContentOffer(srcId, contentKeys)
+    else:
+      # When the node does not accept any of the content offered, reply with an
+      # all zeroes bitlist and connectionId.
+      # Note: What to do in this scenario is not defined in the Portal spec.
+      Bytes2([byte 0x00, 0x00])
 
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList))
-
-  # TODO: Neighborhood gossip
-  # After data has been received and validated from an offer, we need to
-  # get the closest neighbours of that data from our routing table, select a
-  # random subset and offer the same data to them.
 
 proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
@@ -439,6 +441,16 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
 
+    # Filter contentKeys with bitlist
+    var requestedContentKeys: seq[ByteList]
+    for i, b in m.contentKeys:
+      if b:
+        requestedContentKeys.add(contentKeys[i])
+
+    if requestedContentKeys.len() == 0:
+      # Don't open an uTP stream if no content was requested
+      return ok()
+
     let nodeAddress = NodeAddress.init(dst)
     if nodeAddress.isNone():
       # It should not happen as we are already after succesfull talkreq/talkresp
@@ -456,12 +468,6 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     if not clientSocket.isConnected():
       clientSocket.close()
       return err("Portal uTP socket is not in connected state")
-
-    # Filter contentKeys with bitlist
-    var requestedContentKeys: seq[ByteList]
-    for i, b in m.contentKeys:
-      if b:
-        requestedContentKeys.add(contentKeys[i])
 
     for contentKey in requestedContentKeys:
       let contentIdOpt = p.toContentId(contentKey)
@@ -512,7 +518,7 @@ proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.asyn
   # will not propagate well over to nodes with "large" Radius?
   let closestNodes = p.routingTable.neighbours(
     NodeId(contentId), k = 6, seenOnly = false)
-  echo closestNodes.len()
+
   for node in closestNodes:
     # Not doing anything if this fails
     discard await p.offer(node, contentKeys)

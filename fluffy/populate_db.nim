@@ -107,7 +107,7 @@ iterator blocks*(
             transactions: rlp.read(seq[Transaction]),
             uncles: rlp.read(seq[BlockHeader]))
           let rlpdata = encode(blockBody)
-          echo rlpdata.toHex()
+
           res.add((contentKey, rlpdata))
           # res.add((contentKey, @(rlp.rawData())))
           # rlp.skipElem()
