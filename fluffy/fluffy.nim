@@ -43,6 +43,13 @@ proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
     return none(BridgeClient)
 
 proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
+  # Make sure dataDir exists
+  let pathExists = createPath(config.dataDir.string)
+  if pathExists.isErr():
+    fatal "Failed to create data directory", dataDir = config.dataDir,
+      error = pathExists.error
+    quit 1
+
   let
     rng = newRng()
     bindIp = config.listenAddress
@@ -132,7 +139,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     let
       address = config.metricsAddress
       port = config.metricsPort
-    notice "Starting metrics HTTP server",
+    info "Starting metrics HTTP server",
       url = "http://" & $address & ":" & $port & "/metrics"
     try:
       chronos_httpserver.startMetricsHttpServer($address, port)

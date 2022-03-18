@@ -44,7 +44,7 @@ type
   RadiusCache* = LRUCache[NodeId, UInt256]
 
   PortalProtocol* = ref object of TalkProtocol
-    protocolId: PortalProtocolId
+    protocolId*: PortalProtocolId
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     contentDB*: ContentDB
