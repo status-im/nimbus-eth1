@@ -102,8 +102,8 @@ template optionalU256(src, dst: untyped) =
 template optionalBytes(src, dst: untyped) =
   if src.isSome:
     dst = hexToSeqByte(src.get.string)
-    
-proc callData*(call: EthCall): RpcCallData =  
+
+proc callData*(call: EthCall): RpcCallData =
   optionalAddress(call.source, result.source)
   optionalAddress(call.to, result.to)
   optionalGas(call.gas, result.gasLimit)
@@ -144,6 +144,7 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
   result.miner = header.coinbase
   result.difficulty = encodeQuantity(header.difficulty)
   result.extraData = hexDataStr(header.extraData)
+  result.mixHash = header.mixDigest
 
   # discard sizeof(seq[byte]) of extraData and use actual length
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
@@ -152,7 +153,10 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
   result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
   result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
   result.timestamp = encodeQuantity(header.timeStamp.toUnix.uint64)
-
+  result.baseFeePerGas = if header.fee.isSome:
+                           some(encodeQuantity(header.baseFee))
+                         else:
+                           none(HexQuantityStr)
   if not isUncle:
     result.totalDifficulty = encodeQuantity(chain.getScore(blockHash))
     result.uncles = chain.getUncleHashes(header)

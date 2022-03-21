@@ -62,10 +62,12 @@ type
     difficulty*: HexQuantityStr     # integer of the difficulty for this block.
     totalDifficulty*: HexQuantityStr# integer of the total difficulty of the chain until this block.
     extraData*: HexDataStr          # the "extra data" field of this block.
+    mixHash*: Hash256
     size*: HexQuantityStr           # integer the size of this block in bytes.
     gasLimit*: HexQuantityStr       # the maximum gas allowed in this block.
     gasUsed*: HexQuantityStr        # the total used gas by all transactions in this block.
     timestamp*: HexQuantityStr      # the unix timestamp for when the block was collated.
+    baseFeePerGas*: Option[HexQuantityStr]
     transactions*: seq[JsonNode]    # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
     uncles*: seq[Hash256]           # list of uncle hashes.
 
