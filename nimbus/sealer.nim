@@ -121,6 +121,8 @@ proc prepareHeader(engine: SealingEngineRef,
     header.mixDigest = default(Hash256)
     header.nonce = default(BlockNonce)
     header.extraData = @[] # TODO: probably this should be configurable by user?
+    # Stop the block generator if we reach TTD
+    engine.state = EnginePostMerge
   else:
     let res = engine.chain.clique.prepare(parent, header)
     if res.isErr:
@@ -147,10 +149,7 @@ proc generateBlock(engine: SealingEngineRef,
     header: res.get()
   )
 
-  if engine.chain.isBlockAfterTtd(outBlock.header):
-    # Stop the block generator if we reach TTD
-    engine.state = EnginePostMerge
-  else:
+  if engine.state != EnginePostMerge:
     # Post merge, Clique should not be executing
     let sealRes = engine.chain.clique.seal(outBlock)
     if sealRes.isErr:
@@ -261,6 +260,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   # make sure both generated block header and payloadRes(ExecutionPayloadV1)
   # produce the same blockHash
   blk.header.prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
+  blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
   let res = engine.chain.persistBlocks([blk.header], [
     BlockBody(transactions: blk.txs, uncles: blk.uncles)
