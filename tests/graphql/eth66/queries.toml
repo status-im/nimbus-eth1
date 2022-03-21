@@ -486,7 +486,7 @@ mutation {
 """
   result = """
 {
-  "protocolVersion":65
+  "protocolVersion":66
 }
 """
 
