@@ -39,6 +39,12 @@ type
     berlinBlock        : Option[BlockNumber]
     londonBlock        : Option[BlockNumber]
     arrowGlacierBlock  : Option[BlockNumber]
+
+    mergeForkBlock     : Option[BlockNumber] ##\
+      ## EIP-3675 (TheMerge) switch block: "For the purposes of the EIP-2124\
+      ## fork identifier, nodes implementing this EIP *MUST* set the\
+      ## `FORK_NEXT` parameter to the `FORK_NEXT_VALUE`."
+
     clique             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
 
@@ -63,6 +69,7 @@ type
     berlinBlock*        : BlockNumber
     londonBlock*        : BlockNumber
     arrowGlacierBlock*  : BlockNumber
+    mergeForkBlock*     : Option[BlockNumber] # EIP-3675 (TheMerge) switch block
 
     poaEngine*          : bool
     cliquePeriod*       : int
@@ -224,6 +231,14 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
       error "Forks can't be assigned out of order", fork=fork
       return false
 
+  # Process optional block numbers in non-increasing order (otherwise error.)
+  #
+  # See also the go-lang ref implementation:
+  # params/config.go:508: func (c *ChainConfig) CheckConfigForkOrder() error {
+  #
+  # The difference to the ref implementation is that we have no optional values
+  # everywhere for the block numbers but rather assign the next larger block.
+
   validateFork(arrowGlacierBlock,   high(BlockNumber))
   validateFork(londonBlock,         cg.config.arrowGlacierBlock)
   validateFork(berlinBlock,         cg.config.londonBlock)
@@ -237,6 +252,73 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
   validateFork(eip150Block,         cg.config.eip155Block)
   validateFork(daoForkBlock,        cg.config.eip150Block)
   validateFork(homesteadBlock,      cg.config.daoForkBlock)
+
+  # Only this last entry remains optional.
+  cg.config.mergeForkBlock = cc.config.mergeForkBlock
+  if cc.config.mergeForkBlock.isSome:
+    # Must be larger than the largest block
+    let topBlock = min(cg.config.arrowGlacierBlock, cg.config.londonBlock)
+    if cg.config.mergeForkBlock.get < topBlock:
+      error "Forks can't be assigned out of order", fork="mergeForkBlock"
+      return false
+
+  #[
+  # Process optional block numbers in non-increasing order (otherwise error.)
+  #
+  # See also the go-lang ref implementation:
+  # params/config.go:508: func (c *ChainConfig) CheckConfigForkOrder() error {
+  #
+  # The difference to the ref implementation is that we have no optional values
+  # everywhere for the block numbers but rather assign the next larger block.
+  var lastFork = ("", BlockNumber.high)
+
+  template useForkOption(fork: untyped) =
+    ## For the argument fork, the `BlockNumber` value is optional and assigned
+    ## as such. If it is set at all, the value must not increase compared to
+    ## the last processed `BlockNumber`.
+    cg.config.fork = cc.config.fork
+    if cg.config.fork.isSome:
+      let thisFork = (astToStr(fork), cg.config.fork.get)
+      if lastFork[1] < thisFork[1]:
+        error "Forks can't be assigned out of order",
+          fork = thisFork[0],
+          predecessor = lastFork[0]
+        return false
+      lastFork = thisFork
+
+  useForkOption(mergeForkBlock)
+  useForkOption(arrowGlacierBlock)
+
+  template useForkBlockNumber(fork: untyped) =
+    ## For the argument fork, the `BlockNumber` value is optional. If unset,
+    ## then the value of the last processed `BlockNumber` is assigned. If
+    ## it is set at all, the value must not increase compared to the last
+    ## processed `BlockNumber`.
+    if cc.config.fork.isSome:
+      cg.config.fork = cc.config.fork.get
+    else:
+      cg.config.fork = lastFork[1]
+    let thisFork = (astToStr(fork), cg.config.fork)
+    if lastFork[1] < thisFork[1]:
+      error "Forks can't be assigned out of order",
+        fork = thisFork[0],
+        predecessor = lastFork[0]
+      return false
+    lastFork = thisFork
+
+  useForkBlockNumber(londonBlock)
+  useForkBlockNumber(berlinBlock)
+  useForkBlockNumber(muirGlacierBlock)
+  useForkBlockNumber(istanbulBlock)
+  useForkBlockNumber(petersburgBlock)
+  useForkBlockNumber(constantinopleBlock)
+  useForkBlockNumber(byzantiumBlock)
+  useForkBlockNumber(eip158Block)
+  useForkBlockNumber(eip155Block)
+  useForkBlockNumber(eip150Block)
+  useForkBlockNumber(daoForkBlock)
+  useForkBlockNumber(homesteadBlock)
+  #]#
 
   return true
 
@@ -322,6 +404,7 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
       berlinBlock:         12_244_000.toBlockNumber, # 2021-04-15 10:07:03 UTC
       londonBlock:         12_965_000.toBlockNumber, # 2021-08-05 12:33:42 UTC
       arrowGlacierBlock:   13_773_000.toBlockNumber, # 2021-12-09 19:55:23 UTC
+      mergeForkBlock:      none(BlockNumber),
     )
   of RopstenNet:
     ChainConfig(
@@ -342,6 +425,7 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
       berlinBlock:         9_812_189.toBlockNumber,  # 2021-03-10 13:32:08 UTC
       londonBlock:         10_499_401.toBlockNumber, # 2021-06-24 02:03:37 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
+      mergeForkBlock:      none(BlockNumber),
     )
   of RinkebyNet:
     ChainConfig(
@@ -362,6 +446,7 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
       berlinBlock:         8_290_928.toBlockNumber,  # 2021-03-24 14:48:36 UTC
       londonBlock:         8_897_988.toBlockNumber,  # 2021-07-08 01:27:32 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
+      mergeForkBlock:      none(BlockNumber),
     )
   of GoerliNet:
     ChainConfig(
@@ -382,6 +467,7 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
       berlinBlock:         4_460_644.toBlockNumber,  # 2021-03-18 05:29:51 UTC
       londonBlock:         5_062_605.toBlockNumber,  # 2021-07-01 03:19:39 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
+      mergeForkBlock:      none(BlockNumber),
     )
   else:
     ChainConfig()

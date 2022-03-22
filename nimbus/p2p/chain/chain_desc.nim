@@ -39,7 +39,8 @@ type
     MuirGlacier,
     Berlin,
     London,
-    ArrowGlacier
+    ArrowGlacier,
+    MergeFork
 
   Chain* = ref object of AbstractChainDB
     db: BaseChainDB
@@ -75,6 +76,12 @@ func toNextFork(n: BlockNumber): uint64 =
   else:
     result = n.truncate(uint64)
 
+func toNextFork(n: Option[BlockNumber]): uint64 =
+  if n.isSome:
+    n.get.truncate(uint64)
+  else:
+    0'u64
+
 func isBlockAfterTtd*(c: Chain, blockHeader: BlockHeader): bool =
   c.db.totalDifficulty + blockHeader.difficulty >= c.db.ttd
 
@@ -92,7 +99,8 @@ func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
     toNextFork(c.muirGlacierBlock),
     toNextFork(c.berlinBlock),
     toNextFork(c.londonBlock),
-    toNextFork(c.arrowGlacierBlock)
+    toNextFork(c.arrowGlacierBlock),
+    toNextFork(c.mergeForkBlock)
   ]
 
   if fork == high(ChainFork):
