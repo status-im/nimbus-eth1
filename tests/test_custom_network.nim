@@ -8,16 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## This unit test was roughly inspired by repeated failings of running nimbus
-## similar to
-## ::
-##    nimbus \
+## This test has two different parts:
+##
+## :CI:
+##   This was roughly inspired by repeated failings of running nimbus
+##   similar to
+##   ::
+##     nimbus \
 ##       --data-dir:./kintsugi/tmp \
 ##       --custom-network:kintsugi-network.json \
 ##       --bootstrap-file:kintsugi-bootnodes.txt \
 ##       --prune-mode:full ...
 ##
-## from `issue 932` <https://github.com/status-im/nimbus-eth1/issues/932>`_.
+##   from `issue 932` <https://github.com/status-im/nimbus-eth1/issues/932>`_.
+##
+## :TDD (invoked as local executable):
+##   Test driven develomment to prepare for The Merge using real data, in
+##   particular studying TTD.
+##
 
 import
   std/[distros, os],
@@ -36,7 +44,8 @@ type
     fancyName: string     # display name
     genesisFile: string   # json file base name
     termTotalDff: UInt256 # terminal total difficulty (to verify)
-    captureFile: string   # gzipped RPL data dump
+    mergeFork: uint64     # block number, merge fork (to verify)
+    captures: seq[string] # list of gzipped RPL data dumps
     ttdReachedAt: uint64  # block number where total difficulty becomes `true`
     failBlockAt:  uint64  # stop here and expect that block to fail
 
@@ -49,8 +58,9 @@ const
   devnet4 = ReplaySession(
     fancyName:    "Devnet4",
     genesisFile:  "devnet4.json",
-    captureFile:  "devnetfour5664.txt.gz",
+    captures:     @["devnetfour5664.txt.gz"],
     termTotalDff: 5_000_000_000.u256,
+    mergeFork:    100,
     ttdReachedAt: 5645,
     # Previously failed at `ttdReachedAt` (needed `state.nim` fix/update)
     failBlockAt:  99999999)
@@ -58,17 +68,24 @@ const
   devnet5 = ReplaySession(
     fancyName:    "Devnet5",
     genesisFile:  "devnet5.json",
-    captureFile:  "devnetfive43968.txt.gz",
+    captures:     @["devnetfive43968.txt.gz"],
     termTotalDff: 500_000_000_000.u256,
+    mergeFork:    1000,
     ttdReachedAt: 43711,
     failBlockAt:  99999999)
 
   kiln = ReplaySession(
     fancyName:    "Kiln",
     genesisFile:  "kiln.json",
-    captureFile:  "kiln25872.txt.gz",
+    captures:     @[
+      "kiln048000.txt.gz",
+      "kiln048001-55296.txt.gz",
+      # "kiln055297-109056.txt.gz",
+      # "kiln109057-119837.txt.gz",
+    ],
     termTotalDff: 20_000_000_000_000.u256,
-    ttdReachedAt: 9999999,
+    mergeFork:    1000,
+    ttdReachedAt: 55127,
     failBlockAt:  9999999)
 
 when not defined(linux):
@@ -217,6 +234,8 @@ proc genesisLoadRunner(noisy = true;
         params = params)
 
       check mdb.ttd == sSpcs.termTotalDff
+      check mdb.config.mergeForkBlock.isSome
+      check mdb.config.mergeForkBlock.get == sSpcs.mergeFork.u256
 
     test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
@@ -235,7 +254,9 @@ proc genesisLoadRunner(noisy = true;
           pruneTrie = persistPruneTrie,
           params = params)
 
-        check mdb.ttd == sSpcs.termTotalDff
+        check ddb.ttd == sSpcs.termTotalDff
+        check ddb.config.mergeForkBlock.isSome
+        check ddb.config.mergeForkBlock.get == sSpcs.mergeFork.u256
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
@@ -266,8 +287,8 @@ proc testnetChainRunner(noisy = true;
                         memoryDB = true;
                         stopAfterBlock = 999999999) =
   let
-    cFileInfo = sSpcs.captureFile.splitFile.name.split(".")[0]
-    cFilePath = sSpcs.captureFile.findFilePath
+    cFileInfo = sSpcs.captures[0].splitFile.name.split(".")[0]
+    cFilePath = sSpcs.captures.mapIt(it.findFilePath)
     dbInfo = if memoryDB: "in-memory" else: "persistent"
 
     pivotBlockNumber = sSpcs.failBlockAt.u256
@@ -295,11 +316,11 @@ proc testnetChainRunner(noisy = true;
 
     test &"Replay {cFileInfo} capture, may fail ~#{pivotBlockNumber} "&
         &"(slow -- time for coffee break)":
-      noisy.say "***", "capture-file=", cFilePath
+      noisy.say "***", "capture-files=[", cFilePath.join(","), "]"
       discard
 
     test &"Processing {sSpcs.fancyName} blocks":
-      for w in cFilePath.undumpNextGroup:
+      for w in cFilePath.mapIt(it.string).undumpNextGroup:
         let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
 
         # Install & verify Genesis
@@ -358,7 +379,7 @@ when isMainModule:
 
     noisy.genesisLoadRunner(
       # any of: devnet4, devnet5, kiln, etc.
-      captureSession = devnet4)
+      captureSession = kiln)
 
     # Note that the `testnetChainRunner()` finds the replay dump files
     # typically on the `nimbus-eth1-blobs` module.
