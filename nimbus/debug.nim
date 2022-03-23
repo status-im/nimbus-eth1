@@ -15,6 +15,9 @@ proc `$`(bloom: BloomFilter): string =
 proc `$`(nonce: BlockNonce): string =
   nonce.toHex
 
+proc `$`(data: Blob): string =
+  data.toHex
+  
 proc debug*(h: BlockHeader): string =
   result.add "parentHash : " & $h.parentHash  & "\n"
   result.add "ommersHash : " & $h.ommersHash  & "\n"
