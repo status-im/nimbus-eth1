@@ -132,8 +132,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
   # Start Eth node
-  waitFor nimbus.ethNode.connectToNetwork(
-    enableDiscovery = conf.discovery != DiscoveryType.None)
+  if conf.maxPeers > 0:
+    waitFor nimbus.ethNode.connectToNetwork(
+      enableDiscovery = conf.discovery != DiscoveryType.None)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
@@ -252,7 +253,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   else:
     if conf.engineApiEnabled or conf.engineApiWsEnabled:
       warn "Cannot enable engine API without sealing engine",
-        hint = "use --engine-signer to enable sealing engine"      
+        hint = "use --engine-signer to enable sealing engine"
 
   # metrics server
   if conf.metricsEnabled:
