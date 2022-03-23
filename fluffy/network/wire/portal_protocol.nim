@@ -13,7 +13,7 @@
 import
   std/[sequtils, sets, algorithm],
   stew/[results, byteutils], chronicles, chronos, nimcrypto/hash, bearssl,
-  ssz_serialization,
+  ssz_serialization, metrics,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
   ../../content_db,
@@ -21,6 +21,40 @@ import
   ./messages
 
 export messages, routing_table
+
+declareCounter portal_message_requests_incoming,
+  "Portal wire protocol incoming message requests",
+  labels = ["protocol_id", "message_type"]
+declareCounter portal_message_decoding_failures,
+  "Portal wire protocol message decoding failures",
+  labels = ["protocol_id"]
+declareCounter portal_message_requests_outgoing,
+  "Portal wire protocol outgoing message requests",
+  labels = ["protocol_id", "message_type"]
+declareCounter portal_message_response_incoming,
+  "Portal wire protocol incoming message responses",
+  labels = ["protocol_id", "message_type"]
+
+const requestBuckets = [1.0, 3.0, 5.0, 7.0, 9.0, Inf]
+
+declareHistogram portal_lookup_node_requests,
+  "Portal wire protocol amount of requests per node lookup",
+  labels = ["protocol_id"], buckets = requestBuckets
+declareHistogram portal_lookup_content_requests,
+  "Portal wire protocol amount of requests per node lookup",
+  labels = ["protocol_id"], buckets = requestBuckets
+declareCounter portal_lookup_content_failures,
+  "Portal wire protocol content lookup failures",
+  labels = ["protocol_id"]
+
+const contentKeysBuckets = [0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, Inf]
+
+declareHistogram portal_content_keys_offered,
+  "Portal wire protocol amount of content keys per offer message send",
+  labels = ["protocol_id"], buckets = contentKeysBuckets
+declareHistogram portal_content_keys_accepted,
+  "Portal wire protocol amount of content keys per accept message received",
+  labels = ["protocol_id"], buckets = contentKeysBuckets
 
 logScope:
   topics = "portal_wire"
@@ -229,6 +263,9 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     if node.isSome():
       discard p.routingTable.addNode(node.get())
 
+    portal_message_requests_incoming.inc(
+      labelValues = [$p.protocolId, $message.kind])
+
     case message.kind
     of MessageKind.ping:
       p.handlePing(message.ping, srcId)
@@ -244,6 +281,7 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
       debug "Invalid Portal wire message type over talkreq", kind = message.kind
       @[]
   else:
+    portal_message_decoding_failures.inc(labelValues = [$p.protocolId])
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
@@ -296,6 +334,8 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     protocolId = p.protocolId
 
   trace "Send message request", dstId = dst.id, kind = messageKind(Request)
+  portal_message_requests_outgoing.inc(
+    labelValues = [$p.protocolId, $messageKind(Request)])
 
   let talkresp =
     await talkreq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
@@ -314,6 +354,9 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   if messageResponse.isOk():
     trace "Received message response", srcId = dst.id,
       srcAddress = dst.address, kind = messageKind(Response)
+    portal_message_response_incoming.inc(
+      labelValues = [$p.protocolId, $messageKind(Response)])
+
     p.routingTable.setJustSeen(dst)
   else:
     debug "Error receiving message response", error = messageResponse.error,
@@ -452,6 +495,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[void]] {.async.} =
   let acceptMessageResponse = await p.offerImpl(dst, contentKeys)
+  portal_content_keys_offered.observe(contentKeys.len().int64)
 
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
@@ -462,7 +506,9 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
       if b:
         requestedContentKeys.add(contentKeys[i])
 
-    if requestedContentKeys.len() == 0:
+    let contentKeysAmount = requestedContentKeys.len()
+    portal_content_keys_accepted.observe(contentKeysAmount.int64)
+    if contentKeysAmount == 0:
       # Don't open an uTP stream if no content was requested
       return ok()
 
@@ -576,6 +622,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
     seen.incl(node.id)
 
   var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
+  var requestAmount = 0'i64
 
   while true:
     var i = 0
@@ -585,6 +632,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
+        requestAmount.inc()
       inc i
 
     trace "Pending lookup queries", total = pendingQueries.len
@@ -615,6 +663,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
         if closestNodes.len > BUCKET_SIZE:
           closestNodes.del(closestNodes.high())
 
+  portal_lookup_node_requests.observe(requestAmount)
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
@@ -637,6 +686,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
     seen.incl(node.id)
 
   var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
+  var requestAmount = 0'i64
 
   while true:
     var i = 0
@@ -646,6 +696,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
+        requestAmount.inc()
       inc i
 
     trace "Pending lookup queries", total = pendingQueries.len
@@ -686,12 +737,14 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
         for f in pendingQueries:
           f.cancel()
 
+        portal_lookup_content_requests.observe(requestAmount)
         return some(content.content)
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
       discard
 
+  portal_lookup_content_failures.inc()
   return none[seq[byte]]()
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
