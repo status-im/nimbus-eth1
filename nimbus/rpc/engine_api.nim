@@ -115,8 +115,6 @@ proc setupEngineAPI*(
     var payload: ExecutionPayloadV1
     if not api.get(payloadId, payload):
       raise (ref InvalidRequest)(code: engineApiUnknownPayload, msg: "Unknown payload")
-      #raise newException(ValueError, "Unknown payload")
-
     return payload
 
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.7/src/engine/specification.md#engine_exchangeTransitionConfigurationV1
@@ -229,7 +227,9 @@ proc setupEngineAPI*(
         error "Refusing beacon update to pre-merge",
           number = blockNumber,
           hash = blockHash.data.toHex,
-          diff = header.difficulty
+          diff = header.difficulty,
+          ptd = ptd,
+          ttd = ttd
 
         return simpleFCU(PayloadExecutionStatus.invalid_terminal_block)
 
@@ -256,13 +256,38 @@ proc setupEngineAPI*(
       var finalBlock: EthBlockHeader
       if not db.getBlockHeader(finalizedBlockHash, finalBlock):
         warn "Final block not available in database",
-          hash = finalizedBlockHash.data.toHex
-        return simpleFCU(PayloadExecutionStatus.invalid, "final block not available")
-      elif not db.getBlockHash(finalBlock.blockNumber, canonHash) or canonHash != finalizedBlockHash:
+          hash=finalizedBlockHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalized block header not available")
+      var finalHash: Hash256
+      if not db.getBlockHash(finalBlock.blockNumber, finalHash):
         warn "Final block not in canonical chain",
-          number = finalBlock.blockNumber,
-          hash = finalizedBlockHash.data.toHex
-        return simpleFCU(PayloadExecutionStatus.invalid, "final block not canonical")
+          number=finalBlock.blockNumber,
+          hash=finalizedBlockHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalized block hash not available")
+      if finalHash != finalizedBlockHash:
+        warn "Final block not in canonical chain",
+          number=finalBlock.blockNumber,
+          finalHash=finalHash.data.toHex,
+          finalizedBlockHash=finalizedBlockHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalilized block not canonical")
+
+    let safeBlockHash = update.safeBlockHash.asEthHash
+    if safeBlockHash != Hash256():
+      var safeBlock: EthBlockHeader
+      if not db.getBlockHeader(safeBlockHash, safeBlock):
+        warn "Safe block not available in database",
+          hash = safeBlockHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe head not available")
+      var safeHash: Hash256
+      if not db.getBlockHash(safeBlock.blockNumber, safeHash):
+        warn "Safe block hash not available in database",
+          hash = safeHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe block hash not available")
+      if safeHash != safeBlockHash:
+        warn "Safe block not in canonical chain",
+          safeHash=safeHash.data.toHex,
+          safeBlockHash=safeBlockHash.data.toHex
+        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe head not canonical")
 
     # If payload generation was requested, create a new block to be potentially
     # sealed by the beacon client. The payload will be requested later, and we
