@@ -223,10 +223,6 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
       error "sealing engine generateBlock error", msg=blkRes.error
       break
 
-    # if TTD reached during block generation, stop the sealer
-    if engine.state != EngineRunning:
-      break
-
     let res = engine.chain.persistBlocks([blk.header], [
       BlockBody(transactions: blk.txs, uncles: blk.uncles)
     ])
@@ -236,6 +232,11 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
       break
 
     info "block generated", number=blk.header.blockNumber
+
+    # if TTD reached during block generation, stop the sealer
+    if engine.state != EngineRunning:
+      info "TTD reached, stop sealing engine"
+      break
 
 template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
