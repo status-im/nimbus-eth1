@@ -36,7 +36,6 @@ declareCounter portal_message_response_incoming,
   labels = ["protocol_id", "message_type"]
 
 const requestBuckets = [1.0, 3.0, 5.0, 7.0, 9.0, Inf]
-
 declareHistogram portal_lookup_node_requests,
   "Portal wire protocol amount of requests per node lookup",
   labels = ["protocol_id"], buckets = requestBuckets
@@ -48,13 +47,24 @@ declareCounter portal_lookup_content_failures,
   labels = ["protocol_id"]
 
 const contentKeysBuckets = [0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, Inf]
-
 declareHistogram portal_content_keys_offered,
   "Portal wire protocol amount of content keys per offer message send",
   labels = ["protocol_id"], buckets = contentKeysBuckets
 declareHistogram portal_content_keys_accepted,
   "Portal wire protocol amount of content keys per accept message received",
   labels = ["protocol_id"], buckets = contentKeysBuckets
+
+# Note: These metrics are to get some idea on how many enrs are send on average.
+# Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
+const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
+declareHistogram portal_nodes_enrs_packed,
+  "Portal wire protocol amount of enrs packed in a nodes message",
+  labels = ["protocol_id"], buckets = enrsBuckets
+# This one will currently hit the max numbers because all neighbours are send,
+# not only the ones closer to the content.
+declareHistogram portal_content_enrs_packed,
+  "Portal wire protocol amount of enrs packed in a content message",
+  labels = ["protocol_id"], buckets = enrsBuckets
 
 logScope:
   topics = "portal_wire"
@@ -68,6 +78,20 @@ const
   revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
+
+  # TalkResp message is a response message so the session is established and a
+  # regular discv5 packet is assumed for size calculation.
+  # Regular message = IV + header + message
+  # talkResp message = rlp: [request-id, response]
+  talkRespOverhead =
+    16 + # IV size
+    55 + # header size
+    1 + # talkResp msg id
+    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
+    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
+    3 + # rlp encoding response byte string, max length in 2 bytes
+    16 # HMAC
+  discv5MaxSize = 1280
 
 type
   ToContentIdHandler* =
@@ -126,6 +150,20 @@ func inRange*(p: PortalProtocol, contentId: ContentId): bool =
   let distance = p.routingTable.distance(p.localNode.id, contentId)
   distance <= p.dataRadius
 
+func truncateEnrs(
+    nodes: seq[Node], maxSize: int, enrOverhead: int): List[ByteList, 32] =
+  var enrs: List[ByteList, 32]
+  var totalSize = 0
+  for n in nodes:
+    let enr = ByteList.init(n.record.raw)
+    if totalSize + enr.len() + enrOverhead <= maxSize:
+      let res = enrs.add(enr) # 32 limit will not be reached
+      totalSize = totalSize + enr.len()
+    else:
+      break
+
+  enrs
+
 func handlePing(
     p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: This should become custom per Portal Network
@@ -144,7 +182,7 @@ func handlePing(
 
   encodeMessage(p)
 
-func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
+proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
     let enrs = List[ByteList, 32](@[])
     encodeMessage(NodesMessage(total: 1, enrs: enrs))
@@ -157,14 +195,23 @@ func handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
     if distances.all(proc (x: uint16): bool = return x <= 256):
       let
         nodes = p.routingTable.neighboursAtDistances(distances, seenOnly = true)
-        enrs = nodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
 
-      # TODO: Fixed here to total message of 1 for now, as else we would need to
-      # either move the send of the talkresp messages here, or allow for
+      # TODO: Total amount of messages is set fixed to 1 for now, else we would
+      # need to either move the send of the talkresp messages here, or allow for
       # returning multiple messages.
       # On the long run, it might just be better to use a stream in these cases?
-      encodeMessage(
-        NodesMessage(total: 1, enrs: List[ByteList, 32](List(enrs))))
+      # Size calculation is done to truncate the ENR results in order to not go
+      # over the discv5 packet size limits. ENRs are sorted so the closest nodes
+      # will still be passed.
+      const
+        portalNodesOverhead = 1 + 1 + 4 # msg id + total + container offset
+        maxPayloadSize = discv5MaxSize - talkRespOverhead - portalNodesOverhead
+        enrOverhead = 4 # per added ENR, 4 bytes offset overhead
+
+      let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
+      portal_nodes_enrs_packed.observe(enrs.len().int64)
+
+      encodeMessage(NodesMessage(total: 1, enrs: enrs))
     else:
       # invalid request, send empty back
       let enrs = List[ByteList, 32](@[])
@@ -174,6 +221,11 @@ proc handleFindContent(
     p: PortalProtocol, fc: FindContentMessage, srcId: NodeId): seq[byte] =
   let contentIdOpt = p.toContentId(fc.contentKey)
   if contentIdOpt.isSome():
+    const
+      portalContentOverhead = 1 + 1 # msg id + SSZ Union selector
+      maxPayloadSize = discv5MaxSize - talkRespOverhead - portalContentOverhead
+      enrOverhead = 4 # per added ENR, 4 bytes offset overhead
+
     let
       contentId = contentIdOpt.get()
       # TODO: Should we first do a simple check on ContentId versus Radius
@@ -181,8 +233,7 @@ proc handleFindContent(
       maybeContent = p.contentDB.get(contentId)
     if maybeContent.isSome():
       let content = maybeContent.get()
-       # TODO: properly calculate max content size
-      if content.len <= 1000:
+      if content.len <= maxPayloadSize:
         encodeMessage(ContentMessage(
           contentMessageType: contentType, content: ByteList(content)))
       else:
@@ -195,10 +246,10 @@ proc handleFindContent(
       let
         closestNodes = p.routingTable.neighbours(
           NodeId(contentId), seenOnly = true)
-        enrs =
-          closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
-      encodeMessage(ContentMessage(
-        contentMessageType: enrsType, enrs: List[ByteList, 32](List(enrs))))
+        enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+      portal_content_enrs_packed.observe(enrs.len().int64)
+
+      encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
   else:
     # Return empty response when content key validation fails
     # TODO: Better would be to return no message at all, needs changes on
