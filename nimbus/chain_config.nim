@@ -262,64 +262,6 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
       error "Forks can't be assigned out of order", fork="mergeForkBlock"
       return false
 
-  #[
-  # Process optional block numbers in non-increasing order (otherwise error.)
-  #
-  # See also the go-lang ref implementation:
-  # params/config.go:508: func (c *ChainConfig) CheckConfigForkOrder() error {
-  #
-  # The difference to the ref implementation is that we have no optional values
-  # everywhere for the block numbers but rather assign the next larger block.
-  var lastFork = ("", BlockNumber.high)
-
-  template useForkOption(fork: untyped) =
-    ## For the argument fork, the `BlockNumber` value is optional and assigned
-    ## as such. If it is set at all, the value must not increase compared to
-    ## the last processed `BlockNumber`.
-    cg.config.fork = cc.config.fork
-    if cg.config.fork.isSome:
-      let thisFork = (astToStr(fork), cg.config.fork.get)
-      if lastFork[1] < thisFork[1]:
-        error "Forks can't be assigned out of order",
-          fork = thisFork[0],
-          predecessor = lastFork[0]
-        return false
-      lastFork = thisFork
-
-  useForkOption(mergeForkBlock)
-  useForkOption(arrowGlacierBlock)
-
-  template useForkBlockNumber(fork: untyped) =
-    ## For the argument fork, the `BlockNumber` value is optional. If unset,
-    ## then the value of the last processed `BlockNumber` is assigned. If
-    ## it is set at all, the value must not increase compared to the last
-    ## processed `BlockNumber`.
-    if cc.config.fork.isSome:
-      cg.config.fork = cc.config.fork.get
-    else:
-      cg.config.fork = lastFork[1]
-    let thisFork = (astToStr(fork), cg.config.fork)
-    if lastFork[1] < thisFork[1]:
-      error "Forks can't be assigned out of order",
-        fork = thisFork[0],
-        predecessor = lastFork[0]
-      return false
-    lastFork = thisFork
-
-  useForkBlockNumber(londonBlock)
-  useForkBlockNumber(berlinBlock)
-  useForkBlockNumber(muirGlacierBlock)
-  useForkBlockNumber(istanbulBlock)
-  useForkBlockNumber(petersburgBlock)
-  useForkBlockNumber(constantinopleBlock)
-  useForkBlockNumber(byzantiumBlock)
-  useForkBlockNumber(eip158Block)
-  useForkBlockNumber(eip155Block)
-  useForkBlockNumber(eip150Block)
-  useForkBlockNumber(daoForkBlock)
-  useForkBlockNumber(homesteadBlock)
-  #]#
-
   return true
 
 proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
