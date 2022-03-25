@@ -314,13 +314,19 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
 proc setHead*(self: BaseChainDB, blockHash: Hash256): bool =
+  # TODO: apply addBlockNumberToHashLookup to forkPoint
   if self.headerExists(blockHash):
+    var header: BlockHeader
+    if not self.getBlockHeader(blockHash, header):
+      return false
+    self.addBlockNumberToHashLookup(header)
     self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(blockHash))
     return true
   else:
     return false
 
 proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
+  # TODO: apply addBlockNumberToHashLookup to forkPoint
   var headerHash = rlpHash(header)
   if writeHeader:
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
@@ -402,7 +408,6 @@ proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
               else: self.getScore(header.parentHash) + header.difficulty
 
   self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
-  self.addBlockNumberToHashLookup(header)
   self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
