@@ -29,3 +29,6 @@ nimcache
 /.update.timestamp
 
 *.generated.nim
+
+/dist
+

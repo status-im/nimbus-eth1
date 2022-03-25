@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2021 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2022 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -35,7 +35,14 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	clean \
 	libnimbus.so \
 	libnimbus.a \
-	libbacktrace
+	libbacktrace \
+	dist-amd64 \
+	dist-arm64 \
+	dist-arm \
+	dist-win64 \
+	dist-macos \
+	dist-macos-arm64 \
+	dist
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -64,34 +71,34 @@ USE_MIRACL := 0
 # default: use nim native evm
 ENABLE_EVMC := 0
 
-# "-d:release" implies "--stacktrace:off" and it cannot be added to config.nims
+# "-d:release" cannot be added to config.nims
+NIM_PARAMS += -d:release
+
 ifeq ($(USE_LIBBACKTRACE), 0)
-NIM_PARAMS := $(NIM_PARAMS) -d:debug -d:disable_libbacktrace
-else
-NIM_PARAMS := $(NIM_PARAMS) -d:release
-endif
-
-ifneq ($(USE_MIRACL), 0)
-NIM_PARAMS := $(NIM_PARAMS) -d:BLS_FORCE_BACKEND=miracl
-endif
-
-ifneq ($(ENABLE_EVMC), 0)
-NIM_PARAMS := $(NIM_PARAMS) -d:evmc_enabled
-endif
-
-# disabled by default, enable with ENABLE_VM2SLOW=1
-ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled -d:lowmem:1
-else
-# disabled by default, enable with ENABLE_VM2=1
-ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
-endif
+  NIM_PARAMS += -d:disable_libbacktrace
 endif
 
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
+endif
+
+ifneq ($(USE_MIRACL), 0)
+  NIM_PARAMS += -d:BLS_FORCE_BACKEND=miracl
+endif
+
+ifneq ($(ENABLE_EVMC), 0)
+  NIM_PARAMS += -d:evmc_enabled
+endif
+
+# disabled by default, enable with ENABLE_VM2LOWMEM=1
+ifneq ($(ENABLE_VM2LOWMEM), 0)
+  NIM_PARAMS += -d:vm2_enabled -d:lowmem:1
+else
+  # disabled by default, enable with ENABLE_VM2=1
+  ifneq ($(ENABLE_VM2), 0)
+    NIM_PARAMS += -d:vm2_enabled
+  endif
 endif
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
@@ -108,7 +115,7 @@ $(TOOLS): | build deps
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
 
 # symlink
 nimbus.nims:
@@ -170,7 +177,7 @@ fluffy-test-portal-testnet: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc,all_fluffy_tests,portalcli}
+	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc,all_fluffy_tests,portalcli,*.dSYM}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
@@ -186,5 +193,39 @@ endif
 # from C or Go will know it has been done before.  The previous working version
 # can be found in Git history.  Look for the `nimbus-eth1` commit that adds
 # this comment and removes `wrappers/*`.
+
+dist-amd64:
+	+ MAKE="$(MAKE)" \
+		scripts/make_dist.sh amd64
+
+dist-arm64:
+	+ MAKE="$(MAKE)" \
+		scripts/make_dist.sh arm64
+
+# We get an ICE on RocksDB-7.0.2 with "arm-linux-gnueabihf-g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0"
+# and with "arm-linux-gnueabihf-g++ (Ubuntu 10.3.0-1ubuntu1) 10.3.0".
+#dist-arm:
+	#+ MAKE="$(MAKE)" \
+		#scripts/make_dist.sh arm
+
+dist-win64:
+	+ MAKE="$(MAKE)" \
+		scripts/make_dist.sh win64
+
+dist-macos:
+	+ MAKE="$(MAKE)" \
+		scripts/make_dist.sh macos
+
+dist-macos-arm64:
+	+ MAKE="$(MAKE)" \
+		scripts/make_dist.sh macos-arm64
+
+dist:
+	+ $(MAKE) --no-print-directory dist-amd64
+	+ $(MAKE) --no-print-directory dist-arm64
+	#+ $(MAKE) --no-print-directory dist-arm
+	+ $(MAKE) --no-print-directory dist-win64
+	+ $(MAKE) --no-print-directory dist-macos
+	+ $(MAKE) --no-print-directory dist-macos-arm64
 
 endif # "variables.mk" was not included

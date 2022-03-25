@@ -48,9 +48,6 @@ proc test(path: string, name: string, params = "", lang = "c") =
 task test, "Run tests":
   test "tests", "all_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
-task nimbus, "Build Nimbus":
-  buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
-
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 

@@ -23,7 +23,7 @@ import
   config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context, utils/tx_pool,
-  "."/[conf_utils, sealer, constants, utils]
+  "."/[conf_utils, sealer, constants, utils, version]
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -99,7 +99,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       address.ip = extIP.get()
       let extPorts = redirectPorts(tcpPort = address.tcpPort,
                                    udpPort = address.udpPort,
-                                   description = NIMBUS_NAME & " " & NIMBUS_VERSION)
+                                   description = NimbusName & " " & NimbusVersion)
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
 
