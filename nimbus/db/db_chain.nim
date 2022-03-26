@@ -313,24 +313,43 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
+proc markCanonicalChain(self: BaseChainDB, header: BlockHeader, headerHash: Hash256) =
+  ## mark this chain as canonical by adding block number to hash lookup
+  ## down to forking point
+  var
+    currHash = headerHash
+    currHeader = header
+
+  while currHash != Hash256():
+    let key = blockNumberToHashKey(currHeader.blockNumber)
+    let data = self.db.get(key.toOpenArray)
+    if data.len == 0:
+      # not marked, mark it
+      self.db.put(key.toOpenArray, rlp.encode(currHash))
+    elif rlp.decode(data, Hash256) != currHash:
+      # replace prev chain
+      self.db.put(key.toOpenArray, rlp.encode(currHash))
+    else:
+      # forking point, done
+      break
+
+    currHash = currHeader.parentHash
+    currHeader = self.getBlockHeader(currHeader.parentHash)
+
 proc setHead*(self: BaseChainDB, blockHash: Hash256): bool =
-  # TODO: apply addBlockNumberToHashLookup to forkPoint
-  if self.headerExists(blockHash):
-    var header: BlockHeader
-    if not self.getBlockHeader(blockHash, header):
-      return false
-    self.addBlockNumberToHashLookup(header)
-    self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(blockHash))
-    return true
-  else:
+  var header: BlockHeader
+  if not self.getBlockHeader(blockHash, header):
     return false
 
+  self.markCanonicalChain(header, blockHash)
+  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(blockHash))
+  return true
+
 proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
-  # TODO: apply addBlockNumberToHashLookup to forkPoint
   var headerHash = rlpHash(header)
   if writeHeader:
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
-  self.addBlockNumberToHashLookup(header)
+  self.markCanonicalChain(header, headerHash)
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
 
 proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
