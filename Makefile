@@ -129,7 +129,11 @@ libbacktrace:
 test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
-# primitive reproducibility test
+# Primitive reproducibility test.
+#
+# On some platforms, with some GCC versions, it may not be possible to get a
+# deterministic order for debugging info sections - even with
+# "-frandom-seed=...". Striping the binaries should make them identical, though.
 test-reproducibility:
 	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
 		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
