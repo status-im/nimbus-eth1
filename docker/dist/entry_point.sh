@@ -27,6 +27,7 @@ build_rocksdb() {
   ROCKSDB_ARCHIVE="rocksdb-v${ROCKSDBVER}.tar.gz"
   ROCKSDB_DIR="rocksdb-${ROCKSDBVER}"
 
+  mkdir -p build
   pushd build >/dev/null
   rm -rf "${ROCKSDB_DIR}"
   if [[ ! -e "${ROCKSDB_ARCHIVE}" ]]; then
