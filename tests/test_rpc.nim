@@ -12,7 +12,7 @@ import
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, rpc_utils],
   ../nimbus/[constants, config, genesis, utils, transaction,
-             vm_state, vm_types],
+             vm_state, vm_types, version],
   ../nimbus/db/[accounts_cache, db_chain],
   ../nimbus/sync/protocol_ethxx,
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],

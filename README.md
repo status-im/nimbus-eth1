@@ -6,12 +6,11 @@
 ![GH action-fluffy](https://github.com/status-im/nimbus-eth1/workflows/fluffy%20CI/badge.svg)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
-[![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
 [![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://get.status.im/chat/public/nimbus-general)
 
 ## Introduction
 
-This repository contains our development work on our execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in terms of resources used.
+This repository contains development work on an execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in terms of resources used.
 
 This repository is also home to [fluffy](./fluffy/README.md), a
 [Portal Network](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md)
@@ -28,7 +27,7 @@ Monthly development updates are shared
 Some recent highlights include:
 - Renewed funding from the EF to accelerate development
 - Completed Berlin and London fork compatibility (EIP-1559). It now passes nearly all the EF Hive testsuite, and 100% of contract execution tests (47,951 tests)
-- New GraphQL and WebSocket APIs, complementing JSON-RPC 
+- New GraphQL and WebSocket APIs, complementing JSON-RPC
 - EVMC compatibility, supporting third-party optimised EVM plugins
 - Up to 100x memory saving during contract executions
 - Asynchronous EVM to execute many contracts in parallel, while they wait for data from the network
@@ -41,8 +40,6 @@ For more detailed write-ups on the development progress, follow the
 [Nimbus blog](https://our.status.im/tag/nimbus/).
 
 ## Building & Testing
-
-_We currently do not guarantee that Nimbus will work on Windows._
 
 ### Prerequisites
 
@@ -84,7 +81,9 @@ nix-shell default.nix
 ```bash
 # The first `make` invocation will update all Git submodules.
 # You'll run `make update` after each `git pull`, in the future, to keep those submodules up to date.
-make nimbus
+# Assuming you have 4 CPU cores available, you can ask Make to run 4 parallel jobs, with "-j4".
+
+make -j4 nimbus
 
 # See available command line options
 build/nimbus --help
@@ -94,7 +93,7 @@ build/nimbus
 
 # Update to latest version
 git pull
-make update
+make -j4 update
 
 # Run tests
 make test
@@ -212,22 +211,22 @@ build/nimbus
 ```
 ### <a name="make-xvars"></a>Experimental make variables
 
-Apart from standard make flags (see link in the next [chapter](#devel-tips)),
-the following make variables can be set to control which version of a virtual
+Apart from standard Make flags (see link in the next [chapter](#devel-tips)),
+the following Make variables can be set to control which version of a virtual
 engine is compiled. The variables are listed with decreasing priority (in
 case of doubt, the lower prioritised variable is ignored when the higher on is
 available.)
 
  * ENABLE_EVMC=1<br>
-   Enable mostly EVMC compliant wrapper around the native nim VM
+   Enable mostly EVMC compliant wrapper around the native Nim VM
 
  * ENABLE_VM2LOWMEM=1<br>
-   Enable new re-factored version of the native nim VM. This version is not
+   Enable new re-factored version of the native Nim VM. This version is not
    optimised and coded in a way so that low memory compilers can handle it
    (observed on 32 bit windows 7.)
 
  * ENABLE_VM2=1<br>
-   Enable new re-factored version of the native nim VM.
+   Enable new re-factored version of the native Nim VM.
 
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)

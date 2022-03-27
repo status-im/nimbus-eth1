@@ -68,11 +68,6 @@
   url = https://github.com/status-im/nim-confutils.git
   ignore = dirty
   branch = master
-[submodule "vendor/nim-beacon-chain"]
-  path = vendor/nim-beacon-chain
-  url = https://github.com/status-im/nim-beacon-chain.git
-  ignore = dirty
-  branch = master
 [submodule "vendor/nim-blscurve"]
   path = vendor/nim-blscurve
   url = https://github.com/status-im/nim-blscurve
@@ -86,16 +81,6 @@
 [submodule "vendor/tempfile.nim"]
   path = vendor/tempfile.nim
   url = https://github.com/OpenSystemsLab/tempfile.nim.git
-  ignore = dirty
-  branch = master
-[submodule "vendor/go/src/github.com/libp2p/go-libp2p-daemon"]
-  path = vendor/go/src/github.com/libp2p/go-libp2p-daemon
-  url = https://github.com/libp2p/go-libp2p-daemon.git
-  ignore = dirty
-  branch = master
-[submodule "vendor/nim-libp2p"]
-  path = vendor/nim-libp2p
-  url = https://github.com/status-im/nim-libp2p.git
   ignore = dirty
   branch = master
 [submodule "vendor/nim-nat-traversal"]
@@ -118,19 +103,9 @@
 	url = https://github.com/status-im/nim-web3.git
   ignore = dirty
   branch = master
-[submodule "vendor/nim-byteutils"]
-  path = vendor/nim-byteutils
-  url = https://github.com/status-im/nim-byteutils.git
-  ignore = dirty
-  branch = master
 [submodule "vendor/nim-snappy"]
   path = vendor/nim-snappy
   url = https://github.com/status-im/nim-snappy.git
-  ignore = dirty
-  branch = master
-[submodule "vendor/NimYAML"]
-  path = vendor/NimYAML
-  url = https://github.com/flyx/NimYAML.git
   ignore = dirty
   branch = master
 [submodule "vendor/nimbus-build-system"]

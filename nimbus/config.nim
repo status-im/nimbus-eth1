@@ -1,5 +1,4 @@
-# Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,31 +18,12 @@ import
   stew/shims/net as stewNet,
   eth/[p2p, common, net/nat, p2p/bootnodes],
   "."/[db/select_backend, chain_config,
-    constants, vm_compile_info
+    constants, vm_compile_info, version
   ]
 
 export stewNet
 
 const
-  NimbusName* = "nimbus-eth1"
-  ## project name string
-
-  NimbusMajor*: int = 0
-  ## is the major number of Nimbus' version.
-
-  NimbusMinor*: int = 1
-  ## is the minor number of Nimbus' version.
-
-  NimbusPatch*: int = 0
-  ## is the patch number of Nimbus' version.
-
-  NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
-  ## is the version of Nimbus as a string.
-
-  GitRevision = staticExec("git rev-parse --short HEAD").replace("\n") # remove CR
-
-  NimVersion = staticExec("nim --version").strip()
-
   # TODO: fix this agent-string format to match other
   # eth clients format
   NimbusIdent* = "$# v$# [$#: $#, $#, $#, $#]" % [
@@ -55,7 +35,6 @@ const
     VmName,
     GitRevision
   ]
-  ## project ident name for networking services
 
 let
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
@@ -73,7 +52,7 @@ let
 
   NimbusHeader* = "$#\p\p$#" % [
     NimbusBuild,
-    NimVersion
+    version.NimVersion
   ]
 
 proc defaultDataDir*(): string =

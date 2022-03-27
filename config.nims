@@ -1,3 +1,5 @@
+import strutils
+
 if defined(release):
   switch("nimcache", "nimcache/release/$projectName")
 else:
@@ -15,6 +17,10 @@ if defined(windows):
     # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
     switch("passL", "-Wl,--large-address-aware")
 
+  # Avoid some rare stack corruption while using exceptions with a SEH-enabled
+  # toolchain: https://github.com/status-im/nimbus-eth2/issues/3121
+  switch("define", "nimRawSetjmp")
+
 # This helps especially for 32-bit x86, which sans SSE2 and newer instructions
 # requires quite roundabout code generation for cryptography, and other 64-bit
 # and larger arithmetic use cases, along with register starvation issues. When
@@ -28,8 +34,17 @@ if defined(windows):
 #
 if defined(disableMarchNative):
   if defined(i386) or defined(amd64):
-    switch("passC", "-mssse3")
-    switch("passL", "-mssse3")
+    if defined(macosx):
+      # https://support.apple.com/kb/SP777
+      # "macOS Mojave - Technical Specifications": EOL as of 2021-10 so macOS
+      # users on pre-Nehalem must be running either some Hackintosh, or using
+      # an unsupported macOS version beyond that most recently EOL'd. Nehalem
+      # supports instruction set extensions through SSE4.2 and POPCNT.
+      switch("passC", "-march=nehalem")
+      switch("passL", "-march=nehalem")
+    else:
+      switch("passC", "-mssse3")
+      switch("passL", "-mssse3")
 elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-mcpu=apple-a14")
@@ -63,19 +78,39 @@ if not defined(windows):
 
 switch("define", "withoutPCRE")
 
-# the default open files limit is too low on macOS (512), breaking the
-# "--debugger:native" build. It can be increased with `ulimit -n 1024`.
-if not defined(macosx):
+when not defined(disable_libbacktrace):
+  --define:nimStackTraceOverride
+  switch("import", "libbacktrace")
+else:
+  --stacktrace:on
+  --linetrace:on
+
+var canEnableDebuggingSymbols = true
+if defined(macosx):
+  # The default open files limit is too low on macOS (512), breaking the
+  # "--debugger:native" build. It can be increased with `ulimit -n 1024`.
+  let openFilesLimitTarget = 1024
+  var openFilesLimit = 0
+  try:
+    openFilesLimit = staticExec("ulimit -n").strip(chars = Whitespace + Newlines).parseInt()
+    if openFilesLimit < openFilesLimitTarget:
+      echo "Open files limit too low to enable debugging symbols and lightweight stack traces."
+      echo "Increase it with \"ulimit -n " & $openFilesLimitTarget & "\""
+      canEnableDebuggingSymbols = false
+  except:
+    echo "ulimit error"
+# We ignore this resource limit on Windows, where a default `ulimit -n` of 256
+# in Git Bash is apparently ignored by the OS, and on Linux where the default of
+# 1024 is good enough for us.
+
+if canEnableDebuggingSymbols:
   # add debugging symbols and original files and line numbers
   --debugger:native
-  if not (defined(windows) and defined(i386)) and not defined(disable_libbacktrace):
-    # light-weight stack traces using libbacktrace and libunwind
-    --define:nimStackTraceOverride
-    switch("import", "libbacktrace")
 
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
-# libnimbus.so needs position-independent code
-switch("passC", "-fPIC")
+
+# `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
+switch("warning", "CaseTransition:off")
 
 # The compiler doth protest too much, methinks, about all these cases where it can't
 # do its (N)RVO pass: https://github.com/nim-lang/RFCs/issues/230

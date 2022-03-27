@@ -16,10 +16,11 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 + DataTestNotEnoughGAS.json                                       OK
 + DataTestZeroBytes.json                                          OK
 + String10MbData.json                                             OK
++ String10MbDataNotEnoughGAS.json                                 OK
 + dataTx_bcValidBlockTest.json                                    OK
 + dataTx_bcValidBlockTestFrontier.json                            OK
 ```
-OK: 8/8 Fail: 0/8 Skip: 0/8
+OK: 9/9 Fail: 0/9 Skip: 0/9
 ## ttEIP2028
 ```diff
 + DataTestInsufficientGas2028.json                                OK
@@ -29,30 +30,39 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 ## ttGasLimit
 ```diff
 + NotEnoughGasLimit.json                                          OK
-+ TransactionWithGasLimitOverflow.json                            OK
-+ TransactionWithGasLimitOverflow2.json                           OK
-+ TransactionWithGasLimitOverflow63.json                          OK
-+ TransactionWithGasLimitOverflow63_1.json                        OK
++ TransactionWithGasLimitOverflow256.json                         OK
++ TransactionWithGasLimitOverflow64.json                          OK
++ TransactionWithGasLimitOverflowZeros64.json                     OK
 + TransactionWithGasLimitxPriceOverflow.json                      OK
-+ TransactionWithGasLimitxPriceOverflow2.json                     OK
-+ TransactionWithHighGas.json                                     OK
-+ TransactionWithHihghGasLimit63m1.json                           OK
++ TransactionWithHighGasLimit63.json                              OK
++ TransactionWithHighGasLimit63Minus1.json                        OK
++ TransactionWithHighGasLimit63Plus1.json                         OK
++ TransactionWithHighGasLimit64Minus1.json                        OK
++ TransactionWithLeadingZerosGasLimit.json                        OK
 ```
-OK: 9/9 Fail: 0/9 Skip: 0/9
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## ttGasPrice
 ```diff
 + TransactionWithGasPriceOverflow.json                            OK
 + TransactionWithHighGasPrice.json                                OK
 + TransactionWithHighGasPrice2.json                               OK
++ TransactionWithLeadingZerosGasPrice.json                        OK
 ```
-OK: 3/3 Fail: 0/3 Skip: 0/3
+OK: 4/4 Fail: 0/4 Skip: 0/4
 ## ttNonce
 ```diff
++ TransactionWithEmptyBigInt.json                                 OK
 + TransactionWithHighNonce256.json                                OK
 + TransactionWithHighNonce32.json                                 OK
++ TransactionWithHighNonce64.json                                 OK
++ TransactionWithHighNonce64Minus1.json                           OK
++ TransactionWithHighNonce64Minus2.json                           OK
++ TransactionWithHighNonce64Plus1.json                            OK
++ TransactionWithLeadingZerosNonce.json                           OK
 + TransactionWithNonceOverflow.json                               OK
++ TransactionWithZerosBigInt.json                                 OK
 ```
-OK: 3/3 Fail: 0/3 Skip: 0/3
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## ttRSValue
 ```diff
 + RightVRSTestF0000000a.json                                      OK
@@ -71,6 +81,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + TransactionWithRvalueHigh.json                                  OK
 + TransactionWithRvalueOverflow.json                              OK
 + TransactionWithRvaluePrefixed00.json                            OK
++ TransactionWithRvaluePrefixed00BigInt.json                      OK
 + TransactionWithRvalueTooHigh.json                               OK
 + TransactionWithSvalue0.json                                     OK
 + TransactionWithSvalue1.json                                     OK
@@ -80,13 +91,15 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + TransactionWithSvalueLessThan_c_secp256k1n_x05.json             OK
 + TransactionWithSvalueOverflow.json                              OK
 + TransactionWithSvaluePrefixed00.json                            OK
++ TransactionWithSvaluePrefixed00BigInt.json                      OK
 + TransactionWithSvalueTooHigh.json                               OK
 + unpadedRValue.json                                              OK
 ```
-OK: 27/27 Fail: 0/27 Skip: 0/27
+OK: 29/29 Fail: 0/29 Skip: 0/29
 ## ttSignature
 ```diff
 + EmptyTransaction.json                                           OK
++ PointAtInfinity.json                                            OK
 + RSsecp256k1.json                                                OK
 + RightVRSTest.json                                               OK
 + SenderTest.json                                                 OK
@@ -120,9 +133,11 @@ OK: 27/27 Fail: 0/27 Skip: 0/27
 + invalidSignature.json                                           OK
 + libsecp256k1test.json                                           OK
 ```
-OK: 33/33 Fail: 0/33 Skip: 0/33
+OK: 34/34 Fail: 0/34 Skip: 0/34
 ## ttVValue
 ```diff
++ InvalidChainID0ValidV0.json                                     OK
++ InvalidChainID0ValidV1.json                                     OK
 + V_equals37.json                                                 OK
 + V_equals38.json                                                 OK
 + V_overflow32bit.json                                            OK
@@ -137,6 +152,12 @@ OK: 33/33 Fail: 0/33 Skip: 0/33
 + V_wrongvalue_124.json                                           OK
 + V_wrongvalue_ff.json                                            OK
 + V_wrongvalue_ffff.json                                          OK
++ ValidChainID1InvalidV0.json                                     OK
++ ValidChainID1InvalidV00.json                                    OK
++ ValidChainID1InvalidV01.json                                    OK
++ ValidChainID1InvalidV1.json                                     OK
++ ValidChainID1ValidV0.json                                       OK
++ ValidChainID1ValidV1.json                                       OK
 + WrongVRSTestVEqual26.json                                       OK
 + WrongVRSTestVEqual29.json                                       OK
 + WrongVRSTestVEqual31.json                                       OK
@@ -144,13 +165,14 @@ OK: 33/33 Fail: 0/33 Skip: 0/33
 + WrongVRSTestVEqual39.json                                       OK
 + WrongVRSTestVEqual41.json                                       OK
 ```
-OK: 20/20 Fail: 0/20 Skip: 0/20
+OK: 28/28 Fail: 0/28 Skip: 0/28
 ## ttValue
 ```diff
 + TransactionWithHighValue.json                                   OK
 + TransactionWithHighValueOverflow.json                           OK
++ TransactionWithLeadingZerosValue.json                           OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## ttWrongRLP
 ```diff
 + RLPAddressWithFirstZeros.json                                   OK
@@ -167,8 +189,6 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + RLPNonceWithFirstZeros.json                                     OK
 + RLPTransactionGivenAsArray.json                                 OK
 + RLPValueWithFirstZeros.json                                     OK
-+ RLPWrongAddress.json                                            OK
-+ RLPWrongData.json                                               OK
 + RLPgasLimitWithFirstZeros.json                                  OK
 + RLPgasPriceWithFirstZeros.json                                  OK
 + TRANSCT_HeaderGivenAsArray_0.json                               OK
@@ -184,16 +204,6 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + TRANSCT__RandomByteAtRLP_8.json                                 OK
 + TRANSCT__RandomByteAtRLP_9.json                                 OK
 + TRANSCT__RandomByteAtTheEnd.json                                OK
-+ TRANSCT__WrongCharAtRLP_0.json                                  OK
-+ TRANSCT__WrongCharAtRLP_1.json                                  OK
-+ TRANSCT__WrongCharAtRLP_2.json                                  OK
-+ TRANSCT__WrongCharAtRLP_3.json                                  OK
-+ TRANSCT__WrongCharAtRLP_4.json                                  OK
-+ TRANSCT__WrongCharAtRLP_5.json                                  OK
-+ TRANSCT__WrongCharAtRLP_6.json                                  OK
-+ TRANSCT__WrongCharAtRLP_7.json                                  OK
-+ TRANSCT__WrongCharAtRLP_8.json                                  OK
-+ TRANSCT__WrongCharAtRLP_9.json                                  OK
 + TRANSCT__ZeroByteAtRLP_0.json                                   OK
 + TRANSCT__ZeroByteAtRLP_1.json                                   OK
 + TRANSCT__ZeroByteAtRLP_2.json                                   OK
@@ -204,7 +214,6 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + TRANSCT__ZeroByteAtRLP_7.json                                   OK
 + TRANSCT__ZeroByteAtRLP_8.json                                   OK
 + TRANSCT__ZeroByteAtRLP_9.json                                   OK
-+ TRANSCT__ZeroByteAtTheEnd.json                                  OK
 + TRANSCT_data_GivenAsList.json                                   OK
 + TRANSCT_gasLimit_GivenAsList.json                               OK
 + TRANSCT_gasLimit_Prefixed0000.json                              OK
@@ -221,10 +230,10 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + TRANSCT_to_TooLarge.json                                        OK
 + TRANSCT_to_TooShort.json                                        OK
 + aCrashingRLP.json                                               OK
-+ aMalicousRLP.json                                               OK
++ aMaliciousRLP.json                                              OK
 + tr201506052141PYTHON.json                                       OK
 ```
-OK: 70/70 Fail: 0/70 Skip: 0/70
+OK: 57/57 Fail: 0/57 Skip: 0/57
 
 ---TOTAL---
-OK: 181/181 Fail: 0/181 Skip: 0/181
+OK: 190/190 Fail: 0/190 Skip: 0/190

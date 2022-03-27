@@ -1,0 +1,34 @@
+# Example usage:
+#
+# mkdir data
+# docker-compose -f docker-compose-example1.yml up --quiet-pull --no-color --detach
+
+version: "2.4"
+services:
+  nimbus:
+    image: statusim/nimbus-eth1:amd64-latest
+    container_name: nimbus-eth1-amd64-latest
+    restart: unless-stopped
+    stop_grace_period: 1m
+    ports:
+      - 9000:9000/tcp
+      - 9000:9000/udp
+      - 127.0.0.1:9190:9190/tcp
+      - 127.0.0.1:8008:8008/tcp
+    volumes:
+      - ./data:/home/user/nimbus-eth1/build/data
+    # you need to make sure that port 9000 is accesible from outside; no automagic port forwarding here
+    command: >-
+      --network=mainnet
+      --data-dir=/home/user/nimbus-eth1/build/data/mainnet
+      --nat=extip:YOUR_EXTERNAL_IP
+      --log-level=info
+      --tcp-port=9000
+      --udp-port=9000
+      --rpc
+      --rpc-address=0.0.0.0
+      --rpc-port=9190
+      --metrics
+      --metrics-address=0.0.0.0
+      --metrics-port=8008
+
