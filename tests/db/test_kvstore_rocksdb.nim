@@ -8,21 +8,13 @@ import
   ../../nimbus/db/kvstore_rocksdb,
   eth/../tests/db/test_kvstore
 
-proc kvstorerocksdbMain*() =
-  suite "RocksStoreRef":
-    test "KvStore interface":
-      debugecho "a"
-      let tmp = getTempDir() / "nimbus-test-db"
-      removeDir(tmp)
+suite "RocksStoreRef":
+  test "KvStore interface":
+    let tmp = getTempDir() / "nimbus-test-db"
+    removeDir(tmp)
 
-      debugecho "b"
-      let db = RocksStoreRef.init(tmp, "test")[]
-      debugEcho "c"
-      defer:
-        debugEcho "f"
-        db.close()
+    let db = RocksStoreRef.init(tmp, "test")[]
+    defer:
+      db.close()
 
-      debugEcho "d"
-
-      testKvStore(kvStore db, false)
-      debugecho "e"
+    testKvStore(kvStore db, false)

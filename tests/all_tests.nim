@@ -44,5 +44,4 @@ cliBuilder:
           ./test_configuration,
           ./test_keyed_queue_rlp,
           ./test_txpool,
-          ./test_merge,
-          ./db/test_kvstore_rocksdb
+          ./test_merge
