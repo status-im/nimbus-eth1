@@ -41,7 +41,7 @@ type
     {.gcsafe, raises: [Defect].}
 
   PortalStream* = ref object
-    transport*: UtpDiscv5Protocol
+    transport: UtpDiscv5Protocol
     # TODO:
     # Decide on what's the better collection to use and set some limits in them
     # on how many uTP transfers allowed to happen concurrently.
@@ -98,6 +98,34 @@ proc addContentRequest*(
   stream.contentRequests.add(contentRequest)
 
   return connectionId
+
+proc connectTo*(
+  stream: PortalStream, 
+  nodeAddress: NodeAddress, 
+  connectionId: uint16): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
+  let socketRes = await stream.transport.connectTo(nodeAddress, connectionId)
+
+  if socketRes.isErr():
+    case socketRes.error.kind
+    of SocketAlreadyExists:
+      # This error means that there is already socket to this nodeAddress with given
+      # connection id, in our use case it most probably means that other side sent us
+      # connection id which is already used.
+      # For now we just fail connection and return error other strategy to consider
+      # would be check this what this this connection status,and then re-use it, or 
+      # close it and re-try connection
+      let msg = "Socket to " & $nodeAddress & "with connection id: " & $connectionId & " already exists"
+      return err(msg)
+    of ConnectionTimedOut:
+      # Other strategy of handling this error would be to retry conncection few times
+      # before giving up, but we known (as we control uTP impl) that this error will only
+      # be retruned if SYN packet was re-sent 3 times and failed to be acked. This should
+      # be enough for us to known that remote host is not reachable.
+      let msg = "uTP timeout while trying to connect to " & $nodeAddress
+      return err(msg)
+
+  let socket = socketRes.get()
+  return ok(socket)
 
 proc writeAndClose(
     socket: UtpSocket[NodeAddress], stream: PortalStream,
