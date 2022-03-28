@@ -128,13 +128,13 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc findFilePath(file: string): string =
-  result = "?unknown?" / file
+proc findFilePath(file: string): Result[string,void] =
   for dir in baseDir:
     for repo in repoDir:
       let path = dir / repo / file
       if path.fileExists:
-        return path
+        return ok(path)
+  err()
 
 proc flushDbDir(s: string) =
   if s != "":
@@ -211,7 +211,7 @@ proc genesisLoadRunner(noisy = true;
 
   let
     gFileInfo = sSpcs.genesisFile.splitFile.name.split(".")[0]
-    gFilePath = sSpcs.genesisFile.findFilePath
+    gFilePath = sSpcs.genesisFile.findFilePath.value
 
     tmpDir = if disablePersistentDB: "*notused*"
              else: gFilePath.splitFile.dir / "tmp"
@@ -288,7 +288,7 @@ proc testnetChainRunner(noisy = true;
                         stopAfterBlock = 999999999) =
   let
     cFileInfo = sSpcs.captures[0].splitFile.name.split(".")[0]
-    cFilePath = sSpcs.captures.mapIt(it.findFilePath)
+    cFilePath = sSpcs.captures.mapIt(it.findFilePath.value)
     dbInfo = if memoryDB: "in-memory" else: "persistent"
 
     pivotBlockNumber = sSpcs.failBlockAt.u256
