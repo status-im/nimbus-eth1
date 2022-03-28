@@ -180,7 +180,7 @@ proc findSnapshot(d: var LocalSnaps): bool
         # why there should be any, though)
         d.trail.snaps = rc.value.cloneSnapshot
         # d.say "findSnapshot cached ", d.trail.pp
-        debug "Found recently cached voting snapshot",
+        trace "Found recently cached voting snapshot",
           blockNumber = number,
           blockHash = hash
         return true

@@ -148,6 +148,11 @@ iterator undumpNextGroup*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
     echo &"*** Ignoring line({lno}): {line}."
     waitFor = "transaction"
 
+iterator undumpNextGroup*(gzs: seq[string]): (seq[BlockHeader],seq[BlockBody])=
+  for f in gzs:
+    for w in f.undumpNextGroup:
+      yield w
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
