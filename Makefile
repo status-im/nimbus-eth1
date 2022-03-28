@@ -101,6 +101,11 @@ else
   endif
 endif
 
+# chunked messages enabled by default, use ENABLE_CHUNKED_RLPX=0 to disable
+ifneq ($(if $(ENABLE_CHUNKED_RLPX),$(ENABLE_CHUNKED_RLPX),1),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:chunked_rlpx_enabled
+endif
+
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common
 	rm -rf nimbus.nims && \
