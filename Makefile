@@ -92,11 +92,11 @@ ifneq ($(ENABLE_EVMC), 0)
 endif
 
 # disabled by default, enable with ENABLE_VM2LOWMEM=1
-ifneq ($(ENABLE_VM2LOWMEM), 0)
+ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
   NIM_PARAMS += -d:vm2_enabled -d:lowmem:1
 else
   # disabled by default, enable with ENABLE_VM2=1
-  ifneq ($(ENABLE_VM2), 0)
+  ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
     NIM_PARAMS += -d:vm2_enabled
   endif
 endif
