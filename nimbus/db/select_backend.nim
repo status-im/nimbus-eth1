@@ -43,7 +43,7 @@ when dbBackend == sqlite:
     let db = SqStoreRef.init(path, "nimbus").expect("working database")
     ChainDB(kv: kvStore db.openKvStore().expect("working database"))
 elif dbBackend == rocksdb:
-  import eth/db/kvstore_rocksdb as database_backend
+  import ./kvstore_rocksdb as database_backend
   proc newChainDB*(path: string): ChainDB =
     ChainDB(kv: kvStore RocksStoreRef.init(path, "nimbus").tryGet())
 elif dbBackend == lmdb:

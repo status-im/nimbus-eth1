@@ -18,7 +18,8 @@ requires "nim >= 1.2.0",
   "libbacktrace",
   "nimcrypto",
   "stew",
-  "stint"
+  "stint",
+  "rocksdb"
 
 binDir = "build"
 
