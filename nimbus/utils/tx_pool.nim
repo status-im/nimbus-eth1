@@ -10,10 +10,6 @@
 
 ## TODO:
 ## =====
-## * Support `local` accounts the txs of which would be prioritised. This is
-##   currently unsupported. For now, all txs are considered from `remote`
-##   accounts.
-##
 ## * No uncles are handled by this pool
 ##
 ## * Impose a size limit to the bucket database. Which items would be removed?
@@ -845,30 +841,26 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
   xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
 # ------------------------------------------------------------------------------
-# Public functions, more immediate actions deemed not so important yet
+# Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
 
-#[
+proc setLocal*(xp: TxPoolRef; account: EthAddress) =
+  ## Tag argument `account` local which means that the transactions from this
+  ## account -- together with all other local accounts -- will be considered
+  ## first for packing.
+  xp.txDB.setLocal(account)
 
-# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Retrieves the accounts currently considered `local` or `remote` (i.e.
-  ## the have txs of that kind) destaged on request arguments.
-  if local:
-    result = xp.txDB.locals
-  else:
-    result = xp.txDB.remotes
+proc resLocal*(xp: TxPoolRef; account: EthAddress) =
+  ## Untag argument `account` as local which means that the transactions from
+  ## this account -- together with all other untagged accounts -- will be
+  ## considered for packing after the locally tagged accounts.
+  xp.txDB.setLocal(account)
 
-# core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
-proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## For given account, remote transactions are migrated to local transactions.
-  ## The function returns the number of transactions migrated.
-  xp.txDB.setLocal(signer)
-  xp.txDB.bySender.eq(signer).nItems
-
-]#
+proc accountRanks(xp: TxPoolRef): TxTabsLocality =
+  ## Returns two lists, one for local and the other for non-local accounts.
+  ## Any of these lists is sorted by the highest rank first. This sorting
+  ## means that the order may be out-dated after adding transactions.
+  xp.txDB.locality
 
 # ------------------------------------------------------------------------------
 # End

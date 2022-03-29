@@ -35,6 +35,14 @@ type
   TxTabsGasTotals* = tuple
     pending, staged, packed: GasInt ## sum => total
 
+  TxTabsLocality* = object ##\
+    ## Return value for `locality()` function
+    local: seq[EthAddress] ##\
+      ## List of local accounts, higest rank first
+
+    remote: seq[EthAddress] ##\
+      ## List of non-local accounts, higest rank first
+
   TxTabsRef* = ref object ##\
     ## Base descriptor
     maxRejects: int ##\
@@ -253,6 +261,14 @@ proc maxRejects*(xp: TxTabsRef): int =
   ## Getter
   xp.maxRejects
 
+proc local(lc: TxTabsLocality): seq[EthAddress] =
+  ## Getter
+  lc.local
+
+proc remote(lc: TxTabsLocality): seq[EthAddress] =
+  ## Getter
+  lc.remote
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -310,14 +326,17 @@ proc locals*(xp: TxTabsRef): seq[EthAddress] =
   ## Returns  an unsorted list of addresses tagged *local*
   toSeq(xp.byLocal.keys)
 
-proc remotes*(xp: TxTabsRef): seq[EthAddress] =
-  ## Returns an sorted list of untagged addresses, highest address rank first
+proc locality*(xp: TxTabsRef): TxTabsLocality =
+  ## Returns a pair of sorted lists of account addresses,
+  ## highest address rank first
   var rcRank = xp.byRank.le(TxRank.high)
   while rcRank.isOK:
     let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
     for account in addrList.keys:
-      if not xp.byLocal.hasKey(account):
-        result.add account
+      if xp.byLocal.hasKey(account):
+        result.local.add account
+      else:
+        result.remote.add account
     rcRank = xp.byRank.lt(rank)
 
 proc setLocal*(xp: TxTabsRef; sender: EthAddress) =
