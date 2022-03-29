@@ -814,6 +814,10 @@ proc runTxPackerTests(noisy = true) =
           " increase=", xq.gasCumulative - smallerBlockSize,
           " trg/max=", blockProfitRatio, "%"
 
+        noisy.say "***", "accounts",
+          " local=", xq.accountRanks.local.pp,
+          " remote=", xq.accountRanks.remote.pp
+
       # if true: return
       test "Store generated block in block chain database":
 

@@ -35,7 +35,7 @@ let
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc recoverItem*(xp: TxPoolRef; tx: var Transaction;
+proc recoverItem*(xp: TxPoolRef; tx: Transaction;
                   status = txItemPending; info = ""): Result[TxItemRef,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Recover item from waste basket or create new. It is an error if the item

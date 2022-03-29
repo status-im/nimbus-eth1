@@ -261,11 +261,11 @@ proc maxRejects*(xp: TxTabsRef): int =
   ## Getter
   xp.maxRejects
 
-proc local(lc: TxTabsLocality): seq[EthAddress] =
+proc local*(lc: TxTabsLocality): seq[EthAddress] =
   ## Getter
   lc.local
 
-proc remote(lc: TxTabsLocality): seq[EthAddress] =
+proc remote*(lc: TxTabsLocality): seq[EthAddress] =
   ## Getter
   lc.remote
 
