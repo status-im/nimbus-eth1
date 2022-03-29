@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: NimBinaries
-          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-fluffy'
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
@@ -215,7 +215,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: external/dlls-${{ matrix.target.cpu }}
-          key: 'dlls-${{ matrix.target.cpu }}'
+          key: 'dlls-${{ matrix.target.cpu }}-fluffy'
 
       - name: Install DLLs dependencies (Windows)
         if: >
@@ -247,7 +247,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: NimBinaries
-          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}'
+          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-fluffy'
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
