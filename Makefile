@@ -92,13 +92,18 @@ ifneq ($(ENABLE_EVMC), 0)
 endif
 
 # disabled by default, enable with ENABLE_VM2LOWMEM=1
-ifneq ($(ENABLE_VM2LOWMEM), 0)
+ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
   NIM_PARAMS += -d:vm2_enabled -d:lowmem:1
 else
   # disabled by default, enable with ENABLE_VM2=1
-  ifneq ($(ENABLE_VM2), 0)
+  ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
     NIM_PARAMS += -d:vm2_enabled
   endif
+endif
+
+# chunked messages enabled by default, use ENABLE_CHUNKED_RLPX=0 to disable
+ifneq ($(if $(ENABLE_CHUNKED_RLPX),$(ENABLE_CHUNKED_RLPX),1),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:chunked_rlpx_enabled
 endif
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink

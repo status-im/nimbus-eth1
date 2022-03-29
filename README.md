@@ -217,6 +217,10 @@ engine is compiled. The variables are listed with decreasing priority (in
 case of doubt, the lower prioritised variable is ignored when the higher on is
 available.)
 
+ * ENABLE_CHUNKED_RLPX=0<br>
+   Disable legacy chunked RLPx messages which are enabled by default for
+   synchronising against `Nethermind` nodes
+
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
