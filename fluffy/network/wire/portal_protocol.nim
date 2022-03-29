@@ -505,7 +505,11 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
           id = dst.id
         return err("Trying to connect to node with unknown address")
 
-      let connectionResult = await p.stream.connectTo(nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
+      let connectionResult = 
+        await p.stream.connectTo(
+          nodeAddress.unsafeGet(),
+          uint16.fromBytesBE(m.connectionId)
+        )
 
       if connectionResult.isErr():
         error "Utp connection error while trying to find content",
@@ -569,7 +573,11 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
         id = dst.id
       return err("Trying to connect to node with unknown address")
       
-    let connectionResult = await p.stream.connectTo(nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
+    let connectionResult = 
+      await p.stream.connectTo(
+        nodeAddress.unsafeGet(), 
+        uint16.fromBytesBE(m.connectionId)
+      )
 
     if connectionResult.isErr():
       error "Utp connection error while trying to offer content",
