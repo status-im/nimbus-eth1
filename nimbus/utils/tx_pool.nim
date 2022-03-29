@@ -862,7 +862,7 @@ proc resLocal*(xp: TxPoolRef; account: EthAddress) =
   ## Untag argument `account` as local which means that the transactions from
   ## this account -- together with all other untagged accounts -- will be
   ## considered for packing after the locally tagged accounts.
-  xp.txDB.setLocal(account)
+  xp.txDB.resLocal(account)
 
 proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
   ## Returns two lists, one for local and the other for non-local accounts.
