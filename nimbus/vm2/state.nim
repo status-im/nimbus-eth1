@@ -11,7 +11,6 @@
 import
   std/[json, macros, options, sets, strformat, tables],
   ../../stateless/[witness_from_tree, witness_types],
-  ../config,
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../errors,
