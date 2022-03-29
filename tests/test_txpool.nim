@@ -602,8 +602,8 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
-        xr = bcDB.toTxPool(txList, ntNextFee, noisy)
+        xq = bcDB.toTxPool(txList, ntBaseFee, noisy = noisy)
+        xr = bcDB.toTxPool(txList, ntNextFee, noisy = noisy)
       block:
         let
           pending = xq.nItems.pending
@@ -742,7 +742,7 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
+        xq = bcDB.toTxPool(txList, ntBaseFee, noisy = noisy)
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 8)
@@ -814,10 +814,19 @@ proc runTxPackerTests(noisy = true) =
           " increase=", xq.gasCumulative - smallerBlockSize,
           " trg/max=", blockProfitRatio, "%"
 
-        noisy.say "***", "accounts",
-          " local=", xq.accountRanks.local.pp,
-          " remote=", xq.accountRanks.remote.pp
+        let
+          accountExtractPC = 10
+          acc = xq.accountRanks
+          nExtract = (acc.remote.len * accountExtractPC + 50) div 100
+          accExtracted = acc.remote[acc.remote.len - nExtract .. ^1]
 
+        noisy.say "***", "accounts",
+          " local=", acc.local.pp,
+          " remote=", acc.remote.pp,
+          " remote.len=", acc.remote.len,
+          " nExtract=", nExtract,
+          " accExtracted=", accExtracted.pp
+          
       # if true: return
       test "Store generated block in block chain database":
 

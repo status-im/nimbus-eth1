@@ -116,9 +116,10 @@ proc toTxPool*(
 
 
 proc toTxPool*(
-    db: BaseChainDB;            ## to be modified, initialisier for `TxPool`
-    itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0.GasPrice;       ## initalise with `baseFee` (unless 0)
+    db: BaseChainDB;              ## to be modified, initialisier for `TxPool`
+    itList: seq[TxItemRef];       ## import items into new `TxPool` (read only)
+    baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
+    local: seq[EthAddress] = @[]; ## local addresses
     noisy = true): TxPoolRef =
 
   doAssert not db.isNil
@@ -127,30 +128,32 @@ proc toTxPool*(
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
+  let noLocals = local.len == 0
+  var localAddr: Table[EthAddress,bool]
+  for a in local:
+    localAddr[a] = true
+
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for item in itList:
-      result.jobAddTx(item.tx, item.info)
-  result.jobCommit
+      if noLocals:
+        result.jobAddTx(item.tx, item.info)
+      elif localAddr.hasKey(item.sender):
+        doAssert result.addLocal(item.tx, true).isOk
+      else:
+        doAssert result.addRemote(item.tx, true).isOk
+      result.jobCommit
   doAssert result.nItems.total == itList.len
 
 
 proc toTxPool*(
-    db: BaseChainDB;
-    itList: seq[TxItemRef];
-    baseFee = 0.GasPrice;
-    noisy = true): TxPoolRef =
-  var newList = itList
-  db.toTxPool(newList, baseFee, noisy)
-
-
-proc toTxPool*(
-    db: BaseChainDB;            ## to be modified, initialisier for `TxPool`
-    timeGap: var Time;          ## to be set, time in the middle of time gap
-    nGapItems: var int;         ## to be set, # items before time gap
-    itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0.GasPrice;       ## initalise with `baseFee` (unless 0)
-    itemsPC = 30;               ## % number if items befor time gap
-    delayMSecs = 200;           ## size of time vap
+    db: BaseChainDB;              ## to be modified, initialisier for `TxPool`
+    timeGap: var Time;            ## to be set, time in the middle of time gap
+    nGapItems: var int;           ## to be set, # items before time gap
+    itList: var seq[TxItemRef];   ## import items into new `TxPool` (read only)
+    baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
+    itemsPC = 30;                 ## % number if items befor time gap
+    delayMSecs = 200;             ## size of time vap
+    local: seq[EthAddress] = @[]; ## local addresses
     noisy = true): TxPoolRef =
   ## Variant of `toTxPoolFromSeq()` with a time gap between consecutive
   ## items on the `remote` queue
@@ -161,6 +164,11 @@ proc toTxPool*(
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
+  let noLocals = local.len == 0
+  var localAddr: Table[EthAddress,bool]
+  for a in local:
+    localAddr[a] = true
+
   let
     delayAt = itList.len * itemsPC div 100
     middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
@@ -168,7 +176,12 @@ proc toTxPool*(
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for n in 0 ..< itList.len:
       let item = itList[n]
-      result.jobAddTx(item.tx, item.info)
+      if noLocals:
+        result.jobAddTx(item.tx, item.info)
+      elif localAddr.hasKey(item.sender):
+        doAssert result.addLocal(item.tx, true).isOk
+      else:
+        doAssert result.addRemote(item.tx, true).isOk
       if delayAt == n:
         nGapItems = n # pass back value
         noisy.say &"time gap after transactions"
