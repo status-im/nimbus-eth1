@@ -20,6 +20,14 @@ requires "nim >= 1.2.0",
   "stew",
   "stint"
 
+binDir = "build"
+
+namedBin = {
+  "nimbus/nimbus": "nimbus",
+  "fluffy/fluffy": "fluffy",
+  "fluffy/tools/portalcli": "portalcli",
+}.toTable()
+
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
     mkDir "build"
