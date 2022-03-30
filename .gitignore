@@ -32,3 +32,6 @@ nimcache
 
 /dist
 
+# Nimble user files
+nimble.develop
+nimble.paths
