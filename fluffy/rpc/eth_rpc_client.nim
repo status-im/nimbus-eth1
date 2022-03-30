@@ -8,9 +8,10 @@
 import
   std/os,
   json_rpc/rpcclient,
+  json_rpc/errors, # TODO: should be exported in json_rpc/clients/httpclient
   web3/conversions, # sigh
   ../../nimbus/rpc/[rpc_types, hexstrings, rpc_utils]
 
-export rpcclient, rpc_types
+export rpcclient, rpc_types, errors
 
 createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_eth_calls.nim")

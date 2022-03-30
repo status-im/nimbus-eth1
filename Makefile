@@ -170,7 +170,7 @@ fluffy-test: | build deps
 
 # builds the fluffy tools
 fluffy-tools: | build deps
-	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) nim fluffy_tools $(NIM_PARAMS) nimbus.nims
 
 # builds the fluffy tools
 utp-test-app: | build deps
