@@ -67,7 +67,7 @@ type
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
 
     # EIP-4399 and EIP-3675
-    prevRandao: Hash256      ## POS block randomness
+    prevRandao: Hash256      ## PoS block randomness
 
 # ------------------------------------------------------------------------------
 # Private functions

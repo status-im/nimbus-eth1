@@ -828,6 +828,12 @@ proc `head=`*(xp: TxPoolRef; val: BlockHeader)
     xp.pDirtyBuckets = true
     xp.bucketFlushPacked
 
+proc `prevRandao=`*(xp: TxPoolRef; val: Hash256) =
+  ## Setter, PoS block randomness
+  ## Used by `prevRandao` op code in EVM after transition to PoS
+  ## do nothing before transition
+  xp.chain.prevRandao = val
+
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
 # ------------------------------------------------------------------------------
