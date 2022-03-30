@@ -505,16 +505,18 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
           id = dst.id
         return err("Trying to connect to node with unknown address")
 
-      let socketRes = await p.stream.transport.connectTo(
-          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
-      if socketRes.isErr():
-        # TODO: get proper error mapped
-        return err("Error connecting to uTP socket")
-      let socket = socketRes.get()
-      if not socket.isConnected():
-        socket.close()
-        return err("Portal uTP socket is not in connected state")
+      let connectionResult = 
+        await p.stream.connectTo(
+          nodeAddress.unsafeGet(),
+          uint16.fromBytesBE(m.connectionId)
+        )
 
+      if connectionResult.isErr():
+        error "Utp connection error while trying to find content",
+          msg = connectionResult.error
+        return err("Error connecting uTP socket")
+      
+      let socket = connectionResult.get()
       # Read all bytes from the socket
       # This will either end with a FIN, or because the read action times out.
       # A FIN does not necessarily mean that the data read is complete. Further
@@ -570,17 +572,20 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
       error "Trying to connect to node with unknown address",
         id = dst.id
       return err("Trying to connect to node with unknown address")
+      
+    let connectionResult = 
+      await p.stream.connectTo(
+        nodeAddress.unsafeGet(), 
+        uint16.fromBytesBE(m.connectionId)
+      )
 
-    let clientSocketRes = await p.stream.transport.connectTo(
-      nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId))
-    if clientSocketRes.isErr():
-      # TODO: get proper error mapped
-      return err("Error connecting to uTP socket")
-    let clientSocket = clientSocketRes.get()
-    if not clientSocket.isConnected():
-      clientSocket.close()
-      return err("Portal uTP socket is not in connected state")
+    if connectionResult.isErr():
+      error "Utp connection error while trying to offer content",
+        msg = connectionResult.error
+      return err("Error connecting uTP socket")
 
+    let clientSocket = connectionResult.get()
+ 
     for contentKey in requestedContentKeys:
       let contentIdOpt = p.toContentId(contentKey)
       if contentIdOpt.isSome():
