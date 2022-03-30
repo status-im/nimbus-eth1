@@ -14,6 +14,7 @@ import
   ../nimbus/p2p/[chain, clique, executor],
   ../nimbus/utils/[tx_pool, tx_pool/tx_item],
   ./test_txpool/[helpers, setup, sign_helper],
+  ./test_txpool2,
   chronos,
   eth/[common, keys, p2p],
   stew/[keyed_queue, sorted_set],
@@ -922,6 +923,8 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader
   noisy.runTxPoolTests
   noisy.runTxPackerTests
+  test_txpool2.runTxPoolCliqueTest()
+  test_txpool2.runTxPoolPosTest()
 
 when isMainModule:
   const
