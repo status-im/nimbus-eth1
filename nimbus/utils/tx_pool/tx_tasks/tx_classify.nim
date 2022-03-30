@@ -86,6 +86,12 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
 
   true
 
+proc eip1559TxNormalization(tx: Transaction): Transaction =
+  result = tx
+  if tx.txType < TxEip1559:
+    result.maxPriorityFee = tx.gasPrice
+    result.maxFee = tx.gasPrice
+
 # ------------------------------------------------------------------------------
 # Private function: active tx classifier check helpers
 # ------------------------------------------------------------------------------
@@ -233,7 +239,11 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                else:
                  xp.chain.limits.trgLimit
 
-  roDB.validateTransaction(item.tx, item.sender, gasLimit, baseFee, fork)
+  var tx = item.tx.eip1559TxNormalization
+  if FkLondon <= fork:
+    tx.gasPrice = min(tx.maxPriorityFee + baseFee.truncate(int64), tx.maxFee)
+
+  roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, fork)
 
 proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
