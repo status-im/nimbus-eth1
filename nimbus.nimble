@@ -22,11 +22,12 @@ requires "nim >= 1.2.0",
 
 binDir = "build"
 
-namedBin = {
-  "nimbus/nimbus": "nimbus",
-  "fluffy/fluffy": "fluffy",
-  "fluffy/tools/portalcli": "portalcli",
-}.toTable()
+when declared(namedBin):
+  namedBin = {
+    "nimbus/nimbus": "nimbus",
+    "fluffy/fluffy": "fluffy",
+    "fluffy/tools/portalcli": "portalcli",
+  }.toTable()
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
