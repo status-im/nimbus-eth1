@@ -1,3 +1,4 @@
+
 # Nimbus
 # Copyright (c) 2018-2019 Status Research & Development GmbH
 # Licensed under either of
@@ -29,6 +30,9 @@ proc pp*(b: Blob): string =
 
 proc pp*(a: EthAddress): string =
   a.mapIt(it.toHex(2)).join[32 .. 39].toLowerAscii
+
+proc pp*(a: openArray[EthAddress]): string =
+  "[" & a.mapIt(it.pp).join(" ") & "]"
 
 proc pp*(a: BlockNonce): string =
   a.mapIt(it.toHex(2)).join.toLowerAscii

@@ -143,6 +143,19 @@ type
      ## tx was removed.
      "Tx expired implied"
 
+    txInfoTxStashed = ##\
+      ## A transaction was item was created and stored in the disposal bin
+      ## to be recycled and processed later.
+      "Tx stashed"
+
+    txInfoTxErrorRemoteExpected = ##\
+      ## The sender account of a transaction was expected non-local.
+      "Tx non-local expected"
+
+    txInfoTxErrorLocalExpected = ##\
+      ## The sender account of a transaction was expected local.
+      "Tx local expected"
+
     # ------- update/move block chain head -------------------------------------
 
     txInfoErrAncestorMissing = ##\

@@ -10,10 +10,6 @@
 
 ## TODO:
 ## =====
-## * Support `local` accounts the txs of which would be prioritised. This is
-##   currently unsupported. For now, all txs are considered from `remote`
-##   accounts.
-##
 ## * No uncles are handled by this pool
 ##
 ## * Impose a size limit to the bucket database. Which items would be removed?
@@ -446,7 +442,13 @@ import
   ../db/db_chain,
   ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks/[tx_add, tx_bucket, tx_head, tx_dispose, tx_packer],
+  ./tx_pool/tx_tasks/[
+    tx_add,
+    tx_bucket,
+    tx_head,
+    tx_dispose,
+    tx_packer,
+    tx_recover],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, results],
@@ -478,7 +480,9 @@ export
   tx_item.sender,
   tx_item.status,
   tx_item.timeStamp,
-  tx_item.tx
+  tx_item.tx,
+  tx_tabs.local,
+  tx_tabs.remote
 
 {.push raises: [Defect].}
 
@@ -845,30 +849,80 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
   xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
 # ------------------------------------------------------------------------------
-# Public functions, more immediate actions deemed not so important yet
+# Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
 
-#[
+proc setLocal*(xp: TxPoolRef; account: EthAddress) =
+  ## Tag argument `account` local which means that the transactions from this
+  ## account -- together with all other local accounts -- will be considered
+  ## first for packing.
+  xp.txDB.setLocal(account)
 
-# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
+proc resLocal*(xp: TxPoolRef; account: EthAddress) =
+  ## Untag argument `account` as local which means that the transactions from
+  ## this account -- together with all other untagged accounts -- will be
+  ## considered for packing after the locally tagged accounts.
+  xp.txDB.resLocal(account)
+
+proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
+  ## Returns two lists, one for local and the other for non-local accounts.
+  ## Any of these lists is sorted by the highest rank first. This sorting
+  ## means that the order may be out-dated after adding transactions.
+  xp.txDB.locality
+
+proc addRemote*(xp: TxPoolRef;
+                tx: Transaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Retrieves the accounts currently considered `local` or `remote` (i.e.
-  ## the have txs of that kind) destaged on request arguments.
-  if local:
-    result = xp.txDB.locals
-  else:
-    result = xp.txDB.remotes
+  ## Adds the argument transaction `tx` to the job queue.
+  ##
+  ## If the argument `force` is set `false` and the sender account of the
+  ## argument transaction is tagged local, this function returns with an error.
+  ## If the argument `force` is set `true`, the sender account will be untagged,
+  ## i.e. made non-local.
+  # Create or recover new item
+  let rc = xp.recoverItem(tx, txItemPending, "remote tx peek")
+  if rc.isErr:
+    return err(rc.error)
 
-# core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
-proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
+  # Temporarily stash the item in the rubbish bin to be recovered, later
+  let sender = rc.value.sender
+  discard xp.txDB.dispose(rc.value, txInfoTxStashed)
+
+  # Verify local/remote account
+  if force:
+    xp.txDB.resLocal(sender)
+  elif xp.txDB.isLocal(sender):
+    return err(txInfoTxErrorRemoteExpected)
+
+  xp.jobAddTx(tx, "remote tx")
+  ok()
+
+proc addLocal*(xp: TxPoolRef;
+               tx: Transaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## For given account, remote transactions are migrated to local transactions.
-  ## The function returns the number of transactions migrated.
-  xp.txDB.setLocal(signer)
-  xp.txDB.bySender.eq(signer).nItems
+  ## Adds the argument transaction `tx` to the job queue.
+  ##
+  ## If the argument `force` is set `false` and the sender account of the
+  ## argument transaction is _not_ tagged local, this function returns with
+  ## an error. If the argument `force` is set `true`, the sender account will
+  ## be tagged local.
+  # Create or recover new item
+  let rc = xp.recoverItem(tx, txItemPending, "local tx peek")
+  if rc.isErr:
+    return err(rc.error)
 
-]#
+  # Temporarily stash the item in the rubbish bin to be recovered, later
+  let sender = rc.value.sender
+  discard xp.txDB.dispose(rc.value, txInfoTxStashed)
+
+  # Verify local/remote account
+  if force:
+    xp.txDB.setLocal(sender)
+  elif not xp.txDB.isLocal(sender):
+    return err(txInfoTxErrorLocalExpected)
+
+  xp.jobAddTx(tx, "local tx")
+  ok()
 
 # ------------------------------------------------------------------------------
 # End
