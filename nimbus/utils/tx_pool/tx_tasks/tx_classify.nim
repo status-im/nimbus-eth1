@@ -86,12 +86,6 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
 
   true
 
-proc eip1559TxNormalization(tx: Transaction): Transaction =
-  result = tx
-  if tx.txType < TxEip1559:
-    result.maxPriorityFee = tx.gasPrice
-    result.maxFee = tx.gasPrice
-
 # ------------------------------------------------------------------------------
 # Private function: active tx classifier check helpers
 # ------------------------------------------------------------------------------
@@ -180,6 +174,22 @@ proc txPostLondonAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef): bool =
   true
 
 # ------------------------------------------------------------------------------
+# Public helper function, needed here and in the packer
+# ------------------------------------------------------------------------------
+
+func eip1559TxNormalization*(tx: Transaction;
+                             baseFee: GasPrice; fork: Fork): Transaction =
+  ## This function adjusts a legacy transaction to EIP-1559 standard. This
+  ## is needed particularly when using the `validateTransaction()` utility
+  ## with legacy transactions.
+  result = tx
+  if tx.txType < TxEip1559:
+    result.maxPriorityFee = tx.gasPrice
+    result.maxFee = tx.gasPrice
+  if FkLondon <= fork:
+    result.gasPrice = min(tx.maxPriorityFee + baseFee.int64, tx.maxFee)
+
+# ------------------------------------------------------------------------------
 # Public functionss
 # ------------------------------------------------------------------------------
 
@@ -238,10 +248,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                  xp.chain.limits.maxLimit
                else:
                  xp.chain.limits.trgLimit
-
-  var tx = item.tx.eip1559TxNormalization
-  if FkLondon <= fork:
-    tx.gasPrice = min(tx.maxPriorityFee + baseFee.truncate(int64), tx.maxFee)
+    tx = item.tx.eip1559TxNormalization(xp.chain.baseFee, fork)
 
   roDB.validateTransaction(tx, item.sender, gasLimit, baseFee, fork)
 

@@ -66,12 +66,6 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
-proc eip1559TxNormalization(tx: Transaction): Transaction =
-  result = tx
-  if tx.txType < TxEip1559:
-    result.maxPriorityFee = tx.gasPrice
-    result.maxFee = tx.gasPrice
-
 proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [Defect,RlpError].} =
   ## Smart wrapper
@@ -87,13 +81,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  var
-    tx = item.tx.eip1559TxNormalization
   let
     fork = pst.xp.chain.nextFork
-    baseFee = pst.xp.chain.head.baseFee
-  if FkLondon <= fork:
-    tx.gasPrice = min(tx.maxPriorityFee + baseFee.truncate(int64), tx.maxFee)
+    baseFee = pst.xp.chain.head.baseFee.truncate(uint64).GasPrice
+    tx = item.tx.eip1559TxNormalization(baseFee, fork)
 
   safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
