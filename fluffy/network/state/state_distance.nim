@@ -19,7 +19,7 @@ const MAX* = high(Uint256)
 #  - modulo operations
 #  - abs operation
 # and the results are eqivalent to function described in spec.
-# 
+#
 # The way it works is as follows. Let say we have integers modulo 8:
 # [0, 1, 2, 3, 4, 5, 6, 7]
 # and we want to calculate minimal distance between 0 and 5.
@@ -27,7 +27,7 @@ const MAX* = high(Uint256)
 # From this we know that the shorter distance is the one wraping around 0, which
 # is equal to 3
 func stateDistance*(node_id: UInt256, content_id: UInt256): UInt256 =
-  let rawDiff = 
+  let rawDiff =
     if node_id > content_id:
       node_id - content_id
     else:
@@ -50,7 +50,7 @@ func log2DistanceImpl(value: UInt256): uint16 =
 
   if value == UInt256.one:
     return 0'u16
-  
+
   var comp = value
   var ret = 0'u16
   while (comp > 1):

@@ -154,6 +154,11 @@ proc propagateHistoryDb*(
         # TODO: This call will get the content we just stored in the db, so it
         # might be an improvement to directly pass it.
         await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]))
+
+    # Need to be sure that all offers where started. TODO: this is not great.
+    while not p.offerQueueEmpty():
+      error "WAITING FOR OFFER QUEUE EMPTY"
+      await sleepAsync(500.milliseconds)
     return ok()
   else:
     return err(blockData.error)
