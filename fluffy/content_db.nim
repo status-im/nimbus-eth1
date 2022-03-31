@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/options,
+  std/[options, heapqueue],
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint,
@@ -30,10 +30,24 @@ export kvstore_sqlite3
 # thus depending on the network the right db needs to be selected.
 
 type
+  RowInfo = tuple
+    contentId: array[32, byte]
+    payloadLength: int64
+
+  ObjInfo* = object
+    contentId*: array[32, byte]
+    payloadLength*: int64
+    distFrom*: UInt256
+
   ContentDB* = ref object
     kv: KvStoreRef
     sizeStmt: SqliteStmt[NoParams, int64]
     vacStmt: SqliteStmt[NoParams, void]
+    getAll: SqliteStmt[NoParams, RowInfo]
+
+# we want objects to be sorted from largest distance to closests
+proc `<`(a, b: ObjInfo): bool = 
+  return a.distFrom < b.distFrom
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -47,7 +61,7 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
         "working database (out of memory?)")
     else:
       SqStoreRef.init(path, "fluffy").expectDb()
-
+  
   let getSizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64).get()
@@ -56,7 +70,59 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
     "VACUUM;",
     NoParams, void).get()
 
-  ContentDB(kv: kvStore db.openKvStore().expectDb(), sizeStmt: getSizeStmt, vacStmt: vacStmt)
+  let kvStore = kvStore db.openKvStore().expectDb()
+
+  # this need to go after opening openKvStore, as it checks that table name kvstore
+  # already exists.
+  let getKeysStmt = db.prepareStmt(
+    "SELECT key, length(value) FROM kvstore",
+    NoParams, RowInfo
+  ).get()
+
+  ContentDB(kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
+
+proc getNFurtherstElements*(db: ContentDB, distanceFrom: UInt256, n: uint64): seq[ObjInfo] =
+  ## Get at most n furthest elements from database in order from furtherst to closest.
+  ## We are also returning payload lengths so caller can decide how many of those elements
+  ## need to be deleted.
+  ## 
+  ## Currently it uses xor metric
+  ## 
+  ## Currently works by querying for all elements in database and doing all necessary 
+  ## work on program level. This is mainly due to two facts:
+  ## - sqlite does not have build xor function, also it does not handle bitwise
+  ## operations on blobs as expected
+  ## - our nim wrapper for sqlite does not support create_function api of sqlite
+  ## so we cannot create custom function comparing blobs at sql level. If that 
+  ## would be possible we may be able to all this work by one sql query
+
+  if n == 0:
+    return newSeq[ObjInfo]()
+
+  var heap = initHeapQueue[ObjInfo]()
+
+  var ri: RowInfo
+  for e in db.getAll.exec(ri):
+    let contentId = UInt256.fromBytesBE(ri.contentId)
+    # TODO: Currently it asumes xor distance, but when we start testing networks with
+    # other distance functions this may not necessary be true expected
+    let dist = contentId xor distanceFrom
+    let obj = ObjInfo(contentId: ri.contentId, payloadLength: ri.payloadLength, distFrom: dist)
+    
+    if (uint64(len(heap)) < n):
+      heap.push(obj)
+    else:
+      if obj > heap[0]:
+        discard heap.replace(obj)
+
+  var res: seq[ObjInfo] = newSeq[ObjInfo](heap.len())
+
+  var i = heap.len() - 1
+  while heap.len() > 0:
+    res[i] = heap.pop()
+    dec i
+
+  return res
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlie VACUMM commands which rebuilds db, repacking it into a minimal amount of disk space
