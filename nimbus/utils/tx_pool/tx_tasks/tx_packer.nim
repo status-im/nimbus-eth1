@@ -66,12 +66,6 @@ template safeExecutor(info: string; code: untyped) =
     let e = getCurrentException()
     raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
-proc eip1559TxNormalization(tx: Transaction): Transaction =
-  result = tx
-  if tx.txType < TxEip1559:
-    result.maxPriorityFee = tx.gasPrice
-    result.maxFee = tx.gasPrice
-
 proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [Defect,RlpError].} =
   ## Smart wrapper
@@ -87,13 +81,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  var
-    tx = item.tx.eip1559TxNormalization
   let
     fork = pst.xp.chain.nextFork
-    baseFee = pst.xp.chain.head.baseFee
-  if FkLondon <= fork:
-    tx.gasPrice = min(tx.maxPriorityFee + baseFee.truncate(int64), tx.maxFee)
+    baseFee = pst.xp.chain.head.baseFee.truncate(uint64).GasPrice
+    tx = item.tx.eip1559TxNormalization(baseFee, fork)
 
   safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
@@ -252,18 +243,6 @@ proc vmExecCommit(pst: TxPackerStateRef)
   xp.chain.profit = balanceDelta()
   xp.chain.reward = balanceDelta()
 
-iterator rankedAccounts(xp: TxPoolRef): TxStatusNonceRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Loop over staged accounts ordered by
-  ## + local ranks, higest one first
-  ## + remote ranks, higest one first
-  for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-    if xp.txDB.isLocal(account):
-      yield nonceList
-  for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-    if not xp.txDB.isLocal(account):
-      yield nonceList
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -277,7 +256,7 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   var pst = xp.vmExecInit
 
   block loop:
-    for nonceList in pst.xp.rankedAccounts:
+    for (_,nonceList) in pst.xp.txDB.packingOrderAccounts(txItemStaged):
 
       block account:
         for item in nonceList.incNonce:

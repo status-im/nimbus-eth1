@@ -347,6 +347,10 @@ proc resLocal*(xp: TxTabsRef; sender: EthAddress) =
   ## Untag *local* `sender` address argument.
   xp.byLocal.del(sender)
 
+proc flushLocals*(xp: TxTabsRef) =
+  ## Untag all *local* addresses on the system.
+  xp.byLocal.clear
+
 # ------------------------------------------------------------------------------
 # Public iterators, `TxRank` > `(EthAddress,TxStatusNonceRef)`
 # ------------------------------------------------------------------------------
@@ -393,6 +397,21 @@ iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
 
       # Get next ranked address list (top down index walk)
       rcRank = xp.byRank.lt(rank) # potenially modified database
+
+iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
+        (EthAddress,TxStatusNonceRef)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Loop over accounts from a particular bucket ordered by
+  ## + local ranks, higest one first
+  ## + remote ranks, higest one first
+  ## For the `txItemStaged` bucket, this iterator defines the packing order
+  ## for transactions (important when calculationg the *txRoot*.)
+  for (account,nonceList) in xp.decAccount(bucket):
+    if xp.isLocal(account):
+      yield (account,nonceList)
+  for (account,nonceList) in xp.decAccount(bucket):
+    if not xp.isLocal(account):
+      yield (account,nonceList)
 
 # ------------------------------------------------------------------------------
 # Public iterators, `TxRank` > `(EthAddress,TxSenderNonceRef)`
