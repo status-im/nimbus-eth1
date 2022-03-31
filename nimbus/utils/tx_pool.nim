@@ -676,7 +676,7 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   ## order to build the block.
   xp.packerVmExec                            # updates vmState
   result.header = xp.chain.getHeader         # uses updated vmState
-  for (_,nonceList) in xp.txDB.decAccount(txItemPacked):
+  for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):
     result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
 
 proc gasCumulative*(xp: TxPoolRef): GasInt
@@ -863,6 +863,10 @@ proc resLocal*(xp: TxPoolRef; account: EthAddress) =
   ## this account -- together with all other untagged accounts -- will be
   ## considered for packing after the locally tagged accounts.
   xp.txDB.resLocal(account)
+
+proc flushLocals*(xp: TxPoolRef) =
+  ## Untag all *local* addresses on the system.
+  xp.txDB.flushLocals
 
 proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
   ## Returns two lists, one for local and the other for non-local accounts.

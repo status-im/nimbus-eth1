@@ -252,18 +252,6 @@ proc vmExecCommit(pst: TxPackerStateRef)
   xp.chain.profit = balanceDelta()
   xp.chain.reward = balanceDelta()
 
-iterator rankedAccounts(xp: TxPoolRef): TxStatusNonceRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Loop over staged accounts ordered by
-  ## + local ranks, higest one first
-  ## + remote ranks, higest one first
-  for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-    if xp.txDB.isLocal(account):
-      yield nonceList
-  for (account,nonceList) in xp.txDB.decAccount(txItemStaged):
-    if not xp.txDB.isLocal(account):
-      yield nonceList
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -277,7 +265,7 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
   var pst = xp.vmExecInit
 
   block loop:
-    for nonceList in pst.xp.rankedAccounts:
+    for (_,nonceList) in pst.xp.txDB.packingOrderAccounts(txItemStaged):
 
       block account:
         for item in nonceList.incNonce:

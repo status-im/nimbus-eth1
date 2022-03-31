@@ -60,6 +60,9 @@ const
   # parameter should be above 100%.
   decreasingBlockProfitRatioPC = 92
 
+  # Make some percentage of the accounts local accouns.
+  accountExtractPC = 10
+
   # test block chain
   networkId = GoerliNet # MainNet
 
@@ -69,14 +72,17 @@ var
 
   prng = prngSeed.initRand
 
-  # to be set up in runTxLoader()
+  # To be set up in runTxLoader()
   statCount: array[TxItemStatus,int] # per status bucket
 
   txList: seq[TxItemRef]
   effGasTips: seq[GasPriceEx]
 
-  # running block chain
+  # Running block chain
   bcDB: BaseChainDB
+
+  # Accounts to be considered local
+  localAccounts: seq[EthAddress]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -176,6 +182,13 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
                                    minBlockTxs = capture.minBlockTxs,
                                    loadTxs = capture.numTxs,
                                    noisy = veryNoisy)
+
+      # Extract some of the least profitable accounts and hold them so
+      # they could be made local at a later stage
+      let
+        accr = xp.accountRanks
+        nExtract = (accr.remote.len * accountExtractPC + 50) div 100
+      localAccounts = accr.remote[accr.remote.len - nExtract .. ^1]
 
       # Make sure that sample extraction from file was ok
       check capture.minBlockTxs <= nTxs
@@ -742,7 +755,9 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, ntBaseFee, noisy = noisy)
+        xq = bcDB.toTxPool(txList, ntBaseFee,
+                           local = localAccounts,
+                           noisy = noisy)
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 8)
@@ -814,21 +829,12 @@ proc runTxPackerTests(noisy = true) =
           " increase=", xq.gasCumulative - smallerBlockSize,
           " trg/max=", blockProfitRatio, "%"
 
-        let
-          accountExtractPC = 10
-          acc = xq.accountRanks
-          nExtract = (acc.remote.len * accountExtractPC + 50) div 100
-          accExtracted = acc.remote[acc.remote.len - nExtract .. ^1]
-
-        noisy.say "***", "accounts",
-          " local=", acc.local.pp,
-          " remote=", acc.remote.pp,
-          " remote.len=", acc.remote.len,
-          " nExtract=", nExtract,
-          " accExtracted=", accExtracted.pp
-          
       # if true: return
       test "Store generated block in block chain database":
+
+        noisy.say "***", "locality",
+          " locals=", xq.accountRanks.local.len,
+          " remotes=", xq.accountRanks.remote.len
 
         # Force maximal block size. Accidentally, the latest tx should have
         # a `gasLimit` exceeding the available space on the block `gasLimit`
@@ -875,10 +881,14 @@ proc runTxPackerTests(noisy = true) =
         # much less than permitted so this block will be accepted.
         check 0 < overlap
 
+        #setTraceLevel()
+
         # Test low-level function for adding the new block to the database
         xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
         check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
+
+        setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
         check BaseVMState.new(hdr, bcDB).processBlock(poa, hdr, bdy).isOK
