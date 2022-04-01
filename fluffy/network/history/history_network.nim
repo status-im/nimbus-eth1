@@ -38,7 +38,9 @@ func encodeKey(k: ContentKey): (ByteList, ContentId) =
   let keyEncoded = encode(k)
   return (keyEncoded, toContentId(keyEncoded))
 
-func getEncodedKeyForContent(cType: ContentType, chainId: uint16, hash: BlockHash): (ByteList, ContentId) =
+func getEncodedKeyForContent(
+    cType: ContentType, chainId: uint16, hash: BlockHash):
+    (ByteList, ContentId) =
   let contentKeyType = ContentKeyType(chainId: chainId, blockHash: hash)
 
   let contentKey =
@@ -52,15 +54,16 @@ func getEncodedKeyForContent(cType: ContentType, chainId: uint16, hash: BlockHas
 
   return encodeKey(contentKey)
 
-proc validateHeaderBytes*(bytes: seq[byte], hash: BlockHash): Option[BlockHeader] =
+proc validateHeaderBytes*(
+    bytes: seq[byte], hash: BlockHash): Option[BlockHeader] =
   try:
     var rlp = rlpFromBytes(bytes)
 
     let blockHeader = rlp.read(BlockHeader)
 
     if not (blockHeader.blockHash() == hash):
-      # TODO: Header with different hash than expected maybe we should punish peer which sent
-      # us this ?
+      # TODO: Header with different hash than expecte, maybe we should punish
+      # peer which sent us this ?
       return none(BlockHeader)
 
     return some(blockHeader)
@@ -69,7 +72,9 @@ proc validateHeaderBytes*(bytes: seq[byte], hash: BlockHash): Option[BlockHeader
     # TODO add some logging about failed decoding
     return none(BlockHeader)
 
-proc validateBodyBytes*(bytes: seq[byte], txRoot: KeccakHash, ommersHash: KeccakHash): Option[BlockBody] =
+proc validateBodyBytes*(
+    bytes: seq[byte], txRoot: KeccakHash, ommersHash: KeccakHash):
+    Option[BlockBody] =
   try:
     var rlp = rlpFromBytes(bytes)
 
@@ -79,8 +84,9 @@ proc validateBodyBytes*(bytes: seq[byte], txRoot: KeccakHash, ommersHash: Keccak
     let calculatedOmmersHash = rlpHash(blockBody.uncles)
 
     if txRoot != calculatedTxRoot or ommersHash != calculatedOmmersHash:
-      # we got block body (bundle of transactions and uncles) which do not match 
-      # header. For now just ignore it, but maybe we should penalize peer sending us such data?
+      # we got block body (bundle of transactions and uncles) which do not match
+      # header. For now just ignore it, but maybe we should penalize peer
+      # sending us such data?
       return none(BlockBody)
 
     return some(blockBody)
@@ -89,7 +95,8 @@ proc validateBodyBytes*(bytes: seq[byte], txRoot: KeccakHash, ommersHash: Keccak
     # TODO add some logging about failed decoding
     return none(BlockBody)
 
-proc getContentFromDb(h: HistoryNetwork, T: type, contentId: ContentId): Option[T] = 
+proc getContentFromDb(
+    h: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
   if h.portalProtocol.inRange(contentId):
     let contentFromDB = h.contentDB.get(contentId)
     if contentFromDB.isSome():
@@ -98,14 +105,17 @@ proc getContentFromDb(h: HistoryNetwork, T: type, contentId: ContentId): Option[
         let content = rlp.read(T)
         return some(content)
       except CatchableError as e:
-        # Content in db should always have valid formatting, so this should not happen
+        # Content in db should always have valid formatting, so this should not
+        # happen
         raiseAssert(e.msg)
     else:
       return none(T)
   else:
     return none(T)
 
-proc getBlockHeader*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Future[Option[BlockHeader]] {.async.} = 
+proc getBlockHeader*(
+    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    Future[Option[BlockHeader]] {.async.} =
   let (keyEncoded, contentId) = getEncodedKeyForContent(blockHeader, chainId, hash)
 
   let maybeHeaderFromDb = h.getContentFromDb(BlockHeader, contentId)
@@ -128,7 +138,9 @@ proc getBlockHeader*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Futur
 
   return maybeHeader
 
-proc getBlock*(h: HistoryNetwork, chainId: uint16, hash: BlockHash): Future[Option[Block]] {.async.} = 
+proc getBlock*(
+    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    Future[Option[Block]] {.async.} =
   let maybeHeader = await h.getBlockHeader(chainId, hash)
 
   if maybeHeader.isNone():

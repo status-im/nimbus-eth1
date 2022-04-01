@@ -100,8 +100,8 @@ proc addContentRequest*(
   return connectionId
 
 proc connectTo*(
-  stream: PortalStream, 
-  nodeAddress: NodeAddress, 
+  stream: PortalStream,
+  nodeAddress: NodeAddress,
   connectionId: uint16): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
   let socketRes = await stream.transport.connectTo(nodeAddress, connectionId)
 
@@ -112,7 +112,7 @@ proc connectTo*(
       # connection id, in our use case it most probably means that other side sent us
       # connection id which is already used.
       # For now we just fail connection and return an error. Another strategy to consider
-      # would be to check what is the connection status, and then re-use it, or 
+      # would be to check what is the connection status, and then re-use it, or
       # close it and retry connection.
       let msg = "Socket to " & $nodeAddress & "with connection id: " & $connectionId & " already exists"
       return err(msg)

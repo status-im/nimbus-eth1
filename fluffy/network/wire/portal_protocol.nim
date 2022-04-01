@@ -53,6 +53,12 @@ declareHistogram portal_content_keys_offered,
 declareHistogram portal_content_keys_accepted,
   "Portal wire protocol amount of content keys per accept message received",
   labels = ["protocol_id"], buckets = contentKeysBuckets
+declareCounter portal_gossip_offers_successful,
+  "Portal wire protocol successful content offers from neighborhood gossip",
+  labels = ["protocol_id"]
+declareCounter portal_gossip_offers_failed,
+  "Portal wire protocol failed content offers from neighborhood gossip",
+  labels = ["protocol_id"]
 
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
@@ -93,6 +99,20 @@ const
     16 # HMAC
   discv5MaxSize = 1280
 
+  # These are the concurrent offers per Portal wire protocol that is running.
+  # Using the `offerQueue` allows for limiting the amount of offers send and
+  # thus how many streams can be started.
+  # TODO:
+  # More thought needs to go into this as it is currently on a per network
+  # basis. Keep it simple like that? Or limit it better at the stream transport
+  # level? In the latter case, this might still need to be checked/blocked at
+  # the very start of sending the offer, because blocking/waiting too long
+  # between the received accept message and actually starting the stream and
+  # sending data could give issues due to timeouts on the other side.
+  # And then there are still limits to be applied also for FindContent and the
+  # incoming directions.
+  concurrentOffers = 50
+
 type
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
@@ -114,6 +134,8 @@ type
     revalidateLoop: Future[void]
     stream*: PortalStream
     radiusCache: RadiusCache
+    offerQueue: AsyncQueue[(Node, ContentKeysList)]
+    offerWorkers: seq[Future[void]]
 
   PortalResult*[T] = Result[T, cstring]
 
@@ -362,7 +384,8 @@ proc new*(T: type PortalProtocol,
     toContentId: toContentId,
     dataRadius: dataRadius,
     bootstrapRecords: @bootstrapRecords,
-    radiusCache: RadiusCache.init(256))
+    radiusCache: RadiusCache.init(256),
+    offerQueue: newAsyncQueue[(Node, ContentKeysList)](concurrentOffers))
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
@@ -505,7 +528,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
           id = dst.id
         return err("Trying to connect to node with unknown address")
 
-      let connectionResult = 
+      let connectionResult =
         await p.stream.connectTo(
           nodeAddress.unsafeGet(),
           uint16.fromBytesBE(m.connectionId)
@@ -515,7 +538,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         error "Utp connection error while trying to find content",
           msg = connectionResult.error
         return err("Error connecting uTP socket")
-      
+
       let socket = connectionResult.get()
       # Read all bytes from the socket
       # This will either end with a FIN, or because the read action times out.
@@ -572,10 +595,10 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
       error "Trying to connect to node with unknown address",
         id = dst.id
       return err("Trying to connect to node with unknown address")
-      
-    let connectionResult = 
+
+    let connectionResult =
       await p.stream.connectTo(
-        nodeAddress.unsafeGet(), 
+        nodeAddress.unsafeGet(),
         uint16.fromBytesBE(m.connectionId)
       )
 
@@ -585,7 +608,7 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
       return err("Error connecting uTP socket")
 
     let clientSocket = connectionResult.get()
- 
+
     for contentKey in requestedContentKeys:
       let contentIdOpt = p.toContentId(contentKey)
       if contentIdOpt.isSome():
@@ -606,6 +629,19 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
   else:
     return err("No accept response")
 
+proc offerWorker(p: PortalProtocol) {.async.} =
+  while true:
+    let (node, contentKeys) = await p.offerQueue.popFirst()
+
+    let res = await p.offer(node, contentKeys)
+    if res.isOk():
+      portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
+    else:
+      portal_gossip_offers_failed.inc(labelValues = [$p.protocolId])
+
+proc offerQueueEmpty*(p: PortalProtocol): bool =
+  p.offerQueue.empty()
+
 proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.async.} =
   let contentKey = contentKeys[0] # for now only 1 item is considered
   let contentIdOpt = p.toContentId(contentKey)
@@ -622,8 +658,7 @@ proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.asyn
     NodeId(contentId), k = 6, seenOnly = false)
 
   for node in closestNodes:
-    # Not doing anything if this fails
-    discard await p.offer(node, contentKeys)
+    await p.offerQueue.addLast((node, contentKeys))
 
 proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
@@ -947,11 +982,18 @@ proc start*(p: PortalProtocol) =
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
+  for i in 0 ..< concurrentOffers:
+    p.offerWorkers.add(offerWorker(p))
+
 proc stop*(p: PortalProtocol) =
   if not p.revalidateLoop.isNil:
     p.revalidateLoop.cancel()
   if not p.refreshLoop.isNil:
     p.refreshLoop.cancel()
+
+  for worker in p.offerWorkers:
+    worker.cancel()
+  p.offerWorkers = @[]
 
 proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
   ## Resolve a `Node` based on provided `NodeId`.
