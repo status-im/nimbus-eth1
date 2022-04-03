@@ -83,7 +83,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
   ## `gasUsed` after executing the transaction.
   let
     fork = pst.xp.chain.nextFork
-    baseFee = pst.xp.chain.head.baseFee.truncate(uint64).GasPrice
+    baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee, fork)
 
   safeExecutor "tx_packer.runTx":
@@ -102,7 +102,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     xp = pst.xp
     vmState = xp.chain.vmState
     inx = xp.txDB.byStatus.eq(txItemPacked).nItems
-    gasTip = item.tx.effectiveGasTip(xp.chain.head.baseFee)
+    gasTip = item.tx.effectiveGasTip(xp.chain.baseFee)
 
   # The gas tip cannot get negative as all items in the `staged` bucket
   # are vetted for profitability before entering that bucket.
