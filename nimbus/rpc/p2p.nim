@@ -234,7 +234,6 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
-    # TODO: Relies on pending pool implementation
     let
       address = data.source.toAddress
       acc     = ctx.am.getAccount(address).tryGet()
@@ -248,6 +247,10 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
+      res      = txPool.addLocal(signedTx, force = true)
+
+    if res.isErr:
+      raise newException(ValueError, $res.error)
 
     result = keccak_256.digest(rlpTx).ethHashStr
 
@@ -257,9 +260,15 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     ## data: the signed transaction data.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
-    # TODO: Relies on pending pool implementation
-    let rlpBytes = hexToSeqByte(data.string)
-    result = keccak_256.digest(rlpBytes).ethHashStr
+    let
+      txBytes = hexToSeqByte(data.string)
+      signedTx = rlp.decode(txBytes, Transaction)
+      res = txPool.addLocal(signedTx, force = true)
+
+    if res.isErr:
+      raise newException(ValueError, $res.error)
+
+    result = keccak_256.digest(txBytes).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.
