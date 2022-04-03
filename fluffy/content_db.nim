@@ -61,7 +61,7 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
         "working database (out of memory?)")
     else:
       SqStoreRef.init(path, "fluffy").expectDb()
-  
+
   let getSizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64).get()
@@ -72,7 +72,7 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
 
   let kvStore = kvStore db.openKvStore().expectDb()
 
-  # this need to go after opening openKvStore, as it checks that table name kvstore
+  # this need to go after `openKvStore`, as it checks that the table name kvstore
   # already exists.
   let getKeysStmt = db.prepareStmt(
     "SELECT key, length(value) FROM kvstore",
@@ -81,8 +81,8 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
 
   ContentDB(kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
 
-proc getNFurtherstElements*(db: ContentDB, distanceFrom: UInt256, n: uint64): seq[ObjInfo] =
-  ## Get at most n furthest elements from database in order from furtherst to closest.
+proc getNFurthestElements*(db: ContentDB, target: UInt256, n: uint64): seq[ObjInfo] =
+  ## Get at most n furthest elements from database in order from furthest to closest.
   ## We are also returning payload lengths so caller can decide how many of those elements
   ## need to be deleted.
   ## 
@@ -104,9 +104,9 @@ proc getNFurtherstElements*(db: ContentDB, distanceFrom: UInt256, n: uint64): se
   var ri: RowInfo
   for e in db.getAll.exec(ri):
     let contentId = UInt256.fromBytesBE(ri.contentId)
-    # TODO: Currently it asumes xor distance, but when we start testing networks with
-    # other distance functions this may not necessary be true expected
-    let dist = contentId xor distanceFrom
+    # TODO: Currently it assumes xor distance, but when we start testing networks with
+    # other distance functions this needs to be adjusted to the custom distance function
+    let dist = contentId xor target
     let obj = ObjInfo(contentId: ri.contentId, payloadLength: ri.payloadLength, distFrom: dist)
     
     if (uint64(len(heap)) < n):

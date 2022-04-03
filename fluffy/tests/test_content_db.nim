@@ -22,7 +22,7 @@ proc genByteSeq(length: int): seq[byte] =
     inc i
   return resultSeq
 
-proc generateNRanomU256(rng: var BrHmacDrbgContext, n: int): seq[UInt256] =
+proc generateNRandomU256(rng: var BrHmacDrbgContext, n: int): seq[UInt256] =
   var i = 0
   var res = newSeq[Uint256]()
   while i < n:
@@ -128,8 +128,8 @@ suite "Content Database":
       TestCase.init(@[u256(5), u256(1), u256(2), u256(4)], 4),
       TestCase.init(@[u256(57), u256(32), u256(108), u256(4)], 2),
       TestCase.init(@[u256(57), u256(32), u256(108), u256(4)], 4),
-      TestCase.init(generateNRanomU256(rng[], 10), 5),
-      TestCase.init(generateNRanomU256(rng[], 10), 10)
+      TestCase.init(generateNRandomU256(rng[], 10), 5),
+      TestCase.init(generateNRandomU256(rng[], 10), 10)
     ]
 
     for testCase in testCases:
@@ -139,7 +139,7 @@ suite "Content Database":
       for elem in testCase.keys:
         db.put(elem, genByteSeq(32))
 
-      let furthest = db.getNFurtherstElements(zero, testCase.n)
+      let furthest = db.getNFurthestElements(zero, testCase.n)
 
       var sortedKeys = testCase.keys
 
