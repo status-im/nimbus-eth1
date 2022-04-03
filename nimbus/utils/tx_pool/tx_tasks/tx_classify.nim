@@ -187,7 +187,7 @@ func eip1559TxNormalization*(tx: Transaction;
     result.maxPriorityFee = tx.gasPrice
     result.maxFee = tx.gasPrice
   if FkLondon <= fork:
-    result.gasPrice = min(tx.maxPriorityFee + baseFee.int64, tx.maxFee)
+    result.gasPrice = min(result.maxPriorityFee + baseFee.int64, result.maxFee)
 
 # ------------------------------------------------------------------------------
 # Public functionss
