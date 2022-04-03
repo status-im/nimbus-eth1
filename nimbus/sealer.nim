@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[times, tables, typetraits],
+  std/[times, tables, typetraits, options],
   pkg/[chronos,
     stew/results,
     stew/byteutils,
@@ -78,77 +78,68 @@ proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[vo
 proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
   number >= c.londonBlock
 
-proc prepareHeader(engine: SealingEngineRef,
+proc prepareBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    parent: BlockHeader,
-                   time: Time): Result[BlockHeader, string] =
+                   time: Time,
+                   prevRandao: Hash256): Result[EthBlock, string] =
   let timestamp = if parent.timestamp >= time:
                     parent.timestamp + 1.seconds
                   else:
                     time
 
-  var header = BlockHeader(
-    parentHash : parent.blockHash,
-    blockNumber: parent.blockNumber + 1.toBlockNumber,
-    # TODO: gasFloor and gasCeil can be configured by user
-    gasLimit   : computeGasLimit(
-      parent.gasUsed,
-      parent.gasLimit,
-      gasFloor = DEFAULT_GAS_LIMIT,
-      gasCeil = DEFAULT_GAS_LIMIT),
-    extraData  : daoForkBlockExtraData,
-    coinbase   : coinbase,
-    timestamp  : timestamp,
-    ommersHash : EMPTY_UNCLE_HASH,
-    stateRoot  : parent.stateRoot,
-    txRoot     : BLANK_ROOT_HASH,
-    receiptRoot: BLANK_ROOT_HASH
-  )
+  engine.txPool.prevRandao = prevRandao
+  engine.txPool.jobCommit()
 
-  # Set baseFee and GasLimit if we are on an EIP-1559 chain
+  var blk = engine.txPool.ethBlock()
+
+  # TODO: fix txPool GasLimit to match this GasLimit
   let conf = engine.chain.db.config
-  if isLondon(conf, header.blockNumber):
-    header.baseFee = calcEip1599BaseFee(conf, parent)
+  if isLondon(conf, blk.header.blockNumber):
     var parentGasLimit = parent.gasLimit
     if not isLondon(conf, parent.blockNumber):
       # Bump by 2x
       parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
     # TODO: desiredLimit can be configured by user, gasCeil
-    header.gasLimit = calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
+    blk.header.gasLimit = calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
+  else:
+    blk.header.gasLimit = computeGasLimit(
+      parent.gasUsed,
+      parent.gasLimit,
+      gasFloor = DEFAULT_GAS_LIMIT,
+      gasCeil = DEFAULT_GAS_LIMIT)
 
-  if engine.chain.isBlockAfterTtd(header):
-    header.difficulty = DifficultyInt.zero
-    header.mixDigest = default(Hash256)
-    header.nonce = default(BlockNonce)
-    header.extraData = @[] # TODO: probably this should be configurable by user?
+  if engine.chain.isBlockAfterTtd(blk.header):
+    blk.header.difficulty = DifficultyInt.zero
+    blk.header.mixDigest = prevRandao
+    blk.header.nonce = default(BlockNonce)
+    blk.header.extraData = @[] # TODO: probably this should be configurable by user?
     # Stop the block generator if we reach TTD
     engine.state = EnginePostMerge
   else:
-    let res = engine.chain.clique.prepare(parent, header)
+    let res = engine.chain.clique.prepare(parent, blk.header)
     if res.isErr:
       return err($res.error)
 
-  ok(header)
+  ok(blk)
 
 proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    parentBlockHeader: BlockHeader,
                    outBlock: var EthBlock,
-                   timestamp = getTime()): Result[void, string] =
+                   timestamp = getTime(),
+                   prevRandao = Hash256()): Result[void, string] =
   # deviation from standard block generator
   # - no local and remote transactions inclusion(need tx pool)
   # - no receipts from tx
   # - no DAO hard fork
   # - no local and remote uncles inclusion
 
-  let res = prepareHeader(engine, coinbase, parentBlockHeader, timestamp)
+  let res = prepareBlock(engine, coinbase, parentBlockHeader, timestamp, prevRandao)
   if res.isErr:
     return err("error prepare header")
 
-  outBlock = EthBlock(
-    header: res.get()
-  )
-
+  outBlock = res.get()
   if engine.state != EnginePostMerge:
     # Post merge, Clique should not be executing
     let sealRes = engine.chain.clique.seal(outBlock)
@@ -165,26 +156,28 @@ proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    parentHash: Hash256,
                    outBlock: var EthBlock,
-                   timestamp = getTime()): Result[void, string] =
+                   timestamp = getTime(),
+                   prevRandao = Hash256()): Result[void, string] =
   var parentBlockHeader: BlockHeader
   if engine.chain.db.getBlockHeader(parentHash, parentBlockHeader):
-    generateBlock(engine, coinbase, parentBlockHeader, outBlock, timestamp)
+    generateBlock(engine, coinbase, parentBlockHeader, outBlock, timestamp, prevRandao)
   else:
     # TODO:
     # This hack shouldn't be necessary if the database can find
     # the genesis block hash in `getBlockHeader`.
     let maybeGenesisBlock = engine.chain.currentBlock()
     if parentHash == maybeGenesisBlock.blockHash:
-      generateBlock(engine, coinbase, maybeGenesisBlock, outBlock)
+      generateBlock(engine, coinbase, maybeGenesisBlock, outBlock, timestamp, prevRandao)
     else:
       return err "parent block not found"
 
 proc generateBlock(engine: SealingEngineRef,
                    coinbase: EthAddress,
                    outBlock: var EthBlock,
-                   timestamp = getTime()): Result[void, string] =
+                   timestamp = getTime(),
+                   prevRandao = Hash256()): Result[void, string] =
   generateBlock(engine, coinbase, engine.chain.currentBlock(),
-                outBlock, timestamp)
+                outBlock, timestamp, prevRandao)
 
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
   let clique = engine.chain.clique
@@ -231,15 +224,16 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
       error "sealing engine: persistBlocks error"
       break
 
-    info "block generated", number=blk.header.blockNumber
+    discard engine.txPool.jobDeltaTxsHead(blk.header) # add transactions update jobs
+    engine.txPool.head = blk.header # adjust block insertion point
+    engine.txPool.jobCommit()
 
-    # if TTD reached during block generation, stop the sealer
-    if engine.state != EngineRunning:
-      info "TTD reached, stop sealing engine"
-      break
+    info "block generated", number=blk.header.blockNumber
 
 template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
+
+import debug
 
 proc generateExecutionPayload*(engine: SealingEngineRef,
                                payloadAttrs: PayloadAttributesV1,
@@ -247,12 +241,18 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   let headBlock = try: engine.chain.db.getCanonicalHead()
                   except CatchableError: return err "No head block in database"
 
+  let
+    prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
+    timestamp = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
+    coinbase = EthAddress payloadAttrs.suggestedFeeRecipient
+
   var blk: EthBlock
   let blkRes = engine.generateBlock(
-    EthAddress payloadAttrs.suggestedFeeRecipient,
+    coinbase,
     headBlock,
     blk,
-    fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64))
+    timestamp,
+    prevRandao)
 
   if blkRes.isErr:
     error "sealing engine generateBlock error", msg = blkRes.error
@@ -260,7 +260,9 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
 
   # make sure both generated block header and payloadRes(ExecutionPayloadV1)
   # produce the same blockHash
-  blk.header.prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
+  blk.header.coinbase = coinbase
+  blk.header.timestamp = timestamp
+  blk.header.prevRandao = prevRandao
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
   let res = engine.chain.persistBlocks([blk.header], [
@@ -274,12 +276,16 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   if blk.header.extraData.len > 32:
     return err "extraData length should not exceed 32 bytes"
 
+  discard engine.txPool.jobDeltaTxsHead(blk.header) # add transactions update jobs
+  engine.txPool.head = blk.header # adjust block insertion point
+  engine.txPool.jobCommit()
+
   payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
   payloadRes.feeRecipient = Web3Address blk.header.coinbase
   payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
   payloadRes.receiptsRoot = Web3BlockHash blk.header.receiptRoot.data
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
-  payloadRes.prevRandao  = web3types.FixedBytes[32](payloadAttrs.prevRandao)
+  payloadRes.prevRandao = payloadAttrs.prevRandao#web3types.FixedBytes[32](payloadAttrs.prevRandao)
   payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
