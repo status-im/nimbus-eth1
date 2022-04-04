@@ -6,7 +6,7 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/p2p/clique/[clique_sealer, clique_desc],
   ../nimbus/[chain_config, config, genesis, transaction, constants],
-  ../nimbus/utils/[tx_pool],
+  ../nimbus/utils/tx_pool,
   ./test_txpool/helpers,
   ./macro_assembler
 
@@ -234,11 +234,11 @@ proc runTxPoolPosTest*() =
 #runTxPoolPosTest()
 
 
-proc runTxMissingTxNoce*(noisy = true) =
+proc runTxHeadDelta*(noisy = true) =
   ## see github.com/status-im/nimbus-eth1/issues/1031
 
-  suite "TxPool: Issue #1031":
-    test "Reproducing issue #1031":
+  suite "TxPool: Synthesising blocks (covers issue #1031)":
+    test "Packing and adding multiple blocks to chain":
       var
         env = initEnv(some(100.u256))
         xp = env.xp
@@ -266,9 +266,10 @@ proc runTxMissingTxNoce*(noisy = true) =
 
           xp.jobCommit()
 
-          noisy.say "***", "stats",
+          noisy.say "***", "txDB",
             &" n={n}",
-            &" pending/staged/packed:total/disposed={xp.nItems.pp}"
+            # pending/staged/packed : total/disposed
+            &" stats={xp.nItems.pp}"
 
           xp.prevRandao = prevRandao
           var blk = xp.ethBlock()
@@ -285,15 +286,27 @@ proc runTxMissingTxNoce*(noisy = true) =
             transactions: blk.txs,
             uncles: blk.uncles)
 
-          let rr = chain.persistBlocks([blk.header], [body])
-          check rr.isOk
+          # Commit to block chain
+          check chain.persistBlocks([blk.header], [body]).isOk
 
-          # PoS block canonical head must be explicitly set using setHead
+          # PoS block canonical head must be explicitly set using setHead. The
+          # function `persistHeaderToDb()` used in `persistBlocks()` does not
+          # reliably do so due to scoring.
           chainDB.setHead(blk.header)
 
-          discard xp.jobDeltaTxsHead(blk.header)
+          # Synchronise TxPool against new chain head, register txs differences.
+          # In this particular case, these differences will simply flush the
+          # packer bucket.
+          check xp.jobDeltaTxsHead(blk.header)
+          check xp.nJobs == 1
+
+          # Move TxPool chain head to new chain head and apply delta jobs
           xp.head = blk.header
           xp.jobCommit()
+          check xp.nItems.staged == 0
+          check xp.nItems.packed == 0
+
+          setErrorLevel() # in case we set trace level
 
       check chainDB.currentBlock == 10.toBlockNumber
       head = chainDB.getBlockHeader(chainDB.currentBlock)
@@ -311,7 +324,7 @@ when isMainModule:
 
   setErrorLevel() # mute logger
 
-  runTxPoolCliqueTest()
-  runTxPoolPosTest()
+  #runTxPoolCliqueTest()
+  #runTxPoolPosTest()
 
-  true.runTxMissingTxNoce
+  true.runTxHeadDelta

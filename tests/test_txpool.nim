@@ -905,8 +905,9 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader
   noisy.runTxPoolTests
   noisy.runTxPackerTests
-  test_txpool2.runTxPoolCliqueTest()
-  test_txpool2.runTxPoolPosTest()
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+  noisy.runTxHeadDelta
 
 when isMainModule:
   const
@@ -922,8 +923,9 @@ when isMainModule:
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 
-  #runTxPoolCliqueTest()
-  #runTxPoolPosTest()
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+  noisy.runTxHeadDelta
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

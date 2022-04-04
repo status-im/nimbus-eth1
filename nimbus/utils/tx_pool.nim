@@ -600,6 +600,10 @@ proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
 
     # Re-inject transactions, do that via job queue
     if 0 < changes.addTxs.len:
+      debug "queuing delta txs",
+        mode = "inject",
+        num = changes.addTxs.len
+
       discard xp.job(TxJobDataRef(
         kind:       txJobAddTxs,
         addTxsArgs: (
@@ -608,6 +612,10 @@ proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
 
     # Delete already *mined* transactions
     if 0 < changes.remTxs.len:
+      debug "queuing delta txs",
+        mode = "remove",
+        num = changes.remTxs.len
+
       discard xp.job(TxJobDataRef(
         kind:       txJobDelItemIDs,
         delItemIDsArgs: (

@@ -164,8 +164,10 @@ proc headDiff*(xp: TxPoolRef;
     #                   |       |
     #                  new  << current (step back this one)
     #
-    # preserve transactions on the upper branch block numbers
-    # between #new..#current to be re-inserted into the pool
+    # + preserve transactions on the upper branch blocks,
+    #
+    # + txs of blocks with numbers between #new..#current need to be
+    #   re-inserted into the pool
     #
     while newHead.blockNumber < curBranchHead.blockNumber:
       xp.insert(txDiffs, curBranchHash)
@@ -190,11 +192,13 @@ proc headDiff*(xp: TxPoolRef;
     #                   |       |
     #              current  << new (step back this one)
     #
-    # preserve transactions on the upper branch block numbers
-    # between #current..#new to be deleted from the pool
+    # + preserve some transactions on the upper branch blocks,
+    #
+    # + txs of blocks with numbers between #current..#new need to be
+    #   deleted from the pool (as they are on the block chain, now)
     #
     while curHead.blockNumber < newBranchHead.blockNumber:
-      xp.remove(txDiffs, curBranchHash)
+      xp.remove(txDiffs, newBranchHash)
       let
         tmpHead = newBranchHead # cache value for error logging
         tmpHash = newBranchHash
