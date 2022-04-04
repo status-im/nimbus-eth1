@@ -9,10 +9,11 @@
 # according to those terms.
 
 import
-  std/[strformat, sequtils, strutils, times],
+  std/[os, strformat, sequtils, strutils, times],
   ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
   ../../nimbus/utils/tx_pool/tx_tasks/[tx_packer, tx_recover],
   ../replay/[pp, undump],
+  chronicles,
   eth/[common, keys],
   stew/[keyed_queue, sorted_set],
   stint
@@ -194,6 +195,24 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, " ", args.toSeq.join
     else:
       echo pfx, args.toSeq.join
+
+proc setTraceLevel* =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel* =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
+proc findFilePath*(file: string;
+                   baseDir, repoDir: openArray[string]): Result[string,void] =
+  for dir in baseDir:
+    for repo in repoDir:
+      let path = dir / repo / file
+      if path.fileExists:
+        return ok(path)
 
 # ------------------------------------------------------------------------------
 # End

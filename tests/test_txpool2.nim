@@ -1,7 +1,7 @@
 import
-  std/[os, strutils, math, tables, options],
+  std/[strutils, math, tables, options, times],
   eth/[trie/db, keys, common, trie/hexary],
-  stew/byteutils, nimcrypto, unittest2,
+  stew/[byteutils, results], nimcrypto, unittest2,
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/p2p/chain,
   ../nimbus/p2p/clique/[clique_sealer, clique_desc],
@@ -11,8 +11,9 @@ import
   ./macro_assembler
 
 const
-  baseFolder  = "tests" / "customgenesis"
-  genesisFile = baseFolder / "merge.json"
+  baseDir = [".", "tests"]
+  repoDir = [".", "customgenesis"]
+  genesisFile = "merge.json"
 
 type
   TestEnv = object
@@ -69,7 +70,7 @@ proc initEnv(ttd: Option[UInt256] = none(UInt256)): TestEnv =
   var
     conf = makeConfig(@[
       "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
-      "--custom-network:" & genesisFile
+      "--custom-network:" & genesisFile.findFilePath(baseDir,repoDir).value
     ])
 
   conf.networkParams.genesis.alloc[recipient] = GenesisAccount(
@@ -230,4 +231,87 @@ proc runTxPoolPosTest*() =
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
-runTxPoolPosTest()
+#runTxPoolPosTest()
+
+
+proc runTxMissingTxNoce*(noisy = true) =
+  ## see github.com/status-im/nimbus-eth1/issues/1031
+
+  suite "TxPool: Issue #1031":
+    test "Reproducing issue #1031":
+      var
+        env = initEnv(some(100.u256))
+        xp = env.xp
+        chainDB = env.chainDB
+        chain = env.chain
+        head = chainDB.getCanonicalHead()
+        timestamp = head.timestamp
+
+      const
+        txPerblock = 20
+        numBlocks = 10
+
+      # setTraceLevel()
+
+      block processBlocks:
+        for n in 0..<numBlocks:
+
+          for tn in 0..<txPerblock:
+            let tx = env.makeTx(recipient, amount)
+            let res = xp.addLocal(tx, force = true)
+            if res.isErr:
+              noisy.say "***", "loading blocks failed",
+                " error=", res.error
+              break processBlocks
+
+          xp.jobCommit()
+
+          noisy.say "***", "stats",
+            &" n={n}",
+            &" pending/staged/packed:total/disposed={xp.nItems.pp}"
+
+          xp.prevRandao = prevRandao
+          var blk = xp.ethBlock()
+          check chain.isBlockAfterTtd(blk.header)
+
+          timestamp = timestamp + 1.seconds
+          blk.header.difficulty = DifficultyInt.zero
+          blk.header.prevRandao = prevRandao
+          blk.header.nonce = default(BlockNonce)
+          blk.header.extraData = @[]
+          blk.header.timestamp = timestamp
+
+          let body = BlockBody(
+            transactions: blk.txs,
+            uncles: blk.uncles)
+
+          let rr = chain.persistBlocks([blk.header], [body])
+          check rr.isOk
+
+          # PoS block canonical head must be explicitly set using setHead
+          chainDB.setHead(blk.header)
+
+          discard xp.jobDeltaTxsHead(blk.header)
+          xp.head = blk.header
+          xp.jobCommit()
+
+      check chainDB.currentBlock == 10.toBlockNumber
+      head = chainDB.getBlockHeader(chainDB.currentBlock)
+      var
+        sdb = newAccountStateDB(chainDB.db, head.stateRoot, pruneTrie = false)
+
+      let
+        expected = u256(txPerblock * numBlocks) * amount
+        balance = sdb.getBalance(recipient)
+      check balance == expected
+
+when isMainModule:
+  const
+    noisy = defined(debug)
+
+  setErrorLevel() # mute logger
+
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+
+  true.runTxMissingTxNoce

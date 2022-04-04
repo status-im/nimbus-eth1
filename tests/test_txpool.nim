@@ -133,24 +133,6 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
 
     return true
 
-proc findFilePath(file: string): string =
-  result = "?unknown?" / file
-  for dir in baseDir:
-    for repo in repoDir:
-      let path = dir / repo / file
-      if path.fileExists:
-        return path
-
-proc setTraceLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.TRACE)
-
-proc setErrorLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.ERROR)
-
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -160,7 +142,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
     elapNoisy = noisy
     veryNoisy = false # noisy
     fileInfo = capture.file.splitFile.name.split(".")[0]
-    filePath = capture.file.findFilePath
+    filePath = capture.file.findFilePath(baseDir,repoDir).value
 
   # Reset/initialise
   statCount.reset
@@ -938,7 +920,10 @@ when isMainModule:
 
   noisy.runTxLoader(capture = capts1)
   noisy.runTxPoolTests
-  true.runTxPackerTests
+  noisy.runTxPackerTests
+
+  #runTxPoolCliqueTest()
+  #runTxPoolPosTest()
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests
