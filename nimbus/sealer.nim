@@ -247,6 +247,8 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     coinbase = EthAddress payloadAttrs.suggestedFeeRecipient
 
   var blk: EthBlock
+  engine.txPool.feeRecipient = coinbase
+
   let blkRes = engine.generateBlock(
     coinbase,
     headBlock,
@@ -260,7 +262,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
 
   # make sure both generated block header and payloadRes(ExecutionPayloadV1)
   # produce the same blockHash
-  blk.header.coinbase = coinbase
+  doAssert blk.header.coinbase == coinbase
   blk.header.timestamp = timestamp
   blk.header.prevRandao = prevRandao
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
@@ -285,7 +287,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
   payloadRes.receiptsRoot = Web3BlockHash blk.header.receiptRoot.data
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
-  payloadRes.prevRandao = payloadAttrs.prevRandao#web3types.FixedBytes[32](payloadAttrs.prevRandao)
+  payloadRes.prevRandao = payloadAttrs.prevRandao
   payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed

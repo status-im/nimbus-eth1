@@ -834,6 +834,11 @@ proc `prevRandao=`*(xp: TxPoolRef; val: Hash256) =
   ## do nothing before transition
   xp.chain.prevRandao = val
 
+proc `feeRecipient=`*(xp: TxPoolRef; beneficiary: EthAddress) =
+  ## Setter, PoS tx fee recipient
+  ## a.k.a miner in PoW chain or coinbase
+  xp.chain.miner = beneficiary
+
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
 # ------------------------------------------------------------------------------
