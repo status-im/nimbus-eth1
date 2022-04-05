@@ -609,6 +609,8 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
 
     let clientSocket = connectionResult.get()
 
+    var payload: ContentPayload
+
     for contentKey in requestedContentKeys:
       let contentIdOpt = p.toContentId(contentKey)
       if contentIdOpt.isSome():
@@ -617,15 +619,24 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
           maybeContent = p.contentDB.get(contentId)
         if maybeContent.isSome():
           let content = maybeContent.get()
-          let dataWritten = await clientSocket.write(content)
-          if dataWritten.isErr:
-            error "Error writing requested data", error = dataWritten.error
-            # No point in trying to continue writing data
-            clientSocket.close()
-            return err("Error writing requested data")
+          # Note: can go over the size now, init does not check size.
+          discard payload.contentList.add(BigByteList.init(content))
+        else:
+          # This can occur in case the content db got pruned since the offer
+          # message got send. In this case an empty ByteList is added.
+          discard payload.contentList.add(BigByteList(@[]))
+      else:
+        # This must not occur as proper content keys must be passed
+        doAssert(true, "Invalid content keys in ContentKeysList")
 
-    await clientSocket.closeWait()
-    return ok()
+    let dataWritten = await clientSocket.write(SSZ.encode(payload))
+    if dataWritten.isErr:
+      error "Error writing requested data", error = dataWritten.error
+      clientSocket.close()
+      return err("Error writing requested data")
+    else:
+      await clientSocket.closeWait()
+      return ok()
   else:
     return err("No accept response")
 
@@ -665,24 +676,35 @@ proc processContent(
     {.gcsafe, raises: [Defect].} =
   let p = getUserData[PortalProtocol](stream)
 
-  # TODO: validate content
-  # - check amount of content items according to ContentKeysList
-  # - History Network specific: each content item, if header, check hash:
-  #   this part of thevalidation will be specific per network & type and should
-  #   be thus be custom per network
+  let payload =
+    try:
+      SSZ.decode(content, ContentPayload)
+    except SszError as e:
+      debug "Invalid stream payload encoding", error = e.msg
+      return
 
-  # TODO: for now we only consider 1 item being offered
-  if contentKeys.len() == 1:
-    let contentKey = contentKeys[0]
-    let contentIdOpt = p.toContentId(contentKey)
+  if contentKeys.len() != payload.contentList.len():
+    debug "Invalid amount of content items", contentKeys = contentKeys.len(),
+      contentItems = payload.contentList.len()
+    return
+
+  for i, contentItem in payload.contentList:
+    let contentIdOpt = p.toContentId(contentKeys[i])
     if contentIdOpt.isNone():
+      # This should not occur as only valid content key must have been accepted
+      doAssert(true, "Invalid content keys in ContentKeysList")
       return
 
     let contentId = contentIdOpt.get()
-    # Store content, should we recheck radius?
-    p.contentDB.put(contentId, content)
+    # TODO: validate content
+    # - History Network specific: each content item, if header, check hash:
+    #   this part of thevalidation will be specific per network & type and should
+    #   be thus be custom per network
 
-    asyncSpawn neighborhoodGossip(p, contentKeys)
+    # Store content, should we recheck radius?
+    p.contentDB.put(contentId, contentItem.asSeq())
+
+  asyncSpawn neighborhoodGossip(p, contentKeys)
 
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =

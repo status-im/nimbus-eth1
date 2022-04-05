@@ -104,6 +104,9 @@ type
     FindContentMessage or ContentMessage or
     OfferMessage or AcceptMessage
 
+  ContentPayload* = object
+    contentList*: List[BigByteList, contentKeysLimit]
+
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong

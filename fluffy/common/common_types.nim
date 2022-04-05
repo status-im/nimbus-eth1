@@ -12,6 +12,7 @@ import
 
 type
   ByteList* = List[byte, 2048]
+  BigByteList* = List[byte, 100 * 1024] # TODO: What size should we take here?
   Bytes2* = array[2, byte]
   Bytes32* = array[32, byte]
 

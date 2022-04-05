@@ -139,12 +139,15 @@ proc installPortalApiHandlers*(
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
   rpcServer.rpc("portal_" & network & "_offer") do(
-      enr: Record, contentKey: string) -> bool:
-    # Only allow 1 content key for now
-    let
-      node = toNodeWithAddress(enr)
-      contentKeys = ContentKeysList(@[ByteList.init(hexToSeqByte(contentKey))])
-      accept = await p.offer(node, contentKeys)
+      enr: Record, contentKeys: seq[string]) -> bool:
+    let node = toNodeWithAddress(enr)
+    var contentKeysList = ContentKeysList.init(@[])
+
+    for key in contentKeys:
+      if not contentKeysList.add(ByteList.init(hexToSeqByte(key))):
+        raise newException(ValueError, "Too many content keys")
+
+    let accept = await p.offer(node, contentKeysList)
     if accept.isErr():
       raise newException(ValueError, $accept.error)
     else:
