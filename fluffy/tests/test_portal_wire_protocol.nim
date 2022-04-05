@@ -31,6 +31,14 @@ proc testHandler(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest("test")
   some(readUintBE[256](idHash.data))
 
+proc testHandlerSha256(contentKey: ByteList): Option[ContentId] =
+  # Note: Returning a static content id here, as in practice this depends
+  # on the content key to content id derivation, which is different for the
+  # different content networks. And we want these tests to be independent from
+  # that.
+  let idHash = sha256.digest(contentKey.asSeq())
+  some(readUintBE[256](idHash.data))
+
 proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
   let
     node1 = initDiscoveryNode(
@@ -217,6 +225,54 @@ procSuite "Portal Wire Protocol Tests":
       await node1.closeWait()
       await node2.closeWait()
       await node3.closeWait()
+
+  asyncTest "Content lookup should return info about nodes interested in content":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+      node3 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20304))
+
+      db1 = ContentDB.new("", inMemory = true)
+      db2 = ContentDB.new("", inMemory = true)
+      db3 = ContentDB.new("", inMemory = true)
+
+      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandlerSha256)
+      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandlerSha256)
+      proto3 = PortalProtocol.new(node3, protocolId, db3, testHandlerSha256)
+
+      content = @[byte 1, 2]
+      contentList = List[byte, 2048].init(content)
+      contentId = readUintBE[256](sha256.digest(content).data)
+    
+    # Only node3 have content
+    db3.put(contentId, content)
+
+    # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
+    # Node1 needs to known Node2 radius to determine if node2 is interested in content
+    check proto1.addNode(node2.localNode) == Added
+    check proto2.addNode(node3.localNode) == Added
+
+    check (await proto1.ping(node2.localNode)).isOk()
+    check (await proto2.ping(node3.localNode)).isOk()
+
+    let lookupResult = await proto1.contentLookup(contentList, contentId)
+
+    check:
+      lookupResult.isSome()
+
+    let res = lookupResult.unsafeGet()
+
+    echo res
+    check:
+      res.content == content
+      res.nodesInterestedInContent.contains(node2.localNode)
+
+    await node1.closeWait()
+    await node2.closeWait()
+    await node3.closeWait()
 
   asyncTest "Valid Bootstrap Node":
     let
