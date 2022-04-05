@@ -13,6 +13,7 @@ import
   ../../db/accounts_cache,
   ../../forks,
   ../../transaction/call_evm,
+  ../../transaction,
   ../../vm_state,
   ../../vm_types,
   ../validate,
@@ -26,12 +27,6 @@ import
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc eip1559TxNormalization(tx: Transaction): Transaction =
-  result = tx
-  if tx.txType < TxEip1559:
-    result.maxPriorityFee = tx.gasPrice
-    result.maxFee = tx.gasPrice
 
 proc eip1559BaseFee(header: BlockHeader; fork: Fork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
@@ -54,18 +49,13 @@ proc processTransactionImpl(
   #trace "Sender", sender
   #trace "txHash", rlpHash = ty.rlpHash
 
-  var
-    tx = eip1559TxNormalization(tx)
   let
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
-    baseFee = baseFee256.truncate(int64)
+    baseFee = baseFee256.truncate(GasInt)
+    tx = eip1559TxNormalization(tx, baseFee, fork)
     priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
     miner = vmState.coinbase()
-  if FkLondon <= fork:
-    # The signer pays both the priority fee and the base fee. So tx.gasPrice
-    # now is the effective gasPrice which also effects the `stateRoot` value.
-    tx.gasPrice = priorityFee + baseFee
 
   # Return failure unless explicitely set `ok()`
   result = err()

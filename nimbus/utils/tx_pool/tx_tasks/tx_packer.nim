@@ -18,6 +18,7 @@ import
   ../../../forks,
   ../../../p2p/[dao, executor, validate],
   ../../../transaction/call_evm,
+  ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
   ../tx_chain,
@@ -84,7 +85,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
   let
     fork = pst.xp.chain.nextFork
     baseFee = pst.xp.chain.baseFee
-    tx = item.tx.eip1559TxNormalization(baseFee, fork)
+    tx = item.tx.eip1559TxNormalization(baseFee.GasInt, fork)
 
   safeExecutor "tx_packer.runTx":
     # Execute transaction, may return a wildcard `Exception`
