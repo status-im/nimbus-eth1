@@ -181,20 +181,16 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     nimbus.rpcServer.start()
 
-  # Provide shared authentication handler for websockets
-  var jwtHook: seq[ws.Hook]
-  block:
+  # Provide JWT authentication handler for websockets
+  let jwtHook = block:
+    # Create or load shared secret
     let rc = nimbus.ctx.rng.jwtGenSecret.jwtSharedSecret(conf)
     if rc.isErr:
       error "Failed create or load shared secret",
         msg = $(rc.unsafeError) # avoid side effects
       quit(QuitFailure)
-    jwtHook = @[rc.value.jwtAuthAsyHook]
-  # Currently, using a `jwtSecret` for authentication this is optional for
-  # legacy usage. At a later stage, authentication will be compulsary. All
-  # that is needed then is to remove the next `if` clause.
-  if conf.jwtSecret.isNone:
-    jwtHook = @[]
+    # Authentcation handler constructor
+    @[rc.value.jwtAuthAsyHook]
 
   # Creating Websocket RPC Server
   if conf.wsEnabled:
