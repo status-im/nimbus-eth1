@@ -42,13 +42,19 @@ proc getContent*(n: StateNetwork, key: ContentKey):
 
   let content = await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
+  if content.isNone():
+    return none[seq[byte]]()
+
+  let contentResult = content.get()
+
   # When content is found on the network and is in the radius range, store it.
   if content.isSome() and contentInRange:
-    n.contentDB.put(contentId, content.get())
+    # TODO Add poke when working on state network
+    n.contentDB.put(contentId, contentResult.content)
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
-  return content
+  return some(contentResult.content)
 
 proc new*(
     T: type StateNetwork,

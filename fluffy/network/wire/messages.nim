@@ -19,7 +19,7 @@ import
 export ssz_serialization, stint, common_types
 
 const
-  contentKeysLimit = 64
+  contentKeysLimit* = 64
 
 type
   ContentKeysList* = List[ByteList, contentKeysLimit]
