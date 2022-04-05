@@ -11,7 +11,7 @@ import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../db/db_chain, strutils, algorithm, options, times, json,
   ../constants, stint, hexstrings, rpc_types,
   ../utils, ../transaction,
-  ../transaction/call_evm
+  ../transaction/call_evm, ../forks
 
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 
@@ -170,7 +170,7 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
       for x in chain.getBlockTransactionHashes(header):
         result.transactions.add %(x)
 
-proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, header: BlockHeader): ReceiptObject =
+proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, header: BlockHeader, fork: Fork): ReceiptObject =
   result.transactionHash = tx.rlpHash
   result.transactionIndex = encodeQuantity(txIndex.uint)
   result.blockHash = header.hash
@@ -195,3 +195,6 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
   else:
     # 1 = success, 0 = failure.
     result.status = some(receipt.status.int)
+
+  let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt), fork)
+  result.effectiveGasPrice = encodeQuantity(normTx.gasPrice.uint64)

@@ -117,6 +117,9 @@ type
     logsBloom*: FixedBytes[256]           # bloom filter for light clients to quickly retrieve related logs.
     root*: Option[Hash256]                # post-transaction stateroot (pre Byzantium).
     status*: Option[int]                  # 1 = success, 0 = failure.
+    effectiveGasPrice*: HexQuantityStr    # The actual value per gas deducted from the senders account.
+                                          # Before EIP-1559, this is equal to the transaction's gas price.
+                                          # After, it is equal to baseFeePerGas + min(maxFeePerGas - baseFeePerGas, maxPriorityFeePerGas).
 
   FilterDataKind* = enum fkItem, fkList
   FilterData* = object
