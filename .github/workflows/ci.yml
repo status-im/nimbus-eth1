@@ -291,8 +291,6 @@ jobs:
             env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test
           fi
 
-          env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test
-
       - name: Run nimbus-eth1 tests (Macos)
         if: runner.os == 'Macos'
         run: |
