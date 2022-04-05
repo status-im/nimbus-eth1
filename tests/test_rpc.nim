@@ -258,7 +258,7 @@ proc rpcMain*() =
 
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(ethAddressStr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), hexQuantityStr "0x0", "0x0")
-      check hexDataStr(0.u256).string == hexDataStr(res).string
+      check hexDataStr(0.u256).string == res.string
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(ethAddressStr("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), "0x0")
