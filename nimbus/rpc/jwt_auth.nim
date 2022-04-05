@@ -14,7 +14,6 @@
 
 import
   std/[base64, json, options, os, strutils, times],
-  ../config,
   bearssl,
   chronicles,
   chronos,
@@ -22,7 +21,8 @@ import
   httputils,
   websock/types as ws,
   nimcrypto/[hmac, utils],
-  stew/[byteutils, objects, results]
+  stew/[byteutils, objects, results],
+  ../config
 
 {.push raises: [Defect].}
 
@@ -39,13 +39,13 @@ const
     32
 
 type
-  #[
   # -- currently unused --
-  JwtAuthHandler* = ##\
-    ## JSW authenticator prototype
-    proc(req: HttpTable): Result[void,(HttpCode,string)]
-      {.gcsafe, raises: [Defect].}
-  #]#
+  #
+  #JwtAuthHandler* = ##\
+  #  ## JSW authenticator prototype
+  #  proc(req: HttpTable): Result[void,(HttpCode,string)]
+  #    {.gcsafe, raises: [Defect].}
+  #
 
   JwtAuthAsyHandler* = ##\
     ## Asynchroneous JSW authenticator prototype. This is the definition
@@ -237,32 +237,32 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
     return err(jwtKeyInvalidHexString)
 
 
-#[
 # -- currently unused --
-proc jwtAuthHandler*(key: JwtSharedKey): JwtAuthHandler =
-  ## Returns a JWT authentication handler that can be used with an HTTP header
-  ## based call back system.
-  ##
-  ## The argument `key` is captured by the session handler for JWT
-  ## authentication. The function `jwtSharedSecret()` provides such a key.
-  result = proc(req: HttpTable): Result[void,(HttpCode,string)] =
-              let auth = req.getString("Authorization","?")
-              if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-                return err((Http403, "Missing Token"))
-
-              let rc = auth[7..^1].strip.verifyTokenHS256(key)
-              if rc.isOk:
-                return ok()
-
-              debug "Could not authenticate",
-                error = rc.error
-
-              case rc.error:
-              of jwtTokenValidationError, jwtMethodUnsupported:
-                return err((Http401, "Unauthorized"))
-              else:
-                return err((Http403, "Malformed Token"))
-#]#
+#
+#proc jwtAuthHandler*(key: JwtSharedKey): JwtAuthHandler =
+#  ## Returns a JWT authentication handler that can be used with an HTTP header
+#  ## based call back system.
+#  ##
+#  ## The argument `key` is captured by the session handler for JWT
+#  ## authentication. The function `jwtSharedSecret()` provides such a key.
+#  result = proc(req: HttpTable): Result[void,(HttpCode,string)] =
+#              let auth = req.getString("Authorization","?")
+#              if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
+#                return err((Http403, "Missing Token"))
+#
+#              let rc = auth[7..^1].strip.verifyTokenHS256(key)
+#              if rc.isOk:
+#                return ok()
+#
+#              debug "Could not authenticate",
+#                error = rc.error
+#
+#              case rc.error:
+#              of jwtTokenValidationError, jwtMethodUnsupported:
+#                return err((Http401, "Unauthorized"))
+#              else:
+#                return err((Http403, "Malformed Token"))
+#
 
 proc jwtAuthAsyHandler*(key: JwtSharedKey): JwtAuthAsyHandler =
   ## Returns an asynchroneous JWT authentication handler that can be used with

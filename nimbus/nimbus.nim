@@ -12,14 +12,6 @@ import
 
 import
   std/[os, strutils, net, options],
-  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
-  ./db/[storage_types, db_chain, select_backend],
-  ./graphql/ethapi,
-  ./p2p/[chain, blockchain_sync],
-  ./p2p/clique/[clique_desc, clique_sealer],
-  ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/protocol_ethxx,
-  ./utils/tx_pool,
   chronicles,
   chronos,
   eth/[keys, net/nat, trie/db],
@@ -30,7 +22,15 @@ import
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
-  websock/types as ws
+  websock/types as ws,
+  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
+  ./db/[storage_types, db_chain, select_backend],
+  ./graphql/ethapi,
+  ./p2p/[chain, blockchain_sync],
+  ./p2p/clique/[clique_desc, clique_sealer],
+  ./rpc/[common, debug, engine_api, jwt_auth, p2p],
+  ./sync/protocol_ethxx,
+  ./utils/tx_pool
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader

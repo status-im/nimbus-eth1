@@ -275,7 +275,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc engineAuthMain*(noisy = defined(debug)) =
+proc jwtAuthMain*(noisy = defined(debug)) =
   noisy.runKeyLoader
   noisy.runJwtAuth
 
