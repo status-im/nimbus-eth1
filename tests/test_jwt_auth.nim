@@ -224,7 +224,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
 
     # The wrapper contains the handler function with the captured shared key
-    asyHandler = secret.value.jwtAuthAsyHandler
+    handler = secret.value.jwtAuthHandler
 
   suite "EngineAuth: Http/rpc authentication mechanics":
 
@@ -249,7 +249,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let htCode = waitFor req.asyHandler
+      let htCode = req.handler
       noisy.say "***", "result",
         " htCode=", htCode
 
@@ -268,7 +268,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let htCode = waitFor req.asyHandler
+      let htCode = req.handler
       noisy.say "***", "result",
         " htCode=", htCode
 
@@ -285,7 +285,7 @@ proc jwtAuthMain*(noisy = defined(debug)) =
 
 when isMainModule:
   const
-    noisy = defined(debug) or true
+    noisy = defined(debug)
 
   setErrorLevel()
 

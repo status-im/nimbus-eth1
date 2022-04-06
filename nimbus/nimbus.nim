@@ -190,7 +190,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         msg = $(rc.unsafeError) # avoid side effects
       quit(QuitFailure)
     # Authentcation handler constructor
-    @[rc.value.jwtAuthAsyHook]
+    some(rc.value.jwtAuthHandler)
 
   # Creating Websocket RPC Server
   if conf.wsEnabled:

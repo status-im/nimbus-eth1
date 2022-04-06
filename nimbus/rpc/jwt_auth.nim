@@ -18,6 +18,7 @@ import
   chronicles,
   chronos,
   chronos/apps/http/httptable,
+  json_rpc/servers/websocketserver,
   httputils,
   websock/types as ws,
   nimcrypto/[hmac, utils],
@@ -39,19 +40,9 @@ const
     32
 
 type
-  # -- currently unused --
-  #
-  #JwtAuthHandler* = ##\
-  #  ## JSW authenticator prototype
-  #  proc(req: HttpTable): Result[void,(HttpCode,string)]
-  #    {.gcsafe, raises: [Defect].}
-  #
-
-  JwtAuthAsyHandler* = ##\
-    ## Asynchroneous JSW authenticator prototype. This is the definition
-    ## appicable for the `verify` entry of a `ws.Hook`.
-    proc(req: HttpTable): Future[Result[void,string]]
-      {.closure, gcsafe, raises: [Defect].}
+  JwtAuthHandler* = ##\
+    ## Generic authentication handler, also provided by the web-socket server.
+    RpcWebSocketServerAuth
 
   JwtSharedKey* = ##\
     ## Convenience type, needed quite often
@@ -269,68 +260,29 @@ proc jwtSharedSecret*(rng: ref BrHmacDrbgContext; config: NimbusConf):
     result = rng.jwtGenSecret.jwtSharedSecret(config)
 
 
-# -- currently unused --
-#
-#proc jwtAuthHandler*(key: JwtSharedKey): JwtAuthHandler =
-#  ## Returns a JWT authentication handler that can be used with an HTTP header
-#  ## based call back system.
-#  ##
-#  ## The argument `key` is captured by the session handler for JWT
-#  ## authentication. The function `jwtSharedSecret()` provides such a key.
-#  result = proc(req: HttpTable): Result[void,(HttpCode,string)] =
-#              let auth = req.getString("Authorization","?")
-#              if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-#                return err((Http403, "Missing Token"))
-#
-#              let rc = auth[7..^1].strip.verifyTokenHS256(key)
-#              if rc.isOk:
-#                return ok()
-#
-#              debug "Could not authenticate",
-#                error = rc.error
-#
-#              case rc.error:
-#              of jwtTokenValidationError, jwtMethodUnsupported:
-#                return err((Http401, "Unauthorized"))
-#              else:
-#                return err((Http403, "Malformed Token"))
-#
-
-proc jwtAuthAsyHandler*(key: JwtSharedKey): JwtAuthAsyHandler =
-  ## Returns an asynchroneous JWT authentication handler that can be used with
-  ## an HTTP header based call back system.
+proc jwtAuthHandler*(key: JwtSharedKey): JwtAuthHandler =
+  ## Returns a JWT authentication handler that can be used with an HTTP header
+  ## based call back system as the web socket server.
   ##
   ## The argument `key` is captured by the session handler for JWT
   ## authentication. The function `jwtSharedSecret()` provides such a key.
-  result = proc(req: HttpTable): Future[Result[void,string]] {.async.} =
-              let auth = req.getString("Authorization","?")
-              if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-                return err("Missing Token")
+  result = proc(req: HttpTable): Result[void,(HttpCode,string)] {.gcsafe.} =
+    let auth = req.getString("Authorization","?")
+    if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
+      return err((Http403, "Missing Token"))
 
-              let rc = auth[7..^1].strip.verifyTokenHS256(key)
-              if rc.isOk:
-                return ok()
+    let rc = auth[7..^1].strip.verifyTokenHS256(key)
+    if rc.isOk:
+      return ok()
 
-              debug "Could not authenticate",
-                error = rc.error
+    debug "Could not authenticate",
+       error = rc.error
 
-              case rc.error:
-              of jwtTokenValidationError, jwtMethodUnsupported:
-                return err("Unauthorized")
-              else:
-                return err("Malformed Token")
-
-proc jwtAuthAsyHook*(key: JwtSharedKey): ws.Hook =
-  ## Variant of `jwtAuthHandler()` (e.g. directly suitable for Json WebSockets.)
-  ##
-  ## Note that currently there is no meaningful way to send a http 401/403 in
-  ## case of an authentication problem.
-  let handler = key.jwtAuthAsyHandler
-  ws.Hook(
-    append: proc(ctx: ws.Hook, req: var HttpTable): Result[void,string] =
-                ok(),
-    verify: proc(ctx: ws.Hook, req: HttpTable): Future[Result[void,string]] =
-                req.handler)
+    case rc.error:
+    of jwtTokenValidationError, jwtMethodUnsupported:
+      return err((Http401, "Unauthorized"))
+    else:
+      return err((Http403, "Malformed Token"))
 
 # ------------------------------------------------------------------------------
 # End
