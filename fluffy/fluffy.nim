@@ -111,8 +111,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.
   let
+    # Overhead of talkReq message when sending 1150 bytes data packet, is 107bytes
+    # also each uTP packet have 20bytes header.
+    # Total max packet size will be: 1150 + 20 + 107 = 1277bytes, which
+    # is smaller than 1280 max discv5 packet size.
+    maxPayloadSize = uint32(1150)
     socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration))
+      incomingSocketReceiveTimeout = none(Duration), payloadSize = maxPayloadSize)
     streamTransport = UtpDiscv5Protocol.new(
       d,
       utpProtocolId,
