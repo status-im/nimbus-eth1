@@ -144,11 +144,27 @@ type
     Content
 
   FoundContent* = object
+    src*: Node
     case kind*: FoundContentKind
     of Content:
       content*: seq[byte]
     of Nodes:
       nodes*: seq[Node]
+
+  ContentLookupResult* = object
+    content*: seq[byte]
+    # List of nodes which do not have requested content, and for which
+    # content is in their range
+    nodesInterestedInContent*: seq[Node]
+
+proc init*(
+  T: type ContentLookupResult, 
+  content: seq[byte], 
+  nodesInterestedInContent: seq[Node]): T =
+  ContentLookupResult(
+    content: content, 
+    nodesInterestedInContent: nodesInterestedInContent
+  )
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()
@@ -168,9 +184,16 @@ func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
+proc inRange(
+  p: PortalProtocol,
+  nodeId: NodeId, 
+  nodeRadius: Uint256, 
+  contentId: ContentId): bool =
+  let distance = p.routingTable.distance(nodeId, contentId)
+  distance <= nodeRadius
+
 func inRange*(p: PortalProtocol, contentId: ContentId): bool =
-  let distance = p.routingTable.distance(p.localNode.id, contentId)
-  distance <= p.dataRadius
+  p.inRange(p.localNode.id, p.dataRadius, contentId)
 
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int): List[ByteList, 32] =
@@ -549,19 +572,19 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
         await socket.destroyWait()
-        return ok(FoundContent(kind: Content, content: content))
+        return ok(FoundContent(src: dst, kind: Content, content: content))
       else:
         socket.close()
         return err("Reading data from socket timed out, content request failed")
     of contentType:
-      return ok(FoundContent(kind: Content, content: m.content.asSeq()))
+      return ok(FoundContent(src: dst, kind: Content, content: m.content.asSeq()))
     of enrsType:
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
         let verifiedNodes =
           verifyNodesRecords(records.get(), dst, enrsResultLimit)
 
-        return ok(FoundContent(kind: Nodes, nodes: verifiedNodes))
+        return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
       else:
         return err("Content message returned invalid ENRs")
 
@@ -758,11 +781,35 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
+proc triggerPoke*(
+    p: PortalProtocol,
+    nodes: seq[Node], 
+    contentKey: ByteList,
+    contentId: ContentId) =
+  ## Triggers asynchronous offer-accept interaction to provided nodes.
+  ## Provided content should be in range of provided nodes
+  ## Provided content should be in database
+  ## TODO Related to todo in `proc offer` it maybe better to pass content to
+  ## offer directly to avoid potential problems when content is not really in database
+  ## this will be especially important when we introduce deleting content
+  ## from database
+  let keys = ContentKeysList.init(@[contentKey])
+  for node in nodes:
+    if not p.offerQueue.full():
+      try:
+        p.offerQueue.putNoWait((node, keys))
+      except AsyncQueueFullError as e:
+        # should not happen as we always check is full before putting element to the queue
+        raiseAssert(e.msg)
+    else:
+      # offer queue full, do not start more offer offer-accept interactions
+      return 
+
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
 proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[Option[seq[byte]]] {.async.} =
+    Future[Option[ContentLookupResult]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -778,6 +825,8 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
   var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
   var requestAmount = 0'i64
+
+  var nodesWithoutContent: seq[Node] = newSeq[Node]()
 
   while true:
     var i = 0
@@ -811,6 +860,13 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
       case content.kind
       of Nodes:
+        let maybeRadius = p.radiusCache.get(content.src.id)
+        if maybeRadius.isSome() and p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
+          # Only return nodes which may be interested in content.
+          # No need to check for duplicates in nodesWithoutContent
+          # as requests are never made two times to the same node.
+          nodesWithoutContent.add(content.src)
+
         for n in content.nodes:
           if not seen.containsOrIncl(n.id):
             discard p.routingTable.addNode(n)
@@ -823,20 +879,20 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
+                        
       of Content:
         # cancel any pending queries as we have find the content
         for f in pendingQueries:
           f.cancel()
-
         portal_lookup_content_requests.observe(requestAmount)
-        return some(content.content)
+        return some(ContentLookupResult.init(content.content, nodesWithoutContent))
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
       discard
 
   portal_lookup_content_failures.inc()
-  return none[seq[byte]]()
+  return none[ContentLookupResult]()
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =

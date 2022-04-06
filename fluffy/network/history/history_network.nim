@@ -130,11 +130,21 @@ proc getBlockHeader*(
 
   let headerContent = maybeHeaderContent.unsafeGet()
 
-  let maybeHeader = validateHeaderBytes(headerContent, hash)
+  let maybeHeader = validateHeaderBytes(headerContent.content, hash)
 
   # content is in range and valid, put into db
   if maybeHeader.isSome() and h.portalProtocol.inRange(contentId):
-     h.contentDB.put(contentId, headerContent)
+    # TODO this bit is quite troubling, currently we may trigger offer/accept
+    # only when content is in our db and we save content only when is in our range
+    # which means we cannot propagate content which is not in our range, but maybe
+    # in range of other nodes. 
+    h.contentDB.put(contentId, headerContent.content)
+    # content is valid and in the db, it may be propagated it through the network
+    h.portalProtocol.triggerPoke(
+      headerContent.nodesInterestedInContent,
+      keyEncoded, 
+      contentId
+    )
 
   return maybeHeader
 
@@ -164,7 +174,7 @@ proc getBlock*(
 
   let bodyContent = maybeBodyContent.unsafeGet()
 
-  let maybeBody = validateBodyBytes(bodyContent, header.txRoot, header.ommersHash)
+  let maybeBody = validateBodyBytes(bodyContent.content, header.txRoot, header.ommersHash)
 
   if maybeBody.isNone():
     return none(Block)
@@ -173,7 +183,17 @@ proc getBlock*(
 
   # content is in range and valid, put into db
   if h.portalProtocol.inRange(contentId):
-     h.contentDB.put(contentId, bodyContent)
+    # TODO this bit is quite troubling, currently we may trigger offer/accept
+    # only when content is in our db and we save content only when is in our range
+    # which means we cannot propagate content which is not in our range, but maybe
+    # in range of other nodes. 
+    h.contentDB.put(contentId, bodyContent.content)
+    # content is valid and in db we may propagate it through the network
+    h.portalProtocol.triggerPoke(
+      bodyContent.nodesInterestedInContent,
+      keyEncoded, 
+      contentId
+    )
 
   return some[Block]((header, blockBody))
 
