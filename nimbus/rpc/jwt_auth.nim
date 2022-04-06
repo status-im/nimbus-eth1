@@ -55,6 +55,9 @@ type
 
   JwtSharedKey* = ##\
     ## Convenience type, needed quite often
+    distinct array[jwtMinSecretLen,byte]
+
+  JwtSharedKeyRaw =
     array[jwtMinSecretLen,byte]
 
   JwtGenSecret* = ##\
@@ -62,6 +65,9 @@ type
     ## will be a wrapper around a random generator type, such as\
     ## `BrHmacDrbgContext`.
     proc(): JwtSharedKey {.gcsafe.}
+
+  JwtExcept* = object of CatchableError
+    ## Catch and relay exception error
 
   JwtError* = enum
     jwtKeyTooSmall = "JWT secret not at least 256 bits"
@@ -89,6 +95,12 @@ type
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+template safeExecutor(info: string; code: untyped) =
+  try:
+    code
+  except Exception as e:
+    raise newException(JwtExcept, info & "(): " & $e.name & " -- " & e.msg)
 
 proc base64urlEncode(x: auto): string =
   # The only strings this gets are internally generated, and don't have
@@ -154,35 +166,43 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
       delta
     return err(jwtTimeValidationError)
 
-  let b64sig = base64urlEncode(sha256.hmac(key, p[0] & "." & p[1]).data)
+  let
+    keyArray = cast[array[jwtMinSecretLen,byte]](key)
+    b64sig = base64urlEncode(sha256.hmac(keyArray, p[0] & "." & p[1]).data)
   if b64sig != p[2]:
     return err(jwtTokenValidationError)
 
   ok()
 
-proc jwtAsyncHS256(key: JwtSharedKey, req: HttpTable):
-                  Future[Result[void,string]] {.async.} =
-  ## Asynchroneous authenticator call back function
-  let auth = req.getString("Authorization","?")
-  if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-    return err("Missing Token")
-
-  let rc = auth[7..^1].strip.verifyTokenHS256(key)
-  if rc.isOk:
-    return ok()
-
-  debug "Could not authenticate",
-    error = rc.error
-
-  case rc.error:
-  of jwtTokenValidationError, jwtMethodUnsupported:
-    return err("Unauthorized")
-  else:
-    return err("Malformed Token")
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc fromHex*(key: var JwtSharedkey, src: string): Result[void,JwtError] =
+  ## Parse argument `src` from hex-string and fill it into the argument `key`.
+  ## This function is supposed to read and convert data in constant-time
+  ## fashion, guarding against side channel attacks.
+  # utils.fromHex() does the constant-time job
+  let secret = utils.fromHex(src)
+  if secret.len < jwtMinSecretLen:
+    return err(jwtKeyTooSmall)
+  key = toArray(JwtSharedKeyRaw.len, secret).JwtSharedKey
+  ok()
+
+proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
+  ## Standard shared key random generator. If a fixed key is needed, a
+  ## function like
+  ## ::
+  ##   proc preCompiledGenSecret(key: JwtSharedKey): JwtGenSecret =
+  ##     result = proc: JwtSharedKey =
+  ##       key
+  ##
+  ## might do. Not that in most cases, this function is internally used,
+  ## only.
+  result = proc: JwtSharedKey =
+    var data: array[jwtMinSecretLen,byte]
+    rng[].brHmacDrbgGenerate(data)
+    data.JwtSharedKey
 
 proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
                     Result[JwtSharedKey, JwtError] =
@@ -192,6 +212,10 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
   ##
   ## The resulting `JwtSharedKey` is supposed to be usewd as argument for
   ## the function `jwtHandlerHS256()`, below.
+  ##
+  ## Note that this function variant is mainly used for debugging and testing.
+  ## For a more common interface prototype with explicit random generator
+  ## object see the variant below this one.
   ##
   ## Ackn nimbus-eth2:
   ##   beacon_chain/spec/engine_authentication.nim.`checkJwtSecret()`
@@ -215,7 +239,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
       jwtSecretPath = config.dataDir.string / jwtSecretFile
       newSecret = rndSecret()
     try:
-      jwtSecretPath.writeFile(newSecret.to0xHex)
+      jwtSecretPath.writeFile(newSecret.JwtSharedKeyRaw.to0xHex)
     except IOError as e:
       # Allow continuing to run, though this is effectively fatal for a merge
       # client using authentication. This keeps it lower-risk initially.
@@ -227,14 +251,22 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
     let lines = config.jwtSecret.get.string.readLines(1)
     if lines.len == 0:
       return err(jwtKeyEmptyFile)
-    let secret = utils.fromHex(lines[0])
-    if secret.len < jwtMinSecretLen:
-      return err(jwtKeyTooSmall)
-    return ok(toArray(JwtSharedKey.len, secret))
+    var key: JwtSharedkey
+    let rc = key.fromHex(lines[0])
+    if rc.isErr:
+      return err(rc.error)
+    return ok(key.JwtSharedKey)
   except IOError:
     return err(jwtKeyFileCannotOpen)
   except ValueError:
     return err(jwtKeyInvalidHexString)
+
+proc jwtSharedSecret*(rng: ref BrHmacDrbgContext; config: NimbusConf):
+                    Result[JwtSharedKey, JwtError]
+    {.gcsafe, raises: [Defect,JwtExcept].} =
+  ## Variant of `jwtSharedSecret()` with explicit random generator argument.
+  safeExecutor("jwtSharedSecret"):
+    result = rng.jwtGenSecret.jwtSharedSecret(config)
 
 
 # -- currently unused --
@@ -290,27 +322,15 @@ proc jwtAuthAsyHandler*(key: JwtSharedKey): JwtAuthAsyHandler =
 
 proc jwtAuthAsyHook*(key: JwtSharedKey): ws.Hook =
   ## Variant of `jwtAuthHandler()` (e.g. directly suitable for Json WebSockets.)
+  ##
+  ## Note that currently there is no meaningful way to send a http 401/403 in
+  ## case of an authentication problem.
   let handler = key.jwtAuthAsyHandler
   ws.Hook(
     append: proc(ctx: ws.Hook, req: var HttpTable): Result[void,string] =
                 ok(),
     verify: proc(ctx: ws.Hook, req: HttpTable): Future[Result[void,string]] =
                 req.handler)
-
-
-proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
-  ## Standard shared key random generator. If a fixed key is needed, a
-  ## function like
-  ## ::
-  ##   proc preCompiledGenSecret(key: JwtSharedKey): JwtGenSecret =
-  ##     result = proc: JwtSharedKey =
-  ##       key
-  ##
-  ## might do.
-  result = proc: JwtSharedKey =
-    var data: JwtSharedKey
-    rng[].brHmacDrbgGenerate(data)
-    return data
 
 # ------------------------------------------------------------------------------
 # End

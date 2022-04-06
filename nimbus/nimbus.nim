@@ -184,7 +184,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   # Provide JWT authentication handler for websockets
   let jwtHook = block:
     # Create or load shared secret
-    let rc = nimbus.ctx.rng.jwtGenSecret.jwtSharedSecret(conf)
+    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
     if rc.isErr:
       error "Failed create or load shared secret",
         msg = $(rc.unsafeError) # avoid side effects

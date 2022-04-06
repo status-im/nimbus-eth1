@@ -26,6 +26,10 @@ import
   stint,
   unittest2
 
+type
+  UnGuardedKey =
+    array[jwtMinSecretLen,byte]
+
 const
   jwtKeyFile ="jwtsecret.txt"       # external shared secret file
   jwtKeyStripped ="jwtstripped.txt" # without leading 0x
@@ -34,10 +38,10 @@ const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests" / "test_jwt_auth"]
 
+let
   fakeKey = block:
     var rc: JwtSharedKey
-    for n in 0 ..< rc.len:
-      rc[n] = (15 - (n mod 16)).byte
+    discard rc.fromHex((0..31).mapIt(15 - (it mod 16)).mapIt(it.byte).toHex)
     rc
 
 # ------------------------------------------------------------------------------
@@ -102,11 +106,11 @@ proc getSignedToken2*(key: openArray[byte], payload: string): string =
   sData & "." & sha256.hmac(key, sData).data.base64UrlEncode
 
 proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
-  let bearer = secret.getSignedToken($getIatToken(time))
+  let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
 proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
-  let bearer = secret.getSignedToken2($getIatToken(time))
+  let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
 # ------------------------------------------------------------------------------
@@ -141,8 +145,8 @@ proc runKeyLoader(noisy = true;
       check 0 < lines.len
 
       let
-        hexKey = "0x" & secret.value.mapIt(it.toHex(2)).join
-        hexFake = "0x" & fakeKey.toSeq.mapIt(it.toHex(2)).join
+        hexKey = "0x" & secret.value.UnGuardedKey.toHex
+        hexFake = "0x" & fakeKey.UnGuardedKey.toSeq.toHex
         hexLine = lines[0].strip
 
       noisy.say "***", "key=", hexKey
@@ -165,8 +169,8 @@ proc runKeyLoader(noisy = true;
       check 0 < lines.len
 
       let
-        hexKey = secret.value.mapIt(it.toHex(2)).join
-        hexFake = fakeKey.toSeq.mapIt(it.toHex(2)).join
+        hexKey = secret.value.UnGuardedKey.toHex
+        hexFake = fakeKey.UnGuardedKey.toSeq.toHex
         hexLine = lines[0].strip
 
       noisy.say "***", "key=", hexKey
@@ -195,7 +199,7 @@ proc runKeyLoader(noisy = true;
       check secret.isOk
 
       let
-        hexKey = "0x" & secret.value.mapIt(it.toHex(2)).join
+        hexKey = "0x" & secret.value.UnGuardedKey.toHex
         hexLine = lines[0].strip
 
       noisy.say "***", "key=", hexKey
@@ -230,7 +234,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       # suite.
       let
         lines = config.jwtSecret.get.string.readLines(1)
-        hexKey = "0x" & secret.value.mapIt(it.toHex(2)).join
+        hexKey = "0x" & secret.value.UnGuardedKey.toHex
         hexLine = lines[0].strip
       noisy.say "***", "key=", hexKey
       noisy.say "   ", "text=", hexLine
@@ -281,7 +285,7 @@ proc jwtAuthMain*(noisy = defined(debug)) =
 
 when isMainModule:
   const
-    noisy = defined(debug)
+    noisy = defined(debug) or true
 
   setErrorLevel()
 
