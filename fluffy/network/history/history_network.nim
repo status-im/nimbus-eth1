@@ -139,7 +139,7 @@ proc getBlockHeader*(
     # which means we cannot propagate content which is not in our range, but maybe
     # in range of other nodes. 
     h.contentDB.put(contentId, headerContent.content)
-    # content is valid and in db we may propagate it through the network
+    # content is valid and in the db, it may be propagated it through the network
     h.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent,
       keyEncoded, 

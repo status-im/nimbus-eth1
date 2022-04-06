@@ -144,7 +144,7 @@ type
     Content
 
   FoundContent* = object
-    dst*: Node
+    src*: Node
     case kind*: FoundContentKind
     of Content:
       content*: seq[byte]
@@ -184,7 +184,7 @@ func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
-proc inRangeImpl(
+proc inRange(
   p: PortalProtocol,
   nodeId: NodeId, 
   nodeRadius: Uint256, 
@@ -193,7 +193,7 @@ proc inRangeImpl(
   distance <= nodeRadius
 
 func inRange*(p: PortalProtocol, contentId: ContentId): bool =
-  p.inRangeImpl(p.localNode.id, p.dataRadius, contentId)
+  p.inRange(p.localNode.id, p.dataRadius, contentId)
 
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int): List[ByteList, 32] =
@@ -572,19 +572,19 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
         await socket.destroyWait()
-        return ok(FoundContent(dst: dst, kind: Content, content: content))
+        return ok(FoundContent(src: dst, kind: Content, content: content))
       else:
         socket.close()
         return err("Reading data from socket timed out, content request failed")
     of contentType:
-      return ok(FoundContent(dst: dst, kind: Content, content: m.content.asSeq()))
+      return ok(FoundContent(src: dst, kind: Content, content: m.content.asSeq()))
     of enrsType:
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
         let verifiedNodes =
           verifyNodesRecords(records.get(), dst, enrsResultLimit)
 
-        return ok(FoundContent(dst: dst, kind: Nodes, nodes: verifiedNodes))
+        return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
       else:
         return err("Content message returned invalid ENRs")
 
@@ -786,14 +786,14 @@ proc triggerPoke*(
     nodes: seq[Node], 
     contentKey: ByteList,
     contentId: ContentId) =
-  ## Trigers asynchronous offer-accept interaction to provided nodes.
+  ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes
   ## Provided content should be in database
   ## TODO Related to todo in `proc offer` it maybe better to pass content to
   ## offer directly to avoid potential problems when content is not really in database
   ## this will be especially important when we introduce deleting content
   ## from database
-  let keys = List[ByteList, contentKeysLimit].init(@[contentKey])
+  let keys = ContentKeysList.init(@[contentKey])
   for node in nodes:
     if not p.offerQueue.full():
       try:
@@ -804,7 +804,6 @@ proc triggerPoke*(
     else:
       # offer queue full, do not start more offer offer-accept interactions
       return 
-
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
@@ -861,12 +860,12 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
       case content.kind
       of Nodes:
-        let maybeRadius = p.radiusCache.get(content.dst.id)
-        if maybeRadius.isSome() and p.inRangeImpl(content.dst.id, maybeRadius.unsafeGet(), targetId):
-          # we only return nodes which may be interested in content
-          # also we do not need to chec for duplicates in nodesWithoutContent
-          # as we never make requests two times to the same node
-          nodesWithoutContent.add(content.dst)
+        let maybeRadius = p.radiusCache.get(content.src.id)
+        if maybeRadius.isSome() and p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
+          # Only return nodes which may be interested in content.
+          # No need to check for duplicates in nodesWithoutContent
+          # as requests are never made two times to the same node.
+          nodesWithoutContent.add(content.src)
 
         for n in content.nodes:
           if not seen.containsOrIncl(n.id):
@@ -891,7 +890,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       # TODO: Should we do something with the node that failed responding our
       # query?
       discard
-  
+
   portal_lookup_content_failures.inc()
   return none[ContentLookupResult]()
 

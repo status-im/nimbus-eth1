@@ -265,7 +265,6 @@ procSuite "Portal Wire Protocol Tests":
 
     let res = lookupResult.unsafeGet()
 
-    echo res
     check:
       res.content == content
       res.nodesInterestedInContent.contains(node2.localNode)
