@@ -132,6 +132,7 @@ libbacktrace:
 
 # builds and runs the nimbus test suite
 test: | build deps
+	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 # Primitive reproducibility test.
@@ -186,7 +187,7 @@ fluffy-test-portal-testnet: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc,all_fluffy_tests,portalcli,*.dSYM}
+	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,db/test_kvstore_rocksdb,test_rpc,all_fluffy_tests,portalcli,*.dSYM}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif

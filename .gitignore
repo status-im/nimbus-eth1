@@ -27,9 +27,7 @@ nimcache
 /debug*.json
 /block*.json
 /.update.timestamp
-
 *.generated.nim
-
 /dist
 
 # Nimble user files
