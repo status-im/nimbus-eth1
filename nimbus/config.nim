@@ -403,6 +403,15 @@ type
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
 
+      # github.com/ethereum/execution-apis/
+      #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
+      jwtSecret* {.
+        desc: "Path to a file containing a 32 byte hex-encoded shared secret" &
+          " needed for websocket authentication. By default, the secret key" &
+          " is auto-generated."
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "jwt-secret" .}: Option[InputFile]
+
       graphqlEnabled* {.
         desc: "Enable the GraphQL HTTP server"
         defaultValue: false

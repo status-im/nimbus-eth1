@@ -11,19 +11,26 @@ import
   ../nimbus/vm_compile_info
 
 import
-  os, strutils, net, options,
+  std/[os, strutils, net, options],
+  chronicles,
+  chronos,
+  eth/[keys, net/nat, trie/db],
+  eth/common as eth_common,
+  eth/p2p as eth_p2p,
+  eth/p2p/[peer_pool, rlpx_protocols/les_protocol],
+  json_rpc/rpcserver,
+  metrics,
+  metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
-  eth/keys, db/[storage_types, db_chain, select_backend],
-  eth/common as eth_common, eth/p2p as eth_p2p,
-  chronos, json_rpc/rpcserver, chronicles,
-  eth/p2p/rlpx_protocols/les_protocol,
-  ./sync/protocol_ethxx,
-  ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
+  websock/types as ws,
+  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
+  ./db/[storage_types, db_chain, select_backend],
+  ./graphql/ethapi,
+  ./p2p/[chain, blockchain_sync],
   ./p2p/clique/[clique_desc, clique_sealer],
-  config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
-  eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
-  graphql/ethapi, context, utils/tx_pool,
-  "."/[conf_utils, sealer, constants, utils, version]
+  ./rpc/[common, debug, engine_api, jwt_auth, p2p],
+  ./sync/protocol_ethxx,
+  ./utils/tx_pool
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -154,7 +161,6 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       info "metrics", registry
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-
   # Creating RPC Server
   if conf.rpcEnabled:
     nimbus.rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
@@ -175,9 +181,23 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     nimbus.rpcServer.start()
 
+  # Provide JWT authentication handler for websockets
+  let jwtHook = block:
+    # Create or load shared secret
+    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
+    if rc.isErr:
+      error "Failed create or load shared secret",
+        msg = $(rc.unsafeError) # avoid side effects
+      quit(QuitFailure)
+    # Authentcation handler constructor
+    @[rc.value.jwtAuthAsyHook]
+
   # Creating Websocket RPC Server
   if conf.wsEnabled:
-    nimbus.wsRpcServer = newRpcWebSocketServer(initTAddress(conf.wsAddress, conf.wsPort))
+    # Construct server object
+    nimbus.wsRpcServer = newRpcWebSocketServer(
+      initTAddress(conf.wsAddress, conf.wsPort),
+      authHandler = jwtHook)
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
     # Enable Websocket RPC APIs based on RPC flags and protocol flags
@@ -242,7 +262,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if conf.engineApiWsEnabled:
       if conf.engineApiWsPort != conf.wsPort:
         nimbus.engineApiWsServer = newRpcWebSocketServer(
-          initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort))
+          initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
+          authHandler = jwtHook)
         setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
         setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
         nimbus.engineApiWsServer.start()
