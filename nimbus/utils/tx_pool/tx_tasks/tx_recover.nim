@@ -35,16 +35,22 @@ let
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc recoverItem*(xp: TxPoolRef; tx: Transaction;
-                  status = txItemPending; info = ""): Result[TxItemRef,TxInfo]
+proc recoverItem*(xp: TxPoolRef; tx: Transaction; status = txItemPending;
+                  info = ""; acceptExisting = false): Result[TxItemRef,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Recover item from waste basket or create new. It is an error if the item
   ## is in the buckets database, already.
+  ##
+  ## If thy argument `acceptExisting` is set `true` and the tx item is in the
+  ## bucket database already for any bucket, the fuction successds ok.
   let itemID = tx.itemID
 
   # Test whether the item is in the database, already
   if xp.txDB.byItemID.hasKey(itemID):
-    return err(txInfoErrAlreadyKnown)
+    if acceptExisting:
+      return ok(xp.txDB.byItemID.eq(itemID).value)
+    else:
+      return err(txInfoErrAlreadyKnown)
 
   # Check whether the tx can be re-cycled from waste basket
   block:

@@ -16,7 +16,7 @@
 ##
 ## * There is a conceivable problem with the per-account optimisation. The
 ##   algorithm chooses an account and does not stop packing until all txs
-##   of the account are packed or the block is full. In the lattter case,
+##   of the account are packed or the block is full. In the latter case,
 ##   there might be some txs left unpacked from the account which might be
 ##   the most lucrative ones. Should this be tackled (see also next item)?
 ##
@@ -81,25 +81,25 @@
 ## Pool database:
 ## --------------
 ## ::
-##    <Batch queue>     .   <Status buckets>      .    <Terminal state>
-##                      .                         .
-##                      .                         .    +----------+
-##    --> txJobAddTxs -------------------------------> |          |
-##                |     .        +-----------+    .    | disposed |
-##                +------------> |  pending  | ------> |          |
-##                      .        +-----------+    .    |          |
-##                      .          |  ^   ^       .    |  waste   |
-##                      .          v  |   |       .    |  basket  |
-##                      .   +----------+  |       .    |          |
-##                      .   |  staged  |  |       .    |          |
-##                      .   +----------+  |       .    |          |
-##                      .     |    |  ^   |       .    |          |
-##                      .     |    v  |   |       .    |          |
-##                      .     |  +----------+     .    |          |
-##                      .     |  |  packed  | -------> |          |
-##                      .     |  +----------+     .    |          |
-##                      .     +----------------------> |          |
-##                      .                         .    +----------+
+##    <Transactions>   .   <Status buckets>      .    <Terminal state>
+##                     .                         .
+##                     .                         .    +----------+
+##      add() ----+---------------------------------> |          |
+##                |    .        +-----------+    .    | disposed |
+##                +-----------> |  pending  | ------> |          |
+##                     .        +-----------+    .    |          |
+##                     .          |  ^   ^       .    |  waste   |
+##                     .          v  |   |       .    |  basket  |
+##                     .   +----------+  |       .    |          |
+##                     .   |  staged  |  |       .    |          |
+##                     .   +----------+  |       .    |          |
+##                     .     |    |  ^   |       .    |          |
+##                     .     |    v  |   |       .    |          |
+##                     .     |  +----------+     .    |          |
+##                     .     |  |  packed  | -------> |          |
+##                     .     |  +----------+     .    |          |
+##                     .     +----------------------> |          |
+##                     .                         .    +----------+
 ##
 ## The three columns *Batch queue*, *State bucket*, and *Terminal state*
 ## represent three different accounting (or database) systems. The pool
@@ -245,20 +245,16 @@
 ##    var xq = TxPoolRef.new(db)             # initialise tx-pool
 ##    ..
 ##
-##    xq.jobAddTxs(txs)                      # add transactions to be held
-##    ..                                     # .. on the batch queue
+##    xq.add(txs)                            # add transactions ..
+##    ..                                     # .. into the buckets
 ##
-##    xq.jobCommit                           # run batch queue worker/processor
 ##    let newBlock = xq.ethBlock             # fetch current mining block
 ##
 ##    ..
 ##    mineThatBlock(newBlock) ...            # external mining & signing process
 ##    ..
 ##
-##    let newTopHeader = db.getCanonicalHead # new head after mining
-##    xp.jobDeltaTxsHead(newTopHeader)       # add transactions update jobs
-##    xp.head = newTopHeader                 # adjust block insertion point
-##    xp.jobCommit                           # run batch queue worker/processor
+##    xp.smartHead(newBlock.header)          # update pool, new insertion point
 ##
 ##
 ## Discussion of example
@@ -350,10 +346,6 @@
 ##
 ##   *..there might be more strategy symbols..*
 ##
-## head
-##   Cached block chain insertion point. Typocally, this should be the the
-##   same header as retrieved by the `getCanonicalHead()`.
-##
 ## hwmTrgPercent
 ##   This parameter implies the size of `hwmGasLimit` which is calculated
 ##   as `max(trgGasLimit, maxGasLimit * lwmTrgPercent  / 100)`.
@@ -405,6 +397,11 @@
 ##   eligible for staging at the next cycle when the internally cached block
 ##   chain state is updated.)
 ##
+## head
+##   Cached block chain insertion point, not necessarily the same header as
+##   retrieved by the `getCanonicalHead()`. This insertion point can be
+##   adjusted with the `smartHead()` function.
+##
 ## hwmGasLimit
 ##   This parameter is at least `trgGasLimit` and does not exceed
 ##   `maxGasLimit` and can be adjusted by means of setting `hwmMaxPercent`. It
@@ -440,7 +437,7 @@
 import
   std/[sequtils, tables],
   ../db/db_chain,
-  ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item, tx_job],
+  ./tx_pool/[tx_chain, tx_desc, tx_info, tx_item],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[
     tx_add,
@@ -454,16 +451,9 @@ import
   stew/[keyed_queue, results],
   stint
 
-# hide complexity unless really needed
-when JobWaitEnabled:
-  import chronos
-
 export
   TxItemRef,
   TxItemStatus,
-  TxJobDataRef,
-  TxJobID,
-  TxJobKind,
   TxPoolFlags,
   TxPoolRef,
   TxTabsGasTotals,
@@ -495,7 +485,7 @@ logScope:
 
 proc maintenanceProcessing(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Tasks to be done after job processing
+  ## Tasks to be done after add/del job processing
 
   # Purge expired items
   if autoZombifyUnpacked in xp.pFlags or
@@ -512,34 +502,15 @@ proc maintenanceProcessing(xp: TxPoolRef)
       discard xp.bucketUpdateAll
       xp.pDirtyBuckets = false
 
-
-proc processJobs(xp: TxPoolRef): int
+proc setHead(xp: TxPoolRef; val: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Job queue processor
-  var rc = xp.byJob.fetch
-  while rc.isOK:
-    let task = rc.value
-    rc = xp.byJob.fetch
-    result.inc
-
-    case task.data.kind
-    of txJobNone:
-      # No action
-      discard
-
-    of txJobAddTxs:
-      # Add a batch of txs to the database
-      var args = task.data.addTxsArgs
-      let (_,topItems) = xp.addTxs(args.txs, args.info)
-      xp.pDoubleCheckAdd topItems
-
-    of txJobDelItemIDs:
-      # Dispose a batch of items
-      var args = task.data.delItemIDsArgs
-      for itemID in args.itemIDs:
-        let rcItem = xp.txDB.byItemID.eq(itemID)
-        if rcItem.isOK:
-          discard xp.txDB.dispose(rcItem.value, reason = args.reason)
+  ## Update cached block chain insertion point. This will also update the
+  ## internally cached `baseFee` (depends on the block chain state.)
+  if xp.chain.head != val:
+    xp.chain.head = val # calculates the new baseFee
+    xp.txDB.baseFee = xp.chain.baseFee
+    xp.pDirtyBuckets = true
+    xp.bucketFlushPacked
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor
@@ -556,14 +527,9 @@ proc new*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
 # Public functions, task manager, pool actions serialiser
 # ------------------------------------------------------------------------------
 
-proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
-  ## Queue a new generic job (does not run `jobCommit()`.)
-  xp.byJob.add(job)
-
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
+proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queues a batch of transactions jobs to be processed in due course (does
   ## not run `jobCommit()`.)
@@ -573,88 +539,68 @@ proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
   ## least nonce first. For this reason, it is suggested to pass transactions
   ## in larger groups. Calling single transaction jobs, they must strictly be
   ## passed smaller nonce before larger nonce.
-  discard xp.job(TxJobDataRef(
-    kind:     txJobAddTxs,
-    addTxsArgs: (
-      txs:    toSeq(txs),
-      info:   info)))
+  xp.pDoubleCheckAdd xp.addTxs(txs, info).topItems
+  xp.maintenanceProcessing
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
+proc add*(xp: TxPoolRef; tx: Transaction; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `jobAddTxs()` for a single transaction.
-  xp.jobAddTxs(@[tx], info)
+  ## Variant of `add()` for a single transaction.
+  xp.add(@[tx], info)
 
-
-proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
+proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## This function calculates the txs to add or delete that need to take place
-  ## after the cached block chain head is set to the position implied by the
-  ## argument `newHead`. If successful, the txs to add or delete are queued
-  ## on the job queue (run `jobCommit()` to execute) and `true` is returned.
-  ## Otherwise nothing is done and `false` is returned.
-  let rcDiff = xp.headDiff(newHead)
+  ## This function moves the internal head cache (i.e. tx insertion point,
+  ## vmState) and ponts it to a now block on the chain.
+  ##
+  ## In standard mode when argument `blindMode` is `false`, it calculates the
+  ## txs that beed to be added or deleted after moving the insertion point
+  ## head so that the tx-pool will not fail to re-insert quered txs that are
+  ## on the chain, already. Neither will it loose any txs. After updating the
+  ## the internal head cache, the previously calculated actions will be
+  ## applied.
+  ##
+  ## If the argument `blindMode` is passed `true`, the insertion head is
+  ## simply set ignoring all changes. This mode makes sense only in very
+  ## particular circumstances.
+  if blindMode:
+    xp.sethead(pos)
+    return true
+
+  let rcDiff = xp.headDiff(pos)
   if rcDiff.isOk:
     let changes = rcDiff.value
+
+    # Need to move head before adding txs which may rightly be rejected in
+    # `addTxs()` otherwise.
+    xp.sethead(pos)
 
     # Re-inject transactions, do that via job queue
     if 0 < changes.addTxs.len:
       debug "queuing delta txs",
         mode = "inject",
         num = changes.addTxs.len
-
-      discard xp.job(TxJobDataRef(
-        kind:       txJobAddTxs,
-        addTxsArgs: (
-          txs:      toSeq(changes.addTxs.nextValues),
-          info:     "")))
+      xp.pDoubleCheckAdd xp.addTxs(toSeq(changes.addTxs.nextValues)).topItems
 
     # Delete already *mined* transactions
     if 0 < changes.remTxs.len:
       debug "queuing delta txs",
         mode = "remove",
         num = changes.remTxs.len
+      xp.disposeById(toSeq(changes.remTxs.keys), txInfoChainHeadUpdate)
 
-      discard xp.job(TxJobDataRef(
-        kind:       txJobDelItemIDs,
-        delItemIDsArgs: (
-          itemIDs:  toSeq(changes.remTxs.keys),
-          reason:   txInfoChainHeadUpdate)))
-
+    xp.maintenanceProcessing
     return true
 
-
-proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
+proc triggerReorg*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## This function processes all jobs currently queued. If the the argument
-  ## `forceMaintenance` is set `true`, mainenance processing is always run.
-  ## Otherwise it is only run if there were active jobs.
-  let nJobs = xp.processJobs
-  if 0 < nJobs or forceMaintenance:
-    xp.maintenanceProcessing
-  debug "processed jobs", nJobs
-
-proc nJobs*(xp: TxPoolRef): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Return the number of jobs currently unprocessed, waiting.
-  xp.byJob.len
-
-# hide complexity unless really needed
-when JobWaitEnabled:
-  proc jobWait*(xp: TxPoolRef) {.async,raises: [Defect,CatchableError].} =
-    ## Asynchronously wait until at least one job is queued and available.
-    ## This function might be useful for testing (available only if the
-    ## `JobWaitEnabled` compile time constant is set.)
-    await xp.byJob.waitAvail
-
-
-proc triggerReorg*(xp: TxPoolRef) =
   ## This function triggers a bucket re-org action with the next job queue
   ## maintenance-processing (see `jobCommit()`) by setting the `dirtyBuckets`
   ## parameter. This re-org action eventually happens when the
   ## `autoUpdateBucketsDB` flag is also set.
   xp.pDirtyBuckets = true
+  xp.maintenanceProcessing
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -787,9 +733,11 @@ proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
   if 0 <= val and val <= 100:
     xp.chain.lhwm = (lwmTrg: val, hwmMax: xp.chain.lhwm.hwmMax)
 
-proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags])
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
+  xp.maintenanceProcessing
 
 proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
@@ -826,16 +774,6 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pMinTipPrice = val
     xp.pDirtyBuckets = true
 
-proc `head=`*(xp: TxPoolRef; val: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, cached block chain insertion point. This will also update the
-  ## internally cached `baseFee` (depends on the block chain state.)
-  if xp.chain.head != val:
-    xp.chain.head = val # calculates the new baseFee
-    xp.txDB.baseFee = xp.chain.baseFee
-    xp.pDirtyBuckets = true
-    xp.bucketFlushPacked
-
 proc `prevRandao=`*(xp: TxPoolRef; val: Hash256) =
   ## Setter, PoS block randomness
   ## Used by `prevRandao` op code in EVM after transition to PoS
@@ -871,6 +809,10 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
 
+proc isLocal*(xp: TxPoolRef; account: EthAddress): bool =
+  ## This function returns `true` if argument `account` is tagged local.
+  xp.txDB.isLocal(account)
+
 proc setLocal*(xp: TxPoolRef; account: EthAddress) =
   ## Tag argument `account` local which means that the transactions from this
   ## account -- together with all other local accounts -- will be considered
@@ -902,8 +844,15 @@ proc addRemote*(xp: TxPoolRef;
   ## argument transaction is tagged local, this function returns with an error.
   ## If the argument `force` is set `true`, the sender account will be untagged,
   ## i.e. made non-local.
-  # Create or recover new item
-  let rc = xp.recoverItem(tx, txItemPending, "remote tx peek")
+  ##
+  ## Note: This function is rather inefficient if there are more than one
+  ## txs to be added for a known account. The preferable way to do this
+  ## would be to use a combination of `xp.add()` and `xp.resLocal()` in any
+  ## order.
+  # Create or recover new item. This will wrap the argument `tx` and cache
+  # the sender account and other derived data accessible.
+  let rc = xp.recoverItem(
+    tx, txItemPending, "remote tx peek", acceptExisting = true)
   if rc.isErr:
     return err(rc.error)
 
@@ -917,7 +866,7 @@ proc addRemote*(xp: TxPoolRef;
   elif xp.txDB.isLocal(sender):
     return err(txInfoTxErrorRemoteExpected)
 
-  xp.jobAddTx(tx, "remote tx")
+  xp.add(tx, "remote tx")
   ok()
 
 proc addLocal*(xp: TxPoolRef;
@@ -929,8 +878,15 @@ proc addLocal*(xp: TxPoolRef;
   ## argument transaction is _not_ tagged local, this function returns with
   ## an error. If the argument `force` is set `true`, the sender account will
   ## be tagged local.
-  # Create or recover new item
-  let rc = xp.recoverItem(tx, txItemPending, "local tx peek")
+  ##
+  ## Note: This function is rather inefficient if there are more than one
+  ## txs to be added for a known account. The preferable way to do this
+  ## would be to use a combination of `xp.add()` and `xp.setLocal()` in any
+  ## order.
+  # Create or recover new item. This will wrap the argument `tx` and cache
+  # the sender account and other derived data accessible.
+  let rc = xp.recoverItem(
+    tx, txItemPending, "local tx peek", acceptExisting = true)
   if rc.isErr:
     return err(rc.error)
 
@@ -944,8 +900,42 @@ proc addLocal*(xp: TxPoolRef;
   elif not xp.txDB.isLocal(sender):
     return err(txInfoTxErrorLocalExpected)
 
-  xp.jobAddTx(tx, "local tx")
+  xp.add(tx, "local tx")
   ok()
+
+# ------------------------------------------------------------------------------
+# Legacy stuff -- will be removed, soon
+# ------------------------------------------------------------------------------
+
+proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
+    {.gcsafe, raises: [Defect,CatchableError],
+      deprecated: "use add() instead".} =
+  xp.add(txs,info)
+
+proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
+    {.gcsafe,raises: [Defect,CatchableError],
+      deprecated: "use add() instead".} =
+   xp.add(tx,info)
+
+proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
+    {.gcsafe,raises: [Defect,CatchableError],
+      deprecated: "use smartHead() instead " &
+                  "and remove the head= directive follwoing".} =
+  xp.smartHead(newHead)
+
+proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
+    {.deprecated: "this function does nothing and can savely be removed".} =
+  discard
+
+proc nJobs*(xp: TxPoolRef): int
+    {.deprecated: "this function returns always 0 and can savely be removed".} =
+  0
+
+proc `head=`*(xp: TxPoolRef; val: BlockHeader)
+    {.gcsafe,raises: [Defect,CatchableError],
+      deprecated: "use smartHead(val,blindMode=true) instead although " &
+                  "this function is unneccesary after running smartHead()".} =
+  discard xp.smartHead(val, true)
 
 # ------------------------------------------------------------------------------
 # End

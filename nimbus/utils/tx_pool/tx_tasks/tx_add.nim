@@ -28,6 +28,18 @@ import
 {.push raises: [Defect].}
 
 type
+  TxAddStats* = tuple ##\
+    ## Status code returned from the `addTxs()` function
+
+    stagedIndicator: bool ##\
+      ## If `true`, this value indicates that at least one item was added to\
+      ## the `staged` bucket (which suggest a re-run of the packer.)
+
+    topItems: seq[TxItemRef] ##\
+      ## For each sender where txs were added to the bucket database or waste\
+      ## basket, this list keeps the items with the highest nonce (handy for\
+      ## chasing nonce gaps after a back-move of the block chain head.)
+
   NonceList = ##\
     ## Temporary sorter list
     SortedSet[AccountNonce,TxItemRef]
@@ -147,25 +159,25 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(xp: TxPoolRef;
-             txs: var openArray[Transaction]; info = ""): (bool,seq[TxItemRef])
+             txs: openArray[Transaction]; info = ""): TxAddStats
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Add a list of transactions. The list is sorted after nonces and txs are
   ## tested and stored into either of the `pending` or `staged` buckets, or
   ## disposed o the waste basket. The function returns the tuple
   ## `(staged-indicator,top-items)` as explained below.
   ##
-  ## *staged-indicator*
+  ## *stagedIndicator*
   ##   If `true`, this value indicates that at least one item was added to
   ##   the `staged` bucket (which suggest a re-run of the packer.)
   ##
-  ## *top-items*
+  ## *topItems*
   ##   For each sender where txs were added to the bucket database or waste
   ##   basket, this list keeps the items with the highest nonce (handy for
   ##   chasing nonce gaps after a back-move of the block chain head.)
   ##
   var accTab: AccouuntNonceTab
 
-  for tx in txs.mitems:
+  for tx in txs.items:
     var reason: TxInfo
 
     # Create tx item wrapper, preferably recovered from waste basket
@@ -203,7 +215,7 @@ proc addTxs*(xp: TxPoolRef;
     while rc.isOK:
       let (nonce,item) = (rc.value.key,rc.value.data)
       if xp.addTx(item):
-        result[0] = true
+        result.stagedIndicator = true
 
       # Make sure that there is at least one item per sender, prefereably
       # a non-error item.
@@ -213,7 +225,7 @@ proc addTxs*(xp: TxPoolRef;
 
     # return the last one in the series
     if not lastItem.isNil:
-      result[1].add lastItem
+      result.topItems.add lastItem
 
 # ------------------------------------------------------------------------------
 # End
