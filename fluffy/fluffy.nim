@@ -111,8 +111,9 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.
   let
+    maxPayloadSize = uint32(discv5MaxSize - talkReqOverhead - utpHeaderOverhead)
     socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration))
+      incomingSocketReceiveTimeout = none(Duration), payloadSize = maxPayloadSize)
     streamTransport = UtpDiscv5Protocol.new(
       d,
       utpProtocolId,
@@ -123,7 +124,6 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
         stateNetwork.portalProtocol.stream,
         historyNetwork.portalProtocol.stream]),
       socketConfig)
-
   stateNetwork.setStreamTransport(streamTransport)
   historyNetwork.setStreamTransport(streamTransport)
 
