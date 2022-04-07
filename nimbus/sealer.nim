@@ -89,7 +89,6 @@ proc prepareBlock(engine: SealingEngineRef,
                     time
 
   engine.txPool.prevRandao = prevRandao
-  engine.txPool.jobCommit()
 
   var blk = engine.txPool.ethBlock()
 
@@ -224,10 +223,7 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
       error "sealing engine: persistBlocks error"
       break
 
-    discard engine.txPool.jobDeltaTxsHead(blk.header) # add transactions update jobs
-    engine.txPool.head = blk.header # adjust block insertion point
-    engine.txPool.jobCommit()
-
+    discard engine.txPool.smartHead(blk.header) # add transactions update jobs
     info "block generated", number=blk.header.blockNumber
 
 template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
@@ -278,9 +274,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   if blk.header.extraData.len > 32:
     return err "extraData length should not exceed 32 bytes"
 
-  discard engine.txPool.jobDeltaTxsHead(blk.header) # add transactions update jobs
-  engine.txPool.head = blk.header # adjust block insertion point
-  engine.txPool.jobCommit()
+  discard engine.txPool.smartHead(blk.header) # add transactions update jobs
 
   payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
   payloadRes.feeRecipient = Web3Address blk.header.coinbase

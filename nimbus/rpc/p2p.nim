@@ -248,11 +248,8 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
-      res      = txPool.addLocal(signedTx, force = true)
 
-    if res.isErr:
-      raise newException(ValueError, $res.error)
-
+    txPool.add(signedTx)
     result = keccak_256.digest(rlpTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
@@ -264,11 +261,8 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     let
       txBytes = hexToSeqByte(data.string)
       signedTx = rlp.decode(txBytes, Transaction)
-      res = txPool.addLocal(signedTx, force = true)
 
-    if res.isErr:
-      raise newException(ValueError, $res.error)
-
+    txPool.add(signedTx)
     result = keccak_256.digest(txBytes).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
