@@ -22,6 +22,18 @@ const
   utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
   defaultReadTimeout = 2.seconds
+  # TalkReq message is used as transport message
+  talkReqOverhead* =
+    16 + # IV size
+    55 + # header size
+    1 + # talkReq msg id
+    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
+    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
+    3 + # rlp encoding response byte string, max length in 2 bytes
+    16 + # HMAC
+    len(utpProtocolId) + 1 # + 1 is necessary due to rlp encoding of those bytes
+  utpHeaderOverhead* = 20
+  discv5MaxSize* = 1280
 
 type
   ContentRequest = object
