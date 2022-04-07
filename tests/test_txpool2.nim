@@ -139,7 +139,6 @@ proc runTxPoolCliqueTest*() =
         return
 
     test "TxPool jobCommit":
-      xp.jobCommit()
       check xp.nItems.total == 1
 
     test "TxPool ethBlock":
@@ -193,7 +192,6 @@ proc runTxPoolPosTest*() =
         return
 
     test "TxPool jobCommit":
-      xp.jobCommit()
       check xp.nItems.total == 1
 
     test "TxPool ethBlock":
@@ -253,18 +251,14 @@ proc runTxHeadDelta*(noisy = true) =
 
       # setTraceLevel()
 
-      block processBlocks:
+      block:
         for n in 0..<numBlocks:
 
           for tn in 0..<txPerblock:
             let tx = env.makeTx(recipient, amount)
-            let res = xp.addLocal(tx, force = true)
-            if res.isErr:
-              noisy.say "***", "loading blocks failed",
-                " error=", res.error
-              break processBlocks
-
-          xp.jobCommit()
+            # Instead of `add()`, the functions `addRemote()` or `addLocal()`
+            # also would do.
+            xp.add(tx)
 
           noisy.say "***", "txDB",
             &" n={n}",
@@ -289,7 +283,7 @@ proc runTxHeadDelta*(noisy = true) =
           # Commit to block chain
           check chain.persistBlocks([blk.header], [body]).isOk
 
-          # I not for other reason, setting head is irrelevant for this test
+          # If not for other reason, setting head is irrelevant for this test
           #
           # # PoS block canonical head must be explicitly set using setHead.
           # # The function `persistHeaderToDb()` used in `persistBlocks()`
@@ -299,11 +293,9 @@ proc runTxHeadDelta*(noisy = true) =
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
           # packer bucket.
-          check xp.jobDeltaTxsHead(blk.header)
+          check xp.smartHead(blk.header)
 
           # Move TxPool chain head to new chain head and apply delta jobs
-          xp.head = blk.header
-          xp.jobCommit()
           check xp.nItems.staged == 0
           check xp.nItems.packed == 0
 
@@ -325,7 +317,8 @@ when isMainModule:
 
   setErrorLevel() # mute logger
 
-  #runTxPoolCliqueTest()
-  #runTxPoolPosTest()
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+  noisy.runTxHeadDelta
 
-  true.runTxHeadDelta
+# End
