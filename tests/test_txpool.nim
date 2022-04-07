@@ -216,40 +216,6 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       check 0.GasPrice <= minGasPrice
       check minGasPrice <= maxGasPrice
 
-    test &"Concurrent job processing example":
-      var log = ""
-
-      # This test does not verify anything but rather shows how the pool
-      # primitives could be used in an async context.
-
-      proc delayJob(xp: TxPoolRef; waitMs: int) {.async.} =
-        let n = xp.nJobs
-        xp.job(TxJobDataRef(kind: txJobNone))
-        xp.job(TxJobDataRef(kind: txJobNone))
-        xp.job(TxJobDataRef(kind: txJobNone))
-        log &= " wait-" & $waitMs & "-" & $(xp.nJobs - n)
-        await chronos.milliseconds(waitMs).sleepAsync
-        xp.jobCommit
-        log &= " done-" & $waitMs
-
-      # run async jobs, completion should be sorted by timeout argument
-      proc runJobs(xp: TxPoolRef) {.async.} =
-        let
-          p1 = xp.delayJob(900)
-          p2 = xp.delayJob(1)
-          p3 = xp.delayJob(700)
-        await p3
-        await p2
-        await p1
-
-      waitFor xp.runJobs
-      check xp.nJobs == 0
-      check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
-
-      # Cannot rely on boundary conditions regarding nonces. So xp.verify()
-      # will not work here => xp.txDB.verify()
-      check xp.txDB.verify.isOK
-
 
 proc runTxPoolTests(noisy = true) =
   let elapNoisy = false
@@ -387,16 +353,19 @@ proc runTxPoolTests(noisy = true) =
 
       test &"Auto delete about {nItems} expired txs out of {xq.nItems.total}":
 
+        # Make sure that the test did not collapse
         check 0 < nItems
-        xq.lifeTime = getTime() - gap
-        xq.flags = xq.flags + {autoZombifyPacked}
 
         # evict and pick items from the wastbasket
         let
           disposedBase = xq.nItems.disposed
           evictedBase = evictionMeter.value
           impliedBase = impliedEvictionMeter.value
+
+        xq.lifeTime = getTime() - gap
+        xq.flags = xq.flags + {autoZombifyPacked}
         xq.jobCommit(true)
+
         let
           disposedItems = xq.nItems.disposed - disposedBase
           evictedItems = (evictionMeter.value - evictedBase).int

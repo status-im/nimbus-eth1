@@ -300,7 +300,6 @@ proc runTxHeadDelta*(noisy = true) =
           # In this particular case, these differences will simply flush the
           # packer bucket.
           check xp.jobDeltaTxsHead(blk.header)
-          check xp.nJobs == 1
 
           # Move TxPool chain head to new chain head and apply delta jobs
           xp.head = blk.header
