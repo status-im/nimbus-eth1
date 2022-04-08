@@ -108,15 +108,11 @@
 ## state in addition to other cached information like the sender account.
 ##
 ##
-## Batch Queue
-## -----------
-## The batch queue holds different types of jobs to be run later in a batch.
-## When running at a time, all jobs are executed in *FIFO* mode until the queue
-## is empty.
-##
+## New transactions
+## ----------------
 ## When entering the pool, new transactions are bundled with meta data and
-## appended to the batch queue. These bundles are called *item*. When the
-## batch commits, items are forwarded to one of the following entites:
+## appended to the batch queue. These bundles are called *items* which are
+## forwarded to one of the following entites:
 ##
 ## * the *staged* bucket if the transaction is valid and match some constraints
 ##   on expected minimum mining fees (or a semblance of that for *non-PoW*
@@ -229,10 +225,7 @@
 ##
 ## Pool coding
 ## ===========
-## The idea is that there are concurrent *async* instances feeding transactions
-## into a batch queue via `jobAddTxs()`. The batch queue is then processed on
-## demand not until `jobCommit()` is run. A piece of code using this pool
-## architecture could look like as follows:
+## A piece of code using this pool architecture could look like as follows:
 ## ::
 ##    # see also unit test examples, e.g. "Block packer tests"
 ##    var db: BaseChainDB                    # to be initialised
@@ -259,14 +252,12 @@
 ##
 ## Discussion of example
 ## ---------------------
-## In the example, transactions are collected via `jobAddTx()` and added to
-## a batch of jobs to be processed at a time when considered right. The
-## processing is initiated with the `jobCommit()` directive.
+## In the example, transactions are processed into buckets via `add()`.
 ##
-## The `ethBlock()` directive retrieves a new block for mining derived
-## from the current pool state. It invokes the block packer whic accumulates
-## txs from the `pending` buscket into the `packed` bucket which then go
-## into the block.
+## The `ethBlock()` directive assembles and retrieves a new block for mining
+## derived from the current pool state. It invokes the block packer which
+## accumulates txs from the `pending` buscket into the `packed` bucket which
+## then go into the block.
 ##
 ## Then mining and signing takes place ...
 ##
@@ -281,16 +272,13 @@
 ## chain branch which has become an uncle to the new canonical head retrieved
 ## by `getCanonicalHead()`. In order to update the pool to the very state
 ## one would have arrived if worked on the retrieved canonical head branch
-## in the first place, the directive `jobDeltaTxsHead()` calculates the
-## actions of what is needed to get just there from the locally cached head
-## state of the pool. These actions are added by `jobDeltaTxsHead()` to the
-## batch queue to be executed when it is time.
+## in the first place, the directive `smartHead()` calculates the actions of
+## what is needed to get just there from the locally cached head state of the
+## pool. These actions are applied by `smartHead()` after the internal head
+## position was moved.
 ##
-## Then the locally cached block chain head is updated by setting a new
-## `topHeader`. The *setter* behind this assignment also caches implied
-## internal parameters as base fee, fork, etc. Only after the new chain head
-## is set, the `jobCommit()` should be started to process the update actions
-## (otherwise txs might be thrown out which could be used for packing.)
+## The *setter* behind the internal head position adjustment also caches
+## updated internal parameters as base fee, state, fork, etc.
 ##
 ##
 ## Adjustable Parameters
@@ -485,7 +473,7 @@ logScope:
 
 proc maintenanceProcessing(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Tasks to be done after add/del job processing
+  ## Tasks to be done after add/del txs processing
 
   # Purge expired items
   if autoZombifyUnpacked in xp.pFlags or
@@ -531,14 +519,15 @@ proc new*(T: type TxPoolRef; db: BaseChainDB; miner: EthAddress): T
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Queues a batch of transactions jobs to be processed in due course (does
-  ## not run `jobCommit()`.)
+  ## Add a list of transactions to be processed and added to the buckets
+  ## database. It is OK pass an empty list in which case some maintenance
+  ## check can be forced.
   ##
   ## The argument Transactions `txs` may come in any order, they will be
   ## sorted by `<account,nonce>` before adding to the database with the
   ## least nonce first. For this reason, it is suggested to pass transactions
   ## in larger groups. Calling single transaction jobs, they must strictly be
-  ## passed smaller nonce before larger nonce.
+  ## passed *smaller nonce* before *larger nonce*.
   xp.pDoubleCheckAdd xp.addTxs(txs, info).topItems
   xp.maintenanceProcessing
 
@@ -555,7 +544,7 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
   ## vmState) and ponts it to a now block on the chain.
   ##
   ## In standard mode when argument `blindMode` is `false`, it calculates the
-  ## txs that beed to be added or deleted after moving the insertion point
+  ## txs that need to be added or deleted after moving the insertion point
   ## head so that the tx-pool will not fail to re-insert quered txs that are
   ## on the chain, already. Neither will it loose any txs. After updating the
   ## the internal head cache, the previously calculated actions will be
@@ -595,10 +584,9 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
 
 proc triggerReorg*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## This function triggers a bucket re-org action with the next job queue
-  ## maintenance-processing (see `jobCommit()`) by setting the `dirtyBuckets`
-  ## parameter. This re-org action eventually happens when the
-  ## `autoUpdateBucketsDB` flag is also set.
+  ## This function triggers a tentative bucket re-org action by setting the
+  ## `dirtyBuckets` parameter. This re-org action eventually happens only if
+  ## the `autoUpdateBucketsDB` flag is also set.
   xp.pDirtyBuckets = true
   xp.maintenanceProcessing
 
@@ -722,7 +710,7 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
   ## Setter, sets `baseFee` explicitely witout triggering a packer update.
   ## Stil a database update might take place when updating account ranks.
   ##
-  ## Typically, this function would *not* be called but rather the `head=`
+  ## Typically, this function would *not* be called but rather the `smartHead()`
   ## update would be employed to do the job figuring out the proper value
   ## for the `baseFee`.
   xp.txDB.baseFee = val
@@ -737,7 +725,6 @@ proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags])
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
-  xp.maintenanceProcessing
 
 proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
@@ -838,7 +825,7 @@ proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
 proc addRemote*(xp: TxPoolRef;
                 tx: Transaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Adds the argument transaction `tx` to the job queue.
+  ## Adds the argument transaction `tx` to the buckets database.
   ##
   ## If the argument `force` is set `false` and the sender account of the
   ## argument transaction is tagged local, this function returns with an error.
@@ -872,7 +859,7 @@ proc addRemote*(xp: TxPoolRef;
 proc addLocal*(xp: TxPoolRef;
                tx: Transaction; force = false): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Adds the argument transaction `tx` to the job queue.
+  ## Adds the argument transaction `tx` to the buckets database.
   ##
   ## If the argument `force` is set `false` and the sender account of the
   ## argument transaction is _not_ tagged local, this function returns with

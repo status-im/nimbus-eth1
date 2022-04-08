@@ -106,12 +106,11 @@ proc toTxPool*(
           status = statusInfo[getStatus()]
           info = &"{txCount} #{num}({chainNo}) {n}/{txs.len} {status}"
         noisy.showElapsed(&"insert: {info}"):
-          result[0].jobAddTx(txs[n], info)
+          result[0].add(txs[n], info)
 
       if loadTxs <= txCount:
         break
 
-  result[0].jobCommit
   result[1] = nTxs
 
 
@@ -136,12 +135,11 @@ proc toTxPool*(
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for item in itList:
       if noLocals:
-        result.jobAddTx(item.tx, item.info)
+        result.add(item.tx, item.info)
       elif localAddr.hasKey(item.sender):
         doAssert result.addLocal(item.tx, true).isOk
       else:
         doAssert result.addRemote(item.tx, true).isOk
-      result.jobCommit
   doAssert result.nItems.total == itList.len
 
 
@@ -172,26 +170,30 @@ proc toTxPool*(
   let
     delayAt = itList.len * itemsPC div 100
     middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
+  const
+    tFmt = "yyyy-MM-dd'T'HH-mm-ss'.'fff"
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for n in 0 ..< itList.len:
       let item = itList[n]
       if noLocals:
-        result.jobAddTx(item.tx, item.info)
+        result.add(item.tx, item.info)
       elif localAddr.hasKey(item.sender):
         doAssert result.addLocal(item.tx, true).isOk
       else:
         doAssert result.addRemote(item.tx, true).isOk
+      if n < 3 or delayAt-3 <= n and n <= delayAt+3 or itList.len-4 < n:
+        let t = result.getItem(item.itemID).value.timeStamp.format(tFmt, utc())
+        noisy.say &"added item {n} time={t}"
       if delayAt == n:
         nGapItems = n # pass back value
-        noisy.say &"time gap after transactions"
         let itemID = item.itemID
-        result.jobCommit
         doAssert result.nItems.disposed == 0
         timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
+        let t = timegap.format(tFmt, utc())
+        noisy.say &"{delayMSecs}ms time gap centered around {t}"
         delayMSecs.sleep
 
-  result.jobCommit
   doAssert result.nItems.total == itList.len
   doAssert result.nItems.disposed == 0
 
