@@ -109,6 +109,16 @@ proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
         if xp.txDB.dispose(otherItem, otherReason):
           result.inc
 
+
+proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash256]; reason: TxInfo)
+    {.gcsafe,raises: [Defect,KeyError].}=
+  ## Dispose items by item ID wihtout checking whether this makes other items
+  ## unusable (e.g. with higher nonces for the same sender.)
+  for itemID in itemIDs:
+    let rcItem = xp.txDB.byItemID.eq(itemID)
+    if rcItem.isOK:
+      discard xp.txDB.dispose(rcItem.value, reason)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

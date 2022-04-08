@@ -18,7 +18,6 @@ import
   ./tx_chain,
   ./tx_info,
   ./tx_item,
-  ./tx_job,
   ./tx_tabs,
   ./tx_tabs/tx_sender, # for verify()
   eth/[common, keys]
@@ -94,7 +93,6 @@ type
     startDate: Time             ## Start date (read-only)
 
     chain: TxChainRef           ## block chain state
-    byJob: TxJobRef             ## Job batch list
     txDB: TxTabsRef             ## Transaction lists & tables
 
     lifeTime*: times.Duration   ## Maximum life time of a tx in the system
@@ -136,7 +134,6 @@ proc init*(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
 
   xp.chain = TxChainRef.new(db, miner)
   xp.txDB = TxTabsRef.new
-  xp.byJob = TxJobRef.new
 
   xp.lifeTime = txItemLifeTime
   xp.priceBump = txPriceBump
@@ -149,10 +146,6 @@ proc init*(xp: TxPoolRef; db: BaseChainDB; miner: EthAddress)
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
-
-proc byJob*(xp: TxPoolRef): TxJobRef =
-  ## Getter, job queue
-  xp.byJob
 
 proc chain*(xp: TxPoolRef): TxChainRef =
   ## Getter, block chain DB
@@ -231,10 +224,6 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 
-  block:
-    let rc = xp.byJob.verify
-    if rc.isErr:
-      return rc
   block:
     let rc = xp.txDB.verify
     if rc.isErr:
