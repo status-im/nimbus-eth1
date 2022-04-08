@@ -35,7 +35,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc writePaddedResult(mem: var Memory,
-                       data: openarray[byte],
+                       data: openArray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
 

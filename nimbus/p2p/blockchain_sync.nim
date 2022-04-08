@@ -173,7 +173,7 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
     if ctx.hasOutOfOrderBlocks:
       let (index, validation) = ctx.persistPendingWorkItems()
       # Only report an error if it was this peer's work item that failed
-      if validation == ValidationResult.Error and index == workitem:
+      if validation == ValidationResult.Error and index == workItem:
         result = ValidationResult.Error
       # TODO: What about failures on other peers' work items?
       # In that case the peer will probably get disconnected on future erroneous

@@ -10,7 +10,7 @@ func toEvmc*(h: Hash256 | ContractSalt): evmc_bytes32 {.inline.} =
   doAssert sizeof(h) == sizeof(evmc_bytes32)
   cast[evmc_bytes32](h)
 
-func toEvmc*(n: Uint256): evmc_uint256be {.inline.} =
+func toEvmc*(n: UInt256): evmc_uint256be {.inline.} =
   when evmc_native:
     cast[evmc_uint256be](n)
   else:
@@ -20,11 +20,11 @@ func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
   when T is Hash256 | ContractSalt:
     doAssert sizeof(n) == sizeof(T)
     cast[T](n)
-  elif T is Uint256:
+  elif T is UInt256:
     when evmc_native:
-      cast[Uint256](n)
+      cast[UInt256](n)
     else:
-      Uint256.fromBytesBE(n.bytes)
+      UInt256.fromBytesBE(n.bytes)
   else:
     {.error: "cannot convert unsupported evmc type".}
 
@@ -39,7 +39,7 @@ when isMainModule:
   assert(a == toEvmc(na))
   var b = stuint(10, 256)
   var eb = b.toEvmc
-  assert(b == fromEvmc(Uint256, eb))
+  assert(b == fromEvmc(UInt256, eb))
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
   assert(h == fromEvmc(Hash256, eh))

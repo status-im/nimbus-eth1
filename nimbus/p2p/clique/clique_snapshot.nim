@@ -114,7 +114,7 @@ proc pp(t: var LocalPath): string =
   var w = LocalSubChain()
   t.pp(w)
 
-proc pp(err: CLiqueError): string =
+proc pp(err: CliqueError): string =
   "(" & $err[0] & "," & err[1] & ")"
 
 # ------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ proc findSnapshot(d: var LocalSnaps): bool
     # Check whether the snapshot was recently visited and cached
     if d.c.recents.hasLruSnaps(hash):
       let rc = d.c.recents.getLruSnaps(hash)
-      if rc.isOK:
+      if rc.isOk:
         # we made sure that this is not a blind entry (currently no reason
         # why there should be any, though)
         d.trail.snaps = rc.value.cloneSnapshot
@@ -203,7 +203,7 @@ proc findSnapshot(d: var LocalSnaps): bool
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
       d.trail.snaps = d.c.cfg.newSnapshot(header)
       let rc = d.trail.snaps.storeSnapshot
-      if rc.isOK:
+      if rc.isOk:
         d.say "findSnapshot <epoch> ", d.trail.pp
         info "Stored voting snapshot to disk",
           blockNumber = number,
@@ -216,7 +216,7 @@ proc findSnapshot(d: var LocalSnaps): bool
     d.trail.chain.add header
 
     # Assign parent header
-    if 0 < parentslen:
+    if 0 < parentsLen:
       # If we have explicit parents, pop it from the parents list
       parentsLen.dec
       header = d.parents[parentsLen]
@@ -326,8 +326,8 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
-                        parents: var seq[Blockheader]): SnapshotResult
+proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
+                        parents: var seq[BlockHeader]): SnapshotResult
                            {.gcsafe, raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
@@ -362,7 +362,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
 
 
 proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
-                        parents: var seq[Blockheader]): SnapshotResult
+                        parents: var seq[BlockHeader]): SnapshotResult
                           {.gcsafe,raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
@@ -401,28 +401,28 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
 
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
-proc cliqueSnapshot*(c: Clique; header: Blockheader;
-                     parents: var seq[Blockheader]): SnapshotResult
+proc cliqueSnapshot*(c: Clique; header: BlockHeader;
+                     parents: var seq[BlockHeader]): SnapshotResult
                          {.gcsafe, raises: [Defect,CatchableError].} =
   var list = toSeq(parents)
   c.cliqueSnapshotSeq(header,list)
 
 proc cliqueSnapshot*(c: Clique;hash: Hash256;
-                     parents: openArray[Blockheader]): SnapshotResult
+                     parents: openArray[BlockHeader]): SnapshotResult
                          {.gcsafe, raises: [Defect,CatchableError].} =
   var list = toSeq(parents)
   c.cliqueSnapshotSeq(hash,list)
 
-proc cliqueSnapshot*(c: Clique; header: Blockheader): SnapshotResult
+proc cliqueSnapshot*(c: Clique; header: BlockHeader): SnapshotResult
                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,header,@[])`
-  var blind: seq[Blockheader]
+  var blind: seq[BlockHeader]
   c.cliqueSnapshotSeq(header, blind)
 
 proc cliqueSnapshot*(c: Clique; hash: Hash256): SnapshotResult
                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,hash,@[])`
-  var blind: seq[Blockheader]
+  var blind: seq[BlockHeader]
   c.cliqueSnapshot(hash, blind)
 
 # ------------------------------------------------------------------------------

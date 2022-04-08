@@ -17,7 +17,7 @@ type
   EthHeader = object
     header: BlockHeader
 
-proc importRlpBlock*(importFile: string; chainDB: BasechainDB): bool =
+proc importRlpBlock*(importFile: string; chainDB: BaseChainDB): bool =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
     error "failed to import",

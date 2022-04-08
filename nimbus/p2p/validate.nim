@@ -49,7 +49,7 @@ func isGenesis(header: BlockHeader): bool =
 # Pivate validator functions
 # ------------------------------------------------------------------------------
 
-proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
+proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
   let (expMixDigest, miningValue) = try:
     pow.getPowDigest(header)
   except CatchableError as err:
@@ -72,8 +72,8 @@ proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
       cachedHash = cachedHash
     return err("mixHash mismatch")
 
-  let value = Uint256.fromBytesBE(miningValue.data)
-  if value > Uint256.high div header.difficulty:
+  let value = UInt256.fromBytesBE(miningValue.data)
+  if value > UInt256.high div header.difficulty:
     return err("mining difficulty error")
 
   ok()
@@ -242,7 +242,7 @@ proc validateTransaction*(
     tx:       Transaction;     ## tx to validate
     sender:   EthAddress;      ## tx.getSender or tx.ecRecover
     maxLimit: GasInt;          ## gasLimit from block header
-    baseFee:  Uint256;         ## baseFee from block header
+    baseFee:  UInt256;         ## baseFee from block header
     fork:     Fork): bool =
   let
     balance = roDB.getBalance(sender)

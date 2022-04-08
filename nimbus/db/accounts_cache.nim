@@ -3,7 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils, storage_types,
   ../../stateless/multi_keys,
-  ./access_list
+  ./access_list as ac_access_list
 
 type
   AccountFlag = enum
@@ -46,7 +46,7 @@ type
   SavePoint* = ref object
     parentSavepoint: SavePoint
     cache: Table[EthAddress, RefAccount]
-    accessList: access_list.AccessList
+    accessList: ac_access_list.AccessList
     state: TransactionState
 
 const
@@ -77,14 +77,14 @@ proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = tr
 
 proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavePoint.isNil)
+  doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
   ac.trie.rootHash
 
 proc isTopLevelClean*(ac: AccountsCache): bool =
   ## Getter, returns `true` if all pending data have been commited.
-  not ac.isDirty and ac.savePoint.parentSavePoint.isNil
+  not ac.isDirty and ac.savePoint.parentSavepoint.isNil
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
@@ -94,7 +94,7 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
 
-proc rollback*(ac: var AccountsCache, sp: Savepoint) =
+proc rollback*(ac: var AccountsCache, sp: SavePoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
@@ -102,7 +102,7 @@ proc rollback*(ac: var AccountsCache, sp: Savepoint) =
   ac.savePoint = sp.parentSavepoint
   sp.state = RolledBack
 
-proc commit*(ac: var AccountsCache, sp: Savepoint) =
+proc commit*(ac: var AccountsCache, sp: SavePoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
@@ -117,11 +117,11 @@ proc commit*(ac: var AccountsCache, sp: Savepoint) =
   ac.savePoint.accessList.merge(sp.accessList)
   sp.state = Committed
 
-proc dispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
+proc dispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
   if sp.state == Pending:
     ac.rollback(sp)
 
-proc safeDispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
+proc safeDispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
   if (not isNil(sp)) and (sp.state == Pending):
     ac.rollback(sp)
 
@@ -424,13 +424,13 @@ proc clearStorage*(ac: AccountsCache, address: EthAddress) =
 
 proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   # make sure all savepoints already committed
-  doAssert(ac.savePoint.parentSavePoint.isNil)
+  doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
   acc.kill()
 
 proc persist*(ac: AccountsCache, clearCache: bool = true) =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavePoint.isNil)
+  doAssert(ac.savePoint.parentSavepoint.isNil)
   var cleanAccounts = initHashSet[EthAddress]()
 
   for address, acc in ac.savePoint.cache:
@@ -506,7 +506,7 @@ func witnessData(acc: RefAccount): WitnessData =
 
 proc collectWitnessData*(ac: var AccountsCache) =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavePoint.isNil)
+  doAssert(ac.savePoint.parentSavepoint.isNil)
   # usually witness data is collected before we call persist()
   for address, acc in ac.savePoint.cache:
     ac.witnessCache.withValue(address, val) do:

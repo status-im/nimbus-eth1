@@ -81,7 +81,7 @@ proc getSignature(computation: Computation): (array[32, byte], Signature) =
   else:
     raise newException(ValidationError, "Invalid V in getSignature")
 
-proc simpleDecode*(dst: var FQ2, src: openarray[byte]): bool {.noinit.} =
+proc simpleDecode*(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
   # bypassing FQ2.fromBytes
   # because we want to check `value > modulus`
   result = false
@@ -89,10 +89,10 @@ proc simpleDecode*(dst: var FQ2, src: openarray[byte]): bool {.noinit.} =
      dst.c0.fromBytes(src.toOpenArray(32, 63)):
     result = true
 
-template simpleDecode*(dst: var FQ, src: openarray[byte]): bool =
+template simpleDecode*(dst: var FQ, src: openArray[byte]): bool =
   fromBytes(dst, src)
 
-proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
+proc getPoint[T: G1|G2](t: typedesc[T], data: openArray[byte]): Point[T] =
   when T is G1:
     const nextOffset = 32
     var px, py: FQ
@@ -112,7 +112,7 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
       raise newException(ValidationError, "Point is not on curve")
     result = ap.toJacobian()
 
-proc getFR(data: openarray[byte]): FR =
+proc getFR(data: openArray[byte]): FR =
   if not result.fromBytes2(data):
     raise newException(ValidationError, "Could not get FR value")
 
@@ -138,7 +138,7 @@ proc sha256*(computation: Computation) =
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  computation.output = @(nimcrypto.sha_256.digest(computation.msg.data).data)
+  computation.output = @(nimcrypto.sha256.digest(computation.msg.data).data)
   #trace "SHA256 precompile", output = computation.output.toHex
 
 proc ripemd160*(computation: Computation) =
@@ -201,17 +201,17 @@ proc modExpInternal(computation: Computation, baseLen, expLen, modLen: int, T: t
     computation.output = newSeq[byte](modLen)
     computation.output[^output.len..^1] = output[0..^1]
 
-proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): GasInt =
+proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: Fork): GasInt =
   template data: untyped {.dirty.} =
     c.msg.data
 
-  func mulComplexity(x: Uint256): Uint256 =
+  func mulComplexity(x: UInt256): UInt256 =
     ## Estimates the difficulty of Karatsuba multiplication
     if x <= 64.u256: x * x
     elif x <= 1024.u256: x * x div 4.u256 + 96.u256 * x - 3072.u256
     else: x * x div 16.u256 + 480.u256 * x - 199680.u256
 
-  func mulComplexityEIP2565(x: Uint256): Uint256 =
+  func mulComplexityEIP2565(x: UInt256): UInt256 =
     # gas = ceil(x div 8) ^ 2
     result = x + 7
     result = result div 8
@@ -222,7 +222,7 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
       baseL = baseLen.safeInt
       expL = expLen.safeInt
       first32 = if baseL.uint64 + expL.uint64 < high(int32).uint64 and baseL < data.len:
-                  data.rangeToPadded2[:Uint256](96 + baseL, 95 + baseL + expL, min(expL, 32))
+                  data.rangeToPadded2[:UInt256](96 + baseL, 95 + baseL + expL, min(expL, 32))
                 else:
                   0.u256
 
@@ -265,9 +265,9 @@ proc modExp*(c: Computation, fork: Fork = FkByzantium) =
     c.msg.data
 
   let # lengths Base, Exponent, Modulus
-    baseL = data.rangeToPadded[:Uint256](0, 31)
-    expL  = data.rangeToPadded[:Uint256](32, 63)
-    modL  = data.rangeToPadded[:Uint256](64, 95)
+    baseL = data.rangeToPadded[:UInt256](0, 31)
+    expL  = data.rangeToPadded[:UInt256](32, 63)
+    modL  = data.rangeToPadded[:UInt256](64, 95)
     baseLen = baseL.safeInt
     expLen  = expL.safeInt
     modLen  = modL.safeInt
@@ -698,7 +698,7 @@ proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
       case precompile
       of paEcRecover: ecRecover(computation)
       of paSha256: sha256(computation)
-      of paRipeMd160: ripeMd160(computation)
+      of paRipeMd160: ripemd160(computation)
       of paIdentity: identity(computation)
       of paModExp: modExp(computation, fork)
       of paEcAdd: bn256ecAdd(computation, fork)
@@ -720,7 +720,7 @@ proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
       # cannot use setError here, cyclic dependency
       computation.error = Error(info: e.msg, burnsGas: true)
     except CatchableError as e:
-      if fork >= FKByzantium and precompile > paIdentity:
+      if fork >= FkByzantium and precompile > paIdentity:
         computation.error = Error(info: e.msg, burnsGas: true)
       else:
         # swallow any other precompiles errors

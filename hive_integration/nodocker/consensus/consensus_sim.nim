@@ -19,7 +19,7 @@ proc processNode(genesisFile, chainFile,
 
   let
     conf = makeConfig(@["--custom-network:" & genesisFile])
-    chainDB = newBaseChainDB(newMemoryDb(),
+    chainDB = newBaseChainDB(newMemoryDB(),
       pruneTrie = false,
       conf.networkId,
       conf.networkParams

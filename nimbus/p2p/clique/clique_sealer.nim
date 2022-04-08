@@ -290,7 +290,7 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
     let wiggle = c.snapshot.signersThreshold.int64 * WIGGLE_TIME
     # Kludge for limited rand() argument range
     if wiggle.inSeconds < (int.high div 1000).int64:
-      let rndWiggleMs = c.cfg.rand(wiggle.inMilliSeconds.int)
+      let rndWiggleMs = c.cfg.rand(wiggle.inMilliseconds.int)
       delay += initDuration(milliseconds = rndWiggleMs)
     else:
       let rndWiggleSec = c.cfg.rand((wiggle.inSeconds and int.high).int)

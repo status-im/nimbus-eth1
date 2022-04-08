@@ -45,7 +45,7 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    db = newChainDb(conf.dataDir)
+    db = newChainDB(conf.dataDir)
     trieDB = trieDB db
     chainDB = newBaseChainDB(trieDB, false)
 

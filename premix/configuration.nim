@@ -21,7 +21,7 @@ type
 
   PremixConfiguration* = ref object
     dataDir*: string
-    head*: Uint256
+    head*: UInt256
     maxBlocks*: int
     numCommits*: int
     netId*: NetworkId
@@ -54,11 +54,11 @@ proc getConfiguration*(): PremixConfiguration =
     premixConfig = initConfiguration()
   result = premixConfig
 
-proc processU256(val: string, o: var Uint256): ConfigStatus =
+proc processU256(val: string, o: var UInt256): ConfigStatus =
   if val.len > 2 and val[0] == '0' and val[1] == 'x':
-    o = Uint256.fromHex(val)
+    o = UInt256.fromHex(val)
   else:
-    o = parse(val, Uint256)
+    o = parse(val, UInt256)
   result = Success
 
 proc processNetId(val: string, o: var NetworkId): ConfigStatus =

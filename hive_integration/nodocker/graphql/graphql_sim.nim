@@ -71,7 +71,7 @@ proc main() =
     conf = makeConfig(@["--custom-network:" & genesisFile])
     ethCtx = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    chainDB = newBaseChainDB(newMemoryDb(),
+    chainDB = newBaseChainDB(newMemoryDB(),
       pruneTrie = false,
       conf.networkId,
       conf.networkParams

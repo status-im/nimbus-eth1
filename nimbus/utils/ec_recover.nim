@@ -98,7 +98,7 @@ proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
     return err((errSkSigResult,$sig.error))
 
   # Recover the public key from signature and seal hash
-  let pubKey = recover(sig.value, SKMessage(msg.data))
+  let pubKey = recover(sig.value, SkMessage(msg.data))
   if pubKey.isErr:
     return err((errSkPubKeyResult,$pubKey.error))
 
@@ -161,11 +161,11 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
   let key = header.blockHash.data
   block:
     let rc = er.q.lruFetch(key)
-    if rc.isOK:
+    if rc.isOk:
       return ok(rc.value)
   block:
     let rc = header.extraData.recoverImpl(header.hashPreSealed)
-    if rc.isOK:
+    if rc.isOk:
       return ok(er.q.lruAppend(key, rc.value, er.size.int))
     err(rc.error)
 
@@ -180,7 +180,7 @@ proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
-  if rc.isOK:
+  if rc.isOk:
     return ok(rc.value)
   err((errItemNotFound,""))
 
@@ -206,7 +206,7 @@ proc read*(rlp: var Rlp; Q: type EcRecover): Q
 iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress)
     {.gcsafe, raises: [Defect,CatchableError].} =
   var rc = er.q.first
-  while rc.isOK:
+  while rc.isOk:
     yield (rc.value.key, rc.value.data)
     rc = er.q.next(rc.value.key)
 

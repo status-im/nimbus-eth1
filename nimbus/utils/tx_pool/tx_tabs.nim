@@ -86,13 +86,13 @@ proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
   ## Delete transaction (and wrapping container) from the database. If
   ## successful, the function returns the wrapping container that was just
   ## removed.
-  if xp.byItemID.delete(item.itemID).isOK:
+  if xp.byItemID.delete(item.itemID).isOk:
     discard xp.bySender.delete(item)
     discard xp.byStatus.delete(item)
 
     # Update address rank
     let rc = xp.bySender.rank(item.sender)
-    if rc.isOK:
+    if rc.isOk:
       discard xp.byRank.insert(rc.value.TxRank, item.sender) # update
     else:
       discard xp.byRank.delete(item.sender)
@@ -185,7 +185,7 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
   ## Variant of `reassign()` for the `TxItemStatus` flag.
   # make sure that the argument `item` is not some copy
   let rc = xp.byItemID.eq(item.itemID)
-  if rc.isOK:
+  if rc.isOk:
     var realItem = rc.value
     if realItem.status != status:
       discard xp.bySender.delete(realItem) # delete original
@@ -330,7 +330,7 @@ proc locality*(xp: TxTabsRef): TxTabsLocality =
   ## Returns a pair of sorted lists of account addresses,
   ## highest address rank first
   var rcRank = xp.byRank.le(TxRank.high)
-  while rcRank.isOK:
+  while rcRank.isOk:
     let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
     for account in addrList.keys:
       if xp.byLocal.hasKey(account):
@@ -360,17 +360,17 @@ iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
         {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk accounts with increasing ranks and return a nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
-  if rcBucket.isOK:
+  if rcBucket.isOk:
     let bucketList = xp.byStatus.eq(bucket).value.data
 
     var rcRank = xp.byRank.ge(fromRank)
-    while rcRank.isOK:
+    while rcRank.isOk:
       let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
 
       # Use adresses for this rank which are also found in the bucket
       for account in addrList.keys:
         let rcAccount = bucketList.eq(account)
-        if rcAccount.isOK:
+        if rcAccount.isOk:
           yield (account, rcAccount.value.data)
 
       # Get next ranked address list (top down index walk)
@@ -382,17 +382,17 @@ iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
         {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk accounts with decreasing ranks and return the nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
-  if rcBucket.isOK:
+  if rcBucket.isOk:
     let bucketList = xp.byStatus.eq(bucket).value.data
 
     var rcRank = xp.byRank.le(fromRank)
-    while rcRank.isOK:
+    while rcRank.isOk:
       let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
 
       # Use adresses for this rank which are also found in the bucket
       for account in addrList.keys:
         let rcAccount = bucketList.eq(account)
-        if rcAccount.isOK:
+        if rcAccount.isOk:
           yield (account, rcAccount.value.data)
 
       # Get next ranked address list (top down index walk)
@@ -422,7 +422,7 @@ iterator incAccount*(xp: TxTabsRef;
         {.gcsafe,raises: [Defect,KeyError].} =
   ## Variant of `incAccount()` without bucket restriction.
   var rcRank = xp.byRank.ge(fromRank)
-  while rcRank.isOK:
+  while rcRank.isOk:
     let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
 
     # Try all sender adresses found
@@ -438,7 +438,7 @@ iterator decAccount*(xp: TxTabsRef;
         {.gcsafe,raises: [Defect,KeyError].} =
   ## Variant of `decAccount()` without bucket restriction.
   var rcRank = xp.byRank.le(fromRank)
-  while rcRank.isOK:
+  while rcRank.isOk:
     let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
 
     # Try all sender adresses found
@@ -468,7 +468,7 @@ iterator incNonce*(nonceList: TxStatusNonceRef;
                    nonceFrom = AccountNonce.low): TxItemRef =
   ## Variant of `incNonce()` for the `TxStatusNonceRef` list.
   var rc = nonceList.ge(nonceFrom)
-  while rc.isOK:
+  while rc.isOk:
     let (nonce, item) = (rc.value.key, rc.value.data)
     yield item
     rc = nonceList.gt(nonce) # potenially modified database
@@ -491,7 +491,7 @@ iterator decNonce*(nonceList: TxStatusNonceRef;
                    nonceFrom = AccountNonce.high): TxItemRef =
   ## Variant of `decNonce()` for the `TxStatusNonceRef` list.
   var rc = nonceList.le(nonceFrom)
-  while rc.isOK:
+  while rc.isOk:
     let (nonce, item) = (rc.value.key, rc.value.data)
     yield item
     rc = nonceList.lt(nonce) # potenially modified database

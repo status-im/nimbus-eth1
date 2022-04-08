@@ -51,8 +51,8 @@ proc reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
 # ------------------------------------------------------------------------------
 
 proc ppMs*(elapsed: Duration): string =
-  result = $elapsed.inMilliSeconds
-  let ns = elapsed.inNanoSeconds mod 1_000_000
+  result = $elapsed.inMilliseconds
+  let ns = elapsed.inNanoseconds mod 1_000_000
   if ns != 0:
     # to rounded deca milli seconds
     let dm = (ns + 5_000i64) div 10_000i64

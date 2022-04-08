@@ -14,7 +14,6 @@ import
   eth/common,
   ../db/db_chain,
   ../constants,
-  ../errors,
   ../chain_config,
   ../forks
 

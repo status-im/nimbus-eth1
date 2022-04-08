@@ -17,7 +17,7 @@ import
   eth/common
 
 
-func eth(n: int): Uint256 {.compileTime.} =
+func eth(n: int): UInt256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)
 
 const
@@ -28,7 +28,7 @@ const
 
   # Note than the `blockRewards` were previously exported but nowhere
   # used otherwise.
-  blockRewards: array[Fork, Uint256] = [
+  blockRewards: array[Fork, UInt256] = [
     eth5, # FkFrontier
     eth5, # FkHomestead
     eth5, # FkTangerine
@@ -48,7 +48,7 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
                       number: BlockNumber; uncles: openArray[BlockHeader])
     {.gcsafe, raises: [Defect,CatchableError].} =
 
-  var blockReward: Uint256
+  var blockReward: UInt256
   safeExecutor("getFork"):
     blockReward = blockRewards[vmState.getForkUnsafe]
 

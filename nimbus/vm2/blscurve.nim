@@ -217,10 +217,10 @@ when BLS_BACKEND == Miracl:
 else:
   func decodeFE*(res: var BLS_FE, input: openArray[byte]): bool =
     const
-      fieldModulus = Stuint[512].fromHex "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+      fieldModulus = StUint[512].fromHex "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
     if not res.decodeFieldElement(input):
       return false
-    var z: Stuint[512]
+    var z: StUint[512]
     z.initFromBytesBE(input)
     z < fieldModulus
 

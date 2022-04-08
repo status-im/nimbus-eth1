@@ -174,7 +174,7 @@ proc ddbCleanUp(dir: string) =
 proc ddbCleanUp =
   ddbDir.ddbCleanUp
 
-proc isOK(rc: ValidationResult): bool =
+proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
 proc ttdReached(db: BaseChainDB): bool =
@@ -229,8 +229,8 @@ proc genesisLoadRunner(noisy = true;
 
     test "Construct in-memory BaseChainDB, pruning enabled":
       mdb = newBaseChainDB(
-        newMemoryDb(),
-        id = params.config.chainID.NetworkId,
+        newMemoryDB(),
+        id = params.config.chainId.NetworkId,
         params = params)
 
       check mdb.ttd == sSpcs.termTotalDff
@@ -249,8 +249,8 @@ proc genesisLoadRunner(noisy = true;
 
         # Constructor ...
         ddb = newBaseChainDB(
-          tmpDir.newChainDb.trieDB,
-          id = params.config.chainID.NetworkId,
+          tmpDir.newChainDB.trieDB,
+          id = params.config.chainId.NetworkId,
           pruneTrie = persistPruneTrie,
           params = params)
 

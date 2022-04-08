@@ -18,7 +18,7 @@ func vmName(): string =
 
 const
   VmName* = vmName()
-  warningMSg = block:
+  warningMsg = block:
     var rc = "*** Compiling with " & VmName
     when defined(chunked_rlpx_enabled):
       rc &= ", chunked-rlpx"

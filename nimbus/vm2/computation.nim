@@ -37,7 +37,7 @@ when defined(chronicles_log_level):
 
 proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
   if c.msg.kind == evmcCreate:
-    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
+    let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
   else:
     result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
@@ -52,7 +52,7 @@ template getCoinbase*(c: Computation): EthAddress =
 template getTimestamp*(c: Computation): int64 =
   c.vmState.timestamp.toUnix
 
-template getBlockNumber*(c: Computation): Uint256 =
+template getBlockNumber*(c: Computation): UInt256 =
   c.vmState.blockNumber.blockNumberToVmWord
 
 template getDifficulty*(c: Computation): DifficultyInt =
@@ -61,11 +61,11 @@ template getDifficulty*(c: Computation): DifficultyInt =
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.gasLimit
 
-template getBaseFee*(c: Computation): Uint256 =
+template getBaseFee*(c: Computation): UInt256 =
   c.vmState.baseFee
 
 template getChainId*(c: Computation): uint =
-  c.vmState.chaindb.config.chainId.uint
+  c.vmState.chainDB.config.chainId.uint
 
 template getOrigin*(c: Computation): EthAddress =
   c.vmState.txOrigin
@@ -73,7 +73,7 @@ template getOrigin*(c: Computation): EthAddress =
 template getGasPrice*(c: Computation): GasInt =
   c.vmState.txGasPrice
 
-template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
+template getBlockHash*(c: Computation, blockNumber: UInt256): Hash256 =
   c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -82,10 +82,10 @@ template accountExists*(c: Computation, address: EthAddress): bool =
   else:
     c.vmState.readOnlyStateDB.accountExists(address)
 
-template getStorage*(c: Computation, slot: Uint256): Uint256 =
+template getStorage*(c: Computation, slot: UInt256): UInt256 =
   c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
-template getBalance*(c: Computation, address: EthAddress): Uint256 =
+template getBalance*(c: Computation, address: EthAddress): UInt256 =
   c.vmState.readOnlyStateDB.getBalance(address)
 
 template getCodeSize*(c: Computation, address: EthAddress): uint =
@@ -123,7 +123,7 @@ proc newComputation*(vmState: BaseVMState, message: Message,
     message.data = @[]
   else:
     result.code = newCodeStream(
-      vmState.readOnlyStateDb.getCode(message.codeAddress))
+      vmState.readOnlyStateDB.getCode(message.codeAddress))
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -148,7 +148,7 @@ proc isSelfDestructed*(c: Computation, address: EthAddress): bool =
   result = address in c.selfDestructs
 
 proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.stateDB.beginSavePoint()
+  c.savePoint = c.vmState.stateDB.beginSavepoint()
 
 proc commit*(c: Computation) =
   c.vmState.stateDB.commit(c.savePoint)
@@ -202,7 +202,7 @@ proc writeContract*(c: Computation) =
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
   if codeCost <= c.gasMeter.gasRemaining:
     c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
-    c.vmState.mutateStateDb:
+    c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
     return

@@ -152,7 +152,7 @@ proc readValue(reader: var JsonReader, value: var UInt256) =
   ## account `balance`.
   let tok = reader.lexer.tok
   if tok == tkInt:
-    value = reader.lexer.absintVal.u256
+    value = reader.lexer.absIntVal.u256
     reader.lexer.next()
   elif tok == tkString:
     # Make sure that "0x11" decodes to 17, "b" and "11" decode to 11.

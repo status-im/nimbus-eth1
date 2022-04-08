@@ -35,7 +35,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: Uint256) =
+proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256) =
   let
     stateDB = c.vmState.readOnlyStateDB
     currentValue = c.getStorage(slot)
@@ -67,7 +67,7 @@ proc jumpImpl(c: Computation; jumpTarget: UInt256) =
   c.code.pc = jt
 
   let nextOpcode = c.code.peek
-  if nextOpcode != JUMPDEST:
+  if nextOpcode != JumpDest:
     raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
   # TODO: next check seems redundant
@@ -90,7 +90,7 @@ const
 
     let memPos = memStartPos.cleanMemRef
     k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[MLoad].m_handler(k.cpt.memory.len, memPos, 32),
+      k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
       reason = "MLOAD: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 32)
@@ -104,7 +104,7 @@ const
 
     let memPos = memStartPos.cleanMemRef
     k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[MStore].m_handler(k.cpt.memory.len, memPos, 32),
+      k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
       reason = "MSTORE: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 32)
@@ -117,7 +117,7 @@ const
 
     let memPos = memStartPos.cleanMemRef
     k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[MStore].m_handler(k.cpt.memory.len, memPos, 1),
+      k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 1),
       reason = "MSTORE8: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 1)
@@ -153,7 +153,7 @@ const
 
     checkInStaticContext(k.cpt)
     # sstoreImpl(k.cpt, slot, newValue)
-    # template sstoreImpl(c: Computation, slot, newValue: Uint256) =
+    # template sstoreImpl(c: Computation, slot, newValue: UInt256) =
     let
       currentValue = k.cpt.getStorage(slot)
       gasParam = GasParams(
@@ -435,8 +435,8 @@ const
             run:  jumpDestOp,
             post: vm2OpIgnore))]
 
-#[   
-    EIP-2315: temporary disabled    
+#[
+    EIP-2315: temporary disabled
     Reason  : not included in berlin hard fork
     (opCode: BeginSub,  ## 0x5c, Begin subroutine
      forks: Vm2OpBerlinAndLater,

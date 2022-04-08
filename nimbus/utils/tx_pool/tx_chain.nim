@@ -48,8 +48,8 @@ type
   TxChainPackerEnv = tuple
     vmState: BaseVMState     ## current tx/packer environment
     receipts: seq[Receipt]   ## `vmState.receipts` after packing
-    reward: Uint256          ## Miner balance difference after packing
-    profit: Uint256          ## Net reward (w/o PoW specific block rewards)
+    reward: UInt256          ## Miner balance difference after packing
+    profit: UInt256          ## Net reward (w/o PoW specific block rewards)
     txRoot: Hash256          ## `rootHash` after packing
     stateRoot: Hash256       ## `stateRoot` after packing
 
@@ -221,7 +221,7 @@ proc gasUsed*(dh: TxChainRef): GasInt =
   if 0 < dh.txEnv.receipts.len:
     return dh.txEnv.receipts[^1].cumulativeGasUsed
 
-proc profit*(dh: TxChainRef): Uint256 =
+proc profit*(dh: TxChainRef): UInt256 =
   ## Getter
   dh.txEnv.profit
 
@@ -229,7 +229,7 @@ proc receipts*(dh: TxChainRef): seq[Receipt] =
   ## Getter, receipts for collected blocks
   dh.txEnv.receipts
 
-proc reward*(dh: TxChainRef): Uint256 =
+proc reward*(dh: TxChainRef): UInt256 =
   ## Getter, reward for collected blocks
   dh.txEnv.reward
 
@@ -287,7 +287,7 @@ proc `miner=`*(dh: TxChainRef; val: EthAddress) =
   dh.miner = val
   dh.txEnv.vmState.minerAddress = val
 
-proc `profit=`*(dh: TxChainRef; val: Uint256) =
+proc `profit=`*(dh: TxChainRef; val: UInt256) =
   ## Setter
   dh.txEnv.profit = val
 
@@ -295,7 +295,7 @@ proc `receipts=`*(dh: TxChainRef; val: seq[Receipt]) =
   ## Setter, implies `gasUsed`
   dh.txEnv.receipts = val
 
-proc `reward=`*(dh: TxChainRef; val: Uint256) =
+proc `reward=`*(dh: TxChainRef; val: UInt256) =
   ## Getter
   dh.txEnv.reward = val
 

@@ -125,7 +125,7 @@ proc miningHash(header: BlockHeader): Hash256 =
 # ---------------
 
 proc tryNonceFull(nonce: uint64;
-                  ds: PowDatasetItemRef; hash: Hash256): Uint256 =
+                  ds: PowDatasetItemRef; hash: Hash256): UInt256 =
   let
     rc = hashimotoFull(ds.size, ds.data, hash, nonce)
     value = readUintBE[256](rc.value.data)
@@ -147,7 +147,7 @@ proc mineFull(tm: PowRef; blockNumber: BlockNumber; powHeaderDigest: Hash256,
 
   let
     ds = tm.fullByEpoch.get(blockNumber)
-    valueMax = Uint256.high div difficulty
+    valueMax = UInt256.high div difficulty
 
   while valueMax < result.tryNonceFull(ds, powHeaderDigest):
     result.inc # rely on uint overflow mod 2^64

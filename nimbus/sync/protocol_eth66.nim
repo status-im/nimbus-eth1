@@ -63,7 +63,7 @@ p2pProtocol eth(version = ethVersion,
       bestBlock = chain.getBestBlockHeader
       chainForkId = chain.getForkId(bestBlock.blockNumber)
       forkId = ForkId(
-        forkHash: chainForkId.crc.toBytesBe,
+        forkHash: chainForkId.crc.toBytesBE,
         forkNext: chainForkId.nextFork.u256)
 
     tracePacket ">> Sending eth.Status (0x00) [eth/" & $ethVersion & "]",

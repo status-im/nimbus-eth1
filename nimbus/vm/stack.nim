@@ -35,7 +35,7 @@ proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 ..
 proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = elem.toByteArrayBE()
 proc fromStackElement(elem: StackElement, v: var Topic) {.inline.} = v = elem.toByteArrayBE()
 
-proc toStackElement(v: openarray[byte], elem: var StackElement) {.inline.} =
+proc toStackElement(v: openArray[byte], elem: var StackElement) {.inline.} =
   # TODO: This needs to go
   validateStackItem(v) # This is necessary to pass stack tests
   elem.initFromBytesBE(v)
@@ -48,7 +48,7 @@ proc pushAux[T](stack: var Stack, value: T) =
 proc push*(stack: var Stack, value: uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
   pushAux(stack, value)
 
-proc push*(stack: var Stack, value: openarray[byte]) {.inline.} =
+proc push*(stack: var Stack, value: openArray[byte]) {.inline.} =
   # TODO: This needs to go...
   pushAux(stack, value)
 
@@ -104,7 +104,7 @@ proc swap*(stack: var Stack, position: int) =
     raise newException(InsufficientStack,
                       &"Insufficient stack items for SWAP{position}")
 
-template getint(x: int): int = x
+template getInt(x: int): int = x
 
 proc dup*(stack: var Stack, position: int | UInt256) =
   ## Perform a DUP operation on the stack

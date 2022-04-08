@@ -91,7 +91,7 @@ proc init*(x: typedesc[HostContext], host: ptr nimbus_host_interface, context: e
 proc getTxContext*(ctx: HostContext): nimbus_tx_context {.inline.} =
   ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: Uint256): Hash256 =
+proc getBlockHash*(ctx: HostContext, number: UInt256): Hash256 =
   let
     blockNumber = ctx.getTxContext().block_number.u256
     ancestorDepth  = blockNumber - number - 1
@@ -104,19 +104,19 @@ proc getBlockHash*(ctx: HostContext, number: Uint256): Hash256 =
 proc accountExists*(ctx: HostContext, address: EthAddress): bool {.inline.} =
   ctx.host.account_exists(ctx.context, address)
 
-proc getStorage*(ctx: HostContext, address: EthAddress, key: Uint256): Uint256 =
+proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
   var key = toEvmc(key)
-  Uint256.fromEvmc ctx.host.get_storage(ctx.context, address, key.addr)
+  UInt256.fromEvmc ctx.host.get_storage(ctx.context, address, key.addr)
 
 proc setStorage*(ctx: HostContext, address: EthAddress,
-                 key, value: Uint256): evmc_storage_status {.inline.} =
+                 key, value: UInt256): evmc_storage_status {.inline.} =
   var
     key = toEvmc(key)
     value = toEvmc(value)
   ctx.host.set_storage(ctx.context, address, key.addr, value.addr)
 
-proc getBalance*(ctx: HostContext, address: EthAddress): Uint256 {.inline.} =
-  Uint256.fromEvmc ctx.host.get_balance(ctx.context, address)
+proc getBalance*(ctx: HostContext, address: EthAddress): UInt256 {.inline.} =
+  UInt256.fromEvmc ctx.host.get_balance(ctx.context, address)
 
 proc getCodeSize*(ctx: HostContext, address: EthAddress): uint {.inline.} =
   ctx.host.get_code_size(ctx.context, address)
@@ -148,7 +148,7 @@ proc accessAccount*(ctx: HostContext,
   ctx.host.access_account(ctx.context, address)
 
 proc accessStorage*(ctx: HostContext, address: EthAddress,
-                    key: Uint256): evmc_access_status {.inline.} =
+                    key: UInt256): evmc_access_status {.inline.} =
   var key = toEvmc(key)
   ctx.host.access_storage(ctx.context, address, key)
 

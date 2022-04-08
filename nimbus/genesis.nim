@@ -67,7 +67,7 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     extraData: g.extraData,
     gasLimit: g.gasLimit,
     difficulty: g.difficulty,
-    mixDigest: g.mixhash,
+    mixDigest: g.mixHash,
     coinbase: g.coinbase,
     stateRoot: sdb.rootHash,
     parentHash: GENESIS_PARENT_HASH,
@@ -91,8 +91,8 @@ proc toGenesisHeader*(params: NetworkParams): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Generate the genesis block header from the `params` argument value.
   let cdb = newBaseChainDB(
-    db        = newMemoryDb(),
-    id        = params.config.chainID.NetworkId,
+    db        = newMemoryDB(),
+    id        = params.config.chainId.NetworkId,
     params    = params,
     pruneTrie = true)
   let sdb = newStateDB(cdb.db, cdb.pruneTrie)

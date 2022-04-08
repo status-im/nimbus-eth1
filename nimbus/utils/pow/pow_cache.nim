@@ -78,7 +78,7 @@ proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef
     key = bn.toKey
     rc = pc.cache.lruFetch(key)
 
-  if rc.isOK:
+  if rc.isOk:
     return rc.value
 
   let

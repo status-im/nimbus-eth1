@@ -12,7 +12,7 @@ import
 import eth/common/transaction as common_transaction
 export common_transaction
 
-func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
+func intrinsicGas*(data: openArray[byte], fork: Fork): GasInt =
   result = gasFees[fork][GasTransaction]
   for i in data:
     if i == 0:
@@ -94,8 +94,8 @@ proc validateTxLegacy(tx: Transaction, fork: Fork) =
     vMin = 35 + (2 * chainId)
     vMax = vMin + 1
 
-  var isValid = tx.R >= Uint256.one
-  isValid = isValid and tx.S >= Uint256.one
+  var isValid = tx.R >= UInt256.one
+  isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.V >= vMin
   isValid = isValid and tx.V <= vMax
   isValid = isValid and tx.S < SECPK1_N
@@ -109,7 +109,7 @@ proc validateTxLegacy(tx: Transaction, fork: Fork) =
 
 proc validateTxEip2930(tx: Transaction) =
   var isValid = tx.V in {0'i64, 1'i64}
-  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
   isValid = isValid and tx.R < SECPK1_N
 
@@ -151,8 +151,8 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   else:
     result.V = sig[64].int64
 
-  result.R = Uint256.fromBytesBE(sig[0..31])
-  result.S = Uint256.fromBytesBE(sig[32..63])
+  result.R = UInt256.fromBytesBE(sig[0..31])
+  result.S = UInt256.fromBytesBE(sig[32..63])
 
 func eip1559TxNormalization*(tx: Transaction;
                              baseFee: GasInt; fork: Fork): Transaction =

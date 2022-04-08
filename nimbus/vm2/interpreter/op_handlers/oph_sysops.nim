@@ -68,13 +68,13 @@ const
                          "not implemented in the current fork.")
 
   # -----------
-      
+
   selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xff, Halt execution and register account for later deletion.
     let beneficiary = k.cpt.stack.popAddress()
     k.cpt.selfDestruct(beneficiary)
 
-  
+
   selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip150 (auto generated comment)
     let beneficiary = k.cpt.stack.popAddress()
@@ -82,7 +82,7 @@ const
     let gasParams = GasParams(
       kind: SelfDestruct,
       sd_condition: not k.cpt.accountExists(beneficiary))
-    
+
     let gasCost =
       k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
     k.cpt.gasMeter.consumeGas(
@@ -90,7 +90,7 @@ const
     k.cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEip161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
+  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip161 (auto generated comment)
     checkInStaticContext(k.cpt)
 
@@ -150,7 +150,7 @@ const
             run: returnOp,
             post: vm2OpIgnore)),
 
-    (opCode: Revert,       ## 0xfd, Halt and revert state changes 
+    (opCode: Revert,       ## 0xfd, Halt and revert state changes
      forks: Vm2OpByzantiumAndLater,
      name: "revert",
      info: "Halt execution reverting state changes but returning data " &
@@ -158,7 +158,7 @@ const
      exec: (prep: vm2OpIgnore,
             run: revertOp,
             post: vm2OpIgnore)),
-   
+
     (opCode: Invalid,      ## 0xfe, invalid instruction.
      forks: Vm2OpAllForks,
      name: "invalidInstruction",

@@ -236,7 +236,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   xp.chain.txRoot = pst.tr.rootHash
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
-  proc balanceDelta: Uint256 =
+  proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
     if pst.balance < postBalance:
       return postBalance - pst.balance

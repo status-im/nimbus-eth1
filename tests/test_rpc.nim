@@ -28,7 +28,7 @@ const
 type
   TestEnv = object
     txHash: Hash256
-    blockHash: HAsh256
+    blockHash: Hash256
 
 proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
@@ -38,12 +38,12 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     parentHash = parent.blockHash
 
   const code = evmByteCode:
-    PUSH4 "0xDEADBEEF"  # PUSH
-    PUSH1 "0x00"        # MSTORE AT 0x00
-    MSTORE
-    PUSH1 "0x04"        # RETURN LEN
-    PUSH1 "0x1C"        # RETURN OFFSET at 28
-    RETURN
+    Push4 "0xDEADBEEF"  # PUSH
+    Push1 "0x00"        # MSTORE AT 0x00
+    Mstore
+    Push1 "0x04"        # RETURN LEN
+    Push1 "0x1C"        # RETURN OFFSET at 28
+    Return
 
   let
     vmHeader = BlockHeader(parentHash: parentHash)
@@ -129,7 +129,7 @@ proc rpcMain*() =
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
       chain = newBaseChainDB(
-        newMemoryDb(),
+        newMemoryDB(),
         conf.pruneMode == PruneMode.Full,
         conf.networkId,
         conf.networkParams
@@ -180,7 +180,7 @@ proc rpcMain*() =
       let data = "0x" & byteutils.toHex(NimbusName.toOpenArrayByte(0, NimbusName.len-1))
       let res = await client.web3_sha3(data.hexDataStr)
       let rawdata = nimcrypto.fromHex(data[2 .. ^1])
-      let hash = "0x" & $keccak_256.digest(rawdata)
+      let hash = "0x" & $keccak256.digest(rawdata)
       check hash == res
 
     test "net_version":

@@ -57,11 +57,11 @@ func computeGasLimit*(parentGasUsed, parentGasLimit, gasFloor, gasCeil: GasInt):
 
 proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     coinbase: EthAddress, timestamp: Option[EthTime],
-    gasLimit: GasInt, extraData: Blob, baseFee: Option[Uint256]): BlockHeader =
+    gasLimit: GasInt, extraData: Blob, baseFee: Option[UInt256]): BlockHeader =
 
   var lcTimestamp: EthTime
   if timestamp.isNone:
-    lcTimeStamp = max(getTime(), parent.timestamp + 1.milliseconds)  # Note: Py-evm uses +1 second, not ms
+    lcTimestamp = max(getTime(), parent.timestamp + 1.milliseconds)  # Note: Py-evm uses +1 second, not ms
   else:
     lcTimestamp = timestamp.get()
 

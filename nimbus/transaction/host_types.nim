@@ -70,7 +70,7 @@ type
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_
 # calls to `flip256` where it is wanted.
 
-template toEvmc*(n: Uint256): evmc_uint256be =
+template toEvmc*(n: UInt256): evmc_uint256be =
   cast[evmc_uint256be](n)
 
 template toEvmc*(n: Hash256): evmc_bytes32 =
@@ -86,7 +86,7 @@ template fromEvmc*(address: evmc_address): EthAddress =
   cast[EthAddress](address)
 
 template flip256*(word256: evmc_uint256be): evmc_uint256be =
-  cast[evmc_uint256be](Uint256.fromBytesBe(word256.bytes).toBytes)
+  cast[evmc_uint256be](UInt256.fromBytesBe(word256.bytes).toBytes)
 
 template isCreate*(kind: EvmcCallKind): bool =
   kind in {EVMC_CREATE, EVMC_CREATE2}

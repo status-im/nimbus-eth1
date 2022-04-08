@@ -118,7 +118,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.toAddress
-      key     = fromHex(Uint256, quantity.string)
+      key     = fromHex(UInt256, quantity.string)
       value   = accDB.getStorage(address, key)[0]
     result = hexDataStr(value)
 
@@ -250,7 +250,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       rlpTx    = rlp.encode(signedTx)
 
     txPool.add(signedTx)
-    result = keccak_256.digest(rlpTx).ethHashStr
+    result = keccak256.digest(rlpTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -263,7 +263,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       signedTx = rlp.decode(txBytes, Transaction)
 
     txPool.add(signedTx)
-    result = keccak_256.digest(txBytes).ethHashStr
+    result = keccak256.digest(txBytes).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

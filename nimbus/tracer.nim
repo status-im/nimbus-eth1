@@ -122,7 +122,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       beforeRoot = stateDb.rootHash
 
     let rc = vmState.processTransaction(tx, sender, header)
-    gasUsed = if rc.isOK: rc.value else: 0
+    gasUsed = if rc.isOk: rc.value else: 0
 
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
@@ -231,7 +231,7 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     let
       sender = tx.getSender
       rc = vmState.processTransaction(tx, sender, header)
-    if rc.isOK:
+    if rc.isOk:
       gasUsed = gasUsed + rc.value
 
   result = vmState.getTracingResult()

@@ -30,7 +30,7 @@ const genFields = [
   "coinbase"
 ]
 
-proc processNetWork(network: string): JsonNode =
+proc processNetwork(network: string): JsonNode =
   var
     homesteadBlock      = 2000
     daoForkSupport      = false

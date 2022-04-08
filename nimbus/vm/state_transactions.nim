@@ -26,4 +26,4 @@ proc execComputation*(c: Computation) =
     shallowCopy(c.vmState.logEntries, c.logEntries)
     c.vmState.touchedAccounts.incl c.touchedAccounts
 
-  c.vmstate.status = c.isSuccess
+  c.vmState.status = c.isSuccess

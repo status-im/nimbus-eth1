@@ -96,14 +96,14 @@ proc getSignedToken*(key: openArray[byte], payload: string): string =
   ## from nimbus-eth2, engine_authentication.nim
   # Using hard coded string for """{"typ": "JWT", "alg": "HS256"}"""
   let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
-  sData & "." & sha256.hmac(key, sData).data.base64UrlEncode
+  sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
 proc getSignedToken2*(key: openArray[byte], payload: string): string =
   ## Variant of `getSignedToken()`: different algorithm encoding
   let
     jNode = %* {"alg": "HS256", "typ": "JWT" }
     sData = base64urlEncode($jNode) & "." & base64urlEncode(payload)
-  sData & "." & sha256.hmac(key, sData).data.base64UrlEncode
+  sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
 proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))

@@ -75,7 +75,7 @@ proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
 proc simpleFCU*(status: PayloadExecutionStatus, msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status, validationError: some(msg)))
 
-proc validFCU*(id: Option[PayloadId], validHash: Hash256): ForkchoiceUpdatedResponse =
+proc validFCU*(id: Option[PayloadID], validHash: Hash256): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
       status: PayloadExecutionStatus.valid,

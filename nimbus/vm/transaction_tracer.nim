@@ -8,7 +8,7 @@ import
 logScope:
   topics = "vm opcode"
 
-proc hash*(x: Uint256): Hash =
+proc hash*(x: UInt256): Hash =
   result = hash(x.toByteArrayBE)
 
 proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
@@ -32,14 +32,14 @@ proc prepare*(tracer: var TransactionTracer, compDepth: int) =
     let prevLen = tracer.storageKeys.len
     tracer.storageKeys.setLen(compDepth + 1)
     for i in prevLen ..< tracer.storageKeys.len - 1:
-      tracer.storageKeys[i] = initHashSet[Uint256]()
+      tracer.storageKeys[i] = initHashSet[UInt256]()
 
-  tracer.storageKeys[compDepth] = initHashSet[Uint256]()
+  tracer.storageKeys[compDepth] = initHashSet[UInt256]()
 
-proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
+proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: UInt256) =
   tracer.storageKeys[compDepth].incl key
 
-iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =
+iterator storage(tracer: TransactionTracer, compDepth: int): UInt256 =
   doAssert compDepth >= 0 and compDepth < tracer.storageKeys.len
   for key in tracer.storageKeys[compDepth]:
     yield key
@@ -86,7 +86,7 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op):
   if TracerFlags.DisableStorage notin tracer.flags:
     if op == Sstore:
       if c.stack.values.len > 1:
-        tracer.rememberStorageKey(c.msg.depth, c.stack[^1, Uint256])
+        tracer.rememberStorageKey(c.msg.depth, c.stack[^1, UInt256])
 
   result = tracer.trace["structLogs"].len - 1
 

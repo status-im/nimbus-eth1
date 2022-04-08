@@ -29,7 +29,7 @@ type
     GasJumpDest,        # Paid for a JUMPDEST operation.
     GasSset,            # Paid for an SSTORE operation when the storage value is set to non-zero from zero.
     GasSreset,          # Paid for an SSTORE operation when the storage value’s zeroness remains unchanged or is set to zero.
-    RefundSclear,       # Refund given (added into refund counter) when the storage value is set to zero from non-zero.
+    RefundsClear,       # Refund given (added into refund counter) when the storage value is set to zero from non-zero.
     RefundSelfDestruct, # Refund given (added into refund counter) for self-destructing an account.
     GasSelfDestruct,    # Amount of gas to pay for a SELFDESTRUCT operation.
     GasCreate,          # Paid for a CREATE operation.
@@ -69,12 +69,12 @@ type
     of Sstore:
       when defined(evmc_enabled):
         s_status*: evmc_storage_status
-      s_currentValue*: Uint256
-      s_originalValue*: Uint256
+      s_currentValue*: UInt256
+      s_originalValue*: UInt256
     of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
-      c_contractGas*: Uint256
+      c_contractGas*: UInt256
       c_currentMemSize*: GasNatural
       c_memOffset*: GasNatural
       c_memLength*: GasNatural
@@ -103,11 +103,11 @@ type
     of GckFixed:
       cost*: GasInt
     of GckDynamic:
-      d_handler*: proc(value: Uint256): GasInt {.nimcall, gcsafe.}
+      d_handler*: proc(value: UInt256): GasInt {.nimcall, gcsafe.}
     of GckMemExpansion:
       m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}
     of GckComplex:
-      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
+      c_handler*: proc(value: UInt256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
       # We use gasCost/gasRefund for:
       #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
@@ -185,14 +185,14 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   # ############### Opcode gas functions ##############################
 
-  func `prefix gasExp`(value: Uint256): GasInt {.nimcall.} =
+  func `prefix gasExp`(value: UInt256): GasInt {.nimcall.} =
     ## Value is the exponent
 
     result = static FeeSchedule[GasExp]
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasCreate`(value: Uint256, gasParams: GasParams): GasResult {.nimcall.} =
+  func `prefix gasCreate`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     if value.isZero:
       result.gasCost = static(FeeSchedule[GasCodeDeposit]) * gasParams.cr_memLength
     else:
@@ -222,7 +222,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     result = static(FeeSchedule[GasVeryLow])
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
+  func `prefix gasSstore`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     ## Value is word to save
 
     when fork >= FkBerlin:
@@ -361,7 +361,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       static(FeeSchedule[GasLogData]) * memLength +
       static(4 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasCall`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
+  func `prefix gasCall`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
 
     # From the Yellow Paper, going through the equation from bottom to top
     # https://ethereum.github.io/yellowpaper/paper.pdf#appendix.H
@@ -450,7 +450,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
   func `prefix gasHalt`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
+  func `prefix gasSelfDestruct`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     result.gasCost += static(FeeSchedule[GasSelfDestruct])
     when fork >= FkTangerine:
       if gasParams.sd_condition:
@@ -470,13 +470,13 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
       GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
-    func dynamic(handler: proc(value: Uint256): GasInt {.nimcall, gcsafe.}): GasCost =
+    func dynamic(handler: proc(value: UInt256): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
     func memExpansion(handler: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
+    func complex(handler: proc(value: UInt256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value
@@ -527,7 +527,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           CodeSize:        fixed GasBase,
           CodeCopy:        memExpansion `prefix gasCopy`,
           GasPrice:        fixed GasBase,
-          ExtCodeSize:     fixed GasExtcode,
+          ExtCodeSize:     fixed GasExtCode,
           ExtCodeCopy:     memExpansion `prefix gasExtCodeCopy`,
           ReturnDataSize:  fixed GasBase,
           ReturnDataCopy:  memExpansion `prefix gasCopy`,
@@ -667,7 +667,7 @@ const
     GasJumpDest:        1,
     GasSset:            20_000,
     GasSreset:          5_000,
-    RefundSclear:       15_000,
+    RefundsClear:       15_000,
     RefundSelfDestruct: 24_000,
     GasSelfDestruct:    0,      # Changed to 5000 in Tangerine (EIP150)
     GasCreate:          32000,
@@ -731,7 +731,7 @@ func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result[GasExtCode]     = 0
 
   # SLOAD gasCost become fully dynamic, see sloadEIP2929
-  result[GasSLoad]        = 0
+  result[GasSload]        = 0
   result[GasCall]         = WarmStorageReadCost
 
 func londonGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =

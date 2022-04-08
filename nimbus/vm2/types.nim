@@ -24,11 +24,11 @@ type
 
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
-    chaindb*       : BaseChainDB
+    chainDB*       : BaseChainDB
     parent*        : BlockHeader
     timestamp*     : EthTime
     gasLimit*      : GasInt
-    fee*           : Option[Uint256]
+    fee*           : Option[UInt256]
     prevRandao*    : Hash256
     ttdReached*    : bool
     name*          : string
@@ -59,7 +59,7 @@ type
     trace*: JsonNode
     flags*: set[TracerFlags]
     accounts*: HashSet[EthAddress]
-    storageKeys*: seq[HashSet[Uint256]]
+    storageKeys*: seq[HashSet[UInt256]]
 
   Computation* = ref object
     # The execution computation

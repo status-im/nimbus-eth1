@@ -46,7 +46,7 @@ proc newCodeStreamFromUnescaped*(code: string): CodeStream =
   newCodeStream(codeBytes)
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
-  # TODO: use openarray[bytes]
+  # TODO: use openArray[bytes]
   if c.pc + size - 1 < c.bytes.len:
     result = c.bytes[c.pc .. c.pc + size - 1]
     c.pc += size
@@ -136,13 +136,13 @@ proc decompile*(original: var CodeStream): seq[(int, Op, string)] =
   var c = newCodeStream(original.bytes)
   while true:
     var op = c.next
-    if op >= PUSH1 and op <= PUSH32:
+    if op >= Push1 and op <= Push32:
       let bytes = c.read(op.int - 95)
       result.add((c.pc - 1, op, "0x" & bytes.mapIt($(it.BiggestInt.toHex(2))).join("")))
     elif op != Op.Stop:
       result.add((c.pc - 1, op, ""))
     else:
-      result.add((-1, Op.STOP, ""))
+      result.add((-1, Op.Stop, ""))
       break
   original.cached = result
 
@@ -154,7 +154,7 @@ proc displayDecompiled*(c: CodeStream) =
 
 proc hasSStore*(c: var CodeStream): bool =
   let opcodes = c.decompile()
-  result = opcodes.anyIt(it[1] == SSTORE)
+  result = opcodes.anyIt(it[1] == Sstore)
 
 proc atEnd*(c: CodeStream): bool =
   result = c.pc >= c.bytes.len

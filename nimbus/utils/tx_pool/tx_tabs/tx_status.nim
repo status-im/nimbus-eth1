@@ -116,7 +116,7 @@ proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already (apart from returning `false`.)
   let rc = sq.mkInxImpl(item)
-  if rc.isOK:
+  if rc.isOk:
     let inx = rc.value
     sq.size.inc
     inx.addrData.size.inc
@@ -127,7 +127,7 @@ proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
 proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = sq.getInxImpl(item)
-  if rc.isOK:
+  if rc.isOk:
     let inx = rc.value
 
     sq.size.dec
@@ -169,7 +169,7 @@ proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
             return err(txInfoVfyStatusNonceList)
 
         var rcNonce = nonceData.nonceList.ge(AccountNonce.low)
-        while rcNonce.isOK:
+        while rcNonce.isOk:
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = nonceData.nonceList.gt(nonceKey)
 
@@ -216,7 +216,7 @@ proc nItems*(addrData: TxStatusSenderRef): int =
   addrData.size
 
 proc nItems*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): int =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.nItems
   0
 
@@ -226,7 +226,7 @@ proc gasLimits*(addrData: TxStatusSenderRef): GasInt =
   addrData.gasLimits
 
 proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.gasLimits
   0
 
@@ -234,14 +234,14 @@ proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt =
 proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
        SortedSetResult[EthAddress,TxStatusNonceRef]
     {.gcsafe,raises: [Defect,KeyError].} =
-  if addrData.addrList.haskey(sender):
+  if addrData.addrList.hasKey(sender):
     return toSortedSetResult(key = sender, data = addrData.addrList[sender])
   err(rbNotFound)
 
 proc eq*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
          sender: EthAddress): SortedSetResult[EthAddress,TxStatusNonceRef]
     {.gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.eq(sender)
   err(rc.error)
 
@@ -258,7 +258,7 @@ proc nItems*(nonceData: TxStatusNonceRef): int =
   nonceData.nonceList.len
 
 proc nItems*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]): int =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.nItems
   0
 
@@ -269,7 +269,7 @@ proc eq*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
 
 proc eq*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.eq(nonce)
   err(rc.error)
 
@@ -280,7 +280,7 @@ proc ge*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
 
 proc ge*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.ge(nonce)
   err(rc.error)
 
@@ -291,7 +291,7 @@ proc gt*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
 
 proc gt*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.gt(nonce)
   err(rc.error)
 
@@ -302,7 +302,7 @@ proc le*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
 
 proc le*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.le(nonce)
   err(rc.error)
 
@@ -313,7 +313,7 @@ proc lt*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
 
 proc lt*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOK:
+  if rc.isOk:
     return rc.value.data.lt(nonce)
   err(rc.error)
 

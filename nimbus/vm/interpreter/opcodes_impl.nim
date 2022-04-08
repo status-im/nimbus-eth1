@@ -51,7 +51,7 @@ proc accessGas(c: Computation, address = c.msg.contractAddress,
         return warmAccessGas
 
 proc accessGas(c: Computation, coldAccessGas, warmAccessGas: GasInt,
-               slot: Uint256): GasInt {.inline.} =
+               slot: UInt256): GasInt {.inline.} =
   when evmc_enabled:
     if c.host.accessStorage(c.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
       coldAccessGas
@@ -87,7 +87,7 @@ op sub, inline = true, lhs, rhs:
 op divide, inline = true, lhs, rhs:
   ## 0x04, Division
   push:
-    if rhs == 0: zero(Uint256) # EVM special casing of div by 0
+    if rhs == 0: zero(UInt256) # EVM special casing of div by 0
     else:        lhs div rhs
 
 op sdiv, inline = true, lhs, rhs:
@@ -106,7 +106,7 @@ op sdiv, inline = true, lhs, rhs:
 op modulo, inline = true, lhs, rhs:
   ## 0x06, Modulo
   push:
-    if rhs == 0: zero(Uint256)
+    if rhs == 0: zero(UInt256)
     else:        lhs mod rhs
 
 op smod, inline = true, lhs, rhs:
@@ -224,7 +224,7 @@ op byteOp, inline = true, position, value:
   let pos = position.truncate(int)
 
   push:
-    if pos >= 32 or pos < 0: zero(Uint256)
+    if pos >= 32 or pos < 0: zero(UInt256)
     else:
       when system.cpuEndian == bigEndian:
         cast[array[32, byte]](value)[pos].u256
@@ -258,7 +258,7 @@ op sha3, inline = true, startPos, length:
 # 30s: Environmental Information
 
 proc writePaddedResult(mem: var Memory,
-                       data: openarray[byte],
+                       data: openArray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
 
@@ -440,7 +440,7 @@ op mload, inline = true, memStartPos:
   let memPos = memStartPos.cleanMemRef
 
   c.gasMeter.consumeGas(
-    c.gasCosts[MLoad].m_handler(c.memory.len, memPos, 32),
+    c.gasCosts[Mload].m_handler(c.memory.len, memPos, 32),
     reason="MLOAD: GasVeryLow + memory expansion"
     )
   c.memory.extend(memPos, 32)
@@ -452,7 +452,7 @@ op mstore, inline = true, memStartPos, value:
   let memPos = memStartPos.cleanMemRef
 
   c.gasMeter.consumeGas(
-    c.gasCosts[MStore].m_handler(c.memory.len, memPos, 32),
+    c.gasCosts[Mstore].m_handler(c.memory.len, memPos, 32),
     reason="MSTORE: GasVeryLow + memory expansion"
     )
 
@@ -464,7 +464,7 @@ op mstore8, inline = true, memStartPos, value:
   let memPos = memStartPos.cleanMemRef
 
   c.gasMeter.consumeGas(
-    c.gasCosts[MStore].m_handler(c.memory.len, memPos, 1),
+    c.gasCosts[Mstore].m_handler(c.memory.len, memPos, 1),
     reason="MSTORE8: GasVeryLow + memory expansion"
     )
 
@@ -476,7 +476,7 @@ op sload, inline = true, slot:
   push: c.getStorage(slot)
 
 when not evmc_enabled:
-  template sstoreImpl(c: Computation, slot, newValue: Uint256) =
+  template sstoreImpl(c: Computation, slot, newValue: UInt256) =
     let currentValue {.inject.} = c.getStorage(slot)
 
     let
@@ -492,7 +492,7 @@ when not evmc_enabled:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
 when evmc_enabled:
-  template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
+  template sstoreEvmc(c: Computation, slot, newValue: UInt256) =
     let
       currentValue {.inject.} = c.getStorage(slot)
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
@@ -511,7 +511,7 @@ op sstore, inline = false, slot, newValue:
     sstoreImpl(c, slot, newValue)
 
 when not evmc_enabled:
-  template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
+  template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: UInt256) =
     let stateDB = c.vmState.readOnlyStateDB
     let currentValue {.inject.} = c.getStorage(slot)
 
@@ -558,7 +558,7 @@ proc jumpImpl(c: Computation, jumpTarget: UInt256) =
   c.code.pc = jt
 
   let nextOpcode = c.code.peek
-  if nextOpcode != JUMPDEST:
+  if nextOpcode != JumpDest:
     raise newException(InvalidJumpDestination, "Invalid Jump Destination")
   # TODO: next check seems redundant
   if not c.code.isValidOpcode(jt):
@@ -796,7 +796,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
     when opCode == Call:
-      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
+      if emvcStatic == c.msg.flags and c.stack[^3, UInt256] > 0.u256:
         raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
 
     let (gas, value, destination, sender, callKind,
@@ -1003,13 +1003,13 @@ op sarOp, inline = true:
   let num = cast[Int256](c.stack.popInt())
   if shiftLen >= 256:
     if num.isNegative:
-      push: cast[Uint256]((-1).i256)
+      push: cast[UInt256]((-1).i256)
     else:
       push: 0
   else:
     # int version of `shr` then force the result
     # into uint256
-    push: cast[Uint256](num shr shiftLen)
+    push: cast[UInt256](num shr shiftLen)
 
 op extCodeHash, inline = true:
   let address = c.stack.popAddress()

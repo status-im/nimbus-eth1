@@ -103,7 +103,7 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             last = folder.splitPath().tail
           # we set this here because exceptions might be raised in the handler:
           status[last][name] = Status.Fail
-          let fixtures = parseJSON(readFile(filename))
+          let fixtures = parseJson(readFile(filename))
           if fixtures.lacksSupportedForks:
             status[last][name] = Status.Skip
             skip()
@@ -139,8 +139,8 @@ func safeHexToSeqByte*(hexStr: string): seq[byte] =
 
 func getHexadecimalInt*(j: JsonNode): int64 =
   # parseutils.parseHex works with int which will overflow in 32 bit
-  var data: StUInt[64]
-  data = fromHex(StUInt[64], j.getStr)
+  var data: StUint[64]
+  data = fromHex(StUint[64], j.getStr)
   result = cast[int64](data)
 
 proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =

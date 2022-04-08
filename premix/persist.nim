@@ -40,7 +40,7 @@ proc main() {.used.} =
   # 66407 failed transaction
 
   let conf = configuration.getConfiguration()
-  let db = newChainDb(conf.dataDir)
+  let db = newChainDB(conf.dataDir)
   let trieDB = trieDB db
   let chainDB = newBaseChainDB(trieDB, false, conf.netId, networkParams(conf.netId))
 

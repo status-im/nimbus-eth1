@@ -108,7 +108,7 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == evmcCall:
-    c.vmState.mutateStateDb:
+    c.vmState.mutateStateDB:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
@@ -117,7 +117,7 @@ proc afterExecCall(c: Computation) =
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
-  if c.isError or c.fork >= FKByzantium:
+  if c.isError or c.fork >= FkByzantium:
     if c.msg.contractAddress == ripemdAddr:
       # Special case to account for geth+parity bug
       c.vmState.touchedAccounts.incl c.msg.contractAddress
@@ -145,13 +145,13 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
-  if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
+  if c.vmState.readOnlyStateDB().hasCodeOrNonce(c.msg.contractAddress):
     var blurb =c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address={blurb}", true)
     c.rollback()
     return true
 
-  c.vmState.mutateStateDb:
+  c.vmState.mutateStateDB:
     db.subBalance(c.msg.sender, c.msg.value)
     db.addBalance(c.msg.contractAddress, c.msg.value)
     db.clearStorage(c.msg.contractAddress)

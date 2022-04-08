@@ -69,7 +69,7 @@ proc terminalHashKey*(): DbKey =
   result.data[0] = byte ord(terminalHash)
   result.dataEndPos = uint8 1
 
-template toOpenArray*(k: DbKey): openarray[byte] =
+template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
 
 proc hash*(k: DbKey): Hash =

@@ -67,7 +67,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState = BaseVMState.new(
       BlockHeader(blockNumber: 1.u256),
       BlockHeader(),
-      newBaseChainDB(newMemoryDb()))
+      newBaseChainDB(newMemoryDB()))
 
   case toLowerAscii(label)
   of "ecrecover": data.doTest(vmState, fork, paEcRecover)

@@ -59,9 +59,9 @@ func cleanMemRef*(x: UInt256): int {.inline.} =
     return high(int32) shr 2
   return x.truncate(int)
 
-proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int, toLen = 0): T =
+proc rangeToPadded*[T: StUint](x: openArray[byte], first, last: int, toLen = 0): T =
   ## Convert take a slice of a sequence of bytes interpret it as the big endian
-  ## representation of an Uint256. Use padding for sequence shorter than 32 bytes
+  ## representation of an UInt256. Use padding for sequence shorter than 32 bytes
   ## including 0-length sequences.
   const N = T.bits div 8
 
@@ -84,9 +84,9 @@ proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int, toLen = 0):
       allowPadding = true
     )
 
-proc rangeToPadded2*[T: StUint](x: openarray[byte], first, last: int, toLen = 0): T =
+proc rangeToPadded2*[T: StUint](x: openArray[byte], first, last: int, toLen = 0): T =
   ## Convert take a slice of a sequence of bytes interpret it as the big endian
-  ## representation of an Uint256. Use padding for sequence shorter than 32 bytes
+  ## representation of an UInt256. Use padding for sequence shorter than 32 bytes
   ## including 0-length sequences.
   const N = T.bits div 8
 
@@ -108,7 +108,7 @@ func calcMemSize*(offset, length: int): int {.inline.} =
   if length.isZero: return 0
   result = offset + length
 
-func safeInt*(x: Uint256): int {.inline.} =
+func safeInt*(x: UInt256): int {.inline.} =
   result = x.truncate(int)
   if x > high(int32).u256 or result < 0:
     result = high(int32)

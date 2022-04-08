@@ -39,10 +39,10 @@ proc newMemory*(size: Natural): Memory =
   result.extend(0, size)
 
 proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
-  # TODO: use an openarray[byte]
+  # TODO: use an openArray[byte]
   result = memory.bytes[startPos ..< (startPos + size)]
 
-proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
+proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   let size = value.len
   if size == 0:
     return

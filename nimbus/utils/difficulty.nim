@@ -17,7 +17,7 @@ const
   bigTenI = 10.i256
   bigMin99 = -99.i256
 
-template difficultyBomb(periodCount: Uint256) =
+template difficultyBomb(periodCount: UInt256) =
   periodCount = periodCount div ExpDiffPeriod
 
   if periodCount > bigOne:
@@ -35,7 +35,7 @@ func calcDifficultyFrontier*(timeStamp: EthTime, parent: BlockHeader): Difficult
   var diff: DifficultyInt
   let adjust  = parent.difficulty div DifficultyBoundDivisorU
   let time = timeStamp.toUnix()
-  let parentTime = parent.timeStamp.toUnix()
+  let parentTime = parent.timestamp.toUnix()
 
   if time - parentTime < DurationLimit:
     diff = parent.difficulty + adjust
@@ -59,7 +59,7 @@ func calcDifficultyHomestead*(timeStamp: EthTime, parent: BlockHeader): Difficul
   #        ) + 2^(periodCount - 2)
 
   let time = timeStamp.toUnix()
-  let parentTime = parent.timeStamp.toUnix()
+  let parentTime = parent.timestamp.toUnix()
   let parentDifficulty = cast[Int256](parent.difficulty)
 
   # 1 - (block_timestamp - parent_timestamp) # 10
@@ -76,7 +76,7 @@ func calcDifficultyHomestead*(timeStamp: EthTime, parent: BlockHeader): Difficul
   x = parentDifficulty + x
 
   # minimum difficulty can ever be (before exponential factor)
-  var diff = cast[Uint256](max(x, MinimumDifficultyI))
+  var diff = cast[UInt256](max(x, MinimumDifficultyI))
 
   # for the exponential factor
   var periodCount = parent.blockNumber + bigOne
@@ -100,7 +100,7 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
   #        ) + 2^(periodCount - 2)
 
   let time = timeStamp.toUnix()
-  let parentTime = parent.timeStamp.toUnix()
+  let parentTime = parent.timestamp.toUnix()
   let parentDifficulty = cast[Int256](parent.difficulty)
 
   # (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) # 9
@@ -121,11 +121,11 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
   x = parentDifficulty + x
 
   # minimum difficulty can ever be (before exponential factor)
-  var diff = cast[Uint256](max(x, MinimumDifficultyI))
+  var diff = cast[UInt256](max(x, MinimumDifficultyI))
 
   # calculate a fake block number for the ice-age delay
   # Specification: https:#eips.ethereum.org/EIPS/eip-1234
-  var periodCount: Uint256
+  var periodCount: UInt256
   if parent.blockNumber >= bombDelayFromParent:
     periodCount = parent.blockNumber - bombDelayFromParent
 

@@ -39,7 +39,7 @@ template getTimestamp*(c: Computation): int64 =
   else:
     c.vmState.timestamp.toUnix
 
-template getBlockNumber*(c: Computation): Uint256 =
+template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:
     c.host.getTxContext().block_number.u256
   else:
@@ -47,7 +47,7 @@ template getBlockNumber*(c: Computation): Uint256 =
 
 template getDifficulty*(c: Computation): DifficultyInt =
   when evmc_enabled:
-    Uint256.fromEvmc c.host.getTxContext().block_difficulty
+    UInt256.fromEvmc c.host.getTxContext().block_difficulty
   else:
     c.vmState.difficulty
 
@@ -57,17 +57,17 @@ template getGasLimit*(c: Computation): GasInt =
   else:
     c.vmState.gasLimit
 
-template getBaseFee*(c: Computation): Uint256 =
+template getBaseFee*(c: Computation): UInt256 =
   when evmc_enabled:
-    Uint256.fromEvmc c.host.getTxContext().block_base_fee
+    UInt256.fromEvmc c.host.getTxContext().block_base_fee
   else:
     c.vmState.baseFee
 
 template getChainId*(c: Computation): uint =
   when evmc_enabled:
-    Uint256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
+    UInt256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
   else:
-    c.vmState.chaindb.config.chainId.uint
+    c.vmState.chainDB.config.chainId.uint
 
 template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:
@@ -77,11 +77,11 @@ template getOrigin*(c: Computation): EthAddress =
 
 template getGasPrice*(c: Computation): GasInt =
   when evmc_enabled:
-    Uint256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
+    UInt256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
   else:
     c.vmState.txGasPrice
 
-template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
+template getBlockHash*(c: Computation, blockNumber: UInt256): Hash256 =
   when evmc_enabled:
     c.host.getBlockHash(blockNumber)
   else:
@@ -96,13 +96,13 @@ template accountExists*(c: Computation, address: EthAddress): bool =
     else:
       c.vmState.readOnlyStateDB.accountExists(address)
 
-template getStorage*(c: Computation, slot: Uint256): Uint256 =
+template getStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getStorage(c.msg.contractAddress, slot)
   else:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
-template getBalance*(c: Computation, address: EthAddress): Uint256 =
+template getBalance*(c: Computation, address: EthAddress): UInt256 =
   when evmc_enabled:
     c.host.getBalance(address)
   else:
@@ -138,7 +138,7 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
 
 proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
   if c.msg.kind == evmcCreate:
-    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
+    let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
   else:
     result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
@@ -162,7 +162,7 @@ proc newComputation*(vmState: BaseVMState, message: Message,
     result.code = newCodeStream(message.data)
     message.data = @[]
   else:
-    result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress))
+    result.code = newCodeStream(vmState.readOnlyStateDB.getCode(message.codeAddress))
 
   when evmc_enabled:
     result.host.init(
@@ -211,7 +211,7 @@ proc isSelfDestructed*(c: Computation, address: EthAddress): bool =
   result = address in c.selfDestructs
 
 proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.stateDB.beginSavePoint()
+  c.savePoint = c.vmState.stateDB.beginSavepoint()
 
 proc commit*(c: Computation) =
   c.vmState.stateDB.commit(c.savePoint)
@@ -265,7 +265,7 @@ proc writeContract*(c: Computation) =
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
   if codeCost <= c.gasMeter.gasRemaining:
     c.gasMeter.consumeGas(codeCost, reason = "Write new contract code")
-    c.vmState.mutateStateDb:
+    c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
     return
@@ -289,7 +289,7 @@ proc executeOpcodes*(c: Computation) {.gcsafe.}
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == evmcCall:
-    c.vmState.mutateStateDb:
+    c.vmState.mutateStateDB:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
@@ -298,7 +298,7 @@ proc afterExecCall(c: Computation) =
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
-  if c.isError or c.fork >= FKByzantium:
+  if c.isError or c.fork >= FkByzantium:
     if c.msg.contractAddress == ripemdAddr:
       # Special case to account for geth+parity bug
       c.vmState.touchedAccounts.incl c.msg.contractAddress
@@ -325,12 +325,12 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
-  if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
+  if c.vmState.readOnlyStateDB().hasCodeOrNonce(c.msg.contractAddress):
     c.setError(&"Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
     c.rollback()
     return true
 
-  c.vmState.mutateStateDb:
+  c.vmState.mutateStateDB:
     db.subBalance(c.msg.sender, c.msg.value)
     db.addBalance(c.msg.contractAddress, c.msg.value)
     db.clearStorage(c.msg.contractAddress)

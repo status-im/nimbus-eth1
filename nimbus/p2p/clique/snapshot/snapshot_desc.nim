@@ -69,7 +69,7 @@ proc votesList(s: Snapshot; sep: string): string =
       result = cmp(a[1], b[1])
   s.data.ballot.votesInternal
     .mapIt((s.pp(it[0]),s.pp(it[1]),it[2]))
-    .sorted(cmp = s3cmp)
+    .sorted(cmp = s3Cmp)
     .mapIt(s.pp(it[2]))
     .join(sep)
 
@@ -203,7 +203,7 @@ proc `blockHash=`*(s: Snapshot; hash: Hash256) =
 
 # clique/snapshot.go(88): func loadSnapshot(config [..]
 proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
-                   Result[Snapshot,CLiqueError] {.gcsafe, raises: [Defect].} =
+                   Result[Snapshot,CliqueError] {.gcsafe, raises: [Defect].} =
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:

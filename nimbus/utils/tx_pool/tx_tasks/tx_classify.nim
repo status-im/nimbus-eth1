@@ -77,7 +77,7 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
   elif accountNonce < item.tx.nonce:
     # for an existing account, nonces must come in increasing consecutive order
     let rc = xp.txDB.bySender.eq(item.sender)
-    if rc.isOK:
+    if rc.isOk:
       if rc.value.data.any.eq(item.tx.nonce - 1).isErr:
         debug "invalid tx: account nonces gap",
            txNonce = item.tx.nonce,

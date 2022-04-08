@@ -164,7 +164,7 @@ proc hexDataStr*(value: string): HexDataStr {.inline.} =
 proc hexDataStr*(value: openArray[byte]): HexDataStr {.inline.} =
   result = HexDataStr("0x" & value.toHex)
 
-proc hexDataStr*(value: Uint256): HexDataStr {.inline.} =
+proc hexDataStr*(value: UInt256): HexDataStr {.inline.} =
   result = HexDataStr("0x" & toBytesBE(value).toHex)
 
 proc ethAddressStr*(value: string): EthAddressStr {.inline.} =

@@ -63,7 +63,7 @@ proc init(
       parent:      BlockHeader;
       timestamp:   EthTime;
       gasLimit:    GasInt;
-      fee:         Option[Uint256];
+      fee:         Option[UInt256];
       prevRandao:  Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
@@ -78,7 +78,7 @@ proc init(
   self.gasLimit = gasLimit
   self.fee = fee
   self.prevRandao = prevRandao
-  self.chaindb = chainDB
+  self.chainDB = chainDB
   self.ttdReached = ttdReached
   self.tracer = tracer
   self.logEntries = @[]
@@ -92,7 +92,7 @@ proc init(
       parent:      BlockHeader;
       timestamp:   EthTime;
       gasLimit:    GasInt;
-      fee:         Option[Uint256];
+      fee:         Option[UInt256];
       prevRandao:  Hash256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
@@ -128,7 +128,7 @@ proc new*(
       parent:      BlockHeader;     ## parent header, account sync position
       timestamp:   EthTime;         ## tx env: time stamp
       gasLimit:    GasInt;          ## tx env: gas limit
-      fee:         Option[Uint256]; ## tx env: optional base fee
+      fee:         Option[UInt256]; ## tx env: optional base fee
       prevRandao:  Hash256;         ## tx env: POS block randomness
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
@@ -158,7 +158,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              parent:    BlockHeader;     ## parent header, account sync pos.
              timestamp: EthTime;         ## tx env: time stamp
              gasLimit:  GasInt;          ## tx env: gas limit
-             fee:       Option[Uint256]; ## tx env: optional base fee
+             fee:       Option[UInt256]; ## tx env: optional base fee
              prevRandao:Hash256;         ## tx env: POS block randomness
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              pruneTrie: bool = true): bool
@@ -397,7 +397,7 @@ proc buildWitness*(vmState: BaseVMState): seq[byte]
     {.raises: [Defect, CatchableError].} =
   let rootHash = vmState.stateDB.rootHash
   let mkeys = vmState.stateDB.makeMultiKeys()
-  let flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
+  let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
 
   # build witness from tree
   var wb = initWitnessBuilder(vmState.chainDB.db, rootHash, flags)

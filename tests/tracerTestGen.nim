@@ -48,7 +48,7 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newChainDb(string conf.dataDir)
+  let db = newChainDB(string conf.dataDir)
   let trieDB = trieDB db
   let chainDB = newBaseChainDB(trieDB, false)
 

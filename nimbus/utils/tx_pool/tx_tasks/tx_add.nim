@@ -127,7 +127,7 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
     # Insert into database
     block:
       let rc = xp.txDB.insert(item)
-      if rc.isOK:
+      if rc.isOk:
         validTxMeter(1)
         return item.status == txItemStaged
       vetted = rc.error
@@ -135,7 +135,7 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
     # need to replace tx with same <sender/nonce> as the new item
     if vetted == txInfoErrSenderNonceIndex:
       let rc = xp.supersede(item)
-      if rc.isOK:
+      if rc.isOk:
         validTxMeter(1)
         return
       vetted = rc.error
@@ -212,7 +212,7 @@ proc addTxs*(xp: TxPoolRef;
       rc = itemList.ge(AccountNonce.low)
       lastItem: TxItemRef # => nil
 
-    while rc.isOK:
+    while rc.isOk:
       let (nonce,item) = (rc.value.key,rc.value.data)
       if xp.addTx(item):
         result.stagedIndicator = true

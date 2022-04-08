@@ -68,7 +68,7 @@ proc generatePremixData*(nimbus, geth: JsonNode) =
   var data = "var premixData = " & premixData.pretty & "\n"
   writeFile(getFileDir("index.html") / "premixData.js", data)
 
-proc hasInternalTx(tx: Transaction, blockNumber: Uint256, sender: EthAddress): bool =
+proc hasInternalTx(tx: Transaction, blockNumber: UInt256, sender: EthAddress): bool =
   let
     number = %(blockNumber.prefixHex)
     recipient = tx.getRecipient(sender)
@@ -90,7 +90,7 @@ proc requestInternalTx(txHash, tracer: JsonNode): JsonNode =
     raise newException(ValueError, "Error when retrieving transaction postState")
   result = txTrace
 
-proc requestAccount*(premix: JsonNode, blockNumber: Uint256, address: EthAddress) =
+proc requestAccount*(premix: JsonNode, blockNumber: UInt256, address: EthAddress) =
   let
     number = %(blockNumber.prefixHex)
     address = address.prefixHex
@@ -114,7 +114,7 @@ proc padding(x: string): JsonNode =
   let pad = repeat('0', 64 - val.len)
   result = newJString("0x" & pad & val)
 
-proc updateAccount*(address: string, account: JsonNode, blockNumber: Uint256) =
+proc updateAccount*(address: string, account: JsonNode, blockNumber: UInt256) =
   let number = %(blockNumber.prefixHex)
 
   var storage = newJArray()
@@ -133,7 +133,7 @@ proc updateAccount*(address: string, account: JsonNode, blockNumber: Uint256) =
     x["value"] = padding(x["value"].getStr())
     account["storage"][x["key"].getStr] = x["value"]
 
-proc requestPostState*(premix, n: JsonNode, blockNumber: Uint256) =
+proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
   type
     TxKind {.pure.} = enum
       Regular

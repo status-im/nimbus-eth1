@@ -111,7 +111,7 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
 
   if result.baseFee == 0.u256:
     # probably geth bug
-    result.fee = none(Uint256)
+    result.fee = none(UInt256)
 
 proc parseAccessPair(n: JsonNode): AccessPair =
   n.fromJson "address", result.address

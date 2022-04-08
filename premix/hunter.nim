@@ -21,7 +21,7 @@ proc store(memoryDB: TrieDatabaseRef, branch: JsonNode) =
 proc parseAddress(address: string): EthAddress =
   hexToByteArray(address, result)
 
-proc parseU256(val: string): Uint256 =
+proc parseU256(val: string): UInt256 =
   UInt256.fromHex(val)
 
 proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): TrieDatabaseRef =
@@ -63,7 +63,7 @@ type
   HunterVMState = ref object of BaseVMState
     headers: Table[BlockNumber, BlockHeader]
 
-proc hash*(x: Uint256): Hash =
+proc hash*(x: UInt256): Hash =
   result = hash(x.toByteArrayBE)
 
 proc new(T: type HunterVMState; parent, header: BlockHeader, chainDB: BaseChainDB): T =
@@ -84,7 +84,7 @@ proc putAncestorsIntoDB(vmState: HunterVMState, db: BaseChainDB) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 
-proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
+proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
   let
     # prepare needed state from previous block
     parentNumber = blockNumber - 1
@@ -122,7 +122,7 @@ proc main() {.used.} =
     quit(QuitFailure)
 
   var
-    problematicBlocks = newSeq[Uint256]()
+    problematicBlocks = newSeq[UInt256]()
     blockNumber = conf.head
 
   while true:

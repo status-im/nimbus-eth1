@@ -16,7 +16,7 @@ template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
 template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
 
-func keccakHash*(value: openarray[byte]): Hash256 {.inline.} =
+func keccakHash*(value: openArray[byte]): Hash256 {.inline.} =
   keccak256.digest value
 
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =

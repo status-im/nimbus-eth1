@@ -33,8 +33,8 @@ when not defined(release):
 # Private
 # ------------------------------------------------------------------------------
 
-proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
-                       bodies: openarray[BlockBody], setHead: bool = true): ValidationResult
+proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
+                       bodies: openArray[BlockBody], setHead: bool = true): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [Exception].} =
   c.db.highestBlock = headers[^1].blockNumber
@@ -78,7 +78,7 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
       if c.db.config.poaEngine and not isBlockAfterTtd:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
         let rc = c.clique.cliqueVerify(header,parent)
-        if rc.isOK:
+        if rc.isOk:
           # mark it off so it would not auto-restore previous state
           c.clique.cliqueDispose(cliqueState)
         else:
@@ -128,8 +128,8 @@ proc insertBlockWithoutSetHead*(c: Chain, header: BlockHeader,
 # Public `AbstractChainDB` overload method
 # ------------------------------------------------------------------------------
 
-method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
-                      bodies: openarray[BlockBody]): ValidationResult
+method persistBlocks*(c: Chain; headers: openArray[BlockHeader];
+                      bodies: openArray[BlockBody]): ValidationResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
   # Run the VM here
   if headers.len != bodies.len:

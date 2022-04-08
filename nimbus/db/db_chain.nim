@@ -39,7 +39,7 @@ proc getTotalDifficulty*(self: BaseChainDB): UInt256 =
     return 0.u256
 
   let blockHash = rlp.decode(data, Hash256)
-  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), Uint256)
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
 
 proc newBaseChainDB*(
        db: TrieDatabaseRef,
@@ -134,19 +134,19 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
   ## Raises BlockNotFound error if the block is not in the DB.
   self.getBlockHeader(self.getBlockHash(n))
 
-proc getScore*(self: BaseChainDB; blockHash: Hash256): Uint256 =
-  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), Uint256)
+proc getScore*(self: BaseChainDB; blockHash: Hash256): UInt256 =
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
 
-proc getTd*(self: BaseChainDB; blockHash: Hash256, td: var Uint256): bool =
+proc getTd*(self: BaseChainDB; blockHash: Hash256, td: var UInt256): bool =
   let bytes = self.db.get(blockHashToScoreKey(blockHash).toOpenArray)
   if bytes.len == 0: return false
   try:
-    td = rlp.decode(bytes, Uint256)
+    td = rlp.decode(bytes, UInt256)
   except RlpError:
     return false
   return true
 
-proc getAncestorsHashes*(self: BaseChainDB, limit: Uint256, header: BlockHeader): seq[Hash256] =
+proc getAncestorsHashes*(self: BaseChainDB, limit: UInt256, header: BlockHeader): seq[Hash256] =
   var ancestorCount = min(header.blockNumber, limit).truncate(int)
   var h = header
 
@@ -406,7 +406,7 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
 
   self.addBlockNumberToHashLookup(header)
 
-  var headScore: Uint256
+  var headScore: UInt256
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
   except CanonicalHeadNotFound:
@@ -429,7 +429,7 @@ proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
   self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
-proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
+proc persistUncles*(self: BaseChainDB, uncles: openArray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)

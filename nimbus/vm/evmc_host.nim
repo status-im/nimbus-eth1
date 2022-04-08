@@ -36,7 +36,7 @@ proc hostAccountExistsImpl(ctx: Computation, address: EthAddress): bool {.cdecl.
     db.accountExists(address)
 
 proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
-  ctx.vmState.stateDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
+  ctx.vmState.stateDB.getStorage(address, UInt256.fromEvmc(key)).toEvmc()
 
 proc sstoreNetGasMetering(ctx: Computation): bool {.inline.} =
   ctx.fork in {FkConstantinople, FkIstanbul, FkBerlin, FkLondon}
@@ -44,9 +44,9 @@ proc sstoreNetGasMetering(ctx: Computation): bool {.inline.} =
 proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
                         key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
   let
-    slot = Uint256.fromEvmc(key)
-    newValue = Uint256.fromEvmc(value)
-    statedb = ctx.vmState.readOnlyStateDb
+    slot = UInt256.fromEvmc(key)
+    newValue = UInt256.fromEvmc(value)
+    statedb = ctx.vmState.readOnlyStateDB
     currValue = statedb.getStorage(address, slot)
 
   assert address == ctx.msg.contractAddress
@@ -139,7 +139,7 @@ proc hostAccessAccountImpl(ctx: Computation, address: EthAddress): evmc_access_s
 
 proc hostAccessStorageImpl(ctx: Computation, address: EthAddress,
                            key: var evmc_bytes32): evmc_access_status {.cdecl.} =
-  let slot = Uint256.fromEvmc(key)
+  let slot = UInt256.fromEvmc(key)
   ctx.vmState.mutateStateDB:
     if not db.inAccessList(address, slot):
       db.accessList(address, slot)
@@ -154,7 +154,7 @@ proc enterCreateImpl(c: Computation, m: nimbus_message): Computation =
     depth: m.depth,
     gas: m.gas,
     sender: m.sender,
-    value: Uint256.fromEvmc(m.value),
+    value: UInt256.fromEvmc(m.value),
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
     )
   return newComputation(c.vmState, childMsg,
@@ -185,7 +185,7 @@ template enterCallImpl(c: Computation, m: nimbus_message): Computation =
     sender: m.sender,
     codeAddress: m.destination,
     contractAddress: if m.kind == EVMC_CALL: m.destination else: c.msg.contractAddress,
-    value: Uint256.fromEvmc(m.value),
+    value: UInt256.fromEvmc(m.value),
     data: @(makeOpenArray(m.inputData, m.inputSize.int)),
     flags: MsgFlags(m.flags)
     )

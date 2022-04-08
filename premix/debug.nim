@@ -11,7 +11,7 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
     let value = hexToSeqByte(v.getStr())
     memoryDB.put(key, value)
 
-proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Uint256) =
+proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: UInt256) =
   let
     parentNumber = blockNumber - 1
     chainDB = newBaseChainDB(memoryDB, false)

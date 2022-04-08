@@ -287,7 +287,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
   payloadRes.timestamp = payloadAttrs.timestamp
-  payloadres.extraData = web3types.DynamicBytes[0, 32] blk.header.extraData
+  payloadRes.extraData = web3types.DynamicBytes[0, 32] blk.header.extraData
   payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
   payloadRes.blockHash = Web3BlockHash blockHash.data
 

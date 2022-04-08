@@ -296,7 +296,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     evmcSetLibraryPath(conf.evm)
 
   createDir(string conf.dataDir)
-  let trieDB = trieDB newChainDb(string conf.dataDir)
+  let trieDB = trieDB newChainDB(string conf.dataDir)
   var chainDB = newBaseChainDB(trieDB,
     conf.pruneMode == PruneMode.Full,
     conf.networkId,
@@ -305,7 +305,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   chainDB.populateProgress()
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDb)
+    initializeEmptyDb(chainDB)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   let protocols = conf.getProtocolFlags()
@@ -330,7 +330,7 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   if conf.rpcEnabled:
     await nimbus.rpcServer.stop()
   if conf.engineApiEnabled:
-    await nimbus.engineAPiServer.stop()
+    await nimbus.engineApiServer.stop()
   if conf.wsEnabled:
     nimbus.wsRpcServer.stop()
   if conf.engineApiWsEnabled:

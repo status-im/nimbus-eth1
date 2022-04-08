@@ -22,7 +22,7 @@ import
 
 type
   CaptureSpecs = tuple
-    network: NetworkID
+    network: NetworkId
     file: string
     numBlocks: int
     numTxs: int
@@ -82,13 +82,13 @@ proc pp*(tx: Transaction; vmState: BaseVMState): string =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc blockChainForTesting*(network: NetworkID): BaseChainDB =
+proc blockChainForTesting*(network: NetworkId): BaseChainDB =
   result = newBaseChainDB(
-    newMemoryDb(),
+    newMemoryDB(),
     id = network,
     params = network.networkParams)
   result.populateProgress
-  initializeEmptyDB(result)
+  initializeEmptyDb(result)
 
 proc importBlocks(cdb: BaseChainDB; h: seq[BlockHeader]; b: seq[BlockBody]) =
   if cdb.newChain.persistBlocks(h,b) != ValidationResult.OK:

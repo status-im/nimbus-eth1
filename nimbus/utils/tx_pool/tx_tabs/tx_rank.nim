@@ -81,7 +81,7 @@ proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
   # Add new ranked address
   var newRankSet: TxRankAddrRef
   let rc = rt.rankList.insert(rank)
-  if rc.isOK:
+  if rc.isOk:
     newRankSet = newTable[EthAddress,TxRank](1)
     rc.value.data = newRankSet
   else:
@@ -117,7 +117,7 @@ proc verify*(rt: var TxRankTab): Result[void,TxInfo]
     seen: Table[EthAddress,TxRank]
     rc = rt.rankList.ge(TxRank.low)
 
-  while rc.isOK:
+  while rc.isOk:
     let (key, addrTab) = (rc.value.key, rc.value.data)
     rc = rt.rankList.gt(key)
 

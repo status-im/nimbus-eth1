@@ -310,4 +310,4 @@ proc setupEngineAPI*(
 
       return validFCU(some(id), blockHash)
 
-    return validFCU(none(PayloadId), blockHash)
+    return validFCU(none(PayloadID), blockHash)

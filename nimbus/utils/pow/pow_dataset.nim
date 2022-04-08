@@ -110,7 +110,7 @@ proc get*(pd: var PowDataset; bn: BlockNumber): PowDatasetItemRef
     key = bn.toKey
     rc = pd.dataset.lruFetch(key)
 
-  if rc.isOK:
+  if rc.isOk:
     return rc.value
 
   let

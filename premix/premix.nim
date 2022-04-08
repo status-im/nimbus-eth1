@@ -3,7 +3,7 @@ import
   ../nimbus/tracer, chronicles, prestate,
   eth/common, premixcore
 
-proc generateGethData(thisBlock: Block, blockNumber: Uint256, accounts: JsonNode): JsonNode =
+proc generateGethData(thisBlock: Block, blockNumber: UInt256, accounts: JsonNode): JsonNode =
   let
     receipts = toJson(thisBlock.receipts)
 
@@ -17,7 +17,7 @@ proc generateGethData(thisBlock: Block, blockNumber: Uint256, accounts: JsonNode
 
   result = geth
 
-proc printDebugInstruction(blockNumber: Uint256) =
+proc printDebugInstruction(blockNumber: UInt256) =
   var text = """
 
 Successfully created debugging environment for block $1.

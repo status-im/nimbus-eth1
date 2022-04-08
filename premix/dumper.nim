@@ -9,7 +9,7 @@ import
   eth/trie/[hexary, db], ../nimbus/p2p/executor,
   ../nimbus/[tracer, vm_state, vm_types]
 
-proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
+proc dumpDebug(chainDB: BaseChainDB, blockNumber: UInt256) =
   var
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
@@ -19,7 +19,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
 
-  
+
   let
     parentNumber = blockNumber - 1
     parent = captureChainDB.getBlockHeader(parentNumber)
@@ -36,7 +36,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let db = newChainDb(conf.dataDir)
+  let db = newChainDB(conf.dataDir)
   let trieDB = trieDB db
   let chainDB = newBaseChainDB(trieDB, false)
 

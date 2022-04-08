@@ -24,7 +24,7 @@ template testFailPush(value: untyped): untyped {.used.} =
 func toBytes(s: string): seq[byte] =
   cast[seq[byte]](s)
 
-func bigEndianToInt*(value: openarray[byte]): UInt256 =
+func bigEndianToInt*(value: openArray[byte]): UInt256 =
   result.initFromBytesBE(value)
 
 proc stackMain*() =

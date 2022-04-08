@@ -45,7 +45,7 @@ proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
   ## Move all items in bucket `lblFrom` with nonces not less than `nonceFrom`
   ## to the `pending` bucket
   let rc = xp.txDB.byStatus.eq(labelFrom).eq(account)
-  if rc.isOK:
+  if rc.isOk:
     for item in rc.value.data.incNonce(nonceFrom):
       discard xp.txDB.reassign(item, txItemPending)
 
@@ -72,7 +72,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
       if item.reject == txInfoOk:
         # Check whether there was a gap when the head was moved backwards.
         let rc = xp.txDB.bySender.eq(item.sender).any.gt(item.tx.nonce)
-        if rc.isOK:
+        if rc.isOk:
           let nextItem = rc.value.data
           if item.tx.nonce + 1 < nextItem.tx.nonce:
             discard xp.disposeItemAndHigherNonces(
@@ -82,7 +82,7 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
         # changed. Assuming that this list is complete, then there are
         # no other account affected.
         let rc = xp.txDB.bySender.eq(item.sender).any.ge(minNonce)
-        if rc.isOK:
+        if rc.isOk:
           let firstItem = rc.value.data
           if not xp.classifyValid(firstItem):
             discard xp.disposeItemAndHigherNonces(

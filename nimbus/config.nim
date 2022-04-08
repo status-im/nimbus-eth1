@@ -494,7 +494,7 @@ proc parseCmdArg(T: type NetworkParams, p: TaintedString): T =
 proc completeCmdArg(T: type NetworkParams, val: TaintedString): seq[string] =
   return @[]
 
-proc setBootnodes(output: var seq[ENode], nodeUris: openarray[string]) =
+proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
   output = newSeqOfCap[ENode](nodeUris.len)
   for item in nodeUris:
     output.add(ENode.fromString(item).tryGet())
@@ -525,7 +525,7 @@ iterator strippedLines(filename: string): (int, string) =
       yield (i, stripped)
       inc i
 
-proc loadEnodeFile(fileName: string; output: var seq[Enode]; info: string) =
+proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string) =
   if fileName.len == 0:
     return
 
@@ -547,10 +547,10 @@ proc loadEnodeFile(fileName: string; output: var seq[Enode]; info: string) =
     error "Could not read file", msg = e.msg, purpose = info
     quit 1
 
-proc loadBootstrapFile(fileName: string, output: var seq[Enode]) =
+proc loadBootstrapFile(fileName: string, output: var seq[ENode]) =
   fileName.loadEnodeFile(output, "bootstrap")
 
-proc loadStaticPeersFile(fileName: string, output: var seq[Enode]) =
+proc loadStaticPeersFile(fileName: string, output: var seq[ENode]) =
   fileName.loadEnodeFile(output, "static peers")
 
 proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
@@ -601,7 +601,7 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
 
-proc getBootNodes*(conf: NimbusConf): seq[Enode] =
+proc getBootNodes*(conf: NimbusConf): seq[ENode] =
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
     case conf.networkId
@@ -628,7 +628,7 @@ proc getBootNodes*(conf: NimbusConf): seq[Enode] =
   # override built-in bootnodes
   loadBootstrapFile(string conf.bootstrapFile, result)
 
-proc getStaticPeers*(conf: NimbusConf): seq[Enode] =
+proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
   result.append(conf.staticPeers)
   loadStaticPeersFile(string conf.staticPeersFile, result)
 

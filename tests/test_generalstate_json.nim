@@ -85,7 +85,7 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   let
-    chainDB = newBaseChainDB(newMemoryDb(), getConfiguration().pruning)
+    chainDB = newBaseChainDB(newMemoryDB(), getConfiguration().pruning)
     vmState = BaseVMState.new(
       parent      = BlockHeader(stateRoot: emptyRlpHash),
       header      = tester.header,
@@ -117,7 +117,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
 
   let rc = vmState.processTransaction(
                 tester.tx, sender, tester.header, tester.fork)
-  if rc.isOK:
+  if rc.isOk:
     gasUsed = rc.value
 
   # This is necessary due to the manner in which the state tests are

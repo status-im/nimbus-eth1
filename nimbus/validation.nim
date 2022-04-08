@@ -39,7 +39,7 @@ proc validateStackItem*(value: string) =
     raise newException(ValidationError,
       &"Invalid stack item: expected 32 bytes, got {value.len}: value is {value}")
 
-proc validateStackItem*(value: openarray[byte]) =
+proc validateStackItem*(value: openArray[byte]) =
   if value.len > 32:
     raise newException(ValidationError,
       &"Invalid stack item: expected 32 bytes, got {value.len}: value is {value}")

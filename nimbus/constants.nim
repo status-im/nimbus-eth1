@@ -8,7 +8,7 @@ proc default(t: typedesc): t = discard
 # constants
 const
   UINT_256_MAX*: UInt256 =                  high(UInt256)
-  INT_256_MAX_AS_UINT256* =                 high(Uint256) shr 1
+  INT_256_MAX_AS_UINT256* =                 high(UInt256) shr 1
   UINT160CEILING*: UInt256 =                2.u256.pow(160)
 
   # Transactions to ZERO_ADDRESS are legitimate transfers to that account, not
@@ -50,7 +50,7 @@ const
   MAX_PREV_HEADER_DEPTH* =                  256.toBlockNumber
   MaxCallDepth* =                           1024
 
-  SECPK1_N* =                               Uint256.fromHex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+  SECPK1_N* =                               UInt256.fromHex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
 
   ## Fork specific constants
 

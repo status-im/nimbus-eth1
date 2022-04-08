@@ -27,7 +27,7 @@ type
     accessList*    : AccessList
 
 proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
-                  globalGasCap: GasInt, baseFee: Option[Uint256],
+                  globalGasCap: GasInt, baseFee: Option[UInt256],
                   forkOverride = none(Fork)): CallParams =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
@@ -77,7 +77,7 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): 
     parentHash: header.blockHash,
     timestamp:  getTime().utc.toTime,
     gasLimit:   0.GasInt,          ## ???
-    fee:        Uint256.none())    ## ???
+    fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, chainDB)
   let params  = toCallParams(vmState, call, globalGasCap, header.fee)
 
@@ -92,7 +92,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB,
     parentHash: header.blockHash,
     timestamp:  getTime().utc.toTime,
     gasLimit:   0.GasInt,          ## ???
-    fee:        Uint256.none())    ## ???
+    fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, chainDB)
   let fork    = chainDB.config.toFork(header.blockNumber)
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?

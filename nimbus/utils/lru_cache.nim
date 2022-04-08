@@ -107,7 +107,7 @@ proc initCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
 # ------------------------------------------------------------------------------
 
 proc getItem*[T,K,V,E](lru: var LruCache[T,K,V,E];
-                       arg: T; peekOK = false): Result[V,E]
+                       arg: T; peekOk = false): Result[V,E]
                        {.gcsafe, raises: [Defect,CatchableError].} =
   ## If the key `lru.toKey(arg)` is a cached key, the associated value will
   ## be returnd. If the `peekOK` argument equals `false`, the associated
@@ -215,7 +215,7 @@ proc setItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T; value: V): bool
   if lru.data.tab.hasKey(key):
     lru.data.tab[key].value = value
     return true
- 
+
 
 proc delItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): bool
                      {.gcsafe, discardable, raises: [Defect,KeyError].} =

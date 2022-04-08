@@ -55,7 +55,7 @@ proc recoverItem*(xp: TxPoolRef; tx: Transaction; status = txItemPending;
   # Check whether the tx can be re-cycled from waste basket
   block:
     let rc = xp.txDB.byRejects.delete(itemID)
-    if rc.isOK:
+    if rc.isOk:
       let item = rc.value.data
       # must not be a waste tx without meta-data
       if item.sender != nullSender:

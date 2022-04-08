@@ -120,7 +120,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.gas = encodeQuantity(tx.gasLimit.uint64)
   result.gasPrice = encodeQuantity(tx.gasPrice.uint64)
   result.hash = tx.rlpHash
-  result.input = tx.payLoad
+  result.input = tx.payload
   result.nonce = encodeQuantity(tx.nonce.uint64)
   result.to = some(tx.destination)
   result.transactionIndex = some(encodeQuantity(txIndex.uint64))
@@ -152,7 +152,7 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
 
   result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
   result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
-  result.timestamp = encodeQuantity(header.timeStamp.toUnix.uint64)
+  result.timestamp = encodeQuantity(header.timestamp.toUnix.uint64)
   result.baseFeePerGas = if header.fee.isSome:
                            some(encodeQuantity(header.baseFee))
                          else:

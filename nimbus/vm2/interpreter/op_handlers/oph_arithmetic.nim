@@ -57,7 +57,7 @@ const
     k.cpt.stack.push:
       if rhs == 0:
         # EVM special casing of div by 0
-        zero(Uint256)
+        zero(UInt256)
       else:
         lhs div rhs
 
@@ -83,7 +83,7 @@ const
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
       if rhs == 0:
-        zero(Uint256)
+        zero(UInt256)
       else:
         lhs mod rhs
 
@@ -236,7 +236,7 @@ const
     let pos = position.truncate(int)
     k.cpt.stack.push:
       if pos >= 32 or pos < 0:
-        zero(Uint256)
+        zero(UInt256)
       else:
         when system.cpuEndian == bigEndian:
           cast[array[32, byte]](value)[pos].u256
@@ -272,7 +272,7 @@ const
     if shiftLen >= 256:
       if num.isNegative:
         k.cpt.stack.push:
-          cast[Uint256]((-1).i256)
+          cast[UInt256]((-1).i256)
       else:
        k.cpt.stack. push:
           0
@@ -280,7 +280,7 @@ const
       # int version of `shr` then force the result
       # into uint256
       k.cpt.stack.push:
-        cast[Uint256](num shr shiftLen)
+        cast[UInt256](num shr shiftLen)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -345,7 +345,7 @@ const
             run:  smodOp,
             post: vm2OpIgnore)),
 
-    (opCode: AddMod,      ## 0x08, Modulo addition, Intermediate
+    (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
                           ## computations do not roll over at 2^256
      forks: Vm2OpAllForks,
      name: "addmod",
@@ -354,7 +354,7 @@ const
             run:  addmodOp,
             post: vm2OpIgnore)),
 
-    (opCode: MulMod,      ## 0x09, Modulo multiplication, Intermediate
+    (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
                           ## computations do not roll over at 2^256
      forks: Vm2OpAllForks,
      name: "mulmod",

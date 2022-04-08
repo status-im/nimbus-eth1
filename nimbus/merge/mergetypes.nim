@@ -30,7 +30,7 @@ type
     list: array[M, QueueItem[T]]
 
   PayloadItem = object
-    id: PayloadId
+    id: PayloadID
     payload: ExecutionPayloadV1
 
   HeaderItem = object
@@ -69,10 +69,10 @@ proc get*(api: EngineAPI, hash: Hash256, header: var EthBlockHeader): bool =
       return true
   false
 
-proc put*(api: EngineAPI, id: PayloadId, payload: ExecutionPayloadV1) =
+proc put*(api: EngineAPI, id: PayloadID, payload: ExecutionPayloadV1) =
   api.payloadQueue.put(PayloadItem(id: id, payload: payload))
 
-proc get*(api: EngineAPI, id: PayloadId, payload: var ExecutionPayloadV1): bool =
+proc get*(api: EngineAPI, id: PayloadID, payload: var ExecutionPayloadV1): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload

@@ -19,7 +19,7 @@
 ##     the 2^256 modulo.
 ##
 ## Nimbus authors note:
-##   - This means that we can't naively do (Uint256 + Uint256) mod uint256,
+##   - This means that we can't naively do (UInt256 + UInt256) mod uint256,
 ##     because the intermediate sum (or multiplication) might roll over if
 ##     intermediate result is greater or equal 2^256
 
