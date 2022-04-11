@@ -56,6 +56,9 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return some(contentResult.content)
 
+proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
+  true
+
 proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
@@ -64,7 +67,8 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, stateProtocolId, contentDB, toContentIdHandler,
+    baseProtocol, stateProtocolId, contentDB,
+    toContentIdHandler, validateContent,
     dataRadius, bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
 

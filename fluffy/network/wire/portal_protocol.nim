@@ -117,10 +117,14 @@ type
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
+  ContentValidationHandler* =
+    proc(content: openArray[byte], contentKey: ByteList):
+      bool {.raises: [Defect], gcsafe.}
+
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
-  
+
   ContentInfo* = object
     contentKey*: ByteList
     content*: seq[byte]
@@ -142,6 +146,7 @@ type
     baseProtocol*: protocol.Protocol
     contentDB*: ContentDB
     toContentId: ToContentIdHandler
+    validateContent: ContentValidationHandler
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
@@ -173,7 +178,7 @@ type
     nodesInterestedInContent*: seq[Node]
 
 proc init*(
-  T: type ContentInfo, 
+  T: type ContentInfo,
   contentKey: ByteList,
   content: seq[byte]): T =
   ContentInfo(
@@ -182,11 +187,11 @@ proc init*(
   )
 
 proc init*(
-  T: type ContentLookupResult, 
-  content: seq[byte], 
+  T: type ContentLookupResult,
+  content: seq[byte],
   nodesInterestedInContent: seq[Node]): T =
   ContentLookupResult(
-    content: content, 
+    content: content,
     nodesInterestedInContent: nodesInterestedInContent
   )
 
@@ -210,8 +215,8 @@ func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
 
 proc inRange(
   p: PortalProtocol,
-  nodeId: NodeId, 
-  nodeRadius: Uint256, 
+  nodeId: NodeId,
+  nodeRadius: Uint256,
   contentId: ContentId): bool =
   let distance = p.routingTable.distance(nodeId, contentId)
   distance <= nodeRadius
@@ -414,6 +419,7 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
+    validateContent: ContentValidationHandler,
     dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
@@ -429,6 +435,7 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
+    validateContent: validateContent,
     dataRadius: dataRadius,
     bootstrapRecords: @bootstrapRecords,
     radiusCache: RadiusCache.init(256),
@@ -612,7 +619,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       else:
         return err("Content message returned invalid ENRs")
 
-proc getContentKeys(o: OfferRequest): ContentKeysList = 
+proc getContentKeys(o: OfferRequest): ContentKeysList =
   case o.kind
   of Direct:
     var contentKeys:ContentKeysList
@@ -640,7 +647,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
   ## to many peers, and keeping it all in memory could exhaust node resources.
   ## Main drawback is that content may be deleted from the node database
   ## by the cleanup process before it will be transferred, so this way does not
-  ## guarantee content transfer  
+  ## guarantee content transfer.
   let contentKeys = getContentKeys(o)
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
@@ -716,7 +723,7 @@ proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentInfo]):
     Future[PortalResult[void]] {.async.} =
     if len(content) > contentKeysLimit:
       return err("Cannot offer more than 64 content items")
-    
+
     let contentList = List[ContentInfo, contentKeysLimit].init(content)
     let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
     let res = await p.offer(req)
@@ -759,24 +766,26 @@ proc processContent(
     {.gcsafe, raises: [Defect].} =
   let p = getUserData[PortalProtocol](stream)
 
-  # TODO: validate content
-  # - check amount of content items according to ContentKeysList
-  # - History Network specific: each content item, if header, check hash:
-  #   this part of thevalidation will be specific per network & type and should
-  #   be thus be custom per network
+  # TODO:
+  # - Implement a way to discern different content items (e.g. length prefixed)
+  # - Check amount of content items according to ContentKeysList
+  # - The above could also live in `PortalStream`
 
   # TODO: for now we only consider 1 item being offered
   if contentKeys.len() == 1:
     let contentKey = contentKeys[0]
-    let contentIdOpt = p.toContentId(contentKey)
-    if contentIdOpt.isNone():
-      return
+    if p.validateContent(content, contentKey):
+      let contentIdOpt = p.toContentId(contentKey)
+      if contentIdOpt.isNone():
+        return
 
-    let contentId = contentIdOpt.get()
-    # Store content, should we recheck radius?
-    p.contentDB.put(contentId, content)
+      let contentId = contentIdOpt.get()
+      # Store content, should we recheck radius?
+      p.contentDB.put(contentId, content)
 
-    asyncSpawn neighborhoodGossip(p, contentKeys)
+      asyncSpawn neighborhoodGossip(p, contentKeys)
+    else:
+      error "Received invalid content", contentKey
 
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
@@ -854,7 +863,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
 
 proc triggerPoke*(
     p: PortalProtocol,
-    nodes: seq[Node], 
+    nodes: seq[Node],
     contentKey: ByteList,
     content: seq[byte]) =
   ## Triggers asynchronous offer-accept interaction to provided nodes.
@@ -871,7 +880,7 @@ proc triggerPoke*(
         raiseAssert(e.msg)
     else:
       # offer queue full, do not start more offer offer-accept interactions
-      return 
+      return
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
@@ -947,7 +956,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
 
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
-                        
+
       of Content:
         # cancel any pending queries as we have find the content
         for f in pendingQueries:

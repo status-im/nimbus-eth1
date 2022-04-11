@@ -75,12 +75,25 @@ type
     udata: pointer
     contentHandler: ContentHandlerCallback
 
+proc pruneAllowedConnections(stream: PortalStream) =
+  # Prune requests and offers that didn't receive a connection request
+  # before `connectionTimeout`.
+  let now = Moment.now()
+  stream.contentRequests.keepIf(proc(x: ContentRequest): bool =
+    x.timeout > now)
+  stream.contentOffers.keepIf(proc(x: ContentOffer): bool =
+    x.timeout > now)
+
 proc getUserData*[T](stream: PortalStream): T =
   ## Obtain user data stored in ``stream`` object.
   cast[T](stream.udata)
 
 proc addContentOffer*(
     stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList): Bytes2 =
+  stream.pruneAllowedConnections()
+
+  # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
+  # What happens if we get duplicates?
   var connectionId: Bytes2
   brHmacDrbgGenerate(stream.rng[], connectionId)
 
@@ -97,6 +110,10 @@ proc addContentOffer*(
 
 proc addContentRequest*(
     stream: PortalStream, nodeId: NodeId, content: seq[byte]): Bytes2 =
+  stream.pruneAllowedConnections()
+
+  # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
+  # What happens if we get duplicates?
   var connectionId: Bytes2
   brHmacDrbgGenerate(stream.rng[], connectionId)
 
@@ -193,15 +210,6 @@ proc new*(
 
 func setTransport*(stream: PortalStream, transport: UtpDiscv5Protocol) =
   stream.transport = transport
-
-proc pruneAllowedConnections(stream: PortalStream) =
-  # Prune requests and offers that didn't receive a connection request
-  # before `connectionTimeout`.
-  let now = Moment.now()
-  stream.contentRequests.keepIf(proc(x: ContentRequest): bool =
-    x.timeout > now)
-  stream.contentOffers.keepIf(proc(x: ContentOffer): bool =
-    x.timeout > now)
 
 # TODO: I think I'd like it more if we weren't to capture the stream.
 proc registerIncomingSocketCallback*(

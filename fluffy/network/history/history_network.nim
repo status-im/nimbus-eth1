@@ -55,14 +55,14 @@ func getEncodedKeyForContent(
   return encodeKey(contentKey)
 
 proc validateHeaderBytes*(
-    bytes: seq[byte], hash: BlockHash): Option[BlockHeader] =
+    bytes: openArray[byte], hash: BlockHash): Option[BlockHeader] =
   try:
     var rlp = rlpFromBytes(bytes)
 
     let blockHeader = rlp.read(BlockHeader)
 
     if not (blockHeader.blockHash() == hash):
-      # TODO: Header with different hash than expecte, maybe we should punish
+      # TODO: Header with different hash than expected, maybe we should punish
       # peer which sent us this ?
       return none(BlockHeader)
 
@@ -73,7 +73,7 @@ proc validateHeaderBytes*(
     return none(BlockHeader)
 
 proc validateBodyBytes*(
-    bytes: seq[byte], txRoot: KeccakHash, ommersHash: KeccakHash):
+    bytes: openArray[byte], txRoot: KeccakHash, ommersHash: KeccakHash):
     Option[BlockBody] =
   try:
     var rlp = rlpFromBytes(bytes)
@@ -136,7 +136,7 @@ proc getBlockHeader*(
     # Content is valid we can propagate it to interested peers
     h.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent,
-      keyEncoded, 
+      keyEncoded,
       headerContent.content
     )
 
@@ -182,7 +182,7 @@ proc getBlock*(
   # body is valid, propagate it to interested peers
   h.portalProtocol.triggerPoke(
     bodyContent.nodesInterestedInContent,
-    keyEncoded, 
+    keyEncoded,
     bodyContent.content
   )
 
@@ -192,7 +192,23 @@ proc getBlock*(
 
   return some[Block]((header, blockBody))
 
-# TODO Add getRecepits call
+proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
+  let keyOpt = contentKey.decode()
+
+  if keyOpt.isNone():
+    return false
+
+  let key = keyOpt.get()
+
+  case key.contentType:
+  of blockHeader:
+    validateHeaderBytes(content, key.blockHeaderKey.blockHash).isSome()
+  of blockBody:
+    true
+    # TODO: Need to get the header from the db or the network for this. Or how
+    # to deal with this?
+  of receipts:
+    true
 
 proc new*(
     T: type HistoryNetwork,
@@ -202,7 +218,8 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, historyProtocolId, contentDB, toContentIdHandler,
+    baseProtocol, historyProtocolId, contentDB,
+    toContentIdHandler, validateContent,
     dataRadius, bootstrapRecords,
     config = portalConfig)
 

@@ -39,6 +39,9 @@ proc testHandlerSha256(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest(contentKey.asSeq())
   some(readUintBE[256](idHash.data))
 
+proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
+  true
+
 proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
   let
     node1 = initDiscoveryNode(
@@ -49,8 +52,10 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     db1 = ContentDB.new("", inMemory = true)
     db2 = ContentDB.new("", inMemory = true)
 
-    proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-    proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
+    proto1 =
+      PortalProtocol.new(node1, protocolId, db1, testHandler, validateContent)
+    proto2 =
+      PortalProtocol.new(node2, protocolId, db2, testHandler, validateContent)
 
   Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
 
@@ -206,9 +211,12 @@ procSuite "Portal Wire Protocol Tests":
         db2 = ContentDB.new("", inMemory = true)
         db3 = ContentDB.new("", inMemory = true)
 
-        proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-        proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler)
-        proto3 = PortalProtocol.new(node3, protocolId, db3, testHandler)
+        proto1 = PortalProtocol.new(
+          node1, protocolId, db1, testHandler, validateContent)
+        proto2 = PortalProtocol.new(
+          node2, protocolId, db2, testHandler, validateContent)
+        proto3 = PortalProtocol.new(
+          node3, protocolId, db3, testHandler, validateContent)
 
       # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
       check proto1.addNode(node2.localNode) == Added
@@ -239,14 +247,17 @@ procSuite "Portal Wire Protocol Tests":
       db2 = ContentDB.new("", inMemory = true)
       db3 = ContentDB.new("", inMemory = true)
 
-      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandlerSha256)
-      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandlerSha256)
-      proto3 = PortalProtocol.new(node3, protocolId, db3, testHandlerSha256)
+      proto1 = PortalProtocol.new(
+        node1, protocolId, db1, testHandlerSha256, validateContent)
+      proto2 = PortalProtocol.new(
+        node2, protocolId, db2, testHandlerSha256, validateContent)
+      proto3 = PortalProtocol.new(
+        node3, protocolId, db3, testHandlerSha256, validateContent)
 
       content = @[byte 1, 2]
       contentList = List[byte, 2048].init(content)
       contentId = readUintBE[256](sha256.digest(content).data)
-    
+
     # Only node3 have content
     db3.put(contentId, content)
 
@@ -283,8 +294,10 @@ procSuite "Portal Wire Protocol Tests":
       db1 = ContentDB.new("", inMemory = true)
       db2 = ContentDB.new("", inMemory = true)
 
-      proto1 = PortalProtocol.new(node1, protocolId, db1, testHandler)
-      proto2 = PortalProtocol.new(node2, protocolId, db2, testHandler,
+      proto1 = PortalProtocol.new(
+        node1, protocolId, db1, testHandler, validateContent)
+      proto2 = PortalProtocol.new(
+        node2, protocolId, db2, testHandler, validateContent,
         bootstrapRecords = [node1.localNode.record])
 
     proto1.start()
@@ -307,7 +320,7 @@ procSuite "Portal Wire Protocol Tests":
       db = ContentDB.new("", inMemory = true)
       # No portal protocol for node1, hence an invalid bootstrap node
       proto2 = PortalProtocol.new(node2, protocolId, db, testHandler,
-        bootstrapRecords = [node1.localNode.record])
+        validateContent, bootstrapRecords = [node1.localNode.record])
 
     # seedTable to add node1 to the routing table
     proto2.seedTable()
