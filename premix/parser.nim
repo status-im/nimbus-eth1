@@ -136,7 +136,7 @@ proc parseTransaction*(n: JsonNode): Transaction =
   n.fromJson "r", tx.R
   n.fromJson "s", tx.S
 
-  if n["type"].kind != JNull:
+  if n.hasKey("type") and n["type"].kind != JNull:
     n.fromJson "type", tx.txType
 
   if tx.txType >= TxEip1559:

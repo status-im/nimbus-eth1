@@ -165,3 +165,15 @@ func eip1559TxNormalization*(tx: Transaction;
     result.maxFee = tx.gasPrice
   if FkLondon <= fork:
     result.gasPrice = baseFee + min(result.maxPriorityFee, result.maxFee - baseFee)
+
+func effectiveGasTip*(tx: Transaction; baseFee: Option[UInt256]): GasInt =
+  var
+    maxPriorityFee = tx.maxPriorityFee
+    maxFee = tx.maxFee
+    baseFee = baseFee.get(0.u256).truncate(GasInt)
+
+  if tx.txType < TxEip1559:
+    maxPriorityFee = tx.gasPrice
+    maxFee = tx.gasPrice
+
+  min(maxPriorityFee, maxFee - baseFee)
