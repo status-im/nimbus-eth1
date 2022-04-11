@@ -229,18 +229,19 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
 
-import debug
-
 proc generateExecutionPayload*(engine: SealingEngineRef,
                                payloadAttrs: PayloadAttributesV1,
                                payloadRes: var ExecutionPayloadV1): Result[void, string] =
-  let headBlock = try: engine.chain.db.getCanonicalHead()
-                  except CatchableError: return err "No head block in database"
-
   let
+    headBlock = try: engine.chain.db.getCanonicalHead()
+                except CatchableError: return err "No head block in database"
     prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
     timestamp = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
     coinbase = EthAddress payloadAttrs.suggestedFeeRecipient
+
+  if headBlock.blockHash != engine.txPool.head.blockHash:
+    # reorg
+    discard engine.txPool.smartHead(headBlock)
 
   var blk: EthBlock
   engine.txPool.feeRecipient = coinbase
