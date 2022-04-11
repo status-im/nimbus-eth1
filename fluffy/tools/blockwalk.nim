@@ -71,6 +71,11 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
         fatal "Error occured on JSON-RPC request", error = e.msg
         quit 1
 
+    # Using the http connection re-use seems to slow down these sequentual
+    # requests considerably. Force a new connection setup by doing a close after
+    # each request.
+    await client.close()
+
     if parentBlockOpt.isNone():
       fatal "Failed getting parent block", hash = parentHash.data.toHex()
       quit 1
