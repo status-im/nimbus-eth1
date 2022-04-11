@@ -120,6 +120,21 @@ type
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
+  
+  ContentInfo* = object
+    contentKey*: ByteList
+    content*: seq[byte]
+
+  OfferRequestType = enum
+    Direct, Database
+
+  OfferRequest = object
+    dst: Node
+    case kind: OfferRequestType
+    of Direct:
+      contentList: List[ContentInfo, contentKeysLimit]
+    of Database:
+      contentKeys: ContentKeysList
 
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
@@ -134,7 +149,7 @@ type
     revalidateLoop: Future[void]
     stream*: PortalStream
     radiusCache: RadiusCache
-    offerQueue: AsyncQueue[(Node, ContentKeysList)]
+    offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
 
   PortalResult*[T] = Result[T, cstring]
@@ -156,6 +171,15 @@ type
     # List of nodes which do not have requested content, and for which
     # content is in their range
     nodesInterestedInContent*: seq[Node]
+
+proc init*(
+  T: type ContentInfo, 
+  contentKey: ByteList,
+  content: seq[byte]): T =
+  ContentInfo(
+    contentKey: contentKey,
+    content: content
+  )
 
 proc init*(
   T: type ContentLookupResult, 
@@ -408,7 +432,7 @@ proc new*(T: type PortalProtocol,
     dataRadius: dataRadius,
     bootstrapRecords: @bootstrapRecords,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[(Node, ContentKeysList)](concurrentOffers))
+    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers))
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
@@ -588,35 +612,53 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       else:
         return err("Content message returned invalid ENRs")
 
-# TODO: Depending on how this gets used, it might be better not to request
-# the data from the database here, but pass it as parameter. (like, if it was
-# just received it and now needs to be forwarded)
-proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
-    Future[PortalResult[void]] {.async.} =
-  let acceptMessageResponse = await p.offerImpl(dst, contentKeys)
-  portal_content_keys_offered.observe(contentKeys.len().int64)
+proc getContentKeys(o: OfferRequest): ContentKeysList = 
+  case o.kind
+  of Direct:
+    var contentKeys:ContentKeysList
+    for info in o.contentList:
+      discard contentKeys.add(info.contentKey)
+    return contentKeys
+  of Database:
+    return o.contentKeys
+
+proc offer(p: PortalProtocol, o: OfferRequest):
+  Future[PortalResult[void]] {.async.} =
+  ## Offer triggers offer-accept interaction with one peer
+  ## Whole flow has two phases:
+  ## 1. Come to an agreement on what content to transfer, by using offer and accept
+  ## messages.
+  ## 2. Open uTP stream from content provider to content receiver and transfer
+  ## agreed content.
+  ## There are two types of possible offer requests:
+  ## Direct - when caller provides content to transfer. This way, content is
+  ## guaranteed to be transferred as it stays in memory until whole transfer
+  ## is completed.
+  ## Database - when caller provides keys of content to be transferred. This
+  ## way content is provided from database just before it is transferred through
+  ## uTP socket. This is useful when there is a lot of content to be transferred
+  ## to many peers, and keeping it all in memory could exhaust node resources.
+  ## Main drawback is that content may be deleted from the node database
+  ## by the cleanup process before it will be transferred, so this way does not
+  ## guarantee content transfer  
+  let contentKeys = getContentKeys(o)
+
+  let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
-
-    # Filter contentKeys with bitlist
-    var requestedContentKeys: seq[ByteList]
-    for i, b in m.contentKeys:
-      if b:
-        requestedContentKeys.add(contentKeys[i])
-
-    let contentKeysAmount = requestedContentKeys.len()
-    portal_content_keys_accepted.observe(contentKeysAmount.int64)
-    if contentKeysAmount == 0:
+    let acceptedKeysAmount = m.contentKeys.countOnes()
+    portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
+    if acceptedKeysAmount == 0:
       # Don't open an uTP stream if no content was requested
       return ok()
 
-    let nodeAddress = NodeAddress.init(dst)
+    let nodeAddress = NodeAddress.init(o.dst)
     if nodeAddress.isNone():
       # It should not happen as we are already after succesfull talkreq/talkresp
       # cycle
       error "Trying to connect to node with unknown address",
-        id = dst.id
+        id = o.dst.id
       return err("Trying to connect to node with unknown address")
 
     let connectionResult =
@@ -632,31 +674,59 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
 
     let clientSocket = connectionResult.get()
 
-    for contentKey in requestedContentKeys:
-      let contentIdOpt = p.toContentId(contentKey)
-      if contentIdOpt.isSome():
-        let
-          contentId = contentIdOpt.get()
-          maybeContent = p.contentDB.get(contentId)
-        if maybeContent.isSome():
-          let content = maybeContent.get()
-          let dataWritten = await clientSocket.write(content)
+    case o.kind
+    of Direct:
+      for i, b in m.contentKeys:
+        if b:
+          let dataWritten = await clientSocket.write(o.contentList[i].content)
           if dataWritten.isErr:
             error "Error writing requested data", error = dataWritten.error
             # No point in trying to continue writing data
             clientSocket.close()
             return err("Error writing requested data")
+    of Database:
+      for i, b in m.contentKeys:
+        if b:
+          let contentIdOpt = p.toContentId(o.contentKeys[i])
+          if contentIdOpt.isSome():
+            let
+              contentId = contentIdOpt.get()
+              maybeContent = p.contentDB.get(contentId)
+            if maybeContent.isSome():
+              let content = maybeContent.get()
+              let dataWritten = await clientSocket.write(content)
+              if dataWritten.isErr:
+                error "Error writing requested data", error = dataWritten.error
+                # No point in trying to continue writing data
+                clientSocket.close()
+                return err("Error writing requested data")
 
     await clientSocket.closeWait()
     return ok()
   else:
     return err("No accept response")
 
+proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
+    Future[PortalResult[void]] {.async.} =
+    let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
+    let res = await p.offer(req)
+    return res
+
+proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentInfo]):
+    Future[PortalResult[void]] {.async.} =
+    if len(content) > contentKeysLimit:
+      return err("Cannot offer more than 64 content items")
+    
+    let contentList = List[ContentInfo, contentKeysLimit].init(content)
+    let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
+    let res = await p.offer(req)
+    return res
+
 proc offerWorker(p: PortalProtocol) {.async.} =
   while true:
-    let (node, contentKeys) = await p.offerQueue.popFirst()
+    let req = await p.offerQueue.popFirst()
 
-    let res = await p.offer(node, contentKeys)
+    let res = await p.offer(req)
     if res.isOk():
       portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
     else:
@@ -681,7 +751,8 @@ proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.asyn
     NodeId(contentId), k = 6, seenOnly = false)
 
   for node in closestNodes:
-    await p.offerQueue.addLast((node, contentKeys))
+    let req = OfferRequest(dst: node, kind: Database, contentKeys: contentKeys)
+    await p.offerQueue.addLast(req)
 
 proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
@@ -785,19 +856,16 @@ proc triggerPoke*(
     p: PortalProtocol,
     nodes: seq[Node], 
     contentKey: ByteList,
-    contentId: ContentId) =
+    content: seq[byte]) =
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes
-  ## Provided content should be in database
-  ## TODO Related to todo in `proc offer` it maybe better to pass content to
-  ## offer directly to avoid potential problems when content is not really in database
-  ## this will be especially important when we introduce deleting content
-  ## from database
-  let keys = ContentKeysList.init(@[contentKey])
   for node in nodes:
     if not p.offerQueue.full():
       try:
-        p.offerQueue.putNoWait((node, keys))
+        let ci = ContentInfo(contentKey: contentKey, content: content)
+        let list = List[ContentInfo, contentKeysLimit].init(@[ci])
+        let req = OfferRequest(dst: node, kind: Direct, contentList: list)
+        p.offerQueue.putNoWait(req)
       except AsyncQueueFullError as e:
         # should not happen as we always check is full before putting element to the queue
         raiseAssert(e.msg)
