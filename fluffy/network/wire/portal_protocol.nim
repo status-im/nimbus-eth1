@@ -623,88 +623,88 @@ proc getContentKeys(o: OfferRequest): ContentKeysList =
     return o.contentKeys
 
 proc offer(p: PortalProtocol, o: OfferRequest):
-    Future[PortalResult[void]] {.async.} =
-    ## Offer triggers offer-accept interaction with one peer
-    ## Whole flow have two phases:
-    ## 1. Come to agreement what content to transfer, by using offer and accept
-    ## messages.
-    ## 2. Open uTP stream from content provider to content receiver and transfer
-    ## agreeed content
-    ## There are two types of possible offer requests:
-    ## Direct - when caller provides content to transfer. This way, content is 
-    ## guaranteed to be transferred as it stays in memory until whole transfer
-    ## is completed.
-    ## Database - when caller provides keys of content to be transferred. This 
-    ## way content is provided from database just before it is transferred through
-    ## uTP socket. This is useful when there is a lot of content to be transferred
-    ## to many peers, and keeping it all in memory could exhaust node resources.
-    ## Main drawback is that content maybe deleted from node database 
-    ## by cleanup process before it will be transferred, so this way does not 
-    ## guarant content transfer.  
-    let contentKeys = getContentKeys(o)
+  Future[PortalResult[void]] {.async.} =
+  ## Offer triggers offer-accept interaction with one peer
+  ## Whole flow has two phases:
+  ## 1. Come to an agreement on what content to transfer, by using offer and accept
+  ## messages.
+  ## 2. Open uTP stream from content provider to content receiver and transfer
+  ## agreed content.
+  ## There are two types of possible offer requests:
+  ## Direct - when caller provides content to transfer. This way, content is
+  ## guaranteed to be transferred as it stays in memory until whole transfer
+  ## is completed.
+  ## Database - when caller provides keys of content to be transferred. This
+  ## way content is provided from database just before it is transferred through
+  ## uTP socket. This is useful when there is a lot of content to be transferred
+  ## to many peers, and keeping it all in memory could exhaust node resources.
+  ## Main drawback is that content may be deleted from the node database
+  ## by the cleanup process before it will be transferred, so this way does not
+  ## guarantee content transfer  
+  let contentKeys = getContentKeys(o)
 
-    let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
+  let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
-    if acceptMessageResponse.isOk():
-      let m = acceptMessageResponse.get()
-      let acceptedKeysAmount = m.contentKeys.countOnes()
-      portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
-      if acceptedKeysAmount == 0:
-        # Don't open an uTP stream if no content was requested
-        return ok()
-
-      let nodeAddress = NodeAddress.init(o.dst)
-      if nodeAddress.isNone():
-        # It should not happen as we are already after succesfull talkreq/talkresp
-        # cycle
-        error "Trying to connect to node with unknown address",
-          id = o.dst.id
-        return err("Trying to connect to node with unknown address")
-
-      let connectionResult =
-        await p.stream.connectTo(
-          nodeAddress.unsafeGet(),
-          uint16.fromBytesBE(m.connectionId)
-        )
-
-      if connectionResult.isErr():
-        error "Utp connection error while trying to offer content",
-          msg = connectionResult.error
-        return err("Error connecting uTP socket")
-
-      let clientSocket = connectionResult.get()
-
-      case o.kind
-      of Direct:
-        for i, b in m.contentKeys:
-          if b:
-            let dataWritten = await clientSocket.write(o.contentList[i].content)
-            if dataWritten.isErr:
-              error "Error writing requested data", error = dataWritten.error
-              # No point in trying to continue writing data
-              clientSocket.close()
-              return err("Error writing requested data")
-      of Database:
-        for i, b in m.contentKeys:
-          if b:
-            let contentIdOpt = p.toContentId(o.contentKeys[i])
-            if contentIdOpt.isSome():
-              let
-                contentId = contentIdOpt.get()
-                maybeContent = p.contentDB.get(contentId)
-              if maybeContent.isSome():
-                let content = maybeContent.get()
-                let dataWritten = await clientSocket.write(content)
-                if dataWritten.isErr:
-                  error "Error writing requested data", error = dataWritten.error
-                  # No point in trying to continue writing data
-                  clientSocket.close()
-                  return err("Error writing requested data")
-
-      await clientSocket.closeWait()
+  if acceptMessageResponse.isOk():
+    let m = acceptMessageResponse.get()
+    let acceptedKeysAmount = m.contentKeys.countOnes()
+    portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
+    if acceptedKeysAmount == 0:
+      # Don't open an uTP stream if no content was requested
       return ok()
-    else:
-      return err("No accept response")
+
+    let nodeAddress = NodeAddress.init(o.dst)
+    if nodeAddress.isNone():
+      # It should not happen as we are already after succesfull talkreq/talkresp
+      # cycle
+      error "Trying to connect to node with unknown address",
+        id = o.dst.id
+      return err("Trying to connect to node with unknown address")
+
+    let connectionResult =
+      await p.stream.connectTo(
+        nodeAddress.unsafeGet(),
+        uint16.fromBytesBE(m.connectionId)
+      )
+
+    if connectionResult.isErr():
+      error "Utp connection error while trying to offer content",
+        msg = connectionResult.error
+      return err("Error connecting uTP socket")
+
+    let clientSocket = connectionResult.get()
+
+    case o.kind
+    of Direct:
+      for i, b in m.contentKeys:
+        if b:
+          let dataWritten = await clientSocket.write(o.contentList[i].content)
+          if dataWritten.isErr:
+            error "Error writing requested data", error = dataWritten.error
+            # No point in trying to continue writing data
+            clientSocket.close()
+            return err("Error writing requested data")
+    of Database:
+      for i, b in m.contentKeys:
+        if b:
+          let contentIdOpt = p.toContentId(o.contentKeys[i])
+          if contentIdOpt.isSome():
+            let
+              contentId = contentIdOpt.get()
+              maybeContent = p.contentDB.get(contentId)
+            if maybeContent.isSome():
+              let content = maybeContent.get()
+              let dataWritten = await clientSocket.write(content)
+              if dataWritten.isErr:
+                error "Error writing requested data", error = dataWritten.error
+                # No point in trying to continue writing data
+                clientSocket.close()
+                return err("Error writing requested data")
+
+    await clientSocket.closeWait()
+    return ok()
+  else:
+    return err("No accept response")
 
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[void]] {.async.} =
@@ -715,7 +715,7 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
 proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentInfo]):
     Future[PortalResult[void]] {.async.} =
     if len(content) > contentKeysLimit:
-      return err("Cannot offer more that 64 content items")
+      return err("Cannot offer more than 64 content items")
     
     let contentList = List[ContentInfo, contentKeysLimit].init(content)
     let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
