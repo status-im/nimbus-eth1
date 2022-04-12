@@ -188,7 +188,7 @@ procSuite "Portal testnet tests":
     check (await clients[0].portal_history_propagate(dataFile))
     await clients[0].close()
 
-    let blockData = readBlockData(dataFile)
+    let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
 
     for client in clients:

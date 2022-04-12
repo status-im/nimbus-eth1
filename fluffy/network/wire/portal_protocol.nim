@@ -743,51 +743,6 @@ proc offerWorker(p: PortalProtocol) {.async.} =
 proc offerQueueEmpty*(p: PortalProtocol): bool =
   p.offerQueue.empty()
 
-proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.async.} =
-  let contentKey = contentKeys[0] # for now only 1 item is considered
-  let contentIdOpt = p.toContentId(contentKey)
-  if contentIdOpt.isNone():
-    return
-
-  let contentId = contentIdOpt.get()
-  # gossip content to closest neighbours to target:
-  # Selected closest 6 now. Better is perhaps to select 16 closest and then
-  # select 6 random out of those.
-  # TODO: Might actually have to do here closest to the local node, else data
-  # will not propagate well over to nodes with "large" Radius?
-  let closestNodes = p.routingTable.neighbours(
-    NodeId(contentId), k = 6, seenOnly = false)
-
-  for node in closestNodes:
-    let req = OfferRequest(dst: node, kind: Database, contentKeys: contentKeys)
-    await p.offerQueue.addLast(req)
-
-proc processContent(
-    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
-    {.gcsafe, raises: [Defect].} =
-  let p = getUserData[PortalProtocol](stream)
-
-  # TODO:
-  # - Implement a way to discern different content items (e.g. length prefixed)
-  # - Check amount of content items according to ContentKeysList
-  # - The above could also live in `PortalStream`
-
-  # TODO: for now we only consider 1 item being offered
-  if contentKeys.len() == 1:
-    let contentKey = contentKeys[0]
-    if p.validateContent(content, contentKey):
-      let contentIdOpt = p.toContentId(contentKey)
-      if contentIdOpt.isNone():
-        return
-
-      let contentId = contentIdOpt.get()
-      # Store content, should we recheck radius?
-      p.contentDB.put(contentId, content)
-
-      asyncSpawn neighborhoodGossip(p, contentKeys)
-    else:
-      error "Received invalid content", contentKey
-
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId): Future[seq[Node]] {.async.} =
   let distances = lookupDistances(target, dst.id)
@@ -1024,6 +979,58 @@ proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node
 proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
+
+proc neighborhoodGossip*(
+    p: PortalProtocol, contentKeys: ContentKeysList, content: seq[byte])
+    {.async.} =
+  let
+    # for now only 1 item is considered
+    contentInfo = ContentInfo(contentKey: contentKeys[0], content: content)
+    contentList = List[ContentInfo, contentKeysLimit].init(@[contentInfo])
+    contentIdOpt = p.toContentId(contentInfo.contentKey)
+
+  if contentIdOpt.isNone():
+    return
+
+  let contentId = contentIdOpt.get()
+
+  # Doing an lookup over the network to get the very closest nodes to the
+  # content, instead of looking only at our own routing table. This should give
+  # a bigger rate of success in case the content is not known yet and avoid
+  # data being stopped in its propagation. However, perhaps this causes issues
+  # in data getting propagated in a wider id range.
+  let closestNodes = await p.lookup(NodeId(contentId))
+
+  for node in closestNodes[0..7]: # selecting closest 8 nodes
+    # Note: opportunistically not checking if the radius of the node is known
+    # and thus if the node is in radius with the content.
+    let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+    await p.offerQueue.addLast(req)
+
+proc processContent(
+    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
+    {.gcsafe, raises: [Defect].} =
+  let p = getUserData[PortalProtocol](stream)
+
+  # TODO:
+  # - Implement a way to discern different content items (e.g. length prefixed)
+  # - Check amount of content items according to ContentKeysList
+  # - The above could also live in `PortalStream`
+  # For now we only consider 1 item being offered
+  if contentKeys.len() == 1:
+    let contentKey = contentKeys[0]
+    if p.validateContent(content, contentKey):
+      let contentIdOpt = p.toContentId(contentKey)
+      if contentIdOpt.isNone():
+        return
+
+      let contentId = contentIdOpt.get()
+      # Store content, should we recheck radius?
+      p.contentDB.put(contentId, content)
+
+      asyncSpawn neighborhoodGossip(p, contentKeys, content)
+    else:
+      error "Received invalid content", contentKey
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
