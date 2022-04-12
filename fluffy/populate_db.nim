@@ -30,7 +30,7 @@ type
 
   BlockDataTable* = Table[string, BlockData]
 
-proc readBlockData*(dataFile: string): Result[BlockDataTable, string] =
+proc readBlockDataTable*(dataFile: string): Result[BlockDataTable, string] =
   let blockData = readAllFile(dataFile)
   if blockData.isErr(): # TODO: map errors
     return err("Failed reading data-file")
@@ -54,84 +54,92 @@ iterator blockHashes*(blockData: BlockDataTable): BlockHash =
 
     yield blockHash
 
+proc readBlockData(
+    hash: string, blockData: BlockData, verify = false):
+    Result[seq[(ContentKey, seq[byte])], string] =
+  var res: seq[(ContentKey, seq[byte])]
+
+  var rlp =
+    try:
+      rlpFromHex(blockData.rlp)
+    except ValueError as e:
+      return err("Invalid hex for rlp block data, number " &
+        $blockData.number & ": " & e.msg)
+
+  # The data is currently formatted as an rlp encoded `EthBlock`, thus
+  # containing header, txs and uncles: [header, txs, uncles]. No receipts are
+  # available.
+  # TODO: Change to format to rlp data as it gets stored and send over the
+  # network over the network. I.e. [header, [txs, uncles], receipts]
+  if rlp.enterList():
+    var blockHash: BlockHash
+    try:
+      blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+    except ValueError as e:
+      return err("Invalid hex for blockhash, number " &
+        $blockData.number & ": " & e.msg)
+
+    let contentKeyType =
+      ContentKeyType(chainId: 1'u16, blockHash: blockHash)
+
+    try:
+      # If wanted the hash for the corresponding header can be verified
+      if verify:
+        if keccak256.digest(rlp.rawData()) != blockHash:
+          return err("Data is not matching hash, number " & $blockData.number)
+
+      block:
+        let contentKey = ContentKey(
+          contentType: blockHeader,
+          blockHeaderKey: contentKeyType)
+
+        res.add((contentKey, @(rlp.rawData())))
+        rlp.skipElem()
+
+      block:
+        let contentKey = ContentKey(
+          contentType: blockBody,
+          blockBodyKey: contentKeyType)
+
+        # Note: Temporary until the data format gets changed.
+        let blockBody = BlockBody(
+          transactions: rlp.read(seq[Transaction]),
+          uncles: rlp.read(seq[BlockHeader]))
+        let rlpdata = encode(blockBody)
+
+        res.add((contentKey, rlpdata))
+        # res.add((contentKey, @(rlp.rawData())))
+        # rlp.skipElem()
+
+      # Note: No receipts yet in the data set
+      # block:
+        # let contentKey = ContentKey(
+        #   contentType: receipts,
+        #   receiptsKey: contentKeyType)
+
+        # res.add((contentKey, @(rlp.rawData())))
+        # rlp.skipElem()
+
+    except RlpError as e:
+      return err("Invalid rlp data, number " & $blockData.number & ": " & e.msg)
+
+    ok(res)
+  else:
+    err("Item is not a valid rlp list, number " & $blockData.number)
+
 iterator blocks*(
     blockData: BlockDataTable, verify = false): seq[(ContentKey, seq[byte])] =
   for k,v in blockData:
-    var res: seq[(ContentKey, seq[byte])]
+    let res = readBlockData(k, v, verify)
 
-    var rlp =
-      try:
-        rlpFromHex(v.rlp)
-      except ValueError as e:
-        error "Invalid hex for rlp data", error = e.msg, number = v.number
-        continue
-
-    # The data is currently formatted as an rlp encoded `EthBlock`, thus
-    # containing header, txs and uncles: [header, txs, uncles]. No receipts are
-    # available.
-    # TODO: Change to format to rlp data as it gets stored and send over the
-    # network over the network. I.e. [header, [txs, uncles], receipts]
-    if rlp.enterList():
-      var blockHash: BlockHash
-      try:
-        blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
-      except ValueError as e:
-        error "Invalid hex for block hash", error = e.msg, number = v.number
-        continue
-
-      let contentKeyType =
-        ContentKeyType(chainId: 1'u16, blockHash: blockHash)
-
-      try:
-        # If wanted the hash for the corresponding header can be verified
-        if verify:
-          if keccak256.digest(rlp.rawData()) != blockHash:
-            error "Data is not matching hash, skipping", number = v.number
-            continue
-
-        block:
-          let contentKey = ContentKey(
-            contentType: blockHeader,
-            blockHeaderKey: contentKeyType)
-
-          res.add((contentKey, @(rlp.rawData())))
-          rlp.skipElem()
-
-        block:
-          let contentKey = ContentKey(
-            contentType: blockBody,
-            blockBodyKey: contentKeyType)
-
-          # Note: Temporary until the data format gets changed.
-          let blockBody = BlockBody(
-            transactions: rlp.read(seq[Transaction]),
-            uncles: rlp.read(seq[BlockHeader]))
-          let rlpdata = encode(blockBody)
-
-          res.add((contentKey, rlpdata))
-          # res.add((contentKey, @(rlp.rawData())))
-          # rlp.skipElem()
-
-        # Note: No receipts yet in the data set
-        # block:
-          # let contentKey = ContentKey(
-          #   contentType: receipts,
-          #   receiptsKey: contentKeyType)
-
-          # res.add((contentKey, @(rlp.rawData())))
-          # rlp.skipElem()
-
-      except RlpError as e:
-        error "Invalid rlp data", number = v.number, error = e.msg
-        continue
-
-      yield res
+    if res.isOk():
+      yield res.get()
     else:
-      error "Item is not a valid rlp list", number = v.number
+      error "Failed reading block from block data", error = res.error
 
 proc populateHistoryDb*(
     db: ContentDB, dataFile: string, verify = false): Result[void, string] =
-  let blockData = ? readBlockData(dataFile)
+  let blockData = ? readBlockDataTable(dataFile)
 
   for b in blocks(blockData, verify):
     for value in b:
@@ -143,7 +151,7 @@ proc populateHistoryDb*(
 proc propagateHistoryDb*(
     p: PortalProtocol, dataFile: string, verify = false):
     Future[Result[void, string]] {.async.} =
-  let blockData = readBlockData(dataFile)
+  let blockData = readBlockDataTable(dataFile)
 
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
@@ -157,8 +165,33 @@ proc propagateHistoryDb*(
 
     # Need to be sure that all offers where started. TODO: this is not great.
     while not p.offerQueueEmpty():
-      error "WAITING FOR OFFER QUEUE EMPTY"
       await sleepAsync(500.milliseconds)
     return ok()
   else:
     return err(blockData.error)
+
+proc propagateBlockHistoryDb*(
+    p: PortalProtocol, dataFile: string, blockHash: string, verify = false):
+    Future[Result[void, string]] {.async.} =
+  let blockDataTable = readBlockDataTable(dataFile)
+
+  if blockDataTable.isOk():
+    let b =
+      try:
+        blockDataTable.get()[blockHash]
+      except KeyError:
+        return err("Block hash not found in block data file")
+
+    let blockDataRes = readBlockData(blockHash, b)
+    if blockDataRes.isErr:
+      return err(blockDataRes.error)
+
+    let blockData = blockDataRes.get()
+
+    for value in blockData:
+      p.contentDB.put(history_content.toContentId(value[0]), value[1])
+      await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]))
+
+    return ok()
+  else:
+    return err(blockDataTable.error)

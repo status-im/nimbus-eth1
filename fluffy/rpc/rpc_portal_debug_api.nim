@@ -34,3 +34,11 @@ proc installPortalDebugApiHandlers*(
       return true
     else:
       raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateBlock") do(
+      dataFile: string, blockHash: string) -> bool:
+    let res = await p.propagateBlockHistoryDb(dataFile, blockHash)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)

@@ -11,6 +11,7 @@
 {.push raises: [Defect].}
 
 import
+  std/strutils,
   confutils, chronicles, chronicles/topics_registry, stew/byteutils,
   eth/common/eth_types,
   ../../nimbus/rpc/[hexstrings, rpc_types], ../../nimbus/errors,
@@ -60,12 +61,12 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
     let parentBlockOpt =
       try:
         await client.eth_getBlockByHash(parentHash.ethHashStr(), false)
-      except ValidationError as e:
+      except RpcPostError as e:
         # RpcPostError when for example timing out on the request. Could retry
         # in this case.
         fatal "Error occured on JSON-RPC request", error = e.msg
         quit 1
-      except RpcPostError as e:
+      except ValidationError as e:
         # ValidationError from buildBlockObject, should not occur with proper
         # blocks
         fatal "Error occured on JSON-RPC request", error = e.msg
@@ -89,8 +90,8 @@ proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
     blockNumber = parentBlock.number.get().string
     parentHash = parentBlock.parentHash
 
-    echo "Block number: " & blockNumber
-    echo "Block hash: " & "0x" & parentBlock.hash.get().data.toHex()
+    echo "Block " & $blockNumber.parseHexInt() & ": " &
+      parentBlock.hash.get().data.toHex()
 
 proc run(config: BlockWalkConf) {.async.} =
   let client = newRpcHttpClient()
