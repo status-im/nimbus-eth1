@@ -157,11 +157,12 @@ proc propagateHistoryDb*(
     for b in blocks(blockData.get(), verify):
       for value in b:
         # Note: This is the slowest part due to the hashing that takes place.
-        p.contentDB.put(history_content.toContentId(value[0]), value[1])
+        let contentId = history_content.toContentId(value[0])
+        if p.inRange(contentId):
+          p.contentDB.put(contentId, value[1])
 
-        # TODO: This call will get the content we just stored in the db, so it
-        # might be an improvement to directly pass it.
-        await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]))
+        await p.neighborhoodGossip(
+          ContentKeysList(@[encode(value[0])]), value[1])
 
     # Need to be sure that all offers where started. TODO: this is not great.
     while not p.offerQueueEmpty():
@@ -189,8 +190,11 @@ proc propagateBlockHistoryDb*(
     let blockData = blockDataRes.get()
 
     for value in blockData:
-      p.contentDB.put(history_content.toContentId(value[0]), value[1])
-      await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]))
+      let contentId = history_content.toContentId(value[0])
+      if p.inRange(contentId):
+        p.contentDB.put(contentId, value[1])
+
+      await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), value[1])
 
     return ok()
   else:

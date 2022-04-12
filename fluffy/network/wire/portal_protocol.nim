@@ -980,9 +980,15 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.async.} =
-  let contentKey = contentKeys[0] # for now only 1 item is considered
-  let contentIdOpt = p.toContentId(contentKey)
+proc neighborhoodGossip*(
+    p: PortalProtocol, contentKeys: ContentKeysList, content: seq[byte])
+    {.async.} =
+  let
+    # for now only 1 item is considered
+    contentInfo = ContentInfo(contentKey: contentKeys[0], content: content)
+    contentList = List[ContentInfo, contentKeysLimit].init(@[contentInfo])
+    contentIdOpt = p.toContentId(contentInfo.contentKey)
+
   if contentIdOpt.isNone():
     return
 
@@ -998,7 +1004,7 @@ proc neighborhoodGossip*(p: PortalProtocol, contentKeys: ContentKeysList) {.asyn
   for node in closestNodes[0..7]: # selecting closest 8 nodes
     # Note: opportunistically not checking if the radius of the node is known
     # and thus if the node is in radius with the content.
-    let req = OfferRequest(dst: node, kind: Database, contentKeys: contentKeys)
+    let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
     await p.offerQueue.addLast(req)
 
 proc processContent(
@@ -1022,7 +1028,7 @@ proc processContent(
       # Store content, should we recheck radius?
       p.contentDB.put(contentId, content)
 
-      asyncSpawn neighborhoodGossip(p, contentKeys)
+      asyncSpawn neighborhoodGossip(p, contentKeys, content)
     else:
       error "Received invalid content", contentKey
 
