@@ -649,6 +649,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
   ## by the cleanup process before it will be transferred, so this way does not
   ## guarantee content transfer.
   let contentKeys = getContentKeys(o)
+  portal_content_keys_offered.observe(contentKeys.len().int64)
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
