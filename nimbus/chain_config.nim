@@ -164,6 +164,10 @@ proc readValue(reader: var JsonReader, value: var UInt256) =
       try:    value = reader.lexer.strVal.parse(UInt256, radix = 16)
       except: reader.raiseUnexpectedValue("hex string parse error")
     reader.lexer.next()
+  elif tok == tkError and reader.lexer.err == errNonPortableInt:
+    try:    value = reader.lexer.absIntString.parse(UInt256, radix = 10)
+    except: reader.raiseUnexpectedValue("uin256 parse error")
+    reader.lexer.next()
   else:
     reader.raiseUnexpectedValue("expect int or hex/int string")
 
