@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -589,7 +589,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         )
 
       if connectionResult.isErr():
-        error "Utp connection error while trying to find content",
+        debug "Utp connection error while trying to find content",
           msg = connectionResult.error
         return err("Error connecting uTP socket")
 
@@ -676,7 +676,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
       )
 
     if connectionResult.isErr():
-      error "Utp connection error while trying to offer content",
+      debug "Utp connection error while trying to offer content",
         msg = connectionResult.error
       return err("Error connecting uTP socket")
 
@@ -688,7 +688,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
         if b:
           let dataWritten = await clientSocket.write(o.contentList[i].content)
           if dataWritten.isErr:
-            error "Error writing requested data", error = dataWritten.error
+            debug "Error writing requested data", error = dataWritten.error
             # No point in trying to continue writing data
             clientSocket.close()
             return err("Error writing requested data")
@@ -704,7 +704,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
               let content = maybeContent.get()
               let dataWritten = await clientSocket.write(content)
               if dataWritten.isErr:
-                error "Error writing requested data", error = dataWritten.error
+                debug "Error writing requested data", error = dataWritten.error
                 # No point in trying to continue writing data
                 clientSocket.close()
                 return err("Error writing requested data")
@@ -823,19 +823,20 @@ proc triggerPoke*(
     contentKey: ByteList,
     content: seq[byte]) =
   ## Triggers asynchronous offer-accept interaction to provided nodes.
-  ## Provided content should be in range of provided nodes
+  ## Provided content should be in range of provided nodes.
   for node in nodes:
     if not p.offerQueue.full():
       try:
-        let ci = ContentInfo(contentKey: contentKey, content: content)
-        let list = List[ContentInfo, contentKeysLimit].init(@[ci])
-        let req = OfferRequest(dst: node, kind: Direct, contentList: list)
+        let
+          ci = ContentInfo(contentKey: contentKey, content: content)
+          list = List[ContentInfo, contentKeysLimit].init(@[ci])
+          req = OfferRequest(dst: node, kind: Direct, contentList: list)
         p.offerQueue.putNoWait(req)
       except AsyncQueueFullError as e:
-        # should not happen as we always check is full before putting element to the queue
+        # Should not occur as full() check is done.
         raiseAssert(e.msg)
     else:
-      # offer queue full, do not start more offer offer-accept interactions
+      # Offer queue is full, do not start more offer-accept interactions
       return
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
@@ -894,7 +895,8 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
       case content.kind
       of Nodes:
         let maybeRadius = p.radiusCache.get(content.src.id)
-        if maybeRadius.isSome() and p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
+        if maybeRadius.isSome() and
+            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
           # Only return nodes which may be interested in content.
           # No need to check for duplicates in nodesWithoutContent
           # as requests are never made two times to the same node.
@@ -1028,9 +1030,11 @@ proc processContent(
       # Store content, should we recheck radius?
       p.contentDB.put(contentId, content)
 
+      info "Received valid offered content", contentKey
+
       asyncSpawn neighborhoodGossip(p, contentKeys, content)
     else:
-      error "Received invalid content", contentKey
+      error "Received invalid offered content", contentKey
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are

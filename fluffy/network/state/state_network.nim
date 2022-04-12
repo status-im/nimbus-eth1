@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,12 +7,15 @@
 
 import
   std/[options, sugar],
-  stew/results, chronos,
+  stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_distance
+
+logScope:
+  topics = "portal_state"
 
 const
   stateProtocolId* = [byte 0x50, 0x0A]
@@ -75,7 +78,7 @@ proc new*(
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
 proc start*(n: StateNetwork) =
-  info "Starting Portal state sub-network",
+  info "Starting Portal execution state network",
     protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
