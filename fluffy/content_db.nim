@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -45,8 +45,8 @@ type
     vacStmt: SqliteStmt[NoParams, void]
     getAll: SqliteStmt[NoParams, RowInfo]
 
-# we want objects to be sorted from largest distance to closests
-proc `<`(a, b: ObjInfo): bool = 
+# Objects must be sorted from largest to closest distance
+proc `<`(a, b: ObjInfo): bool =
   return a.distFrom < b.distFrom
 
 template expectDb(x: auto): untyped =
@@ -72,28 +72,30 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
 
   let kvStore = kvStore db.openKvStore().expectDb()
 
-  # this need to go after `openKvStore`, as it checks that the table name kvstore
-  # already exists.
+  # This needs to go after `openKvStore`, as it checks whether the table name
+  # kvstore already exists.
   let getKeysStmt = db.prepareStmt(
     "SELECT key, length(value) FROM kvstore",
     NoParams, RowInfo
   ).get()
 
-  ContentDB(kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
+  ContentDB(
+    kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
 
-proc getNFurthestElements*(db: ContentDB, target: UInt256, n: uint64): seq[ObjInfo] =
-  ## Get at most n furthest elements from database in order from furthest to closest.
-  ## We are also returning payload lengths so caller can decide how many of those elements
-  ## need to be deleted.
-  ## 
+proc getNFurthestElements*(
+    db: ContentDB, target: UInt256, n: uint64): seq[ObjInfo] =
+  ## Get at most n furthest elements from db in order from furthest to closest.
+  ## Payload lengths are also returned so the caller can decide how many of
+  ## those elements need to be deleted.
+  ##
   ## Currently it uses xor metric
-  ## 
-  ## Currently works by querying for all elements in database and doing all necessary 
-  ## work on program level. This is mainly due to two facts:
+  ##
+  ## Currently works by querying for all elements in database and doing all
+  ## necessary work on program level. This is mainly due to two facts:
   ## - sqlite does not have build xor function, also it does not handle bitwise
   ## operations on blobs as expected
   ## - our nim wrapper for sqlite does not support create_function api of sqlite
-  ## so we cannot create custom function comparing blobs at sql level. If that 
+  ## so we cannot create custom function comparing blobs at sql level. If that
   ## would be possible we may be able to all this work by one sql query
 
   if n == 0:
@@ -104,11 +106,13 @@ proc getNFurthestElements*(db: ContentDB, target: UInt256, n: uint64): seq[ObjIn
   var ri: RowInfo
   for e in db.getAll.exec(ri):
     let contentId = UInt256.fromBytesBE(ri.contentId)
-    # TODO: Currently it assumes xor distance, but when we start testing networks with
-    # other distance functions this needs to be adjusted to the custom distance function
+    # TODO: Currently it assumes xor distance, but when we start testing
+    # networks with other distance functions this needs to be adjusted to the
+    # custom distance function
     let dist = contentId xor target
-    let obj = ObjInfo(contentId: ri.contentId, payloadLength: ri.payloadLength, distFrom: dist)
-    
+    let obj = ObjInfo(
+      contentId: ri.contentId, payloadLength: ri.payloadLength, distFrom: dist)
+
     if (uint64(len(heap)) < n):
       heap.push(obj)
     else:
@@ -125,10 +129,11 @@ proc getNFurthestElements*(db: ContentDB, target: UInt256, n: uint64): seq[ObjIn
   return res
 
 proc reclaimSpace*(db: ContentDB): void =
-  ## Runs sqlie VACUMM commands which rebuilds db, repacking it into a minimal amount of disk space
+  ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
+  ## minimal amount of disk space.
   ## Ideal mode of operation, is to run it after several deletes.
-  ## Another options would be to run 'PRAGMA auto_vacuum = FULL;' statement at the start of 
-  ## db to leave it in sqlite power to clean up
+  ## Another options would be to run 'PRAGMA auto_vacuum = FULL;' statement at
+  ## the start of db to leave it up to sqlite to clean up
   db.vacStmt.exec().expectDb()
 
 proc size*(db: ContentDB): int64 =

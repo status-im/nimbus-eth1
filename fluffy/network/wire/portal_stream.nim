@@ -18,6 +18,9 @@ import
 
 export utp_discv5_protocol
 
+logScope:
+  topics = "portal_stream"
+
 const
   utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
@@ -129,27 +132,30 @@ proc addContentRequest*(
   return connectionId
 
 proc connectTo*(
-  stream: PortalStream,
-  nodeAddress: NodeAddress,
-  connectionId: uint16): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
+    stream: PortalStream,
+    nodeAddress: NodeAddress,
+    connectionId: uint16):
+    Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
   let socketRes = await stream.transport.connectTo(nodeAddress, connectionId)
 
   if socketRes.isErr():
     case socketRes.error.kind
     of SocketAlreadyExists:
-      # This error means that there is already socket to this nodeAddress with given
-      # connection id, in our use case it most probably means that other side sent us
-      # connection id which is already used.
-      # For now we just fail connection and return an error. Another strategy to consider
-      # would be to check what is the connection status, and then re-use it, or
-      # close it and retry connection.
-      let msg = "Socket to " & $nodeAddress & "with connection id: " & $connectionId & " already exists"
+      # This means that there is already a socket to this nodeAddress with given
+      # connection id. It probably means that a peersent us a connection id
+      # which is already in use..
+      # For now just fail the connection and return an error. Another strategy
+      # to consider would be to check what is the connection status, and then
+      # re-use it, or close it and retry connection.
+      let msg = "Socket to " & $nodeAddress & "with connection id: " &
+        $connectionId & " already exists"
       return err(msg)
     of ConnectionTimedOut:
-      # Another strategy for handling this error would be to retry connecting a few times
-      # before giving up. But we know (as we control the uTP impl) that this error will only
-      # be returned when a SYN packet was re-sent 3 times and failed to be acked. This
-      # should be enough for us to known that the remote host is not reachable.
+      # Another strategy for handling this error would be to retry connecting a
+      # few times before giving up. But we know (as we control the uTP impl)
+      # that this error will only occur when a SYN packet was re-sent 3 times
+      # and failed to be acked. This should be enough of indication that the
+      # remote host is not reachable.
       let msg = "uTP timeout while trying to connect to " & $nodeAddress
       return err(msg)
 
@@ -180,8 +186,8 @@ proc readAndClose(
     if not stream.contentHandler.isNil():
       stream.contentHandler(stream, offer.contentKeys, content)
 
-    # Destroy socket and not closing as we already received. Closing would send
-    # also a FIN from our side, see also:
+    # Destroy socket and not closing as we already received FIN. Closing would
+    # send also a FIN from our side, see also:
     # https://github.com/status-im/nim-eth/blob/b2dab4be0839c95ca2564df9eacf81995bf57802/eth/utp/utp_socket.nim#L1223
     await socket.destroyWait()
   else:

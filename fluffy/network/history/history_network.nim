@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,13 +9,16 @@
 
 import
   std/[options, sugar],
-  stew/results, chronos,
+  stew/results, chronos, chronicles,
   eth/[common/eth_types, rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../../../nimbus/utils,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./history_content
+
+logScope:
+  topics = "portal_hist"
 
 const
   historyProtocolId* = [byte 0x50, 0x0B]
@@ -121,11 +124,13 @@ proc getBlockHeader*(
   let maybeHeaderFromDb = h.getContentFromDb(BlockHeader, contentId)
 
   if maybeHeaderFromDb.isSome():
+    info "Fetched block header from database", hash
     return maybeHeaderFromDb
 
   let maybeHeaderContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if maybeHeaderContent.isNone():
+    warn "Failed fetching block header from the network", hash
     return none(BlockHeader)
 
   let headerContent = maybeHeaderContent.unsafeGet()
@@ -133,6 +138,7 @@ proc getBlockHeader*(
   let maybeHeader = validateHeaderBytes(headerContent.content, hash)
 
   if maybeHeader.isSome():
+    info "Fetched block header from the network", hash
     # Content is valid we can propagate it to interested peers
     h.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent,
@@ -163,11 +169,13 @@ proc getBlock*(
   let maybeBodyFromDb = h.getContentFromDb(BlockBody, contentId)
 
   if maybeBodyFromDb.isSome():
+    info "Fetched block body from database", hash
     return some[Block]((header, maybeBodyFromDb.unsafeGet()))
 
   let maybeBodyContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if maybeBodyContent.isNone():
+    warn "Failed fetching block body from the network", hash
     return none(Block)
 
   let bodyContent = maybeBodyContent.unsafeGet()
@@ -175,6 +183,7 @@ proc getBlock*(
   let maybeBody = validateBodyBytes(bodyContent.content, header.txRoot, header.ommersHash)
 
   if maybeBody.isNone():
+    info "Fetched block body from the network", hash
     return none(Block)
 
   let blockBody = maybeBody.unsafeGet()
@@ -226,7 +235,7 @@ proc new*(
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
 proc start*(p: HistoryNetwork) =
-  info "Starting Portal history sub-network",
+  info "Starting Portal execution history network",
     protocolId = p.portalProtocol.protocolId
   p.portalProtocol.start()
 
