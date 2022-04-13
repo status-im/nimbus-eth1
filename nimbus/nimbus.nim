@@ -56,6 +56,8 @@ type
     ctx: EthContext
     chainRef: Chain
     txPool: TxPoolRef
+    syncLoop: Future[SyncStatus]
+    networkLoop: Future[void]
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -140,7 +142,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
-    waitFor nimbus.ethNode.connectToNetwork(
+    nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
@@ -235,46 +237,47 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
       ok(rawSign)
 
-    # TODO: There should be a better place to initialize this
     nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
-    var initialState = EngineStopped
-    if chainDB.totalDifficulty > chainDB.ttd:
-       initialState = EnginePostMerge
-    nimbus.sealingEngine = SealingEngineRef.new(
-      nimbus.chainRef, nimbus.ctx, conf.engineSigner,
-      nimbus.txPool, initialState
-    )
+
+  # always create sealing engine instanca but not always run it
+  # e.g. engine api need sealing engine without it running
+  var initialState = EngineStopped
+  if chainDB.totalDifficulty > chainDB.ttd:
+     initialState = EnginePostMerge
+  nimbus.sealingEngine = SealingEngineRef.new(
+    nimbus.chainRef, nimbus.ctx, conf.engineSigner,
+    nimbus.txPool, initialState
+  )
+
+  # only run sealing engine if there is a signer
+  if conf.engineSigner != ZERO_ADDRESS:
     nimbus.sealingEngine.start()
 
-    if conf.engineApiEnabled:
-      if conf.engineApiPort != conf.rpcPort:
-        nimbus.engineApiServer = newRpcHttpServer([
-          initTAddress(conf.engineApiAddress, conf.engineApiPort)
-        ])
-        setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
-        setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
-        nimbus.engineApiServer.start()
-      else:
-        setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer)
+  if conf.engineApiEnabled:
+    if conf.engineApiPort != conf.rpcPort:
+      nimbus.engineApiServer = newRpcHttpServer([
+        initTAddress(conf.engineApiAddress, conf.engineApiPort)
+      ])
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
+      nimbus.engineApiServer.start()
+    else:
+      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer)
 
-      info "Starting engine API server", port = conf.engineApiPort
+    info "Starting engine API server", port = conf.engineApiPort
 
-    if conf.engineApiWsEnabled:
-      if conf.engineApiWsPort != conf.wsPort:
-        nimbus.engineApiWsServer = newRpcWebSocketServer(
-          initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
-          authHandler = jwtHook)
-        setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
-        setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
-        nimbus.engineApiWsServer.start()
-      else:
-        setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
+  if conf.engineApiWsEnabled:
+    if conf.engineApiWsPort != conf.wsPort:
+      nimbus.engineApiWsServer = newRpcWebSocketServer(
+        initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
+        authHandler = jwtHook)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
+      nimbus.engineApiWsServer.start()
+    else:
+      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
 
-      info "Starting WebSocket engine API server", port = conf.engineApiWsPort
-  else:
-    if conf.engineApiEnabled or conf.engineApiWsEnabled:
-      warn "Cannot enable engine API without sealing engine",
-        hint = "use --engine-signer to enable sealing engine"
+    info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 
   # metrics server
   if conf.metricsEnabled:
@@ -315,11 +318,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, chainDB, protocols)
     localServices(nimbus, conf, chainDB, protocols)
 
-    if ProtocolFlag.Eth in protocols:
-      # TODO: temp code until the CLI/RPC interface is fleshed out
-      let status = waitFor nimbus.ethNode.fastBlockchainSync()
-      if status != syncSuccess:
-        debug "Block sync failed: ", status
+    if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
+      nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C
