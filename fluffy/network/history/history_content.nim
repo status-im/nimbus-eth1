@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@
 
 import
   std/options,
-  nimcrypto/[sha2, hash], stew/objects, stint,
+  nimcrypto/[sha2, hash], stew/byteutils, stint,
   ssz_serialization,
   ../../common/common_types
 
@@ -53,3 +53,20 @@ func toContentId*(contentKey: ByteList): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
+
+func `$`*(x: BlockHash): string =
+  "0x" & x.data.toHex()
+
+func `$`*(x: ContentKey): string =
+  let key =
+    case x.contentType:
+    of blockHeader:
+      x.blockHeaderKey
+    of blockBody:
+      x.blockBodyKey
+    of receipts:
+      x.receiptsKey
+
+  "(contentType: " & $x.contentType &
+    ", blockHash: " & $key.blockHash &
+    ", chainId: " & $key.chainId & ")"

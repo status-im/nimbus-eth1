@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -60,7 +60,8 @@ proc getPersistentNetKey*(
 
     let readResult = readAllChars(keyFilePath)
     if readResult.isErr():
-      fatal "Could not load network key file", error = readResult.error
+      fatal "Could not load network key file",
+        error = ioErrorMsg(readResult.error)
       quit QuitFailure
 
     let netKeyInHex = readResult.get()
@@ -80,9 +81,9 @@ proc getPersistentNetKey*(
     info "Network key file is missing, creating a new one"
     let key = PrivateKey.random(rng)
 
-    let writeResult = io2.writeFile(keyFilePath, $key)
-    if writeResult.isErr:
-      fatal "Failed to write the network key file", errno = writeResult.error
+    if (let res = io2.writeFile(keyFilePath, $key); res.isErr):
+      fatal "Failed to write the network key file",
+        error = ioErrorMsg(res.error)
       quit 1
 
     info "New network key file was created"

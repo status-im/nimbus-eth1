@@ -156,6 +156,7 @@ proc propagateHistoryDb*(
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
       for value in b:
+        info "Seeding block content into the network", contentKey = value[0]
         # Note: This is the slowest part due to the hashing that takes place.
         let contentId = history_content.toContentId(value[0])
         if p.inRange(contentId):
@@ -190,6 +191,7 @@ proc propagateBlockHistoryDb*(
     let blockData = blockDataRes.get()
 
     for value in blockData:
+      info "Seeding block content into the network", contentKey = value[0]
       let contentId = history_content.toContentId(value[0])
       if p.inRange(contentId):
         p.contentDB.put(contentId, value[1])
