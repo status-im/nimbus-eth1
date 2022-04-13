@@ -9,9 +9,9 @@ RUN apt-get update \
 
 ENV NPROC=2
 
-RUN git clone --depth 1 https://github.com/status-im/nimbus-eth1.git \
+RUN git clone --depth 1 --branch non_blocking_startup https://github.com/status-im/nimbus-eth1.git \
  && cd nimbus-eth1 \
- && git checkout master \
+ && git checkout non_blocking_startup \
  && make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" V=1 update
 
 RUN cd nimbus-eth1 && \
@@ -31,12 +31,19 @@ RUN apt-get update \
 COPY --from=build /usr/bin/nimbus /usr/bin/nimbus
 RUN usr/bin/nimbus --version > /version.txt
 
-# Inject the startup script and helper files
-COPY *.sh *.jq *.json /
+# Add genesis mapper script.
+ADD genesis.json /genesis.json
+ADD mapper.jq /mapper.jq
+
+# Add the startup script.
+ADD nimbus.sh /nimbus.sh
 RUN chmod +x /nimbus.sh
-RUN chmod +x /enode.sh
+
+# Add the enode URL retriever script.
+ADD enode.sh /hive-bin/enode.sh
+RUN chmod +x /hive-bin/enode.sh
 
 # Export the usual networking ports to allow outside access to the node
-EXPOSE 8545 8546 8547 30303 30303/udp
+EXPOSE 8545 8546 8547 8551 30303 30303/udp
 
 ENTRYPOINT ["/nimbus.sh"]

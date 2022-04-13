@@ -28,10 +28,9 @@
 #  - [x] HIVE_FORK_CONSTANTINOPLE     block number for Constantinople transition
 #  - [x] HIVE_FORK_PETERSBURG         block number for ConstantinopleFix/PetersBurg transition
 #  - [x] HIVE_FORK_ISTANBUL           block number for Istanbul transition
-#  - [x] HIVE_FORK_MUIR_GLACIER       block number for Muir Glacier transition
+#  - [x] HIVE_FORK_MUIRGLACIER        block number for Muir Glacier transition
 #  - [x] HIVE_FORK_BERLIN             block number for Berlin transition
 #  - [x] HIVE_FORK_LONDON             block number for London transition
-#  - [x] HIVE_FORK_ARROW_GLACIER      block number for Arrow Glacier transition
 #
 # Clique PoA:
 #
@@ -69,10 +68,10 @@ if [ "$HIVE_CLIQUE_PRIVATEKEY" != "" ]; then
 # -n will prevent newline when echoing something
   echo -n "$HIVE_CLIQUE_PRIVATEKEY" > private.key
   FLAGS="$FLAGS --import-key:private.key"
-fi
 
-if [ "$HIVE_MINER" != "" ]; then
-  FLAGS="$FLAGS --engine-signer:$HIVE_MINER"
+  if [ "$HIVE_MINER" != "" ]; then
+    FLAGS="$FLAGS --engine-signer:$HIVE_MINER"
+  fi
 fi
 
 # Configure the genesis chain and use it as start block and dump it to stdout
@@ -109,6 +108,7 @@ if [ "$HIVE_GRAPHQL_ENABLED" != "" ]; then
 else
   FLAGS="$FLAGS --rpc --rpc-api:eth,debug --rpc-address:0.0.0.0 --rpc-port:8545"
   FLAGS="$FLAGS --ws --ws-api:eth,debug --ws-address:0.0.0.0 --ws-port:8546"
+  FLAGS="$FLAGS --engine-api:true --engine-api-address:0.0.0.0 --engine-api-port:8551"
 fi
 
 echo "Running nimbus with flags $FLAGS"
