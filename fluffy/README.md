@@ -109,6 +109,22 @@ Find more details on the usage and workings of the local testnet script
 
 Follow the steps outlined [here](../README.md#windows) to build fluffy on Windows.
 
+## Metrics and their visualisation
+
+To enable metrics run Fluffy with the `--metrics` flag:
+```bash
+./build/fluffy --metrics
+```
+Default the metrics are available at http://127.0.0.1:8008/metrics.
+
+The address can be changed with the `--metrics-address` and `--metrics-port` options.
+
+This provides only a snapshot of the current metrics. In order track the metrics over
+time and to also visualise them one can use for example Prometheus and Grafana.
+
+The steps on how to set up such system is explained in [this guide](https://nimbus.guide/metrics-pretty-pictures.html#prometheus-and-grafana).
+
+A Fluffy specific dashboard can be found [here](./grafana/fluffy_grafana_dashboard.json).
 
 ## For Developers
 
