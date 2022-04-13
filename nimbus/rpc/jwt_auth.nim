@@ -174,11 +174,14 @@ proc fromHex*(key: var JwtSharedkey, src: string): Result[void,JwtError] =
   ## This function is supposed to read and convert data in constant-time
   ## fashion, guarding against side channel attacks.
   # utils.fromHex() does the constant-time job
-  let secret = utils.fromHex(src)
-  if secret.len < jwtMinSecretLen:
-    return err(jwtKeyTooSmall)
-  key = toArray(JwtSharedKeyRaw.len, secret).JwtSharedKey
-  ok()
+  try:
+    let secret = utils.fromHex(src)
+    if secret.len < jwtMinSecretLen:
+      return err(jwtKeyTooSmall)
+    key = toArray(JwtSharedKeyRaw.len, secret).JwtSharedKey
+    ok()
+  except ValueError:
+    err(jwtKeyInvalidHexString)
 
 proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
   ## Standard shared key random generator. If a fixed key is needed, a
