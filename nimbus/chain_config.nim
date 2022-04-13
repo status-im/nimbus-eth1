@@ -213,8 +213,8 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
     cc.config.clique.epoch.isSome:
     cg.config.poaEngine = true
 
-  if cc.config.clique.period.isSome:
-    cg.config.cliquePeriod = cc.config.clique.period.get()
+  # set default clique period to 1 second.
+  cg.config.cliquePeriod = cc.config.clique.period.get(1)
 
   if cc.config.clique.epoch.isSome:
     cg.config.cliqueEpoch = cc.config.clique.epoch.get()
