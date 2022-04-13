@@ -655,6 +655,20 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
   if acceptMessageResponse.isOk():
     let m = acceptMessageResponse.get()
+
+    let contentKeysLen =
+      case o.kind
+      of Direct:
+        o.contentList.len()
+      of Database:
+        o.contentKeys.len()
+
+    if m.contentKeys.len() != contentKeysLen:
+      # TODO:
+      # When there is such system, the peer should get scored negatively here.
+      error "Accepted content key bitlist has invalid size"
+      return err("Accepted content key bitlist has invalid size")
+
     let acceptedKeysAmount = m.contentKeys.countOnes()
     portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
     if acceptedKeysAmount == 0:
@@ -1003,7 +1017,8 @@ proc neighborhoodGossip*(
   # in data getting propagated in a wider id range.
   let closestNodes = await p.lookup(NodeId(contentId))
 
-  for node in closestNodes[0..7]: # selecting closest 8 nodes
+  # Selecting closest 8 nodes to offer data
+  for node in closestNodes[0..<min(closestNodes.len, 8)]:
     # Note: opportunistically not checking if the radius of the node is known
     # and thus if the node is in radius with the content.
     let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
