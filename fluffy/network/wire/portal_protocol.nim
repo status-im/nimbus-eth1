@@ -590,7 +590,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
 
       if connectionResult.isErr():
         debug "Utp connection error while trying to find content",
-          msg = connectionResult.error
+          error = connectionResult.error
         return err("Error connecting uTP socket")
 
       let socket = connectionResult.get()
@@ -677,7 +677,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
     if connectionResult.isErr():
       debug "Utp connection error while trying to offer content",
-        msg = connectionResult.error
+        error = connectionResult.error
       return err("Error connecting uTP socket")
 
     let clientSocket = connectionResult.get()
