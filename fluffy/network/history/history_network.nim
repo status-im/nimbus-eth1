@@ -148,7 +148,12 @@ proc getBlockHeader*(
 
     if h.portalProtocol.inRange(contentId):
       # content is valid and in our range, save it into our db
-      h.contentDB.put(contentId, headerContent.content)
+      # TODO handle radius adjustments
+      discard h.contentDB.putAndPrune(
+                contentId, 
+                headerContent.content,
+                h.portalProtocol.localNode.id
+              )
 
   return maybeHeader
 
@@ -198,7 +203,11 @@ proc getBlock*(
 
   # content is in range and valid, put into db
   if h.portalProtocol.inRange(contentId):
-    h.contentDB.put(contentId, bodyContent.content)
+    # TODO handle radius adjustments
+    discard h.contentDB.putAndPrune(
+              contentId, bodyContent.content,
+              h.portalProtocol.localNode.id
+            )
 
   return some[Block]((header, blockBody))
 

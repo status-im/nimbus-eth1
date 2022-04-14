@@ -100,7 +100,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let
     radius = UInt256.fromLogRadius(config.logRadius)
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
-      d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
+      d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
 
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
@@ -180,7 +180,7 @@ when isMainModule:
     run(config)
   of PortalCmd.populateHistoryDb:
     let
-      db = ContentDB.new(config.dbDir.string)
+      db = ContentDB.new(config.dbDir.string, config.storageSize)
       res = populateHistoryDb(db, config.dataFile.string)
     if res.isErr():
       fatal "Failed populating the history content db", error = $res.error

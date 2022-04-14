@@ -49,8 +49,8 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     node2 = initDiscoveryNode(
       rng, PrivateKey.random(rng[]), localAddress(20303))
 
-    db1 = ContentDB.new("", inMemory = true)
-    db2 = ContentDB.new("", inMemory = true)
+    db1 = ContentDB.new("", uint32.high, inMemory = true)
+    db2 = ContentDB.new("", uint32.high, inMemory = true)
 
     proto1 =
       PortalProtocol.new(node1, protocolId, db1, testHandler, validateContent)
@@ -207,9 +207,9 @@ procSuite "Portal Wire Protocol Tests":
         node3 = initDiscoveryNode(
           rng, PrivateKey.random(rng[]), localAddress(20304))
 
-        db1 = ContentDB.new("", inMemory = true)
-        db2 = ContentDB.new("", inMemory = true)
-        db3 = ContentDB.new("", inMemory = true)
+        db1 = ContentDB.new("", uint32.high, inMemory = true)
+        db2 = ContentDB.new("", uint32.high, inMemory = true)
+        db3 = ContentDB.new("", uint32.high, inMemory = true)
 
         proto1 = PortalProtocol.new(
           node1, protocolId, db1, testHandler, validateContent)
@@ -243,9 +243,9 @@ procSuite "Portal Wire Protocol Tests":
       node3 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
-      db1 = ContentDB.new("", inMemory = true)
-      db2 = ContentDB.new("", inMemory = true)
-      db3 = ContentDB.new("", inMemory = true)
+      db1 = ContentDB.new("", uint32.high, inMemory = true)
+      db2 = ContentDB.new("", uint32.high, inMemory = true)
+      db3 = ContentDB.new("", uint32.high, inMemory = true)
 
       proto1 = PortalProtocol.new(
         node1, protocolId, db1, testHandlerSha256, validateContent)
@@ -291,8 +291,8 @@ procSuite "Portal Wire Protocol Tests":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      db1 = ContentDB.new("", inMemory = true)
-      db2 = ContentDB.new("", inMemory = true)
+      db1 = ContentDB.new("", uint32.high, inMemory = true)
+      db2 = ContentDB.new("", uint32.high, inMemory = true)
 
       proto1 = PortalProtocol.new(
         node1, protocolId, db1, testHandler, validateContent)
@@ -317,7 +317,7 @@ procSuite "Portal Wire Protocol Tests":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      db = ContentDB.new("", inMemory = true)
+      db = ContentDB.new("", uint32.high, inMemory = true)
       # No portal protocol for node1, hence an invalid bootstrap node
       proto2 = PortalProtocol.new(node2, protocolId, db, testHandler,
         validateContent, bootstrapRecords = [node1.localNode.record])

@@ -41,9 +41,21 @@ type
 
   ContentDB* = ref object
     kv: KvStoreRef
+    maxSize: uint32
     sizeStmt: SqliteStmt[NoParams, int64]
     vacStmt: SqliteStmt[NoParams, void]
     getAll: SqliteStmt[NoParams, RowInfo]
+
+  PutResultType* = enum
+    ContentStored, DbPruned
+
+  PutResult* = object
+    case kind*: PutResultType
+    of ContentStored:
+      discard
+    of DbPruned:
+      furthestStoredElementDistance*: UInt256
+      fractionOfDeletedContent*: float64
 
 # Objects must be sorted from largest to closest distance
 proc `<`(a, b: ObjInfo): bool =
@@ -54,7 +66,7 @@ template expectDb(x: auto): untyped =
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
 
-proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
+proc new*(T: type ContentDB, path: string, maxSize: uint32, inMemory = false): ContentDB =
   let db =
     if inMemory:
       SqStoreRef.init("", "fluffy-test", inMemory = true).expect(
@@ -80,10 +92,10 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
   ).get()
 
   ContentDB(
-    kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
+    kv: kvStore, maxSize: maxSize, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
 
 proc getNFurthestElements*(
-    db: ContentDB, target: UInt256, n: uint64): seq[ObjInfo] =
+    db: ContentDB, target: UInt256, n: uint64): (seq[ObjInfo], int64) =
   ## Get at most n furthest elements from db in order from furthest to closest.
   ## Payload lengths are also returned so the caller can decide how many of
   ## those elements need to be deleted.
@@ -99,9 +111,10 @@ proc getNFurthestElements*(
   ## would be possible we may be able to all this work by one sql query
 
   if n == 0:
-    return newSeq[ObjInfo]()
+    return (newSeq[ObjInfo](), 0'i64)
 
   var heap = initHeapQueue[ObjInfo]()
+  var totalContentSize: int64 = 0
 
   var ri: RowInfo
   for e in db.getAll.exec(ri):
@@ -118,6 +131,8 @@ proc getNFurthestElements*(
     else:
       if obj > heap[0]:
         discard heap.replace(obj)
+    
+    totalContentSize = totalContentSize + ri.payloadLength
 
   var res: seq[ObjInfo] = newSeq[ObjInfo](heap.len())
 
@@ -126,7 +141,7 @@ proc getNFurthestElements*(
     res[i] = heap.pop()
     dec i
 
-  return res
+  return (res, totalContentSize)
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
@@ -187,3 +202,44 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
+
+proc deleteNelemsNoMoreThan(
+  db: ContentDB, 
+  target: Uint256,
+  n: uint64,
+  maxPercentegeOfDeletedContent: float64): (UInt256, float64) = 
+  ## Procedure deletes n elements from database but no more than 
+  ## maxPercentegeOfDeletedContent percent of total stored content
+  ## it return further non deleted element distance, and fraction of content
+  ## deleted
+
+  var bytesDeleted: int64 = 0
+  let (furthestElements, totalContentSize) = db.getNFurthestElements(target, n)
+  let maxDeletedBytes = int64(maxPercentegeOfDeletedContent * float64(totalContentSize))
+  for elem in furthestElements:
+    if bytesDeleted + elem.payloadLength <= maxDeletedBytes:
+      db.del(elem.contentId)
+      bytesDeleted = bytesDeleted + elem.payloadLength
+    else:
+      let deltedFraction = float64(bytesDeleted) / float64(totalContentSize)
+      db.reclaimSpace()
+      return (elem.distFrom, deltedFraction)
+
+proc putAndPrune*(
+  db: ContentDB, 
+  key: ContentId, 
+  value: openArray[byte],
+  target: UInt256): PutResult = 
+  db.put(key, value)
+  let dbSize = db.size()
+  
+  if dbSize < int64(db.maxSize):
+    return PutResult(kind: ContentStored)
+  else:
+    # TODO maybe caller should decide how many elements should be deleted and what
+    # fraction of content should be left ?
+    let (furthestNonDeletedElement, deletedFraction) = db.deleteNelemsNoMoreThan(target, 100000, 0.25)
+    return PutResult(
+      kind: DbPruned,
+      furthestStoredElementDistance: furthestNonDeletedElement,
+      fractionOfDeletedContent: deletedFraction)
