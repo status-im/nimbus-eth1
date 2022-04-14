@@ -24,7 +24,10 @@ const
 
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
-
+  # 100mb seems a bit smallish we may consider increasing defaults after some
+  # network measurements
+  defaultStorageSize* = uint32(1000 * 1000 * 100)
+  
 type
   PortalCmd* = enum
     noCommand
