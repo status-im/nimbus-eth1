@@ -183,8 +183,9 @@ proc getBlock*(
   let maybeBody = validateBodyBytes(bodyContent.content, header.txRoot, header.ommersHash)
 
   if maybeBody.isNone():
-    info "Fetched block body from the network", hash
     return none(Block)
+
+  info "Fetched block body from the network", hash
 
   let blockBody = maybeBody.unsafeGet()
 
