@@ -600,6 +600,11 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
       # validation is required, using a length prefix here might be beneficial for
       # this.
       let readData = socket.read()
+      readData.cancelCallback = proc(udate: pointer) {.gcsafe.} =
+        # In case this `findContent` gets cancelled while reading the data,
+        # send a FIN and clean up the socket.
+        socket.close()
+
       if await readData.withTimeout(p.stream.readTimeout):
         let content = readData.read
         await socket.destroyWait()
@@ -930,7 +935,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
               closestNodes.del(closestNodes.high())
 
       of Content:
-        # cancel any pending queries as we have find the content
+        # cancel any pending queries as the content has been found
         for f in pendingQueries:
           f.cancel()
         portal_lookup_content_requests.observe(requestAmount)
