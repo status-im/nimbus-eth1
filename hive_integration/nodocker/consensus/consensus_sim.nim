@@ -8,44 +8,54 @@
 # those terms.
 
 import
-  std/[os, strformat, json],
-  eth/[common, trie/db], stew/byteutils,
+  std/[os, json, strutils, times],
+  eth/[common, trie/db, p2p], stew/byteutils,
   ../../../nimbus/db/db_chain,
-  ../../../nimbus/[genesis, config, conf_utils],
-  ../sim_utils
+  ../../../nimbus/[genesis, chain_config, conf_utils],
+  ../sim_utils,
+  ./extract_consensus_data
 
-proc processNode(genesisFile, chainFile,
-                 lastBlockHash: string, testStatusIMPL: var TestStatus) =
+proc processChainData(cd: ChainData): TestStatus =
+  var np: NetworkParams
+  doAssert decodeNetworkParams(cd.genesis, np)
 
   let
-    conf = makeConfig(@["--custom-network:" & genesisFile])
+    networkId = NetworkId(np.config.chainId)
     chainDB = newBaseChainDB(newMemoryDB(),
       pruneTrie = false,
-      conf.networkId,
-      conf.networkParams
+      networkId,
+      np
     )
 
   initializeEmptyDb(chainDB)
-  discard importRlpBlock(chainFile, chainDB)
+  discard importRlpBlock(cd.blocksRlp, chainDB, "consensus_sim")
   let head = chainDB.getCanonicalHead()
   let blockHash = "0x" & head.blockHash.data.toHex
-  check blockHash == lastBlockHash
+  if blockHash == cd.lastBlockHash:
+    TestStatus.OK
+  else:
+    TestStatus.Failed
 
 proc main() =
-  let caseFolder = if paramCount() == 0:
-                     "consensus_data"
-                   else:
-                     paramStr(1)
+  const basePath = "tests" / "fixtures" / "eth_tests" / "BlockchainTests"
+  var stat: SimStat
+  let start = getTime()
 
-  if not caseFolder.dirExists:
-    # Handy early error message and stop directive
-    let progname = getAppFilename().extractFilename
-    quit(&"*** {progname}: Not a case folder: {caseFolder}")
+  for fileName in walkDirRec(basePath):
+    if not fileName.endsWith(".json"):
+      continue
 
-  runTest("Consensus", caseFolder):
-    # Variable `fileName` is injected by `runTest()`
-    let node = parseFile(fileName)
-    processNode(fileName, node["chainfile"].getStr,
-      node["lastblockhash"].getStr, testStatusIMPL)
+    let n = json.parseFile(fileName)
+    for name, unit in n:
+      if "loopMul" in name:
+        inc stat.skipped
+        continue
+
+      let cd = extractChainData(unit)
+      let status = processChainData(cd)
+      stat.inc(name, status)
+
+  let elpd = getTime() - start
+  print(stat, elpd, "consensus")
 
 main()

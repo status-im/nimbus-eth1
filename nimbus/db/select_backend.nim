@@ -7,6 +7,7 @@ export kvstore
 # be reconsidered when making more changes here.
 
 type DbBackend = enum
+  none,
   sqlite,
   rocksdb,
   lmdb
@@ -55,5 +56,8 @@ elif dbBackend == lmdb:
   #      https://github.com/status-im/nim-beacon-chain/pull/809
 
   {.error: "lmdb deprecated, needs reimplementing".}
+elif dbBackend == none:
+  discard
 
-export database_backend
+when dbBackend != none:
+  export database_backend

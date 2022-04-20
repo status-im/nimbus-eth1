@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, json],
+  std/[os, json, times],
   eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
   ../../../nimbus/sync/protocol_ethxx,
   ../../../nimbus/[genesis, config, conf_utils, context],
@@ -22,7 +22,11 @@ const
   genesisFile = baseFolder / "init" / "genesis.json"
   caseFolder  = baseFolder / "testcases"
 
-proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIMPL: var TestStatus) =
+template testCond(expr: untyped) =
+  if not (expr):
+    result = TestStatus.Failed
+    
+proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string): TestStatus =
   let request = node["request"]
   let responses = node["responses"]
   let statusCode = node["statusCode"].getInt()
@@ -30,11 +34,12 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIM
   let savePoint = ctx.getNameCounter()
   let res = ctx.parseQuery(request.getStr())
 
+  result = TestStatus.OK
   block:
     if res.isErr:
       if statusCode == 200:
         debugEcho res.error
-      check statusCode != 200
+      testCond statusCode != 200
       break
 
     let resp = JsonRespStream.new()
@@ -42,11 +47,11 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIM
     if r.isErr:
       if statusCode == 200:
         debugEcho r.error
-      check statusCode != 200
+      testCond statusCode != 200
       break
 
-    check statusCode == 200
-    check r.isOk
+    testCond statusCode == 200
+    testCond r.isOk
 
     let nimbus = resp.getString()
     var resultOK = false
@@ -56,7 +61,7 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIM
         resultOK = true
         break
 
-    check resultOK
+    testCond resultOK
     if not resultOK:
       debugEcho "NIMBUS RESULT: ", nimbus
       for x in responses:
@@ -83,8 +88,19 @@ proc main() =
   discard importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
 
-  runTest("GraphQL", caseFolder):
+  var stat: SimStat
+  let start = getTime()
+  for fileName {.inject.} in walkDirRec(
+                 caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
+    if not fileName.endsWith(".json"):
+      continue
+
+    let (folder, name) = fileName.splitPath()
     let node = parseFile(fileName)
-    ctx.processNode(node, fileName, testStatusIMPL)
+    let status = ctx.processNode(node, fileName)
+    stat.inc(name, status)
+
+  let elpd = getTime() - start
+  print(stat, elpd, "graphql")
 
 main()

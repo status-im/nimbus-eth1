@@ -8,18 +8,19 @@
 # those terms.
 
 import
-  std/os, asynctest,
+  std/[os, times],
   eth/[trie/db],
-  eth/p2p as ethP2p,
+  eth/p2p as ethp2p,
   stew/shims/net as stewNet,
   stew/results,
   chronos, json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/db/db_chain,
-  ../../../nimbus/p2p/protocol_ethxx,
-  ../../../nimbus/[config, context, genesis],
+  ../../../nimbus/sync/protocol_ethxx,
+  ../../../nimbus/[config, context, genesis, utils/tx_pool],
   ../../../nimbus/rpc/[common, p2p, debug],
   ../../../tests/test_helpers,
-  "."/[callsigs, ethclient, vault, client]
+  "."/[ethclient, vault, client],
+  ../sim_utils
 
 const
   initPath = "hive_integration" / "nodocker" / "rpc" / "init"
@@ -31,18 +32,22 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
       echo res.error()
       quit(QuitFailure)
 
-proc setupRpcServer(ctx: EthContext, chainDB: BaseChainDB, ethNode: EthereumNode, conf: NimbusConf): RpcServer  =
+proc setupRpcServer(ctx: EthContext, chainDB: BaseChainDB,
+                    ethNode: EthereumNode, txPool: TxPoolRef,
+                    conf: NimbusConf): RpcServer  =
   let rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, chainDB, rpcServer)
+  setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
 
   rpcServer.start()
   rpcServer
 
-proc setupWsRpcServer(ctx: EthContext, chainDB: BaseChainDB, ethNode: EthereumNode, conf: NimbusConf): RpcServer  =
+proc setupWsRpcServer(ctx: EthContext, chainDB: BaseChainDB,
+                      ethNode: EthereumNode, txPool: TxPoolRef,
+                      conf: NimbusConf): RpcServer  =
   let rpcServer = newRpcWebSocketServer(initTAddress(conf.wsAddress, conf.wsPort))
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, chainDB, rpcServer)
+  setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
 
   rpcServer.start()
   rpcServer
@@ -56,10 +61,19 @@ proc runRpcTest() =
     vault : newVault(chainID, gasPrice, client)
   )
 
-  suite "JSON RPC Test Over HTTP":
-    test "env test":
-      check await envTest(testEnv)
-  
+  var stat: SimStat
+  let start = getTime()
+  for x in testList:
+    try:
+      let status = waitFor x.run(testEnv)
+      stat.inc(x.name, status)
+    except ValueError as ex:
+      stat.inc(x.name, TestStatus.Failed)
+      echo ex.msg
+
+  let elpd = getTime() - start
+  print(stat, elpd, "rpc")
+
 proc main() =
   let conf = makeConfig(@[
     "--prune-mode:archive",
@@ -89,7 +103,9 @@ proc main() =
 
   chainDB.populateProgress()
   chainDB.initializeEmptyDb()
-  let rpcServer = setupRpcServer(ethCtx, chainDB, ethNode, conf)
+
+  let txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+  let rpcServer = setupRpcServer(ethCtx, chainDB, ethNode, txPool, conf)
   runRpcTest()
 
 main()

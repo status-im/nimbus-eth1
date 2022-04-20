@@ -14,15 +14,26 @@ import
 type
   TestSpec* = object
     name*: string
-    run*: proc(t: TestEnv, testStatusIMPL: var TestStatus)
+    run*: proc(t: TestEnv): TestStatus
     ttd*: int64
 
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
 
+template testCond(expr: untyped) =
+  if not (expr):
+    return TestStatus.Failed
+
+template testCond(expr, body: untyped) =
+  if not (expr):
+    body
+    return TestStatus.Failed
+
 # Invalid Terminal Block in ForkchoiceUpdated:
 # Client must reject ForkchoiceUpdated directives if the referenced HeadBlockHash does not meet the TTD requirement.
-proc invalidTerminalBlockForkchoiceUpdated(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc invalidTerminalBlockForkchoiceUpdated(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let
     gHash = Web3BlockHash t.gHeader.blockHash.data
     forkchoiceState = ForkchoiceStateV1(
@@ -36,28 +47,29 @@ proc invalidTerminalBlockForkchoiceUpdated(t: TestEnv, testStatusIMPL: var TestS
   # Execution specification:
   # {payloadStatus: {status: INVALID_TERMINAL_BLOCK, latestValidHash: null, validationError: errorMessage | null}, payloadId: null}
   # either obtained from the Payload validation process or as a result of validating a PoW block referenced by forkchoiceState.headBlockHash
-  check res.isOk
-
-  if res.isErr:
-    return
+  testCond res.isOk
 
   let s = res.get()
-  check s.payloadStatus.status == PayloadExecutionStatus.invalid_terminal_block
-  check s.payloadStatus.latestValidHash.isNone
-  check s.payloadId.isNone
+  testCond s.payloadStatus.status == PayloadExecutionStatus.invalid_terminal_block
+  testCond s.payloadStatus.latestValidHash.isNone
+  testCond s.payloadId.isNone
 
   # ValidationError is not validated since it can be either null or a string message
 
 # Invalid GetPayload Under PoW: Client must reject GetPayload directives under PoW.
-proc invalidGetPayloadUnderPoW(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc invalidGetPayloadUnderPoW(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # We start in PoW and try to get an invalid Payload, which should produce an error but nothing should be disrupted.
   let id = PayloadID [1.byte, 2,3,4,5,6,7,8]
   let res = t.rpcClient.getPayloadV1(id)
-  check res.isErr
+  testCond res.isErr
 
 # Invalid Terminal Block in NewPayload:
 # Client must reject NewPayload directives if the referenced ParentHash does not meet the TTD requirement.
-proc invalidTerminalBlockNewPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let gBlock = t.gHeader
   let payload = ExecutableData(
     parentHash:   gBlock.blockHash,
@@ -75,23 +87,20 @@ proc invalidTerminalBlockNewPayload(t: TestEnv, testStatusIMPL: var TestStatus) 
   # Execution specification:
   # {status: INVALID_TERMINAL_BLOCK, latestValidHash: null, validationError: errorMessage | null}
   # if terminal block conditions are not satisfied
-  check res.isOk
-  if res.isErr:
-    return
+  testCond res.isOk
 
   let s = res.get()
-  check s.status == PayloadExecutionStatus.invalid_terminal_block
-  check s.latestValidHash.isNone
+  testCond s.status == PayloadExecutionStatus.invalid_terminal_block
+  testCond s.latestValidHash.isNone
 
-proc unknownHeadBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc unknownHeadBlockHash(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-
-  if not ok:
-    return
+  testCond ok
 
   var randomHash: Hash256
-  check nimcrypto.randomBytes(randomHash.data) == 32
+  testCond nimcrypto.randomBytes(randomHash.data) == 32
 
   let clMock = t.clMock
   let forkchoiceStateUnknownHeadHash = ForkchoiceStateV1(
@@ -101,16 +110,14 @@ proc unknownHeadBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
   )
 
   var res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash)
-  check res.isOk
-  if res.isErr:
-    return
+  testCond res.isOk
 
   let s = res.get()
   # Execution specification::
   # - {payloadStatus: {status: SYNCING, latestValidHash: null, validationError: null}, payloadId: null}
   #   if forkchoiceState.headBlockHash references an unknown payload or a payload that can't be validated
   #   because requisite data for the validation is missing
-  check s.payloadStatus.status == PayloadExecutionStatus.syncing
+  testCond s.payloadStatus.status == PayloadExecutionStatus.syncing
 
   # Test again using PayloadAttributes, should also return SYNCING and no PayloadID
   let timestamp = uint64 clMock.latestExecutedPayload.timestamp
@@ -119,22 +126,19 @@ proc unknownHeadBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
   )
 
   res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceStateUnknownHeadHash, some(payloadAttr))
-  check res.isOk
-  if res.isErr:
-    return
-  check s.payloadStatus.status == PayloadExecutionStatus.syncing
-  check s.payloadId.isNone
+  testCond res.isOk
+  testCond s.payloadStatus.status == PayloadExecutionStatus.syncing
+  testCond s.payloadId.isNone
 
-proc unknownSafeBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc unknownSafeBlockHash(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -157,18 +161,17 @@ proc unknownSafeBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
       return res.isErr
   ))
 
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc unknownFinalizedBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc unknownFinalizedBlockHash(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -200,19 +203,17 @@ proc unknownFinalizedBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
       return res.isErr
   ))
 
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc preTTDFinalizedBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let
     gHash = Web3BlockHash t.gHeader.blockHash.data
@@ -229,24 +230,19 @@ proc preTTDFinalizedBlockHash(t: TestEnv, testStatusIMPL: var TestStatus) =
   # if not defined on re-orgs to a point before the latest finalized block.
 
   res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
-  check res.isOk
-  if res.isErr:
-    return
-
+  testCond res.isOk
   let s = res.get()
-  check s.payloadStatus.status == PayloadExecutionStatus.valid
+  testCond s.payloadStatus.status == PayloadExecutionStatus.valid
 
-proc badHashOnExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc badHashOnExecPayload(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   type
     Shadow = ref object
@@ -274,9 +270,7 @@ proc badHashOnExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
       let s = res.get()
       s.status == PayloadExecutionStatus.invalid_block_hash
   ))
-  check produceSingleBlockRes
-  if not produceSingleBlockRes:
-    return
+  testCond produceSingleBlockRes
 
   # Lastly, attempt to build on top of the invalid payload
   produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -295,20 +289,18 @@ proc badHashOnExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
       let s = res.get()
       s.status != PayloadExecutionStatus.valid
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc parentHashOnExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc parentHashOnExecPayload(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -326,31 +318,29 @@ proc parentHashOnExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
       let s = res.get()
       s.status == PayloadExecutionStatus.invalid_block_hash
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc invalidPayloadTestCaseGen(payloadField: string): proc (t: TestEnv, testStatusIMPL: var TestStatus) =
-  return proc (t: TestEnv, testStatusIMPL: var TestStatus) =
-    discard
+proc invalidPayloadTestCaseGen(payloadField: string): proc (t: TestEnv): TestStatus =
+  return proc (t: TestEnv): TestStatus =
+    result = TestStatus.SKIPPED
 
 # Test to verify Block information available at the Eth RPC after NewPayload
-proc blockStatusExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc blockStatusExecPayload(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
   var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     onNewPayloadBroadcast: proc(): bool =
-      # TODO: Ideally, we would need to check that the newPayload returned VALID
+      # TODO: Ideally, we would need to testCond that the newPayload returned VALID
       var lastHeader: EthBlockHeader
       var hRes = client.latestHeader(lastHeader)
       if hRes.isErr:
@@ -381,20 +371,18 @@ proc blockStatusExecPayload(t: TestEnv, testStatusIMPL: var TestStatus) =
 
       return true
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc blockStatusHeadBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc blockStatusHeadBlock(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -415,20 +403,18 @@ proc blockStatusHeadBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
         return false
       return true
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc blockStatusSafeBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc blockStatusSafeBlock(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -449,20 +435,18 @@ proc blockStatusSafeBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
         return false
       return true
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc blockStatusFinalizedBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -483,20 +467,18 @@ proc blockStatusFinalizedBlock(t: TestEnv, testStatusIMPL: var TestStatus) =
         return false
       return true
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc blockStatusReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc blockStatusReorg(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -545,7 +527,7 @@ proc blockStatusReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
           get=latestValidHash.toHex
         return false
 
-      # Check that we reorg to the previous block
+      # testCond that we reorg to the previous block
       hRes = client.latestHeader(currHeader)
       if hRes.isErr:
         error "unable to get latest header", msg=hRes.error
@@ -582,31 +564,27 @@ proc blockStatusReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
         return false
       return true
   ))
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc reExecPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc reExecPayloads(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until this client catches up with latest PoS
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # How many Payloads we are going to re-execute
   var payloadReExecCount = 10
 
   # Create those blocks
   let produceBlockRes = t.clMock.produceBlocks(payloadReExecCount, BlockProcessCallbacks())
-  check produceBlockRes
-  if not produceBlockRes:
-    return
+  testCond produceBlockRes
 
   # Re-execute the payloads
   let client = t.rpcClient
   var hRes = client.blockNumber()
-  check hRes.isOk
-  if hRes.isErr:
+  testCond hRes.isOk:
     error "unable to get blockNumber", msg=hRes.error
-    return
 
   let lastBlock = int(hRes.get)
   info "Started re-executing payloads at block", number=lastBlock
@@ -619,33 +597,26 @@ proc reExecPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
     if clMock.executedPayloadHistory.hasKey(uint64 i):
       let payload = clMock.executedPayloadHistory[uint64 i]
       let res = client.newPayloadV1(payload)
-      check res.isOk
-      if res.isErr:
+      testCond res.isOk:
         error "FAIL (%s): Unable to re-execute valid payload", msg=res.error
-        return
 
       let s = res.get()
-      check s.status == PayloadExecutionStatus.valid
-      if s.status != PayloadExecutionStatus.valid:
+      testCond s.status == PayloadExecutionStatus.valid:
         error "Unexpected status after re-execute valid payload", status=s.status
-        return
     else:
-      check false
-      error "(test issue) Payload does not exist", index=i
-      return
+      testCond true:
+        error "(test issue) Payload does not exist", index=i
 
-proc multipleNewCanonicalPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -676,14 +647,14 @@ proc multipleNewCanonicalPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
       return true
   ))
   # At the end the CLMocker continues to try to execute fcU with the original payload, which should not fail
-  check produceSingleBlockRes
+  testCond produceSingleBlockRes
 
-proc outOfOrderPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc outOfOrderPayloads(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # First prepare payloads on a first client, which will also contain multiple transactions
 
@@ -710,38 +681,32 @@ proc outOfOrderPayloads(t: TestEnv, testStatusIMPL: var TestStatus) =
           return false
       return true
   ))
-  check produceBlockRes
+  testCond produceBlockRes
 
   let expectedBalance = amountPerTx * u256(payloadCount*txPerPayload)
 
-  # Check balance on this first client
+  # testCond balance on this first client
   let balRes = client.balanceAt(recipient)
-  check balRes.isOk
-  if balRes.isErr:
+  testCond balRes.isOk:
     error "Error while getting balance of funded account"
-    return
 
   let bal = balRes.get()
-  check expectedBalance == bal
-  if expectedBalance != bal:
-    return
+  testCond expectedBalance == bal
 
   # TODO: this section need multiple client
 
-proc transactionReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc transactionReorg(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
-  # Create transactions that modify the state in order to check after the reorg.
+  # Create transactions that modify the state in order to testCond after the reorg.
   const
     txCount      = 5
     contractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
@@ -762,23 +727,17 @@ proc transactionReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
 
     # Send the transaction
     let res = client.sendTransaction(tx)
-    check res.isOk
-    if res.isErr:
+    testCond res.isOk:
       error "Unable to send transaction", msg=res.error
-      return
 
     # Produce the block containing the transaction
     var blockRes = clMock.produceSingleBlock(BlockProcessCallbacks())
-    check blockRes
-    if not blockRes:
-      return
+    testCond blockRes
 
     # Get the receipt
     let rr = client.txReceipt(rlpHash(tx))
-    check rr.isOk
-    if rr.isErr:
+    testCond rr.isOk:
       error "Unable to obtain transaction receipt", msg=rr.error
-      return
 
     receipts[i] = rr.get()
 
@@ -787,13 +746,11 @@ proc transactionReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
     let storageKey = i.u256
 
     var rr = client.storageAt(contractAddr, storageKey)
-    check rr.isOk
-    if rr.isErr:
+    testCond rr.isOk:
       error "Could not get storage", msg=rr.error
-      return
 
     let valueWithTxApplied = rr.get()
-    check valueWithTxApplied == 1.u256
+    testCond valueWithTxApplied == 1.u256
     if valueWithTxApplied != 1.u256:
       error "Expected storage not set after transaction", valueWithTxApplied
       return
@@ -803,16 +760,12 @@ proc transactionReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
     var reorgBlock: EthBlockHeader
     let blockRes = client.headerByNumber(number - 1, reorgBlock)
     rr = client.storageAt(contractAddr, storageKey, reorgBlock.blockNumber)
-    check rr.isOk
-    if rr.isErr:
+    testCond rr.isOk:
       error "could not get storage", msg= rr.error
-      return
 
     let valueWithoutTxApplied = rr.get()
-    check valueWithoutTxApplied == 0.u256
-    if valueWithoutTxApplied != 0.u256:
+    testCond valueWithoutTxApplied == 0.u256:
       error "Storage not unset before transaction!", valueWithoutTxApplied
-      return
 
     # Re-org back to a previous block where the tx is not included using forkchoiceUpdated
     let rHash = Web3BlockHash reorgBlock.blockHash.data
@@ -823,44 +776,32 @@ proc transactionReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
     )
 
     var res = client.forkchoiceUpdatedV1(reorgForkchoice)
-    check res.isOk
-    if res.isErr:
+    testCond res.isOk:
       error "Could not send forkchoiceUpdatedV1", msg=res.error
-      return
 
     var s = res.get()
-    check s.payloadStatus.status == PayloadExecutionStatus.valid
-    if s.payloadStatus.status != PayloadExecutionStatus.valid:
+    testCond s.payloadStatus.status == PayloadExecutionStatus.valid:
       error "Could not send forkchoiceUpdatedV1", status=s.payloadStatus.status
-      return
 
-    # Check storage again using `latest`, should be unset
+    # testCond storage again using `latest`, should be unset
     rr = client.storageAt( contractAddr, storageKey)
-    check rr.isOk
-    if rr.isErr:
+    testCond rr.isOk:
       error "could not get storage", msg= rr.error
-      return
 
     let valueAfterReOrgBeforeTxApplied = rr.get()
-    check valueAfterReOrgBeforeTxApplied == 0.u256
-    if valueAfterReOrgBeforeTxApplied != 0.u256:
+    testCond valueAfterReOrgBeforeTxApplied == 0.u256:
       error "Storage not unset after re-org", valueAfterReOrgBeforeTxApplied
-      return
 
     # Re-send latest forkchoice to test next transaction
     res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
-    check res.isOk
-    if res.isErr:
+    testCond res.isOk:
       error "Could not send forkchoiceUpdatedV1", msg=res.error
-      return
 
     s = res.get()
-    check s.payloadStatus.status == PayloadExecutionStatus.valid
-    if s.payloadStatus.status != PayloadExecutionStatus.valid:
+    testCond s.payloadStatus.status == PayloadExecutionStatus.valid:
       error "Could not send forkchoiceUpdatedV1", status=s.payloadStatus.status
-      return
 
-proc checkPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumber: uint64): bool =
+proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
   let client = t.rpcClient
 
@@ -877,32 +818,28 @@ proc checkPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumber: 
     return false
   true
 
-proc sidechainReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc sidechainReorg(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Produce blocks before starting the test
   let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  check produce5BlockRes
-  if not produce5BlockRes:
-    return
+  testCond produce5BlockRes
 
   let
     client = t.rpcClient
     clMock = t.clMock
 
-  # Produce two payloads, send fcU with first payload, check transaction outcome, then reorg, check transaction outcome again
+  # Produce two payloads, send fcU with first payload, testCond transaction outcome, then reorg, testCond transaction outcome again
 
   # This single transaction will change its outcome based on the payload
   let tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
   let rr = client.sendTransaction(tx)
-  check rr.isOk
-  if rr.isErr:
+  testCond rr.isOk:
     error "Unable to send transaction", msg=rr.error
-    return
 
   let singleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     onNewPayloadBroadcast: proc(): bool =
@@ -966,21 +903,21 @@ proc sidechainReorg(t: TestEnv, testStatusIMPL: var TestStatus) =
         return false
 
       # PrevRandao should be the alternative prevRandao we sent
-      return checkPrevRandaoValue(t, alternativePrevRandao, uint64 alternativePayload.blockNumber)
+      return testCondPrevRandaoValue(t, alternativePrevRandao, uint64 alternativePayload.blockNumber)
   ))
 
-  check singleBlockRes
+  testCond singleBlockRes
   # The reorg actually happens after the CLMocker continues,
   # verify here that the reorg was successful
   let latestBlockNum = cLMock.latestFinalizedNumber.uint64
-  check checkPrevRandaoValue(t, clMock.prevRandaoHistory[latestBlockNum], latestBlockNum)
+  testCond testCondPrevRandaoValue(t, clMock.prevRandaoHistory[latestBlockNum], latestBlockNum)
 
-proc suggestedFeeRecipient(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc suggestedFeeRecipient(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   # Wait until TTD is reached by this client
   let ok = waitFor t.clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Amount of transactions to send
   const
@@ -988,7 +925,7 @@ proc suggestedFeeRecipient(t: TestEnv, testStatusIMPL: var TestStatus) =
 
   # Verify that, in a block with transactions, fees are accrued by the suggestedFeeRecipient
   var feeRecipient: EthAddress
-  check nimcrypto.randomBytes(feeRecipient) == 20
+  testCond nimcrypto.randomBytes(feeRecipient) == 20
 
   let
     client = t.rpcClient
@@ -999,130 +936,107 @@ proc suggestedFeeRecipient(t: TestEnv, testStatusIMPL: var TestStatus) =
     # Empty self tx
     let tx = t.makeNextTransaction(vaultAccountAddr, 0.u256)
     let res = client.sendTransaction(tx)
-    check res.isOk
-    if res.isErr:
+    testCond res.isOk:
       error "unable to send transaction", msg=res.error
-      return
 
   # Produce the next block with the fee recipient set
   clMock.nextFeeRecipient = feeRecipient
-  check clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond clMock.produceSingleBlock(BlockProcessCallbacks())
 
-  # Calculate the fees and check that they match the balance of the fee recipient
+  # Calculate the fees and testCond that they match the balance of the fee recipient
   var blockIncluded: EthBlock
   var rr = client.latestBlock(blockIncluded)
-  check rr.isOk
-  if rr.isErr:
+  testCond rr.isOk:
     error "unable to get latest block", msg=rr.error
-    return
 
-  check blockIncluded.txs.len == txCount
-  if blockIncluded.txs.len != txCount:
+  testCond blockIncluded.txs.len == txCount:
     error "not all transactions were included in block",
       expected=txCount,
       get=blockIncluded.txs.len
-    return
 
-  check blockIncluded.header.coinbase == feeRecipient
-  if blockIncluded.header.coinbase != feeRecipient:
+  testCond blockIncluded.header.coinbase == feeRecipient:
     error "feeRecipient was not set as coinbase",
       expected=feeRecipient.toHex,
       get=blockIncluded.header.coinbase.toHex
-    return
 
   var feeRecipientFees = 0.u256
   for tx in blockIncluded.txs:
     let effGasTip = tx.effectiveGasTip(blockIncluded.header.fee)
     let tr = client.txReceipt(rlpHash(tx))
-    check tr.isOk
-    if tr.isErr:
+    testCond tr.isOk:
       error "unable to obtain receipt", msg=tr.error
-      return
 
     let rec = tr.get()
     let gasUsed = UInt256.fromHex(rec.gasUsed.string)
     feeRecipientFees = feeRecipientFees  + effGasTip.u256 * gasUsed
 
   var br = client.balanceAt(feeRecipient)
-  check br.isOk
+  testCond br.isOk
 
   var feeRecipientBalance = br.get()
-  check feeRecipientBalance == feeRecipientFees
-  if feeRecipientBalance != feeRecipientFees:
+  testCond feeRecipientBalance == feeRecipientFees:
     error "balance does not match fees",
       feeRecipientBalance, feeRecipientFees
 
   # Produce another block without txns and get the balance again
   clMock.nextFeeRecipient = feeRecipient
-  check clMock.produceSingleBlock(BlockProcessCallbacks())
+  testCond clMock.produceSingleBlock(BlockProcessCallbacks())
 
   br = client.balanceAt(feeRecipient)
-  check br.isOk
+  testCond br.isOk
   feeRecipientBalance = br.get()
-  check feeRecipientBalance == feeRecipientFees
-  if feeRecipientBalance != feeRecipientFees:
+  testCond feeRecipientBalance == feeRecipientFees:
     error "balance does not match fees",
       feeRecipientBalance, feeRecipientFees
 
-proc prevRandaoOpcodeTx(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
   let
     client = t.rpcClient
     clMock = t.clMock
     tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
     rr = client.sendTransaction(tx)
 
-  check rr.isOk
-  if rr.isErr:
+  testCond rr.isOk:
     error "Unable to send transaction", msg=rr.error
-    return
 
   # Wait until TTD is reached by this client
   let ok = waitFor clMock.waitForTTD()
-  check ok
-  if not ok:
-    return
+  testCond ok
 
   # Ideally all blocks up until TTD must have a DIFFICULTY opcode tx in it
   let nr = client.blockNumber()
-  check nr.isOk
-  if nr.isErr:
+  testCond nr.isOk:
     error "Unable to get latest block number", msg=nr.error
-    return
 
   let ttdBlockNumber = nr.get()
 
   # Start
   for i in ttdBlockNumber..ttdBlockNumber:
-    # First check that the block actually contained the transaction
+    # First testCond that the block actually contained the transaction
     var blk: EthBlock
     let res = client.blockByNumber(i, blk)
-    check res.isOk
-    if res.isErr:
+    testCond res.isOk:
       error "Unable to get block", msg=res.error
-      return
 
-    check blk.txs.len > 0
-    if blk.txs.len == 0:
+    testCond blk.txs.len > 0:
       error "(Test issue) no transactions went in block"
-      return
 
     let storageKey = i.u256
     let rr = client.storageAt(prevRandaoContractAddr, storageKey)
-    check rr.isOk
-    if rr.isErr:
+    testCond rr.isOk:
       error "Unable to get storage", msg=rr.error
-      return
 
     let opcodeValueAtBlock = rr.get()
-    if opcodeValueAtBlock != 2.u256:
+    testCond opcodeValueAtBlock == 2.u256:
       error "Incorrect difficulty value in block",
         expect=2,
         get=opcodeValueAtBlock
-      return
 
-proc postMergeSync(t: TestEnv, testStatusIMPL: var TestStatus) =
+proc postMergeSync(t: TestEnv): TestStatus =
+  result = TestStatus.SKIPPED
   # TODO: need multiple client
-  discard
 
 const engineTestList* = [
   TestSpec(
@@ -1165,7 +1079,7 @@ const engineTestList* = [
     name: "ParentHash==BlockHash on NewPayload",
     run:  parentHashOnExecPayload,
   ),
-  #[TestSpec(
+  TestSpec(
     name: "Invalid ParentHash NewPayload",
     run:  invalidPayloadTestCaseGen("ParentHash"),
   ),
@@ -1220,7 +1134,7 @@ const engineTestList* = [
   TestSpec(
     name: "Invalid Transaction Value NewPayload",
     run:  invalidPayloadTestCaseGen("Transaction/Value"),
-  ),]#
+  ),
 
   # Eth RPC Status on ForkchoiceUpdated Events
   TestSpec(
@@ -1276,11 +1190,11 @@ const engineTestList* = [
 
   # TODO: debug and fix
   # PrevRandao opcode tests
- #TestSpec(
- #  name: "PrevRandao Opcode Transactions",
- #  run:  prevRandaoOpcodeTx,
- #  ttd:  10,
- #),
+  TestSpec(
+    name: "PrevRandao Opcode Transactions",
+    run:  prevRandaoOpcodeTx,
+    ttd:  10,
+  ),
 
   # Multi-Client Sync tests
   TestSpec(

@@ -13,8 +13,11 @@ import
   stew/byteutils,
   stint,
   chronos,
+  unittest2,
   json_rpc/[rpcclient],
-  "."/[vault, client, callsigs]
+  "."/[vault, client]
+
+export client
 
 const
   gasPrice* = 30000000000 # 30 Gwei or 30 * pow(10, 9)
@@ -24,6 +27,10 @@ type
   TestEnv* = ref object
     vault*: Vault
     client*: RpcClient
+
+  TestSpec* = object
+    name*: string
+    run*: proc(t: TestEnv): Future[TestStatus]
 
 func eth(n: int): UInt256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)
@@ -35,7 +42,7 @@ func ethAddr(x: string): EthAddress =
   hexToByteArray[20](x)
 
 # envTest make sure the env is set up properly for subsequent tests
-proc envTest*(t: TestEnv): Future[bool] {.async.} =
+proc envTest(t: TestEnv): Future[TestStatus] {.async.} =
   let client = t.client
   let res = await client.web3_clientVersion()
 
@@ -52,14 +59,14 @@ proc envTest*(t: TestEnv): Future[bool] {.async.} =
     let expected = u256(x[1])
     if res != expected:
       debugEcho "expected: $1, got $2" % [x[0], $res]
-      return false
+      return TestStatus.Failed
 
-  result = true
+  result = TestStatus.OK
 
 # balanceAndNonceAtTest creates a new account and transfers funds to it.
 # It then tests if the balance and nonce of the sender and receiver
 # address are updated correct.
-proc balanceAndNonceAtTest*(t: TestEnv) {.async.} =
+proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let
     sourceAddr  = await t.vault.createAccount(1.eth)
     sourceNonce = 0.AccountNonce
@@ -69,3 +76,15 @@ proc balanceAndNonceAtTest*(t: TestEnv) {.async.} =
   let sourceAddressBalanceBefore = t.client.balanceAt(sourceAddr)
 
   # TODO: complete this test
+  result = TestStatus.OK
+
+const testList* = [
+  TestSpec(
+    name: "env is set up properly for subsequent tests",
+    run: envTest
+  ),
+  TestSpec(
+    name: "balance and nonce update correctly",
+    run: balanceAndNonceAtTest
+  )
+]

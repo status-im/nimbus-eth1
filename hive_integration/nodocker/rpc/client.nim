@@ -15,7 +15,9 @@ import
   json_rpc/[rpcclient],
   ../../../nimbus/[utils, transaction],
   ../../../nimbus/rpc/hexstrings,
-  "."/[callsigs]
+  ../../../tests/rpcclient/eth_api
+
+export eth_api
 
 proc fromHex(x: type Hash256, hex: EthHashStr): Hash256 =
   hexToByteArray(hex.string, result.data)

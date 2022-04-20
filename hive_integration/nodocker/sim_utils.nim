@@ -8,35 +8,36 @@
 # those terms.
 
 import
-  std/[tables, strutils, unittest],
-  testutils/markdown_reports
+  std/[tables, strutils, times],
+  unittest2
 
 export
-  tables, strutils, unittest,
-  markdown_reports
+  tables, strutils, unittest2
 
-template runTest*(suiteName: string, caseFolder: string, body: untyped) =
-  disableParamFiltering()
-  suite suiteName:
-    var status = initOrderedTable[string, OrderedTable[string, Status]]()
-    for fileName {.inject.} in walkDirRec(
-                    caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
+type
+  SimStat* = object
+    ok*: int
+    skipped*: int
+    failed*: int
 
-      if not fileName.endsWith(".json"):
-        continue
+proc inc*(stat: var SimStat, name: string, status: TestStatus) =
+  echo name, ", ", status
+  if status == OK:
+    inc stat.ok
+  elif status == SKIPPED:
+    inc stat.skipped
+  else:
+    inc stat.failed
 
-      let (folder, name) = fileName.splitPath()
-      let last = folder.splitPath().tail
-      if last notin status:
-        status[last] = initOrderedTable[string, Status]()
+proc `$`*(stat: SimStat): string =
+  "ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
 
-      test fileName:
-        # we set this here because exceptions might be raised in the handler
-        status[last][name] = Status.Fail
-        body
-        if testStatusIMPL == OK:
-          status[last][name] = Status.OK
-        elif testStatusIMPL == SKIPPED:
-          status[last][name] = Status.Skip
-
-    generateReport(suiteName, status)
+proc print*(stat: SimStat, dur: Duration, name: string) =
+  var f = open(name & ".md", fmWrite)
+  f.write("* " & name)
+  f.write("\n")
+  f.write("  - " & $stat)
+  f.write("\n")
+  f.write("  - " & $dur)
+  f.write("\n")
+  f.close()

@@ -17,16 +17,10 @@ type
   EthHeader = object
     header: BlockHeader
 
-proc importRlpBlock*(importFile: string; chainDB: BaseChainDB): bool =
-  let res = io2.readAllBytes(importFile)
-  if res.isErr:
-    error "failed to import",
-      fileName = importFile
-    return false
-
+proc importRlpBlock*(blocksRlp: openArray[byte]; chainDB: BaseChainDB; importFile: string = ""): bool =
   var
     # the encoded rlp can contains one or more blocks
-    rlp = rlpFromBytes(res.get)
+    rlp = rlpFromBytes(blocksRlp)
     chain = newChain(chainDB, extraValidation = true)
     errorCount = 0
   let
@@ -57,3 +51,13 @@ proc importRlpBlock*(importFile: string; chainDB: BaseChainDB): bool =
       errorCount.inc
 
   return errorCount == 0
+
+proc importRlpBlock*(importFile: string; chainDB: BaseChainDB): bool =
+  let res = io2.readAllBytes(importFile)
+  if res.isErr:
+    error "failed to import",
+      fileName = importFile
+    return false
+    
+  importRlpBlock(res.get, chainDB, importFile)
+  

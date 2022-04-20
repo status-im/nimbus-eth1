@@ -1,19 +1,21 @@
 import
   test_env,
   engine_tests,
-  chronos,
-  unittest2
-
-proc runTest(x: TestSpec, testStatusIMPL: var TestStatus) =
-  var t = setupELClient()
-  t.setRealTTD(x.ttd)
-  x.run(t, testStatusIMPL)
-  t.stopELClient()
+  unittest2,
+  ../sim_utils
 
 proc main() =
-  suite "Engine Tests":
-    for x in engineTestList:
-      test x.name:
-        runTest(x, testStatusIMPL)
+  var stat: SimStat
+  let start = getTime()
+
+  for x in engineTestList:
+    var t = setupELClient()
+    t.setRealTTD(x.ttd)
+    let status = x.run(t)
+    t.stopELClient()
+    stat.inc(x.name, status)
+
+  let elpd = getTime() - start
+  print(stat, elpd, "engine")
 
 main()

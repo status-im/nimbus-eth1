@@ -8,17 +8,14 @@
 # those terms.
 
 import
-  std/[json, os, strutils, parseopt, terminal],
+  std/[json, strutils],
   stew/byteutils
 
 type
-  ChainData = object
-    genesis: JsonNode
-    blocksRlp: seq[byte]
-
-  Config = object
-    outPath: string
-    filter: string
+  ChainData* = object
+    genesis*: string
+    lastBlockHash*: string
+    blocksRlp*: seq[byte]
 
 const genFields = [
   "nonce",
@@ -179,7 +176,7 @@ proc optionalField(n: string, genesis, gen: JsonNode) =
   if n in gen:
     genesis[n] = gen[n]
 
-proc extractChainData(n: JsonNode, chainFile: string): ChainData =
+proc extractChainData*(n: JsonNode): ChainData =
   let gen = n["genesisBlockHeader"]
   var genesis = newJObject()
   for x in genFields:
@@ -191,68 +188,11 @@ proc extractChainData(n: JsonNode, chainFile: string): ChainData =
   var ngen = newJObject()
   ngen["genesis"] = genesis
   ngen["config"] = processNetwork(n["network"].getStr)
-  ngen["lastblockhash"] = n["lastblockhash"]
-  ngen["chainfile"] = %chainFile
-  result.genesis = ngen
+  result.lastblockhash = n["lastblockhash"].getStr
+  result.genesis = $ngen
 
   let blks = n["blocks"]
   for x in blks:
     let hex = x["rlp"].getStr
     let bytes = hexToSeqByte(hex)
     result.blocksRlp.add bytes
-
-proc processFile(fileName, outPath: string): int =
-  let n = json.parseFile(fileName)
-  let (folder, name) = fileName.splitPath()
-  let last = folder.splitPath().tail
-
-  for name, unit in n:
-    let name = last & "_" & name
-    let cd = extractChainData(unit, outPath / name & "_chain.rlp")
-    writeFile(outPath / name & "_config.json", cd.genesis.pretty)
-    writeFile(outPath / name & "_chain.rlp", cd.blocksRlp)
-    inc result
-
-proc initConfig(): Config =
-  result.outPath = "consensus_data"
-
-proc processArguments(conf: var Config) =
-  var opt = initOptParser()
-
-  for kind, key, value in opt.getopt():
-    case kind
-    of cmdArgument:
-      conf.filter = key
-    of cmdLongOption, cmdShortOption:
-      case key.toLowerAscii()
-      of "o": conf.outPath = value
-      else:
-        var msg = "Unknown option " & key
-        if value.len > 0: msg = msg & " : " & value
-        quit(QuitFailure)
-    of cmdEnd:
-      doAssert(false)
-
-proc main() =
-  const basePath = "tests" / "fixtures" / "eth_tests" / "BlockchainTests"
-
-  var conf = initConfig()
-  processArguments(conf)
-  createDir(conf.outPath)
-
-  var count = 0
-  for fileName in walkDirRec(basePath):
-    if not fileName.endsWith(".json"):
-      continue
-    let (_, name) = fileName.splitPath()
-    if conf.filter notin fileName:
-      continue
-
-    terminal.eraseLine(stdout)
-    stdout.write "\r"
-    stdout.write name
-    count += processFile(fileName, conf.outPath)
-
-  echo "\ntest data generated: ", count
-
-main()
