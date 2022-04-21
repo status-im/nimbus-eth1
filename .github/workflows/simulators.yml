@@ -1,6 +1,8 @@
 name: Simulators
 on:
-  push:
+  schedule:
+    # every two days 11 PM
+    - cron: "0 23 */2 * *"
   workflow_dispatch:
 
 jobs:
