@@ -137,6 +137,8 @@ iterator blocks*(
     else:
       error "Failed reading block from block data", error = res.error
 
+# TODO pass nodeid as uint256 so it will be possible to use put method which
+# preserves size
 proc populateHistoryDb*(
     db: ContentDB, dataFile: string, verify = false): Result[void, string] =
   let blockData = ? readBlockDataTable(dataFile)
@@ -144,6 +146,7 @@ proc populateHistoryDb*(
   for b in blocks(blockData, verify):
     for value in b:
       # Note: This is the slowest part due to the hashing that takes place.
+      # TODO use put method which preserves size 
       db.put(history_content.toContentId(value[0]), value[1])
 
   ok()

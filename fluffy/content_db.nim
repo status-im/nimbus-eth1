@@ -194,7 +194,7 @@ proc get*(db: ContentDB, key: ContentId): Option[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
-proc put(db: ContentDB, key: ContentId, value: openArray[byte]) =
+proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toByteArrayBE(), value)
 
 proc contains*(db: ContentDB, key: ContentId): bool =
