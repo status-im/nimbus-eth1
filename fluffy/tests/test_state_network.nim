@@ -64,7 +64,7 @@ procSuite "State Content Network":
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
-      proto1.contentDB.put(contentId, v)
+      discard proto1.contentDB.put(contentId, v, proto1.portalProtocol.localNode.id)
 
     for key in keys:
       var nodeHash: NodeHash
@@ -124,10 +124,10 @@ procSuite "State Content Network":
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
-      proto2.contentDB.put(contentId, v)
+      discard proto2.contentDB.put(contentId, v, proto2.portalProtocol.localNode.id)
       # Not needed right now as 1 node is enough considering node 1 is connected
       # to both.
-      proto3.contentDB.put(contentId, v)
+      discard proto3.contentDB.put(contentId, v, proto3.portalProtocol.localNode.id)
 
     # Get first key
     var nodeHash: NodeHash

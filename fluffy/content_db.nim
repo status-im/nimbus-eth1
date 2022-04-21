@@ -173,7 +173,7 @@ proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
 
   return res
 
-proc put*(db: ContentDB, key, value: openArray[byte]) =
+proc put(db: ContentDB, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
 proc contains*(db: ContentDB, key: openArray[byte]): bool =
@@ -194,7 +194,7 @@ proc get*(db: ContentDB, key: ContentId): Option[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
-proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
+proc put(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toByteArrayBE(), value)
 
 proc contains*(db: ContentDB, key: ContentId): bool =
@@ -225,7 +225,7 @@ proc deleteNelemsNoMoreThan(
       db.reclaimSpace()
       return (elem.distFrom, deltedFraction)
 
-proc putAndPrune*(
+proc put*(
   db: ContentDB, 
   key: ContentId, 
   value: openArray[byte],
@@ -236,8 +236,7 @@ proc putAndPrune*(
   if dbSize < int64(db.maxSize):
     return PutResult(kind: ContentStored)
   else:
-    # TODO maybe caller should decide how many elements should be deleted and what
-    # fraction of content should be left ?
+    # TODO Add some configuration for this magic numbers
     let (furthestNonDeletedElement, deletedFraction) = db.deleteNelemsNoMoreThan(target, 100000, 0.25)
     return PutResult(
       kind: DbPruned,

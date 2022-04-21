@@ -1048,7 +1048,7 @@ proc processContent(
       let contentId = contentIdOpt.get()
       # Store content, should we recheck radius?
       # TODO handle radius adjustments
-      discard p.contentDB.putAndPrune(
+      discard p.contentDB.put(
                 contentId, 
                 content, 
                 p.baseProtocol.localNode.id

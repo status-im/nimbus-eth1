@@ -259,7 +259,7 @@ procSuite "Portal Wire Protocol Tests":
       contentId = readUintBE[256](sha256.digest(content).data)
 
     # Only node3 have content
-    db3.put(contentId, content)
+    discard db3.put(contentId, content, proto3.localNode.id)
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
     # Node1 needs to known Node2 radius to determine if node2 is interested in content
