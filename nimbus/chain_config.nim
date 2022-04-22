@@ -17,6 +17,8 @@ import
   json_serialization/lexer,
   "."/[forks, genesis_alloc]
 
+{.push raises: [Defect].}
+
 type
   CliqueOptions = object
     epoch : Option[int]
@@ -135,18 +137,22 @@ const
   GoerliNet*  = 5.NetworkId
   KovanNet*   = 42.NetworkId
 
-proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress {.inline.} =
+proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
+    {.gcsafe, raises: [Defect,RlpError].} =
   let val = rlp.read(UInt256).toByteArrayBE()
   result[0 .. ^1] = val.toOpenArray(12, val.high)
 
-proc read(rlp: var Rlp, x: var AddressBalance, _: type GenesisAccount): GenesisAccount {.inline.} =
+proc read(rlp: var Rlp, x: var AddressBalance, _: type GenesisAccount): GenesisAccount
+    {.gcsafe, raises: [Defect,RlpError].} =
   GenesisAccount(balance: rlp.read(UInt256))
 
-func decodePrealloc*(data: seq[byte]): GenesisAlloc =
+func decodePrealloc*(data: seq[byte]): GenesisAlloc
+    {.gcsafe, raises: [Defect,RlpError].} =
   for tup in rlp.decode(data, seq[AddressBalance]):
     result[tup.address] = tup.account
 
-proc readValue(reader: var JsonReader, value: var UInt256) =
+proc readValue(reader: var JsonReader, value: var UInt256)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Mixin for `Json.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
@@ -164,31 +170,41 @@ proc readValue(reader: var JsonReader, value: var UInt256) =
       try:    value = reader.lexer.strVal.parse(UInt256, radix = 16)
       except: reader.raiseUnexpectedValue("hex string parse error")
     reader.lexer.next()
+  elif reader.lexer.tok == tkError:
+    reader.raiseUnexpectedValue("hex/int parse error: " & $reader.lexer.err)
   else:
     reader.raiseUnexpectedValue("expect int or hex/int string")
 
-proc readValue(reader: var JsonReader, value: var ChainId) =
+proc readValue(reader: var JsonReader, value: var ChainId)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = reader.readValue(int).ChainId
 
-proc readValue(reader: var JsonReader, value: var Hash256) =
+proc readValue(reader: var JsonReader, value: var Hash256)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = Hash256.fromHex(reader.readValue(string))
 
-proc readValue(reader: var JsonReader, value: var BlockNonce) =
+proc readValue(reader: var JsonReader, value: var BlockNonce)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = fromHex[uint64](reader.readValue(string)).toBlockNonce
 
-proc readValue(reader: var JsonReader, value: var EthTime) =
+proc readValue(reader: var JsonReader, value: var EthTime)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = fromHex[int64](reader.readValue(string)).fromUnix
 
-proc readValue(reader: var JsonReader, value: var seq[byte]) =
+proc readValue(reader: var JsonReader, value: var seq[byte])
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = hexToSeqByte(reader.readValue(string))
 
-proc readValue(reader: var JsonReader, value: var GasInt) =
+proc readValue(reader: var JsonReader, value: var GasInt)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = fromHex[GasInt](reader.readValue(string))
 
-proc readValue(reader: var JsonReader, value: var EthAddress) =
+proc readValue(reader: var JsonReader, value: var EthAddress)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = parseAddress(reader.readValue(string))
 
-proc readValue(reader: var JsonReader, value: var AccountNonce) =
+proc readValue(reader: var JsonReader, value: var AccountNonce)
+    {.gcsafe, raises: [Defect,CatchableError].} =
   value = fromHex[uint64](reader.readValue(string))
 
 template to(a: string, b: type EthAddress): EthAddress =
@@ -199,9 +215,7 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
-    bool {.raises: [Defect].} =
-
+proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
   cg.genesis               = cc.genesis
   cg.config.chainId        = cc.config.chainId
   cg.config.daoForkSupport = cc.config.daoForkSupport
@@ -265,7 +279,7 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams):
   return true
 
 proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
-    bool {.raises: [Defect].} =
+    bool {.raises: [Defect,SerializationError].} =
   var cc: CustomChain
   try:
     cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)
@@ -275,15 +289,14 @@ proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
   except JsonReaderError as e:
     error "Invalid network params file format", fileName, msg=e.formatMsg("")
     return false
-  except:
-    var msg = getCurrentExceptionMsg()
-    error "Error loading network params file", fileName, msg
+  except Exception as e:
+    error "Error loading network params file",
+      fileName, exception = e.name, msg = e.msg
     return false
 
   loadNetworkParams(cc, cg)
 
-proc decodeNetworkParams*(jsonString: string, cg: var NetworkParams):
-    bool {.raises: [Defect].} =
+proc decodeNetworkParams*(jsonString: string, cg: var NetworkParams): bool =
 
   var cc: CustomChain
   try:
@@ -298,7 +311,8 @@ proc decodeNetworkParams*(jsonString: string, cg: var NetworkParams):
 
   loadNetworkParams(cc, cg)
 
-proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool =
+proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
   try:
     ga = Json.decode(data, GenesisAlloc, allowUnknownFields = true)
   except JsonReaderError as e:
@@ -414,7 +428,8 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
   else:
     ChainConfig()
 
-proc genesisBlockForNetwork(id: NetworkId): Genesis =
+proc genesisBlockForNetwork(id: NetworkId): Genesis
+    {.gcsafe, raises: [Defect,CatchableError].} =
   result = case id
   of MainNet:
     Genesis(
@@ -453,6 +468,7 @@ proc genesisBlockForNetwork(id: NetworkId): Genesis =
   else:
     Genesis()
 
-proc networkParams*(id: NetworkId): NetworkParams =
+proc networkParams*(id: NetworkId): NetworkParams
+    {.gcsafe, raises: [Defect,CatchableError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
