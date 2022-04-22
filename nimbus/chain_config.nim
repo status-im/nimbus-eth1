@@ -156,11 +156,16 @@ proc readValue(reader: var JsonReader, value: var UInt256)
   ## Mixin for `Json.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
-  let tok = reader.lexer.tok
-  if tok == tkInt:
-    value = reader.lexer.absIntVal.u256
-    reader.lexer.next()
-  elif tok == tkString:
+  if reader.lexer.lazyTok == tkNumeric:
+    try:
+      var accu: UInt256
+      reader.lexer.customIntValueIt:
+        accu = accu * 10 + it.u256
+      value = accu
+    except: reader.raiseUnexpectedValue("uint256 parse error")
+  elif reader.lexer.tok == tkInt:
+    value = reader.lexer.absintVal.u256
+  elif reader.lexer.tok == tkString:
     # Make sure that "0x11" decodes to 17, "b" and "11" decode to 11.
     if reader.lexer.strVal.filterIt(it.isDigit.not).len == 0:
       try:    value = reader.lexer.strVal.parse(UInt256, radix = 10)
@@ -169,11 +174,11 @@ proc readValue(reader: var JsonReader, value: var UInt256)
       # note that radix is static, so 16 (or 10) cannot be a variable
       try:    value = reader.lexer.strVal.parse(UInt256, radix = 16)
       except: reader.raiseUnexpectedValue("hex string parse error")
-    reader.lexer.next()
   elif reader.lexer.tok == tkError:
     reader.raiseUnexpectedValue("hex/int parse error: " & $reader.lexer.err)
   else:
     reader.raiseUnexpectedValue("expect int or hex/int string")
+  reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var ChainId)
     {.gcsafe, raises: [Defect,CatchableError].} =

@@ -76,9 +76,22 @@ proc customGenesisTest() =
       check h.blockHash == genesisHash
       check cg.config.poaEngine == false
 
+    test "Mainnet shadow fork 1":
+      var cg: NetworkParams
+      check loadNetworkParams("mainshadow1.json".findFilePath, cg)
+      let h = cg.toGenesisHeader
+      let stateRoot = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".toDigest
+      let genesisHash = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3".toDigest
+      let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
+      check h.stateRoot == stateRoot
+      check h.blockHash == genesisHash
+      check cg.config.terminalTotalDifficulty.get == ttd
+      check cg.config.poaEngine == false
+
 proc genesisMain*() =
   genesisTest()
   customGenesisTest()
 
 when isMainModule:
-  genesisMain()
+  genesisTest()
+  customGenesisTest()
