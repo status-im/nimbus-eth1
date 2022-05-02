@@ -97,7 +97,6 @@ const
     9 + # request id (max = 8) + 1 byte from rlp encoding byte string
     3 + # rlp encoding response byte string, max length in 2 bytes
     16 # HMAC
-  discv5MaxSize = 1280
 
   # These are the concurrent offers per Portal wire protocol that is running.
   # Using the `offerQueue` allows for limiting the amount of offers send and
@@ -278,8 +277,8 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       # over the discv5 packet size limits. ENRs are sorted so the closest nodes
       # will still be passed.
       const
-        portalNodesOverhead = 1 + 1 + 4 # msg id + total + container offset
-        maxPayloadSize = discv5MaxSize - talkRespOverhead - portalNodesOverhead
+        nodesOverhead = 1 + 1 + 4 # msg id + total + container offset
+        maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - nodesOverhead
         enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
       let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
@@ -296,8 +295,8 @@ proc handleFindContent(
   let contentIdOpt = p.toContentId(fc.contentKey)
   if contentIdOpt.isSome():
     const
-      portalContentOverhead = 1 + 1 # msg id + SSZ Union selector
-      maxPayloadSize = discv5MaxSize - talkRespOverhead - portalContentOverhead
+      contentOverhead = 1 + 1 # msg id + SSZ Union selector
+      maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
       enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
     let
