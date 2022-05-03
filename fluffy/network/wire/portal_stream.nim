@@ -25,18 +25,22 @@ const
   utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
   defaultReadTimeout = 2.seconds
-  # TalkReq message is used as transport message
-  talkReqOverhead* =
+
+  # TalkReq message is used as transport for uTP. It is assumed here that Portal
+  # protocol messages were exchanged before sending uTP over discv5 data. This
+  # means that a session is established and that the discv5 messages send are
+  # discv5 ordinary message packets, for which below calculation applies.
+  talkReqOverhead =
     16 + # IV size
     55 + # header size
     1 + # talkReq msg id
     3 + # rlp encoding outer list, max length will be encoded in 2 bytes
     9 + # request id (max = 8) + 1 byte from rlp encoding byte string
+    len(utpProtocolId) + 1 + # + 1 is necessary due to rlp encoding of byte string
     3 + # rlp encoding response byte string, max length in 2 bytes
-    16 + # HMAC
-    len(utpProtocolId) + 1 # + 1 is necessary due to rlp encoding of those bytes
-  utpHeaderOverhead* = 20
-  discv5MaxSize* = 1280
+    16 # HMAC
+  utpHeaderOverhead = 20
+  maxUtpPayloadSize* = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
 
 type
   ContentRequest = object
