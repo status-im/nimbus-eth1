@@ -66,7 +66,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -128,7 +128,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -188,7 +188,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -247,7 +247,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -306,7 +306,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -355,7 +355,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -459,7 +459,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -603,7 +603,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -707,7 +707,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -811,7 +811,7 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -871,7 +871,7 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -923,7 +923,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1036,7 +1036,7 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -1094,7 +1094,7 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -1146,7 +1146,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1266,7 +1266,7 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "exemplar": true,
@@ -1318,7 +1318,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1414,7 +1414,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1518,7 +1518,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1605,7 +1605,7 @@
         "y": 48
       },
       "hiddenSeries": false,
-      "id": 8,
+      "id": 46,
       "legend": {
         "avg": false,
         "current": false,
@@ -1622,7 +1622,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1633,17 +1633,25 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "portal_message_decoding_failures_total",
+          "expr": "rate(portal_gossip_with_lookup_total[$__rate_interval])",
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "portal_gossip_with_lookup[{{protocol_id}}]",
           "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "rate(portal_gossip_without_lookup_total[$__rate_interval])",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "portal_gossip_without_lookup[{{protocol_id}}]",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Portal message decoding failures",
+      "title": "Neighborhood gossip node lookups",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1659,7 +1667,7 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:595",
+          "$$hashKey": "object:97",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1668,7 +1676,7 @@
           "show": true
         },
         {
-          "$$hashKey": "object:596",
+          "$$hashKey": "object:98",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1718,7 +1726,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1801,6 +1809,102 @@
       "gridPos": {
         "h": 8,
         "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "hiddenSeries": false,
+      "id": 8,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.11",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "portal_message_decoding_failures_total",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Portal message decoding failures",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:595",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:596",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 0,
         "y": 61
       },
@@ -1822,7 +1926,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1926,7 +2030,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.9",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1987,7 +2091,7 @@
       }
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -2002,5 +2106,5 @@
   "timezone": "",
   "title": "Fluffy Dashboard",
   "uid": "iWQQPuPnkadsf",
-  "version": 4
+  "version": 7
 }

@@ -151,6 +151,22 @@ proc populateHistoryDb*(
 proc propagateHistoryDb*(
     p: PortalProtocol, dataFile: string, verify = false):
     Future[Result[void, string]] {.async.} =
+
+  const concurrentGossips = 20
+
+  var gossipQueue =
+    newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
+  var gossipWorkers: seq[Future[void]]
+
+  proc gossipWorker(p: PortalProtocol) {.async.} =
+    while true:
+      let (keys, content) = await gossipQueue.popFirst()
+
+      await p.neighborhoodGossip(keys, content)
+
+  for i in 0 ..< concurrentGossips:
+    gossipWorkers.add(gossipWorker(p))
+
   let blockData = readBlockDataTable(dataFile)
 
   if blockData.isOk():
@@ -162,12 +178,9 @@ proc propagateHistoryDb*(
         if p.inRange(contentId):
           p.contentDB.put(contentId, value[1])
 
-        await p.neighborhoodGossip(
-          ContentKeysList(@[encode(value[0])]), value[1])
+        await gossipQueue.addLast(
+          (ContentKeysList(@[encode(value[0])]), value[1]))
 
-    # Need to be sure that all offers where started. TODO: this is not great.
-    while not p.offerQueueEmpty():
-      await sleepAsync(500.milliseconds)
     return ok()
   else:
     return err(blockData.error)
