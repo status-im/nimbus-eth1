@@ -151,33 +151,56 @@ func decodePrealloc*(data: seq[byte]): GenesisAlloc
   for tup in rlp.decode(data, seq[AddressBalance]):
     result[tup.address] = tup.account
 
+# borrowed from `lexer.hexCharValue()` :)
+proc fromHex(c: char): int =
+  case c
+  of '0'..'9': ord(c) - ord('0')
+  of 'a'..'f': ord(c) - ord('a') + 10
+  of 'A'..'F': ord(c) - ord('A') + 10
+  else: -1
+
 proc readValue(reader: var JsonReader, value: var UInt256)
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Mixin for `Json.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
+  var (accu, ok) = (0.u256, true)
   if reader.lexer.lazyTok == tkNumeric:
     try:
-      var accu: UInt256
       reader.lexer.customIntValueIt:
         accu = accu * 10 + it.u256
-      value = accu
-    except: reader.raiseUnexpectedValue("uint256 parse error")
-  elif reader.lexer.tok == tkInt:
-    value = reader.lexer.absintVal.u256
-  elif reader.lexer.tok == tkString:
-    # Make sure that "0x11" decodes to 17, "b" and "11" decode to 11.
-    if reader.lexer.strVal.filterIt(it.isDigit.not).len == 0:
-      try:    value = reader.lexer.strVal.parse(UInt256, radix = 10)
-      except: reader.raiseUnexpectedValue("int string overflow")
-    else:
-      # note that radix is static, so 16 (or 10) cannot be a variable
-      try:    value = reader.lexer.strVal.parse(UInt256, radix = 16)
-      except: reader.raiseUnexpectedValue("hex string parse error")
-  elif reader.lexer.tok == tkError:
-    reader.raiseUnexpectedValue("hex/int parse error: " & $reader.lexer.err)
+      ok = reader.lexer.lazyTok == tkExInt # non-negative wanted
+    except:
+      ok = false
+  elif reader.lexer.lazyTok == tkQuoted:
+    try:
+      var (sLen, base) = (0, 10)
+      reader.lexer.customTextValueIt:
+        if ok:
+          var num = it.fromHex
+          if base <= num:
+            ok = false # cannot be larger than base
+          elif sLen < 2:
+            if 0 <= num:
+              accu = accu * base.u256 + num.u256
+            elif sLen == 1 and it in {'x', 'X'}:
+              base = 16 # handle "0x" prefix
+            else:
+              ok = false
+            sLen.inc
+          elif num < 0:
+            ok = false # not a hex digit
+          elif base == 10:
+            accu = accu * 10 + num.u256
+          else:
+            accu = accu * 16 + num.u256
+    except:
+      reader.raiseUnexpectedValue("numeric string parse error")
   else:
     reader.raiseUnexpectedValue("expect int or hex/int string")
+  if not ok:
+    reader.raiseUnexpectedValue("Uint256 parse error")
+  value = accu
   reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var ChainId)
