@@ -49,6 +49,8 @@ type
     blockZeroHash: KeccakHash ##\
       ## Overload cache for `genesisHash()` method
 
+    blockZeroStateRoot: KeccakHash
+
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
@@ -143,7 +145,9 @@ func calculateForkIds(c: ChainConfig,
 
 proc setForkId(c: Chain)
   {. raises: [Defect,CatchableError].} =
-  c.blockZeroHash = c.db.toGenesisHeader.blockHash
+  let blockZero = c.db.toGenesisHeader
+  c.blockZeroHash = blockZero.blockHash
+  c.blockZeroStateRoot = blockZero.stateRoot
   let genesisCRC = crc32(0, c.blockZeroHash.data)
   c.forkIds = calculateForkIds(c.db.config, genesisCRC)
 
@@ -209,6 +213,10 @@ proc newChain*(db: BaseChainDB): Chain
 method genesisHash*(c: Chain): KeccakHash {.gcsafe.} =
   ## Getter: `AbstractChainDB` overload method
   c.blockZeroHash
+
+method genesisStateRoot*(c: Chain): KeccakHash {.gcsafe, base.} =
+  ## Getter: `AbstractChainDB` overloadable base method
+  c.blockZeroStateRoot
 
 method getBestBlockHeader*(c: Chain): BlockHeader
                            {.gcsafe, raises: [Defect,CatchableError].} =
