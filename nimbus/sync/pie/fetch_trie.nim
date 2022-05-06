@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module fetches the Ethereum account state trie from network peers by
 ## traversing the trie from the root, making network requests.
@@ -22,10 +25,12 @@
 {.push raises: [Defect].}
 
 import
-  std/[sets, tables, algorithm, sequtils],
-  chronos, stint,
+  std/[sets, tables, algorithm],
+  chronos,
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types, pie_common, get_nodedata, validate_trienode]
+  stint,
+  ".."/[sync_types, get_nodedata, validate_trienode],
+  ./common
 
 type
   FetchState = ref object of typeof SyncPeer().fetchBase

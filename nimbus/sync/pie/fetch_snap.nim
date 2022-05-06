@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module fetches the Ethereum account state trie from network peers by
 ## traversing leaves of the trie in leaf path order, making network requests
@@ -19,10 +22,14 @@
 {.push raises: [Defect].}
 
 import
-  std/[sets, tables, algorithm, random, sequtils],
-  chronos, stint, nimcrypto/keccak,
+  std/[sets, tables],
+  chronos,
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types, pie_common, protocol_snap1]
+  nimcrypto/keccak,
+  stint,
+  ../sync_types,
+  ../protocol_snapxx,
+  ./common
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024

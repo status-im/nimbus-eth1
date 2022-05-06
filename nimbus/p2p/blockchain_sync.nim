@@ -370,7 +370,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
     # We have enough trusted peers. Validate new peer against trusted
     if await peersAgreeOnChain(peer, ctx.randomTrustedPeer()):
       ctx.trustedPeers.incl(peer)
-      asyncCheck ctx.obtainBlocksFromPeer(peer)
+      asyncSpawn ctx.obtainBlocksFromPeer(peer)
   elif ctx.trustedPeers.len == 0:
     # Assume the peer is trusted, but don't start sync until we reevaluate
     # it with more peers
@@ -406,7 +406,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
 
     if ctx.trustedPeers.len == minPeersToStartSync:
       for p in ctx.trustedPeers:
-        asyncCheck ctx.obtainBlocksFromPeer(p)
+        asyncSpawn ctx.obtainBlocksFromPeer(p)
 
 
 proc onPeerConnected(ctx: SyncContext, peer: Peer) =

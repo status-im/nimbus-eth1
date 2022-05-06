@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module implements Ethereum Snapshot Protocol (SNAP), `snap/1`, as
 ## specified at the reference below, but modified for Geth compatibility.
@@ -161,10 +164,14 @@
 
 import
   std/options,
-  chronos, stint, chronicles, stew/byteutils, nimcrypto/hash,
+  chronicles,
+  chronos,
   eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
-  ./sync_types
+  eth/p2p/[rlpx, private/p2p_types],
+  nimcrypto/hash,
+  stew/byteutils,
+  stint,
+  ../sync_types
 
 type
   SnapAccount* = object

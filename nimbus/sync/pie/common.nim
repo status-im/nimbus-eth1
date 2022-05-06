@@ -10,9 +10,10 @@
 
 import
   std/[sets, tables, sequtils, strutils],
-  chronos, stint,
+  chronos,
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types]
+  stint,
+  ../sync_types
 
 type
   LeafRange* = object

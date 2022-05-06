@@ -2,16 +2,21 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 {.push raises: [Defect].}
 
 import
-  chronos, stint, chronicles, stew/byteutils,
-  eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils, peer_pool],
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p, rlp],
+  eth/p2p/[rlpx, peer_pool, private/p2p_types],
+  stint,
   "."/[sync_types, protocol_ethxx, chain_head_tracker, get_nodedata]
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =

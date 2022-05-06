@@ -29,7 +29,7 @@ import
   ./p2p/[chain, blockchain_sync],
   ./p2p/clique/[clique_desc, clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/[protocol_ethxx, protocol_snap1, newsync],
+  ./sync/[protocol_ethxx, protocol_snapxx, newsync],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
