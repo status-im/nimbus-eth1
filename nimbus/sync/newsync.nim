@@ -12,7 +12,7 @@ import
   chronos, stint, chronicles, stew/byteutils,
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types, blockchain_utils, peer_pool],
-  "."/[sync_types, protocol_ethxx, chain_head_tracker]
+  "."/[sync_types, protocol_ethxx, chain_head_tracker, get_nodedata]
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
@@ -46,15 +46,7 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
   )
   trace "Sync: Peer connected", peer=sp
 
-  protocolPeer.state(eth).onGetNodeData =
-    proc (_: Peer, hashes: openArray[NodeHash], data: var seq[Blob]) =
-      # Return empty nodes result.  This callback is installed to
-      # ensure we don't reply with nodes from the chainDb.
-      discard
-  protocolPeer.state(eth).onNodeData =
-    proc (peer: Peer, data: openArray[Blob]) =
-      tracePacket "<< Discarding eth.NodeData (0x0e)",
-        got=data.len, peer
+  sp.setupGetNodeData()
 
   if protocolPeer.state(eth).initialized:
     # We know the hash but not the block number.
