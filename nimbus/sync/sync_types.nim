@@ -96,6 +96,13 @@ type
   BlockHash* = Hash256
     ## Hash of a block, goes with `BlockNumber`.
 
+  TxHash* = Hash256
+    ## Hash of a transaction.
+
+  NodeHash* = Hash256
+    ## Hash of a trie node or other blob carried over `eth.NodeData`:
+    ## account trie nodes, storage trie nodes, contract code.
+
 proc inc(stat: var Stat) {.borrow.}
 
 template `$`*(sp: SyncPeer): string = $sp.peer

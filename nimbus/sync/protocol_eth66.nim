@@ -25,8 +25,8 @@ export
 
 type
   NewBlockHashesAnnounce* = object
-    hash: KeccakHash
-    number: uint64           # Note: Was `uint`, wrong on 32-bit targets.
+    hash: BlockHash
+    number: BlockNumber
 
   NewBlockAnnounce* = EthBlock
 
@@ -40,7 +40,7 @@ type
 
   PeerState = ref object
     initialized*: bool
-    bestBlockHash*: KeccakHash
+    bestBlockHash*: BlockHash
     bestDifficulty*: DifficultyInt
 
 const
@@ -50,7 +50,7 @@ const
   maxHeadersFetch* = 192
   ethVersion* = 66
 
-func toHex*(hash: KeccakHash): string = hash.data.toHex
+func toHex*(hash: Hash256): string = hash.data.toHex
 
 func traceStep*(request: BlocksRequest): string =
   var str = if request.reverse: "-" else: "+"
@@ -70,7 +70,7 @@ p2pProtocol eth(version = ethVersion,
       chainForkId = chain.getForkId(bestBlock.blockNumber)
       forkId = ForkId(
         forkHash: chainForkId.crc.toBytesBE,
-        forkNext: chainForkId.nextFork.u256)
+        forkNext: chainForkId.nextFork.toBlockNumber)
 
     tracePacket ">> Sending eth.Status (0x00) [eth/" & $ethVersion & "]",
       peer, td=bestBlock.difficulty,
@@ -117,8 +117,8 @@ p2pProtocol eth(version = ethVersion,
                 ethVersionArg: uint,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
-                bestHash: KeccakHash,
-                genesisHash: KeccakHash,
+                bestHash: BlockHash,
+                genesisHash: BlockHash,
                 forkId: ForkId) =
       tracePacket "<< Received eth.Status (0x00) [eth/" & $ethVersion & "]",
          peer, td=totalDifficulty,
@@ -181,7 +181,7 @@ p2pProtocol eth(version = ethVersion,
 
   requestResponse:
     # User message 0x05: GetBlockBodies.
-    proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) =
+    proc getBlockBodies(peer: Peer, hashes: openArray[BlockHash]) =
       tracePacket "<< Received eth.GetBlockBodies (0x05)",
         peer, count=hashes.len
       if hashes.len > maxBodiesFetch:
@@ -214,14 +214,14 @@ p2pProtocol eth(version = ethVersion,
     discard
 
   # User message 0x08: NewPooledTransactionHashes.
-  proc newPooledTransactionHashes(peer: Peer, hashes: openArray[KeccakHash]) =
+  proc newPooledTransactionHashes(peer: Peer, hashes: openArray[TxHash]) =
     traceGossip "<< Discarding eth.NewPooledTransactionHashes (0x08)",
       peer, count=hashes.len
     discard
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
-    proc getPooledTransactions(peer: Peer, hashes: openArray[KeccakHash]) =
+    proc getPooledTransactions(peer: Peer, hashes: openArray[TxHash]) =
       tracePacket "<< Received eth.GetPooledTransactions (0x09)",
          peer, count=hashes.len
 
@@ -236,7 +236,7 @@ p2pProtocol eth(version = ethVersion,
 
   requestResponse:
     # User message 0x0d: GetNodeData.
-    proc getNodeData(peer: Peer, hashes: openArray[KeccakHash]) =
+    proc getNodeData(peer: Peer, hashes: openArray[NodeHash]) =
       tracePacket "<< Received eth.GetNodeData (0x0d)",
         peer, count=hashes.len
 
@@ -255,7 +255,7 @@ p2pProtocol eth(version = ethVersion,
 
   requestResponse:
     # User message 0x0f: GetReceipts.
-    proc getReceipts(peer: Peer, hashes: openArray[KeccakHash]) =
+    proc getReceipts(peer: Peer, hashes: openArray[BlockHash]) =
       tracePacket "<< Received eth.GetReceipts (0x0f)",
          peer, count=hashes.len
 
