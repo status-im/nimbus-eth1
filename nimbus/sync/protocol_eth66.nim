@@ -43,6 +43,12 @@ type
     bestBlockHash*: BlockHash
     bestDifficulty*: DifficultyInt
 
+    onGetNodeData*:
+      proc (peer: Peer, hashes: openArray[NodeHash],
+            data: var seq[Blob]) {.gcsafe.}
+    onNodeData*:
+      proc (peer: Peer, data: openArray[Blob]) {.gcsafe.}
+
 const
   maxStateFetch* = 384
   maxBodiesFetch* = 128
@@ -234,24 +240,35 @@ p2pProtocol eth(version = ethVersion,
 
   nextId 0x0d
 
-  requestResponse:
-    # User message 0x0d: GetNodeData.
-    proc getNodeData(peer: Peer, hashes: openArray[NodeHash]) =
-      tracePacket "<< Received eth.GetNodeData (0x0d)",
-        peer, count=hashes.len
+  # User message 0x0d: GetNodeData.
+  proc getNodeData(peer: Peer, hashes: openArray[NodeHash]) =
+    tracePacket "<< Received eth.GetNodeData (0x0d)", peer,
+      hashCount=hashes.len
 
-      let blobs = peer.network.chain.getStorageNodes(hashes)
-      if blobs.len > 0:
-        tracePacket ">> Replying with eth.NodeData (0x0e)",
-          peer, sent=blobs.len, requested=hashes.len
-      else:
-        tracePacket ">> Replying EMPTY eth.NodeData (0x0e)",
-          peer, sent=0, requested=hashes.len
+    var data: seq[Blob]
+    if not peer.state.onGetNodeData.isNil:
+      peer.state.onGetNodeData(peer, hashes, data)
+    else:
+      data = peer.network.chain.getStorageNodes(hashes)
 
-      await response.send(blobs)
+    if data.len > 0:
+      tracePacket ">> Replying with eth.NodeData (0x0e)", peer,
+        sent=data.len, requested=hashes.len
+    else:
+      tracePacket ">> Replying EMPTY eth.NodeData (0x0e)", peer,
+        sent=0, requested=hashes.len
 
-    # User message 0x0e: NodeData.
-    proc nodeData(peer: Peer, data: openArray[Blob])
+    await peer.nodeData(data)
+
+  # User message 0x0e: NodeData.
+  proc nodeData(peer: Peer, data: openArray[Blob]) =
+    if not peer.state.onNodeData.isNil:
+      # The `onNodeData` should do its own `tracePacket`, because we don't
+      # know if this is a valid reply ("Got reply") or something else.
+      peer.state.onNodeData(peer, data)
+    else:
+      tracePacket "<< Discarding eth.NodeData (0x0e)", peer,
+        got=data.len
 
   requestResponse:
     # User message 0x0f: GetReceipts.

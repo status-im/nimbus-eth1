@@ -46,6 +46,16 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
   )
   trace "Sync: Peer connected", peer=sp
 
+  protocolPeer.state(eth).onGetNodeData =
+    proc (_: Peer, hashes: openArray[NodeHash], data: var seq[Blob]) =
+      # Return empty nodes result.  This callback is installed to
+      # ensure we don't reply with nodes from the chainDb.
+      discard
+  protocolPeer.state(eth).onNodeData =
+    proc (peer: Peer, data: openArray[Blob]) =
+      tracePacket "<< Discarding eth.NodeData (0x0e)",
+        got=data.len, peer
+
   if protocolPeer.state(eth).initialized:
     # We know the hash but not the block number.
     sp.bestBlockHash = protocolPeer.state(eth).bestBlockHash
