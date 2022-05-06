@@ -265,7 +265,7 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
         var hashes = newSeqOfCap[KeccakHash](maxBodiesFetch)
         template fetchBodies() =
           tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
-            count=hashes.len
+            hashes=hashes.len
           let b = await peer.getBlockBodies(hashes)
           if b.isNone:
             raise newException(CatchableError, "Was not able to get the block bodies")
