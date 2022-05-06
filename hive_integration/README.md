@@ -98,19 +98,19 @@ Working directory is nimbus-eth1 root directory. And you can see the result
 in a markdown file with the same name with the simulator.
 
 - ethereum/consensus
-  - first you need to run `extract_consensus_data`
-    ```nim
-    nim c -r -d:release hive_integration/nodocker/consensus/extract_consensus_data
-    ```
-  - then you can run the simulator
-    ```nim
-    nim c -r -d:release hive_integration/nodocker/consensus/consensus_sim
-    ```
+  ```nim
+  nim c -r -d:release hive_integration/nodocker/consensus/consensus_sim
+  ```
+  Note that this progam expects the _./tests_ directory accessible. So if
+  you compile from the _hive_integration/nodocker_ directory on a Posix
+  system,, the _./tests_ directory would be a symlink to _../../tests_.
 
 - ethereum/graphql
   ```nim
   nim c -r -d:release hive_integration/nodocker/graphql/graphql_sim
   ```
+  Similar to above, the directory _./hive_integration_ is expeced.
+
 ## Observations when working with hive/docker
 
 ### DNS problems with hive simulation container running alpine OS
