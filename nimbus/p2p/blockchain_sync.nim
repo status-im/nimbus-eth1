@@ -253,11 +253,12 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
     var dataReceived = false
     try:
       tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer,
-        startBlock=request.startBlock.number, max=request.maxResults
+        startBlock=request.startBlock.number, max=request.maxResults,
+        step=traceStep(request)
       let results = await peer.getBlockHeaders(request)
       if results.isSome:
         tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer,
-          count=results.get.headers.len
+          count=results.get.headers.len, requested=request.maxResults
         shallowCopy(workItem.headers, results.get.headers)
 
         var bodies = newSeqOfCap[BlockBody](workItem.headers.len)
@@ -270,7 +271,7 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
             raise newException(CatchableError, "Was not able to get the block bodies")
           let bodiesLen = b.get.blocks.len
           tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
-            count=bodiesLen
+            count=bodiesLen, requested=hashes.len
           if bodiesLen == 0:
             raise newException(CatchableError, "Zero block bodies received for request")
           elif bodiesLen < hashes.len:

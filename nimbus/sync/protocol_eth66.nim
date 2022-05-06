@@ -142,9 +142,24 @@ p2pProtocol eth(version = ethVersion,
   requestResponse:
     # User message 0x03: GetBlockHeaders.
     proc getBlockHeaders(peer: Peer, request: BlocksRequest) =
-      tracePacket "<< Received eth.GetBlockHeaders (0x03)",
-        peer, `block`=request.startBlock, count=request.maxResults,
-        step=traceStep(request)
+      if tracePackets:
+        if request.maxResults == 1 and request.startBlock.isHash:
+          tracePacket "<< Received eth.GetBlockHeaders/Hash (0x03)",
+            peer, blockHash=($request.startBlock.hash), count=1
+        elif request.maxResults == 1:
+          tracePacket "<< Received eth.GetBlockHeaders (0x03)",
+            peer, `block`=request.startBlock.number, count=1
+        elif request.startBlock.isHash:
+          tracePacket "<< Received eth.GetBlockHeaders/Hash (0x03)",
+            peer, firstBlockHash=($request.startBlock.hash),
+            count=request.maxResults,
+            step=traceStep(request)
+        else:
+          tracePacket "<< Received eth.GetBlockHeaders (0x03)",
+            peer, firstBlock=request.startBlock.number,
+            count=request.maxResults,
+            step=traceStep(request)
+
       if request.maxResults > uint64(maxHeadersFetch):
         debug "eth.GetBlockHeaders (0x03) requested too many headers",
           peer, requested=request.maxResults, max=maxHeadersFetch
@@ -154,10 +169,10 @@ p2pProtocol eth(version = ethVersion,
       let headers = peer.network.chain.getBlockHeaders(request)
       if headers.len > 0:
         tracePacket ">> Replying with eth.BlockHeaders (0x04)",
-          peer, count=headers.len
+          peer, sent=headers.len, requested=request.maxResults
       else:
         tracePacket ">> Replying EMPTY eth.BlockHeaders (0x04)",
-          peer, count=0
+          peer, sent=0, requested=request.maxResults
 
       await response.send(headers)
 
@@ -178,10 +193,10 @@ p2pProtocol eth(version = ethVersion,
       let bodies = peer.network.chain.getBlockBodies(hashes)
       if bodies.len > 0:
         tracePacket ">> Replying with eth.BlockBodies (0x06)",
-          peer, count=bodies.len
+          peer, sent=bodies.len, requested=hashes.len
       else:
         tracePacket ">> Replying EMPTY eth.BlockBodies (0x06)",
-          peer, count=0
+          peer, sent=0, requested=hashes.len
 
       await response.send(bodies)
 
@@ -211,7 +226,7 @@ p2pProtocol eth(version = ethVersion,
          peer, count=hashes.len
 
       tracePacket ">> Replying EMPTY eth.PooledTransactions (0x10)",
-         peer, count=0
+         peer, sent=0, requested=hashes.len
       await response.send([])
 
     # User message 0x0a: PooledTransactions.
@@ -228,10 +243,10 @@ p2pProtocol eth(version = ethVersion,
       let blobs = peer.network.chain.getStorageNodes(hashes)
       if blobs.len > 0:
         tracePacket ">> Replying with eth.NodeData (0x0e)",
-          peer, count=blobs.len
+          peer, sent=blobs.len, requested=hashes.len
       else:
         tracePacket ">> Replying EMPTY eth.NodeData (0x0e)",
-          peer, count=0
+          peer, sent=0, requested=hashes.len
 
       await response.send(blobs)
 
@@ -245,7 +260,7 @@ p2pProtocol eth(version = ethVersion,
          peer, count=hashes.len
 
       tracePacket ">> Replying EMPTY eth.Receipts (0x10)",
-         peer, count=0
+         peer, sent=0, requested=hashes.len
       await response.send([])
       # TODO: implement `getReceipts` and reactivate this code
       # await response.send(peer.network.chain.getReceipts(hashes))
