@@ -11,7 +11,7 @@
 
 import
   std/options,
-  stint, stew/byteutils, chronicles,
+  stint, stew/byteutils, chronicles, chronos,
   eth/[common/eth_types, p2p]
 
 const
@@ -70,6 +70,7 @@ type
     nodeDataRequests:       NodeDataRequestQueue    # Exported via templates.
     fetch:                  FetchState              # Exported via templates.
     startedFetch*:          bool
+    stopThisState*:         bool
 
   SyncPeerMode* = enum
     ## The current state of tracking the peer's canonical chain head.
@@ -233,16 +234,27 @@ template `>`*(path1, path2: InteriorPath): auto = not(path1 <= path2)
 
 ## `LeafPath` methods.
 
-const leafLow* = LeafPath(number: low(UInt256))
-const leafHigh* = LeafPath(number: high(UInt256))
+template low*(_: LeafPath | type LeafPath): auto =
+  LeafPath(number: low(UInt256))
+template high*(_: LeafPath | type LeafPath): auto =
+  LeafPath(number: high(UInt256))
+
+const leafPathBytes = sizeof(LeafPath().number.toBytesBE)
 
 template toLeafPath*(leafPath: LeafPath): LeafPath =
   leafPath
 template toLeafPath*(interiorPath: InteriorPath): LeafPath =
   doAssert interiorPath.numDigits == InteriorPath.maxDepth
   doAssert sizeof(interiorPath.bytes) * 2 == InteriorPath.maxDepth
-  doAssert sizeof(interiorPath.bytes) <= sizeof(LeafPath().number.toBytesBE)
+  doAssert sizeof(interiorPath.bytes) == leafPathBytes
   LeafPath(number: UInt256.fromBytesBE(interiorPath.bytes))
+template toLeafPath*(bytes: array[leafPathBytes, byte]): LeafPath =
+  doAssert sizeof(bytes) == leafPathBytes
+  LeafPath(number: UInt256.fromBytesBE(bytes))
+
+template toBytes*(leafPath: LeafPath): array[leafPathBytes, byte] =
+  doAssert sizeof(LeafPath().number.toBytesBE) == leafPathBytes
+  leafPath.number.toBytesBE
 
 # Note, `{.borrow.}` didn't work for these symbols (with Nim 1.2.12) when we
 # defined `LeafPath = distinct UInt256`.  The `==` didn't match any symbol to
@@ -256,12 +268,12 @@ template `>`*(path1, path2: LeafPath): auto = path1.number > path2.number
 template `>=`*(path1, path2: LeafPath): auto = path1.number >= path2.number
 template cmp*(path1, path2: LeafPath): auto = cmp(path1.number, path2.number)
 
-template `-`*(low, high: LeafPath): UInt256 =
-  high.number - low.number
-template `+`*(base: LeafPath, step: Uint256): LeafPath =
+template `-`*(path1, path2: LeafPath): UInt256 =
+  path1.number - path2.number
+template `+`*(base: LeafPath, step: Uint256 | SomeInteger): LeafPath =
   LeafPath(number: base.number + step)
-template `+`*(base: LeafPath, step: SomeInteger): LeafPath =
-  LeafPath(number: base.number + step)
+template `-`*(base: LeafPath, step: Uint256 | SomeInteger): LeafPath =
+  LeafPath(number: base.number - step)
 
 ## String output functions.
 
@@ -299,3 +311,32 @@ export Blob, Hash256, toHex
 
 # The files and lines clutter more useful details when sync tracing is enabled.
 publicLogScope: chroniclesLineNumbers=false
+
+# Use `safeSetTimer` consistently, with a `ref T` argument if including one.
+type
+  SafeCallbackFunc*[T] = proc (objectRef: ref T) {.gcsafe, raises: [Defect].}
+  SafeCallbackFuncVoid* = proc () {.gcsafe, raises: [Defect].}
+
+proc safeSetTimer*[T](at: Moment, cb: SafeCallbackFunc[T],
+                      objectRef: ref T = nil): TimerCallback =
+  ## Like `setTimer` but takes a typed `ref T` argument, which is passed to the
+  ## callback function correctly typed.  Stores the `ref` in a closure to avoid
+  ## garbage collection memory corruption issues that occur when the `setTimer`
+  ## pointer argument is used.
+  proc chronosTimerSafeCb(udata: pointer) = cb(objectRef)
+  return setTimer(at, chronosTimerSafeCb)
+
+proc safeSetTimer*[T](at: Moment, cb: SafeCallbackFuncVoid): TimerCallback =
+  ## Like `setTimer` but takes no pointer argument.  The callback function
+  ## takes no arguments.
+  proc chronosTimerSafeCb(udata: pointer) = cb()
+  return setTimer(at, chronosTimerSafeCb)
+
+proc setTimer*(at: Moment, cb: CallbackFunc, udata: pointer): TimerCallback
+  {.error: "Do not use setTimer with a `pointer` type argument".}
+  ## `setTimer` with a non-nil pointer argument is dangerous because
+  ## the pointed-to object is often freed or garbage collected before the
+  ## timer callback runs.  Call `setTimer` with a `ref` argument instead.
+
+proc setTimer*(at: Moment, cb: CallbackFunc): TimerCallback {.inline.} =
+  chronos.setTimer(at, cb, nil)

@@ -1,4 +1,4 @@
-# Nimbus - Fetch entire state from peers by trie traversal
+# Nimbus - Fetch account and storage states from peers by trie traversal
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
@@ -6,8 +6,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-## This module fetches the entire Ethereum account state trie from network
-## peers by traversing the trie from the root, making network requests.
+## This module fetches the Ethereum account state trie from network peers by
+## traversing the trie from the root, making network requests.
 ##
 ## Requests are batched, pipelined, sorted, sliced and load-balanced.
 ##
@@ -15,27 +15,19 @@
 ##
 ## - Load-balancing allows the available of multiple peers to be used.
 ##
-## - Sorting and slicing is a key part of the pie sync algorithm, which
-##   allows the entire Ethereum state to be fetched, following hashes,
-##   without any significant random access I/O to the database.
+## - Sorting and slicing is a key part of the pie sync algorithm, which allows
+##   the entire Ethereum state to be fetched, even following hash trie
+##   pointers, without significant random access database I/O.
 
 {.push raises: [Defect].}
 
 import
-  std/[sets, tables, algorithm],
-  chronos, stint, nimcrypto/keccak,
+  std/[sets, tables, algorithm, sequtils],
+  chronos, stint,
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types, get_nodedata, validate_trienode]
+  "."/[sync_types, pie_common, get_nodedata, validate_trienode]
 
 type
-  LeafRange = object
-    leafLow, leafHigh:      LeafPath
-
-  SharedFetchState = ref object of typeof SyncPeer().sharedFetchBase
-    ## Account fetching state that is shared among all peers.
-    # Leaf path ranges not fetched or in progress on any peer.
-    leafRanges:             seq[LeafRange]
-
   FetchState = ref object of typeof SyncPeer().fetchBase
     ## Account fetching state on a single peer.
     sp:                     SyncPeer
@@ -44,17 +36,17 @@ type
     scheduledBatch:         bool
     progressPrefix:         string
     progressCount:          int
+    nodesInFlight:          int
+    getNodeDataErrors:      int
+    leafRange:              LeafRange
+    unwindAccounts:         int64
+    unwindAccountBytes:     int64
+    finish:                 Future[void]
 
   SingleNodeRequest = ref object
     hash:                   NodeHash
     path:                   InteriorPath
     future:                 Future[Blob]
-
-template sharedFetch*(sp: SyncPeer): auto =
-  sync_types.sharedFetchBase(sp).SharedFetchState
-
-template fetch*(sp: SyncPeer): auto =
-  sync_types.fetchBase(sp).FetchState
 
 const
   maxBatchGetNodeData = 384
@@ -62,6 +54,9 @@ const
 
   maxParallelGetNodeData = 32
     ## Maximum number of `GetNodeData` requests in parallel to a single peer.
+
+template fetch*(sp: SyncPeer): auto =
+  sync_types.fetchBase(sp).FetchState
 
 # Forward declaration.
 proc scheduleBatchGetNodeData(fetch: FetchState) {.gcsafe.}
@@ -72,15 +67,18 @@ proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
   inc fetch.nodeGetsInFlight
   let reply = await fetch.sp.getNodeData(hashes, pathFrom, pathTo)
 
-  # Timeout, packet and packet error trace messages are done in `onNodeData`
-  # and `nodeDataTimeout`, where there is more context than here.  Here we
-  # always received just valid data with hashes already verified, or `nil`.
+  # Timeout, packet and packet error trace messages are done in `get_nodedata`,
+  # where there is more context than here.  Here we always received just valid
+  # data with hashes already verified, or empty list of `nil`.
   if reply.isNil:
     # Timeout or error.
+    fetch.sp.stopThisState = true
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
   elif reply.hashVerifiedData.len == 0:
     # Empty reply, matched to request.
+    # It means there are none of the nodes available, but it's not an error.
+    fetch.sp.stopThisState = true
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
   else:
@@ -102,9 +100,16 @@ proc batchGetNodeData(fetch: FetchState) =
   if i == 0 or fetch.nodeGetsInFlight >= maxParallelGetNodeData:
     return
 
-  # Sort individual requests in order of path.  The sort is descending order
-  # but they are popped off the end of the sequence (for O(1) removal) so are
-  # processed in ascending order of path.
+  # WIP NOTE: The algorithm below is out of date and is not the final algorithm
+  # (which doesn't need to sort).  Below gets some of the job done, but it can
+  # exhaust memory in pathological cases depending how the peers respond, and
+  # it cannot track prograss or batch the leaves for storage.  Its replacement
+  # is actually simpler but depends on a data structure which has yet to be
+  # merged.  Also, it doesn't use `Future` so much.
+  #
+  # OLD NOTE: Sort individual requests in order of path.  The sort is
+  # descending order but they are popped off the end of the sequence (for O(1)
+  # removal) so are processed in ascending order of path.
   #
   # For large state tries, this is important magic:
   #
@@ -142,6 +147,14 @@ proc batchGetNodeData(fetch: FetchState) =
   sort(fetch.nodeGetQueue, cmpSingleNodeRequest)
 
   trace "Trie: Sort length", sortLen=i
+
+  # If stopped, abort all waiting nodes, so they clean up.
+  if fetch.sp.stopThisState or fetch.sp.stopped:
+    while i > 0:
+      fetch.nodeGetQueue[i].future.complete(@[])
+      dec i
+    fetch.nodeGetQueue.setLen(0)
+    return
 
   var hashes = newSeqOfCap[NodeHash](maxBatchGetNodeData)
   var futures = newSeqOfCap[Future[Blob]](maxBatchGetNodeData)
@@ -194,6 +207,9 @@ proc getNodeData(fetch: FetchState,
     fetch.scheduleBatchGetNodeData()
   let nodeBytes = await future
 
+  if fetch.sp.stopThisState or fetch.sp.stopped:
+    return nodebytes
+
   if tracePackets:
     doAssert nodeBytes.len == 0 or nodeDataHash(nodeBytes) == hash
 
@@ -208,34 +224,59 @@ proc getNodeData(fetch: FetchState,
         nodeLen=nodeBytes.len, peer=fetch.sp
   return nodeBytes
 
-import std/strutils
-proc updateProgress(fetch: FetchState,
-                    path: string = "done", count: int = 0) =
-  fetch.progressCount += count
-  if fetch.progressPrefix.len == 0 or not path.startsWith(fetch.progressPrefix):
-    trace "Sync: State trie leaves progress",
-      count=fetch.progressCount, path, peer=fetch.sp
-    fetch.progressPrefix = path[0..2]
+proc pathInRange(fetch: FetchState, path: InteriorPath): bool {.inline.} =
+  # TODO: This method is ugly and unnecessarily slow.
+  var compare = fetch.leafRange.leafLow.toInteriorPath
+  while compare.depth > path.depth:
+    compare.pop()
+  if path < compare:
+    return false
+  compare = fetch.leafRange.leafHigh.toInteriorPath
+  while compare.depth > path.depth:
+    compare.pop()
+  if path > compare:
+    return false
+  return true
 
 proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
               fromExtension: bool) {.async.} =
-#  trace "Trie: Fetching node",
-#    depth=path.depth, path=path.toHex(true), hash=($hash), peer=sp
-  let nodeBytes = await fetch.getNodeData(hash, path)
-
-  var context: TrieNodeParseContext # Default values are fine.
-  try:
-    fetch.sp.parseTrieNode(path, hash, nodeBytes, fromExtension, context)
-  except RlpError as e:
-    fetch.sp.parseTrieNodeError(path, hash, nodeBytes, context, e)
-
-  if context.errors > 0:
-    debug "Aborting trie traversal due to errors"
+  template errorReturn() =
+    fetch.sp.stopThisState = true
+    dec fetch.nodesInFlight
+    if fetch.nodesInFlight == 0:
+      fetch.finish.complete()
     return
 
-  if context.childQueue.len > 0:
-    for i in 0 ..< context.childQueue.len:
-      let (nodePath, nodeHash, fromExtension) = context.childQueue[i]
+  # If something triggered stop earlier, don't request, and clean up now.
+  if fetch.sp.stopThisState or fetch.sp.stopped:
+    errorReturn()
+
+  let nodeBytes = await fetch.getNodeData(hash, path)
+
+  # If something triggered stop, clean up now.
+  if fetch.sp.stopThisState or fetch.sp.stopped:
+    errorReturn()
+  # Don't keep emitting error messages after one error.  We'll allow 10.
+  if fetch.getNodeDataErrors >= 10:
+    errorReturn()
+
+  var parseContext: TrieNodeParseContext # Default values are fine.
+  try:
+    fetch.sp.parseTrieNode(path, hash, nodeBytes, fromExtension, parseContext)
+  except RlpError as e:
+    fetch.sp.parseTrieNodeError(path, hash, nodeBytes, parseContext, e)
+
+  if parseContext.errors > 0:
+    debug "Aborting trie traversal due to errors", peer=fetch.sp
+    inc fetch.getNodeDataErrors
+    errorReturn()
+
+  if parseContext.childQueue.len > 0:
+    for i in 0 ..< parseContext.childQueue.len:
+      let (nodePath, nodeHash, fromExtension) = parseContext.childQueue[i]
+      # Discard traversals outside the current leaf range.
+      if not fetch.pathInRange(nodePath):
+        continue
       # Here, with `await` results in depth-first traversal and `asyncSpawn`
       # results in breadth-first.  Neither is what we really want.  Depth-first
       # is delayed by a round trip time for every node.  It's far too slow.
@@ -244,33 +285,26 @@ proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
       # unlikely.  That's far too risky.  However the sorting in the request
       # dispatcher left-biases the traversal so that the out of memory
       # condition won't occur.
+      inc fetch.nodesInFlight
       asyncSpawn fetch.traverse(nodeHash, nodePath, fromExtension)
 
-  if context.leafQueue.len > 0:
-    for i in 0 ..< context.leafQueue.len:
-      let (leafPath, nodeHash, leafBytes) = context.leafQueue[i]
-      fetch.updateProgress($leafPath, 1)
+  if parseContext.leafQueue.len > 0:
+    for i in 0 ..< parseContext.leafQueue.len:
+      let leafPtr = addr parseContext.leafQueue[i]
+      template leafPath: auto = leafPtr[0]
+      # Discard leaves outside the current leaf range.
+      if leafPtr[0] < fetch.leafRange.leafLow or
+         leafPtr[0] > fetch.leafRange.leafHigh:
+        continue
+      template leafBytes: auto = leafPtr[2]
+      inc fetch.unwindAccounts
+      fetch.unwindAccountBytes += leafBytes.len
+      inc fetch.sp.sharedFetch.countAccounts
+      fetch.sp.sharedFetch.countAccountBytes += leafBytes.len
 
-proc getSlice(sp: SyncPeer, leafRange: var LeafRange): bool =
-  const leafMaxFetchRange = (leafHigh - leafLow) div 1000
-
-  if sp.sharedFetch.isNil:
-    sp.sharedFetch = SharedFetchState(
-      leafRanges: @[LeafRange(leafLow: leafLow, leafHigh: leafHigh)]
-    )
-
-  let sharedFetch = sp.sharedFetch
-  if sharedFetch.leafRanges.len == 0:
-    return false
-
-  leafRange.leafLow = sharedFetch.leafRanges[0].leafLow
-  leafRange.leafHigh = sharedFetch.leafRanges[0].leafHigh
-  if leafRange.leafHigh - leafRange.leafLow <= leafMaxFetchRange:
-    sharedFetch.leafRanges.delete(0)
-  else:
-    leafRange.leafHigh = leafRange.leafLow + leafMaxFetchRange
-    sharedFetch.leafRanges[0].leafHigh = leafRange.leafHigh + 1
-  return true
+  dec fetch.nodesInFlight
+  if fetch.nodesInFlight == 0:
+    fetch.finish.complete()
 
 proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.} =
   # Before doing real trie traversal on this peer, send a probe request for
@@ -280,7 +314,7 @@ proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.}
   # Possible outcomes:
   #
   # - Trie root is returned.  Peers supporting `GetNodeData` do this as long as
-  #   `stateRoot` is still in their pruning window, and isn't on a superceded
+  #   `stateRoot` is still in their pruning window, and isn't on a superseded
   #   chain branch.
   #
   # - Empty reply, meaning "I don't have the data".  Peers supporting
@@ -292,13 +326,29 @@ proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.}
   #   such as a source of blocks and transactions, just because it doesn't
   #   reply to `GetNodeData`.
   let reply = await sp.getNodeData(@[stateRoot],
-                                   leafLow.toInteriorPath,
-                                   leafHigh.toInteriorPath)
+                                   rootInteriorPath, rootInteriorPath)
   return not reply.isNil and reply.hashVerifiedData.len == 1
 
-proc trieFetch*(sp: SyncPeer) {.async.} =
-  let stateRoot = sp.syncStateRoot.get
-  trace "Sync: Looking at stateRoot", stateRoot=($stateRoot)
+proc trieFetch*(sp: SyncPeer, stateRoot: TrieHash,
+                leafRange: LeafRange) {.async.} =
   if sp.fetch.isNil:
     sp.fetch = FetchState(sp: sp)
-  asyncSpawn sp.fetch.traverse(stateRoot.NodeHash, rootInteriorPath, false)
+  template fetch: auto = sp.fetch
+
+  fetch.leafRange = leafRange
+  fetch.finish = newFuture[void]()
+  fetch.unwindAccounts = 0
+  fetch.unwindAccountBytes = 0
+
+  inc fetch.nodesInFlight
+  await fetch.traverse(stateRoot.NodeHash, rootInteriorPath, false)
+  await fetch.finish
+  if fetch.getNodeDataErrors == 0:
+    sp.countSlice(leafRange, false)
+  else:
+    sp.sharedFetch.countAccounts -= fetch.unwindAccounts
+    sp.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
+    sp.putSlice(leafRange)
+
+proc peerSupportsGetNodeData*(sp: SyncPeer): bool =
+  not sp.stopped and (sp.fetch.isNil or sp.fetch.getNodeDataErrors == 0)

@@ -238,6 +238,14 @@ proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) {.inlin
   else:
     rlpWriter.append(account.codeHash)
 
+# RLP serialisation for `LeafPath`.
+
+template read*(rlp: var Rlp, _: type LeafPath): LeafPath =
+  rlp.read(array[sizeof(LeafPath().toBytes), byte]).toLeafPath
+
+template append*(rlpWriter: var RlpWriter, leafPath: LeafPath) =
+  rlpWriter.append(leafPath.toBytes)
+
 # TODO: Don't know why, but the `p2pProtocol` can't handle this type.  It tries
 # to serialise the `Option` as an object, looking at the internal fields.  But
 # then fails because they are private fields.
@@ -267,13 +275,8 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      template describeOrigin: string =
-        if origin == leafLow: "min" else: origin.toHex
-      template describeLimit: string =
-        if limit == leafHigh: "max" else: limit.toHex
-
       tracePacket "<< Received snap.GetAccountRange (0x00)",
-        pathRange=(describeOrigin & '-' & describeLimit),
+        accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", sent=0, peer
@@ -292,30 +295,25 @@ p2pProtocol snap1(version = 1,
                           origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =
       if tracePackets:
-        var (originIsDefiniteLow, limitIsDefiniteHigh) = (false, false)
-        if origin.len == 0 or origin.len == 32:
-          originIsDefiniteLow = true
+        var definiteFullRange = ((origin.len == 32 or origin.len == 0) and
+                                 (limit.len == 32 or limit.len == 0))
+        if definiteFullRange:
           for i in 0 ..< origin.len:
             if origin[i] != 0x00:
-              originIsDefiniteLow = false
+              definiteFullRange = false
               break
-        if limit.len == 32:
-          limitIsDefiniteHigh = true
+        if definiteFullRange:
           for i in 0 ..< limit.len:
             if limit[i] != 0xff:
-              limitIsDefiniteHigh = false
+              definiteFullRange = false
               break
 
         template describe(value: openArray[byte]): string =
           if value.len == 0: "(empty)"
           elif value.len == 32: value.toHex
           else: "(non-standard-len=" & $value.len & ')' & value.toHex
-        template describeOrigin: string =
-          if originIsDefiniteLow: "min" else: describe(origin)
-        template describeLimit: string =
-          if limitIsDefiniteHigh: "max" else: describe(limit)
 
-        if originIsDefiniteLow and limitIsDefiniteHigh:
+        if definiteFullRange:
           # Fetching storage for multiple accounts.
           tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
             accountPaths=accounts.len,
@@ -324,7 +322,7 @@ p2pProtocol snap1(version = 1,
           # Fetching partial storage for one account, aka. "large contract".
           tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
             accountPaths=1,
-            storagePathRange=(describeOrigin & '-' & describeLimit),
+            storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes, peer
         else:
           # This branch is separated because these shouldn't occur.  It's not
@@ -332,7 +330,7 @@ p2pProtocol snap1(version = 1,
           # non-default path range.
           tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
             accountPaths=accounts.len,
-            storagePathRange=(describeOrigin & '-' & describeLimit),
+            storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes, peer
 
       tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", sent=0, peer

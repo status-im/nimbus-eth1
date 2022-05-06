@@ -29,7 +29,7 @@ import
   ./p2p/[chain, blockchain_sync],
   ./p2p/clique/[clique_desc, clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/[protocol_ethxx, newsync],
+  ./sync/[protocol_ethxx, protocol_snap1, newsync],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
@@ -124,6 +124,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability eth
+    nimbus.ethNode.addCapability snap1
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 

@@ -63,7 +63,7 @@ import
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types],
   ../p2p/chain/chain_desc,
-  "."/[sync_types, protocol_ethxx, pie_fetch_trie]
+  "."/[sync_types, protocol_ethxx, pie_slicer]
 
 const
   syncLockedMinimumReply        = 8
@@ -127,7 +127,7 @@ proc setSyncStateRoot(sp: SyncPeer, blockNumber: BlockNumber,
     sp.startedFetch = true
     trace "Sync: Starting to download block state",
       `block`=blockNumber, blockHash=($blockHash), stateRoot=($stateRoot), peer=sp
-    asyncSpawn sp.trieFetch()
+    asyncSpawn sp.stateFetch()
 
 proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
                      bestHash: BlockHash) =

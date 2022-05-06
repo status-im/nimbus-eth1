@@ -60,7 +60,7 @@ import
   std/[sequtils, sets, tables, hashes],
   chronos, stint, nimcrypto/keccak,
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types, protocol_eth65]
+  "."/[sync_types, protocol_ethxx]
 
 type
   NodeDataRequestQueue* = ref object of typeof SyncPeer().nodeDataRequestsBase
@@ -131,6 +131,10 @@ proc traceNodeDataReplyError(request: NodeDataRequest,
 
 proc traceNodeDataReplyTimeout(request: NodeDataRequest) {.inline.} =
   traceTimeout "<< Timeout waiting for reply to eth.GetNodeData (0x0d)",
+    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+
+proc traceGetNodeDataDisconnected(request: NodeDataRequest) {.inline.} =
+  traceNetworkError "<< Peer disconnected, not sending eth.GetNodeData (0x0d)",
     hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) {.inline.} =
@@ -317,7 +321,8 @@ proc nodeDataRequestDequeue(rq: NodeDataRequestQueue,
 proc nodeDataTryEmpties(rq: NodeDataRequestQueue)
 proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.}
 
-proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply) =
+proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply,
+                      insideTryEmpties = false) =
   ## Complete `request` with received data or other reply.
   if request.future.finished:
     # Subtle: Timer can trigger and its callback be added to Chronos run loop,
@@ -328,13 +333,14 @@ proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply) =
     request.timer.clearTimer()
     request.future.complete(reply)
     let rq = request.sp.nodeDataRequests
+    trace "nodeDataRequestDequeue", addr=cast[pointer](request).repr
     rq.nodeDataRequestDequeue(request)
     # It may now be possible to match empty replies to earlier requests.
-    rq.nodeDataTryEmpties()
+    if not insideTryEmpties:
+      rq.nodeDataTryEmpties()
 
-proc nodeDataTimeout(arg: pointer) =
-  ## Complete `request` with timeout.  (`arg` because it's a Chronos timer.)
-  let request = cast[NodeDataRequest](arg)
+proc nodeDataTimeout(request: NodeDataRequest) =
+  ## Complete `request` with timeout.
   request.traceNodeDataReplyTimeout()
   {.gcsafe.}: request.nodeDataComplete(nil)
 
@@ -344,19 +350,19 @@ proc nodeDataTryEmpties(rq: NodeDataRequestQueue) =
   # The problem is it's ambiguous whether an empty reply after timed out
   # request was intended by the peer for that request.
   if rq.empties > 0 and rq.empties >= rq.liveRequests.len:
-    rq.empties = 0
-    # Complete all live requests with empty results, now we know.
-    while rq.liveRequests.len > 0:
-      template popSilenceRaises[T](s: HashSet[ref T]): ref T =
-        try: s.pop() except KeyError as e: raise newException(Defect, e.msg)
-      let request = rq.liveRequests.popSilenceRaises()
-      # Construct reply object, because empty is different from timeout.
-      request.nodeDataComplete(NodeDataReply())
+    # Complete all live requests with empty results, now they are all matched.
+    if rq.liveRequests.len > 0:
+      # Careful: Use `.toSeq` below because we must not use the `HashSet`
+      # iterator while the set is being changed.
+      for request in rq.liveRequests.toSeq:
+        # Constructed reply object, because empty is different from timeout.
+        request.nodeDataComplete(NodeDataReply(), true)
     # Move all temporarily delayed requests to the live state, and send them.
-    var tmpList: seq[NodeDataRequest]
-    swap(tmpList, rq.waitingOnEmpties)
-    for i in 0 ..< tmpList.len:
-      asyncSpawn nodeDataEnqueueAndSend(tmpList[i])
+    if rq.waitingOnEmpties.len > 0:
+      var tmpList: seq[NodeDataRequest]
+      swap(tmpList, rq.waitingOnEmpties)
+      for i in 0 ..< tmpList.len:
+        asyncSpawn nodeDataEnqueueAndSend(tmpList[i])
 
 proc nodeDataNewRequest(sp: SyncPeer, hashes: seq[NodeHash],
                         pathFrom, pathTo: InteriorPath
@@ -369,16 +375,22 @@ proc nodeDataNewRequest(sp: SyncPeer, hashes: seq[NodeHash],
   # TODO: Cache the time when making batches of requests, instead of calling
   # `Moment.fromNow()` which always does a system call.  `p2pProtocol` request
   # timeouts have the same issue (and is where we got 10 seconds default).
-  request.timer = setTimer(Moment.fromNow(10.seconds),
-                           nodeDataTimeout, cast[pointer](request))
+#  request.timer = setTimer(Moment.fromNow(10.seconds),
+#                           nodeDataTimeout, cast[pointer](request))
+  request.timer = safeSetTimer(Moment.fromNow(10.seconds),
+                               nodeDataTimeout, request)
   request.future = newFuture[NodeDataReply]()
   return request
 
 proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
   ## Helper function to send an `eth.GetNodeData` request.
   ## But not when we're draining the in flight queue to match empty replies.
-  let rq = request.sp.nodeDataRequests
   let sp = request.sp
+  if sp.stopped:
+    request.traceGetNodeDataDisconnected()
+    request.future.complete(nil)
+    return
+  let rq = sp.nodeDataRequests
   if rq.empties > 0:
     request.traceGetNodeDataDelaying()
     rq.waitingOnEmpties.add(request)

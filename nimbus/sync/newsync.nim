@@ -27,7 +27,6 @@ proc syncPeerStart(sp: SyncPeer) =
   asyncSpawn sp.syncPeerLoop()
 
 proc syncPeerStop(sp: SyncPeer) =
-  trace "Sync: Peer disconnected", peer=sp
   sp.stopped = true
   # TODO: Cancel SyncPeers that are running.  We need clean cancellation for
   # this.  Doing so reliably will be addressed at a later time.
@@ -61,15 +60,18 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
 
 proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
   trace "Sync: Peer disconnected", peer=protocolPeer
-
+  # Find matching `sp` and remove from `ns.syncPeers`.
   var sp: SyncPeer = nil
   for i in 0 ..< ns.syncPeers.len:
-    if $ns.syncPeers[i].peer.remote == $sp.peer.remote:
+    if ns.syncPeers[i].peer == protocolPeer:
       sp = ns.syncPeers[i]
       ns.syncPeers.delete(i)
       break
-  if not sp.isNil:
-    sp.syncPeerStop()
+  if sp.isNil:
+    debug "Sync: Unknown peer disconnected", peer=protocolPeer
+    return
+
+  sp.syncPeerStop()
 
 proc newSyncEarly*(ethNode: EthereumNode) =
   info "** Using --new-sync experimental new sync algorithms"
