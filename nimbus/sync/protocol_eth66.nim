@@ -136,13 +136,13 @@ p2pProtocol eth(version = ethVersion,
   # User message 0x01: NewBlockHashes.
   proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
     traceGossip "<< Discarding eth.NewBlockHashes (0x01)",
-      peer, count=hashes.len
+      peer, hashes=hashes.len
     discard
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
     traceGossip "<< Discarding eth.Transactions (0x02)",
-      peer, count=transactions.len
+      peer, transactions=transactions.len
     discard
 
   requestResponse:
@@ -189,7 +189,7 @@ p2pProtocol eth(version = ethVersion,
     # User message 0x05: GetBlockBodies.
     proc getBlockBodies(peer: Peer, hashes: openArray[BlockHash]) =
       tracePacket "<< Received eth.GetBlockBodies (0x05)",
-        peer, count=hashes.len
+        peer, hashes=hashes.len
       if hashes.len > maxBodiesFetch:
         debug "eth.GetBlockBodies (0x05) requested too many bodies",
           peer, requested=hashes.len, max=maxBodiesFetch
@@ -222,14 +222,14 @@ p2pProtocol eth(version = ethVersion,
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(peer: Peer, hashes: openArray[TxHash]) =
     traceGossip "<< Discarding eth.NewPooledTransactionHashes (0x08)",
-      peer, count=hashes.len
+      peer, hashes=hashes.len
     discard
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
     proc getPooledTransactions(peer: Peer, hashes: openArray[TxHash]) =
       tracePacket "<< Received eth.GetPooledTransactions (0x09)",
-         peer, count=hashes.len
+         peer, hashes=hashes.len
 
       tracePacket ">> Replying EMPTY eth.PooledTransactions (0x10)",
          peer, sent=0, requested=hashes.len
@@ -243,7 +243,7 @@ p2pProtocol eth(version = ethVersion,
   # User message 0x0d: GetNodeData.
   proc getNodeData(peer: Peer, hashes: openArray[NodeHash]) =
     tracePacket "<< Received eth.GetNodeData (0x0d)", peer,
-      hashCount=hashes.len
+      hashes=hashes.len
 
     var data: seq[Blob]
     if not peer.state.onGetNodeData.isNil:
@@ -268,13 +268,13 @@ p2pProtocol eth(version = ethVersion,
       peer.state.onNodeData(peer, data)
     else:
       tracePacket "<< Discarding eth.NodeData (0x0e)", peer,
-        got=data.len
+        bytes=data.len
 
   requestResponse:
     # User message 0x0f: GetReceipts.
     proc getReceipts(peer: Peer, hashes: openArray[BlockHash]) =
       tracePacket "<< Received eth.GetReceipts (0x0f)",
-         peer, count=hashes.len
+        peer, hashes=hashes.len
 
       tracePacket ">> Replying EMPTY eth.Receipts (0x10)",
          peer, sent=0, requested=hashes.len
