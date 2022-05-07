@@ -188,6 +188,12 @@ procSuite "Portal testnet tests":
     check (await clients[0].portal_history_propagate(dataFile))
     await clients[0].close()
 
+    # Note: Sleeping to make a test work is never great. Here it is needed
+    # because the data needs to propagate over the nodes. What one could do is
+    # add a json-rpc debug proc that returns whether the offer queue is empty or
+    # not. And then poll every node until all nodes have an empty queue.
+    await sleepAsync(10.seconds)
+
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
 

@@ -59,6 +59,13 @@ declareCounter portal_gossip_offers_successful,
 declareCounter portal_gossip_offers_failed,
   "Portal wire protocol failed content offers from neighborhood gossip",
   labels = ["protocol_id"]
+declareCounter portal_gossip_with_lookup,
+  "Portal wire protocol neighborhood gossip that required a node lookup",
+  labels = ["protocol_id"]
+declareCounter portal_gossip_without_lookup,
+  "Portal wire protocol neighborhood gossip that did not require a node lookup",
+  labels = ["protocol_id"]
+
 
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
@@ -1014,19 +1021,49 @@ proc neighborhoodGossip*(
 
   let contentId = contentIdOpt.get()
 
-  # Doing an lookup over the network to get the very closest nodes to the
-  # content, instead of looking only at our own routing table. This should give
-  # a bigger rate of success in case the content is not known yet and avoid
-  # data being stopped in its propagation. However, perhaps this causes issues
-  # in data getting propagated in a wider id range.
-  let closestNodes = await p.lookup(NodeId(contentId))
+  # For selecting the closest nodes to whom to gossip the content a mixed
+  # approach is taken:
+  # 1. Select the closest neighbours in the routing table
+  # 2. Check if the radius is known for these these nodes and whether they are
+  # in range of the content to be offered.
+  # 3. If more than n (= 4) nodes are in range, offer these nodes the content
+  # (max nodes set at 8).
+  # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
+  # returned from the lookup the content (max nodes set at 8)
+  #
+  # This should give a bigger rate of success and avoid the data being stopped
+  # in its propagation than when looking only for nodes in the own routing
+  # table, but at the same time avoid unnecessary node lookups.
+  # It might still cause issues in data getting propagated in a wider id range.
 
-  # Selecting closest 8 nodes to offer data
-  for node in closestNodes[0..<min(closestNodes.len, 8)]:
-    # Note: opportunistically not checking if the radius of the node is known
-    # and thus if the node is in radius with the content.
-    let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-    await p.offerQueue.addLast(req)
+  const maxGossipNodes = 8
+
+  let closestLocalNodes = p.routingTable.neighbours(
+    NodeId(contentId), k = 16, seenOnly = true)
+
+  var gossipNodes: seq[Node]
+  for node in closestLocalNodes:
+    let radius = p.radiusCache.get(node.id)
+    if radius.isSome():
+      if p.inRange(node.id, radius.unsafeGet(), contentId):
+        gossipNodes.add(node)
+
+  if gossipNodes.len >= 8: # use local nodes for gossip
+    portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
+    for node in gossipNodes[0..<min(gossipNodes.len, maxGossipNodes)]:
+      let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+      await p.offerQueue.addLast(req)
+  else: # use looked up nodes for gossip
+    portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
+    let closestNodes = await p.lookup(NodeId(contentId))
+
+    for node in closestNodes[0..<min(closestNodes.len, maxGossipNodes)]:
+      # Note: opportunistically not checking if the radius of the node is known
+      # and thus if the node is in radius with the content. Reason is, these
+      # should really be the closest nodes in the DHT, and thus are most likely
+      # going to be in range of the requested content.
+      let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+      await p.offerQueue.addLast(req)
 
 proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
