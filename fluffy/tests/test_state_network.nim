@@ -45,8 +45,8 @@ procSuite "State Content Network":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
 
     check proto2.portalProtocol.addNode(node1.localNode) == Added
 
@@ -64,7 +64,7 @@ procSuite "State Content Network":
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
-      proto1.contentDB.put(contentId, v)
+      discard proto1.contentDB.put(contentId, v, proto1.portalProtocol.localNode.id)
 
     for key in keys:
       var nodeHash: NodeHash
@@ -101,9 +101,9 @@ procSuite "State Content Network":
       node3 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", inMemory = true))
-      proto3 = StateNetwork.new(node3, ContentDB.new("", inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
+      proto3 = StateNetwork.new(node3, ContentDB.new("", uint32.high, inMemory = true))
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
     check proto1.portalProtocol.addNode(node2.localNode) == Added
@@ -124,10 +124,10 @@ procSuite "State Content Network":
           contentType: accountTrieNode, accountTrieNodeKey: accountTrieNodeKey)
         contentId = toContentId(contentKey)
 
-      proto2.contentDB.put(contentId, v)
+      discard proto2.contentDB.put(contentId, v, proto2.portalProtocol.localNode.id)
       # Not needed right now as 1 node is enough considering node 1 is connected
       # to both.
-      proto3.contentDB.put(contentId, v)
+      discard proto3.contentDB.put(contentId, v, proto3.portalProtocol.localNode.id)
 
     # Get first key
     var nodeHash: NodeHash
@@ -160,8 +160,8 @@ procSuite "State Content Network":
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
 
     check (await node1.ping(node2.localNode)).isOk()
     check (await node2.ping(node1.localNode)).isOk()

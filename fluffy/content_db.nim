@@ -29,6 +29,12 @@ export kvstore_sqlite3
 # 3. Or databases are created per network (and kvstores pre content type) and
 # thus depending on the network the right db needs to be selected.
 
+const
+  # Maximal number of ObjInfo objects held in memory per database scan. 100k
+  # objects should result in memory usage of around 7mb which should be 
+  # appropriate for even low resource devices
+  maxObjPerScan = 100000
+
 type
   RowInfo = tuple
     contentId: array[32, byte]
@@ -41,9 +47,21 @@ type
 
   ContentDB* = ref object
     kv: KvStoreRef
+    maxSize: uint32
     sizeStmt: SqliteStmt[NoParams, int64]
     vacStmt: SqliteStmt[NoParams, void]
     getAll: SqliteStmt[NoParams, RowInfo]
+
+  PutResultType* = enum
+    ContentStored, DbPruned
+
+  PutResult* = object
+    case kind*: PutResultType
+    of ContentStored:
+      discard
+    of DbPruned:
+      furthestStoredElementDistance*: UInt256
+      fractionOfDeletedContent*: float64
 
 # Objects must be sorted from largest to closest distance
 proc `<`(a, b: ObjInfo): bool =
@@ -54,7 +72,7 @@ template expectDb(x: auto): untyped =
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
 
-proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
+proc new*(T: type ContentDB, path: string, maxSize: uint32, inMemory = false): ContentDB =
   let db =
     if inMemory:
       SqStoreRef.init("", "fluffy-test", inMemory = true).expect(
@@ -80,10 +98,10 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
   ).get()
 
   ContentDB(
-    kv: kvStore, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
+    kv: kvStore, maxSize: maxSize, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
 
 proc getNFurthestElements*(
-    db: ContentDB, target: UInt256, n: uint64): seq[ObjInfo] =
+    db: ContentDB, target: UInt256, n: uint64): (seq[ObjInfo], int64) =
   ## Get at most n furthest elements from db in order from furthest to closest.
   ## Payload lengths are also returned so the caller can decide how many of
   ## those elements need to be deleted.
@@ -99,9 +117,10 @@ proc getNFurthestElements*(
   ## would be possible we may be able to all this work by one sql query
 
   if n == 0:
-    return newSeq[ObjInfo]()
+    return (newSeq[ObjInfo](), 0'i64)
 
   var heap = initHeapQueue[ObjInfo]()
+  var totalContentSize: int64 = 0
 
   var ri: RowInfo
   for e in db.getAll.exec(ri):
@@ -118,6 +137,8 @@ proc getNFurthestElements*(
     else:
       if obj > heap[0]:
         discard heap.replace(obj)
+    
+    totalContentSize = totalContentSize + ri.payloadLength
 
   var res: seq[ObjInfo] = newSeq[ObjInfo](heap.len())
 
@@ -126,7 +147,7 @@ proc getNFurthestElements*(
     res[i] = heap.pop()
     dec i
 
-  return res
+  return (res, totalContentSize)
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
@@ -158,7 +179,7 @@ proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
 
   return res
 
-proc put*(db: ContentDB, key, value: openArray[byte]) =
+proc put(db: ContentDB, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
 proc contains*(db: ContentDB, key: openArray[byte]): bool =
@@ -179,6 +200,8 @@ proc get*(db: ContentDB, key: ContentId): Option[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
+# TODO: Public due to usage in populating portal db, should be made private after
+# improving db populating to use local node id
 proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toByteArrayBE(), value)
 
@@ -187,3 +210,61 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
+
+proc deleteFractionOfContent(
+  db: ContentDB, 
+  target: Uint256,
+  targetFraction: float64): (UInt256, int64, int64) = 
+  ## Procedure which tries to delete fraction of database by scanning maxObjPerScan
+  ## furthest elements.
+  ## If the maxObjPerScan furthest elements, is not enough to attain required fraction
+  ## procedure deletes all but one element and report how many bytes have been
+  ## deleted
+  ## Procedure do not call reclaim space, it is left to the caller.
+
+  let (furthestElements, totalContentSize) = db.getNFurthestElements(target, maxObjPerScan)
+  var bytesDeleted: int64 = 0
+  let bytesToDelete = int64(targetFraction * float64(totalContentSize))
+  let numOfElements = len(furthestElements)
+
+  if numOfElements == 0:
+    # no elements in database, return some zero value
+    return (UInt256.zero, 0'i64, 0'i64)
+
+  let lastIdx = len(furthestElements) - 1
+
+  for i, elem in furthestElements:
+    if i == lastIdx:
+      # this is our last element, do not delete it and report it as last non deleted
+      # element
+      return (elem.distFrom, bytesDeleted, totalContentSize)
+    
+    if bytesDeleted + elem.payloadLength < bytesToDelete:
+      db.del(elem.contentId)
+      bytesDeleted = bytesDeleted + elem.payloadLength
+    else:
+      return (elem.distFrom, bytesDeleted, totalContentSize)
+
+proc put*(
+  db: ContentDB, 
+  key: ContentId, 
+  value: openArray[byte],
+  target: UInt256): PutResult = 
+  db.put(key, value)
+  let dbSize = db.size()
+  
+  if dbSize < int64(db.maxSize):
+    return PutResult(kind: ContentStored)
+  else:
+    # TODO Add some configuration for this magic number
+    let (furthestNonDeletedElement, deletedBytes, totalContentSize) = 
+      db.deleteFractionOfContent(target, 0.25)
+
+    let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
+
+    db.reclaimSpace()
+
+    return PutResult(
+      kind: DbPruned,
+      furthestStoredElementDistance: furthestNonDeletedElement,
+      fractionOfDeletedContent: deletedFraction)

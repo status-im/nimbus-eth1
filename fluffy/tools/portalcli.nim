@@ -24,7 +24,10 @@ const
 
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
-
+  # 100mb seems a bit smallish we may consider increasing defaults after some
+  # network measurements
+  defaultStorageSize* = uint32(1000 * 1000 * 100)
+  
 type
   PortalCmd* = enum
     noCommand
@@ -102,6 +105,14 @@ type
       defaultValue: stateProtocolId
       desc: "Portal wire protocol id for the network to connect to"
       name: "protocol-id" .}: PortalProtocolId
+
+    # TODO maybe it is worth defining minimal storage size and throw error if
+    # value provided is smaller than minimum
+    storageSize* {.
+      desc: "Maximum amount (in bytes) of content which will be stored " &
+            "in local database."
+      defaultValue: defaultStorageSize
+      name: "storage-size" .}: uint32
 
     case cmd* {.
       command
@@ -214,7 +225,7 @@ proc run(config: PortalCliConf) =
   d.open()
 
   let
-    db = ContentDB.new("", inMemory = true)
+    db = ContentDB.new("", config.storageSize, inMemory = true)
     portal = PortalProtocol.new(d, config.protocolId, db,
       testHandler, validateContent,
       bootstrapRecords = bootstrapRecords)

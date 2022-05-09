@@ -33,6 +33,9 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
   defaultDataDirDesc = defaultDataDir()
   defaultClientConfigDesc = $(defaultClientConfig.httpUri)
+  # 100mb seems a bit smallish we may consider increasing defaults after some
+  # network measurements
+  defaultStorageSize* = uint32(1000 * 1000 * 100)
 
 type
   PortalCmd* = enum
@@ -183,6 +186,14 @@ type
       desc: "Kademlia's b variable, increase for less hops per lookup"
       defaultValue: DefaultBitsPerHop
       name: "bits-per-hop" .}: int
+
+    # TODO maybe it is worth defining minimal storage size and throw error if
+    # value provided is smaller than minimum
+    storageSize* {.
+      desc: "Maximum amount (in bytes) of content which will be stored " &
+            "in local database."
+      defaultValue: defaultStorageSize
+      name: "storage-size" .}: uint32
 
     case cmd* {.
       command

@@ -23,7 +23,8 @@ proc installPortalDebugApiHandlers*(
       contentId: string, content: string) -> bool:
     # Using content id as parameter to make it more easy to store. Might evolve
     # in using content key.
-    p.contentDB.put(hexToSeqByte(contentId), hexToSeqByte(content))
+    let cId = UInt256.fromBytesBE(hexToSeqByte(contentId))
+    discard p.contentDB.put(cId, hexToSeqByte(content), p.localNode.id)
 
     return true
 

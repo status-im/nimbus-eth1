@@ -1084,7 +1084,12 @@ proc processContent(
 
       let contentId = contentIdOpt.get()
       # Store content, should we recheck radius?
-      p.contentDB.put(contentId, content)
+      # TODO handle radius adjustments
+      discard p.contentDB.put(
+                contentId, 
+                content, 
+                p.baseProtocol.localNode.id
+              )
 
       info "Received valid offered content", contentKey
 

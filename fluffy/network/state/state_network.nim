@@ -53,7 +53,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # When content is found on the network and is in the radius range, store it.
   if content.isSome() and contentInRange:
     # TODO Add poke when working on state network
-    n.contentDB.put(contentId, contentResult.content)
+    discard n.contentDB.put(contentId, contentResult.content, n.portalProtocol.localNode.id)
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
