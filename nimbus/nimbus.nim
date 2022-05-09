@@ -124,7 +124,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability eth
-    nimbus.ethNode.addCapability snap1
+    nimbus.ethNode.addCapability snap
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 

@@ -8,5 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import ./protocol/eth66
-export eth66
+import ./protocol/eth66 as proto_eth
+export proto_eth
+type eth* = eth66

@@ -135,4 +135,4 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
   sp.countAccounts(keepAccounts)
 
 proc peerSupportsSnap*(sp: SyncPeer): bool =
-  not sp.stopped and sp.peer.supports(snap1)
+  not sp.stopped and sp.peer.supports(snap)

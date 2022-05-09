@@ -77,9 +77,10 @@ template traceReplying(msg: static[string], args: varargs[untyped]) =
   tracePacket ">> " & protoInfo & " Replying " & msg, `args`
 
 
-p2pProtocol eth(version = ethVersion,
-                peerState = PeerState,
-                useRequestIds = true):
+p2pProtocol eth66(version = ethVersion,
+                  rlpxName = "eth",
+                  peerState = PeerState,
+                  useRequestIds = true):
 
   onPeerConnected do (peer: Peer):
     let
