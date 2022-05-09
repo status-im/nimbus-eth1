@@ -34,10 +34,6 @@ type
     forkHash: array[4, byte] # The RLP encoding must be exactly 4 bytes.
     forkNext: BlockNumber    # The RLP encoding must be variable-length
 
-  NewBlockAndTotalDiff* = object
-    ethBlock: EthBlock
-    totalDifficulty: DifficultyInt
-
   PeerState = ref object
     initialized*: bool
     bestBlockHash*: BlockHash

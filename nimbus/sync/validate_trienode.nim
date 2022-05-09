@@ -49,30 +49,30 @@ proc combinePaths(nodePath, childPath: InteriorPath): string =
 
 template leafError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, leafPath, nodePath, nodeHash, nodeBytes, context
-  debug "Trie leaf data error: " & msg,
+  debug "Trie leaf data error: " & msg, peer=sp,
     depth=nodePath.depth, leafDepth=leafPath.depth, `more`,
     path=combinePaths(nodePath, leafPath),
     hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex, peer=sp
+    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
   echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template childError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, childPath, nodePath, nodeHash, nodeBytes, context
-  debug "Trie data error: " & msg,
+  debug "Trie data error: " & msg, peer=sp,
     depth=nodePath.depth, childDepth=childPath.depth, `more`,
     path=combinePaths(nodePath, childPath),
     hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex, peer=sp
+    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
   echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template nodeError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, nodePath, nodeHash, nodeBytes, context
-  debug "Trie data error: " & msg,
+  debug "Trie data error: " & msg, peer=sp,
     depth=nodePath.depth, `more`,
     path=nodePath.toHex(true), hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex, peer=sp
+    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
   echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
@@ -80,7 +80,7 @@ proc parseLeafValue(sp: SyncPeer,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     nodeRlp: var Rlp, leafPath: InteriorPath,
                     context: var TrieNodeParseContext
-                   ) {.inline, raises: [Defect, RlpError].} =
+                   ) {.raises: [Defect, RlpError].} =
   ## Parse the leaf value of a trie leaf node.  The caller has already updated
   ## `leafPath`, which means the path length can't be above the maximum.
   ## But it hasn't checked other path length constraints.
@@ -110,10 +110,10 @@ proc parseLeafValue(sp: SyncPeer,
 
   if traceIndividualNodes:
     let leafBytes = context.leafQueue[^1][2]
-    trace "Trie: Account leaf found",
+    trace "Trie: Account leaf found", peer=sp,
       path=combinePaths(nodePath, leafPath),
       nodeHash=maybeHash(nodeHash, nodeBytes),
-      leafLen, leafBytes=leafBytes.toHex, peer=sp
+      leafLen, leafBytes=leafBytes.toHex
 #    echo inspect(rlpFromBytes(leafBytes))
 
 # Forward declaration, used for bounded, rare recursion.
@@ -128,7 +128,7 @@ proc parseExtensionChild(sp: SyncPeer,
                          nodeBytes: Blob, nodeRlp: var Rlp,
                          childPath: InteriorPath,
                          context: var TrieNodeParseContext
-                        ) {.inline, raises: [Defect, RlpError].} =
+                        ) {.raises: [Defect, RlpError].} =
   ## Parse the child branch of a trie extension node.  The caller has already
   ## updated `childPath`, which means the path length can't be above the
   ## maximum.  But it hasn't checked other path length constraints.
@@ -176,7 +176,7 @@ proc parseExtensionOrLeaf(sp: SyncPeer,
                           nodeBytes: Blob, nodeRlp: var Rlp,
                           fromExtension: bool,
                           context: var TrieNodeParseContext
-                         ) {.inline, raises: [Defect, RlpError].} =
+                         ) {.raises: [Defect, RlpError].} =
   ## Parse a trie extension node or leaf node.  The caller has already checked
   ## it is a list of 2 elements, but nothing else.
 
@@ -263,7 +263,7 @@ proc parseBranchNode(sp: SyncPeer,
                      nodePath: InteriorPath, nodeHash: NodeHash,
                      nodeBytes: Blob, nodeRlp: var Rlp,
                      context: var TrieNodeParseContext
-                    ) {.inline, raises: [Defect, RlpError].} =
+                    ) {.raises: [Defect, RlpError].} =
   ## Parse a trie branch node.  The caller has already checked it is a list
   ## of 17 elements, but nothing else.
 

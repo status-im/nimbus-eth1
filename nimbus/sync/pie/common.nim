@@ -92,7 +92,7 @@ proc hasSlice*(sp: SyncPeer): bool =
   if sp.sharedFetch.isNil:
     sp.sharedFetch = newSharedFetchState(sp)
   result = not sp.sharedFetch.isNil and sp.sharedFetch.leafRanges.len > 0
-  trace "Sync: hasSlice", hasSlice=result, peer=sp
+  trace "Sync: hasSlice", peer=sp, hasSlice=result
 
 proc getSlice*(sp: SyncPeer, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
@@ -115,7 +115,7 @@ proc getSlice*(sp: SyncPeer, leafLow, leafHigh: var LeafPath): bool =
   else:
     leafHigh = leafLow + leafMaxFetchRange
     ranges[0].leafLow = leafHigh + 1
-  trace "Sync: getSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
+  trace "Sync: getSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
   return true
 
 proc putSlice*(sp: SyncPeer, leafLow, leafHigh: LeafPath) =

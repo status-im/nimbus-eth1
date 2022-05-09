@@ -104,60 +104,57 @@ template nodeDataRequests*(sp: SyncPeer): auto =
 
 template nodeDataHash*(data: Blob): NodeHash = keccak256.digest(data).NodeHash
 
-# The trace functions are all inline because we'd rather skip the call when the
-# trace facility is turned off.
-
 template pathRange(request: NodeDataRequest): string =
   pathRange(request.pathRange[0], request.pathRange[1])
 template `$`*(paths: (InteriorPath, InteriorPath)): string =
   pathRange(paths[0], paths[1])
 
-proc traceGetNodeDataSending(request: NodeDataRequest) {.inline.} =
-  tracePacket ">> Sending eth.GetNodeData (0x0d)",
-    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+proc traceGetNodeDataSending(request: NodeDataRequest) =
+  tracePacket ">> Sending eth.GetNodeData (0x0d)", peer=request.sp,
+    hashes=request.hashes.len, pathRange=request.pathRange
 
-proc traceGetNodeDataDelaying(request: NodeDataRequest) {.inline.} =
-  tracePacket ">> Delaying eth.GetNodeData (0x0d)",
-    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+proc traceGetNodeDataDelaying(request: NodeDataRequest) =
+  tracePacket ">> Delaying eth.GetNodeData (0x0d)",  peer=request.sp,
+    hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataSendError(request: NodeDataRequest,
-                               e: ref CatchableError) {.inline.} =
+                               e: ref CatchableError) =
   traceNetworkError ">> Error sending eth.GetNodeData (0x0d)",
-    error=e.msg,
-    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+    peer=request.sp, error=e.msg,
+    hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyError(request: NodeDataRequest,
-                             e: ref CatchableError) {.inline.} =
+                             e: ref CatchableError) =
   traceNetworkError "<< Error waiting for reply to eth.GetNodeData (0x0d)",
-    error=e.msg,
-    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+    peer=request.sp, error=e.msg,
+    hashes=request.hashes.len, pathRange=request.pathRange
 
-proc traceNodeDataReplyTimeout(request: NodeDataRequest) {.inline.} =
+proc traceNodeDataReplyTimeout(request: NodeDataRequest) =
   traceTimeout "<< Timeout waiting for reply to eth.GetNodeData (0x0d)",
     hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
-proc traceGetNodeDataDisconnected(request: NodeDataRequest) {.inline.} =
+proc traceGetNodeDataDisconnected(request: NodeDataRequest) =
   traceNetworkError "<< Peer disconnected, not sending eth.GetNodeData (0x0d)",
-    hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
+    peer=request.sp, hashes=request.hashes.len, pathRange=request.pathRange
 
-proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) {.inline.} =
+proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
-    tracePacket "<< Got EMPTY eth.NodeData (0x0e)",
-      got=0, peer=sp
+    tracePacket "<< Got EMPTY eth.NodeData (0x0e)", peer=sp,
+      got=0
   else:
-    tracePacket "<< Got eth.NodeData (0x0e)",
-      got=0, requested=request.hashes.len, pathRange=request.pathRange, peer=sp
+    tracePacket "<< Got eth.NodeData (0x0e)", peer=sp,
+      got=0, requested=request.hashes.len, pathRange=request.pathRange
 
-proc traceNodeDataReplyUnmatched(sp: SyncPeer, got: int) {.inline.} =
+proc traceNodeDataReplyUnmatched(sp: SyncPeer, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
   tracePacketError "<< Protocol violation, non-reply eth.NodeData (0x0e)",
-    got, peer=sp
-  debug "Sync: Warning: Unexpected non-reply eth.NodeData from peer", peer=sp
+    peer=sp, got
+  debug "Sync: Warning: Unexpected non-reply eth.NodeData from peer"
 
 proc traceNodeDataReply(request: NodeDataRequest,
-                        got, use, unmatched, other, duplicates: int) {.inline.} =
+                        got, use, unmatched, other, duplicates: int) =
   if tracePackets:
     logScope: got=got
     logScope: requested=request.hashes.len
@@ -304,13 +301,13 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
   return request
 
 proc nodeDataRequestEnqueue(rq: NodeDataRequestQueue,
-                            request: NodeDataRequest) {.inline.} =
+                            request: NodeDataRequest) =
   ## Add `request` to the data structures in `rq: NodeDataRequest`.
   doAssert not rq.liveRequests.containsOrIncl(request)
   rq.beforeFirstHash.add(request)
 
 proc nodeDataRequestDequeue(rq: NodeDataRequestQueue,
-                            request: NodeDataRequest) {.inline.} =
+                            request: NodeDataRequest) =
   ## Remove `request` from the data structures in `rq: NodeDataRequest`.
   doAssert not rq.liveRequests.missingOrExcl(request)
   let index = rq.beforeFirstHash.find(request)
@@ -369,7 +366,7 @@ proc nodeDataTryEmpties(rq: NodeDataRequestQueue) =
 
 proc nodeDataNewRequest(sp: SyncPeer, hashes: seq[NodeHash],
                         pathFrom, pathTo: InteriorPath
-                       ): NodeDataRequest {.inline.} =
+                       ): NodeDataRequest  =
   ## Make a new `NodeDataRequest` to receive a reply or timeout in future.  The
   ## caller is responsible for sending the `GetNodeData` request, and must do
   ## that after this setup (not before) to avoid race conditions.
@@ -412,7 +409,7 @@ proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
     sp.stopped = true
     request.future.fail(e)
 
-proc onNodeData(sp: SyncPeer, data: openArray[Blob]) {.inline.} =
+proc onNodeData(sp: SyncPeer, data: openArray[Blob]) =
   ## Handle an incoming `eth.NodeData` reply.
   ## Practically, this is also where all the incoming packet trace messages go.
   let rq = sp.nodeDataRequests

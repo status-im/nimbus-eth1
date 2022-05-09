@@ -43,8 +43,8 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
 
   if sp.stopped:
     traceNetworkError "<< Peer already disconnected, not sending snap.GetAccountRange (0x00)",
-      accountRange=pathRange(origin, limit),
-      stateRoot=($stateRoot), bytesLimit=snapRequestBytesLimit, peer=sp
+      peer=sp, accountRange=pathRange(origin, limit),
+      stateRoot=($stateRoot), bytesLimit=snapRequestBytesLimit
     sp.putSlice(leafRange)
 
   if tracePackets:
@@ -59,7 +59,7 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
                                           snapRequestBytesLimit)
   except CatchableError as e:
     traceNetworkError "<< Error waiting for reply to snap.GetAccountRange (0x00)",
-      error=e.msg, peer=sp
+      peer=sp, error=e.msg
     inc sp.stats.major.networkErrors
     sp.stopped = true
     sp.putSlice(leafRange)
@@ -89,32 +89,32 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
     # This makes all the difference to terminating the fetch.  For now we'll
     # trust the mere existence of the proof rather than verifying it.
     if proof.len == 0:
-      tracePacket "<< Got EMPTY reply snap.AccountRange (0x01)",
+      tracePacket "<< Got EMPTY reply snap.AccountRange (0x01)", peer=sp,
         got=len, proofLen=proof.len, gotRange="-",
-        requestedRange=pathRange(origin, limit), stateRoot=($stateRoot), peer=sp
+        requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
       sp.putSlice(leafRange)
       # Don't keep retrying snap for this state.
       sp.stopThisState = true
     else:
-      tracePacket "<< Got END reply snap.AccountRange (0x01)",
+      tracePacket "<< Got END reply snap.AccountRange (0x01)", peer=sp,
         got=len, proofLen=proof.len, gotRange=pathRange(origin, high(LeafPath)),
-        requestedRange=pathRange(origin, limit), stateRoot=($stateRoot), peer=sp
+        requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
       # Current slicer can't accept more result data than was requested, so
       # just leave the requested slice claimed and update statistics.
       sp.countSlice(origin, limit, true)
     return
 
   var lastPath = accounts[len-1].accHash
-  tracePacket "<< Got reply snap.AccountRange (0x01)",
+  tracePacket "<< Got reply snap.AccountRange (0x01)", peer=sp,
     got=len, proofLen=proof.len, gotRange=pathRange(origin, lastPath),
-    requestedRange=pathRange(origin, limit), stateRoot=($stateRoot), peer=sp
+    requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
 
   # Missing proof isn't allowed, unless `origin` is min path in which case
   # there might be no proof if the result spans the entire range.
   if proof.len == 0 and origin != low(LeafPath):
     tracePacketError "<< Protocol violation, missing proof in snap.AccountRange (0x01)",
-      got=len, proofLen=proof.len, gotRange=pathRange(origin, lastPath),
-      requestedRange=pathRange(origin, limit), stateRoot=($stateRoot), peer=sp
+      peer=sp, got=len, proofLen=proof.len, gotRange=pathRange(origin,lastPath),
+      requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
     sp.putSlice(leafRange)
     return
 
@@ -134,5 +134,5 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
 
   sp.countAccounts(keepAccounts)
 
-proc peerSupportsSnap*(sp: SyncPeer): bool {.inline.} =
+proc peerSupportsSnap*(sp: SyncPeer): bool =
   not sp.stopped and sp.peer.supports(snap1)

@@ -199,8 +199,8 @@ proc getNodeData(fetch: FetchState,
   ## Request _one_ item of trie node data asynchronously.  This function
   ## batches requested into larger `eth.GetNodeData` requests efficiently.
   if traceIndividualNodes:
-    trace "> Fetching individual NodeData",
-      depth=path.depth, path, hash=($hash), peer=fetch.sp
+    trace "> Fetching individual NodeData", peer=fetch.sp,
+      depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
   fetch.nodeGetQueue.add(SingleNodeRequest(
@@ -220,16 +220,16 @@ proc getNodeData(fetch: FetchState,
 
   if traceIndividualNodes:
     if nodeBytes.len > 0:
-      trace "< Received individual NodeData",
+      trace "< Received individual NodeData", peer=fetch.sp,
         depth=path.depth, path, hash=($hash),
-        nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex, peer=fetch.sp
+        nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
     else:
-      trace "< Received EMPTY individual NodeData",
+      trace "< Received EMPTY individual NodeData", peer=fetch.sp,
         depth=path.depth, path, hash=($hash),
-        nodeLen=nodeBytes.len, peer=fetch.sp
+        nodeLen=nodeBytes.len
   return nodeBytes
 
-proc pathInRange(fetch: FetchState, path: InteriorPath): bool {.inline.} =
+proc pathInRange(fetch: FetchState, path: InteriorPath): bool =
   # TODO: This method is ugly and unnecessarily slow.
   var compare = fetch.leafRange.leafLow.toInteriorPath
   while compare.depth > path.depth:

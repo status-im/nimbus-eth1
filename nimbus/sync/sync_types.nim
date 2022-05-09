@@ -180,12 +180,12 @@ template toInteriorPath*(leafPath: LeafPath): InteriorPath =
 template depth*(path: InteriorPath): int =
   path.numDigits.int
 
-proc digit*(path: InteriorPath, index: int): int {.inline.} =
+proc digit*(path: InteriorPath, index: int): int =
   doAssert index >= 0 and index < path.numDigits.int
   let b = path.bytes[index shr 1]
   (if (index and 1) == 0: (b shr 4) else: (b and 0x0f)).int
 
-proc add*(path: var InteriorPath, digit: byte) {.inline.} =
+proc add*(path: var InteriorPath, digit: byte) =
   doAssert path.numDigits < InteriorPath.maxDepth
   inc path.numDigits
   if (path.numDigits and 1) != 0:
@@ -193,7 +193,7 @@ proc add*(path: var InteriorPath, digit: byte) {.inline.} =
   else:
     path.bytes[(path.numDigits shr 1) - 1] += (digit and 0x0f)
 
-proc addPair*(path: var InteriorPath, digitPair: byte) {.inline.} =
+proc addPair*(path: var InteriorPath, digitPair: byte) =
   doAssert path.numDigits < InteriorPath.maxDepth - 1
   path.numDigits += 2
   if (path.numDigits and 1) == 0:
@@ -202,28 +202,28 @@ proc addPair*(path: var InteriorPath, digitPair: byte) {.inline.} =
     path.bytes[(path.numDigits shr 1) - 1] += (digitPair shr 4)
     path.bytes[path.numDigits shr 1] = (digitPair shl 4)
 
-proc pop*(path: var InteriorPath) {.inline.} =
+proc pop*(path: var InteriorPath) =
   doAssert path.numDigits >= 1
   dec path.numDigits
   path.bytes[path.numDigits shr 1] =
     if (path.numDigits and 1) == 0: 0.byte
     else: path.bytes[path.numDigits shr 1] and 0xf0
 
-proc `==`*(path1, path2: InteriorPath): bool {.inline.} =
+proc `==`*(path1, path2: InteriorPath): bool =
   # Paths are zero-padded to the end of the array, so comparison is easy.
   for i in 0 ..< (max(path1.numDigits, path2.numDigits).int + 1) shr 1:
     if path1.bytes[i] != path2.bytes[i]:
       return false
   return true
 
-proc `<=`*(path1, path2: InteriorPath): bool {.inline.} =
+proc `<=`*(path1, path2: InteriorPath): bool =
   # Paths are zero-padded to the end of the array, so comparison is easy.
   for i in 0 ..< (max(path1.numDigits, path2.numDigits).int + 1) shr 1:
     if path1.bytes[i] != path2.bytes[i]:
       return path1.bytes[i] <= path2.bytes[i]
   return true
 
-proc cmp*(path1, path2: InteriorPath): int {.inline.} =
+proc cmp*(path1, path2: InteriorPath): int =
   # Paths are zero-padded to the end of the array, so comparison is easy.
   for i in 0 ..< (max(path1.numDigits, path2.numDigits).int + 1) shr 1:
     if path1.bytes[i] != path2.bytes[i]:
@@ -341,5 +341,5 @@ proc setTimer*(at: Moment, cb: CallbackFunc, udata: pointer): TimerCallback
   ## the pointed-to object is often freed or garbage collected before the
   ## timer callback runs.  Call `setTimer` with a `ref` argument instead.
 
-proc setTimer*(at: Moment, cb: CallbackFunc): TimerCallback {.inline.} =
+proc setTimer*(at: Moment, cb: CallbackFunc): TimerCallback =
   chronos.setTimer(at, cb, nil)

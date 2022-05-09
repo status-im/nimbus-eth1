@@ -198,7 +198,7 @@ const EMPTY_STORAGE_HASH* =
 const EMPTY_CODE_HASH* =
   "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
 
-proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account {.inline.} =
+proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
   ## RLP decoding for `SnapAccount`, which contains a path and account.
   ## The snap representation of the account differs from `Account` RLP.
   ## Empty storage hash and empty code hash are each represented by an
@@ -227,7 +227,7 @@ proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account {.inline.
     rlp.skipElem()
     result.codeHash = EMPTY_CODE_HASH
 
-proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) {.inline.} =
+proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP encoding for `SnapAccount`, which contains a path and account.
   ## The snap representation of the account differs from `Account` RLP.
   ## Empty storage hash and empty code hash are each represented by an
@@ -259,13 +259,13 @@ template append*(rlpWriter: var RlpWriter, leafPath: LeafPath) =
 #
 ## RLP serialisation for `Option[SnapPath]`.
 #
-#proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] {.inline.} =
+#proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] =
 #  if rlp.blobLen == 0 and rlp.isBlob:
 #    result = none(SnapPath)
 #  else:
 #    result = some(read(rlp, SnapPath))
 
-#proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) {.inline.} =
+#proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) =
 #  if value.isNone:
 #    rlpWriter.append("")
 #  else:
@@ -282,11 +282,11 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      tracePacket "<< Received snap.GetAccountRange (0x00)",
+      tracePacket "<< Received snap.GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
-        stateRoot=($rootHash), responseBytes, peer
+        stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", sent=0, peer
+      tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -322,25 +322,25 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          tracePacket "<< Received snap.GetStorageRanges/A (0x02)",
+          tracePacket "<< Received snap.GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
-            stateRoot=($rootHash), responseBytes, peer
+            stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          tracePacket "<< Received snap.GetStorageRanges/S (0x02)",
+          tracePacket "<< Received snap.GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
-            stateRoot=($rootHash), responseBytes, peer
+            stateRoot=($rootHash), responseBytes
         else:
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)",
+          tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
-            stateRoot=($rootHash), responseBytes, peer
+            stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", sent=0, peer
+      tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -352,10 +352,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
-      tracePacket "<< Received snap.GetByteCodes (0x04)",
-        hashes=hashes.len, responseBytes, peer
+      tracePacket "<< Received snap.GetByteCodes (0x04)", peer,
+        hashes=hashes.len, responseBytes
 
-      tracePacket ">> Replying EMPTY snap.ByteCodes (0x05)", sent=0, peer
+      tracePacket ">> Replying EMPTY snap.ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -365,10 +365,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      tracePacket "<< Received snap.GetTrieNodes (0x06)",
-        nodePaths=paths.len, stateRoot=($rootHash), responseBytes, peer
+      tracePacket "<< Received snap.GetTrieNodes (0x06)", peer,
+        nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.TrieNodes (0x07)", sent=0, peer
+      tracePacket ">> Replying EMPTY snap.TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.

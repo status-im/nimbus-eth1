@@ -7,11 +7,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/times,
-  eth/common/eth_types, stint, options, stew/byteutils, chronicles,
+  std/[options, times],
+  chronicles,
+  eth/[common/eth_types, trie/db],
+  stint,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
-  ".."/[db/db_chain, db/accounts_cache, transaction], eth/trie/db,
-  ".."/[chain_config, rpc/hexstrings],
+  ".."/[db/db_chain, db/accounts_cache, chain_config],
   ./call_common
 
 type

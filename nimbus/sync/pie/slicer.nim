@@ -25,7 +25,7 @@ import
 
 proc stateFetch*(sp: SyncPeer) {.async.} =
   var stateRoot = sp.syncStateRoot.get
-  trace "Sync: Syncing from stateRoot", stateRoot=($stateRoot), peer=sp
+  trace "Sync: Syncing from stateRoot", peer=sp, stateRoot=($stateRoot)
 
   while true:
     if not sp.peerSupportsGetNodeData() and not sp.peerSupportsSnap():
@@ -46,7 +46,7 @@ proc stateFetch*(sp: SyncPeer) {.async.} =
       continue
 
     if stateRoot != sp.syncStateRoot.get:
-      trace "Sync: Syncing from new stateRoot", stateRoot=($stateRoot), peer=sp
+      trace "Sync: Syncing from new stateRoot", peer=sp, stateRoot=($stateRoot)
       stateRoot = sp.syncStateRoot.get
       sp.stopThisState = false
 
@@ -69,13 +69,13 @@ proc stateFetch*(sp: SyncPeer) {.async.} =
 
     if sp.peerSupportsSnap() and allowSnap:
       discard sp.getSlice(leafRange)
-      trace "Sync: snap.GetAccountRange segment",
+      trace "Sync: snap.GetAccountRange segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot), peer=sp
+        stateRoot=($stateRoot)
       await sp.snapFetch(stateRoot, leafRange)
     elif sp.peerSupportsGetNodeData():
       discard sp.getSlice(leafRange)
-      trace "Sync: eth.GetNodeData segment",
+      trace "Sync: eth.GetNodeData segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot), peer=sp
+        stateRoot=($stateRoot)
       await sp.trieFetch(stateRoot, leafRange)
