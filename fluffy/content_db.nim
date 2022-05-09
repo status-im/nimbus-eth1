@@ -29,6 +29,12 @@ export kvstore_sqlite3
 # 3. Or databases are created per network (and kvstores pre content type) and
 # thus depending on the network the right db needs to be selected.
 
+const
+  # Maximal number of ObjInfo objects held in memory per database scan. 100k
+  # objects should result in memory usage of around 7mb which should be 
+  # appropriate for even low resource devices
+  maxObjPerScan = 100000
+
 type
   RowInfo = tuple
     contentId: array[32, byte]
@@ -205,27 +211,39 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
 
-proc deleteNelemsNoMoreThan(
+proc deleteFractionOfContent(
   db: ContentDB, 
   target: Uint256,
-  n: uint64,
-  maxPercentegeOfDeletedContent: float64): (UInt256, float64) = 
-  ## Procedure deletes n elements from database but no more than 
-  ## maxPercentegeOfDeletedContent percent of total stored content
-  ## it return further non deleted element distance, and fraction of content
+  targetFraction: float64): (UInt256, int64, int64) = 
+  ## Procedure which tries to delete fraction of database by scanning maxObjPerScan
+  ## furthest elements.
+  ## If the maxObjPerScan furthest elements, is not enough to attain required fraction
+  ## procedure deletes all but one element and report how many bytes have been
   ## deleted
+  ## Procedure do not call reclaim space, it is left to the caller.
 
+  let (furthestElements, totalContentSize) = db.getNFurthestElements(target, maxObjPerScan)
   var bytesDeleted: int64 = 0
-  let (furthestElements, totalContentSize) = db.getNFurthestElements(target, n)
-  let maxDeletedBytes = int64(maxPercentegeOfDeletedContent * float64(totalContentSize))
-  for elem in furthestElements:
-    if bytesDeleted + elem.payloadLength <= maxDeletedBytes:
+  let bytesToDelete = int64(targetFraction * float64(totalContentSize))
+  let numOfElements = len(furthestElements)
+
+  if numOfElements == 0:
+    # no elements in database, return some zero value
+    return (UInt256.zero, 0'i64, 0'i64)
+
+  let lastIdx = len(furthestElements) - 1
+
+  for i, elem in furthestElements:
+    if i == lastIdx:
+      # this is our last element, do not delete it and report it as last non deleted
+      # element
+      return (elem.distFrom, bytesDeleted, totalContentSize)
+    
+    if bytesDeleted + elem.payloadLength < bytesToDelete:
       db.del(elem.contentId)
       bytesDeleted = bytesDeleted + elem.payloadLength
     else:
-      let deltedFraction = float64(bytesDeleted) / float64(totalContentSize)
-      db.reclaimSpace()
-      return (elem.distFrom, deltedFraction)
+      return (elem.distFrom, bytesDeleted, totalContentSize)
 
 proc put*(
   db: ContentDB, 
@@ -238,8 +256,14 @@ proc put*(
   if dbSize < int64(db.maxSize):
     return PutResult(kind: ContentStored)
   else:
-    # TODO Add some configuration for this magic numbers
-    let (furthestNonDeletedElement, deletedFraction) = db.deleteNelemsNoMoreThan(target, 100000, 0.25)
+    # TODO Add some configuration for this magic number
+    let (furthestNonDeletedElement, deletedBytes, totalContentSize) = 
+      db.deleteFractionOfContent(target, 0.25)
+
+    let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
+
+    db.reclaimSpace()
+
     return PutResult(
       kind: DbPruned,
       furthestStoredElementDistance: furthestNonDeletedElement,
