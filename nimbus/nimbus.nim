@@ -325,14 +325,11 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     localServices(nimbus, conf, chainDB, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
-      # previously: nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
       # TODO: temp code until the CLI/RPC interface is fleshed out
-      if not conf.newSync:
-        let status = waitFor nimbus.ethNode.fastBlockchainSync()
-        if status != syncSuccess:
-          debug "Block sync failed: ", status
-      else:
+      if conf.newSync:
         newSync()
+      else:
+        nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C

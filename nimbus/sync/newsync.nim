@@ -17,7 +17,7 @@ import
   eth/[common/eth_types, p2p, rlp],
   eth/p2p/[rlpx, peer_pool, private/p2p_types],
   stint,
-  "."/[sync_types, protocol_ethxx, chain_head_tracker, get_nodedata]
+  "."/[chain_head_tracker, protocol_ethxx, protocol/get_nodedata, sync_types]
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
