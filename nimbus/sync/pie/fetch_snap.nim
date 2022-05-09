@@ -27,8 +27,7 @@ import
   eth/[common/eth_types, rlp, p2p],
   nimcrypto/keccak,
   stint,
-  ../sync_types,
-  ../protocol_snapxx,
+  ".."/[protocol_snapxx, sync_types, trace_helper],
   ./common
 
 const

@@ -63,7 +63,7 @@ import
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types],
   ../p2p/chain/chain_desc,
-  "."/[sync_types, protocol_ethxx, pie/slicer]
+  "."/[sync_types, protocol_ethxx, pie/slicer, trace_helper]
 
 const
   syncLockedMinimumReply        = 8

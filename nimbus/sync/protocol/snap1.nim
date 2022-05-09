@@ -171,8 +171,9 @@ import
   nimcrypto/hash,
   stew/byteutils,
   stint,
-  ../sync_types,
-  ../../constants
+  ".."/[sync_types, trace_helper],
+  ../../constants,
+  ./pickeled_snap_tracers
 
 type
   SnapAccount* = object
@@ -271,15 +272,6 @@ template append*(rlpWriter: var RlpWriter, leafPath: LeafPath) =
 # #  else:
 # #    rlpWriter.append(value.unsafeGet)
 
-# Shortcuts, print the protocol type as well (might be removed in future)
-const protoInfo = prettySnapProtoName
-
-template traceReceived(msg: static[string], args: varargs[untyped]) =
-  tracePacket "<< " & protoInfo & " Received " & msg, `args`
-template traceReplying(msg: static[string], args: varargs[untyped]) =
-  tracePacket ">> " & protoInfo & " Replying " & msg, `args`
-
-
 p2pProtocol snap1(version = 1,
                   rlpxName = "snap",
                   useRequestIds = true):
@@ -291,11 +283,11 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      traceReceived "snap.GetAccountRange (0x00)", peer,
+      traceReceived "GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.AccountRange (0x01)", peer, sent=0
+      traceReplying "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -331,12 +323,12 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          traceReceived "snap.GetStorageRanges/A (0x02)", peer,
+          traceReceived "GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
             stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          traceReceived "snap.GetStorageRanges/S (0x02)", peer,
+          traceReceived "GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
@@ -344,12 +336,12 @@ p2pProtocol snap1(version = 1,
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          traceReceived "snap.GetStorageRanges/AS?? (0x02)", peer,
+          traceReceived "GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.StorageRanges (0x03)", peer, sent=0
+      traceReplying "EMPTY StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -361,10 +353,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
-      traceReceived "snap.GetByteCodes (0x04)", peer,
+      traceReceived "GetByteCodes (0x04)", peer,
         hashes=hashes.len, responseBytes
 
-      traceReplying "EMPTY snap.ByteCodes (0x05)", peer, sent=0
+      traceReplying "EMPTY ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -374,10 +366,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      traceReceived "snap.GetTrieNodes (0x06)", peer,
+      traceReceived "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.TrieNodes (0x07)", peer, sent=0
+      traceReplying "EMPTY TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.

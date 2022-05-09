@@ -1,16 +1,21 @@
 # nim-eth
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed and distributed under either of
-#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 import
   std/[sets, options, random, hashes, sequtils],
-  chronos, chronicles,
-  ../sync/protocol_ethxx,
-  eth/common/eth_types,
-  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p],
+  eth/p2p/[private/p2p_types, rlpx, peer_pool],
+  stew/byteutils,
+  ../sync/[protocol_ethxx, trace_helper]
 
 {.push raises:[Defect].}
 
@@ -456,8 +461,8 @@ proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
 
 proc fastBlockchainSync*(node: EthereumNode): Future[SyncStatus] {.async.} =
   ## Code for the fast blockchain sync procedure:
-  ## https://github.com/ethereum/wiki/wiki/Parallel-Block-Downloads
-  ## https://github.com/ethereum/go-ethereum/pull/1889
+  ## <https://github.com/ethereum/wiki/wiki/Parallel-Block-Downloads>_
+  ## <https://github.com/ethereum/go-ethereum/pull/1889__
   # TODO: This needs a better interface. Consider removing this function and
   # exposing SyncCtx
   var syncCtx = newSyncContext(node.chain, node.peerPool)

@@ -17,33 +17,6 @@ import
   stint, stew/byteutils, chronicles, chronos,
   eth/[common/eth_types, p2p]
 
-const
-  tracePackets*         = true
-    ## Whether to `trace` log each sync network message.
-  traceGossips*         = false
-    ## Whether to `trace` log each gossip network message.
-  traceHandshakes*      = true
-    ## Whether to `trace` log each network handshake message.
-  traceTimeouts*        = true
-    ## Whether to `trace` log each network request timeout.
-  traceNetworkErrors*   = true
-    ## Whether to `trace` log each network request error.
-  tracePacketErrors*    = true
-    ## Whether to `trace` log each messages with invalid data.
-  traceIndividualNodes* = false
-    ## Whether to `trace` log each trie node, account, storage, receipt, etc.
-
-template tracePacket*(msg: static[string], args: varargs[untyped]) =
-  if tracePackets: trace `msg`, `args`
-template traceGossip*(msg: static[string], args: varargs[untyped]) =
-  if traceGossips: trace `msg`, `args`
-template traceTimeout*(msg: static[string], args: varargs[untyped]) =
-  if traceTimeouts: trace `msg`, `args`
-template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
-  if traceNetworkErrors: trace `msg`, `args`
-template tracePacketError*(msg: static[string], args: varargs[untyped]) =
-  if tracePacketErrors: trace `msg`, `args`
-
 type
   NewSync* = ref object
     ## Shared state among all peers of a syncing node.

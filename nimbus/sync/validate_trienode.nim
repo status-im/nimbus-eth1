@@ -31,7 +31,7 @@
 
 import
   eth/[common/eth_types, rlp, p2p],
-  "."/[sync_types]
+  "."/[sync_types, trace_helper]
 
 type
   TrieNodeParseContext* = object
