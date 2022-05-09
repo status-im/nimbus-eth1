@@ -253,24 +253,25 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
     var dataReceived = false
     try:
       tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer,
-        startBlock=request.startBlock.number, max=request.maxResults
+        startBlock=request.startBlock.number, max=request.maxResults,
+        step=traceStep(request)
       let results = await peer.getBlockHeaders(request)
       if results.isSome:
         tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer,
-          count=results.get.headers.len
+          count=results.get.headers.len, requested=request.maxResults
         shallowCopy(workItem.headers, results.get.headers)
 
         var bodies = newSeqOfCap[BlockBody](workItem.headers.len)
         var hashes = newSeqOfCap[KeccakHash](maxBodiesFetch)
         template fetchBodies() =
           tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
-            count=hashes.len
+            hashes=hashes.len
           let b = await peer.getBlockBodies(hashes)
           if b.isNone:
             raise newException(CatchableError, "Was not able to get the block bodies")
           let bodiesLen = b.get.blocks.len
           tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
-            count=bodiesLen
+            count=bodiesLen, requested=hashes.len
           if bodiesLen == 0:
             raise newException(CatchableError, "Zero block bodies received for request")
           elif bodiesLen < hashes.len:
@@ -369,7 +370,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
     # We have enough trusted peers. Validate new peer against trusted
     if await peersAgreeOnChain(peer, ctx.randomTrustedPeer()):
       ctx.trustedPeers.incl(peer)
-      asyncCheck ctx.obtainBlocksFromPeer(peer)
+      asyncSpawn ctx.obtainBlocksFromPeer(peer)
   elif ctx.trustedPeers.len == 0:
     # Assume the peer is trusted, but don't start sync until we reevaluate
     # it with more peers
@@ -405,7 +406,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
 
     if ctx.trustedPeers.len == minPeersToStartSync:
       for p in ctx.trustedPeers:
-        asyncCheck ctx.obtainBlocksFromPeer(p)
+        asyncSpawn ctx.obtainBlocksFromPeer(p)
 
 
 proc onPeerConnected(ctx: SyncContext, peer: Peer) =

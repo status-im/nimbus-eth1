@@ -8,5 +8,5 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import ./protocol/eth66
-export eth66
+import ./protocol/snap1
+export snap1

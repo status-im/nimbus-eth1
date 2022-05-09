@@ -351,6 +351,11 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    newSync* {.
+      desc: "Enable experimental new sync algorithms"
+      defaultValue: false
+      name: "new-sync" .}: bool
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd

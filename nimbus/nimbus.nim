@@ -29,7 +29,7 @@ import
   ./p2p/[chain, blockchain_sync],
   ./p2p/clique/[clique_desc, clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/protocol_ethxx,
+  ./sync/[protocol_ethxx, protocol_snapxx, newsync],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
@@ -124,6 +124,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability eth
+    nimbus.ethNode.addCapability snap1
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 
@@ -135,15 +136,20 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
 
+  # Early-initialise "--new-sync" before starting any network connections.
+  if ProtocolFlag.Eth in protocols and conf.newSync:
+    newSyncEarly(nimbus.ethNode)
+
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
   for enode in staticPeers:
-    asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
+    asyncSpawn nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
   # Start Eth node
   if conf.maxPeers > 0:
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
-      enableDiscovery = conf.discovery != DiscoveryType.None)
+      enableDiscovery = conf.discovery != DiscoveryType.None,
+      waitForPeers = not conf.newSync)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
@@ -319,7 +325,14 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     localServices(nimbus, conf, chainDB, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
-      nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
+      # previously: nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
+      # TODO: temp code until the CLI/RPC interface is fleshed out
+      if not conf.newSync:
+        let status = waitFor nimbus.ethNode.fastBlockchainSync()
+        if status != syncSuccess:
+          debug "Block sync failed: ", status
+      else:
+        newSync()
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C

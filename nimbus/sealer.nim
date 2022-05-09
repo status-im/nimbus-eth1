@@ -28,8 +28,7 @@ import
     clique_sealer],
   ./p2p/[gaslimit, validate],
   "."/[chain_config, utils, context],
-  "."/utils/tx_pool,
-  "."/merge/mergetypes
+  "."/utils/tx_pool
 
 from web3/ethtypes as web3types import nil
 from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1

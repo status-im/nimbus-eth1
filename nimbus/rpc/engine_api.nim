@@ -12,10 +12,10 @@ import
   stew/[objects, results, byteutils],
   json_rpc/[rpcserver, errors],
   web3/[conversions, engine_api_types], chronicles,
-  eth/[trie, rlp, common, trie/db],
+  eth/[rlp, common],
   ".."/db/db_chain,
   ".."/p2p/chain/[chain_desc, persist_blocks],
-  ".."/[sealer, utils, constants],
+  ".."/[sealer, constants],
   ".."/merge/[mergetypes, mergeutils]
 
 import eth/common/eth_types except BlockHeader
