@@ -47,9 +47,12 @@
 ##
 ## References:
 ##
-## - [Ethereum Wire Protocol (ETH)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md)
-## - [`GetNodeData` (0x0d)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getnodedata-0x0d)
-## - [`NodeData` (0x0e)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md#nodedata-0x0e)
+## - `Ethereum Wire Protocol (ETH)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
+## - `GetNodeData (0x0d)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getnodedata-0x0d>`_
+## - `NodeData (0x0e)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md#nodedata-0x0e>`_
 ##
 ## Note:
 ##

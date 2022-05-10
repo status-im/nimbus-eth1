@@ -47,8 +47,7 @@ proc onPeerConnected(ns: SnapSync, protocolPeer: Peer) =
     huntLow:         0.toBlockNumber,
     huntHigh:        high(BlockNumber),
     huntStep:        0,
-    bestBlockNumber: 0.toBlockNumber
-  )
+    bestBlockNumber: 0.toBlockNumber)
   trace "Sync: Peer connected", peer=sp
 
   sp.setupGetNodeData()
@@ -80,7 +79,7 @@ proc onPeerDisconnected(ns: SnapSync, protocolPeer: Peer) =
   sp.syncPeerStop()
 
 proc snapSyncEarly*(ethNode: EthereumNode) =
-  info "** Using --new-sync experimental new sync algorithms"
+  info "** Using --snap-sync experimental new sync algorithms"
   info "** Note that fetched data is not currently stored"
   info "** It's used for timing, behaviour and interop tests"
 
@@ -91,8 +90,7 @@ proc snapSyncEarly*(ethNode: EthereumNode) =
         ns.onPeerConnected(protocolPeer),
     onPeerDisconnected:
       proc(protocolPeer: Peer) {.gcsafe.} =
-        ns.onPeerDisconnected(protocolPeer)
-  )
+        ns.onPeerDisconnected(protocolPeer))
   po.setProtocol(eth)
   ethNode.peerPool.addObserver(ns, po)
 

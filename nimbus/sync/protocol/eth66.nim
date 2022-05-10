@@ -2,13 +2,38 @@
 #
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
-## This module implements Ethereum Wire Protocol version 66, `eth/66`.
-## Specification:
-##   `eth/66 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
+## This module implements `eth/66`, the `Ethereum Wire Protocol version 66
+##   <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
+##
+## Optional peply processor function hooks
+## ---------------------------------------
+##
+## The `onGetNodeData` and `onNodeData` hooks allow new sync code to register
+## for providing reply data or consume incoming events without a circular
+## import dependency involving the `p2pProtocol`.
+##
+## Without the hooks, the protocol file needs to import functions that consume
+## incoming network messages. So the `p2pProtocol` can call them, and the
+## functions that produce outgoing network messages need to import the protocol
+## file.
+##
+## But related producer/consumer function pairs are typically located in the
+## very same file because they are closely related.  For an example see the
+## producer of `GetNodeData` and the consumer of `NodeData`.
+##
+## In this specific case, we need to split the `requestResponse` relationship
+## between `GetNodeData` and `NodeData` messages when pipelining.
+##
+## Among others, this way is the most practical to acomplish the split
+## implementation. It allows different protocol-using modules to coexist
+## easily.  When the hooks aren't set, default behaviour applies.
 
 import
   chronos, stint, chronicles, stew/byteutils, macros,
@@ -35,7 +60,7 @@ type
     forkHash: array[4, byte] # The RLP encoding must be exactly 4 bytes.
     forkNext: BlockNumber    # The RLP encoding must be variable-length
 
-  PeerState = ref object
+  PeerState* = ref object
     initialized*: bool
     bestBlockHash*: BlockHash
     bestDifficulty*: DifficultyInt
