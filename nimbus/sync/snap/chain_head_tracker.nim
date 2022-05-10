@@ -66,7 +66,7 @@ import
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types],
   ../../p2p/chain/chain_desc,
-  ".."/[protocol_ethxx, protocol/pickeled_eth_tracers, sync_types, trace_helper],
+  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types, trace_helper],
   ./pie/slicer
 
 const

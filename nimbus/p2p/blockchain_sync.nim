@@ -15,7 +15,7 @@ import
   eth/[common/eth_types, p2p],
   eth/p2p/[private/p2p_types, rlpx, peer_pool],
   stew/byteutils,
-  ../sync/[protocol_ethxx, trace_helper]
+  ../sync/[protocol, trace_helper]
 
 {.push raises:[Defect].}
 

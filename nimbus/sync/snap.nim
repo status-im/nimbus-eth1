@@ -17,7 +17,7 @@ import
   eth/[common/eth_types, p2p, rlp],
   eth/p2p/[rlpx, peer_pool, private/p2p_types],
   stint,
-  "."/[protocol_ethxx, sync_types],
+  "."/[protocol, sync_types],
   ./snap/[chain_head_tracker, get_nodedata]
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =

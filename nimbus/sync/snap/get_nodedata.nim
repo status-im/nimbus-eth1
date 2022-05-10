@@ -65,7 +65,7 @@ import
   stint,
   nimcrypto/keccak,
   eth/[common/eth_types, rlp, p2p],
-  ".."/[protocol_ethxx, protocol/pickeled_eth_tracers, sync_types]
+  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types]
 
 type
   NodeDataRequestQueue* = ref object of typeof SyncPeer().nodeDataRequestsBase

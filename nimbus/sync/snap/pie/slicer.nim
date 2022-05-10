@@ -12,7 +12,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[sets, tables, random],
+  std/[sets, random],
   chronos,
   nimcrypto/keccak,
   stint,
