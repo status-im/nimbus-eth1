@@ -17,7 +17,7 @@ import
   nimcrypto/keccak,
   stint,
   eth/[common/eth_types, p2p, rlp],
-  ../sync_types,
+  ../../sync_types,
   "."/[common, fetch_trie, fetch_snap]
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or

@@ -17,7 +17,8 @@ import
   eth/[common/eth_types, p2p, rlp],
   eth/p2p/[rlpx, peer_pool, private/p2p_types],
   stint,
-  "."/[chain_head_tracker, protocol_ethxx, protocol/get_nodedata, sync_types]
+  "."/[protocol_ethxx, sync_types],
+  ./snap/[chain_head_tracker, get_nodedata]
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
@@ -36,7 +37,7 @@ proc syncPeerStop(sp: SyncPeer) =
   # TODO: Cancel SyncPeers that are running.  We need clean cancellation for
   # this.  Doing so reliably will be addressed at a later time.
 
-proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
+proc onPeerConnected(ns: SnapSync, protocolPeer: Peer) =
   let sp = SyncPeer(
     ns:              ns,
     peer:            protocolPeer,
@@ -63,7 +64,7 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
   ns.syncPeers.add(sp)
   sp.syncPeerStart()
 
-proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
+proc onPeerDisconnected(ns: SnapSync, protocolPeer: Peer) =
   trace "Sync: Peer disconnected", peer=protocolPeer
   # Find matching `sp` and remove from `ns.syncPeers`.
   var sp: SyncPeer = nil
@@ -78,12 +79,12 @@ proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
 
   sp.syncPeerStop()
 
-proc newSyncEarly*(ethNode: EthereumNode) =
+proc snapSyncEarly*(ethNode: EthereumNode) =
   info "** Using --new-sync experimental new sync algorithms"
   info "** Note that fetched data is not currently stored"
   info "** It's used for timing, behaviour and interop tests"
 
-  let ns = NewSync()
+  let ns = SnapSync()
   var po = PeerObserver(
     onPeerConnected:
       proc(protocolPeer: Peer) {.gcsafe.} =
@@ -95,5 +96,5 @@ proc newSyncEarly*(ethNode: EthereumNode) =
   po.setProtocol(eth)
   ethNode.peerPool.addObserver(ns, po)
 
-proc newSync*() =
+proc snapSync*() =
   discard

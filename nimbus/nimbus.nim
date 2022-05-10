@@ -29,7 +29,7 @@ import
   ./p2p/[chain, blockchain_sync],
   ./p2p/clique/[clique_desc, clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/[protocol_ethxx, protocol_snapxx, newsync],
+  ./sync/[protocol_ethxx, protocol_snapxx, snap],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
@@ -123,8 +123,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
-    nimbus.ethNode.addCapability eth
-    nimbus.ethNode.addCapability snap
+    nimbus.ethNode.addCapability protocol_ethxx.eth
+    if conf.snapSync:
+      nimbus.ethNode.addCapability protocol_snapxx.snap
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 
@@ -137,8 +138,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.chainRef.verifyFrom = verifyFrom
 
   # Early-initialise "--new-sync" before starting any network connections.
-  if ProtocolFlag.Eth in protocols and conf.newSync:
-    newSyncEarly(nimbus.ethNode)
+  if ProtocolFlag.Eth in protocols and conf.snapSync:
+    snapSyncEarly(nimbus.ethNode)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -149,7 +150,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = not conf.newSync)
+      waitForPeers = not conf.snapSync)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
@@ -326,8 +327,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
       # TODO: temp code until the CLI/RPC interface is fleshed out
-      if conf.newSync:
-        newSync()
+      if conf.snapSync:
+        snapSync()
       else:
         nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
 

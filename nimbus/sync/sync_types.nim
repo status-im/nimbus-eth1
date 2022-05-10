@@ -18,14 +18,14 @@ import
   eth/[common/eth_types, p2p]
 
 type
-  NewSync* = ref object
+  SnapSync* = ref object
     ## Shared state among all peers of a syncing node.
     syncPeers*:             seq[SyncPeer]
     sharedFetch:            SharedFetchState        # Exported via templates.
 
   SyncPeer* = ref object
     ## Peer state tracking.
-    ns*:                    NewSync
+    ns*:                    SnapSync
     peer*:                  Peer                    # p2pProtocol(eth65).
     stopped*:               bool
     pendingGetBlockHeaders*:bool
@@ -108,13 +108,13 @@ type
     ## numerical properties: ordering, intervals and meaningful difference.
     number: UInt256
 
-  # Use `import protocol/get_nodedata` to access the real type's methods.
+  # Use `import snap/get_nodedata` to access the real type's methods.
   NodeDataRequestQueue {.inheritable, pure.} = ref object
 
-  # Use `import pie/trie_fetch` to access the real type's methods.
+  # Use `import snap/pie/trie_fetch` to access the real type's methods.
   SharedFetchState {.inheritable, pure.} = ref object
 
-  # Use `import pie/trie_fetch` to access the real type's methods.
+  # Use `import snap/pie/trie_fetch` to access the real type's methods.
   FetchState {.inheritable, pure.} = ref object
 
 proc inc(stat: var Stat) {.borrow.}
