@@ -135,13 +135,13 @@ type
     ## numerical properties: ordering, intervals and meaningful difference.
     number: UInt256
 
-  # Use `import get_nodedata` to access the real type's methods.
+  # Use `import protocol/get_nodedata` to access the real type's methods.
   NodeDataRequestQueue {.inheritable, pure.} = ref object
 
-  # Use `import trie_fetch` to access the real type's methods.
+  # Use `import pie/trie_fetch` to access the real type's methods.
   SharedFetchState {.inheritable, pure.} = ref object
 
-  # Use `import trie_fetch` to access the real type's methods.
+  # Use `import pie/trie_fetch` to access the real type's methods.
   FetchState {.inheritable, pure.} = ref object
 
 proc inc(stat: var Stat) {.borrow.}

@@ -171,7 +171,8 @@ import
   nimcrypto/hash,
   stew/byteutils,
   stint,
-  ../sync_types
+  ../sync_types,
+  ../../constants
 
 type
   SnapAccount* = object
@@ -186,17 +187,16 @@ type
 
   SnapStorageProof* = seq[Blob]
 
+const
+  snapVersion* = 1
+  prettySnapProtoName* = "[snap/" & $snapVersion & "]"
+
 # The `snap` protocol represents `Account` differently from the regular RLP
 # serialisation used in `eth` protocol as well as the canonical Merkle hash
 # over all accounts.  In `snap`, empty storage hash and empty code hash are
 # each represented by an RLP zero-length string instead of the full hash.  This
 # avoids transmitting these hashes in about 90% of accounts.  We need to
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
-
-const EMPTY_STORAGE_HASH* =
-  "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
-const EMPTY_CODE_HASH* =
-  "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
 
 proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
   ## RLP decoding for `SnapAccount`, which contains a path and account.
@@ -209,23 +209,22 @@ proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
 
   if rlp.blobLen != 0 or not rlp.isBlob:
     result.storageRoot = rlp.read(typeof(result.storageRoot))
-    if result.storageRoot == EMPTY_STORAGE_HASH:
+    if result.storageRoot == BLANK_ROOT_HASH:
       raise newException(RlpTypeMismatch,
-        "EMPTY_STORAGE_HASH not encoded as empty string in Snap protocol"
+        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol"
       )
   else:
     rlp.skipElem()
-    result.storageRoot = EMPTY_STORAGE_HASH
+    result.storageRoot = BLANK_ROOT_HASH
 
   if rlp.blobLen != 0 or not rlp.isBlob:
     result.codeHash = rlp.read(typeof(result.codeHash))
-    if result.codeHash == EMPTY_CODE_HASH:
+    if result.codeHash == EMPTY_SHA3:
       raise newException(RlpTypeMismatch,
-        "EMPTY_CODE_HASH not encoded as empty string in Snap protocol"
-      )
+        "EMPTY_SHA3 not encoded as empty string in Snap protocol")
   else:
     rlp.skipElem()
-    result.codeHash = EMPTY_CODE_HASH
+    result.codeHash = EMPTY_SHA3
 
 proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP encoding for `SnapAccount`, which contains a path and account.
@@ -235,12 +234,12 @@ proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   rlpWriter.append(account.nonce)
   rlpWriter.append(account.balance)
 
-  if account.storageRoot == EMPTY_STORAGE_HASH:
+  if account.storageRoot == BLANK_ROOT_HASH:
     rlpWriter.append("")
   else:
     rlpWriter.append(account.storageRoot)
 
-  if account.codeHash == EMPTY_CODE_HASH:
+  if account.codeHash == EMPTY_SHA3:
     rlpWriter.append("")
   else:
     rlpWriter.append(account.codeHash)
@@ -253,23 +252,33 @@ template read*(rlp: var Rlp, _: type LeafPath): LeafPath =
 template append*(rlpWriter: var RlpWriter, leafPath: LeafPath) =
   rlpWriter.append(leafPath.toBytes)
 
-# TODO: Don't know why, but the `p2pProtocol` can't handle this type.  It tries
-# to serialise the `Option` as an object, looking at the internal fields.  But
-# then fails because they are private fields.
+# Maybe cruft following?
+# # TODO: Don't know why, but the `p2pProtocol` can't handle this type.  It
+# # tries to serialise the `Option` as an object, looking at the internal
+# # fields.  But then fails because they are private fields.
+# #
+# ## RLP serialisation for `Option[SnapPath]`.
+# #
+# #proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] =
+# #  if rlp.blobLen == 0 and rlp.isBlob:
+# #    result = none(SnapPath)
+# #  else:
+# #    result = some(read(rlp, SnapPath))
 #
-## RLP serialisation for `Option[SnapPath]`.
-#
-#proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] =
-#  if rlp.blobLen == 0 and rlp.isBlob:
-#    result = none(SnapPath)
-#  else:
-#    result = some(read(rlp, SnapPath))
+# #proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) =
+# #  if value.isNone:
+# #    rlpWriter.append("")
+# #  else:
+# #    rlpWriter.append(value.unsafeGet)
 
-#proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) =
-#  if value.isNone:
-#    rlpWriter.append("")
-#  else:
-#    rlpWriter.append(value.unsafeGet)
+# Shortcuts, print the protocol type as well (might be removed in future)
+const protoInfo = prettySnapProtoName
+
+template traceReceived(msg: static[string], args: varargs[untyped]) =
+  tracePacket "<< " & protoInfo & " Received " & msg, `args`
+template traceReplying(msg: static[string], args: varargs[untyped]) =
+  tracePacket ">> " & protoInfo & " Replying " & msg, `args`
+
 
 p2pProtocol snap1(version = 1,
                   rlpxName = "snap",
@@ -282,11 +291,11 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      tracePacket "<< Received snap.GetAccountRange (0x00)", peer,
+      traceReceived "snap.GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.AccountRange (0x01)", peer, sent=0
+      traceReplying "EMPTY snap.AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -322,12 +331,12 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          tracePacket "<< Received snap.GetStorageRanges/A (0x02)", peer,
+          traceReceived "snap.GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
             stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          tracePacket "<< Received snap.GetStorageRanges/S (0x02)", peer,
+          traceReceived "snap.GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
@@ -335,12 +344,12 @@ p2pProtocol snap1(version = 1,
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          tracePacket "<< Received snap.GetStorageRanges/AS?? (0x02)", peer,
+          traceReceived "snap.GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.StorageRanges (0x03)", peer, sent=0
+      traceReplying "EMPTY snap.StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -352,10 +361,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
-      tracePacket "<< Received snap.GetByteCodes (0x04)", peer,
+      traceReceived "snap.GetByteCodes (0x04)", peer,
         hashes=hashes.len, responseBytes
 
-      tracePacket ">> Replying EMPTY snap.ByteCodes (0x05)", peer, sent=0
+      traceReplying "EMPTY snap.ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -365,10 +374,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      tracePacket "<< Received snap.GetTrieNodes (0x06)", peer,
+      traceReceived "snap.GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      tracePacket ">> Replying EMPTY snap.TrieNodes (0x07)", peer, sent=0
+      traceReplying "EMPTY snap.TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.
