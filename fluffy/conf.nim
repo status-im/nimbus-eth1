@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/os,
+  std/[os,strutils],
   uri, confutils, confutils/std/net, chronicles,
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
   json_rpc/rpcproxy
@@ -45,6 +45,16 @@ type
   PortalNetwork* = enum
     none
     testnet0
+
+  RadiusConfigKind* = enum
+    Static, Dynamic
+
+  RadiusConfig* = object
+    case kind*: RadiusConfigKind
+    of Static:
+      logRadius*: uint16
+    of Dynamic:
+      discard
 
   PortalConf* = object
     logLevel* {.
@@ -187,6 +197,13 @@ type
       defaultValue: DefaultBitsPerHop
       name: "bits-per-hop" .}: int
 
+    radiusConfig* {.
+      desc: "Radius configuration for a fluffy node. Radius can be either `dynamic`" &
+            "where node adjust it based on storage capacity and limits," &
+            "or `static:logRadius` where node have hardcoded logRadius value"
+      defaultValue: RadiusConfig(kind: Dynamic)
+      name: "radius-config" .}: RadiusConfig
+
     # TODO maybe it is worth defining minimal storage size and throw error if
     # value provided is smaller than minimum
     storageSize* {.
@@ -261,4 +278,37 @@ proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
     )
 
 proc completeCmdArg*(T: type ClientConfig, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg*(T: type RadiusConfig, p: TaintedString): T
+      {.raises: [Defect, ConfigurationError].} =
+
+  if p.startsWith("dynamic") and len(p) == 7:
+    return RadiusConfig(kind: Dynamic)
+  elif p.startsWith("static:"):
+    let num = p[7..^1]
+    try:
+      let parsed = uint16.parseCmdArg(num)
+
+      if parsed > 256:
+        raise newException(
+          ConfigurationError, "Provided logRadius should be <= 256"
+        )
+
+      return RadiusConfig(kind: Static, logRadius: parsed)
+    except ValueError:
+      let msg = "Provided logRadius: " & num & " is not a valid number"
+      raise newException(
+        ConfigurationError, msg
+      )
+  else:
+    let msg = 
+      "Not supported radius config option: " & p & " . " & 
+      "Supported options: dynamic, static:logRadius"
+    raise newException(
+      ConfigurationError, 
+      msg
+    )
+
+proc completeCmdArg*(T: type RadiusConfig, val: TaintedString): seq[string] =
   return @[]
