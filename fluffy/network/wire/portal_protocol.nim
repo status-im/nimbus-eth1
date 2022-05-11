@@ -1090,6 +1090,8 @@ proc adjustRadius(
   fractionOfDeletedContent: float64, 
   furthestElementInDbDistance: UInt256) =
 
+  # we need to invert fraction as our Uin256 implementation does not support
+  # multiplication by float
   let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
 
   let scaledRadius =  p.dataRadius div u256(invertedFractionAsInt)
@@ -1101,12 +1103,13 @@ proc adjustRadius(
   let newRadius = max(scaledRadius, furthestElementInDbDistance)
   
   # both scaledRadius and furthestElementInDbDistance are smaller than current
-  # dataRadius, so the radius will 
+  # dataRadius, so the radius will constantly decrease through the node
+  # life time
   p.dataRadius = newRadius
 
 proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) =
   # always re-check that key is in node range, to make sure that invariant that
-  # all keys in databbase are always in node range always hold.
+  # all keys in database are always in node range hold.
   # TODO current silent assumption is that both contentDb and portalProtocol are
   # using the same xor distance function
   if p.inRange(key):
