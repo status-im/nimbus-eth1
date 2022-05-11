@@ -53,7 +53,9 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # When content is found on the network and is in the radius range, store it.
   if content.isSome() and contentInRange:
     # TODO Add poke when working on state network
-    discard n.contentDB.put(contentId, contentResult.content, n.portalProtocol.localNode.id)
+    # TODO When working on state network, make it possible to pass different
+    # distance functions to store content
+    n.portalProtocol.storeContent(contentId, contentResult.content)
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
@@ -66,14 +68,12 @@ proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
-    dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, contentDB,
     toContentIdHandler, validateContent,
-    dataRadius, bootstrapRecords, stateDistanceCalculator,
-    config = portalConfig)
+    bootstrapRecords, stateDistanceCalculator, config = portalConfig)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 

@@ -98,15 +98,18 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   # This is done because the content in the db is dependant on the `NodeId` and
   # the selected `Radius`.
   let
-    radius = UInt256.fromLogRadius(config.logRadius)
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
 
     portalConfig = PortalProtocolConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
-    stateNetwork = StateNetwork.new(d, db, radius,
+      config.tableIpLimit, 
+      config.bucketIpLimit, 
+      config.bitsPerHop, 
+      config.radiusConfig
+    )
+    stateNetwork = StateNetwork.new(d, db,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
-    historyNetwork = HistoryNetwork.new(d, db, radius,
+    historyNetwork = HistoryNetwork.new(d, db,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
   # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.

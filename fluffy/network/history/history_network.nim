@@ -146,14 +146,7 @@ proc getBlockHeader*(
       headerContent.content
     )
 
-    if h.portalProtocol.inRange(contentId):
-      # content is valid and in our range, save it into our db
-      # TODO handle radius adjustments
-      discard h.contentDB.put(
-                contentId, 
-                headerContent.content,
-                h.portalProtocol.localNode.id
-              )
+    h.portalProtocol.storeContent(contentId, headerContent.content)
 
   return maybeHeader
 
@@ -202,12 +195,7 @@ proc getBlock*(
   )
 
   # content is in range and valid, put into db
-  if h.portalProtocol.inRange(contentId):
-    # TODO handle radius adjustments
-    discard h.contentDB.put(
-              contentId, bodyContent.content,
-              h.portalProtocol.localNode.id
-            )
+  h.portalProtocol.storeContent(contentId, bodyContent.content)
 
   return some[Block]((header, blockBody))
 
@@ -233,13 +221,11 @@ proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
-    dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, contentDB,
-    toContentIdHandler, validateContent,
-    dataRadius, bootstrapRecords,
+    toContentIdHandler, validateContent, bootstrapRecords,
     config = portalConfig)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
