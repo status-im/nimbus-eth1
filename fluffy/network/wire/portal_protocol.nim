@@ -1090,6 +1090,13 @@ proc adjustRadius(
   fractionOfDeletedContent: float64, 
   furthestElementInDbDistance: UInt256) =
 
+  if fractionOfDeletedContent == 0.0:
+    # even though pruning was triggered no content was deleted, it could happen
+    # in pathological case of really small database with really big values.
+    # log it as error as it should not happenn
+    error "Datbase pruned but no content deleted"
+    return
+
   # we need to invert fraction as our Uin256 implementation does not support
   # multiplication by float
   let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
@@ -1102,6 +1109,13 @@ proc adjustRadius(
   # If scaledRadius radius will be larger it will still contain all elements
   let newRadius = max(scaledRadius, furthestElementInDbDistance)
   
+
+  debug "Database pruned",
+    oldRadius = p.dataRadius,
+    newRadius = newRadius,
+    furthestDistanceInDb = furthestElementInDbDistance,
+    fractionOfDeletedContent = fractionOfDeletedContent
+
   # both scaledRadius and furthestElementInDbDistance are smaller than current
   # dataRadius, so the radius will constantly decrease through the node
   # life time
