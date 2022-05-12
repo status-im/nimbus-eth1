@@ -56,7 +56,6 @@ type
     ctx: EthContext
     chainRef: Chain
     txPool: TxPoolRef
-    syncLoop: Future[SyncStatus]
     networkLoop: Future[void]
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
@@ -137,9 +136,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
 
-  # Early-initialise "--new-sync" before starting any network connections.
+  # Early-initialise "--snap-sync" before starting any network connections.
   if ProtocolFlag.Eth in protocols and conf.snapSync:
-    snapSyncEarly(nimbus.ethNode)
+    SnapSyncCtx.new(nimbus.ethNode).start
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -326,11 +325,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     localServices(nimbus, conf, chainDB, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
-      # TODO: temp code until the CLI/RPC interface is fleshed out
-      if conf.snapSync:
-        snapSync()
-      else:
-        nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
+      if not conf.snapSync:
+        FastSyncCtx.new(nimbus.ethNode).start
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C

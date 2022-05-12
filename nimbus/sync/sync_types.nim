@@ -18,7 +18,7 @@ import
   eth/[common/eth_types, p2p]
 
 type
-  SnapSync* = ref object
+  SnapSync* = ref object of RootObj
     ## Shared state among all peers of a syncing node.
     syncPeers*:             seq[SyncPeer]
     sharedFetch:            SharedFetchState        # Exported via templates.
