@@ -26,10 +26,9 @@ import
   "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
   ./db/[storage_types, db_chain, select_backend],
   ./graphql/ethapi,
-  ./p2p/[chain, blockchain_sync],
-  ./p2p/clique/[clique_desc, clique_sealer],
+  ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p],
-  ./sync/[protocol, snap],
+  ./sync/[fast, protocol, snap],
   ./utils/tx_pool
 
 when defined(evmc_enabled):

@@ -13,9 +13,9 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
-  eth/p2p/[private/p2p_types, rlpx, peer_pool],
+  eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
-  ../sync/[protocol, trace_helper]
+  "."/[protocol, trace_helper]
 
 {.push raises:[Defect].}
 
