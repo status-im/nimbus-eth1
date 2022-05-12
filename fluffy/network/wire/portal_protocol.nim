@@ -430,11 +430,11 @@ proc getInitialRadius(rc: RadiusConfig): UInt256 =
   of Static:
     return UInt256.fromLogRadius(rc.logRadius)
   of Dynamic:
-    # In case of dynamic radius we start from maxium value possible to quicky
+    # In case of a dynamic radius we start from the maximum value to quickly
     # gather as much data as possible, and also make sure each data piece in
-    # database is in our range after node restart.
-    # Alternative would be to store node radius in database, and intiizalize it
-    # from database after restart
+    # the database is in our range after a node restart.
+    # Alternative would be to store node the radius in database, and initialize it
+    # from database after a restart
     return UInt256.high()
 
 
@@ -1086,15 +1086,15 @@ proc neighborhoodGossip*(
       await p.offerQueue.addLast(req)
 
 proc adjustRadius(
-  p: PortalProtocol, 
-  fractionOfDeletedContent: float64, 
+  p: PortalProtocol,
+  fractionOfDeletedContent: float64,
   furthestElementInDbDistance: UInt256) =
 
   if fractionOfDeletedContent == 0.0:
     # even though pruning was triggered no content was deleted, it could happen
     # in pathological case of really small database with really big values.
     # log it as error as it should not happenn
-    error "Datbase pruned but no content deleted"
+    error "Database pruning attempt resulted in no content deleted"
     return
 
   # we need to invert fraction as our Uin256 implementation does not support
@@ -1133,7 +1133,7 @@ proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) 
       discard
     of DbPruned:
       if p.radiusConfig.kind == Dynamic:
-        # If the config is set staticlly, radius is not adjusted, and is kept
+        # If the config is set statically, radius is not adjusted, and is kept
         # constant thorugh node life time.
         p.adjustRadius(
           res.fractionOfDeletedContent,

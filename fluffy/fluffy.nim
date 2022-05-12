@@ -22,11 +22,6 @@ import
   ./network/wire/[portal_stream, portal_protocol_config],
   "."/[content_db, populate_db]
 
-proc fromLogRadius(T: type UInt256, logRadius: uint16): T =
-  # Get the max value of the logRadius range
-  pow((2).stuint(256), logRadius) - 1
-  # For the min value do `pow((2).stuint(256), logRadius - 1)`
-
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
     if (maybeUri.isSome()):
