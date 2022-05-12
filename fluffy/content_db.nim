@@ -200,8 +200,6 @@ proc get*(db: ContentDB, key: ContentId): Option[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
-# TODO: Public due to usage in populating portal db, should be made private after
-# improving db populating to use local node id
 proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toByteArrayBE(), value)
 
@@ -250,7 +248,9 @@ proc put*(
   key: ContentId, 
   value: openArray[byte],
   target: UInt256): PutResult = 
+
   db.put(key, value)
+
   let dbSize = db.size()
   
   if dbSize < int64(db.maxSize):

@@ -11,7 +11,8 @@ import
   std/os,
   uri, confutils, confutils/std/net, chronicles,
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
-  json_rpc/rpcproxy
+  json_rpc/rpcproxy,
+  ./network/wire/portal_protocol_config
 
 proc defaultDataDir*(): string =
   let dataDir = when defined(windows):
@@ -36,6 +37,7 @@ const
   # 100mb seems a bit smallish we may consider increasing defaults after some
   # network measurements
   defaultStorageSize* = uint32(1000 * 1000 * 100)
+  defaultStorageSizeDesc* = $defaultStorageSize
 
 type
   PortalCmd* = enum
@@ -162,13 +164,6 @@ type
       desc: "URI of eth client where to proxy unimplemented rpc methods to"
       name: "proxy-uri" .}: ClientConfig
 
-    logRadius* {.
-      desc: "Hardcoded (logarithmic) radius for each Portal network. This is " &
-            "a temporary development option which will be replaced in the " &
-            "future by e.g. a storage size limit"
-      defaultValue: 256
-      name: "radius" .}: uint16
-
     tableIpLimit* {.
       hidden
       desc: "Maximum amount of nodes with the same IP in the routing tables"
@@ -187,12 +182,23 @@ type
       defaultValue: DefaultBitsPerHop
       name: "bits-per-hop" .}: int
 
+    radiusConfig* {.
+      hidden
+      desc: "Radius configuration for a fluffy node. Radius can be either `dynamic`" &
+            "where node adjust radius based on storage size limit," &
+            "or `static:logRadius` where node have hardcoded logRadius value. " &
+            "Warning: Setting it `static:logRadius` disable storage size limits and" &
+            "makes fluffy node to store fraction of the network."
+      defaultValue: defaultRadiusConfig
+      name: "radius-config" .}: RadiusConfig
+
     # TODO maybe it is worth defining minimal storage size and throw error if
     # value provided is smaller than minimum
     storageSize* {.
       desc: "Maximum amount (in bytes) of content which will be stored " &
             "in local database."
       defaultValue: defaultStorageSize
+      defaultValueDesc: $defaultStorageSizeDesc
       name: "storage-size" .}: uint32
 
     case cmd* {.

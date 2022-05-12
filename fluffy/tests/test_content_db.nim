@@ -12,15 +12,8 @@ import
   unittest2, stint,
   eth/keys,
   ../network/state/state_content,
-  ../content_db
-
-proc genByteSeq(length: int): seq[byte] = 
-  var i = 0
-  var resultSeq = newSeq[byte](length)
-  while i < length:
-    resultSeq[i] = byte(i)
-    inc i
-  return resultSeq
+  ../content_db,
+  ./test_helpers
 
 proc generateNRandomU256(rng: var BrHmacDrbgContext, n: int): seq[UInt256] =
   var i = 0

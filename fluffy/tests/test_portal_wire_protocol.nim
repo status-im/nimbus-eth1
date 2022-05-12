@@ -8,6 +8,7 @@
 {.used.}
 
 import
+  std/algorithm,
   chronos, testutils/unittests, stew/shims/net,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -334,3 +335,38 @@ procSuite "Portal Wire Protocol Tests":
     proto2.stop()
     await node1.closeWait()
     await node2.closeWait()
+
+  asyncTest "Adjusting radius after hitting full database":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+
+      dbLimit = 100000'u32
+      db = ContentDB.new("", dbLimit, inMemory = true)
+      proto1 = PortalProtocol.new(node1, protocolId, db, testHandler,
+        validateContent)
+
+    let item = genByteSeq(10000)
+    var distances: seq[UInt256] = @[]
+
+    for i in 0..8:
+      proto1.storeContent(u256(i), item)
+      distances.add(u256(i) xor proto1.localNode.id)
+    
+    # With current setting i.e limit 100000bytes and 10000 byte element each
+    # two furthest elements should be delted i.e index 0 and 1.
+    # index 2 should be still be in database and it distance should always be
+    # <= updated radius
+    distances.sort(order = SortOrder.Descending)
+
+    check:
+      db.get((distances[0] xor proto1.localNode.id)).isNone()
+      db.get((distances[1] xor proto1.localNode.id)).isNone()
+      db.get((distances[2] xor proto1.localNode.id)).isSome()
+      # our radius have been updated and is lower than max
+      proto1.dataRadius < UInt256.high
+      # but higher or equal to furthest non deleted element
+      proto1.dataRadius >= distances[2]
+
+    proto1.stop()
+    await node1.closeWait()

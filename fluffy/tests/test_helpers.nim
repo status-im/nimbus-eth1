@@ -34,3 +34,11 @@ proc initDiscoveryNode*(rng: ref BrHmacDrbgContext,
     rng = rng)
 
   result.open()
+
+proc genByteSeq*(length: int): seq[byte] = 
+  var i = 0
+  var resultSeq = newSeq[byte](length)
+  while i < length:
+    resultSeq[i] = byte(i)
+    inc i
+  return resultSeq

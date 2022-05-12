@@ -153,6 +153,7 @@ type
     contentDB*: ContentDB
     toContentId: ToContentIdHandler
     validateContent: ContentValidationHandler
+    radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
@@ -420,17 +421,35 @@ proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
     {.gcsafe, raises: [Defect].}
 
+proc fromLogRadius(T: type UInt256, logRadius: uint16): T =
+  # Get the max value of the logRadius range
+  pow((2).stuint(256), logRadius) - 1
+
+proc getInitialRadius(rc: RadiusConfig): UInt256 = 
+  case rc.kind
+  of Static:
+    return UInt256.fromLogRadius(rc.logRadius)
+  of Dynamic:
+    # In case of a dynamic radius we start from the maximum value to quickly
+    # gather as much data as possible, and also make sure each data piece in
+    # the database is in our range after a node restart.
+    # Alternative would be to store node the radius in database, and initialize it
+    # from database after a restart
+    return UInt256.high()
+
+
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
     validateContent: ContentValidationHandler,
-    dataRadius = UInt256.high(),
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig
     ): T =
+
+  let initialRadius: UInt256 = config.radiusConfig.getInitialRadius()
 
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
@@ -442,7 +461,8 @@ proc new*(T: type PortalProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
     validateContent: validateContent,
-    dataRadius: dataRadius,
+    radiusConfig: config.radiusConfig,
+    dataRadius: initialRadius,
     bootstrapRecords: @bootstrapRecords,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers))
@@ -1065,6 +1085,64 @@ proc neighborhoodGossip*(
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
 
+proc adjustRadius(
+  p: PortalProtocol,
+  fractionOfDeletedContent: float64,
+  furthestElementInDbDistance: UInt256) =
+
+  if fractionOfDeletedContent == 0.0:
+    # even though pruning was triggered no content was deleted, it could happen
+    # in pathological case of really small database with really big values.
+    # log it as error as it should not happenn
+    error "Database pruning attempt resulted in no content deleted"
+    return
+
+  # we need to invert fraction as our Uin256 implementation does not support
+  # multiplication by float
+  let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
+
+  let scaledRadius =  p.dataRadius div u256(invertedFractionAsInt)
+
+  # Chose larger value to avoid situation, where furthestElementInDbDistance
+  # is super close to local id, so local radius would end up too small
+  # to accept any more data to local database
+  # If scaledRadius radius will be larger it will still contain all elements
+  let newRadius = max(scaledRadius, furthestElementInDbDistance)
+  
+
+  debug "Database pruned",
+    oldRadius = p.dataRadius,
+    newRadius = newRadius,
+    furthestDistanceInDb = furthestElementInDbDistance,
+    fractionOfDeletedContent = fractionOfDeletedContent
+
+  # both scaledRadius and furthestElementInDbDistance are smaller than current
+  # dataRadius, so the radius will constantly decrease through the node
+  # life time
+  p.dataRadius = newRadius
+
+proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) =
+  # always re-check that key is in node range, to make sure that invariant that
+  # all keys in database are always in node range hold.
+  # TODO current silent assumption is that both contentDb and portalProtocol are
+  # using the same xor distance function
+  if p.inRange(key):
+    case p.radiusConfig.kind:
+    of Dynamic:
+      # In case of dynamic radius setting we obey storage limits and adjust
+      # radius to store network fraction corresponding to those storage limits.
+      let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
+      if res.kind == DbPruned:
+        p.adjustRadius(
+          res.fractionOfDeletedContent,
+          res.furthestStoredElementDistance
+        )
+    of Static:
+      # If the config is set statically, radius is not adjusted, and is kept
+      # constant thorugh node life time, also database max size is disabled
+      # so we will effectivly store fraction of the network
+      p.contentDB.put(key, content)
+
 proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
     {.gcsafe, raises: [Defect].} =
@@ -1083,13 +1161,8 @@ proc processContent(
         return
 
       let contentId = contentIdOpt.get()
-      # Store content, should we recheck radius?
-      # TODO handle radius adjustments
-      discard p.contentDB.put(
-                contentId, 
-                content, 
-                p.baseProtocol.localNode.id
-              )
+
+      p.storeContent(contentId, content)
 
       info "Received valid offered content", contentKey
 
