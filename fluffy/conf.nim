@@ -37,6 +37,7 @@ const
   # 100mb seems a bit smallish we may consider increasing defaults after some
   # network measurements
   defaultStorageSize* = uint32(1000 * 1000 * 100)
+  defaultStorageSizeDesc* = $defaultStorageSize
 
 type
   PortalCmd* = enum
@@ -182,9 +183,12 @@ type
       name: "bits-per-hop" .}: int
 
     radiusConfig* {.
+      hidden
       desc: "Radius configuration for a fluffy node. Radius can be either `dynamic`" &
-            "where node adjust it based on storage capacity and limits," &
-            "or `static:logRadius` where node have hardcoded logRadius value"
+            "where node adjust radius based on storage size limit," &
+            "or `static:logRadius` where node have hardcoded logRadius value. " &
+            "Warning: Setting it `static:logRadius` disable storage size limits and" &
+            "makes fluffy node to store fraction of the network."
       defaultValue: defaultRadiusConfig
       name: "radius-config" .}: RadiusConfig
 
@@ -194,6 +198,7 @@ type
       desc: "Maximum amount (in bytes) of content which will be stored " &
             "in local database."
       defaultValue: defaultStorageSize
+      defaultValueDesc: $defaultStorageSizeDesc
       name: "storage-size" .}: uint32
 
     case cmd* {.

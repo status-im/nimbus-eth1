@@ -1127,18 +1127,21 @@ proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) 
   # TODO current silent assumption is that both contentDb and portalProtocol are
   # using the same xor distance function
   if p.inRange(key):
-    let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
-    case res.kind
-    of ContentStored:
-      discard
-    of DbPruned:
-      if p.radiusConfig.kind == Dynamic:
-        # If the config is set statically, radius is not adjusted, and is kept
-        # constant thorugh node life time.
+    case p.radiusConfig.kind:
+    of Dynamic:
+      # In case of dynamic radius setting we obey storage limits and adjust
+      # radius to store network fraction corresponding to those storage limits.
+      let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
+      if res.kind == DbPruned:
         p.adjustRadius(
           res.fractionOfDeletedContent,
           res.furthestStoredElementDistance
         )
+    of Static:
+      # If the config is set statically, radius is not adjusted, and is kept
+      # constant thorugh node life time, also database max size is disabled
+      # so we will effectivly store fraction of the network
+      p.contentDB.put(key, content)
 
 proc processContent(
     stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
