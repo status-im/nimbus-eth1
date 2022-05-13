@@ -67,7 +67,7 @@ import
   nimcrypto/keccak,
   eth/[common/eth_types, rlp, p2p],
   ".."/[protocol, protocol/pickeled_eth_tracers, sync_types],
-  "."/[timer_helper, types]
+  "."/[path_desc, timer_helper, types]
 
 {.push raises: [Defect].}
 

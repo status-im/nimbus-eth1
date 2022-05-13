@@ -23,13 +23,13 @@
 ##   pointers, without significant random access database I/O.
 
 import
-  std/[sets, tables, algorithm],
+  std/[algorithm, sets, tables],
   chronos,
-  eth/[common/eth_types, rlp, p2p],
+  eth/[common/eth_types, p2p],
   stew/byteutils,
   stint,
   "../.."/[sync_types, trace_helper],
-  ".."/[get_nodedata, types, validate_trienode],
+  ".."/[get_nodedata, path_desc, types, validate_trienode],
   ./common
 
 {.push raises: [Defect].}
@@ -332,8 +332,7 @@ proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.}
   #   send an empty reply.  We don't want to cut off a peer for other purposes
   #   such as a source of blocks and transactions, just because it doesn't
   #   reply to `GetNodeData`.
-  let reply = await sp.getNodeData(@[stateRoot],
-                                   rootInteriorPath, rootInteriorPath)
+  let reply = await sp.getNodeData(@[stateRoot], InteriorPath(), InteriorPath())
   return not reply.isNil and reply.hashVerifiedData.len == 1
 
 proc trieFetch*(sp: SyncPeer, stateRoot: TrieHash,
@@ -348,7 +347,7 @@ proc trieFetch*(sp: SyncPeer, stateRoot: TrieHash,
   fetch.unwindAccountBytes = 0
 
   inc fetch.nodesInFlight
-  await fetch.traverse(stateRoot.NodeHash, rootInteriorPath, false)
+  await fetch.traverse(stateRoot.NodeHash, InteriorPath(), false)
   await fetch.finish
   if fetch.getNodeDataErrors == 0:
     sp.countSlice(leafRange, false)

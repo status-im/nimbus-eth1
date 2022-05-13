@@ -31,7 +31,7 @@ import
   eth/[common/eth_types, p2p],
   stew/byteutils,
   ".."/[sync_types, trace_helper],
-  ./types
+  "."/[path_desc, types]
 
 {.push raises: [Defect].}
 

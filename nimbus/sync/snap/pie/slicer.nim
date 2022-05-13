@@ -14,10 +14,11 @@
 import
   std/[sets, random],
   chronos,
+  eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  eth/[common/eth_types, p2p, rlp],
   ../../sync_types,
+  ../path_desc,
   "."/[common, fetch_trie, fetch_snap]
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or

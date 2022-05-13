@@ -22,11 +22,11 @@
 import
   std/sets,
   chronos,
-  eth/[common/eth_types, rlp, p2p],
+  eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
   "../.."/[protocol, protocol/pickeled_snap_tracers, sync_types, trace_helper],
-  ../types,
+  ".."/[path_desc, types],
   ./common
 
 {.push raises: [Defect].}

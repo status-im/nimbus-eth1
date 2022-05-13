@@ -2,24 +2,24 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
-
-{.push raises: [Defect].}
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 import
   std/[sets, sequtils, strutils],
   chronos,
-  eth/[common/eth_types, rlp, p2p],
+  eth/[common/eth_types, p2p],
   stint,
   ../../sync_types,
-  ../timer_helper
+  ".."/[path_desc, timer_helper]
+
+{.push raises: [Defect].}
 
 type
-  LeafRange* = object
-    leafLow*, leafHigh*:    LeafPath
-
   SharedFetchState* = ref object of typeof SyncPeer().sharedFetchBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
