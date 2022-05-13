@@ -18,7 +18,7 @@ import
     db/db_chain,
     rpc/p2p,
     rpc/engine_api,
-    sync/protocol_ethxx,
+    sync/protocol,
     utils/tx_pool
   ],
   ../../../tests/test_helpers,

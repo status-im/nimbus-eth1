@@ -9,47 +9,57 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## This module implements Ethereum Snapshot Protocol (SNAP), `snap/1`, as
-## specified at the reference below, but modified for Geth compatibility.
+## This module implements `snap/1`, the `Ethereum Snapshot Protocol (SNAP)
+## <https://github.com/ethereum/devp2p/blob/master/caps/snap.md>`_.
 ##
-## - [Ethereum Snapshot Protocol (SNAP)]
-##   (https://github.com/ethereum/devp2p/blob/master/caps/snap.md)
+## Modifications for *Geth* compatibility
+## --------------------------------------
 ##
-## Note: The `snap/1` specification doesn't match reality.  If we implement the
-## protocol as specified, Geth drops the peer connection.  We must do as Geth
-## expects.
+## `GetAccountRange` and `GetStorageRanges` take parameters `origin` and
+## `limit`, instead of a single `startingHash` parameter in the
+## specification. The parameters `origin` and `limit` are 256-bit paths
+## representing the starting hash and ending trie path, both inclusive.
 ##
-## Modifications for Geth compatibility
-## ------------------------------------
+## The `snap/1` specification doesn't match reality. If the specification is
+## strictly followed omitting `limit`, *Geth 1.10* disconnects immediately so
+## this implementation strives to meet the *Geth* behaviour.
 ##
-## - `GetAccountRanges` and `GetStorageRanges` take parameters `origin` and
-##   `limit`, instead of a single `startingHash` parameter in the
-##   specification.  `origin` and `limit` are 256-bit paths representing the
-##   starting hash and ending trie path, both inclusive.
+## Results from either call may include one item with path `>= limit`. *Geth*
+## fetches data from its internal database until it reaches this condition or
+## the bytes threshold, then replies with what it fetched.  Usually there is
+## no item at the exact path `limit`, so there is one after.
 ##
-## - If the `snap/1` specification is followed (omitting `limit`), Geth 1.10
-##   disconnects immediately so we must follow this deviation.
 ##
-## - Results from either call may include one item with path `>= limit`.  Geth
-##   fetches data from its internal database until it reaches this condition or
-##   the bytes threshold, then replies with what it fetched.  Usually there is
-##   no item at the exact path `limit`, so there is one after.
+## Modified `GetStorageRanges` (0x02) message syntax
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ##
-## - `GetAccountRanges` parameters `origin` and `limit` must be 32 byte blobs.
-##   There is no reason why empty limit is not allowed here when it is allowed
-##   for `GetStorageRanges`, it just isn't.
+## As implementes here, the request message is encoded as
 ##
-## `GetStorageRanges` quirks for Geth compatibility
-## ------------------------------------------------
+## `[reqID, rootHash, accountHashes, origin, limit, responseBytes]`
 ##
-## When calling a Geth peer with `GetStorageRanges`:
+## It requests the storage slots of multiple accounts' storage tries. Since
+## certain contracts have huge state, the method can also request storage
+## slots from a single account, starting at a specific storage key hash.
+## The intended purpose of this message is to fetch a large number of
+## subsequent storage slots from a remote node and reconstruct a state
+## subtrie locally.
+##
+## * `reqID`: Request ID to match up responses with
+## * `rootHash`: 32 byte root hash of the account trie to serve
+## * `accountHashes`: Array of 32 byte account hashes of the storage tries to serve
+## * `origin`: Storage slot hash fragment of the first to retrieve (see below)
+## * `limit`: Storage slot hash fragment after which to stop serving (see below)
+## * `responseBytes`: 64 bit number soft limit at which to stop returning data
+##
+## Discussion of *Geth* `GetStorageRanges` behaviour
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ##
 ## - Parameters `origin` and `limit` may each be empty blobs, which mean "all
 ##   zeros" (0x00000...) or "no limit" (0xfffff...)  respectively.
 ##
 ##   (Blobs shorter than 32 bytes can also be given, and they are extended with
 ##   zero bytes; longer than 32 bytes can be given and are truncated, but this
-##   is Geth being too accepting, and shouldn't be used.)
+##   is *Geth* being too accepting, and shouldn't be used.)
 ##
 ## - In the `slots` reply, the last account's storage list may be empty even if
 ##   that account has non-empty storage.
@@ -80,12 +90,12 @@
 ##   pipelining where different `stateRoot` hashes are used as time progresses.
 ##   Workarounds:
 ##
-##   - Fetch the proof using a second `GetStorageRanges` query with non-zero
+##   * Fetch the proof using a second `GetStorageRanges` query with non-zero
 ##     `origin` (perhaps equal to `limit`; use `origin = 1` if `limit == 0`).
 ##
-##   - Avoid the condition by using `origin >= 1` when using `limit`.
+##   * Avoid the condition by using `origin >= 1` when using `limit`.
 ##
-##   - Use trie node traversal (`snap` `GetTrieNodes` or `eth` `GetNodeData`)
+##   * Use trie node traversal (`snap` `GetTrieNodes` or `eth` `GetNodeData`)
 ##     to obtain the omitted proof.
 ##
 ## - When multiple accounts are requested with `origin > 0`, only one account's
@@ -103,6 +113,30 @@
 ##   treated `origin` as applying to only the first account and `limit` to only
 ##   the last account, but it doesn't.)
 ##
+## Modified `GetAccountRange` (0x00) packet syntax
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+##
+## As implementes here, the request message is encoded as
+##
+## `[reqID, rootHash, origin, limit, responseBytes]`
+##
+## It requests an unknown number of accounts from a given account trie, starting
+## at the specified account hash and capped by the maximum allowed response
+## size in bytes. The intended purpose of this message is to fetch a large
+## number of subsequent accounts from a remote node and reconstruct a state
+## subtrie locally.
+##
+## The `GetAccountRange` parameters `origin` and `limit` must be 32 byte
+## blobs. There is no reason why empty limit is not allowed here when it is
+## allowed for `GetStorageRanges`, it just isn't.
+##
+## * `reqID`: Request ID to match up responses with
+## * `rootHash`: Root hash of the account trie to serve
+## * `origin`: 32 byte storage slot hash of the first to retrieve
+## * `limit`: 32 byte storage slot hash fragment after which to stop serving
+## * `responseBytes`: 64 bit number soft limit at which to stop returning data
+##
+##
 ## Performance benefits
 ## --------------------
 ##
@@ -113,13 +147,13 @@
 ## It improves both network and local storage performance.  The benefits are
 ## substantial, and summarised here:
 ##
-## - [Ethereum Snapshot Protocol (SNAP) - Expected results]
-##   (https://github.com/ethereum/devp2p/blob/master/caps/snap.md)
-## - [Geth v1.10.0 - Snap sync]
-##   (https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#snap-sync)
+## - `Ethereum Snapshot Protocol (SNAP) - Expected results
+##    <https://github.com/ethereum/devp2p/blob/master/caps/snap.md>`_
+## - `Geth v1.10.0 - Snap sync
+##    <https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#snap-sync>`_
 ##
 ## In the Snap sync model, local storage benefits require clients to adopt a
-## different representation of Ethereum state than the trie storage that Geth
+## different representation of Ethereum state than the trie storage that *Geth*
 ## (and most clients) traditionally used, and still do in archive mode,
 ##
 ## However, Nimbus's sync method obtains similar local storage benefits
@@ -157,7 +191,7 @@
 ## the size of a representation of partially completed trie traversal with
 ## `eth` `GetNodeData`.  Due to the smaller metadata, after aborting a partial
 ## sync and restarting, it is possible to resume quickly, without waiting for
-## the very slow local database scan associated with older versions of Geth.
+## the very slow local database scan associated with older versions of *Geth*.
 ##
 ## However, Nimbus's sync method uses this principle as inspiration to
 ## obtain similar metadata benefits whichever network protocol is used.
@@ -171,8 +205,9 @@ import
   nimcrypto/hash,
   stew/byteutils,
   stint,
-  ../sync_types,
-  ../../constants
+  ".."/[sync_types, trace_helper],
+  ../../constants,
+  ./pickeled_snap_tracers
 
 type
   SnapAccount* = object
@@ -198,7 +233,7 @@ const
 # avoids transmitting these hashes in about 90% of accounts.  We need to
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
-proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
+proc read(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
   ## RLP decoding for `SnapAccount`, which contains a path and account.
   ## The snap representation of the account differs from `Account` RLP.
   ## Empty storage hash and empty code hash are each represented by an
@@ -226,7 +261,7 @@ proc read*(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
     rlp.skipElem()
     result.codeHash = EMPTY_SHA3
 
-proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
+proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP encoding for `SnapAccount`, which contains a path and account.
   ## The snap representation of the account differs from `Account` RLP.
   ## Empty storage hash and empty code hash are each represented by an
@@ -246,38 +281,11 @@ proc append*(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
 
 # RLP serialisation for `LeafPath`.
 
-template read*(rlp: var Rlp, _: type LeafPath): LeafPath =
+template read(rlp: var Rlp, _: type LeafPath): LeafPath =
   rlp.read(array[sizeof(LeafPath().toBytes), byte]).toLeafPath
 
-template append*(rlpWriter: var RlpWriter, leafPath: LeafPath) =
+template append(rlpWriter: var RlpWriter, leafPath: LeafPath) =
   rlpWriter.append(leafPath.toBytes)
-
-# Maybe cruft following?
-# # TODO: Don't know why, but the `p2pProtocol` can't handle this type.  It
-# # tries to serialise the `Option` as an object, looking at the internal
-# # fields.  But then fails because they are private fields.
-# #
-# ## RLP serialisation for `Option[SnapPath]`.
-# #
-# #proc read*(rlp: var Rlp, _: type Option[SnapPath]): Option[SnapPath] =
-# #  if rlp.blobLen == 0 and rlp.isBlob:
-# #    result = none(SnapPath)
-# #  else:
-# #    result = some(read(rlp, SnapPath))
-#
-# #proc write*(rlpWriter: var RlpWriter, value: Option[SnapPath]) =
-# #  if value.isNone:
-# #    rlpWriter.append("")
-# #  else:
-# #    rlpWriter.append(value.unsafeGet)
-
-# Shortcuts, print the protocol type as well (might be removed in future)
-const protoInfo = prettySnapProtoName
-
-template traceReceived(msg: static[string], args: varargs[untyped]) =
-  tracePacket "<< " & protoInfo & " Received " & msg, `args`
-template traceReplying(msg: static[string], args: varargs[untyped]) =
-  tracePacket ">> " & protoInfo & " Replying " & msg, `args`
 
 
 p2pProtocol snap1(version = 1,
@@ -291,11 +299,11 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      traceReceived "snap.GetAccountRange (0x00)", peer,
+      traceReceived "GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.AccountRange (0x01)", peer, sent=0
+      traceReplying "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -331,12 +339,12 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          traceReceived "snap.GetStorageRanges/A (0x02)", peer,
+          traceReceived "GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
             stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          traceReceived "snap.GetStorageRanges/S (0x02)", peer,
+          traceReceived "GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
@@ -344,12 +352,12 @@ p2pProtocol snap1(version = 1,
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          traceReceived "snap.GetStorageRanges/AS?? (0x02)", peer,
+          traceReceived "GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.StorageRanges (0x03)", peer, sent=0
+      traceReplying "EMPTY StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -361,10 +369,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
-      traceReceived "snap.GetByteCodes (0x04)", peer,
+      traceReceived "GetByteCodes (0x04)", peer,
         hashes=hashes.len, responseBytes
 
-      traceReplying "EMPTY snap.ByteCodes (0x05)", peer, sent=0
+      traceReplying "EMPTY ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -374,10 +382,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      traceReceived "snap.GetTrieNodes (0x06)", peer,
+      traceReceived "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY snap.TrieNodes (0x07)", peer, sent=0
+      traceReplying "EMPTY TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.

@@ -150,6 +150,11 @@ type
       abbr : "p"
       name: "prune-mode" }: PruneMode
 
+    snapSync* {.
+      desc: "Enable experimental new sync algorithms"
+      defaultValue: false
+      name: "snap-sync" .}: bool
+
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
       defaultValue: ""
@@ -350,11 +355,6 @@ type
       defaultValue: @[]
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
-
-    newSync* {.
-      desc: "Enable experimental new sync algorithms"
-      defaultValue: false
-      name: "new-sync" .}: bool
 
     case cmd* {.
       command

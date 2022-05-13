@@ -1,16 +1,21 @@
 # nim-eth
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed and distributed under either of
-#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 import
   std/[sets, options, random, hashes, sequtils],
-  chronos, chronicles,
-  ../sync/protocol_ethxx,
-  eth/common/eth_types,
-  eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool]
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p],
+  eth/p2p/[private/p2p_types, peer_pool],
+  stew/byteutils,
+  "."/[protocol, trace_helper]
 
 {.push raises:[Defect].}
 
@@ -19,10 +24,10 @@ const
                            # number of peers before syncing
 
 type
-  SyncStatus* = enum
-    syncSuccess
-    syncNotEnoughPeers
-    syncTimeOut
+  #SyncStatus = enum
+  #  syncSuccess
+  #  syncNotEnoughPeers
+  #  syncTimeOut
 
   BlockchainSyncDefect* = object of Defect
     ## Catch and relay exception
@@ -40,7 +45,7 @@ type
     headers: seq[BlockHeader]
     bodies: seq[BlockBody]
 
-  SyncContext = ref object
+  FastSyncCtx* = ref object
     workQueue: seq[WantedBlocks]
     endBlockNumber: BlockNumber
     finalizedBlock: BlockNumber # Block which was downloaded and verified
@@ -66,7 +71,7 @@ proc endIndex(b: WantedBlocks): BlockNumber =
   result = b.startIndex
   result += (b.numBlocks - 1).toBlockNumber
 
-proc availableWorkItem(ctx: SyncContext): int =
+proc availableWorkItem(ctx: FastSyncCtx): int =
   var maxPendingBlock = ctx.finalizedBlock # the last downloaded & processed
   trace "queue len", length = ctx.workQueue.len
   result = -1
@@ -110,7 +115,7 @@ proc availableWorkItem(ctx: SyncContext): int =
     numBlocks = maxHeadersFetch
   ctx.workQueue[result] = WantedBlocks(startIndex: nextRequestedBlock, numBlocks: numBlocks.uint, state: Initial)
 
-proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
+proc persistWorkItem(ctx: FastSyncCtx, wi: var WantedBlocks): ValidationResult
     {.gcsafe, raises:[Defect,CatchableError].} =
   catchException("persistBlocks"):
     result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
@@ -124,7 +129,7 @@ proc persistWorkItem(ctx: SyncContext, wi: var WantedBlocks): ValidationResult
   wi.headers = @[]
   wi.bodies = @[]
 
-proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
+proc persistPendingWorkItems(ctx: FastSyncCtx): (int, ValidationResult)
     {.gcsafe, raises:[Defect,CatchableError].} =
   var nextStartIndex = ctx.finalizedBlock + 1
   var keepRunning = true
@@ -153,7 +158,7 @@ proc persistPendingWorkItems(ctx: SyncContext): (int, ValidationResult)
 
   ctx.hasOutOfOrderBlocks = hasOutOfOrderBlocks
 
-proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
+proc returnWorkItem(ctx: FastSyncCtx, workItem: int): ValidationResult
     {.gcsafe, raises:[Defect,CatchableError].} =
   let wi = addr ctx.workQueue[workItem]
   let askedBlocks = wi.numBlocks.int
@@ -192,15 +197,7 @@ proc returnWorkItem(ctx: SyncContext, workItem: int): ValidationResult
       receivedBlocks
     return ValidationResult.Error
 
-proc newSyncContext(chain: AbstractChainDB, peerPool: PeerPool): SyncContext
-    {.gcsafe, raises:[Defect,CatchableError].} =
-  new result
-  result.chain = chain
-  result.peerPool = peerPool
-  result.trustedPeers = initHashSet[Peer]()
-  result.finalizedBlock = chain.getBestBlockHeader().blockNumber
-
-proc handleLostPeer(ctx: SyncContext) =
+proc handleLostPeer(ctx: FastSyncCtx) =
   # TODO: ask the PeerPool for new connections and then call
   # `obtainBlocksFromPeer`
   discard
@@ -224,7 +221,7 @@ proc getBestBlockNumber(p: Peer): Future[BlockNumber] {.async.} =
      count=latestBlock.get.headers.len,
      blockNumber=(if latestBlock.get.headers.len > 0: $result else: "missing")
 
-proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
+proc obtainBlocksFromPeer(syncCtx: FastSyncCtx, peer: Peer) {.async.} =
   # Update our best block number
   try:
     let bestBlockNumber = await peer.getBestBlockNumber()
@@ -356,7 +353,7 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
     tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer=a,
       count=latestBlock.get.headers.len, blockNumber
 
-proc randomTrustedPeer(ctx: SyncContext): Peer =
+proc randomTrustedPeer(ctx: FastSyncCtx): Peer =
   var k = rand(ctx.trustedPeers.len - 1)
   var i = 0
   for p in ctx.trustedPeers:
@@ -364,7 +361,7 @@ proc randomTrustedPeer(ctx: SyncContext): Peer =
     if i == k: return
     inc i
 
-proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
+proc startSyncWithPeer(ctx: FastSyncCtx, peer: Peer) {.async.} =
   trace "start sync", peer, trustedPeers = ctx.trustedPeers.len
   if ctx.trustedPeers.len >= minPeersToStartSync:
     # We have enough trusted peers. Validate new peer against trusted
@@ -409,7 +406,7 @@ proc startSyncWithPeer(ctx: SyncContext, peer: Peer) {.async.} =
         asyncSpawn ctx.obtainBlocksFromPeer(p)
 
 
-proc onPeerConnected(ctx: SyncContext, peer: Peer) =
+proc onPeerConnected(ctx: FastSyncCtx, peer: Peer) =
   trace "New candidate for sync", peer
   try:
     let f = ctx.startSyncWithPeer(peer)
@@ -425,20 +422,9 @@ proc onPeerConnected(ctx: SyncContext, peer: Peer) =
     debug "Exception in startSyncWithPeer()", exc = e.name, err = e.msg
 
 
-proc onPeerDisconnected(ctx: SyncContext, p: Peer) =
+proc onPeerDisconnected(ctx: FastSyncCtx, p: Peer) =
   trace "peer disconnected ", peer = p
   ctx.trustedPeers.excl(p)
-
-proc startSync(ctx: SyncContext) =
-  var po: PeerObserver
-  po.onPeerConnected = proc(p: Peer) {.gcsafe.} =
-    ctx.onPeerConnected(p)
-
-  po.onPeerDisconnected = proc(p: Peer) {.gcsafe.} =
-    ctx.onPeerDisconnected(p)
-
-  po.setProtocol eth
-  ctx.peerPool.addObserver(ctx, po)
 
 proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
   var
@@ -454,12 +440,29 @@ proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
 
   result = (bestPeer, bestBlockDifficulty)
 
-proc fastBlockchainSync*(node: EthereumNode): Future[SyncStatus] {.async.} =
-  ## Code for the fast blockchain sync procedure:
-  ## https://github.com/ethereum/wiki/wiki/Parallel-Block-Downloads
-  ## https://github.com/ethereum/go-ethereum/pull/1889
-  # TODO: This needs a better interface. Consider removing this function and
-  # exposing SyncCtx
-  var syncCtx = newSyncContext(node.chain, node.peerPool)
-  syncCtx.startSync()
+proc new*(T: type FastSyncCtx; ethNode: EthereumNode): T
+    {.gcsafe, raises:[Defect,CatchableError].} =
+  FastSyncCtx(
+    # workQueue:           n/a
+    # endBlockNumber:      n/a
+    # hasOutOfOrderBlocks: n/a
+    chain:          ethNode.chain,
+    peerPool:       ethNode.peerPool,
+    trustedPeers:   initHashSet[Peer](),
+    finalizedBlock: ethNode.chain.getBestBlockHeader.blockNumber)
 
+proc start*(ctx: FastSyncCtx) =
+  ## Code for the fast blockchain sync procedure:
+  ##   <https://github.com/ethereum/wiki/wiki/Parallel-Block-Downloads>_
+  ##   <https://github.com/ethereum/go-ethereum/pull/1889__
+  var po = PeerObserver(
+    onPeerConnected:
+      proc(p: Peer) {.gcsafe.} =
+         ctx.onPeerConnected(p),
+    onPeerDisconnected:
+      proc(p: Peer) {.gcsafe.} =
+        ctx.onPeerDisconnected(p))
+  po.setProtocol eth
+  ctx.peerPool.addObserver(ctx, po)
+
+# End

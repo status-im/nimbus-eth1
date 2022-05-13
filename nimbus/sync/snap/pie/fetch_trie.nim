@@ -29,7 +29,8 @@ import
   chronos,
   eth/[common/eth_types, rlp, p2p],
   stint,
-  ".."/[protocol/get_nodedata, sync_types, validate_trienode],
+  "../.."/[sync_types, trace_helper],
+  ".."/[get_nodedata, validate_trienode],
   ./common
 
 type

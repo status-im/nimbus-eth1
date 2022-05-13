@@ -47,9 +47,12 @@
 ##
 ## References:
 ##
-## - [Ethereum Wire Protocol (ETH)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md)
-## - [`GetNodeData` (0x0d)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getnodedata-0x0d)
-## - [`NodeData` (0x0e)](https://github.com/ethereum/devp2p/blob/master/caps/eth.md#nodedata-0x0e)
+## - `Ethereum Wire Protocol (ETH)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
+## - `GetNodeData (0x0d)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getnodedata-0x0d>`_
+## - `NodeData (0x0e)
+##    <https://github.com/ethereum/devp2p/blob/master/caps/eth.md#nodedata-0x0e>`_
 ##
 ## Note:
 ##
@@ -62,10 +65,10 @@
 import
   std/[sequtils, sets, tables, hashes],
   chronos,
-  eth/[common/eth_types, rlp, p2p],
-  nimcrypto/keccak,
   stint,
-  ".."/[sync_types, protocol_ethxx]
+  nimcrypto/keccak,
+  eth/[common/eth_types, rlp, p2p],
+  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types]
 
 type
   NodeDataRequestQueue* = ref object of typeof SyncPeer().nodeDataRequestsBase
@@ -93,27 +96,6 @@ type
     reverseMap:             seq[int]    # Access with `reversMap(i)` instead.
     hashVerifiedData*:      seq[Blob]
 
-# Shortcuts, print the protocol type as well (might be removed in future)
-const protoInfo = prettyEthProtoName
-
-template traceReceived(msg: static[string], args: varargs[untyped]) =
-  tracePacket "<< " & protoInfo & " Received " & msg, `args`
-template traceWaitTimeout(msg: static[string], args: varargs[untyped]) =
-  traceTimeout "<< " & protoInfo & " Timeout waiting " & msg, `args`
-template traceWaitError(msg: static[string], args: varargs[untyped]) =
-  traceNetworkError "<< " & protoInfo & " Error waiting " & msg, `args`
-template traceProtoError(msg: static[string], args: varargs[untyped]) =
-  tracePacketError "<< " & protoInfo & " Protocol violation, " & msg, `args`
-template traceDisconError(msg: static[string], args: varargs[untyped]) =
-  traceNetworkError "<< " & protoInfo & " Peer disconnected, " & msg, `args`
-template traceSending(msg: static[string], args: varargs[untyped]) =
-  tracePacket ">> " & protoInfo & " Sending " & msg, `args`
-template traceSendError(msg: static[string], args: varargs[untyped]) =
-  traceNetworkError ">> " & protoInfo & " Error sending " & msg, `args`
-template traceDelaying(msg: static[string], args: varargs[untyped]) =
-  tracePacket ">> " & protoInfo & " Dlaying " & msg, `args`
-
-
 template reverseMap*(reply: NodeDataReply, index: int): int =
   ## Given an index into the request hash list, return index into the reply
   ## `hashVerifiedData`, or -1 if there is no data for that request hash.
@@ -133,46 +115,47 @@ template `$`*(paths: (InteriorPath, InteriorPath)): string =
   pathRange(paths[0], paths[1])
 
 proc traceGetNodeDataSending(request: NodeDataRequest) =
-  traceSending "eth.GetNodeData (0x0d)", peer=request.sp,
+  traceSending "GetNodeData", peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataDelaying(request: NodeDataRequest) =
-  traceDelaying "eth.GetNodeData (0x0d)",  peer=request.sp,
+  traceDelaying "GetNodeData",  peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataSendError(request: NodeDataRequest,
                                e: ref CatchableError) =
-  traceSendError "eth.GetNodeData (0x0d)",
+  traceRecvError "sending GetNodeData",
     peer=request.sp, error=e.msg,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyError(request: NodeDataRequest,
                              e: ref CatchableError) =
-  traceWaitError "for reply to eth.GetNodeData (0x0d)",
+  traceRecvError "waiting for reply to GetNodeData",
     peer=request.sp, error=e.msg,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyTimeout(request: NodeDataRequest) =
-  traceWaitTimeout "for reply to eth.GetNodeData (0x0d)",
+  traceTimeoutWaiting "for reply to GetNodeData",
     hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceGetNodeDataDisconnected(request: NodeDataRequest) =
-  traceDisconError "not sending eth.GetNodeData (0x0d)",
+  traceRecvError "peer disconnected, not sending GetNodeData",
     peer=request.sp, hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
-    traceReceived "EMPTY eth.NodeData (0x0e)", peer=sp, got=0
+    traceGot "EMPTY NodeData", peer=sp,
+      got=0
   else:
-    traceReceived "eth.NodeData (0x0e)", peer=sp, got=0,
-      requested=request.hashes.len, pathRange=request.pathRange
+    traceGot "NodeData", peer=sp,
+      got=0, requested=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyUnmatched(sp: SyncPeer, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
-  traceProtoError "non-reply eth.NodeData (0x0e)", peer=sp, got
-  debug "Sync: Warning: Unexpected non-reply eth.NodeData from peer"
+  traceProtocolViolation "non-reply NodeData", peer=sp, got
+  debug "Sync: Warning: Unexpected non-reply NodeData from peer"
 
 proc traceNodeDataReply(request: NodeDataRequest,
                         got, use, unmatched, other, duplicates: int) =
@@ -182,11 +165,11 @@ proc traceNodeDataReply(request: NodeDataRequest,
     logScope: pathRange=request.pathRange
     logScope: peer=request.sp
     if got > request.hashes.len and (unmatched + other) == 0:
-      traceReceived "EXCESS reply eth.NodeData (0x0e)"
+      traceGot "EXCESS reply NodeData"
     elif got == request.hashes.len or use != got:
-      traceReceived "reply eth.NodeData (0x0e)"
+      traceGot "reply NodeData"
     elif got < request.hashes.len:
-      traceReceived "TRUNCATED reply eth.NodeData (0x0e)"
+      traceGot "TRUNCATED reply NodeData"
 
   if use != got:
     logScope:
@@ -197,18 +180,18 @@ proc traceNodeDataReply(request: NodeDataRequest,
       pathRange=request.pathRange
       peer=request.sp
     if unmatched > 0:
-      traceProtoError "incorrect hashes in eth.NodeData (0x0e)"
-      debug "Sync: Warning: eth.NodeData has nodes with incorrect hashes"
+      traceProtocolViolation "incorrect hashes in NodeData"
+      debug "Sync: Warning: NodeData has nodes with incorrect hashes"
     elif other > 0:
-      traceProtoError "mixed request nodes in eth.NodeData (0x0e)"
-      debug "Sync: Warning: eth.NodeData has nodes from mixed requests"
+      traceProtocolViolation "mixed request nodes in NodeData"
+      debug "Sync: Warning: NodeData has nodes from mixed requests"
     elif got > request.hashes.len:
       # Excess without unmatched/other is only possible with duplicates > 0.
-      traceProtoError "excess nodes in eth.NodeData (0x0e)"
-      debug "Sync: Warning: eth.NodeData has more nodes than requested"
+      traceProtocolViolation "excess nodes in NodeData"
+      debug "Sync: Warning: NodeData has more nodes than requested"
     else:
-      traceProtoError "duplicate nodes in eth.NodeData (0x0e)"
-      debug "Sync: Warning: eth.NodeData has duplicate nodes"
+      traceProtocolViolation "duplicate nodes in NodeData"
+      debug "Sync: Warning: NodeData has duplicate nodes"
 
 proc hash(hash: ptr Hash256): Hash         = cast[ptr Hash](addr hash.data)[]
 proc `==`(hash1, hash2: ptr Hash256): bool = hash1[] == hash2[]
@@ -349,7 +332,7 @@ proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply,
     # Subtle: Timer can trigger and its callback be added to Chronos run loop,
     # then data event trigger and call `clearTimer()`.  The timer callback
     # will then run but it must be ignored.
-    debug "Sync: Warning: Resolved timer race over eth.NodeData reply"
+    debug "Sync: Warning: Resolved timer race over NodeData reply"
   else:
     request.timer.clearTimer()
     request.future.complete(reply)

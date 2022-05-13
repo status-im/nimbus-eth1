@@ -9,11 +9,11 @@
 {.push raises: [Defect].}
 
 import
-  std/[sets, tables, sequtils, strutils],
+  std/[sets, sequtils, strutils],
   chronos,
   eth/[common/eth_types, rlp, p2p],
   stint,
-  ../sync_types
+  ../../sync_types
 
 type
   LeafRange* = object

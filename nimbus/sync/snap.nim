@@ -9,15 +9,24 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [Defect].}
-
 import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, rlp],
   eth/p2p/[rlpx, peer_pool, private/p2p_types],
   stint,
-  "."/[chain_head_tracker, protocol_ethxx, protocol/get_nodedata, sync_types]
+  "."/[protocol, sync_types],
+  ./snap/[chain_head_tracker, get_nodedata]
+
+{.push raises: [Defect].}
+
+type
+  SnapSyncCtx* = ref object of SnapSync
+    peerPool: PeerPool
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc syncPeerLoop(sp: SyncPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
@@ -36,7 +45,7 @@ proc syncPeerStop(sp: SyncPeer) =
   # TODO: Cancel SyncPeers that are running.  We need clean cancellation for
   # this.  Doing so reliably will be addressed at a later time.
 
-proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
+proc onPeerConnected(ns: SnapSyncCtx, protocolPeer: Peer) =
   let sp = SyncPeer(
     ns:              ns,
     peer:            protocolPeer,
@@ -46,8 +55,7 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
     huntLow:         0.toBlockNumber,
     huntHigh:        high(BlockNumber),
     huntStep:        0,
-    bestBlockNumber: 0.toBlockNumber
-  )
+    bestBlockNumber: 0.toBlockNumber)
   trace "Sync: Peer connected", peer=sp
 
   sp.setupGetNodeData()
@@ -63,7 +71,7 @@ proc onPeerConnected(ns: NewSync, protocolPeer: Peer) =
   ns.syncPeers.add(sp)
   sp.syncPeerStart()
 
-proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
+proc onPeerDisconnected(ns: SnapSyncCtx, protocolPeer: Peer) =
   trace "Sync: Peer disconnected", peer=protocolPeer
   # Find matching `sp` and remove from `ns.syncPeers`.
   var sp: SyncPeer = nil
@@ -78,22 +86,27 @@ proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
 
   sp.syncPeerStop()
 
-proc newSyncEarly*(ethNode: EthereumNode) =
-  info "** Using --new-sync experimental new sync algorithms"
-  info "** Note that fetched data is not currently stored"
-  info "** It's used for timing, behaviour and interop tests"
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-  let ns = NewSync()
+proc new*(T: type SnapSyncCtx; ethNode: EthereumNode): T =
+  ## Constructor
+  new result
+  result.peerPool = ethNode.peerPool
+
+proc start*(ctx: SnapSyncCtx) =
+  ## Set up syncing. This call should come early.
   var po = PeerObserver(
     onPeerConnected:
-      proc(protocolPeer: Peer) {.gcsafe.} =
-        ns.onPeerConnected(protocolPeer),
+      proc(p: Peer) {.gcsafe.} =
+        ctx.onPeerConnected(p),
     onPeerDisconnected:
-      proc(protocolPeer: Peer) {.gcsafe.} =
-        ns.onPeerDisconnected(protocolPeer)
-  )
-  po.setProtocol(eth)
-  ethNode.peerPool.addObserver(ns, po)
+      proc(p: Peer) {.gcsafe.} =
+        ctx.onPeerDisconnected(p))
+  po.setProtocol eth
+  ctx.peerPool.addObserver(ctx, po)
 
-proc newSync*() =
-  discard
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

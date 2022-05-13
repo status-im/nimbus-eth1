@@ -12,7 +12,7 @@ import
   unittest2, nimcrypto, eth/common as eth_common,
   json_rpc/[rpcserver, rpcclient], web3/[conversions, engine_api_types],
   eth/[trie/db, p2p/private/p2p_types],
-  ../nimbus/sync/protocol_ethxx,
+  ../nimbus/sync/protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils, engine_api],
   ../nimbus/db/[db_chain],
   ../nimbus/[chain_config, config, context, genesis, sealer],

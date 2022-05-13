@@ -12,7 +12,7 @@ import
   stew/byteutils, unittest2,
   eth/[p2p, common, trie/db, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
-  ../nimbus/sync/protocol_ethxx,
+  ../nimbus/sync/protocol,
   ../nimbus/[genesis, config, chain_config, context],
   ../nimbus/db/[db_chain],
   ../nimbus/p2p/chain, ./test_helpers,

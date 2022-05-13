@@ -8,5 +8,16 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import ./protocol/snap1
-export snap1
+import
+  ./protocol/eth66 as proto_eth,
+  ./protocol/snap1 as proto_snap
+
+export
+  proto_eth,
+  proto_snap
+
+type
+  eth* = eth66
+  snap* = snap1
+
+# End

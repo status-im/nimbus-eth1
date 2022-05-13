@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module fetches and tracks the canonical chain head of each connected
 ## peer.  (Or in future, each peer we care about; we won't poll them all so
@@ -62,8 +65,9 @@ import
   chronos, stint, chronicles, stew/byteutils,
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types],
-  ../p2p/chain/chain_desc,
-  "."/[sync_types, protocol_ethxx, pie/slicer]
+  ../../p2p/chain/chain_desc,
+  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types, trace_helper],
+  ./pie/slicer
 
 const
   syncLockedMinimumReply        = 8
@@ -106,6 +110,7 @@ doAssert syncLockedQuerySize <= maxHeadersFetch
 doAssert syncHuntQuerySize >= 1 and syncHuntQuerySize <= maxHeadersFetch
 doAssert syncHuntForwardExpandShift >= 1 and syncHuntForwardExpandShift <= 8
 doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
+
 
 proc clearSyncStateRoot(sp: SyncPeer) =
   if sp.syncStateRoot.isSome:
@@ -486,17 +491,17 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
 
   if tracePackets:
     if request.maxResults == 1 and request.startBlock.isHash:
-      tracePacket ">> Sending eth.GetBlockHeaders/Hash (0x03)", peer=sp,
+      traceSending "GetBlockHeaders/Hash", peer=sp,
         blockHash=($request.startBlock.hash), count=1
     elif request.maxResults == 1:
-      tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=sp,
+      traceSending "GetBlockHeaders", peer=sp,
         `block`=request.startBlock, count=1
     elif request.startBlock.isHash:
-      tracePacket ">> Sending eth.GetBlockHeaders/Hash (0x03)", peer=sp,
+      traceSending "GetBlockHeaders/Hash", peer=sp,
         firstBlockHash=request.startBlock, count=request.maxResults,
-        step=traceStep(request)
+                       step=traceStep(request)
     else:
-      tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=sp,
+      traceSending "GetBlockHeaders", peer=sp,
         firstBlock=request.startBlock, count=request.maxResults,
         step=traceStep(request)
 
@@ -505,14 +510,14 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
   try:
     reply = await sp.peer.getBlockHeaders(request)
   except CatchableError as e:
-    traceNetworkError "<< Error waiting for reply to eth.GetBlockHeaders (0x03)",
+    traceRecvError "waiting for reply to GetBlockHeaders",
       peer=sp, error=e.msg
     inc sp.stats.major.networkErrors
     sp.stopped = true
     return
 
   if reply.isNone:
-    traceTimeout "<< Timeout waiting for reply to eth.GetBlockHeaders (0x03)",
+    traceTimeoutWaiting "for reply to GetBlockHeaders",
       peer=sp
     # TODO: Should disconnect?
     inc sp.stats.minor.timeoutBlockHeaders
@@ -521,18 +526,18 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
   let len = reply.get.headers.len
   if tracePackets:
     if len == 0:
-      tracePacket "<< Got EMPTY reply eth.BlockHeaders (0x04)", peer=sp,
+      traceGot "EMPTY reply BlockHeaders", peer=sp,
         got=0, requested=request.maxResults
     else:
       let firstBlock = reply.get.headers[0].blockNumber
       let lastBlock = reply.get.headers[len - 1].blockNumber
-      tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer=sp,
+      traceGot "reply BlockHeaders", peer=sp,
         got=len, requested=request.maxResults, firstBlock, lastBlock
 
   sp.pendingGetBlockHeaders = false
 
   if len > request.maxResults.int:
-    tracePacketError "<< Protocol violation, excess headers in eth.BlockHeaders (0x04)",
+    traceProtocolViolation "excess headers in BlockHeaders",
       peer=sp, got=len, requested=request.maxResults
     # TODO: Should disconnect.
     inc sp.stats.major.excessBlockHeaders

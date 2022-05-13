@@ -17,42 +17,15 @@ import
   stint, stew/byteutils, chronicles, chronos,
   eth/[common/eth_types, p2p]
 
-const
-  tracePackets*         = true
-    ## Whether to `trace` log each sync network message.
-  traceGossips*         = false
-    ## Whether to `trace` log each gossip network message.
-  traceHandshakes*      = true
-    ## Whether to `trace` log each network handshake message.
-  traceTimeouts*        = true
-    ## Whether to `trace` log each network request timeout.
-  traceNetworkErrors*   = true
-    ## Whether to `trace` log each network request error.
-  tracePacketErrors*    = true
-    ## Whether to `trace` log each messages with invalid data.
-  traceIndividualNodes* = false
-    ## Whether to `trace` log each trie node, account, storage, receipt, etc.
-
-template tracePacket*(msg: static[string], args: varargs[untyped]) =
-  if tracePackets: trace `msg`, `args`
-template traceGossip*(msg: static[string], args: varargs[untyped]) =
-  if traceGossips: trace `msg`, `args`
-template traceTimeout*(msg: static[string], args: varargs[untyped]) =
-  if traceTimeouts: trace `msg`, `args`
-template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
-  if traceNetworkErrors: trace `msg`, `args`
-template tracePacketError*(msg: static[string], args: varargs[untyped]) =
-  if tracePacketErrors: trace `msg`, `args`
-
 type
-  NewSync* = ref object
+  SnapSync* = ref object of RootObj
     ## Shared state among all peers of a syncing node.
     syncPeers*:             seq[SyncPeer]
     sharedFetch:            SharedFetchState        # Exported via templates.
 
   SyncPeer* = ref object
     ## Peer state tracking.
-    ns*:                    NewSync
+    ns*:                    SnapSync
     peer*:                  Peer                    # p2pProtocol(eth65).
     stopped*:               bool
     pendingGetBlockHeaders*:bool
@@ -135,13 +108,13 @@ type
     ## numerical properties: ordering, intervals and meaningful difference.
     number: UInt256
 
-  # Use `import protocol/get_nodedata` to access the real type's methods.
+  # Use `import snap/get_nodedata` to access the real type's methods.
   NodeDataRequestQueue {.inheritable, pure.} = ref object
 
-  # Use `import pie/trie_fetch` to access the real type's methods.
+  # Use `import snap/pie/trie_fetch` to access the real type's methods.
   SharedFetchState {.inheritable, pure.} = ref object
 
-  # Use `import pie/trie_fetch` to access the real type's methods.
+  # Use `import snap/pie/trie_fetch` to access the real type's methods.
   FetchState {.inheritable, pure.} = ref object
 
 proc inc(stat: var Stat) {.borrow.}
