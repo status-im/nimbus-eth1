@@ -14,17 +14,16 @@
 import
   std/[sets, random],
   chronos,
-  eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  ../../sync_types,
-  ../path_desc,
-  "."/[common, fetch_trie, fetch_snap]
+  eth/[common/eth_types, p2p, rlp],
+  ".."/[path_desc, base_desc],
+  "."/[common, fetch_trie, fetch_snap, peer_desc]
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
 # `peerSupportsSnap` where those are defined.
 
-proc stateFetch*(sp: SyncPeer) {.async.} =
+proc stateFetch*(sp: SnapPeerEx) {.async.} =
   var stateRoot = sp.syncStateRoot.get
   trace "Sync: Syncing from stateRoot", peer=sp, stateRoot=($stateRoot)
 

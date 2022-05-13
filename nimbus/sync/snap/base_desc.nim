@@ -10,9 +10,8 @@
 # except according to those terms.
 
 import
-  eth/common/eth_types
-  #eth/[common/eth_types, p2p],
-  #./types
+  eth/[common/eth_types, p2p],
+  ./types
 
 {.push raises: [Defect].}
 
@@ -50,7 +49,6 @@ type
     SyncHuntRange
     SyncHuntRangeFinal
 
-  #[
   SnapPeerBase* = ref object of RootObj
     ## Peer state tracking.
     ns*:                    SnapSyncBase  ## Opaque object reference
@@ -77,14 +75,13 @@ type
     ## Shared state among all peers of a snap syncing node.
     syncPeers*: seq[SnapPeerBase]
       ## Peer state tracking
-  #]#
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-#proc `$`*(sp: SnapPeerBase): string =
-#  $sp.peer
+proc `$`*(sp: SnapPeerBase): string =
+  $sp.peer
 
 proc inc(stat: var SnapStat) {.borrow.}
 

@@ -64,7 +64,4 @@ proc `$`*(hashOrNum: HashOrNum): string =
   if hashOrNum.isHash: $hashOrNum.hash
   else: $hashOrNum.number
 
-# The files and lines clutter more useful details when sync tracing is enabled.
-publicLogScope: chroniclesLineNumbers=false
-
 # End

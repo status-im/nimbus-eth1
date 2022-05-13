@@ -12,97 +12,29 @@
 import
   std/[sets, sequtils, strutils],
   chronos,
+  chronicles,
   eth/[common/eth_types, p2p],
   stint,
-  ../../sync_types,
-  ".."/[path_desc, timer_helper]
+  ../path_desc,
+  "."/[peer_desc, sync_desc]
 
 {.push raises: [Defect].}
 
-type
-  SharedFetchState* = ref object of typeof SyncPeer().sharedFetchBase
-    ## Account fetching state that is shared among all peers.
-    # Leaf path ranges not fetched or in progress on any peer.
-    leafRanges:             seq[LeafRange]
-    countAccounts*:         int64
-    countAccountBytes*:     int64
-    countRange*:            UInt256
-    countRangeStarted*:     bool
-    countRangeSnap*:        UInt256
-    countRangeSnapStarted*: bool
-    countRangeTrie*:        UInt256
-    countRangeTrieStarted*: bool
-    displayTimer:           TimerCallback
-
-template sharedFetch*(sp: SyncPeer): auto =
-  sync_types.sharedFetchBase(sp).SharedFetchState
-
-proc rangeFraction(value: UInt256, discriminator: bool): int =
-  ## Format a value in the range 0..2^256 as a percentage, 0-100%.  As the
-  ## top of the range 2^256 cannot be represented in `UInt256` it actually
-  ## has the value `0: UInt256`, and with that value, `discriminator` is
-  ## consulted to decide between 0% and 100%.  For other values, the value is
-  ## constrained to be between slightly above 0% and slightly below 100%,
-  ## so that the endpoints are distinctive when displayed.
-  const multiplier = 10000
-  var fraction: int = 0 # Fixed point, fraction 0.0-1.0 multiplied up.
-  if value == 0:
-    return if discriminator: multiplier else: 0 # Either 100.00% or 0.00%.
-
-  const shift = 8 * (sizeof(value) - sizeof(uint64))
-  const wordHigh: uint64 = (high(typeof(value)) shr shift).truncate(uint64)
-  # Divide `wordHigh+1` by `multiplier`, rounding up, avoiding overflow.
-  const wordDiv: uint64 = 1 + ((wordHigh shr 1) div (multiplier.uint64 shr 1))
-  let wordValue: uint64 = (value shr shift).truncate(uint64)
-  let divided: uint64 = wordValue div wordDiv
-  return if divided >= multiplier: multiplier - 1
-         elif divided <= 0: 1
-         else: divided.int
-
-proc percent(value: UInt256, discriminator: bool): string =
-  var str = intToStr(rangeFraction(value, discriminator), 3)
-  str.insert(".", str.len - 2)
-  str.add('%')
-  return str
-
-proc setDisplayTimer(sp: SyncPeer, at: Moment) {.gcsafe.}
-
-proc displayUpdate(sp: SyncPeer) {.gcsafe.} =
-  let sharedFetch = sp.sharedFetch
-  doAssert not sharedFetch.isNil
-
-  info "State: Account sync progress",
-    percent=percent(sharedFetch.countRange, sharedFetch.countRangeStarted),
-    accounts=sharedFetch.countAccounts,
-    snap=percent(sharedFetch.countRangeSnap, sharedFetch.countRangeSnapStarted),
-    trie=percent(sharedFetch.countRangeTrie, sharedFetch.countRangeTrieStarted)
-  sp.setDisplayTimer(Moment.fromNow(1.seconds))
-
-proc setDisplayTimer(sp: SyncPeer, at: Moment) =
-  sp.sharedFetch.displayTimer = safeSetTimer(at, displayUpdate, sp)
-
-proc newSharedFetchState(sp: SyncPeer): SharedFetchState =
-  result = SharedFetchState(
-    leafRanges: @[LeafRange(leafLow: low(LeafPath), leafHigh: high(LeafPath))]
-  )
-  result.displayTimer = safeSetTimer(Moment.fromNow(100.milliseconds),
-                                     displayUpdate, sp)
-
-proc hasSlice*(sp: SyncPeer): bool =
+proc hasSlice*(sp: SnapPeerEx): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
-  if sp.sharedFetch.isNil:
-    sp.sharedFetch = newSharedFetchState(sp)
-  result = not sp.sharedFetch.isNil and sp.sharedFetch.leafRanges.len > 0
+  if sp.nsx.sharedFetch.isNil:
+    sp.nsx.sharedFetch = SharedFetchState.new
+  result = 0 < sp.nsx.sharedFetch.leafRanges.len
   trace "Sync: hasSlice", peer=sp, hasSlice=result
 
-proc getSlice*(sp: SyncPeer, leafLow, leafHigh: var LeafPath): bool =
+proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
   ## `leadLow` and `leafHigh` are set to the slice range and `true` is
   ## returned.  Otherwise `false` is returned.
 
-  if sp.sharedFetch.isNil:
-    sp.sharedFetch = newSharedFetchState(sp)
-  let sharedFetch = sp.sharedFetch
+  if sp.nsx.sharedFetch.isNil:
+    sp.nsx.sharedFetch = SharedFetchState.new
+  let sharedFetch = sp.nsx.sharedFetch
   template ranges: auto = sharedFetch.leafRanges
   const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
 
@@ -119,10 +51,10 @@ proc getSlice*(sp: SyncPeer, leafLow, leafHigh: var LeafPath): bool =
   trace "Sync: getSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
   return true
 
-proc putSlice*(sp: SyncPeer, leafLow, leafHigh: LeafPath) =
+proc putSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath) =
   ## Return a slice to the free list, merging with the rest of the list.
 
-  let sharedFetch = sp.sharedFetch
+  let sharedFetch = sp.nsx.sharedFetch
   template ranges: auto = sharedFetch.leafRanges
 
   trace "Sync: putSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
@@ -147,25 +79,25 @@ proc putSlice*(sp: SyncPeer, leafLow, leafHigh: LeafPath) =
     if leafHigh > ranges[i].leafHigh:
       ranges[i].leafHigh = leafHigh
 
-template getSlice*(sp: SyncPeer, leafRange: var LeafRange): bool =
+template getSlice*(sp: SnapPeerEx, leafRange: var LeafRange): bool =
   sp.getSlice(leafRange.leafLow, leafRange.leafHigh)
 
-template putSlice*(sp: SyncPeer, leafRange: LeafRange) =
+template putSlice*(sp: SnapPeerEx, leafRange: LeafRange) =
   sp.putSlice(leafRange.leafLow, leafRange.leafHigh)
 
-proc countSlice*(sp: SyncPeer, leafLow, leafHigh: LeafPath, which: bool) =
+proc countSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath, which: bool) =
   doAssert leafLow <= leafHigh
-  sp.sharedFetch.countRange += leafHigh - leafLow + 1
-  sp.sharedFetch.countRangeStarted = true
+  sp.nsx.sharedFetch.countRange += leafHigh - leafLow + 1
+  sp.nsx.sharedFetch.countRangeStarted = true
   if which:
-    sp.sharedFetch.countRangeSnap += leafHigh - leafLow + 1
-    sp.sharedFetch.countRangeSnapStarted = true
+    sp.nsx.sharedFetch.countRangeSnap += leafHigh - leafLow + 1
+    sp.nsx.sharedFetch.countRangeSnapStarted = true
   else:
-    sp.sharedFetch.countRangeTrie += leafHigh - leafLow + 1
-    sp.sharedFetch.countRangeTrieStarted = true
+    sp.nsx.sharedFetch.countRangeTrie += leafHigh - leafLow + 1
+    sp.nsx.sharedFetch.countRangeTrieStarted = true
 
-template countSlice*(sp: SyncPeer, leafRange: LeafRange, which: bool) =
+template countSlice*(sp: SnapPeerEx, leafRange: LeafRange, which: bool) =
   sp.countSlice(leafRange.leafLow, leafRange.leafHigh, which)
 
-proc countAccounts*(sp: SyncPeer, len: int) =
-  sp.sharedFetch.countAccounts += len
+proc countAccounts*(sp: SnapPeerEx, len: int) =
+  sp.nsx.sharedFetch.countAccounts += len

@@ -23,37 +23,16 @@
 ##   pointers, without significant random access database I/O.
 
 import
-  std/[algorithm, sets, tables],
+  std/[sets, tables, algorithm],
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common/eth_types, rlp, p2p],
   stew/byteutils,
   stint,
-  "../.."/[sync_types, trace_helper],
-  ".."/[get_nodedata, path_desc, types, validate_trienode],
-  ./common
+  ../../trace_helper,
+  ".."/[base_desc, get_nodedata, path_desc, types, validate_trienode],
+  "."/[common, peer_desc, sync_desc]
 
 {.push raises: [Defect].}
-
-type
-  FetchState = ref object of typeof SyncPeer().fetchBase
-    ## Account fetching state on a single peer.
-    sp:                     SyncPeer
-    nodeGetQueue:           seq[SingleNodeRequest]
-    nodeGetsInFlight:       int
-    scheduledBatch:         bool
-    progressPrefix:         string
-    progressCount:          int
-    nodesInFlight:          int
-    getNodeDataErrors:      int
-    leafRange:              LeafRange
-    unwindAccounts:         int64
-    unwindAccountBytes:     int64
-    finish:                 Future[void]
-
-  SingleNodeRequest = ref object
-    hash:                   NodeHash
-    path:                   InteriorPath
-    future:                 Future[Blob]
 
 const
   maxBatchGetNodeData = 384
@@ -62,11 +41,26 @@ const
   maxParallelGetNodeData = 32
     ## Maximum number of `GetNodeData` requests in parallel to a single peer.
 
-template fetch*(sp: SyncPeer): auto =
-  sync_types.fetchBase(sp).FetchState
+type
+  SingleNodeRequestEx = ref object of SingleNodeRequestBase
+    hash:                   NodeHash
+    path:                   InteriorPath
+    future:                 Future[Blob]
+
+proc hash(n: SingleNodeRequestBase): NodeHash =
+  n.SingleNodeRequestEx.hash
+
+proc path(n: SingleNodeRequestBase): InteriorPath =
+  n.SingleNodeRequestEx.path
+
+proc future(n: SingleNodeRequestBase): Future[Blob] =
+  n.SingleNodeRequestEx.future
+
 
 # Forward declaration.
 proc scheduleBatchGetNodeData(fetch: FetchState) {.gcsafe.}
+
+# ---
 
 proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
                          futures: seq[Future[Blob]],
@@ -141,14 +135,14 @@ proc batchGetNodeData(fetch: FetchState) =
   #   use them in lookups, many remote databases store the leaves in some way
   #   indexed by path.  If so, this order will greatly improve lookup locality,
   #   which directly reduces the amount of storage I/O time and latency.
-  # - The left-to-right order is beneficial to the local database writes as well.
+  # - The left-to-right order is beneficial to the local database writes too.
   # - If the local database indexes by path, the left-to-right write order will
   #   increase storage density by a lot in a B-tree compared with random order.
   # - If the local database doesn't index by path at all, but does use "rowid"
   #   internally (like SQLite by default), the left-to-right write order will
   #   improve read performance when other peers sync reading this local node.
 
-  proc cmpSingleNodeRequest(x, y: SingleNodeRequest): int =
+  proc cmpSingleNodeRequest(x, y: SingleNodeRequestBase): int =
     # `x` and `y` are deliberately swapped to get descending order.  See above.
     cmp(y.path, x.path)
   sort(fetch.nodeGetQueue, cmpSingleNodeRequest)
@@ -205,7 +199,7 @@ proc getNodeData(fetch: FetchState,
       depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
-  fetch.nodeGetQueue.add(SingleNodeRequest(
+  fetch.nodeGetQueue.add(SingleNodeRequestEx(
     hash: hash,
     path: path,
     future: future
@@ -218,7 +212,7 @@ proc getNodeData(fetch: FetchState,
     return nodebytes
 
   if tracePackets:
-    doAssert nodeBytes.len == 0 or nodeDataHash(nodeBytes) == hash
+    doAssert nodeBytes.len == 0 or nodeBytes.toNodeHash == hash
 
   if traceIndividualNodes:
     if nodeBytes.len > 0:
@@ -306,14 +300,15 @@ proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
       template leafBytes: auto = leafPtr[2]
       inc fetch.unwindAccounts
       fetch.unwindAccountBytes += leafBytes.len
-      inc fetch.sp.sharedFetch.countAccounts
-      fetch.sp.sharedFetch.countAccountBytes += leafBytes.len
+      inc fetch.sp.nsx.sharedFetch.countAccounts
+      fetch.sp.nsx.sharedFetch.countAccountBytes += leafBytes.len
 
   dec fetch.nodesInFlight
   if fetch.nodesInFlight == 0:
     fetch.finish.complete()
 
-proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.} =
+proc probeGetNodeData(sp: SnapPeerEx, stateRoot: TrieHash): Future[bool]
+    {.async.} =
   # Before doing real trie traversal on this peer, send a probe request for
   # `stateRoot` to see if it's worth pursuing at all.  We will avoid reserving
   # a slice of leafspace, even temporarily, if no traversal will take place.
@@ -335,11 +330,11 @@ proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.}
   let reply = await sp.getNodeData(@[stateRoot], InteriorPath(), InteriorPath())
   return not reply.isNil and reply.hashVerifiedData.len == 1
 
-proc trieFetch*(sp: SyncPeer, stateRoot: TrieHash,
+proc trieFetch*(sp: SnapPeerEx, stateRoot: TrieHash,
                 leafRange: LeafRange) {.async.} =
-  if sp.fetch.isNil:
-    sp.fetch = FetchState(sp: sp)
-  template fetch: auto = sp.fetch
+  if sp.fetchState.isNil:
+    sp.fetchState = FetchState(sp: sp)
+  template fetch: auto = sp.fetchState
 
   fetch.leafRange = leafRange
   fetch.finish = newFuture[void]()
@@ -352,9 +347,10 @@ proc trieFetch*(sp: SyncPeer, stateRoot: TrieHash,
   if fetch.getNodeDataErrors == 0:
     sp.countSlice(leafRange, false)
   else:
-    sp.sharedFetch.countAccounts -= fetch.unwindAccounts
-    sp.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
+    sp.nsx.sharedFetch.countAccounts -= fetch.unwindAccounts
+    sp.nsx.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
     sp.putSlice(leafRange)
 
-proc peerSupportsGetNodeData*(sp: SyncPeer): bool =
+proc peerSupportsGetNodeData*(sp: SnapPeerEx): bool =
+  template fetch(sp): FetchState = sp.fetchState
   not sp.stopped and (sp.fetch.isNil or sp.fetch.getNodeDataErrors == 0)

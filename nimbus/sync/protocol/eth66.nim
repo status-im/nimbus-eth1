@@ -36,9 +36,12 @@
 ## easily.  When the hooks aren't set, default behaviour applies.
 
 import
-  chronos, stint, chronicles, stew/byteutils, macros,
-  eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p, p2p/private/p2p_types, p2p/blockchain_utils],
+  macros,
+  stew/byteutils,
+  stint,
   ".."/[snap/types, trace_helper],
   ./pickeled_eth_tracers
 

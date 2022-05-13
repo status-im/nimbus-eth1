@@ -125,10 +125,10 @@ proc cmp*(path1, path2: InteriorPath): int =
       return path1.bytes[i].int - path2.bytes[i].int
   return 0
 
-template `!=`*(path1, path2: InteriorPath): auto = not(path1 == path2)
-template `<`*(path1, path2: InteriorPath): auto = not(path2 <= path1)
-template `>=`*(path1, path2: InteriorPath): auto = path2 <= path1
-template `>`*(path1, path2: InteriorPath): auto = not(path1 <= path2)
+proc `!=`*(path1, path2: InteriorPath): bool = not(path1 == path2)
+proc `<`*(path1, path2: InteriorPath): bool = not(path2 <= path1)
+proc `>=`*(path1, path2: InteriorPath): bool = path2 <= path1
+proc `>`*(path1, path2: InteriorPath): bool = not(path1 <= path2)
 
 # ------------------------------------------------------------------------------
 # Public string output functions for `LeafPath`
@@ -147,30 +147,33 @@ proc toHex*(path: InteriorPath, withEllipsis = true): string =
   for i in 0 ..< digits:
     result[i] = hexChars[path.digit(i)]
 
+proc pathRange*(path1, path2: InteriorPath): string =
+  path1.toHex(false) & '-' & path2.toHex(false)
+
 proc `$`*(path: InteriorPath): string =
   path.toHex
 
-proc pathRange*(path1, path2: InteriorPath): string =
-  path1.toHex(false) & '-' & path2.toHex(false)
+proc `$`*(paths: (InteriorPath, InteriorPath)): string =
+  pathRange(paths[0], paths[1])
 
 # ------------------------------------------------------------------------------
 # Public `LeafPath` functions
 # ------------------------------------------------------------------------------
 
-template toLeafPath*(leafPath: LeafPath): LeafPath =
+proc toLeafPath*(leafPath: LeafPath): LeafPath =
   leafPath
 
-template toLeafPath*(interiorPath: InteriorPath): LeafPath =
+proc toLeafPath*(interiorPath: InteriorPath): LeafPath =
   doAssert interiorPath.depth == InteriorPath.maxDepth
   doAssert sizeof(interiorPath.bytes) * 2 == InteriorPath.maxDepth
   doAssert sizeof(interiorPath.bytes) == leafPathBytes
   LeafPath(number: UInt256.fromBytesBE(interiorPath.bytes))
 
-template toLeafPath*(bytes: array[leafPathBytes, byte]): LeafPath =
+proc toLeafPath*(bytes: array[leafPathBytes, byte]): LeafPath =
   doAssert sizeof(bytes) == leafPathBytes
   LeafPath(number: UInt256.fromBytesBE(bytes))
 
-template toBytes*(leafPath: LeafPath): array[leafPathBytes, byte] =
+proc toBytes*(leafPath: LeafPath): array[leafPathBytes, byte] =
   doAssert sizeof(LeafPath().number.toBytesBE) == leafPathBytes
   leafPath.number.toBytesBE
 
@@ -178,20 +181,24 @@ template toBytes*(leafPath: LeafPath): array[leafPathBytes, byte] =
 # defined `LeafPath = distinct UInt256`.  The `==` didn't match any symbol to
 # borrow from, and the auto-generated `<` failed to compile, with a peculiar
 # type mismatch error.
-template `==`*(path1, path2: LeafPath): auto = path1.number == path2.number
-template `!=`*(path1, path2: LeafPath): auto = path1.number != path2.number
-template `<`*(path1, path2: LeafPath): auto = path1.number < path2.number
-template `<=`*(path1, path2: LeafPath): auto = path1.number <= path2.number
-template `>`*(path1, path2: LeafPath): auto = path1.number > path2.number
-template `>=`*(path1, path2: LeafPath): auto = path1.number >= path2.number
-template cmp*(path1, path2: LeafPath): auto = cmp(path1.number, path2.number)
+proc `==`*(path1, path2: LeafPath): bool = path1.number == path2.number
+proc `!=`*(path1, path2: LeafPath): bool = path1.number != path2.number
+proc `<`*(path1, path2: LeafPath): bool = path1.number < path2.number
+proc `<=`*(path1, path2: LeafPath): bool = path1.number <= path2.number
+proc `>`*(path1, path2: LeafPath): bool = path1.number > path2.number
+proc `>=`*(path1, path2: LeafPath): bool = path1.number >= path2.number
+proc cmp*(path1, path2: LeafPath): int = cmp(path1.number, path2.number)
 
-template `-`*(path1, path2: LeafPath): UInt256 =
+proc `-`*(path1, path2: LeafPath): UInt256 =
   path1.number - path2.number
-template `+`*(base: LeafPath, step: Uint256 | SomeInteger): LeafPath =
+proc `+`*(base: LeafPath, step: UInt256): LeafPath =
   LeafPath(number: base.number + step)
-template `-`*(base: LeafPath, step: Uint256 | SomeInteger): LeafPath =
+proc `+`*(base: LeafPath, step: SomeInteger): LeafPath =
+  LeafPath(number: base.number + step.u256)
+proc `-`*(base: LeafPath, step: UInt256): LeafPath =
   LeafPath(number: base.number - step)
+proc `-`*(base: LeafPath, step: SomeInteger): LeafPath =
+  LeafPath(number: base.number - step.u256)
 
 # ------------------------------------------------------------------------------
 # Public string output functions for `LeafPath`

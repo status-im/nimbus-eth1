@@ -200,12 +200,11 @@ import
   std/options,
   chronicles,
   chronos,
-  eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types],
+  eth/[common/eth_types, p2p, p2p/private/p2p_types],
   nimcrypto/hash,
   stew/byteutils,
   stint,
-  ".."/[sync_types, snap/path_desc, snap/types, trace_helper],
+  ".."/[snap/types, snap/path_desc, trace_helper],
   ../../constants,
   ./pickeled_snap_tracers
 

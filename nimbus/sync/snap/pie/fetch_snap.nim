@@ -19,24 +19,24 @@
 ## different related tries (blocks at different times) together in a way that
 ## eventually becomes a full trie for a single block.
 
+{.push raises: [Defect].}
+
 import
   std/sets,
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  "../.."/[protocol, protocol/pickeled_snap_tracers, sync_types, trace_helper],
-  ".."/[path_desc, types],
-  ./common
-
-{.push raises: [Defect].}
+  "../.."/[protocol, protocol/pickeled_snap_tracers, trace_helper],
+  ".."/[base_desc, path_desc, types],
+  "."/[common, peer_desc]
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
-                leafRange: LeafRange) {.async.} =
+proc snapFetch*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+    {.async.} =
   var origin = leafRange.leafLow
   var limit = leafRange.leafHigh
   const responseBytes = 2 * 1024 * 1024
@@ -134,5 +134,5 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
 
   sp.countAccounts(keepAccounts)
 
-proc peerSupportsSnap*(sp: SyncPeer): bool =
+proc peerSupportsSnap*(sp: SnapPeerEx): bool =
   not sp.stopped and sp.peer.supports(snap)

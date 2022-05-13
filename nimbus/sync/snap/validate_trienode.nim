@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module parses Ethereum hexary trie nodes from bytes received over the
 ## network.  The data is untrusted, and a non-canonical RLP encoding of the
@@ -28,10 +31,10 @@
 ## exception to `parseTrieNodeError` if it occurs.
 
 import
-  eth/[common/eth_types, p2p],
+  eth/[common/eth_types, rlp, p2p],
   stew/byteutils,
-  ".."/[sync_types, trace_helper],
-  "."/[path_desc, types]
+  ../trace_helper,
+  "."/[base_desc, path_desc, types]
 
 {.push raises: [Defect].}
 
@@ -78,7 +81,7 @@ template nodeError(msg: string{lit}, more: varargs[untyped]) =
   echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
-proc parseLeafValue(sp: SyncPeer,
+proc parseLeafValue(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     nodeRlp: var Rlp, leafPath: InteriorPath,
                     context: var TrieNodeParseContext
@@ -119,13 +122,13 @@ proc parseLeafValue(sp: SyncPeer,
 #    echo inspect(rlpFromBytes(leafBytes))
 
 # Forward declaration, used for bounded, rare recursion.
-proc parseTrieNode*(sp: SyncPeer,
+proc parseTrieNode*(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool,
                     context: var TrieNodeParseContext
                    ) {.gcsafe, raises: [Defect, RlpError].}
 
-proc parseExtensionChild(sp: SyncPeer,
+proc parseExtensionChild(sp: SnapPeerBase,
                          nodePath: InteriorPath, nodeHash: NodeHash,
                          nodeBytes: Blob, nodeRlp: var Rlp,
                          childPath: InteriorPath,
@@ -173,7 +176,7 @@ proc parseExtensionChild(sp: SyncPeer,
   else:
     childError "Extension node child (RLP element 1) has length > 32 bytes"
 
-proc parseExtensionOrLeaf(sp: SyncPeer,
+proc parseExtensionOrLeaf(sp: SnapPeerBase,
                           nodePath: InteriorPath, nodeHash: NodeHash,
                           nodeBytes: Blob, nodeRlp: var Rlp,
                           fromExtension: bool,
@@ -261,7 +264,7 @@ proc parseExtensionOrLeaf(sp: SyncPeer,
     sp.parseExtensionChild(nodePath, nodeHash, nodeBytes, nodeRlp,
                            childPath, context)
 
-proc parseBranchNode(sp: SyncPeer,
+proc parseBranchNode(sp: SnapPeerBase,
                      nodePath: InteriorPath, nodeHash: NodeHash,
                      nodeBytes: Blob, nodeRlp: var Rlp,
                      context: var TrieNodeParseContext
@@ -335,7 +338,7 @@ proc parseBranchNode(sp: SyncPeer,
         branches=branchCount, minBranches=2
     return
 
-proc parseTrieNode*(sp: SyncPeer,
+proc parseTrieNode*(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool, context: var TrieNodeParseContext
                    ) {.raises: [Defect, RlpError].} =
@@ -371,7 +374,7 @@ proc parseTrieNode*(sp: SyncPeer,
   ##   root node of a trie, otherwise it is the value stored in `childQueue`
   ##   from parsing the parent node.
   ##
-  ## - The `sp: SyncPeer` is like the hash, only used for diagnostics.  When
+  ## - The `sp: SnapPeerBase` is like the hash, only used for diagnostics.  When
   ##   there is invalid data, it's useful to show where we got it from.
   ##
   ## - Some limited recursion is possible while parsing, because of how < 32
@@ -435,7 +438,7 @@ proc parseTrieNode*(sp: SyncPeer,
       listLen=nodeListLen
     return
 
-proc parseTrieNodeError*(sp: SyncPeer, nodePath: InteriorPath,
+proc parseTrieNodeError*(sp: SnapPeerBase, nodePath: InteriorPath,
                          nodeHash: NodeHash, nodeBytes: Blob,
                          context: var TrieNodeParseContext,
                          exception: ref RlpError) =

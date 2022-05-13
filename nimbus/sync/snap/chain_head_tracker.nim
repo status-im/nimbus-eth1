@@ -62,11 +62,11 @@ import
   std/bitops,
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, p2p/private/p2p_types],
+  eth/[common/eth_types, p2p, p2p/rlpx, p2p/private/p2p_types, rlp],
   stint,
   ../../p2p/chain/chain_desc,
-  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types, trace_helper],
-  "."/[base_desc, pie/slicer, types]
+  ".."/[protocol, protocol/pickeled_eth_tracers, trace_helper],
+  "."/[base_desc, pie/peer_desc, pie/slicer, types]
 
 {.push raises: [Defect].}
 
@@ -113,12 +113,12 @@ doAssert syncHuntForwardExpandShift >= 1 and syncHuntForwardExpandShift <= 8
 doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
 
 
-proc clearSyncStateRoot(sp: SyncPeer) =
+proc clearSyncStateRoot(sp: SnapPeerEx) =
   if sp.syncStateRoot.isSome:
     debug "Sync: Stopping state sync from this peer", peer=sp
     sp.syncStateRoot = none(TrieHash)
 
-proc setSyncStateRoot(sp: SyncPeer, blockNumber: BlockNumber,
+proc setSyncStateRoot(sp: SnapPeerEx, blockNumber: BlockNumber,
                       blockHash: BlockHash, stateRoot: TrieHash) =
   if sp.syncStateRoot.isNone:
     debug "Sync: Starting state sync from this peer", peer=sp,
@@ -135,7 +135,7 @@ proc setSyncStateRoot(sp: SyncPeer, blockNumber: BlockNumber,
       `block`=blockNumber, blockHash=($blockHash), stateRoot=($stateRoot)
     asyncSpawn sp.stateFetch()
 
-proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
+proc traceSyncLocked(sp: SnapPeerEx, bestNumber: BlockNumber,
                      bestHash: BlockHash) =
   ## Trace messages when peer canonical head is confirmed or updated.
   if sp.syncMode != SyncLocked:
@@ -154,7 +154,7 @@ proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
       advance=(sp.bestBlockNumber - bestNumber),
       `block`=bestNumber, blockHash=($bestHash)
 
-proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
+proc setSyncLocked(sp: SnapPeerEx, bestNumber: BlockNumber,
                    bestHash: BlockHash) =
   ## Actions to take when peer canonical head is confirmed or updated.
   sp.traceSyncLocked(bestNumber, bestHash)
@@ -162,7 +162,7 @@ proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
   sp.bestBlockHash = bestHash
   sp.syncMode = SyncLocked
 
-proc setHuntBackward(sp: SyncPeer, lowestAbsent: BlockNumber) =
+proc setHuntBackward(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
   sp.syncMode = SyncHuntBackward
   sp.huntStep = 0
@@ -172,7 +172,7 @@ proc setHuntBackward(sp: SyncPeer, lowestAbsent: BlockNumber) =
   sp.huntHigh = if lowestAbsent > 0: lowestAbsent else: 1.toBlockNumber
   sp.clearSyncStateRoot()
 
-proc setHuntForward(sp: SyncPeer, highestPresent: BlockNumber) =
+proc setHuntForward(sp: SnapPeerEx, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
   sp.syncMode = SyncHuntForward
   sp.huntStep = 0
@@ -180,7 +180,7 @@ proc setHuntForward(sp: SyncPeer, highestPresent: BlockNumber) =
   sp.huntHigh = high(BlockNumber)
   sp.clearSyncStateRoot()
 
-proc updateHuntAbsent(sp: SyncPeer, lowestAbsent: BlockNumber) =
+proc updateHuntAbsent(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
   ## Converge uncertainty range backward.
   if lowestAbsent < sp.huntHigh:
     sp.huntHigh = lowestAbsent
@@ -191,7 +191,7 @@ proc updateHuntAbsent(sp: SyncPeer, lowestAbsent: BlockNumber) =
       sp.setHuntBackward(lowestAbsent)
   sp.clearSyncStateRoot()
 
-proc updateHuntPresent(sp: SyncPeer, highestPresent: BlockNumber) =
+proc updateHuntPresent(sp: SnapPeerEx, highestPresent: BlockNumber) =
   ## Converge uncertainty range forward.
   if highestPresent > sp.huntLow:
     sp.huntLow = highestPresent
@@ -202,7 +202,7 @@ proc updateHuntPresent(sp: SyncPeer, highestPresent: BlockNumber) =
       sp.setHuntForward(highestPresent)
   sp.clearSyncStateRoot()
 
-proc peerSyncChainEmptyReply(sp: SyncPeer, request: BlocksRequest) =
+proc peerSyncChainEmptyReply(sp: SnapPeerEx, request: BlocksRequest) =
   ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
   ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
   ## and the previous canonical chain head has disappeared.  If hunting, this
@@ -249,7 +249,7 @@ proc peerSyncChainEmptyReply(sp: SyncPeer, request: BlocksRequest) =
                          else: lowestAbsent - 1.toBlockNumber
     sp.bestBlockHash = default(typeof(sp.bestBlockHash))
 
-proc peerSyncChainNonEmptyReply(sp: SyncPeer, request: BlocksRequest,
+proc peerSyncChainNonEmptyReply(sp: SnapPeerEx, request: BlocksRequest,
                                 headers: openArray[BlockHeader]) =
   ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
   ## is present on the peer and in its canonical chain (unless the request was
@@ -305,7 +305,7 @@ proc peerSyncChainNonEmptyReply(sp: SyncPeer, request: BlocksRequest,
     sp.bestBlockNumber = highestPresent
     sp.bestBlockHash = headers[highestIndex].blockHash
 
-proc peerSyncChainRequest(sp: SyncPeer, request: var BlocksRequest) =
+proc peerSyncChainRequest(sp: SnapPeerEx, request: var BlocksRequest) =
   ## Choose `GetBlockHeaders` parameters when hunting or following the canonical
   ## chain of a peer.
   request = BlocksRequest(
@@ -443,7 +443,7 @@ proc peerSyncChainRequest(sp: SyncPeer, request: var BlocksRequest) =
     request.maxResults = syncHuntFinalSize
     sp.syncMode = SyncHuntRangeFinal
 
-proc peerSyncChainTrace(sp: SyncPeer) =
+proc peerSyncChainTrace(sp: SnapPeerEx) =
   ## To be called after `peerSyncChainRequest` has updated state.
   case sp.syncMode:
     of SyncLocked:
@@ -466,7 +466,7 @@ proc peerSyncChainTrace(sp: SyncPeer) =
       trace "Sync: HuntRangeFinal",
         low=sp.huntLow, high=sp.huntHigh, step=1
 
-proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
+proc peerHuntCanonical*(sp: SnapPeerEx) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.

@@ -60,60 +60,52 @@
 ## matching.  Before this module was written, we tended to accept whatever came
 ## and assume a lot about replies.  It often worked but wasn't robust enough.
 
+{.push raises: [Defect].}
+
 import
   std/[sequtils, sets, tables, hashes],
   chronos,
-  stint,
+  eth/[common/eth_types, p2p],
   nimcrypto/keccak,
-  eth/[common/eth_types, rlp, p2p],
-  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types],
-  "."/[path_desc, timer_helper, types]
-
-{.push raises: [Defect].}
+  stint,
+  ".."/[protocol, protocol/pickeled_eth_tracers],
+  "."/[base_desc, path_desc, pie/peer_desc, timer_helper, types]
 
 type
-  NodeDataRequestQueue* = ref object of typeof SyncPeer().nodeDataRequestsBase
-    liveRequests*:          HashSet[NodeDataRequest]
-    empties*:               int
-    # `OrderedSet` was considered instead of `seq` here, but it has a slow
-    # implementation of `excl`, defeating the motivation for using it.
-    waitingOnEmpties*:      seq[NodeDataRequest]
-    beforeFirstHash*:       seq[NodeDataRequest]
-    beforeFullHash*:        HashSet[NodeDataRequest]
-    # We need to be able to lookup requests by the hash of reply data.
-    # `ptr NodeHash` is used here so the table doesn't require an independent
-    # copy of the hash.  The hash is part of the request object.
-    itemHash*:              Table[ptr NodeHash, (NodeDataRequest, int)]
-
-  NodeDataRequest* = ref object
-    sp*:                    SyncPeer
-    hashes*:                seq[NodeHash]
-    future*:                Future[NodeDataReply]
-    timer*:                 TimerCallback
-    pathRange*:             (InteriorPath, InteriorPath)
-    fullHashed*:            bool
+  NodeDataRequest = ref object of NodeDataRequestBase
+    sp:                    SnapPeerEx
+    hashes:                seq[NodeHash]
+    future:                Future[NodeDataReply]
+    timer:                 TimerCallback
+    pathRange:             (InteriorPath, InteriorPath)
+    fullHashed:            bool
 
   NodeDataReply* = ref object
-    reverseMap:             seq[int]    # Access with `reversMap(i)` instead.
-    hashVerifiedData*:      seq[Blob]
+    reverseMap:            seq[int]    # Access with `reversMap(i)` instead.
+    hashVerifiedData*:     seq[Blob]
 
-template reverseMap*(reply: NodeDataReply, index: int): int =
-  ## Given an index into the request hash list, return index into the reply
-  ## `hashVerifiedData`, or -1 if there is no data for that request hash.
-  if index < reply.reverseMap.len: reply.reverseMap[index] - 1
-  elif index < reply.hashVerifiedData.len: index
-  else: -1
 
-template nodeDataRequests*(sp: SyncPeer): auto =
-  ## Make `sp.nodeDataRequests` available with the real object type.
-  sync_types.nodeDataRequestsBase(sp).NodeDataRequestQueue
+proc ex(base: NodeDataRequestBase): NodeDataRequest =
+  ## to extended object version
+  base.NodeDataRequest
 
-template nodeDataHash*(data: Blob): NodeHash = keccak256.digest(data).NodeHash
+proc ex(pair: (NodeDataRequestBase,int)): (NodeDataRequest, int) =
+  ## to extended object version
+  (pair[0].ex, pair[1])
+
+proc hash(request: NodeDataRequest|NodeDataRequestBase): Hash =
+  hash(cast[pointer](request))
+
+proc hash(hash: ptr Hash256): Hash =
+  cast[ptr Hash](addr hash.data)[]
+
+proc `==`(hash1, hash2: ptr Hash256): bool =
+  hash1[] == hash2[]
+
+# ---
 
 template pathRange(request: NodeDataRequest): string =
   pathRange(request.pathRange[0], request.pathRange[1])
-template `$`*(paths: (InteriorPath, InteriorPath)): string =
-  pathRange(paths[0], paths[1])
 
 proc traceGetNodeDataSending(request: NodeDataRequest) =
   traceSending "GetNodeData", peer=request.sp,
@@ -143,7 +135,7 @@ proc traceGetNodeDataDisconnected(request: NodeDataRequest) =
   traceRecvError "peer disconnected, not sending GetNodeData",
     peer=request.sp, hashes=request.hashes.len, pathRange=request.pathRange
 
-proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) =
+proc traceNodeDataReplyEmpty(sp: SnapPeerEx, request: NodeDataRequest) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
@@ -153,7 +145,7 @@ proc traceNodeDataReplyEmpty(sp: SyncPeer, request: NodeDataRequest) =
     traceGot "NodeData", peer=sp,
       got=0, requested=request.hashes.len, pathRange=request.pathRange
 
-proc traceNodeDataReplyUnmatched(sp: SyncPeer, got: int) =
+proc traceNodeDataReplyUnmatched(sp: SnapPeerEx, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
   traceProtocolViolation "non-reply NodeData", peer=sp, got
   debug "Sync: Warning: Unexpected non-reply NodeData from peer"
@@ -194,10 +186,6 @@ proc traceNodeDataReply(request: NodeDataRequest,
       traceProtocolViolation "duplicate nodes in NodeData"
       debug "Sync: Warning: NodeData has duplicate nodes"
 
-proc hash(hash: ptr Hash256): Hash         = cast[ptr Hash](addr hash.data)[]
-proc `==`(hash1, hash2: ptr Hash256): bool = hash1[] == hash2[]
-proc hash(request: NodeDataRequest): Hash  = hash(cast[pointer](request))
-
 proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
                           reverseMap: var seq[int],
                           use, unmatched, other, duplicates: var int
@@ -220,7 +208,7 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
   for i in 0 ..< data.len:
     var itemRequest: NodeDataRequest
     var index = 0
-    let hash = nodeDataHash(data[i])
+    let hash = data[i].toNodeHash
     if i == 0:
       # Efficiently guess the request belongs to the oldest queued request and
       # the items are in requested order.  This lets us skip storing any item
@@ -228,7 +216,7 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
       # make sure we always find the oldest queued request first.
       var j = 0
       while j < rq.beforeFirstHash.len:
-        let hashRequest = rq.beforeFirstHash[j]
+        let hashRequest = rq.beforeFirstHash[j].NodeDataRequest
         if hashRequest.hashes[0] == hash:
           itemRequest = hashRequest
           break
@@ -237,7 +225,7 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
         # in the global request table when replies have items in requested
         # order, even though replies themselves are out of order.
         if j == 0:
-          (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash)
+          (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash).ex
           if not itemRequest.isNil:
             break
         rq.itemHash[addr hashRequest.hashes[0]] = (hashRequest, 0)
@@ -255,7 +243,7 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
     # If this succeeds, the reply must have items out of requested order.
     # If it fails, a peer sent a bad reply.
     if itemRequest.isNil:
-      (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash)
+      (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash).ex
       if itemRequest.isNil:
         # Hash and search items in the current request first, if there is one.
         if not request.isNil and not request.fullHashed:
@@ -263,7 +251,7 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
           for j in 0 ..< request.hashes.len:
             rq.itemHash[addr request.hashes[j]] = (request, j)
           (itemRequest, index) =
-            rq.itemHash.getOrDefault(unsafeAddr hash)
+            rq.itemHash.getOrDefault(unsafeAddr hash).ex
         if itemRequest.isNil:
           # Hash and search all items across all requests.
           if rq.beforeFirstHash.len + rq.beforeFullHash.len > 0:
@@ -271,12 +259,12 @@ proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
               rq.beforeFirstHash.add(rq.beforeFullHash.toSeq)
               rq.beforeFullHash.clear()
             for hashRequest in rq.beforeFirstHash:
-              if not hashRequest.fullHashed:
-                hashRequest.fullHashed = true
-                for j in 0 ..< hashRequest.hashes.len:
-                  rq.itemHash[addr hashRequest.hashes[j]] = (hashRequest, j)
+              if not hashRequest.ex.fullHashed:
+                hashRequest.ex.fullHashed = true
+                for j in 0 ..< hashRequest.ex.hashes.len:
+                  rq.itemHash[addr hashRequest.ex.hashes[j]] = (hashRequest, j)
             rq.beforeFirstHash.setLen(0)
-            (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash)
+            (itemRequest, index) = rq.itemHash.getOrDefault(unsafeAddr hash).ex
           if itemRequest.isNil:
             # Not found anywhere.
             inc unmatched
@@ -359,17 +347,17 @@ proc nodeDataTryEmpties(rq: NodeDataRequestQueue) =
     if rq.liveRequests.len > 0:
       # Careful: Use `.toSeq` below because we must not use the `HashSet`
       # iterator while the set is being changed.
-      for request in rq.liveRequests.toSeq:
+      for request in rq.liveRequests.toSeq.mapIt(it.ex):
         # Constructed reply object, because empty is different from timeout.
         request.nodeDataComplete(NodeDataReply(), true)
     # Move all temporarily delayed requests to the live state, and send them.
     if rq.waitingOnEmpties.len > 0:
-      var tmpList: seq[NodeDataRequest]
+      var tmpList: seq[NodeDataRequestBase]
       swap(tmpList, rq.waitingOnEmpties)
       for i in 0 ..< tmpList.len:
-        asyncSpawn nodeDataEnqueueAndSend(tmpList[i])
+        asyncSpawn nodeDataEnqueueAndSend(tmpList[i].ex)
 
-proc nodeDataNewRequest(sp: SyncPeer, hashes: seq[NodeHash],
+proc nodeDataNewRequest(sp: SnapPeerEx, hashes: seq[NodeHash],
                         pathFrom, pathTo: InteriorPath
                        ): NodeDataRequest  =
   ## Make a new `NodeDataRequest` to receive a reply or timeout in future.  The
@@ -414,7 +402,7 @@ proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
     sp.stopped = true
     request.future.fail(e)
 
-proc onNodeData(sp: SyncPeer, data: openArray[Blob]) =
+proc onNodeData(sp: SnapPeerEx, data: openArray[Blob]) =
   ## Handle an incoming `eth.NodeData` reply.
   ## Practically, this is also where all the incoming packet trace messages go.
   let rq = sp.nodeDataRequests
@@ -428,7 +416,7 @@ proc onNodeData(sp: SyncPeer, data: openArray[Blob]) =
     # through until the "non-reply" protocol violation error.
     if rq.liveRequests.len > 0:
       sp.traceNodeDataReplyEmpty(if rq.liveRequests.len != 1: nil
-                                 else: rq.liveRequests.toSeq[0])
+                                 else: rq.liveRequests.toSeq[0].ex)
       inc rq.empties
       # It may now be possible to match empty replies to earlier requests.
       rq.nodeDataTryEmpties()
@@ -462,8 +450,11 @@ proc onNodeData(sp: SyncPeer, data: openArray[Blob]) =
   doAssert reply.hashVerifiedData.len == use
   request.nodeDataComplete(reply)
 
-proc getNodeData*(sp: SyncPeer, hashes: seq[NodeHash],
-                  pathFrom, pathTo: InteriorPath): Future[NodeDataReply] {.async.} =
+# ------
+
+proc getNodeData*(sp: SnapPeerEx, hashes: seq[NodeHash],
+                  pathFrom, pathTo: InteriorPath): Future[NodeDataReply]
+    {.async.} =
   ## Async function to send a `GetNodeData` request to a peer, and when the
   ## peer replies, or on timeout or error, return `NodeDataReply`.
   ##
@@ -496,8 +487,8 @@ proc getNodeData*(sp: SyncPeer, hashes: seq[NodeHash],
   # always received just valid data with hashes already verified, or `nil`.
   return reply
 
-proc setupGetNodeData*(sp: SyncPeer) =
-  ## Initialise `SyncPeer` to support `getNodeData` calls.
+proc setupGetNodeData*(sp: SnapPeerEx) =
+  ## Initialise `SnapPeerEx` to support `GetNodeData` calls.
 
   if sp.nodeDataRequests.isNil:
     sp.nodeDataRequests = NodeDataRequestQueue()
@@ -511,3 +502,10 @@ proc setupGetNodeData*(sp: SyncPeer) =
       # Return empty nodes result.  This callback is installed to
       # ensure we don't reply with nodes from the chainDb.
       discard
+
+proc reverseMap*(reply: NodeDataReply, index: int): int =
+  ## Given an index into the request hash list, return index into the reply
+  ## `hashVerifiedData`, or -1 if there is no data for that request hash.
+  if index < reply.reverseMap.len: reply.reverseMap[index] - 1
+  elif index < reply.hashVerifiedData.len: index
+  else: -1
