@@ -16,7 +16,7 @@ import
   std/options,
   stint, chronicles, chronos,
   eth/[common/eth_types, p2p],
-  ./snap/[path_desc, types]
+  ./snap/[base_desc, path_desc, types]
 
 type
   SnapSync* = ref object of RootObj
@@ -30,10 +30,10 @@ type
     peer*:                  Peer                    # p2pProtocol(eth65).
     stopped*:               bool
     pendingGetBlockHeaders*:bool
-    stats*:                 SyncPeerStats
+    stats*:                 SnapPeerStats
 
     # Peer canonical chain head ("best block") search state.
-    syncMode*:              SyncPeerMode
+    syncMode*:              SnapPeerMode
     bestBlockNumber*:       BlockNumber
     bestBlockHash*:         BlockHash
     huntLow*:               BlockNumber # Recent highest known present block.
@@ -49,39 +49,6 @@ type
     startedFetch*:          bool
     stopThisState*:         bool
 
-  SyncPeerMode* = enum
-    ## The current state of tracking the peer's canonical chain head.
-    ## `bestBlockNumber` is only valid when this is `SyncLocked`.
-    SyncLocked
-    SyncOnlyHash
-    SyncHuntForward
-    SyncHuntBackward
-    SyncHuntRange
-    SyncHuntRangeFinal
-
-  SyncPeerStats = object
-    ## Statistics counters for events associated with this peer.
-    ## These may be used to recognise errors and select good peers.
-    ok*:                    SyncPeerStatsOk
-    minor*:                 SyncPeerStatsMinor
-    major*:                 SyncPeerStatsMajor
-
-  SyncPeerStatsOk = object
-    reorgDetected*:         Stat
-    getBlockHeaders*:       Stat
-    getNodeData*:           Stat
-
-  SyncPeerStatsMinor = object
-    timeoutBlockHeaders*:   Stat
-    unexpectedBlockHash*:   Stat
-
-  SyncPeerStatsMajor = object
-    networkErrors*:         Stat
-    excessBlockHeaders*:    Stat
-    wrongBlockHeader*:      Stat
-
-  Stat = distinct int
-
   # Use `import snap/get_nodedata` to access the real type's methods.
   NodeDataRequestQueue {.inheritable, pure.} = ref object
 
@@ -90,8 +57,6 @@ type
 
   # Use `import snap/pie/trie_fetch` to access the real type's methods.
   FetchState {.inheritable, pure.} = ref object
-
-proc inc(stat: var Stat) {.borrow.}
 
 template nodeDataRequestsBase*(sp: SyncPeer): auto =
   sp.nodeDataRequests
@@ -107,7 +72,6 @@ template fetchBase*(sp: SyncPeer): auto =
   sp.fetch
 template `fetch=`*(sp: SyncPeer, value: auto) =
   sp.fetch = value
-
 
 ## String output functions.
 

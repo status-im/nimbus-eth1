@@ -16,7 +16,7 @@ import
   eth/p2p/[rlpx, peer_pool, private/p2p_types],
   stint,
   "."/[protocol, sync_types],
-  ./snap/[chain_head_tracker, get_nodedata]
+  ./snap/[base_desc, chain_head_tracker, get_nodedata]
 
 {.push raises: [Defect].}
 

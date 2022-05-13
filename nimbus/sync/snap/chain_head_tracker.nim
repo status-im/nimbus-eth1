@@ -66,7 +66,7 @@ import
   stint,
   ../../p2p/chain/chain_desc,
   ".."/[protocol, protocol/pickeled_eth_tracers, sync_types, trace_helper],
-  "."/[pie/slicer, types]
+  "."/[base_desc, pie/slicer, types]
 
 {.push raises: [Defect].}
 
