@@ -205,7 +205,7 @@ import
   nimcrypto/hash,
   stew/byteutils,
   stint,
-  ".."/[sync_types, trace_helper],
+  ".."/[sync_types, snap/types, trace_helper],
   ../../constants,
   ./pickeled_snap_tracers
 

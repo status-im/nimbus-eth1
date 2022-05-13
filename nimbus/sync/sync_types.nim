@@ -15,7 +15,8 @@
 import
   std/options,
   stint, stew/byteutils, chronicles, chronos,
-  eth/[common/eth_types, p2p]
+  eth/[common/eth_types, p2p],
+  snap/types
 
 type
   SnapSync* = ref object of RootObj
@@ -80,19 +81,6 @@ type
     wrongBlockHeader*:      Stat
 
   Stat = distinct int
-
-  BlockHash* = Hash256
-    ## Hash of a block, goes with `BlockNumber`.
-
-  TxHash* = Hash256
-    ## Hash of a transaction.
-
-  TrieHash* = Hash256
-    ## Hash of a trie root: accounts, storage, receipts or transactions.
-
-  NodeHash* = Hash256
-    ## Hash of a trie node or other blob carried over `eth.NodeData`:
-    ## account trie nodes, storage trie nodes, contract code.
 
   InteriorPath* = object
     ## Path to an interior node in an Ethereum hexary trie.  This is a sequence
@@ -254,12 +242,6 @@ template `-`*(base: LeafPath, step: Uint256 | SomeInteger): LeafPath =
 ## String output functions.
 
 template `$`*(sp: SyncPeer): string = $sp.peer
-template `$`*(hash: Hash256): string = hash.data.toHex
-template `$`*(blob: Blob): string = blob.toHex
-template `$`*(hashOrNum: HashOrNum): string =
-  # It's always obvious which one from the visible length of the string.
-  if hashOrNum.isHash: $hashOrNum.hash
-  else: $hashOrNum.number
 
 proc toHex*(path: InteriorPath, withEllipsis = true): string =
   const hexChars = "0123456789abcdef"
@@ -283,36 +265,3 @@ template `$`*(path: LeafPath): string = path.toHex
 proc pathRange*(path1, path2: LeafPath): string =
   path1.toHex & '-' & path2.toHex
 
-export Blob, Hash256, toHex
-
-# The files and lines clutter more useful details when sync tracing is enabled.
-publicLogScope: chroniclesLineNumbers=false
-
-# Use `safeSetTimer` consistently, with a `ref T` argument if including one.
-type
-  SafeCallbackFunc*[T] = proc (objectRef: ref T) {.gcsafe, raises: [Defect].}
-  SafeCallbackFuncVoid* = proc () {.gcsafe, raises: [Defect].}
-
-proc safeSetTimer*[T](at: Moment, cb: SafeCallbackFunc[T],
-                      objectRef: ref T = nil): TimerCallback =
-  ## Like `setTimer` but takes a typed `ref T` argument, which is passed to the
-  ## callback function correctly typed.  Stores the `ref` in a closure to avoid
-  ## garbage collection memory corruption issues that occur when the `setTimer`
-  ## pointer argument is used.
-  proc chronosTimerSafeCb(udata: pointer) = cb(objectRef)
-  return setTimer(at, chronosTimerSafeCb)
-
-proc safeSetTimer*[T](at: Moment, cb: SafeCallbackFuncVoid): TimerCallback =
-  ## Like `setTimer` but takes no pointer argument.  The callback function
-  ## takes no arguments.
-  proc chronosTimerSafeCb(udata: pointer) = cb()
-  return setTimer(at, chronosTimerSafeCb)
-
-proc setTimer*(at: Moment, cb: CallbackFunc, udata: pointer): TimerCallback
-  {.error: "Do not use setTimer with a `pointer` type argument".}
-  ## `setTimer` with a non-nil pointer argument is dangerous because
-  ## the pointed-to object is often freed or garbage collected before the
-  ## timer callback runs.  Call `setTimer` with a `ref` argument instead.
-
-proc setTimer*(at: Moment, cb: CallbackFunc): TimerCallback =
-  chronos.setTimer(at, cb, nil)

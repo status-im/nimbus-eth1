@@ -13,7 +13,8 @@ import
   chronos,
   eth/[common/eth_types, rlp, p2p],
   stint,
-  ../../sync_types
+  ../../sync_types,
+  ../timer_helper
 
 type
   LeafRange* = object

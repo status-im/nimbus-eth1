@@ -39,7 +39,7 @@ import
   chronos, stint, chronicles, stew/byteutils, macros,
   eth/[common/eth_types, rlp, p2p],
   eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
-  ".."/[sync_types, trace_helper],
+  ".."/[snap/types, trace_helper],
   ./pickeled_eth_tracers
 
 export

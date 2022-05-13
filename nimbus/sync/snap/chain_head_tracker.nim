@@ -58,16 +58,17 @@
 ## previously knew can become unavailable on the peer.  So we must detect when
 ## the current best block disappears and be able to reduce block number.
 
-{.push raises: [Defect].}
-
 import
   std/bitops,
-  chronos, stint, chronicles, stew/byteutils,
-  eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types],
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p, p2p/private/p2p_types],
+  stint,
   ../../p2p/chain/chain_desc,
   ".."/[protocol, protocol/pickeled_eth_tracers, sync_types, trace_helper],
-  ./pie/slicer
+  "."/[pie/slicer, types]
+
+{.push raises: [Defect].}
 
 const
   syncLockedMinimumReply        = 8

@@ -19,8 +19,6 @@
 ## different related tries (blocks at different times) together in a way that
 ## eventually becomes a full trie for a single block.
 
-{.push raises: [Defect].}
-
 import
   std/sets,
   chronos,
@@ -28,7 +26,10 @@ import
   nimcrypto/keccak,
   stint,
   "../.."/[protocol, protocol/pickeled_snap_tracers, sync_types, trace_helper],
+  ../types,
   ./common
+
+{.push raises: [Defect].}
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024

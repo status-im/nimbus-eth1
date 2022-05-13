@@ -14,6 +14,8 @@ import
   eth/common/eth_types,
   stew/byteutils
 
+{.push raises: [Defect].}
+
 const
   tracePackets*         = true
     ## Whether to `trace` log each sync network message.
@@ -50,5 +52,19 @@ func traceStep*(request: BlocksRequest): string =
   if request.skip < high(typeof(request.skip)):
     return str & $(request.skip + 1)
   return static($(high(typeof(request.skip)).u256 + 1))
+
+proc `$`*(hash: Hash256): string =
+  hash.data.toHex
+
+proc `$`*(blob: Blob): string =
+  blob.toHex
+
+proc `$`*(hashOrNum: HashOrNum): string =
+  # It's always obvious which one from the visible length of the string.
+  if hashOrNum.isHash: $hashOrNum.hash
+  else: $hashOrNum.number
+
+# The files and lines clutter more useful details when sync tracing is enabled.
+publicLogScope: chroniclesLineNumbers=false
 
 # End

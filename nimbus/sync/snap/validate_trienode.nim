@@ -27,11 +27,13 @@
 ## `try..except RlpError as e` outside its trie node parsing loop, and pass the
 ## exception to `parseTrieNodeError` if it occurs.
 
-{.push raises: [Defect].}
-
 import
-  eth/[common/eth_types, rlp, p2p],
-  ".."/[sync_types, trace_helper]
+  eth/[common/eth_types, p2p],
+  stew/byteutils,
+  ".."/[sync_types, trace_helper],
+  ./types
+
+{.push raises: [Defect].}
 
 type
   TrieNodeParseContext* = object

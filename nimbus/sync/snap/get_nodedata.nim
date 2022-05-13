@@ -60,15 +60,16 @@
 ## matching.  Before this module was written, we tended to accept whatever came
 ## and assume a lot about replies.  It often worked but wasn't robust enough.
 
-{.push raises: [Defect].}
-
 import
   std/[sequtils, sets, tables, hashes],
   chronos,
   stint,
   nimcrypto/keccak,
   eth/[common/eth_types, rlp, p2p],
-  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types]
+  ".."/[protocol, protocol/pickeled_eth_tracers, sync_types],
+  "."/[timer_helper, types]
+
+{.push raises: [Defect].}
 
 type
   NodeDataRequestQueue* = ref object of typeof SyncPeer().nodeDataRequestsBase

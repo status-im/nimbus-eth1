@@ -22,16 +22,17 @@
 ##   the entire Ethereum state to be fetched, even following hash trie
 ##   pointers, without significant random access database I/O.
 
-{.push raises: [Defect].}
-
 import
   std/[sets, tables, algorithm],
   chronos,
   eth/[common/eth_types, rlp, p2p],
+  stew/byteutils,
   stint,
   "../.."/[sync_types, trace_helper],
-  ".."/[get_nodedata, validate_trienode],
+  ".."/[get_nodedata, types, validate_trienode],
   ./common
+
+{.push raises: [Defect].}
 
 type
   FetchState = ref object of typeof SyncPeer().fetchBase
