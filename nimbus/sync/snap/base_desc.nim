@@ -11,9 +11,14 @@
 
 import
   eth/[common/eth_types, p2p],
+  stew/[byteutils, keyed_queue, results],
   ./types
 
 {.push raises: [Defect].}
+
+const
+  seenBlocksMax = 500
+    ## Internal size of LRU cache (for debugging)
 
 type
   SnapStat* = distinct int
@@ -73,6 +78,8 @@ type
 
   SnapSyncBase* = ref object of RootObj
     ## Shared state among all peers of a snap syncing node.
+    seenBlock: KeyedQueue[array[32,byte],BlockNumber]
+      ## Temporary for pretty debugging, BlockHash keyed lru cache
     syncPeers*: seq[SnapPeerBase]
       ## Peer state tracking
 
@@ -84,6 +91,37 @@ proc `$`*(sp: SnapPeerBase): string =
   $sp.peer
 
 proc inc(stat: var SnapStat) {.borrow.}
+
+# ------------------------------------------------------------------------------
+# Public functions, debugging helpers (will go away eventually)
+# ------------------------------------------------------------------------------
+
+proc pp*(sn: SnapSyncBase; bh: BlockHash): string =
+  ## Pretty printer for debugging
+  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  if rc.isOk:
+    return "#" & $rc.value
+  $bh.untie.data.toHex
+
+proc pp*(sn: SnapSyncBase; bh: BlockHash; bn: BlockNumber): string =
+  ## Pretty printer for debugging
+  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  if rc.isOk:
+    return "#" & $rc.value
+  "#" & $sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+
+proc pp*(sn: SnapSyncBase; bhn: HashOrNum): string =
+  if not bhn.isHash:
+    return "num(#" & $bhn.number & ")"
+  let rc = sn.seenBlock.lruFetch(bhn.hash.data)
+  if rc.isOk:
+    return "hash(#" & $rc.value & ")"
+  return "hash(" & $bhn.hash.data.toHex & ")"
+
+proc seen*(sn: SnapSyncBase; bh: BlockHash; bn: BlockNumber) =
+  ## Register for pretty printing
+  if not sn.seenBlock.lruFetch(bh.untie.data).isOk:
+    discard sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
 
 # ------------------------------------------------------------------------------
 # End

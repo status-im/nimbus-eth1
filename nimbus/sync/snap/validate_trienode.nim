@@ -31,8 +31,7 @@
 ## exception to `parseTrieNodeError` if it occurs.
 
 import
-  eth/[common/eth_types, rlp, p2p],
-  stew/byteutils,
+  eth/[common/eth_types, p2p, rlp],
   ../trace_helper,
   "."/[base_desc, path_desc, types]
 
@@ -44,41 +43,43 @@ type
     leafQueue*:             seq[(LeafPath, NodeHash, Blob)]
     errors*:                int
 
+
+template read(rlp: var Rlp, T: type NodeHash): T =
+  rlp.read(Hash256).T
+
 template maybeHash(nodeHash: NodeHash, nodeBytes: Blob): string =
   if nodeBytes.len >= 32: $nodeHash else: "selfEncoded"
 
 proc combinePaths(nodePath, childPath: InteriorPath): string =
-  let nodeHex = nodePath.toHex(false)
-  let childHex = childPath.toHex(true)
+  let nodeHex = nodePath.toHex(withEllipsis = false)
+  let childHex = childPath.toHex(withEllipsis = true)
   nodeHex & "::" & childHex[nodeHex.len..^1]
 
 template leafError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, leafPath, nodePath, nodeHash, nodeBytes, context
   debug "Trie leaf data error: " & msg, peer=sp,
-    depth=nodePath.depth, leafDepth=leafPath.depth, `more`,
-    path=combinePaths(nodePath, leafPath),
-    hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth, leafDepth=leafPath.depth,
+    `more`, path=combinePaths(nodePath, leafPath),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template childError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, childPath, nodePath, nodeHash, nodeBytes, context
   debug "Trie data error: " & msg, peer=sp,
-    depth=nodePath.depth, childDepth=childPath.depth, `more`,
-    path=combinePaths(nodePath, childPath),
-    hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth, childDepth=childPath.depth,
+    `more`, path=combinePaths(nodePath, childPath),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template nodeError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, nodePath, nodeHash, nodeBytes, context
   debug "Trie data error: " & msg, peer=sp,
-    depth=nodePath.depth, `more`,
-    path=nodePath.toHex(true), hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth,
+    `more`, path=nodePath.toHex(withEllipsis = true),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 proc parseLeafValue(sp: SnapPeerBase,
@@ -118,7 +119,7 @@ proc parseLeafValue(sp: SnapPeerBase,
     trace "Trie: Account leaf found", peer=sp,
       path=combinePaths(nodePath, leafPath),
       nodeHash=maybeHash(nodeHash, nodeBytes),
-      leafLen, leafBytes=leafBytes.toHex
+      leafLen, leafBytes
 #    echo inspect(rlpFromBytes(leafBytes))
 
 # Forward declaration, used for bounded, rare recursion.
@@ -172,7 +173,7 @@ proc parseExtensionChild(sp: SnapPeerBase,
     # RLP can be < 32 bytes.  Because this is hard to test, let's make < 32
     # exit the program for now to see if any appear on Mainnet.
     doAssert childLen == 32
-    sp.parseTrieNode(childPath, NodeHash(), nodeRlp.toBytes, true, context)
+    sp.parseTrieNode(childPath, NodeHash.new, nodeRlp.toBytes, true, context)
   else:
     childError "Extension node child (RLP element 1) has length > 32 bytes"
 
@@ -210,11 +211,11 @@ proc parseExtensionOrLeaf(sp: SnapPeerBase,
   # nibble in the first byte must be zero.
   if (firstByte and (if oddLen == 0: 0xcf else: 0xc0)) != 0:
     if isLeaf != 0:
-      nodeError "Leaf node path suffix (RLP element 0) starts with invalid byte",
-        invalidByte=[firstByte].toHex
+      nodeError "Leaf node path suffix, RLP starts with invalid byte",
+        invalidByte=[firstByte]
     else:
-      nodeError "Extension node prefix (RLP element 0) starts with invalid byte",
-        invalidByte=[firstByte].toHex
+      nodeError "Extension node prefix RLP starts with invalid byte",
+        invalidByte=[firstByte]
     return
 
   # In the canonical trie encoding, an extension node's child is not allowed to
@@ -305,7 +306,7 @@ proc parseBranchNode(sp: SnapPeerBase,
       # RLP can be < 32 bytes.  Because this is hard to test, let's make < 32
       # exit the program for now to see if any appear on Mainnet.
       doAssert childLen == 32
-      sp.parseTrieNode(childPath, NodeHash(), nodeRlp.toBytes, false, context)
+      sp.parseTrieNode(childPath, NodeHash.new, nodeRlp.toBytes, false, context)
       nodeRlp.skipElem()
     else:
       childError "Branch node child (RLP element i in 0..15) has length > 32 bytes", i

@@ -32,7 +32,7 @@ type
     countRangeSnapStarted*: bool
     countRangeTrie*:        UInt256
     countRangeTrieStarted*: bool
-    displayTimer:           TimerCallback
+    logTicker:              TimerCallback
 
   SnapSyncEx* = ref object of SnapSyncBase
     sharedFetch*: SharedFetchState
@@ -69,19 +69,19 @@ proc percent(value: UInt256, discriminator: bool): string =
   result.add('%')
 
 
-proc setDisplayTimer(sf: SharedFetchState; at: Moment) {.gcsafe.}
+proc setLogTicker(sf: SharedFetchState; at: Moment) {.gcsafe.}
 
-proc restartDisplayTimer(sf: SharedFetchState) {.gcsafe.} =
+proc runLogTicker(sf: SharedFetchState) {.gcsafe.} =
   doAssert not sf.isNil
   info "State: Account sync progress",
     percent = percent(sf.countRange, sf.countRangeStarted),
     accounts = sf.countAccounts,
     snap = percent(sf.countRangeSnap, sf.countRangeSnapStarted),
     trie = percent(sf.countRangeTrie, sf.countRangeTrieStarted)
-  sf.setDisplayTimer(Moment.fromNow(1.seconds))
+  sf.setLogTicker(Moment.fromNow(1.seconds))
 
-proc setDisplayTimer(sf: SharedFetchState; at: Moment) =
-  sf.displayTimer = safeSetTimer(at, restartDisplayTimer, sf)
+proc setLogTicker(sf: SharedFetchState; at: Moment) =
+  sf.logTicker = safeSetTimer(at, runLogTicker, sf)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -92,22 +92,18 @@ proc new*(T: type SharedFetchState; startLoggingAfter = 100.milliseconds): T =
     leafRanges: @[LeafRange(
       leafLow: LeafPath.low,
       leafHigh: LeafPath.high)])
-  result.displayTimer = safeSetTimer(
+  result.logTicker = safeSetTimer(
     Moment.fromNow(startLoggingAfter),
-    restartDisplayTimer,
+    runLogTicker,
     result)
 
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc ex*(base: SnapSyncBase): SnapSyncEx =
-  ## to extended object version
-  base.SnapSyncEx
-
 proc nsx*[T](sp: T): SnapSyncEx =
-  ## handy helper, typically used with `T` instantiated as `SnapPeerEx`
-  sp.ns.ex
+  ## Handy helper, typically used with `T` instantiated as `SnapPeerEx`
+  sp.ns.SnapSyncEx
 
 # ------------------------------------------------------------------------------
 # End

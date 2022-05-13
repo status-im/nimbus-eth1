@@ -10,9 +10,9 @@
 # distributed except according to those terms.
 
 import
-  stint,
+  eth/[common/eth_types, p2p],
   stew/byteutils,
-  eth/[common/eth_types, p2p]
+  stint
 
 {.push raises: [Defect].}
 
@@ -148,7 +148,7 @@ proc toHex*(path: InteriorPath, withEllipsis = true): string =
     result[i] = hexChars[path.digit(i)]
 
 proc pathRange*(path1, path2: InteriorPath): string =
-  path1.toHex(false) & '-' & path2.toHex(false)
+  path1.toHex(withEllipsis = false) & '-' & path2.toHex(withEllipsis = false)
 
 proc `$`*(path: InteriorPath): string =
   path.toHex

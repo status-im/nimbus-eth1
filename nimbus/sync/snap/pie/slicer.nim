@@ -16,8 +16,8 @@ import
   chronos,
   nimcrypto/keccak,
   stint,
-  eth/[common/eth_types, p2p, rlp],
-  ".."/[path_desc, base_desc],
+  eth/[common/eth_types, p2p],
+  ".."/[path_desc, base_desc, types],
   "."/[common, fetch_trie, fetch_snap, peer_desc]
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
@@ -25,7 +25,7 @@ import
 
 proc stateFetch*(sp: SnapPeerEx) {.async.} =
   var stateRoot = sp.syncStateRoot.get
-  trace "Snap: Syncing from stateRoot", peer=sp, stateRoot=($stateRoot)
+  trace "Snap: Syncing from stateRoot", peer=sp, stateRoot
 
   while true:
     if not sp.peerSupportsGetNodeData() and not sp.peerSupportsSnap():
@@ -46,7 +46,7 @@ proc stateFetch*(sp: SnapPeerEx) {.async.} =
       continue
 
     if stateRoot != sp.syncStateRoot.get:
-      trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot=($stateRoot)
+      trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.syncStateRoot.get
       sp.stopThisState = false
 
@@ -70,12 +70,10 @@ proc stateFetch*(sp: SnapPeerEx) {.async.} =
     if sp.peerSupportsSnap() and allowSnap:
       discard sp.getSlice(leafRange)
       trace "Snap: snap.GetAccountRange segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot)
+        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.snapFetch(stateRoot, leafRange)
     elif sp.peerSupportsGetNodeData():
       discard sp.getSlice(leafRange)
       trace "Snap: eth.GetNodeData segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot)
+        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.trieFetch(stateRoot, leafRange)

@@ -25,9 +25,7 @@
 import
   std/[sets, tables, algorithm],
   chronos,
-  eth/[common/eth_types, rlp, p2p],
-  stew/byteutils,
-  stint,
+  eth/[common/eth_types, p2p],
   ../../trace_helper,
   ".."/[base_desc, get_nodedata, path_desc, types, validate_trienode],
   "."/[common, peer_desc, sync_desc]
@@ -198,11 +196,11 @@ proc getNodeData(fetch: FetchState,
     depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
-  fetch.nodeGetQueue.add(SingleNodeRequestEx(
-    hash: hash,
+  fetch.nodeGetQueue.add SingleNodeRequestEx(
+    hash: hash.NodeHash,
     path: path,
-    future: future
-  ))
+    future: future)
+
   if not fetch.scheduledBatch:
     fetch.scheduleBatchGetNodeData()
   let nodeBytes = await future
@@ -216,10 +214,10 @@ proc getNodeData(fetch: FetchState,
   if nodeBytes.len > 0:
     traceIndividualNode "< Received individual NodeData", peer=fetch.sp,
       depth=path.depth, path, hash=($hash),
-      nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
+      nodeLen=nodeBytes.len, nodeBytes
   else:
     traceIndividualNode "< Received EMPTY individual NodeData", peer=fetch.sp,
-      depth=path.depth, path, hash=($hash),
+      depth=path.depth, path, hash,
       nodeLen=nodeBytes.len
   return nodeBytes
 
@@ -250,7 +248,7 @@ proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
   if fetch.sp.stopThisState or fetch.sp.stopped:
     errorReturn()
 
-  let nodeBytes = await fetch.getNodeData(hash, path)
+  let nodeBytes = await fetch.getNodeData(hash.TrieHash, path)
 
   # If something triggered stop, clean up now.
   if fetch.sp.stopThisState or fetch.sp.stopped:
@@ -325,7 +323,8 @@ proc probeGetNodeData(sp: SnapPeerEx, stateRoot: TrieHash): Future[bool]
   #   send an empty reply.  We don't want to cut off a peer for other purposes
   #   such as a source of blocks and transactions, just because it doesn't
   #   reply to `GetNodeData`.
-  let reply = await sp.getNodeData(@[stateRoot], InteriorPath(), InteriorPath())
+  let reply = await sp.getNodeData(
+    @[stateRoot.NodeHash], InteriorPath(), InteriorPath())
   return not reply.isNil and reply.hashVerifiedData.len == 1
 
 proc trieFetch*(sp: SnapPeerEx, stateRoot: TrieHash,

@@ -399,7 +399,7 @@ proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
   try:
     # TODO: What exactly does this `await` do, wait for space in send buffer?
     # TODO: Check if this copies the hashes redundantly.
-    await sp.peer.getNodeData(request.hashes)
+    await sp.peer.getNodeData(request.hashes.untie)
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors
@@ -504,7 +504,7 @@ proc setupGetNodeData*(sp: SnapPeerEx) =
       {.gcsafe.}: onNodeData(sp, data)
 
   sp.peer.state(eth).onGetNodeData =
-    proc (_: Peer, hashes: openArray[NodeHash], data: var seq[Blob]) =
+    proc (_: Peer, hashes: openArray[Hash256], data: var seq[Blob]) =
       # Return empty nodes result.  This callback is installed to
       # ensure we don't reply with nodes from the chainDb.
       discard

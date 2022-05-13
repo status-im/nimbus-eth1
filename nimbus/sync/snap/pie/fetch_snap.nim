@@ -52,11 +52,11 @@ proc snapFetch*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
       accountRange=pathRange(origin, limit),
       stateRoot=($stateRoot), bytesLimit=snapRequestBytesLimit, peer=sp
 
-  var reply: typeof await sp.peer.getAccountRange(stateRoot, origin, limit,
-                                                  snapRequestBytesLimit)
+  var
+    reply: Option[accountRangeObj]
   try:
-    reply = await sp.peer.getAccountRange(stateRoot, origin, limit,
-                                          snapRequestBytesLimit)
+    reply = await sp.peer.getAccountRange(
+      stateRoot.untie, origin, limit, snapRequestBytesLimit)
   except CatchableError as e:
     traceRecvError "waiting for reply to GetAccountRange",
       peer=sp, error=e.msg

@@ -16,7 +16,7 @@ import
   eth/p2p/[peer_pool, private/p2p_types, rlpx],
   stint,
   ./protocol,
-  ./snap/[base_desc, chain_head_tracker, get_nodedata],
+  ./snap/[base_desc, chain_head_tracker, get_nodedata, types],
   ./snap/pie/[sync_desc, peer_desc]
 
 {.push raises: [Defect].}
@@ -24,6 +24,30 @@ import
 type
   SnapSyncCtx* = ref object of SnapSyncEx
     peerPool: PeerPool
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc fetchPeerDesc(ns: SnapSyncCtx, peer: Peer): SnapPeerEx =
+  ## Find matching peer and remove descriptor from list
+  for i in 0 ..< ns.syncPeers.len:
+    if ns.syncPeers[i].peer == peer:
+      result = ns.syncPeers[i].ex
+      ns.syncPeers.delete(i)
+      return
+
+proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
+  T(
+    ns:              ns,
+    peer:            peer,
+    stopped:         false,
+    # Initial state: hunt forward, maximum uncertainty range.
+    syncMode:        SyncHuntForward,
+    huntLow:         0.toBlockNumber,
+    huntHigh:        high(BlockNumber),
+    huntStep:        0,
+    bestBlockNumber: 0.toBlockNumber)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -38,6 +62,7 @@ proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
     let delayMs = if sp.syncMode == SyncLocked: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
+
 proc syncPeerStart(sp: SnapPeerEx) =
   asyncSpawn sp.syncPeerLoop()
 
@@ -46,46 +71,32 @@ proc syncPeerStop(sp: SnapPeerEx) =
   # TODO: Cancel running `SnapPeerEx` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
-proc onPeerConnected(ns: SnapSyncCtx, protocolPeer: Peer) =
-  let sp = SnapPeerEx(
-    ns:              ns,
-    peer:            protocolPeer,
-    stopped:         false,
-    # Initial state: hunt forward, maximum uncertainty range.
-    syncMode:        SyncHuntForward,
-    huntLow:         0.toBlockNumber,
-    huntHigh:        high(BlockNumber),
-    huntStep:        0,
-    bestBlockNumber: 0.toBlockNumber)
-  trace "Sync: Peer connected", peer=sp
 
+proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
+  trace "Snap: Peer connected", peer
+
+  let sp = SnapPeerEx.new(ns, peer)
   sp.setupGetNodeData()
 
-  if protocolPeer.state(eth).initialized:
+  if peer.state(eth).initialized:
     # We know the hash but not the block number.
-    sp.bestBlockHash = protocolPeer.state(eth).bestBlockHash
-    #TODO: Temporarily disabled because it's useful to test the head hunter.
-    #sp.syncMode = SyncOnlyHash
+    sp.bestBlockHash = peer.state(eth).bestBlockHash.BlockHash
+    # TODO: Temporarily disabled because it's useful to test the head hunter.
+    # sp.syncMode = SyncOnlyHash
   else:
-    trace "Sync: state(eth) not initialized!"
+    trace "Snap: state(eth) not initialized!"
 
   ns.syncPeers.add(sp)
   sp.syncPeerStart()
 
-proc onPeerDisconnected(ns: SnapSyncCtx, protocolPeer: Peer) =
-  trace "Sync: Peer disconnected", peer=protocolPeer
-  # Find matching `sp` and remove from `ns.syncPeers`.
-  var sp: SnapPeerEx = nil
-  for i in 0 ..< ns.syncPeers.len:
-    if ns.syncPeers[i].peer == protocolPeer:
-      sp = ns.syncPeers[i].ex
-      ns.syncPeers.delete(i)
-      break
-  if sp.isNil:
-    debug "Sync: Unknown peer disconnected", peer=protocolPeer
-    return
+proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
+  trace "Snap: Peer disconnected", peer
 
-  sp.syncPeerStop()
+  let sp = ns.fetchPeerDesc(peer)
+  if sp.isNil:
+    debug "Snap: Disconnected from unregistered peer", peer
+  else:
+    sp.syncPeerStop()
 
 # ------------------------------------------------------------------------------
 # Public functions
