@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,76 +18,79 @@ import
 
 const protocolId = [byte 0x50, 0x00]
 
-type Default2NodeTest = ref object
-  node1: discv5_protocol.Protocol
-  node2: discv5_protocol.Protocol
-  proto1: PortalProtocol
-  proto2: PortalProtocol
-
-proc testHandler(contentKey: ByteList): Option[ContentId] =
-  # Note: Returning a static content id here, as in practice this depends
-  # on the content key to content id derivation, which is different for the
-  # different content networks. And we want these tests to be independent from
-  # that.
-  let idHash = sha256.digest("test")
-  some(readUintBE[256](idHash.data))
-
-proc testHandlerSha256(contentKey: ByteList): Option[ContentId] =
-  # Note: Returning a static content id here, as in practice this depends
-  # on the content key to content id derivation, which is different for the
-  # different content networks. And we want these tests to be independent from
-  # that.
+proc toContentId(contentKey: ByteList): Option[ContentId] =
+  # Note: Returning sha256 digest as content id here. This content key to
+  # content id derivation is different for the different content networks
+  # and their content types.
   let idHash = sha256.digest(contentKey.asSeq())
   some(readUintBE[256](idHash.data))
 
 proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   true
 
-proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
+proc initPortalProtocol(
+    rng: ref BrHmacDrbgContext,
+    privKey: PrivateKey,
+    address: Address,
+    bootstrapRecords: openArray[Record] = []): PortalProtocol =
   let
-    node1 = initDiscoveryNode(
-      rng, PrivateKey.random(rng[]), localAddress(20302))
-    node2 = initDiscoveryNode(
-      rng, PrivateKey.random(rng[]), localAddress(20303))
+    d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
+    db = ContentDB.new("", uint32.high, inMemory = true)
+    proto = PortalProtocol.new(
+      d, protocolId, db, toContentId, validateContent,
+      bootstrapRecords = bootstrapRecords)
 
-    db1 = ContentDB.new("", uint32.high, inMemory = true)
-    db2 = ContentDB.new("", uint32.high, inMemory = true)
+    socketConfig = SocketConfig.init(
+      incomingSocketReceiveTimeout = none(Duration),
+      payloadSize = uint32(maxUtpPayloadSize))
+    streamTransport = UtpDiscv5Protocol.new(
+      d, utpProtocolId,
+      registerIncomingSocketCallback(@[proto.stream]),
+      allowRegisteredIdCallback(@[proto.stream]),
+      socketConfig)
 
+  proto.stream.setTransport(streamTransport)
+
+  return proto
+
+proc stopPortalProtocol(proto: PortalProtocol) {.async.} =
+  proto.stop()
+  await proto.baseProtocol.closeWait()
+
+proc defaultTestSetup(rng: ref BrHmacDrbgContext):
+    (PortalProtocol, PortalProtocol) =
+  let
     proto1 =
-      PortalProtocol.new(node1, protocolId, db1, testHandler, validateContent)
+      initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
     proto2 =
-      PortalProtocol.new(node2, protocolId, db2, testHandler, validateContent)
+      initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
 
-  Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
-
-proc stopTest(test: Default2NodeTest) {.async.} =
-  test.proto1.stop()
-  test.proto2.stop()
-  await test.node1.closeWait()
-  await test.node2.closeWait()
+  (proto1, proto2)
 
 procSuite "Portal Wire Protocol Tests":
   let rng = newRng()
 
   asyncTest "Ping/Pong":
-    let test = defaultTestCase(rng)
+    let (proto1, proto2) = defaultTestSetup(rng)
 
-    let pong = await test.proto1.ping(test.proto2.localNode)
+    let pong = await proto1.ping(proto2.localNode)
 
-    let customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+    let customPayload =
+      ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
 
     check:
       pong.isOk()
       pong.get().enrSeq == 1'u64
       pong.get().customPayload == customPayload
 
-    await test.stopTest()
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
 
   asyncTest "FindNodes/Nodes":
-    let test = defaultTestCase(rng)
+    let (proto1, proto2) = defaultTestSetup(rng)
 
     block: # Find itself
-      let nodes = await test.proto1.findNodesImpl(test.proto2.localNode,
+      let nodes = await proto1.findNodesImpl(proto2.localNode,
         List[uint16, 256](@[0'u16]))
 
       check:
@@ -97,7 +100,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await test.proto1.findNodesImpl(test.proto2.localNode,
+      let nodes = await proto1.findNodesImpl(proto2.localNode,
         List[uint16, 256](@[]))
 
       check:
@@ -109,15 +112,15 @@ procSuite "Portal Wire Protocol Tests":
       # ping in one direction to add, ping in the other to update as seen,
       # adding the node in the discovery v5 routing table. Could also launch
       # with bootstrap node instead.
-      check (await test.node1.ping(test.node2.localNode)).isOk()
-      check (await test.node2.ping(test.node1.localNode)).isOk()
+      check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
+      check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
 
       # Start the portal protocol to seed nodes from the discoveryv5 routing
       # table.
-      test.proto2.start()
+      proto2.start()
 
-      let distance = logDistance(test.node1.localNode.id, test.node2.localNode.id)
-      let nodes = await test.proto1.findNodesImpl(test.proto2.localNode,
+      let distance = logDistance(proto1.localNode.id, proto2.localNode.id)
+      let nodes = await proto1.findNodesImpl(proto2.localNode,
         List[uint16, 256](@[distance]))
 
       check:
@@ -125,152 +128,135 @@ procSuite "Portal Wire Protocol Tests":
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
 
-    await test.stopTest()
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
 
   asyncTest "FindContent/Content - send enrs":
-    let test = defaultTestCase(rng)
+    let (proto1, proto2) = defaultTestSetup(rng)
 
     # ping in one direction to add, ping in the other to update as seen.
-    check (await test.node1.ping(test.node2.localNode)).isOk()
-    check (await test.node2.ping(test.node1.localNode)).isOk()
+    check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
+    check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
 
     # Start the portal protocol to seed nodes from the discoveryv5 routing
     # table.
-    test.proto2.start()
+    proto2.start()
 
     let contentKey = ByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
-    let content = await test.proto1.findContentImpl(test.proto2.localNode,
-      contentKey)
+    let content = await proto1.findContentImpl(proto2.localNode, contentKey)
 
     check:
       content.isOk()
       content.get().enrs.len() == 1
 
-    await test.stopTest()
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
 
   asyncTest "Offer/Accept":
-    let test = defaultTestCase(rng)
-    let contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
+    let (proto1, proto2) = defaultTestSetup(rng)
+    let contentKeys = ContentKeysList(@[ByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await test.proto1.offerImpl(
-      test.proto2.baseProtocol.localNode, contentKeys)
+    let accept = await proto1.offerImpl(
+      proto2.baseProtocol.localNode, contentKeys)
 
     check:
       accept.isOk()
       accept.get().connectionId.len == 2
       accept.get().contentKeys.len == contentKeys.len
 
-    await test.stopTest()
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
 
   asyncTest "Correctly mark node as seen after request":
-    let test = defaultTestCase(rng)
+    let (proto1, proto2) = defaultTestSetup(rng)
 
-    let initialNeighbours = test.proto1.neighbours(test.proto1.localNode.id,
+    let initialNeighbours = proto1.neighbours(proto1.localNode.id,
       seenOnly = false)
 
     check:
       len(initialNeighbours) == 0
 
-    discard test.proto1.addNode(test.proto2.baseProtocol.localNode)
+    discard proto1.addNode(proto2.localNode)
 
-    let allNeighboursAfterAdd = test.proto1.neighbours(
-      test.proto1.localNode.id, seenOnly = false)
-    let seenNeighboursAfterAdd = test.proto1.neighbours(
-      test.proto1.localNode.id, seenOnly = true)
+    let allNeighboursAfterAdd = proto1.neighbours(
+      proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterAdd = proto1.neighbours(
+      proto1.localNode.id, seenOnly = true)
 
     check:
       len(allNeighboursAfterAdd) == 1
       len(seenNeighboursAfterAdd) == 0
 
-    let pong = await test.proto1.ping(test.proto2.baseProtocol.localNode)
+    let pong = await proto1.ping(proto2.localNode)
 
-    let allNeighboursAfterPing = test.proto1.neighbours(
-      test.proto1.localNode.id, seenOnly = false)
-    let seenNeighboursAfterPing = test.proto1.neighbours(
-      test.proto1.localNode.id, seenOnly = true)
+    let allNeighboursAfterPing = proto1.neighbours(
+      proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterPing = proto1.neighbours(
+      proto1.localNode.id, seenOnly = true)
 
     check:
       pong.isOk()
       len(allNeighboursAfterPing) == 1
       len(seenNeighboursAfterPing) == 1
 
-    await test.stopTest()
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
 
   asyncTest "Lookup nodes":
-      let
-        node1 = initDiscoveryNode(
-          rng, PrivateKey.random(rng[]), localAddress(20302))
-        node2 = initDiscoveryNode(
-          rng, PrivateKey.random(rng[]), localAddress(20303))
-        node3 = initDiscoveryNode(
-          rng, PrivateKey.random(rng[]), localAddress(20304))
-
-        db1 = ContentDB.new("", uint32.high, inMemory = true)
-        db2 = ContentDB.new("", uint32.high, inMemory = true)
-        db3 = ContentDB.new("", uint32.high, inMemory = true)
-
-        proto1 = PortalProtocol.new(
-          node1, protocolId, db1, testHandler, validateContent)
-        proto2 = PortalProtocol.new(
-          node2, protocolId, db2, testHandler, validateContent)
-        proto3 = PortalProtocol.new(
-          node3, protocolId, db3, testHandler, validateContent)
-
-      # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
-      check proto1.addNode(node2.localNode) == Added
-      check proto2.addNode(node3.localNode) == Added
-
-      check (await proto2.ping(node3.localNode)).isOk()
-
-      let lookuResult = await proto1.lookup(node3.localNode.id)
-
-      check:
-        # returned result should contain node3 as it is in node2 routing table
-        lookuResult.contains(node3.localNode)
-
-      await node1.closeWait()
-      await node2.closeWait()
-      await node3.closeWait()
-
-  asyncTest "Content lookup should return info about nodes interested in content":
     let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-      node3 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20304))
+      node1 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      node3 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
 
-      db1 = ContentDB.new("", uint32.high, inMemory = true)
-      db2 = ContentDB.new("", uint32.high, inMemory = true)
-      db3 = ContentDB.new("", uint32.high, inMemory = true)
+    # Make node1 know about node2, and node2 about node3
+    # node1 will then do a lookup for node3
+    check node1.addNode(node2.localNode) == Added
+    check node2.addNode(node3.localNode) == Added
 
-      proto1 = PortalProtocol.new(
-        node1, protocolId, db1, testHandlerSha256, validateContent)
-      proto2 = PortalProtocol.new(
-        node2, protocolId, db2, testHandlerSha256, validateContent)
-      proto3 = PortalProtocol.new(
-        node3, protocolId, db3, testHandlerSha256, validateContent)
+    check (await node2.ping(node3.localNode)).isOk()
+
+    let lookupResult = await node1.lookup(node3.localNode.id)
+
+    check:
+      # Result should contain node3 as it is in the routing table of node2
+      lookupResult.contains(node3.localNode)
+
+    await node1.stopPortalProtocol()
+    await node2.stopPortalProtocol()
+    await node3.stopPortalProtocol()
+
+  asyncTest "Lookup content - nodes interested":
+    let
+      node1 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      node3 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
 
       content = @[byte 1, 2]
       contentList = List[byte, 2048].init(content)
       contentId = readUintBE[256](sha256.digest(content).data)
 
-    # Only node3 have content
-    discard db3.put(contentId, content, proto3.localNode.id)
+    # Store the content on node3
+    discard node3.contentDB.put(contentId, content, node3.localNode.id)
 
-    # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
-    # Node1 needs to known Node2 radius to determine if node2 is interested in content
-    check proto1.addNode(node2.localNode) == Added
-    check proto2.addNode(node3.localNode) == Added
+    # Make node1 know about node2, and node2 about node3
+    check node1.addNode(node2.localNode) == Added
+    check node2.addNode(node3.localNode) == Added
 
-    check (await proto1.ping(node2.localNode)).isOk()
-    check (await proto2.ping(node3.localNode)).isOk()
+    # node1 needs to know the radius of the nodes to determine if they are
+    # interested in content, so a ping is done.
+    check (await node1.ping(node2.localNode)).isOk()
+    check (await node2.ping(node3.localNode)).isOk()
 
-    let lookupResult = await proto1.contentLookup(contentList, contentId)
+    let lookupResult = await node1.contentLookup(contentList, contentId)
 
     check:
       lookupResult.isSome()
@@ -281,91 +267,77 @@ procSuite "Portal Wire Protocol Tests":
       res.content == content
       res.nodesInterestedInContent.contains(node2.localNode)
 
-    await node1.closeWait()
-    await node2.closeWait()
-    await node3.closeWait()
+    await node1.stopPortalProtocol()
+    await node2.stopPortalProtocol()
+    await node3.stopPortalProtocol()
 
   asyncTest "Valid Bootstrap Node":
     let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
+      node1 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 =
+        initPortalProtocol(
+          rng, PrivateKey.random(rng[]), localAddress(20303),
+          bootstrapRecords = [node1.localNode.record])
 
-      db1 = ContentDB.new("", uint32.high, inMemory = true)
-      db2 = ContentDB.new("", uint32.high, inMemory = true)
+    node1.start()
+    node2.start()
 
-      proto1 = PortalProtocol.new(
-        node1, protocolId, db1, testHandler, validateContent)
-      proto2 = PortalProtocol.new(
-        node2, protocolId, db2, testHandler, validateContent,
-        bootstrapRecords = [node1.localNode.record])
+    check node2.neighbours(node2.localNode.id).len == 1
 
-    proto1.start()
-    proto2.start()
-
-    check proto2.neighbours(proto2.localNode.id).len == 1
-
-    proto1.stop()
-    proto2.stop()
-    await node1.closeWait()
-    await node2.closeWait()
+    await node1.stopPortalProtocol()
+    await node2.stopPortalProtocol()
 
   asyncTest "Invalid Bootstrap Node":
     let
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-
-      db = ContentDB.new("", uint32.high, inMemory = true)
-      # No portal protocol for node1, hence an invalid bootstrap node
-      proto2 = PortalProtocol.new(node2, protocolId, db, testHandler,
-        validateContent, bootstrapRecords = [node1.localNode.record])
+      node2 =
+        initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303),
+        bootstrapRecords = [node1.localNode.record])
 
     # seedTable to add node1 to the routing table
-    proto2.seedTable()
-    check proto2.neighbours(proto2.localNode.id).len == 1
+    node2.seedTable()
+    check node2.neighbours(node2.localNode.id).len == 1
 
     # This should fail and drop node1 from the routing table
-    await proto2.revalidateNode(node1.localNode)
+    await node2.revalidateNode(node1.localNode)
 
-    check proto2.neighbours(proto2.localNode.id).len == 0
+    check node2.neighbours(node2.localNode.id).len == 0
 
-    proto2.stop()
     await node1.closeWait()
-    await node2.closeWait()
+    await node2.stopPortalProtocol()
 
   asyncTest "Adjusting radius after hitting full database":
     let
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      dbLimit = 100000'u32
+      dbLimit = 100_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
-      proto1 = PortalProtocol.new(node1, protocolId, db, testHandler,
+      proto1 = PortalProtocol.new(node1, protocolId, db, toContentId,
         validateContent)
 
-    let item = genByteSeq(10000)
+    let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
 
     for i in 0..8:
       proto1.storeContent(u256(i), item)
       distances.add(u256(i) xor proto1.localNode.id)
-    
-    # With current setting i.e limit 100000bytes and 10000 byte element each
-    # two furthest elements should be delted i.e index 0 and 1.
-    # index 2 should be still be in database and it distance should always be
-    # <= updated radius
+
     distances.sort(order = SortOrder.Descending)
 
+    # With the selected db limit of 100_000 bytes and added elements of 10_000
+    # bytes each, the two furthest elements should be prined, i.e index 0 and 1.
+    # Index 2 should be still be in database and its distance should be <=
+    # updated radius
     check:
       db.get((distances[0] xor proto1.localNode.id)).isNone()
       db.get((distances[1] xor proto1.localNode.id)).isNone()
       db.get((distances[2] xor proto1.localNode.id)).isSome()
-      # our radius have been updated and is lower than max
+      # The radius has been updated and is lower than the maximum start value.
       proto1.dataRadius < UInt256.high
-      # but higher or equal to furthest non deleted element
+      # Yet higher than or equal to the furthest non deleted element.
       proto1.dataRadius >= distances[2]
 
     proto1.stop()
