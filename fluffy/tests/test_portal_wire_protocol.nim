@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  std/algorithm,
+  std/[algorithm, sequtils],
   chronos, testutils/unittests, stew/shims/net,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -166,6 +166,29 @@ procSuite "Portal Wire Protocol Tests":
       accept.isOk()
       accept.get().connectionId.len == 2
       accept.get().contentKeys.len == contentKeys.len
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer/Accept/Stream":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    var content: seq[ContentInfo]
+    for i in 0..<contentKeysLimit:
+      let contentItem = ContentInfo(
+        contentKey: ByteList(@[byte i]), content: repeat(byte i, 5000))
+      content.add(contentItem)
+
+    let res = await proto1.offer(proto2.baseProtocol.localNode, content)
+
+    check:
+      res.isOk()
+
+    for contentInfo in content:
+      let receivedContent = proto2.contentDB.get(
+        toContentId(contentInfo.contentKey).get())
+      check:
+        receivedContent.isSome()
+        receivedContent.get() == contentInfo.content
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

@@ -9,7 +9,7 @@
 
 import
   std/sequtils,
-  chronos, stew/byteutils, chronicles,
+  chronos, stew/[byteutils, leb128], chronicles,
   eth/utp/utp_discv5_protocol,
   # even though utp_discv5_protocol exports this, import is still needed,
   # perhaps protocol.Protocol type of usage?
@@ -24,7 +24,7 @@ logScope:
 const
   utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
-  defaultReadTimeout = 2.seconds
+  defaultContentReadTimeout = 2.seconds
 
   # TalkReq message is used as transport for uTP. It is assumed here that Portal
   # protocol messages were exchanged before sending uTP over discv5 data. This
@@ -56,8 +56,8 @@ type
     timeout: Moment
 
   ContentHandlerCallback* = proc(
-    stream: PortalStream, contentKeys: ContentKeysList, content: seq[byte])
-    {.gcsafe, raises: [Defect].}
+    stream: PortalStream, contentKeys: ContentKeysList,
+    content: seq[seq[byte]]) {.gcsafe, raises: [Defect].}
 
   PortalStream* = ref object
     transport: UtpDiscv5Protocol
@@ -77,7 +77,7 @@ type
     contentRequests: seq[ContentRequest]
     contentOffers: seq[ContentOffer]
     connectionTimeout: Duration
-    readTimeout*: Duration
+    contentReadTimeout*: Duration
     rng: ref BrHmacDrbgContext
     udata: pointer
     contentHandler: ContentHandlerCallback
@@ -177,7 +177,7 @@ proc connectTo*(
   let socket = socketRes.get()
   return ok(socket)
 
-proc writeAndClose(
+proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream,
     request: ContentRequest) {.async.} =
   let dataWritten =  await socket.write(request.content)
@@ -186,37 +186,97 @@ proc writeAndClose(
 
   await socket.closeWait()
 
-proc readAndClose(
+proc readVarint(socket: UtpSocket[NodeAddress]):
+    Future[Opt[uint32]] {.async.} =
+  var
+    buffer: array[5, byte]
+
+  for i in 0..<len(buffer):
+    let dataRead = await socket.read(1)
+    if dataRead.len() == 0:
+      return err()
+
+    buffer[i] = dataRead[0]
+
+    let (lenU32, bytesRead) = fromBytes(uint32, buffer.toOpenArray(0, i), Leb128)
+    if bytesRead > 0:
+      return ok(lenU32)
+    elif bytesRead == 0:
+      continue
+    else:
+      return err()
+
+proc readContentItem(socket: UtpSocket[NodeAddress]):
+    Future[Opt[seq[byte]]] {.async.} =
+  let len = await socket.readVarint()
+
+  if len.isOk():
+    let contentItem = await socket.read(len.get())
+    if contentItem.len() == len.get().int:
+      return ok(contentItem)
+    else:
+      return err()
+  else:
+    return err()
+
+proc readContentOffer(
     socket: UtpSocket[NodeAddress], stream: PortalStream,
     offer: ContentOffer) {.async.} =
-  # Read all bytes from the socket
-  # This will either end with a FIN, or because the read action times out.
-  # A FIN does not necessarily mean that the data read is complete. Further
-  # validation is required, using a length prefix here might be beneficial for
-  # this.
-  # TODO: Should also limit the amount of data to read and/or total time.
-  var readData = socket.read()
-  if await readData.withTimeout(stream.readTimeout):
-    let content = readData.read
-    if not stream.contentHandler.isNil():
-      stream.contentHandler(stream, offer.contentKeys, content)
+  # Read number of content items according to amount of ContentKeys accepted.
+  # This will either end with a FIN, or because the read action times out or
+  # because the number of expected items was read (if this happens and no FIN
+  # was received yet, a FIN will be send from this side).
+  # None of this means that the contentItems are valid, further validation is
+  # required.
+  # Socket will be closed when this call ends.
 
+  # TODO: Currently reading from the socket 1 item at a time, and validating
+  # items at later time. Uncertain what is best approach here (mostly from a
+  # security PoV), e.g. other options such as reading all content from socket at
+  # once, then processing the individual content items. Or reading and
+  # validating one per time.
+
+  let amount = offer.contentKeys.len()
+
+  var contentItems: seq[seq[byte]]
+  for i in 0..<amount:
+    let contentItemFut = socket.readContentItem()
+    if await contentItemFut.withTimeout(stream.contentReadTimeout):
+      let contentItem = contentItemFut.read
+
+      if contentItem.isOk():
+        contentItems.add(contentItem.get())
+      else:
+        # Invalid data, stop reading content, but still process data received
+        # so far.
+        debug "Reading content item failed, content offer failed"
+        break
+    else:
+      # Read timed out, stop further reading, but still process data received
+      # so far.
+      debug "Reading data from socket timed out, content offer failed"
+      break
+
+  if socket.atEof():
     # Destroy socket and not closing as we already received FIN. Closing would
     # send also a FIN from our side, see also:
     # https://github.com/status-im/nim-eth/blob/b2dab4be0839c95ca2564df9eacf81995bf57802/eth/utp/utp_socket.nim#L1223
     await socket.destroyWait()
   else:
-    debug "Reading data from socket timed out, content request failed"
-    # Even though reading timed out, lets be nice and still send a FIN.
+    # This means FIN didn't arrive yet, perhaps it got dropped but it might also
+    # be still in flight. Closing the socket (= sending FIN) ourselves.
     # Not waiting here for its ACK however, so no `closeWait`
     socket.close()
+
+  if not stream.contentHandler.isNil():
+    stream.contentHandler(stream, offer.contentKeys, contentItems)
 
 proc new*(
     T: type PortalStream,
     contentHandler: ContentHandlerCallback,
     udata: ref,
     connectionTimeout = defaultConnectionTimeout,
-    readTimeout = defaultReadTimeout,
+    contentReadTimeout = defaultContentReadTimeout,
     rng = newRng()): T =
   GC_ref(udata)
   let
@@ -224,7 +284,7 @@ proc new*(
       contentHandler: contentHandler,
       udata: cast[pointer](udata),
       connectionTimeout: connectionTimeout,
-      readTimeout: readTimeout,
+      contentReadTimeout: contentReadTimeout,
       rng: rng)
 
   stream
@@ -236,22 +296,22 @@ func setTransport*(stream: PortalStream, transport: UtpDiscv5Protocol) =
 proc registerIncomingSocketCallback*(
     streams: seq[PortalStream]): AcceptConnectionCallback[NodeAddress] =
   return (
-    proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
+    proc(server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]): Future[void] =
       for stream in streams:
         # Note: Connection id of uTP SYN is different from other packets, it is
         # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
         # other packets.
         for i, request in stream.contentRequests:
-          if request.connectionId == client.connectionId and
-              request.nodeId == client.remoteAddress.nodeId:
-            let fut = client.writeAndClose(stream, request)
+          if request.connectionId == socket.connectionId and
+              request.nodeId == socket.remoteAddress.nodeId:
+            let fut = socket.writeContentRequest(stream, request)
             stream.contentRequests.del(i)
             return fut
 
         for i, offer in stream.contentOffers:
-          if offer.connectionId == client.connectionId and
-              offer.nodeId == client.remoteAddress.nodeId:
-            let fut = client.readAndClose(stream, offer)
+          if offer.connectionId == socket.connectionId and
+              offer.nodeId == socket.remoteAddress.nodeId:
+            let fut = socket.readContentOffer(stream, offer)
             stream.contentOffers.del(i)
             return fut
 

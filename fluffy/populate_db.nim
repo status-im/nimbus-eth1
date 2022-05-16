@@ -185,7 +185,7 @@ proc historyPropagate*(
     while true:
       let (keys, content) = await gossipQueue.popFirst()
 
-      await p.neighborhoodGossip(keys, content)
+      await p.neighborhoodGossip(keys, @[content])
 
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))
@@ -230,7 +230,7 @@ proc historyPropagateBlock*(
       let contentId = history_content.toContentId(value[0])
       p.storeContent(contentId, value[1])
 
-      await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), value[1])
+      await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), @[value[1]])
 
     return ok()
   else:
