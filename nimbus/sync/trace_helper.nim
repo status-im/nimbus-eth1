@@ -42,6 +42,8 @@ template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
   if traceNetworkErrors: trace `msg`, `args`
 template tracePacketError*(msg: static[string], args: varargs[untyped]) =
   if tracePacketErrors: trace `msg`, `args`
+template traceIndividualNode*(msg: static[string], args: varargs[untyped]) =
+  if traceIndividualNodes: trace `msg`, `args`
 
 func toHex*(hash: Hash256): string =
   ## Shortcut for buteutils.toHex(hash.data)

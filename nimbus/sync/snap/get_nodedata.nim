@@ -102,24 +102,25 @@ proc hash(hash: ptr Hash256): Hash =
 proc `==`(hash1, hash2: ptr Hash256): bool =
   hash1[] == hash2[]
 
-# ---
+# ------------------------------------------------------------------------------
+# Private logging helpers
+# ------------------------------------------------------------------------------
 
 template pathRange(request: NodeDataRequest): string =
   pathRange(request.pathRange[0], request.pathRange[1])
 
 proc traceGetNodeDataSending(request: NodeDataRequest) =
-  traceSending "GetNodeData", peer=request.sp,
+  traceSendSending "GetNodeData", peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataDelaying(request: NodeDataRequest) =
-  traceDelaying "GetNodeData",  peer=request.sp,
+  traceSendDelaying "GetNodeData",  peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataSendError(request: NodeDataRequest,
                                e: ref CatchableError) =
-  traceRecvError "sending GetNodeData",
-    peer=request.sp, error=e.msg,
-    hashes=request.hashes.len, pathRange=request.pathRange
+  traceRecvError "sending GetNodeData", peer=request.sp,
+    error=e.msg, hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyError(request: NodeDataRequest,
                              e: ref CatchableError) =
@@ -128,7 +129,7 @@ proc traceNodeDataReplyError(request: NodeDataRequest,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyTimeout(request: NodeDataRequest) =
-  traceTimeoutWaiting "for reply to GetNodeData",
+  traceRecvTimeoutWaiting "for reply to GetNodeData",
     hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceGetNodeDataDisconnected(request: NodeDataRequest) =
@@ -139,16 +140,15 @@ proc traceNodeDataReplyEmpty(sp: SnapPeerEx, request: NodeDataRequest) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
-    traceGot "EMPTY NodeData", peer=sp,
-      got=0
+    traceRecvGot "EMPTY NodeData", peer=sp, got=0
   else:
-    traceGot "NodeData", peer=sp,
-      got=0, requested=request.hashes.len, pathRange=request.pathRange
+    traceRecvGot "NodeData", peer=sp, got=0,
+      requested=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyUnmatched(sp: SnapPeerEx, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
-  traceProtocolViolation "non-reply NodeData", peer=sp, got
-  debug "Sync: Warning: Unexpected non-reply NodeData from peer"
+  traceRecvProtocolViolation "non-reply NodeData", peer=sp, got
+  debug "Snap: Warning: Unexpected non-reply NodeData from peer"
 
 proc traceNodeDataReply(request: NodeDataRequest,
                         got, use, unmatched, other, duplicates: int) =
@@ -158,11 +158,11 @@ proc traceNodeDataReply(request: NodeDataRequest,
     logScope: pathRange=request.pathRange
     logScope: peer=request.sp
     if got > request.hashes.len and (unmatched + other) == 0:
-      traceGot "EXCESS reply NodeData"
+      traceRecvGot "EXCESS reply NodeData"
     elif got == request.hashes.len or use != got:
-      traceGot "reply NodeData"
+      traceRecvGot "reply NodeData"
     elif got < request.hashes.len:
-      traceGot "TRUNCATED reply NodeData"
+      traceRecvGot "TRUNCATED reply NodeData"
 
   if use != got:
     logScope:
@@ -173,18 +173,22 @@ proc traceNodeDataReply(request: NodeDataRequest,
       pathRange=request.pathRange
       peer=request.sp
     if unmatched > 0:
-      traceProtocolViolation "incorrect hashes in NodeData"
-      debug "Sync: Warning: NodeData has nodes with incorrect hashes"
+      traceRecvProtocolViolation "incorrect hashes in NodeData"
+      debug "Snap: Warning: NodeData has nodes with incorrect hashes"
     elif other > 0:
-      traceProtocolViolation "mixed request nodes in NodeData"
-      debug "Sync: Warning: NodeData has nodes from mixed requests"
+      traceRecvProtocolViolation "mixed request nodes in NodeData"
+      debug "Snap: Warning: NodeData has nodes from mixed requests"
     elif got > request.hashes.len:
       # Excess without unmatched/other is only possible with duplicates > 0.
-      traceProtocolViolation "excess nodes in NodeData"
-      debug "Sync: Warning: NodeData has more nodes than requested"
+      traceRecvProtocolViolation "excess nodes in NodeData"
+      debug "Snap: Warning: NodeData has more nodes than requested"
     else:
-      traceProtocolViolation "duplicate nodes in NodeData"
-      debug "Sync: Warning: NodeData has duplicate nodes"
+      traceRecvProtocolViolation "duplicate nodes in NodeData"
+      debug "Snap: Warning: NodeData has duplicate nodes"
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc nodeDataMatchRequest(rq: NodeDataRequestQueue, data: openArray[Blob],
                           reverseMap: var seq[int],
@@ -321,7 +325,7 @@ proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply,
     # Subtle: Timer can trigger and its callback be added to Chronos run loop,
     # then data event trigger and call `clearTimer()`.  The timer callback
     # will then run but it must be ignored.
-    debug "Sync: Warning: Resolved timer race over NodeData reply"
+    debug "Snap: Warning: Resolved timer race over NodeData reply"
   else:
     request.timer.clearTimer()
     request.future.complete(reply)
@@ -450,7 +454,9 @@ proc onNodeData(sp: SnapPeerEx, data: openArray[Blob]) =
   doAssert reply.hashVerifiedData.len == use
   request.nodeDataComplete(reply)
 
-# ------
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc getNodeData*(sp: SnapPeerEx, hashes: seq[NodeHash],
                   pathFrom, pathTo: InteriorPath): Future[NodeDataReply]
@@ -509,3 +515,7 @@ proc reverseMap*(reply: NodeDataReply, index: int): int =
   if index < reply.reverseMap.len: reply.reverseMap[index] - 1
   elif index < reply.hashVerifiedData.len: index
   else: -1
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

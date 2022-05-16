@@ -9,15 +9,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-template traceReceived*(msg: static[string], args: varargs[untyped]) =
+template traceRecvReceived*(msg: static[string], args: varargs[untyped]) =
   tracePacket "<< " & prettySnapProtoName & " Received " & msg,
     `args`
 
-template traceGot*(msg: static[string], args: varargs[untyped]) =
+template traceRecvGot*(msg: static[string], args: varargs[untyped]) =
   tracePacket "<< " & prettySnapProtoName & " Got " & msg,
     `args`
 
-template traceProtocolViolation*(msg: static[string], args: varargs[untyped]) =
+template traceRecvProtocolViolation*(msg: static[string], args: varargs[untyped]) =
   tracePacketError "<< " & prettySnapProtoName & " Protocol violation, " & msg,
     `args`
 
@@ -25,15 +25,15 @@ template traceRecvError*(msg: static[string], args: varargs[untyped]) =
   traceNetworkError "<< " & prettySnapProtoName & " Error " & msg,
     `args`
 
-template traceTimeoutWaiting*(msg: static[string], args: varargs[untyped]) =
+template traceRecvTimeoutWaiting*(msg: static[string], args: varargs[untyped]) =
   traceTimeout "<< " & prettySnapProtoName & " Timeout waiting " & msg,
     `args`
 
-template traceSending*(msg: static[string], args: varargs[untyped]) =
+template traceSendSending*(msg: static[string], args: varargs[untyped]) =
   tracePacket ">> " & prettySnapProtoName & " Sending " & msg,
     `args`
 
-template traceReplying*(msg: static[string], args: varargs[untyped]) =
+template traceSendReplying*(msg: static[string], args: varargs[untyped]) =
   tracePacket ">> " & prettySnapProtoName & " Replying " & msg,
     `args`
 

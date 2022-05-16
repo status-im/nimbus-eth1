@@ -298,11 +298,11 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      traceReceived "GetAccountRange (0x00)", peer,
+      traceRecvReceived "GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY AccountRange (0x01)", peer, sent=0
+      traceSendReplying "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -338,12 +338,12 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          traceReceived "GetStorageRanges/A (0x02)", peer,
+          traceRecvReceived "GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
             stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          traceReceived "GetStorageRanges/S (0x02)", peer,
+          traceRecvReceived "GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
@@ -351,12 +351,12 @@ p2pProtocol snap1(version = 1,
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          traceReceived "GetStorageRanges/AS?? (0x02)", peer,
+          traceRecvReceived "GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY StorageRanges (0x03)", peer, sent=0
+      traceSendReplying "EMPTY StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -368,10 +368,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, hashes: openArray[NodeHash],
                       responseBytes: uint64) =
-      traceReceived "GetByteCodes (0x04)", peer,
+      traceRecvReceived "GetByteCodes (0x04)", peer,
         hashes=hashes.len, responseBytes
 
-      traceReplying "EMPTY ByteCodes (0x05)", peer, sent=0
+      traceSendReplying "EMPTY ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -381,10 +381,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: TrieHash,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      traceReceived "GetTrieNodes (0x06)", peer,
+      traceRecvReceived "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      traceReplying "EMPTY TrieNodes (0x07)", peer, sent=0
+      traceSendReplying "EMPTY TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.

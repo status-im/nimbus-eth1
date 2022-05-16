@@ -194,9 +194,8 @@ proc getNodeData(fetch: FetchState,
                  hash: TrieHash, path: InteriorPath): Future[Blob] {.async.} =
   ## Request _one_ item of trie node data asynchronously.  This function
   ## batches requested into larger `eth.GetNodeData` requests efficiently.
-  if traceIndividualNodes:
-    trace "> Fetching individual NodeData", peer=fetch.sp,
-      depth=path.depth, path, hash=($hash)
+  traceIndividualNode "> Fetching individual NodeData", peer=fetch.sp,
+    depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
   fetch.nodeGetQueue.add(SingleNodeRequestEx(
@@ -214,15 +213,14 @@ proc getNodeData(fetch: FetchState,
   if tracePackets:
     doAssert nodeBytes.len == 0 or nodeBytes.toNodeHash == hash
 
-  if traceIndividualNodes:
-    if nodeBytes.len > 0:
-      trace "< Received individual NodeData", peer=fetch.sp,
-        depth=path.depth, path, hash=($hash),
-        nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-    else:
-      trace "< Received EMPTY individual NodeData", peer=fetch.sp,
-        depth=path.depth, path, hash=($hash),
-        nodeLen=nodeBytes.len
+  if nodeBytes.len > 0:
+    traceIndividualNode "< Received individual NodeData", peer=fetch.sp,
+      depth=path.depth, path, hash=($hash),
+      nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
+  else:
+    traceIndividualNode "< Received EMPTY individual NodeData", peer=fetch.sp,
+      depth=path.depth, path, hash=($hash),
+      nodeLen=nodeBytes.len
   return nodeBytes
 
 proc pathInRange(fetch: FetchState, path: InteriorPath): bool =

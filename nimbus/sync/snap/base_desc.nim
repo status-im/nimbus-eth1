@@ -63,7 +63,7 @@ type
     bestBlockHash*:         BlockHash
     huntLow*:               BlockNumber   ## Recent highest known present block.
     huntHigh*:              BlockNumber   ## Recent lowest known absent block.
-    huntStep*:              typeof(BlocksRequest.skip)
+    huntStep*:              typeof(BlocksRequest.skip) # aka uint
 
     # State root to fetch state for.
     # This changes during sync and is slightly different for each peer.
