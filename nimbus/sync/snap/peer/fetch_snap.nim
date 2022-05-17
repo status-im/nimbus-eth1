@@ -26,17 +26,18 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
-  stint,
+  #stint,
   "../.."/[protocol, protocol/pickeled_snap_tracers, trace_helper],
   ".."/[base_desc, path_desc, types],
-  "."/[common, peer_desc]
+  "."/[common, peer_xdesc]
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc snapFetch*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+proc fetchSnap*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
     {.async.} =
+  ## Fetch data using the `snap#` protocol
   var origin = leafRange.leafLow
   var limit = leafRange.leafHigh
   const responseBytes = 2 * 1024 * 1024
@@ -131,5 +132,7 @@ proc snapFetch*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
 
   sp.countAccounts(keepAccounts)
 
-proc peerSupportsSnap*(sp: SnapPeerEx): bool =
+proc fetchSnapOk*(sp: SnapPeerEx): bool =
+  ## Sort of getter: if `true`, fetching data using the `snap#` protocol
+  ## is supported.
   sp.ctrl.runState != SyncStopped and sp.peer.supports(snap)

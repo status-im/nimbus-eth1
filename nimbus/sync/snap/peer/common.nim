@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p],
   stint,
   ../path_desc,
-  "."/[peer_desc, sync_desc]
+  "."/[peer_xdesc, sync_xdesc]
 
 {.push raises: [Defect].}
 

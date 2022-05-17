@@ -27,8 +27,8 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   ../../trace_helper,
-  ".."/[base_desc, get_nodedata, path_desc, types, validate_trienode],
-  "."/[common, peer_desc, sync_desc]
+  ".."/[base_desc, path_desc, types],
+  "."/[common, reply_data, peer_xdesc, sync_xdesc, validate_trienode]
 
 {.push raises: [Defect].}
 
@@ -58,13 +58,15 @@ proc future(n: SingleNodeRequestBase): Future[Blob] =
 # Forward declaration.
 proc scheduleBatchGetNodeData(fetch: FetchState) {.gcsafe.}
 
-# ---
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
                          futures: seq[Future[Blob]],
                          pathFrom, pathTo: InteriorPath) {.async.} =
   inc fetch.nodeGetsInFlight
-  let reply = await fetch.sp.getNodeData(hashes, pathFrom, pathTo)
+  let reply = await fetch.sp.replyDataGet(hashes, pathFrom, pathTo)
 
   # Timeout, packet and packet error trace messages are done in `get_nodedata`,
   # where there is more context than here.  Here we always received just valid
@@ -85,7 +87,7 @@ proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
   else:
     # Non-empty reply.
     for i in 0 ..< futures.len:
-      let index = reply.reverseMap(i)
+      let index = reply.replyDataReverseMap(i)
       if index >= 0:
         futures[i].complete(reply.hashVerifiedData[index])
       else:
@@ -325,12 +327,16 @@ proc probeGetNodeData(sp: SnapPeerEx, stateRoot: TrieHash): Future[bool]
   #   send an empty reply.  We don't want to cut off a peer for other purposes
   #   such as a source of blocks and transactions, just because it doesn't
   #   reply to `GetNodeData`.
-  let reply = await sp.getNodeData(
+  let reply = await sp.replyDataGet(
     @[stateRoot.NodeHash], InteriorPath(), InteriorPath())
   return not reply.isNil and reply.hashVerifiedData.len == 1
 
-proc trieFetch*(sp: SnapPeerEx, stateRoot: TrieHash,
-                leafRange: LeafRange) {.async.} =
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc fetchTrie*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+    {.async.} =
   if sp.fetchState.isNil:
     sp.fetchState = FetchState(sp: sp)
   template fetch: auto = sp.fetchState
@@ -350,6 +356,10 @@ proc trieFetch*(sp: SnapPeerEx, stateRoot: TrieHash,
     sp.nsx.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
     sp.putSlice(leafRange)
 
-proc peerSupportsGetNodeData*(sp: SnapPeerEx): bool =
+proc fetchTrieOk*(sp: SnapPeerEx): bool =
   sp.ctrl.runState != SyncStopped and
    (sp.fetchState.isNil or sp.fetchState.getNodeDataErrors == 0)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

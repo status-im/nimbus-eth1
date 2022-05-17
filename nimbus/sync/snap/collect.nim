@@ -65,7 +65,8 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   ../../p2p/chain/chain_desc,
   ".."/[protocol, protocol/pickeled_eth_tracers, trace_helper],
-  "."/[base_desc, pie/peer_desc, pie/slicer, types]
+  "."/[base_desc, types],
+  ./peer/[reply_data, peer_xdesc, fetch]
 
 {.push raises: [Defect].}
 
@@ -197,7 +198,7 @@ proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
     sp.ctrl.runState = SyncRunningOK
     trace "Snap: Starting to download block state", peer=sp,
       thisBlock, stateRoot
-    asyncSpawn sp.stateFetch()
+    asyncSpawn sp.fetch()
 
 proc setHuntBackward(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
@@ -481,7 +482,7 @@ proc peerSyncChainRequest(sp: SnapPeerEx): BlocksRequest =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc peerHuntCanonical*(sp: SnapPeerEx) {.async.} =
+proc collectBlockHeaders*(sp: SnapPeerEx) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -537,6 +538,9 @@ proc peerHuntCanonical*(sp: SnapPeerEx) {.async.} =
     sp.peerSyncChainNonEmptyReply(request, reply.get.headers)
   else:
     sp.peerSyncChainEmptyReply(request)
+
+proc collectDataSetup*(sp: SnapPeerEx) =
+  sp.replyDataSetup
 
 # ------------------------------------------------------------------------------
 # End

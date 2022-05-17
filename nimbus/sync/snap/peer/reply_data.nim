@@ -68,8 +68,9 @@ import
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  ".."/[protocol, protocol/pickeled_eth_tracers],
-  "."/[base_desc, path_desc, pie/peer_desc, timer_helper, types]
+  "../.."/[protocol, protocol/pickeled_eth_tracers],
+  ".."/[base_desc, path_desc, timer_helper, types],
+  ./peer_xdesc
 
 type
   NodeDataRequest = ref object of NodeDataRequestBase
@@ -372,8 +373,8 @@ proc nodeDataNewRequest(sp: SnapPeerEx, hashes: seq[NodeHash],
   # TODO: Cache the time when making batches of requests, instead of calling
   # `Moment.fromNow()` which always does a system call.  `p2pProtocol` request
   # timeouts have the same issue (and is where we got 10 seconds default).
-#  request.timer = setTimer(Moment.fromNow(10.seconds),
-#                           nodeDataTimeout, cast[pointer](request))
+  #  request.timer = setTimer(Moment.fromNow(10.seconds),
+  #                           nodeDataTimeout, cast[pointer](request))
   request.timer = safeSetTimer(Moment.fromNow(10.seconds),
                                nodeDataTimeout, request)
   request.future = newFuture[NodeDataReply]()
@@ -458,7 +459,7 @@ proc onNodeData(sp: SnapPeerEx, data: openArray[Blob]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getNodeData*(sp: SnapPeerEx, hashes: seq[NodeHash],
+proc replyDataGet*(sp: SnapPeerEx, hashes: seq[NodeHash],
                   pathFrom, pathTo: InteriorPath): Future[NodeDataReply]
     {.async.} =
   ## Async function to send a `GetNodeData` request to a peer, and when the
@@ -493,7 +494,7 @@ proc getNodeData*(sp: SnapPeerEx, hashes: seq[NodeHash],
   # always received just valid data with hashes already verified, or `nil`.
   return reply
 
-proc setupGetNodeData*(sp: SnapPeerEx) =
+proc replyDataSetup*(sp: SnapPeerEx) =
   ## Initialise `SnapPeerEx` to support `GetNodeData` calls.
 
   if sp.nodeDataRequests.isNil:
@@ -509,7 +510,7 @@ proc setupGetNodeData*(sp: SnapPeerEx) =
       # ensure we don't reply with nodes from the chainDb.
       discard
 
-proc reverseMap*(reply: NodeDataReply, index: int): int =
+proc replyDataReverseMap*(reply: NodeDataReply, index: int): int =
   ## Given an index into the request hash list, return index into the reply
   ## `hashVerifiedData`, or -1 if there is no data for that request hash.
   if index < reply.reverseMap.len: reply.reverseMap[index] - 1

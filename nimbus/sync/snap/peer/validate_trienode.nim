@@ -31,9 +31,9 @@
 ## exception to `parseTrieNodeError` if it occurs.
 
 import
-  eth/[common/eth_types, p2p, rlp],
-  ../trace_helper,
-  "."/[base_desc, path_desc, types]
+  eth/[common/eth_types, p2p],
+  ../../trace_helper,
+  ".."/[base_desc, path_desc, types]
 
 {.push raises: [Defect].}
 

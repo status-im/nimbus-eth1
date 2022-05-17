@@ -12,12 +12,10 @@
 import
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, rlp],
-  eth/p2p/[peer_pool, private/p2p_types, rlpx],
-  stint,
+  eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   ./protocol,
-  ./snap/[base_desc, chain_head_tracker, get_nodedata, types],
-  ./snap/pie/[sync_desc, peer_desc]
+  ./snap/[base_desc, collect, types],
+  ./snap/peer/[sync_xdesc, peer_xdesc]
 
 {.push raises: [Defect].}
 
@@ -50,7 +48,7 @@ proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
 proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   while sp.ctrl.runState != SyncStopped:
-    await sp.peerHuntCanonical()
+    await sp.collectBlockHeaders()
     if sp.ctrl.runState == SyncStopped:
       return
     let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
@@ -70,7 +68,7 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Snap: Peer connected", peer
 
   let sp = SnapPeerEx.new(ns, peer)
-  sp.setupGetNodeData()
+  sp.collectDataSetup()
 
   if peer.state(eth).initialized:
     # We know the hash but not the block number.

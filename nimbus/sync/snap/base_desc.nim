@@ -56,12 +56,9 @@ type
 
   SnapPeerHunt* = tuple
     ## Peer canonical chain head ("best block") search state.
-    syncMode:   SnapPeerMode
-      ## Action mode
-    lowNumber:  BlockNumber
-      ## Recent lowest known block number.
-    highNumber: BlockNumber
-      ## Recent highest known block number.
+    syncMode:   SnapPeerMode   ## Action mode
+    lowNumber:  BlockNumber    ## Recent lowest known block number.
+    highNumber: BlockNumber    ## Recent highest known block number.
     bestNumber: BlockNumber
     bestHash:   BlockHash
     step:       uint
@@ -73,18 +70,15 @@ type
       ## slightly different for each peer.
     runState:    SnapPeerRunState
 
+  # -------
+
   SnapPeerBase* = ref object of RootObj
     ## Peer state tracking descriptor.
-    ns*: SnapSyncBase
-      ## Main snap descriptor object back reference
-    peer*: Peer
-      ## Object reference to eth p2pProtocol entry
-    stats*: SnapPeerStats
-      ## Statistics counters
-    hunt*: SnapPeerHunt
-      ## Peer chain head search state
-    ctrl*: SnapPeerCtrl
-      ## Control and state settings
+    ns*: SnapSyncBase      ## Main snap descriptor object back reference
+    peer*: Peer            ## Object reference to eth p2pProtocol entry
+    stats*: SnapPeerStats  ## Statistics counters
+    hunt*: SnapPeerHunt    ## Peer chain head search state
+    ctrl*: SnapPeerCtrl    ## Control and state settings
 
   SnapSyncBase* = ref object of RootObj
     ## Shared state among all peers of a snap syncing node.
@@ -101,9 +95,9 @@ proc new*(T: type SnapPeerHunt; syncMode: SnapPeerMode): T =
   result = (
     syncMode:   syncMode,
     lowNumber:  0.toBlockNumber.BlockNumber,
-    highNumber: high(BlockNumber).BlockNumber,
+    highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
     bestNumber: 0.toBlockNumber.BlockNumber,
-    bestHash:   ZERO_HASH256.BlockHash,
+    bestHash:   ZERO_HASH256.BlockHash,        # whatever
     step:       0u)
 
 # ------------------------------------------------------------------------------
