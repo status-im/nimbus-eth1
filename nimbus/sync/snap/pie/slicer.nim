@@ -16,29 +16,29 @@ import
   chronos,
   nimcrypto/keccak,
   stint,
-  eth/[common/eth_types, p2p, rlp],
-  ../../sync_types,
-  "."/[common, fetch_trie, fetch_snap]
+  eth/[common/eth_types, p2p],
+  ".."/[path_desc, base_desc, types],
+  "."/[common, fetch_trie, fetch_snap, peer_desc]
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
 # `peerSupportsSnap` where those are defined.
 
-proc stateFetch*(sp: SyncPeer) {.async.} =
+proc stateFetch*(sp: SnapPeerEx) {.async.} =
   var stateRoot = sp.syncStateRoot.get
-  trace "Sync: Syncing from stateRoot", peer=sp, stateRoot=($stateRoot)
+  trace "Snap: Syncing from stateRoot", peer=sp, stateRoot
 
   while true:
     if not sp.peerSupportsGetNodeData() and not sp.peerSupportsSnap():
-      trace "Sync: Cannot sync more from this peer", peer=sp
+      trace "Snap: Cannot sync more from this peer", peer=sp
       return
 
     if not sp.hasSlice():
-      trace "Sync: Nothing more to sync from this peer", peer=sp
+      trace "Snap: Nothing more to sync from this peer", peer=sp
       while not sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
     if sp.syncStateRoot.isNone:
-      trace "Sync: No current state root for this peer", peer=sp
+      trace "Snap: No current state root for this peer", peer=sp
       while sp.syncStateRoot.isNone and
             (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
             sp.hasSlice():
@@ -46,12 +46,12 @@ proc stateFetch*(sp: SyncPeer) {.async.} =
       continue
 
     if stateRoot != sp.syncStateRoot.get:
-      trace "Sync: Syncing from new stateRoot", peer=sp, stateRoot=($stateRoot)
+      trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.syncStateRoot.get
       sp.stopThisState = false
 
     if sp.stopThisState:
-      trace "Sync: Pausing sync until we get a new state root", peer=sp
+      trace "Snap: Pausing sync until we get a new state root", peer=sp
       while sp.syncStateRoot.isSome and stateRoot == sp.syncStateRoot.get and
             (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
             sp.hasSlice():
@@ -69,13 +69,11 @@ proc stateFetch*(sp: SyncPeer) {.async.} =
 
     if sp.peerSupportsSnap() and allowSnap:
       discard sp.getSlice(leafRange)
-      trace "Sync: snap.GetAccountRange segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot)
+      trace "Snap: snap.GetAccountRange segment", peer=sp,
+        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.snapFetch(stateRoot, leafRange)
     elif sp.peerSupportsGetNodeData():
       discard sp.getSlice(leafRange)
-      trace "Sync: eth.GetNodeData segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh),
-        stateRoot=($stateRoot)
+      trace "Snap: eth.GetNodeData segment", peer=sp,
+        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.trieFetch(stateRoot, leafRange)

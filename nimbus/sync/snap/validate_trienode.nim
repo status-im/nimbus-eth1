@@ -2,9 +2,12 @@
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## This module parses Ethereum hexary trie nodes from bytes received over the
 ## network.  The data is untrusted, and a non-canonical RLP encoding of the
@@ -27,11 +30,12 @@
 ## `try..except RlpError as e` outside its trie node parsing loop, and pass the
 ## exception to `parseTrieNodeError` if it occurs.
 
-{.push raises: [Defect].}
-
 import
-  eth/[common/eth_types, rlp, p2p],
-  ".."/[sync_types, trace_helper]
+  eth/[common/eth_types, p2p, rlp],
+  ../trace_helper,
+  "."/[base_desc, path_desc, types]
+
+{.push raises: [Defect].}
 
 type
   TrieNodeParseContext* = object
@@ -39,44 +43,46 @@ type
     leafQueue*:             seq[(LeafPath, NodeHash, Blob)]
     errors*:                int
 
+
+template read(rlp: var Rlp, T: type NodeHash): T =
+  rlp.read(Hash256).T
+
 template maybeHash(nodeHash: NodeHash, nodeBytes: Blob): string =
   if nodeBytes.len >= 32: $nodeHash else: "selfEncoded"
 
 proc combinePaths(nodePath, childPath: InteriorPath): string =
-  let nodeHex = nodePath.toHex(false)
-  let childHex = childPath.toHex(true)
+  let nodeHex = nodePath.toHex(withEllipsis = false)
+  let childHex = childPath.toHex(withEllipsis = true)
   nodeHex & "::" & childHex[nodeHex.len..^1]
 
 template leafError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, leafPath, nodePath, nodeHash, nodeBytes, context
   debug "Trie leaf data error: " & msg, peer=sp,
-    depth=nodePath.depth, leafDepth=leafPath.depth, `more`,
-    path=combinePaths(nodePath, leafPath),
-    hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth, leafDepth=leafPath.depth,
+    `more`, path=combinePaths(nodePath, leafPath),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template childError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, childPath, nodePath, nodeHash, nodeBytes, context
   debug "Trie data error: " & msg, peer=sp,
-    depth=nodePath.depth, childDepth=childPath.depth, `more`,
-    path=combinePaths(nodePath, childPath),
-    hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth, childDepth=childPath.depth,
+    `more`, path=combinePaths(nodePath, childPath),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
 template nodeError(msg: string{lit}, more: varargs[untyped]) =
   mixin sp, nodePath, nodeHash, nodeBytes, context
   debug "Trie data error: " & msg, peer=sp,
-    depth=nodePath.depth, `more`,
-    path=nodePath.toHex(true), hash=maybeHash(nodeHash, nodeBytes),
-    nodeLen=nodeBytes.len, nodeBytes=nodeBytes.toHex
-  echo inspect(rlpFromBytes(nodeBytes))
+    depth=nodePath.depth,
+    `more`, path=nodePath.toHex(withEllipsis = true),
+    hash=maybeHash(nodeHash, nodeBytes), nodeLen=nodeBytes.len, nodeBytes
+  #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
-proc parseLeafValue(sp: SyncPeer,
+proc parseLeafValue(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     nodeRlp: var Rlp, leafPath: InteriorPath,
                     context: var TrieNodeParseContext
@@ -113,17 +119,17 @@ proc parseLeafValue(sp: SyncPeer,
     trace "Trie: Account leaf found", peer=sp,
       path=combinePaths(nodePath, leafPath),
       nodeHash=maybeHash(nodeHash, nodeBytes),
-      leafLen, leafBytes=leafBytes.toHex
+      leafLen, leafBytes
 #    echo inspect(rlpFromBytes(leafBytes))
 
 # Forward declaration, used for bounded, rare recursion.
-proc parseTrieNode*(sp: SyncPeer,
+proc parseTrieNode*(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool,
                     context: var TrieNodeParseContext
                    ) {.gcsafe, raises: [Defect, RlpError].}
 
-proc parseExtensionChild(sp: SyncPeer,
+proc parseExtensionChild(sp: SnapPeerBase,
                          nodePath: InteriorPath, nodeHash: NodeHash,
                          nodeBytes: Blob, nodeRlp: var Rlp,
                          childPath: InteriorPath,
@@ -167,11 +173,11 @@ proc parseExtensionChild(sp: SyncPeer,
     # RLP can be < 32 bytes.  Because this is hard to test, let's make < 32
     # exit the program for now to see if any appear on Mainnet.
     doAssert childLen == 32
-    sp.parseTrieNode(childPath, NodeHash(), nodeRlp.toBytes, true, context)
+    sp.parseTrieNode(childPath, NodeHash.new, nodeRlp.toBytes, true, context)
   else:
     childError "Extension node child (RLP element 1) has length > 32 bytes"
 
-proc parseExtensionOrLeaf(sp: SyncPeer,
+proc parseExtensionOrLeaf(sp: SnapPeerBase,
                           nodePath: InteriorPath, nodeHash: NodeHash,
                           nodeBytes: Blob, nodeRlp: var Rlp,
                           fromExtension: bool,
@@ -205,11 +211,11 @@ proc parseExtensionOrLeaf(sp: SyncPeer,
   # nibble in the first byte must be zero.
   if (firstByte and (if oddLen == 0: 0xcf else: 0xc0)) != 0:
     if isLeaf != 0:
-      nodeError "Leaf node path suffix (RLP element 0) starts with invalid byte",
-        invalidByte=[firstByte].toHex
+      nodeError "Leaf node path suffix, RLP starts with invalid byte",
+        invalidByte=[firstByte]
     else:
-      nodeError "Extension node prefix (RLP element 0) starts with invalid byte",
-        invalidByte=[firstByte].toHex
+      nodeError "Extension node prefix RLP starts with invalid byte",
+        invalidByte=[firstByte]
     return
 
   # In the canonical trie encoding, an extension node's child is not allowed to
@@ -259,7 +265,7 @@ proc parseExtensionOrLeaf(sp: SyncPeer,
     sp.parseExtensionChild(nodePath, nodeHash, nodeBytes, nodeRlp,
                            childPath, context)
 
-proc parseBranchNode(sp: SyncPeer,
+proc parseBranchNode(sp: SnapPeerBase,
                      nodePath: InteriorPath, nodeHash: NodeHash,
                      nodeBytes: Blob, nodeRlp: var Rlp,
                      context: var TrieNodeParseContext
@@ -300,7 +306,7 @@ proc parseBranchNode(sp: SyncPeer,
       # RLP can be < 32 bytes.  Because this is hard to test, let's make < 32
       # exit the program for now to see if any appear on Mainnet.
       doAssert childLen == 32
-      sp.parseTrieNode(childPath, NodeHash(), nodeRlp.toBytes, false, context)
+      sp.parseTrieNode(childPath, NodeHash.new, nodeRlp.toBytes, false, context)
       nodeRlp.skipElem()
     else:
       childError "Branch node child (RLP element i in 0..15) has length > 32 bytes", i
@@ -333,7 +339,7 @@ proc parseBranchNode(sp: SyncPeer,
         branches=branchCount, minBranches=2
     return
 
-proc parseTrieNode*(sp: SyncPeer,
+proc parseTrieNode*(sp: SnapPeerBase,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool, context: var TrieNodeParseContext
                    ) {.raises: [Defect, RlpError].} =
@@ -369,7 +375,7 @@ proc parseTrieNode*(sp: SyncPeer,
   ##   root node of a trie, otherwise it is the value stored in `childQueue`
   ##   from parsing the parent node.
   ##
-  ## - The `sp: SyncPeer` is like the hash, only used for diagnostics.  When
+  ## - The `sp: SnapPeerBase` is like the hash, only used for diagnostics.  When
   ##   there is invalid data, it's useful to show where we got it from.
   ##
   ## - Some limited recursion is possible while parsing, because of how < 32
@@ -433,7 +439,7 @@ proc parseTrieNode*(sp: SyncPeer,
       listLen=nodeListLen
     return
 
-proc parseTrieNodeError*(sp: SyncPeer, nodePath: InteriorPath,
+proc parseTrieNodeError*(sp: SnapPeerBase, nodePath: InteriorPath,
                          nodeHash: NodeHash, nodeBytes: Blob,
                          context: var TrieNodeParseContext,
                          exception: ref RlpError) =

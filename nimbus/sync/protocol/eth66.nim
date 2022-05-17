@@ -36,10 +36,11 @@
 ## easily.  When the hooks aren't set, default behaviour applies.
 
 import
-  chronos, stint, chronicles, stew/byteutils, macros,
-  eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
-  ".."/[sync_types, trace_helper],
+  chronicles,
+  chronos,
+  eth/[common/eth_types, p2p, p2p/private/p2p_types, p2p/blockchain_utils],
+  stew/byteutils,
+  ".."/trace_helper,
   ./pickeled_eth_tracers
 
 export
@@ -51,7 +52,7 @@ export
 
 type
   NewBlockHashesAnnounce* = object
-    hash: BlockHash
+    hash: Hash256
     number: BlockNumber
 
   NewBlockAnnounce* = EthBlock
@@ -62,11 +63,11 @@ type
 
   PeerState* = ref object
     initialized*: bool
-    bestBlockHash*: BlockHash
+    bestBlockHash*: Hash256
     bestDifficulty*: DifficultyInt
 
     onGetNodeData*:
-      proc (peer: Peer, hashes: openArray[NodeHash],
+      proc (peer: Peer, hashes: openArray[Hash256],
             data: var seq[Blob]) {.gcsafe.}
     onNodeData*:
       proc (peer: Peer, data: openArray[Blob]) {.gcsafe.}
@@ -95,7 +96,7 @@ p2pProtocol eth66(version = ethVersion,
         forkHash: chainForkId.crc.toBytesBE,
         forkNext: chainForkId.nextFork.toBlockNumber)
 
-    traceSending "Status (0x00) " & prettyEthProtoName,
+    traceSendSending "Status (0x00) " & prettyEthProtoName,
       peer, td=bestBlock.difficulty,
       bestHash=bestBlock.blockHash.toHex,
       networkId=network.networkId,
@@ -140,25 +141,22 @@ p2pProtocol eth66(version = ethVersion,
                 ethVersionArg: uint,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
-                bestHash: BlockHash,
-                genesisHash: BlockHash,
+                bestHash: Hash256,
+                genesisHash: Hash256,
                 forkId: ForkId) =
-      traceReceived "Status (0x00)",
-         peer, td=totalDifficulty,
-         bestHash=bestHash.toHex,
-         networkId,
-         genesis=genesisHash.toHex,
+      traceRecvReceived "Status (0x00)",
+         peer, networkId, totalDifficulty, bestHash, genesisHash,
          forkHash=forkId.forkHash.toHex, forkNext=forkId.forkNext
 
   # User message 0x01: NewBlockHashes.
   proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
-    traceGossipDiscarding "NewBlockHashes (0x01)",
+    traceSendGossipDiscarding "NewBlockHashes (0x01)",
       peer, hashes=hashes.len
     discard
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
-    traceGossipDiscarding "Transactions (0x02)",
+    traceSendGossipDiscarding "Transactions (0x02)",
       peer, transactions=transactions.len
     discard
 
@@ -167,18 +165,18 @@ p2pProtocol eth66(version = ethVersion,
     proc getBlockHeaders(peer: Peer, request: BlocksRequest) =
       if tracePackets:
         if request.maxResults == 1 and request.startBlock.isHash:
-          traceReceived "GetBlockHeaders/Hash (0x03)",
+          traceRecvReceived "GetBlockHeaders/Hash (0x03)",
             peer, blockHash=($request.startBlock.hash), count=1
         elif request.maxResults == 1:
-          traceReceived "GetBlockHeaders (0x03)",
+          traceRecvReceived "GetBlockHeaders (0x03)",
             peer, `block`=request.startBlock.number, count=1
         elif request.startBlock.isHash:
-          traceReceived "GetBlockHeaders/Hash (0x03)",
+          traceRecvReceived "GetBlockHeaders/Hash (0x03)",
             peer, firstBlockHash=($request.startBlock.hash),
             count=request.maxResults,
             step=traceStep(request)
         else:
-          traceReceived "GetBlockHeaders (0x03)",
+          traceRecvReceived "GetBlockHeaders (0x03)",
             peer, firstBlock=request.startBlock.number,
             count=request.maxResults,
             step=traceStep(request)
@@ -191,10 +189,10 @@ p2pProtocol eth66(version = ethVersion,
 
       let headers = peer.network.chain.getBlockHeaders(request)
       if headers.len > 0:
-        traceReplying "with BlockHeaders (0x04)",
+        traceSendReplying "with BlockHeaders (0x04)",
           peer, sent=headers.len, requested=request.maxResults
       else:
-        traceReplying "EMPTY BlockHeaders (0x04)",
+        traceSendReplying "EMPTY BlockHeaders (0x04)",
           peer, sent=0, requested=request.maxResults
 
       await response.send(headers)
@@ -204,8 +202,8 @@ p2pProtocol eth66(version = ethVersion,
 
   requestResponse:
     # User message 0x05: GetBlockBodies.
-    proc getBlockBodies(peer: Peer, hashes: openArray[BlockHash]) =
-      traceReceived "GetBlockBodies (0x05)",
+    proc getBlockBodies(peer: Peer, hashes: openArray[Hash256]) =
+      traceRecvReceived "GetBlockBodies (0x05)",
         peer, hashes=hashes.len
       if hashes.len > maxBodiesFetch:
         debug "GetBlockBodies (0x05) requested too many bodies",
@@ -215,10 +213,10 @@ p2pProtocol eth66(version = ethVersion,
 
       let bodies = peer.network.chain.getBlockBodies(hashes)
       if bodies.len > 0:
-        traceReplying "with BlockBodies (0x06)",
+        traceSendReplying "with BlockBodies (0x06)",
           peer, sent=bodies.len, requested=hashes.len
       else:
-        traceReplying "EMPTY BlockBodies (0x06)",
+        traceSendReplying "EMPTY BlockBodies (0x06)",
           peer, sent=0, requested=hashes.len
 
       await response.send(bodies)
@@ -230,26 +228,26 @@ p2pProtocol eth66(version = ethVersion,
   proc newBlock(peer: Peer, bh: EthBlock, totalDifficulty: DifficultyInt) =
     # (Note, needs to use `EthBlock` instead of its alias `NewBlockAnnounce`
     # because either `p2pProtocol` or RLPx doesn't work with an alias.)
-    traceGossipDiscarding "NewBlock (0x07)",
+    traceSendGossipDiscarding "NewBlock (0x07)",
       peer, totalDifficulty,
       blockNumber = bh.header.blockNumber,
       blockDifficulty = bh.header.difficulty
     discard
 
   # User message 0x08: NewPooledTransactionHashes.
-  proc newPooledTransactionHashes(peer: Peer, hashes: openArray[TxHash]) =
-    traceGossipDiscarding "NewPooledTransactionHashes (0x08)",
-      peer, hashes=hashes.len
+  proc newPooledTransactionHashes(peer: Peer, txHashes: openArray[Hash256]) =
+    traceSendGossipDiscarding "NewPooledTransactionHashes (0x08)",
+      peer, hashes=txHashes.len
     discard
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
-    proc getPooledTransactions(peer: Peer, hashes: openArray[TxHash]) =
-      traceReceived "GetPooledTransactions (0x09)",
-         peer, hashes=hashes.len
+    proc getPooledTransactions(peer: Peer, txHashes: openArray[Hash256]) =
+      traceRecvReceived "GetPooledTransactions (0x09)",
+         peer, hashes=txHashes.len
 
-      traceReplying "EMPTY PooledTransactions (0x10)",
-         peer, sent=0, requested=hashes.len
+      traceSendReplying "EMPTY PooledTransactions (0x10)",
+         peer, sent=0, requested=txHashes.len
       await response.send([])
 
     # User message 0x0a: PooledTransactions.
@@ -258,22 +256,22 @@ p2pProtocol eth66(version = ethVersion,
   nextId 0x0d
 
   # User message 0x0d: GetNodeData.
-  proc getNodeData(peer: Peer, hashes: openArray[NodeHash]) =
-    traceReceived "GetNodeData (0x0d)", peer,
-      hashes=hashes.len
+  proc getNodeData(peer: Peer, nodeHashes: openArray[Hash256]) =
+    traceRecvReceived "GetNodeData (0x0d)", peer,
+      hashes=nodeHashes.len
 
     var data: seq[Blob]
     if not peer.state.onGetNodeData.isNil:
-      peer.state.onGetNodeData(peer, hashes, data)
+      peer.state.onGetNodeData(peer, nodeHashes, data)
     else:
-      data = peer.network.chain.getStorageNodes(hashes)
+      data = peer.network.chain.getStorageNodes(nodeHashes)
 
     if data.len > 0:
-      traceReplying "with NodeData (0x0e)", peer,
-        sent=data.len, requested=hashes.len
+      traceSendReplying "with NodeData (0x0e)", peer,
+        sent=data.len, requested=nodeHashes.len
     else:
-      traceReplying "EMPTY NodeData (0x0e)", peer,
-        sent=0, requested=hashes.len
+      traceSendReplying "EMPTY NodeData (0x0e)", peer,
+        sent=0, requested=nodeHashes.len
 
     await peer.nodeData(data)
 
@@ -284,17 +282,17 @@ p2pProtocol eth66(version = ethVersion,
       # know if this is a valid reply ("Got reply") or something else.
       peer.state.onNodeData(peer, data)
     else:
-      traceDiscarding "NodeData (0x0e)", peer,
+      traceSendDiscarding "NodeData (0x0e)", peer,
         bytes=data.len
 
   requestResponse:
     # User message 0x0f: GetReceipts.
-    proc getReceipts(peer: Peer, hashes: openArray[BlockHash]) =
-      traceReceived "GetReceipts (0x0f)",
-        peer, hashes=hashes.len
+    proc getReceipts(peer: Peer, hashes: openArray[Hash256]) =
+      traceRecvReceived "GetReceipts (0x0f)", peer,
+        hashes=hashes.len
 
-      traceReplying "EMPTY Receipts (0x10)",
-         peer, sent=0, requested=hashes.len
+      traceSendReplying "EMPTY Receipts (0x10)", peer,
+        sent=0, requested=hashes.len
       await response.send([])
       # TODO: implement `getReceipts` and reactivate this code
       # await response.send(peer.network.chain.getReceipts(hashes))

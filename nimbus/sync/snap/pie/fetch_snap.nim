@@ -24,18 +24,19 @@
 import
   std/sets,
   chronos,
-  eth/[common/eth_types, rlp, p2p],
+  eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  "../.."/[protocol, protocol/pickeled_snap_tracers, sync_types, trace_helper],
-  ./common
+  "../.."/[protocol, protocol/pickeled_snap_tracers, trace_helper],
+  ".."/[base_desc, path_desc, types],
+  "."/[common, peer_desc]
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
-                leafRange: LeafRange) {.async.} =
+proc snapFetch*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+    {.async.} =
   var origin = leafRange.leafLow
   var limit = leafRange.leafHigh
   const responseBytes = 2 * 1024 * 1024
@@ -47,15 +48,15 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
     sp.putSlice(leafRange)
 
   if tracePackets:
-    traceSending "GetAccountRange",
+    traceSendSending "GetAccountRange",
       accountRange=pathRange(origin, limit),
       stateRoot=($stateRoot), bytesLimit=snapRequestBytesLimit, peer=sp
 
-  var reply: typeof await sp.peer.getAccountRange(stateRoot, origin, limit,
-                                                  snapRequestBytesLimit)
+  var
+    reply: Option[accountRangeObj]
   try:
-    reply = await sp.peer.getAccountRange(stateRoot, origin, limit,
-                                          snapRequestBytesLimit)
+    reply = await sp.peer.getAccountRange(
+      stateRoot.untie, origin, limit, snapRequestBytesLimit)
   except CatchableError as e:
     traceRecvError "waiting for reply to GetAccountRange",
       peer=sp, error=e.msg
@@ -65,7 +66,7 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
     return
 
   if reply.isNone:
-    traceTimeoutWaiting "for reply to GetAccountRange",
+    traceRecvTimeoutWaiting "for reply to GetAccountRange",
       peer=sp
     sp.putSlice(leafRange)
     return
@@ -88,14 +89,14 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
     # This makes all the difference to terminating the fetch.  For now we'll
     # trust the mere existence of the proof rather than verifying it.
     if proof.len == 0:
-      traceGot "EMPTY reply AccountRange", peer=sp,
+      traceRecvGot "EMPTY reply AccountRange", peer=sp,
         got=len, proofLen=proof.len, gotRange="-",
         requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
       sp.putSlice(leafRange)
       # Don't keep retrying snap for this state.
       sp.stopThisState = true
     else:
-      traceGot "END reply AccountRange", peer=sp,
+      traceRecvGot "END reply AccountRange", peer=sp,
         got=len, proofLen=proof.len, gotRange=pathRange(origin, high(LeafPath)),
         requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
       # Current slicer can't accept more result data than was requested, so
@@ -104,14 +105,14 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
     return
 
   var lastPath = accounts[len-1].accHash
-  traceGot "reply AccountRange", peer=sp,
+  traceRecvGot "reply AccountRange", peer=sp,
     got=len, proofLen=proof.len, gotRange=pathRange(origin, lastPath),
     requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
 
   # Missing proof isn't allowed, unless `origin` is min path in which case
   # there might be no proof if the result spans the entire range.
   if proof.len == 0 and origin != low(LeafPath):
-    traceProtocolViolation "missing proof in AccountRange",
+    traceRecvProtocolViolation "missing proof in AccountRange",
       peer=sp, got=len, proofLen=proof.len, gotRange=pathRange(origin,lastPath),
       requestedRange=pathRange(origin, limit), stateRoot=($stateRoot)
     sp.putSlice(leafRange)
@@ -133,5 +134,5 @@ proc snapFetch*(sp: SyncPeer, stateRoot: TrieHash,
 
   sp.countAccounts(keepAccounts)
 
-proc peerSupportsSnap*(sp: SyncPeer): bool =
+proc peerSupportsSnap*(sp: SnapPeerEx): bool =
   not sp.stopped and sp.peer.supports(snap)
