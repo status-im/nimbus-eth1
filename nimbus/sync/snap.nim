@@ -38,16 +38,10 @@ proc fetchPeerDesc(ns: SnapSyncCtx, peer: Peer): SnapPeerEx =
       return
 
 proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
-  T(
-    ns:              ns,
-    peer:            peer,
-    stopped:         false,
-    # Initial state: hunt forward, maximum uncertainty range.
-    syncMode:        SyncHuntForward,
-    huntLow:         0.toBlockNumber,
-    huntHigh:        high(BlockNumber),
-    huntStep:        0,
-    bestBlockNumber: 0.toBlockNumber)
+  # Initial state: hunt forward, maximum uncertainty range.
+  T(ns:   ns,
+    peer: peer,
+    hunt: SnapPeerHunt.new(SyncHuntForward))
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -55,11 +49,11 @@ proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
 
 proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
-  while not sp.stopped:
+  while sp.ctrl.runState != SyncStopped:
     await sp.peerHuntCanonical()
-    if sp.stopped:
+    if sp.ctrl.runState == SyncStopped:
       return
-    let delayMs = if sp.syncMode == SyncLocked: 1000 else: 50
+    let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
@@ -67,7 +61,7 @@ proc syncPeerStart(sp: SnapPeerEx) =
   asyncSpawn sp.syncPeerLoop()
 
 proc syncPeerStop(sp: SnapPeerEx) =
-  sp.stopped = true
+  sp.ctrl.runState = SyncStopped
   # TODO: Cancel running `SnapPeerEx` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
@@ -80,7 +74,7 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
 
   if peer.state(eth).initialized:
     # We know the hash but not the block number.
-    sp.bestBlockHash = peer.state(eth).bestBlockHash.BlockHash
+    sp.hunt.bestHash = peer.state(eth).bestBlockHash.BlockHash
     # TODO: Temporarily disabled because it's useful to test the head hunter.
     # sp.syncMode = SyncOnlyHash
   else:

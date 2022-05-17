@@ -24,7 +24,7 @@ import
 # `peerSupportsSnap` where those are defined.
 
 proc stateFetch*(sp: SnapPeerEx) {.async.} =
-  var stateRoot = sp.syncStateRoot.get
+  var stateRoot = sp.ctrl.stateRoot.get
   trace "Snap: Syncing from stateRoot", peer=sp, stateRoot
 
   while true:
@@ -37,22 +37,22 @@ proc stateFetch*(sp: SnapPeerEx) {.async.} =
       while not sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
-    if sp.syncStateRoot.isNone:
+    if sp.ctrl.stateRoot.isNone:
       trace "Snap: No current state root for this peer", peer=sp
-      while sp.syncStateRoot.isNone and
+      while sp.ctrl.stateRoot.isNone and
             (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    if stateRoot != sp.syncStateRoot.get:
+    if stateRoot != sp.ctrl.stateRoot.get:
       trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot
-      stateRoot = sp.syncStateRoot.get
-      sp.stopThisState = false
+      stateRoot = sp.ctrl.stateRoot.get
+      sp.ctrl.runState = SyncRunningOK
 
-    if sp.stopThisState:
+    if sp.ctrl.runState == SyncStopRequest:
       trace "Snap: Pausing sync until we get a new state root", peer=sp
-      while sp.syncStateRoot.isSome and stateRoot == sp.syncStateRoot.get and
+      while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
             (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.

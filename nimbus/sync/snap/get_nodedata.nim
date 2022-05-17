@@ -383,7 +383,7 @@ proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
   ## Helper function to send an `eth.GetNodeData` request.
   ## But not when we're draining the in flight queue to match empty replies.
   let sp = request.sp
-  if sp.stopped:
+  if sp.ctrl.runState == SyncStopped:
     request.traceGetNodeDataDisconnected()
     request.future.complete(nil)
     return
@@ -403,7 +403,7 @@ proc nodeDataEnqueueAndSend(request: NodeDataRequest) {.async.} =
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors
-    sp.stopped = true
+    sp.ctrl.runState = SyncStopped
     request.future.fail(e)
 
 proc onNodeData(sp: SnapPeerEx, data: openArray[Blob]) =
@@ -486,7 +486,7 @@ proc getNodeData*(sp: SnapPeerEx, hashes: seq[NodeHash],
   except CatchableError as e:
     request.traceNodeDataReplyError(e)
     inc sp.stats.major.networkErrors
-    sp.stopped = true
+    sp.ctrl.runState = SyncStopped
     return nil
   # Timeout, packet and packet error trace messages are done in `onNodeData`
   # and `nodeDataTimeout`, where there is more context than here.  Here we

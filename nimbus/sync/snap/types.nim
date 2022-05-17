@@ -69,6 +69,9 @@ proc `==`*(a,b: BlockHash): bool {.borrow.}
 proc toNodeHash*(data: Blob): NodeHash =
   keccak256.digest(data).NodeHash
 
+proc toHashOrNum*(bh: BlockHash): HashOrNum =
+  HashOrNum(isHash: true, hash: bh.Hash256)
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------

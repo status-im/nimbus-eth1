@@ -71,15 +71,17 @@ proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
   # data with hashes already verified, or empty list of `nil`.
   if reply.isNil:
     # Timeout or error.
-    fetch.sp.stopThisState = true
+    fetch.sp.ctrl.runState = SyncStopRequest
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
+
   elif reply.hashVerifiedData.len == 0:
     # Empty reply, matched to request.
     # It means there are none of the nodes available, but it's not an error.
-    fetch.sp.stopThisState = true
+    fetch.sp.ctrl.runState = SyncStopRequest
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
+
   else:
     # Non-empty reply.
     for i in 0 ..< futures.len:
@@ -148,7 +150,7 @@ proc batchGetNodeData(fetch: FetchState) =
   trace "Trie: Sort length", sortLen=i
 
   # If stopped, abort all waiting nodes, so they clean up.
-  if fetch.sp.stopThisState or fetch.sp.stopped:
+  if fetch.sp.ctrl.runState != SyncRunningOk:
     while i > 0:
       fetch.nodeGetQueue[i].future.complete(@[])
       dec i
@@ -205,7 +207,7 @@ proc getNodeData(fetch: FetchState,
     fetch.scheduleBatchGetNodeData()
   let nodeBytes = await future
 
-  if fetch.sp.stopThisState or fetch.sp.stopped:
+  if fetch.sp.ctrl.runState != SyncRunningOk:
     return nodebytes
 
   if tracePackets:
@@ -238,20 +240,20 @@ proc pathInRange(fetch: FetchState, path: InteriorPath): bool =
 proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
               fromExtension: bool) {.async.} =
   template errorReturn() =
-    fetch.sp.stopThisState = true
+    fetch.sp.ctrl.runState = SyncStopRequest
     dec fetch.nodesInFlight
     if fetch.nodesInFlight == 0:
       fetch.finish.complete()
     return
 
   # If something triggered stop earlier, don't request, and clean up now.
-  if fetch.sp.stopThisState or fetch.sp.stopped:
+  if fetch.sp.ctrl.runState != SyncRunningOk:
     errorReturn()
 
   let nodeBytes = await fetch.getNodeData(hash.TrieHash, path)
 
   # If something triggered stop, clean up now.
-  if fetch.sp.stopThisState or fetch.sp.stopped:
+  if fetch.sp.ctrl.runState != SyncRunningOk:
     errorReturn()
   # Don't keep emitting error messages after one error.  We'll allow 10.
   if fetch.getNodeDataErrors >= 10:
@@ -349,5 +351,5 @@ proc trieFetch*(sp: SnapPeerEx, stateRoot: TrieHash,
     sp.putSlice(leafRange)
 
 proc peerSupportsGetNodeData*(sp: SnapPeerEx): bool =
-  template fetch(sp): FetchState = sp.fetchState
-  not sp.stopped and (sp.fetch.isNil or sp.fetch.getNodeDataErrors == 0)
+  sp.ctrl.runState != SyncStopped and
+   (sp.fetchState.isNil or sp.fetchState.getNodeDataErrors == 0)
