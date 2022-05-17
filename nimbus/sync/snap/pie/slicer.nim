@@ -72,6 +72,7 @@ proc stateFetch*(sp: SnapPeerEx) {.async.} =
       trace "Snap: snap.GetAccountRange segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.snapFetch(stateRoot, leafRange)
+
     elif sp.peerSupportsGetNodeData():
       discard sp.getSlice(leafRange)
       trace "Snap: eth.GetNodeData segment", peer=sp,

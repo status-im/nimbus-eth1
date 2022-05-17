@@ -72,7 +72,6 @@ type
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
     runState:    SnapPeerRunState
-    pendingGetBlockHeaders: bool
 
   SnapPeerBase* = ref object of RootObj
     ## Peer state tracking descriptor.

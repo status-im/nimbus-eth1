@@ -112,26 +112,31 @@ static:
   doAssert syncHuntForwardExpandShift >= 1 and syncHuntForwardExpandShift <= 8
   doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
 
+  # Make sure that request/response wire protocol messages are id-tracked and
+  # would not overlap (no multi-protocol legacy support)
+  doAssert 66 <= protocol.ethVersion
+
 # ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-proc traceSyncLocked(sp: SnapPeerEx, bestNumber: BlockNumber,
-                     bestHash: BlockHash) =
+proc traceSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
   ## Trace messages when peer canonical head is confirmed or updated.
-  let bestBlock = sp.ns.pp(bestHash,bestNumber)
+  let
+    bestBlock = sp.ns.pp(hash, number)
+    peer = $sp
   if sp.hunt.syncMode != SyncLocked:
-    debug "Snap: Now tracking chain head of peer", peer=sp, bestBlock
-  elif bestNumber > sp.hunt.bestNumber:
-    if bestNumber == sp.hunt.bestNumber + 1:
-      debug "Snap: Peer chain head advanced one block", peer=sp,
+    debug "Snap: Now tracking chain head of peer", peer, bestBlock
+  elif number > sp.hunt.bestNumber:
+    if number == sp.hunt.bestNumber + 1:
+      debug "Snap: Peer chain head advanced one block", peer,
        advance=1, bestBlock
     else:
-      debug "Snap: Peer chain head advanced some blocks", peer=sp,
-        advance=(sp.hunt.bestNumber - bestNumber), bestBlock
-  elif bestNumber < sp.hunt.bestNumber or bestHash != sp.hunt.bestHash:
-    debug "Snap: Peer chain head reorg detected", peer=sp,
-      advance=(sp.hunt.bestNumber - bestNumber), bestBlock
+      debug "Snap: Peer chain head advanced some blocks", peer,
+        advance=(sp.hunt.bestNumber - number), bestBlock
+  elif number < sp.hunt.bestNumber or hash != sp.hunt.bestHash:
+    debug "Snap: Peer chain head reorg detected", peer,
+      advance=(sp.hunt.bestNumber - number), bestBlock
 
 # proc peerSyncChainTrace(sp: SnapPeerEx) =
 #   ## To be called after `peerSyncChainRequest` has updated state.
@@ -162,14 +167,23 @@ proc traceSyncLocked(sp: SnapPeerEx, bestNumber: BlockNumber,
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc setSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
+  ## Actions to take when peer canonical head is confirmed or updated.
+  sp.traceSyncLocked(number, hash)
+  sp.hunt.bestNumber = number
+  sp.hunt.bestHash = hash
+  sp.hunt.syncMode = SyncLocked
+
 proc clearSyncStateRoot(sp: SnapPeerEx) =
   if sp.ctrl.stateRoot.isSome:
     debug "Snap: Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
-proc setSyncStateRoot(sp: SnapPeerEx, blockNumber: BlockNumber,
-                      blockHash: BlockHash, stateRoot: TrieHash) =
-  let thisBlock = sp.ns.pp(blockHash,blockNumber)
+proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
+                       stateRoot: TrieHash) =
+  sp.setSyncLocked(number, hash)
+
+  let thisBlock = sp.ns.pp(hash, number)
   if sp.ctrl.stateRoot.isNone:
     debug "Snap: Starting state sync from this peer", peer=sp,
       thisBlock, stateRoot
@@ -184,14 +198,6 @@ proc setSyncStateRoot(sp: SnapPeerEx, blockNumber: BlockNumber,
     trace "Snap: Starting to download block state", peer=sp,
       thisBlock, stateRoot
     asyncSpawn sp.stateFetch()
-
-proc setSyncLocked(sp: SnapPeerEx, bestNumber: BlockNumber,
-                   bestHash: BlockHash) =
-  ## Actions to take when peer canonical head is confirmed or updated.
-  sp.traceSyncLocked(bestNumber, bestHash)
-  sp.hunt.bestNumber = bestNumber
-  sp.hunt.bestHash = bestHash
-  sp.hunt.syncMode = SyncLocked
 
 proc setHuntBackward(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
@@ -242,14 +248,13 @@ proc peerSyncChainEmptyReply(sp: SnapPeerEx, request: BlocksRequest) =
   # Treat empty response to a request starting from block 1 as equivalent to
   # length 1 starting from block 0 in `peerSyncChainNonEmptyReply`.  We treat
   # every peer as if it would send genesis for block 0, without asking for it.
-  if request.skip == 0 and not request.reverse and
+  if request.skip == 0 and
+     not request.reverse and
      not request.startBlock.isHash and
      request.startBlock.number == 1.toBlockNumber:
-    sp.setSyncLocked(0.toBlockNumber,
-                     sp.peer.network.chain.genesisHash.BlockHash)
-    sp.setSyncStateRoot(0.toBlockNumber,
-                        sp.peer.network.chain.genesisHash.BlockHash,
-                        sp.peer.network.chain.Chain.genesisStateRoot.TrieHash)
+    sp.lockSyncStateRoot(0.toBlockNumber,
+                         sp.peer.network.chain.genesisHash.BlockHash,
+                         sp.peer.network.chain.Chain.genesisStateRoot.TrieHash)
     return
 
   if sp.hunt.syncMode == SyncLocked or sp.hunt.syncMode == SyncOnlyHash:
@@ -304,10 +309,9 @@ proc peerSyncChainNonEmptyReply(sp: SnapPeerEx, request: BlocksRequest,
   if len < syncLockedMinimumReply and
      request.skip == 0 and not request.reverse and
      len.uint < request.maxResults:
-    let blockHash = headers[highestIndex].blockHash.BlockHash
-    sp.setSyncLocked(headers[highestIndex].blockNumber, blockHash)
-    sp.setSyncStateRoot(headers[highestIndex].blockNumber, blockHash,
-                        headers[highestIndex].stateRoot.TrieHash)
+    sp.lockSyncStateRoot(headers[highestIndex].blockNumber,
+                         headers[highestIndex].blockHash.BlockHash,
+                         headers[highestIndex].stateRoot.TrieHash)
     return
 
   # Be careful, this number is from externally supplied data and arithmetic
@@ -489,15 +493,6 @@ proc peerHuntCanonical*(sp: SnapPeerEx) {.async.} =
   ## All replies to this query are part of the peer's canonical chain at the
   ## time the peer sends them.
 
-  # If we send multiple `GetBlockHeaders` requests, the replies can be out of
-  # order, and prior to eth/66 there is no request-id.  We'll avoid this
-  # problem by never sending overlapping `GetBlockHeaders` to the same peer.
-  if sp.ctrl.pendingGetBlockHeaders:
-    #trace ">| Blocked overlapping eth.GetBlockHeaders (0x03)", peer=sp
-    await sleepAsync(chronos.milliseconds(500))
-    return
-  sp.ctrl.pendingGetBlockHeaders = true
-
   let request = sp.peerSyncChainRequest
 
   traceSendSending "GetBlockHeaders", peer=sp, count=request.maxResults,
@@ -529,8 +524,6 @@ proc peerHuntCanonical*(sp: SnapPeerEx) {.async.} =
       requested=request.maxResults,
       firstBlock=reply.get.headers[0].blockNumber,
       lastBlock=reply.get.headers[^1].blockNumber
-
-  sp.ctrl.pendingGetBlockHeaders = false
 
   if request.maxResults.int < nHeaders:
     traceRecvProtocolViolation "excess headers in BlockHeaders",
