@@ -62,6 +62,7 @@ type
     of DbPruned:
       furthestStoredElementDistance*: UInt256
       fractionOfDeletedContent*: float64
+      numOfDeletedElements*: int64
 
 # Objects must be sorted from largest to closest distance
 proc `<`(a, b: ObjInfo): bool =
@@ -212,7 +213,7 @@ proc del*(db: ContentDB, key: ContentId) =
 proc deleteFractionOfContent(
   db: ContentDB, 
   target: Uint256,
-  targetFraction: float64): (UInt256, int64, int64) = 
+  targetFraction: float64): (UInt256, int64, int64, int64) =
   ## Procedure which tries to delete fraction of database by scanning maxObjPerScan
   ## furthest elements.
   ## If the maxObjPerScan furthest elements, is not enough to attain required fraction
@@ -224,10 +225,11 @@ proc deleteFractionOfContent(
   var bytesDeleted: int64 = 0
   let bytesToDelete = int64(targetFraction * float64(totalContentSize))
   let numOfElements = len(furthestElements)
+  var numOfDeletedElements: int64 = 0
 
   if numOfElements == 0:
     # no elements in database, return some zero value
-    return (UInt256.zero, 0'i64, 0'i64)
+    return (UInt256.zero, 0'i64, 0'i64, 0'i64)
 
   let lastIdx = len(furthestElements) - 1
 
@@ -235,19 +237,20 @@ proc deleteFractionOfContent(
     if i == lastIdx:
       # this is our last element, do not delete it and report it as last non deleted
       # element
-      return (elem.distFrom, bytesDeleted, totalContentSize)
+      return (elem.distFrom, bytesDeleted, totalContentSize, numOfDeletedElements)
     
     if bytesDeleted + elem.payloadLength < bytesToDelete:
       db.del(elem.contentId)
       bytesDeleted = bytesDeleted + elem.payloadLength
+      inc numOfDeletedElements
     else:
-      return (elem.distFrom, bytesDeleted, totalContentSize)
+      return (elem.distFrom, bytesDeleted, totalContentSize, numOfDeletedElements)
 
 proc put*(
   db: ContentDB, 
   key: ContentId, 
   value: openArray[byte],
-  target: UInt256): PutResult = 
+  target: UInt256): PutResult =
 
   db.put(key, value)
 
@@ -257,7 +260,12 @@ proc put*(
     return PutResult(kind: ContentStored)
   else:
     # TODO Add some configuration for this magic number
-    let (furthestNonDeletedElement, deletedBytes, totalContentSize) = 
+    let (
+      furthestNonDeletedElement,
+      deletedBytes,
+      totalContentSize,
+      deletedElements
+    ) =
       db.deleteFractionOfContent(target, 0.25)
 
     let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
@@ -267,4 +275,5 @@ proc put*(
     return PutResult(
       kind: DbPruned,
       furthestStoredElementDistance: furthestNonDeletedElement,
-      fractionOfDeletedContent: deletedFraction)
+      fractionOfDeletedContent: deletedFraction,
+      numOfDeletedElements: deletedElements)

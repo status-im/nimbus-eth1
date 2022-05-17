@@ -182,6 +182,7 @@ suite "Content Database":
       pr10.kind == DbPruned
 
     check:
+      pr10.numOfDeletedElements == 2
       uint32(db.size()) < maxDbSize
       # With current settings 2 furthers elements will be delted i.e 30 and 40
       # so the furthest non deleted one will be 20

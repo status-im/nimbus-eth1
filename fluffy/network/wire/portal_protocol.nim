@@ -79,6 +79,14 @@ declareHistogram portal_content_enrs_packed,
   "Portal wire protocol amount of enrs packed in a content message",
   labels = ["protocol_id"], buckets = enrsBuckets
 
+declareCounter portal_pruning_counter,
+  "Number of pruning event which happened during node lifetime",
+  labels = ["protocol_id"]
+
+declareGauge portal_pruning_deleted_elements,
+  "Number of elements delted in last pruning",
+  labels = ["protocol_id"]
+
 logScope:
   topics = "portal_wire"
 
@@ -436,7 +444,6 @@ proc getInitialRadius(rc: RadiusConfig): UInt256 =
     # Alternative would be to store node the radius in database, and initialize it
     # from database after a restart
     return UInt256.high()
-
 
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
@@ -1133,6 +1140,12 @@ proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) 
       # radius to store network fraction corresponding to those storage limits.
       let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
       if res.kind == DbPruned:
+        portal_pruning_counter.inc(labelValues = [$p.protocolId])
+        portal_pruning_deleted_elements.set(
+          res.numOfDeletedElements.int64,
+          labelValues = [$p.protocolId]
+        )
+
         p.adjustRadius(
           res.fractionOfDeletedContent,
           res.furthestStoredElementDistance
