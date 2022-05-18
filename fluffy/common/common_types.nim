@@ -9,14 +9,15 @@
 
 import
   ssz_serialization/types,
-  stew/byteutils
+  stew/byteutils, nimcrypto/hash
 
 type
   ByteList* = List[byte, 2048]
   Bytes2* = array[2, byte]
   Bytes32* = array[32, byte]
 
-  ContentId* = Uint256
+  ContentId* = UInt256
+  BlockHash* = MDigest[32 * 8] # Bytes32
 
 func `$`*(x: ByteList): string =
   x.asSeq.toHex()

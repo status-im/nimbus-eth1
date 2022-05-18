@@ -15,6 +15,8 @@ import
   ./network/wire/portal_protocol,
   ./network/history/history_content
 
+export results
+
 # Helper calls to, offline, populate the database with the current existing json
 # files with block data. Might move to some other storage format later on.
 # Perhaps https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
@@ -137,6 +139,22 @@ iterator blocks*(
     else:
       error "Failed reading block from block data", error = res.error
 
+proc readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
+  var rlp =
+    try:
+      rlpFromHex(blockData.rlp)
+    except ValueError as e:
+      return err("Invalid hex for rlp block data, number " &
+        $blockData.number & ": " & e.msg)
+
+  if rlp.enterList():
+    try:
+      return ok(rlp.read(BlockHeader))
+    except RlpError as e:
+      return err("Invalid header, number " & $blockData.number & ": " & e.msg)
+  else:
+    return err("Item is not a valid rlp list, number " & $blockData.number)
+
 # TODO pass nodeid as uint256 so it will be possible to use put method which
 # preserves size
 proc populateHistoryDb*(
@@ -146,7 +164,7 @@ proc populateHistoryDb*(
   for b in blocks(blockData, verify):
     for value in b:
       # Note: This is the slowest part due to the hashing that takes place.
-      # TODO use put method which preserves size 
+      # TODO use put method which preserves size
       db.put(history_content.toContentId(value[0]), value[1])
 
   ok()
