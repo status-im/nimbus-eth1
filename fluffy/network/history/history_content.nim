@@ -23,8 +23,6 @@ type
     blockBody = 0x01
     receipts = 0x02
 
-  BlockHash* = MDigest[32 * 8] # Bytes32
-
   ContentKeyType* = object
     chainId*: uint16
     blockHash*: BlockHash
