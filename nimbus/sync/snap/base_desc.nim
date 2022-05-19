@@ -84,8 +84,6 @@ type
     ## Shared state among all peers of a snap syncing node.
     seenBlock: KeyedQueue[array[32,byte],BlockNumber]
       ## Temporary for pretty debugging, BlockHash keyed lru cache
-    syncPeers*: seq[SnapPeerBase]
-      ## Peer state tracking
 
 # ------------------------------------------------------------------------------
 # Public Constructor
@@ -139,6 +137,25 @@ proc seen*(sn: SnapSyncBase; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
   if not sn.seenBlock.lruFetch(bh.untie.data).isOk:
     discard sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+
+# -----------
+
+import
+  ../../../tests/replay/pp_light
+
+proc pp*(bh: BlockHash): string =
+  bh.Hash256.pp
+
+proc pp*(bn: BlockNumber): string =
+  if bn == high(BlockNumber): "#max"
+  else: "#" & $bn
+
+proc pp*(sp: SnapPeerHunt): string =
+  result &= "(mode=" & $sp.syncMode
+  result &= ",num=(" & sp.lowNumber.pp & "," & sp.highNumber.pp & ")"
+  result &= ",best=(" & sp.bestNumber.pp & "," & sp.bestHash.pp & ")"
+  result &= ",step=" & $sp.step
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # End

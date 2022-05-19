@@ -137,7 +137,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Early-initialise "--snap-sync" before starting any network connections.
   if ProtocolFlag.Eth in protocols and conf.snapSync:
-    SnapSyncCtx.new(nimbus.ethNode).start
+    SnapSyncCtx.new(nimbus.ethNode, conf.maxPeers).start
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
