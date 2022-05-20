@@ -10,7 +10,7 @@ import
   ./forks, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
-export common_transaction
+export common_transaction, errors
 
 func intrinsicGas*(data: openArray[byte], fork: Fork): GasInt =
   result = gasFees[fork][GasTransaction]

@@ -1,5 +1,5 @@
 import
-  hexstrings, options, eth/[common, keys, rlp], json
+  hexstrings, options, eth/[common, rlp], json
 
 from
   web3/ethtypes import FixedBytes

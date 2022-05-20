@@ -9,13 +9,11 @@
 
 import
   std/[times, sequtils],
-  json_rpc/[rpcproxy, rpcserver], nimcrypto/[hash, keccak],
+  json_rpc/[rpcproxy, rpcserver], nimcrypto/[hash, keccak], stew/byteutils,
   web3/conversions, # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
-  # TODO: Using the Nimbus json-rpc helpers, but they could use some rework as
-  # they bring a whole lot of other stuff with them.
-  ../../nimbus/rpc/[rpc_types, hexstrings, rpc_utils],
-  ../../nimbus/errors, # for ValidationError, should be exported instead
+  ../../nimbus/rpc/[rpc_types, hexstrings],
+  ../../nimbus/transaction,
   ../network/history/[history_network, history_content]
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
@@ -28,51 +26,84 @@ import
 # Can be done by just forwarding the rpc call, or by adding a call here, but
 # that would introduce a unnecessary serializing/deserializing step.
 
-# Note: Similar as `populateBlockObject` from rpc_utils, but more limited as
-# there is currently only access to the block header.
-proc buildBlockObject*(
+# Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
+# brings in  a lot more. Should restructure `rpc_utils` a bit before using that.
+func toHash*(value: array[32, byte]): Hash256 =
+  result.data = value
+
+func toHash*(value: EthHashStr): Hash256 {.raises: [Defect, ValueError].} =
+  hexToPaddedByteArray[32](value.string).toHash
+
+func init*(
+    T: type TransactionObject,
+    tx: Transaction, header: BlockHeader, txIndex: int):
+    T {.raises: [Defect, ValidationError].} =
+  TransactionObject(
+    blockHash: some(header.blockHash),
+    blockNumber: some(encodeQuantity(header.blockNumber)),
+    `from`: tx.getSender(),
+    gas: encodeQuantity(tx.gasLimit.uint64),
+    gasPrice: encodeQuantity(tx.gasPrice.uint64),
+    hash: tx.rlpHash,
+    input: tx.payload,
+    nonce: encodeQuantity(tx.nonce.uint64),
+    to: some(tx.destination),
+    transactionIndex: some(encodeQuantity(txIndex.uint64)),
+    value: encodeQuantity(tx.value),
+    v: encodeQuantity(tx.V.uint),
+    r: encodeQuantity(tx.R),
+    s: encodeQuantity(tx.S)
+  )
+
+# Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
+# total difficulty
+func init*(
+    T: type BlockObject,
     header: BlockHeader, body: BlockBody,
     fullTx = true, isUncle = false):
-    BlockObject {.raises: [Defect, ValidationError].} =
+    T {.raises: [Defect, ValidationError].} =
   let blockHash = header.blockHash
 
-  result.number = some(encodeQuantity(header.blockNumber))
-  result.hash = some(blockHash)
-  result.parentHash = header.parentHash
-  result.nonce = some(hexDataStr(header.nonce))
-  result.sha3Uncles = header.ommersHash
-  result.logsBloom = FixedBytes[256] header.bloom
-  result.transactionsRoot = header.txRoot
-  result.stateRoot = header.stateRoot
-  result.receiptsRoot = header.receiptRoot
-  result.miner = header.coinbase
-  result.difficulty = encodeQuantity(header.difficulty)
-  result.extraData = hexDataStr(header.extraData)
-
-  # TODO: This is optional according to
-  # https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/eth1.0-apis/assembled-spec/openrpc.json
-  # So we should probably change `BlockObject`.
-  result.totalDifficulty = encodeQuantity(UInt256.low())
+  var blockObject = BlockObject(
+    number: some(encodeQuantity(header.blockNumber)),
+    hash: some(blockHash),
+    parentHash: header.parentHash,
+    nonce: some(hexDataStr(header.nonce)),
+    sha3Uncles: header.ommersHash,
+    logsBloom: FixedBytes[256] header.bloom,
+    transactionsRoot: header.txRoot,
+    stateRoot: header.stateRoot,
+    receiptsRoot: header.receiptRoot,
+    miner: header.coinbase,
+    difficulty: encodeQuantity(header.difficulty),
+    extraData: hexDataStr(header.extraData),
+    # TODO: This is optional according to
+    # https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/eth1.0-apis/assembled-spec/openrpc.json
+    # So we should probably change `BlockObject`.
+    totalDifficulty: encodeQuantity(UInt256.low()),
+    gasLimit: encodeQuantity(header.gasLimit.uint64),
+    gasUsed: encodeQuantity(header.gasUsed.uint64),
+    timestamp: encodeQuantity(header.timeStamp.toUnix.uint64)
+  )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
-  result.size = encodeQuantity(size.uint)
-
-  result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
-  result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
-  result.timestamp = encodeQuantity(header.timeStamp.toUnix.uint64)
+  blockObject.size = encodeQuantity(size.uint)
 
   if not isUncle:
-    result.uncles = body.uncles.map(proc(h: BlockHeader): Hash256 = h.blockHash)
+    blockObject.uncles =
+      body.uncles.map(proc(h: BlockHeader): Hash256 = h.blockHash)
 
     if fullTx:
       var i = 0
       for tx in body.transactions:
-        # ValidationError from tx.getSender in populateTransactionObject
-        result.transactions.add %(populateTransactionObject(tx, header, i))
+        # ValidationError from tx.getSender in TransactionObject.init
+        blockObject.transactions.add %(TransactionObject.init(tx, header, i))
         inc i
     else:
       for tx in body.transactions:
-        result.transactions.add %(keccak256.digest(rlp.encode(tx)))
+        blockObject.transactions.add %(keccak256.digest(rlp.encode(tx)))
+
+  blockObject
 
 proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
@@ -164,19 +195,17 @@ proc installEthApiHandlers*(
     ## data: Hash of a block.
     ## fullTransactions: If true it returns the full transaction objects, if
     ## false only the hashes of the transactions.
-    ## Note: transactions and uncles are currently not implemented.
     ##
     ## Returns BlockObject or nil when no block was found.
     let
       blockHash = data.toHash()
+      blockRes = await historyNetwork.getBlock(1'u16, blockHash)
 
-    let maybeHeaderAndBody = await historyNetwork.getBlock(1'u16, blockHash)
-
-    if maybeHeaderAndBody.isNone():
+    if blockRes.isNone():
       return none(BlockObject)
     else:
-      let (header, body) = maybeHeaderAndBody.unsafeGet()
-      return some(buildBlockObject(header, body))
+      let (header, body) = blockRes.unsafeGet()
+      return some(BlockObject.init(header, body))
 
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
@@ -188,13 +217,12 @@ proc installEthApiHandlers*(
     ## Returns integer of the number of transactions in this block.
     let
       blockHash = data.toHash()
+      blockRes = await historyNetwork.getBlock(1'u16, blockHash)
 
-    let maybeHeaderAndBody = await historyNetwork.getBlock(1'u16, blockHash)
-
-    if maybeHeaderAndBody.isNone():
+    if blockRes.isNone():
       raise newException(ValueError, "Could not find block with requested hash")
     else:
-      let (_, body) = maybeHeaderAndBody.unsafeGet()
+      let (_, body) = blockRes.unsafeGet()
       var txCount:uint = 0
       for tx in body.transactions:
         txCount.inc()
