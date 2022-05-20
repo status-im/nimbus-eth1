@@ -32,10 +32,13 @@
 
 import
   eth/[common/eth_types, p2p],
-  ../../trace_helper,
-  ".."/[base_desc, path_desc, types]
+  ../../types,
+  ".."/[base_desc, path_desc]
 
 {.push raises: [Defect].}
+
+logScope:
+  topics = "snap validate trie node"
 
 type
   TrieNodeParseContext* = object
@@ -43,6 +46,9 @@ type
     leafQueue*:             seq[(LeafPath, NodeHash, Blob)]
     errors*:                int
 
+const
+  # Local debugging
+  traceIndividualNodesOk = true
 
 template read(rlp: var Rlp, T: type NodeHash): T =
   rlp.read(Hash256).T
@@ -114,7 +120,7 @@ proc parseLeafValue(sp: SnapPeerBase,
 
   context.leafQueue.add((leafPath.toLeafPath, nodeHash, nodeRlp.toBytes))
 
-  if traceIndividualNodes:
+  when traceIndividualNodesOk:
     let leafBytes = context.leafQueue[^1][2]
     trace "Trie: Account leaf found", peer=sp,
       path=combinePaths(nodePath, leafPath),

@@ -20,12 +20,15 @@ import
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "snap peer common"
+
 proc hasSlice*(sp: SnapPeerEx): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
   if sp.nsx.sharedFetch.isNil:
     sp.nsx.sharedFetch = SharedFetchState.new
   result = 0 < sp.nsx.sharedFetch.leafRanges.len
-  trace "Snap: hasSlice", peer=sp, hasSlice=result
+  trace "hasSlice", peer=sp, hasSlice=result
 
 proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
@@ -39,7 +42,7 @@ proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
   const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
 
   if ranges.len == 0:
-    trace "Snap: getSlice", leafRange="none"
+    trace "GetSlice", leafRange="none"
     return false
   leafLow = ranges[0].leafLow
   if ranges[0].leafHigh - ranges[0].leafLow <= leafMaxFetchRange:
@@ -48,7 +51,7 @@ proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
   else:
     leafHigh = leafLow + leafMaxFetchRange
     ranges[0].leafLow = leafHigh + 1
-  trace "Snap: getSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
+  trace "GetSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
   return true
 
 proc putSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath) =
@@ -57,7 +60,7 @@ proc putSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath) =
   let sharedFetch = sp.nsx.sharedFetch
   template ranges: auto = sharedFetch.leafRanges
 
-  trace "Snap: putSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
+  trace "PutSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
   var i = 0
   while i < ranges.len and leafLow > ranges[i].leafHigh:
     inc i

@@ -26,11 +26,14 @@ import
   std/[sets, tables, algorithm],
   chronos,
   eth/[common/eth_types, p2p],
-  ../../trace_helper,
-  ".."/[base_desc, path_desc, types],
+  "../.."/[protocol/trace_config, types],
+  ".."/[base_desc, path_desc],
   "."/[common, reply_data, peer_xdesc, sync_xdesc, validate_trienode]
 
 {.push raises: [Defect].}
+
+logScope:
+  topics = "snap peer fetch"
 
 const
   maxBatchGetNodeData = 384
@@ -196,8 +199,9 @@ proc getNodeData(fetch: FetchState,
                  hash: TrieHash, path: InteriorPath): Future[Blob] {.async.} =
   ## Request _one_ item of trie node data asynchronously.  This function
   ## batches requested into larger `eth.GetNodeData` requests efficiently.
-  traceIndividualNode "> Fetching individual NodeData", peer=fetch.sp,
-    depth=path.depth, path, hash=($hash)
+  when trEthTraceIndividualNodesOk:
+    trace "> Fetching individual NodeData", peer=fetch.sp,
+      depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
   fetch.nodeGetQueue.add SingleNodeRequestEx(
@@ -212,17 +216,18 @@ proc getNodeData(fetch: FetchState,
   if fetch.sp.ctrl.runState != SyncRunningOk:
     return nodebytes
 
-  if tracePackets:
+  when trEthTracePacketsOk:
     doAssert nodeBytes.len == 0 or nodeBytes.toNodeHash == hash
 
-  if nodeBytes.len > 0:
-    traceIndividualNode "< Received individual NodeData", peer=fetch.sp,
-      depth=path.depth, path, hash=($hash),
-      nodeLen=nodeBytes.len, nodeBytes
-  else:
-    traceIndividualNode "< Received EMPTY individual NodeData", peer=fetch.sp,
-      depth=path.depth, path, hash,
-      nodeLen=nodeBytes.len
+  when trEthTraceIndividualNodesOk:
+    if nodeBytes.len > 0:
+      trace "< Received individual NodeData", peer=fetch.sp,
+        depth=path.depth, path, hash=($hash),
+        nodeLen=nodeBytes.len, nodeBytes
+    else:
+      trace "< Received EMPTY individual NodeData", peer=fetch.sp,
+        depth=path.depth, path, hash,
+        nodeLen=nodeBytes.len
   return nodeBytes
 
 proc pathInRange(fetch: FetchState, path: InteriorPath): bool =

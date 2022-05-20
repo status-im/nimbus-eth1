@@ -13,11 +13,14 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
-  ./protocol,
-  ./snap/[base_desc, collect, types],
+ "."/[protocol, types],
+  ./snap/[base_desc, collect],
   ./snap/peer/[sync_xdesc, peer_xdesc]
 
 {.push raises: [Defect].}
+
+logScope:
+  topics = "snap sync"
 
 type
   SnapSyncCtx* = ref object of SnapSyncEx
@@ -50,6 +53,7 @@ proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
   while sp.ctrl.runState != SyncStopped:
     await sp.collectBlockHeaders()
     if sp.ctrl.runState == SyncStopped:
+      trace "Ignoring stopped peer", peer=sp
       return
     let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
@@ -65,7 +69,7 @@ proc syncPeerStop(sp: SnapPeerEx) =
 
 
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Snap: Peer connected", peer
+  trace "Peer connected", peer
 
   let sp = SnapPeerEx.new(ns, peer)
   sp.collectDataSetup()
@@ -76,17 +80,17 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
     # TODO: Temporarily disabled because it's useful to test the head hunter.
     # sp.syncMode = SyncOnlyHash
   else:
-    trace "Snap: state(eth) not initialized!"
+    trace "State(eth) not initialized!"
 
   ns.syncPeers.add(sp)
   sp.syncPeerStart()
 
 proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Snap: Peer disconnected", peer
+  trace "Peer disconnected", peer
 
   let sp = ns.fetchPeerDesc(peer)
   if sp.isNil:
-    debug "Snap: Disconnected from unregistered peer", peer
+    debug "Disconnected from unregistered peer", peer
   else:
     sp.syncPeerStop()
 

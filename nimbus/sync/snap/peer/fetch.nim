@@ -9,36 +9,40 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [Defect].}
-
 import
   std/[sets, random],
   chronos,
   nimcrypto/keccak,
   stint,
   eth/[common/eth_types, p2p],
-  ".."/[path_desc, base_desc, types],
+  ../../types,
+  ".."/[path_desc, base_desc],
   "."/[common, fetch_trie, fetch_snap, peer_xdesc]
+
+{.push raises: [Defect].}
+
+logScope:
+  topics = "snap peer fetch"
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
 # `fetchSnapOk` where those are defined.
 
 proc fetch*(sp: SnapPeerEx) {.async.} =
   var stateRoot = sp.ctrl.stateRoot.get
-  trace "Snap: Syncing from stateRoot", peer=sp, stateRoot
+  trace "Syncing from stateRoot", peer=sp, stateRoot
 
   while true:
     if not sp.fetchTrieOk and not sp.fetchSnapOk:
-      trace "Snap: No more sync available from this peer", peer=sp
+      trace "No more sync available from this peer", peer=sp
       return
 
     if not sp.hasSlice():
-      trace "Snap: Nothing more to sync from this peer", peer=sp
+      trace "Nothing more to sync from this peer", peer=sp
       while not sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
     if sp.ctrl.stateRoot.isNone:
-      trace "Snap: No current state root for this peer", peer=sp
+      trace "No current state root for this peer", peer=sp
       while sp.ctrl.stateRoot.isNone and
             (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
@@ -46,12 +50,12 @@ proc fetch*(sp: SnapPeerEx) {.async.} =
       continue
 
     if stateRoot != sp.ctrl.stateRoot.get:
-      trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot
+      trace "Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.ctrl.stateRoot.get
       sp.ctrl.runState = SyncRunningOK
 
     if sp.ctrl.runState == SyncStopRequest:
-      trace "Snap: Pausing sync until we get a new state root", peer=sp
+      trace "Pausing sync until we get a new state root", peer=sp
       while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
             (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
@@ -69,12 +73,12 @@ proc fetch*(sp: SnapPeerEx) {.async.} =
 
     if sp.fetchSnapOk and allowSnap:
       discard sp.getSlice(leafRange)
-      trace "Snap: snap.GetAccountRange segment", peer=sp,
+      trace "GetAccountRange segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.fetchSnap(stateRoot, leafRange)
 
     elif sp.fetchTrieOk:
       discard sp.getSlice(leafRange)
-      trace "Snap: eth.GetNodeData segment", peer=sp,
+      trace "GetNodeData segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.fetchTrie(stateRoot, leafRange)

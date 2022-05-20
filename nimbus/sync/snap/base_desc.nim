@@ -13,7 +13,7 @@ import
   eth/[common/eth_types, p2p],
   stew/[byteutils, keyed_queue, results],
   ../../constants,
-  ./types
+  ../types
 
 {.push raises: [Defect].}
 

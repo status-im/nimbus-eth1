@@ -60,17 +60,20 @@
 ## matching.  Before this module was written, we tended to accept whatever came
 ## and assume a lot about replies.  It often worked but wasn't robust enough.
 
-{.push raises: [Defect].}
-
 import
   std/[sequtils, sets, tables, hashes],
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stint,
-  "../.."/[protocol, protocol/pickeled_eth_tracers],
-  ".."/[base_desc, path_desc, timer_helper, types],
+  "../.."/[protocol, protocol/trace_config, types],
+  ".."/[base_desc, path_desc, timer_helper],
   ./peer_xdesc
+
+{.push raises: [Defect].}
+
+logScope:
+  topics = "snap reply data"
 
 type
   NodeDataRequest = ref object of NodeDataRequestBase
@@ -111,59 +114,59 @@ template pathRange(request: NodeDataRequest): string =
   pathRange(request.pathRange[0], request.pathRange[1])
 
 proc traceGetNodeDataSending(request: NodeDataRequest) =
-  traceSendSending "GetNodeData", peer=request.sp,
+  trace trEthSendSending & "GetNodeData", peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataDelaying(request: NodeDataRequest) =
-  traceSendDelaying "GetNodeData",  peer=request.sp,
+  trace trEthSendDelaying & "GetNodeData",  peer=request.sp,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceGetNodeDataSendError(request: NodeDataRequest,
                                e: ref CatchableError) =
-  traceRecvError "sending GetNodeData", peer=request.sp,
+  trace trEthRecvError & "sending GetNodeData", peer=request.sp,
     error=e.msg, hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyError(request: NodeDataRequest,
                              e: ref CatchableError) =
-  traceRecvError "waiting for reply to GetNodeData",
+  trace trEthRecvError & "waiting for reply to GetNodeData",
     peer=request.sp, error=e.msg,
     hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyTimeout(request: NodeDataRequest) =
-  traceRecvTimeoutWaiting "for reply to GetNodeData",
+  trace trEthRecvTimeoutWaiting & "for reply to GetNodeData",
     hashes=request.hashes.len, pathRange=request.pathRange, peer=request.sp
 
 proc traceGetNodeDataDisconnected(request: NodeDataRequest) =
-  traceRecvError "peer disconnected, not sending GetNodeData",
+  trace trEthRecvError & "peer disconnected, not sending GetNodeData",
     peer=request.sp, hashes=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyEmpty(sp: SnapPeerEx, request: NodeDataRequest) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
-    traceRecvGot "EMPTY NodeData", peer=sp, got=0
+    trace trEthRecvGot & "EMPTY NodeData", peer=sp, got=0
   else:
-    traceRecvGot "NodeData", peer=sp, got=0,
+    trace trEthRecvGot & "NodeData", peer=sp, got=0,
       requested=request.hashes.len, pathRange=request.pathRange
 
 proc traceNodeDataReplyUnmatched(sp: SnapPeerEx, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
-  traceRecvProtocolViolation "non-reply NodeData", peer=sp, got
-  debug "Snap: Warning: Unexpected non-reply NodeData from peer"
+  trace trEthRecvProtocolViolation & "non-reply NodeData", peer=sp, got
+  debug "Warning: Unexpected non-reply NodeData from peer"
 
 proc traceNodeDataReply(request: NodeDataRequest,
                         got, use, unmatched, other, duplicates: int) =
-  if tracePackets:
+  when trEthTracePacketsOk:
     logScope: got=got
     logScope: requested=request.hashes.len
     logScope: pathRange=request.pathRange
     logScope: peer=request.sp
     if got > request.hashes.len and (unmatched + other) == 0:
-      traceRecvGot "EXCESS reply NodeData"
+      trace trEthRecvGot & "EXCESS reply NodeData"
     elif got == request.hashes.len or use != got:
-      traceRecvGot "reply NodeData"
+      trace trEthRecvGot & "reply NodeData"
     elif got < request.hashes.len:
-      traceRecvGot "TRUNCATED reply NodeData"
+      trace trEthRecvGot & "TRUNCATED reply NodeData"
 
   if use != got:
     logScope:
@@ -174,18 +177,18 @@ proc traceNodeDataReply(request: NodeDataRequest,
       pathRange=request.pathRange
       peer=request.sp
     if unmatched > 0:
-      traceRecvProtocolViolation "incorrect hashes in NodeData"
-      debug "Snap: Warning: NodeData has nodes with incorrect hashes"
+      trace trEthRecvProtocolViolation & "incorrect hashes in NodeData"
+      debug "Warning: NodeData has nodes with incorrect hashes"
     elif other > 0:
-      traceRecvProtocolViolation "mixed request nodes in NodeData"
-      debug "Snap: Warning: NodeData has nodes from mixed requests"
+      trace trEthRecvProtocolViolation & "mixed request nodes in NodeData"
+      debug "Warning: NodeData has nodes from mixed requests"
     elif got > request.hashes.len:
       # Excess without unmatched/other is only possible with duplicates > 0.
-      traceRecvProtocolViolation "excess nodes in NodeData"
-      debug "Snap: Warning: NodeData has more nodes than requested"
+      trace trEthRecvProtocolViolation & "excess nodes in NodeData"
+      debug "Warning: NodeData has more nodes than requested"
     else:
-      traceRecvProtocolViolation "duplicate nodes in NodeData"
-      debug "Snap: Warning: NodeData has duplicate nodes"
+      trace trEthRecvProtocolViolation & "duplicate nodes in NodeData"
+      debug "Warning: NodeData has duplicate nodes"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -326,7 +329,7 @@ proc nodeDataComplete(request: NodeDataRequest, reply: NodeDataReply,
     # Subtle: Timer can trigger and its callback be added to Chronos run loop,
     # then data event trigger and call `clearTimer()`.  The timer callback
     # will then run but it must be ignored.
-    debug "Snap: Warning: Resolved timer race over NodeData reply"
+    debug "Warning: Resolved timer race over NodeData reply"
   else:
     request.timer.clearTimer()
     request.future.complete(reply)

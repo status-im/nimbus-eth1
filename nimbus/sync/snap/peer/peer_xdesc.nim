@@ -13,7 +13,8 @@ import
   std/[sets, tables],
   chronos,
   stint,
-  ".."/[base_desc, path_desc, types]
+  ../../types,
+  ".."/[base_desc, path_desc]
 
 type
   NodeDataRequestBase* = ref object of RootObj

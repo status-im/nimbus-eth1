@@ -203,9 +203,12 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   nimcrypto/hash,
   stew/byteutils,
-  ".."/[snap/path_desc, trace_helper],
   ../../constants,
-  ./pickeled_snap_tracers
+  ../snap/path_desc,
+  ./trace_config
+
+logScope:
+  topics = "datax"
 
 type
   SnapAccount* = object
@@ -223,6 +226,23 @@ type
 const
   snapVersion* = 1
   prettySnapProtoName* = "[snap/" & $snapVersion & "]"
+
+  # Pickeled tracer texts
+  trSnapRecvReceived* =
+    "<< " & prettySnapProtoName & " Received "
+  trSnapRecvGot* =
+    "<< " & prettySnapProtoName & " Got "
+  trSnapRecvProtocolViolation* =
+    "<< " & prettySnapProtoName & " Protocol violation, "
+  trSnapRecvError* =
+    "<< " & prettySnapProtoName & " Error "
+  trSnapRecvTimeoutWaiting* =
+    "<< " & prettySnapProtoName & " Timeout waiting "
+  trSnapSendSending* =
+    ">> " & prettySnapProtoName & " Sending "
+  trSnapSendReplying* =
+    ">> " & prettySnapProtoName & " Replying "
+
 
 # The `snap` protocol represents `Account` differently from the regular RLP
 # serialisation used in `eth` protocol as well as the canonical Merkle hash
@@ -297,11 +317,12 @@ p2pProtocol snap1(version = 1,
                          # Next line differs from spec to match Geth.
                          origin: LeafPath, limit: LeafPath,
                          responseBytes: uint64) =
-      traceRecvReceived "GetAccountRange (0x00)", peer,
+      trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
+      # traceRecvReceived "GetAccountRange (0x00)", peer,
         accountRange=pathRange(origin, limit),
         stateRoot=($rootHash), responseBytes
 
-      traceSendReplying "EMPTY AccountRange (0x01)", peer, sent=0
+      trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x01: AccountRange.
@@ -316,7 +337,7 @@ p2pProtocol snap1(version = 1,
                           # Next line differs from spec to match Geth.
                           origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =
-      if tracePackets:
+      when trSnapTracePacketsOk:
         var definiteFullRange = ((origin.len == 32 or origin.len == 0) and
                                  (limit.len == 32 or limit.len == 0))
         if definiteFullRange:
@@ -337,12 +358,12 @@ p2pProtocol snap1(version = 1,
 
         if definiteFullRange:
           # Fetching storage for multiple accounts.
-          traceRecvReceived "GetStorageRanges/A (0x02)", peer,
+          trace trSnapRecvReceived & "GetStorageRanges/A (0x02)", peer,
             accountPaths=accounts.len,
             stateRoot=($rootHash), responseBytes
         elif accounts.len == 1:
           # Fetching partial storage for one account, aka. "large contract".
-          traceRecvReceived "GetStorageRanges/S (0x02)", peer,
+          trace trSnapRecvReceived & "GetStorageRanges/S (0x02)", peer,
             accountPaths=1,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
@@ -350,12 +371,12 @@ p2pProtocol snap1(version = 1,
           # This branch is separated because these shouldn't occur.  It's not
           # really specified what happens when there are multiple accounts and
           # non-default path range.
-          traceRecvReceived "GetStorageRanges/AS?? (0x02)", peer,
+          trace trSnapRecvReceived & "GetStorageRanges/AS?? (0x02)", peer,
             accountPaths=accounts.len,
             storageRange=(describe(origin) & '-' & describe(limit)),
             stateRoot=($rootHash), responseBytes
 
-      traceSendReplying "EMPTY StorageRanges (0x03)", peer, sent=0
+      trace trSnapSendReplying & "EMPTY StorageRanges (0x03)", peer, sent=0
       await response.send(@[], @[])
 
     # User message 0x03: StorageRanges.
@@ -367,10 +388,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getByteCodes(peer: Peer, nodeHashes: openArray[Hash256],
                       responseBytes: uint64) =
-      traceRecvReceived "GetByteCodes (0x04)", peer,
+      trace trSnapRecvReceived & "GetByteCodes (0x04)", peer,
         hashes=nodeHashes.len, responseBytes
 
-      traceSendReplying "EMPTY ByteCodes (0x05)", peer, sent=0
+      trace trSnapSendReplying & "EMPTY ByteCodes (0x05)", peer, sent=0
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
@@ -380,10 +401,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: Hash256,
                       paths: openArray[InteriorPath], responseBytes: uint64) =
-      traceRecvReceived "GetTrieNodes (0x06)", peer,
+      trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 
-      traceSendReplying "EMPTY TrieNodes (0x07)", peer, sent=0
+      trace trSnapSendReplying & "EMPTY TrieNodes (0x07)", peer, sent=0
       await response.send(@[])
 
     # User message 0x07: TrieNodes.

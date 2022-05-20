@@ -64,11 +64,13 @@ import
   chronos,
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   ../../p2p/chain/chain_desc,
-  ".."/[protocol, protocol/pickeled_eth_tracers, trace_helper],
-  "."/[base_desc, types],
-  ./peer/[reply_data, peer_xdesc, fetch]
+  ".."/[protocol, types],
+  "."/[base_desc, peer/fetch, peer/peer_xdesc,  peer/reply_data]
 
 {.push raises: [Defect].}
+
+logScope:
+  topics = "snap collect"
 
 const
   syncLockedMinimumReply        = 8
@@ -127,41 +129,41 @@ proc traceSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
     bestBlock = sp.ns.pp(hash, number)
     peer = $sp
   if sp.hunt.syncMode != SyncLocked:
-    debug "Snap: Now tracking chain head of peer", peer, bestBlock
+    debug "Now tracking chain head of peer", peer, bestBlock
   elif number > sp.hunt.bestNumber:
     if number == sp.hunt.bestNumber + 1:
-      debug "Snap: Peer chain head advanced one block", peer,
+      debug "Peer chain head advanced one block", peer,
        advance=1, bestBlock
     else:
-      debug "Snap: Peer chain head advanced some blocks", peer,
+      debug "Peer chain head advanced some blocks", peer,
         advance=(sp.hunt.bestNumber - number), bestBlock
   elif number < sp.hunt.bestNumber or hash != sp.hunt.bestHash:
-    debug "Snap: Peer chain head reorg detected", peer,
+    debug "Peer chain head reorg detected", peer,
       advance=(sp.hunt.bestNumber - number), bestBlock
 
 # proc peerSyncChainTrace(sp: SnapPeerEx) =
 #   ## To be called after `peerSyncChainRequest` has updated state.
 #   case sp.hunt.syncMode:
 #     of SyncLocked:
-#       trace "Snap: SyncLocked",
+#       trace "SyncLocked",
 #         bestBlock = sp.ns.pp(sp.hunt.bestHash, sp.hunt.bestNumber)
 #     of SyncOnlyHash:
-#       trace "Snap: OnlyHash",
+#       trace "OnlyHash",
 #         bestBlock = sp.ns.pp(sp.hunt.bestHash, sp.hunt.bestNumber)
 #     of SyncHuntForward:
 #       template highMax(n: BlockNumber): string =
 #         if n == high(BlockNumber): "max" else: $n
-#       trace "Snap: HuntForward",
+#       trace "HuntForward",
 #         low=sp.hunt.lowNumber, high=highMax(sp.hunt.highNumber),
 #         step=sp.hunt.step
 #     of SyncHuntBackward:
-#       trace "Snap: HuntBackward",
+#       trace "HuntBackward",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=sp.hunt.step
 #     of SyncHuntRange:
-#       trace "Snap: HuntRange",
+#       trace "HuntRange",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=sp.hunt.step
 #     of SyncHuntRangeFinal:
-#       trace "Snap: HuntRangeFinal",
+#       trace "HuntRangeFinal",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=1
 
 # ------------------------------------------------------------------------------
@@ -177,7 +179,7 @@ proc setSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
 
 proc clearSyncStateRoot(sp: SnapPeerEx) =
   if sp.ctrl.stateRoot.isSome:
-    debug "Snap: Stopping state sync from this peer", peer=sp
+    debug "Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
 proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
@@ -186,17 +188,17 @@ proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
 
   let thisBlock = sp.ns.pp(hash, number)
   if sp.ctrl.stateRoot.isNone:
-    debug "Snap: Starting state sync from this peer", peer=sp,
+    debug "Starting state sync from this peer", peer=sp,
       thisBlock, stateRoot
   elif sp.ctrl.stateRoot.unsafeGet != stateRoot:
-    trace "Snap: Adjusting state sync root from this peer", peer=sp,
+    trace "Adjusting state sync root from this peer", peer=sp,
       thisBlock, stateRoot
 
   sp.ctrl.stateRoot = some(stateRoot)
 
   if sp.ctrl.runState != SyncRunningOK:
     sp.ctrl.runState = SyncRunningOK
-    trace "Snap: Starting to download block state", peer=sp,
+    trace "Starting to download block state", peer=sp,
       thisBlock, stateRoot
     asyncSpawn sp.fetch()
 
@@ -260,7 +262,7 @@ proc peerSyncChainEmptyReply(sp: SnapPeerEx, request: BlocksRequest) =
 
   if sp.hunt.syncMode == SyncLocked or sp.hunt.syncMode == SyncOnlyHash:
     inc sp.stats.ok.reorgDetected
-    trace "Snap: Peer reorg detected, best block disappeared", peer=sp,
+    trace "Peer reorg detected, best block disappeared", peer=sp,
       startBlock=request.startBlock
 
   let lowestAbsent = request.startBlock.number
@@ -496,7 +498,8 @@ proc collectBlockHeaders*(sp: SnapPeerEx) {.async.} =
 
   let request = sp.peerSyncChainRequest
 
-  traceSendSending "GetBlockHeaders", peer=sp, count=request.maxResults,
+  trace trEthSendSending & "GetBlockHeaders", peer=sp,
+    count=request.maxResults,
     startBlock=sp.ns.pp(request.startBlock), step=request.traceStep
 
   inc sp.stats.ok.getBlockHeaders
@@ -504,30 +507,30 @@ proc collectBlockHeaders*(sp: SnapPeerEx) {.async.} =
   try:
     reply = await sp.peer.getBlockHeaders(request)
   except CatchableError as e:
-    traceRecvError "waiting for reply to GetBlockHeaders",
-      peer=sp, error=e.msg
+    trace trEthRecvError & "waiting for reply to GetBlockHeaders", peer=sp,
+      error=e.msg
     inc sp.stats.major.networkErrors
     sp.ctrl.runState = SyncStopped
     return
 
   if reply.isNone:
-    traceRecvTimeoutWaiting "for reply to GetBlockHeaders", peer=sp
+    trace trEthRecvTimeoutWaiting & "for reply to GetBlockHeaders", peer=sp
     # TODO: Should disconnect?
     inc sp.stats.minor.timeoutBlockHeaders
     return
 
   let nHeaders = reply.get.headers.len
   if nHeaders == 0:
-    traceRecvGot "EMPTY reply BlockHeaders", peer=sp, got=0,
-      requested=request.maxResults
+    trace trEthRecvGot & "EMPTY reply BlockHeaders", peer=sp,
+      got=0, requested=request.maxResults
   else:
-    traceRecvGot "reply BlockHeaders", peer=sp, got=nHeaders,
-      requested=request.maxResults,
+    trace trEthRecvGot & "reply BlockHeaders", peer=sp,
+      got=nHeaders, requested=request.maxResults,
       firstBlock=reply.get.headers[0].blockNumber,
       lastBlock=reply.get.headers[^1].blockNumber
 
   if request.maxResults.int < nHeaders:
-    traceRecvProtocolViolation "excess headers in BlockHeaders",
+    trace trEthRecvProtocolViolation & "excess headers in BlockHeaders",
       peer=sp, got=nHeaders, requested=request.maxResults
     # TODO: Should disconnect.
     inc sp.stats.major.excessBlockHeaders
