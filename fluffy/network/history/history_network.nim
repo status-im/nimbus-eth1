@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, sugar],
+  std/options,
   stew/results, chronos, chronicles,
   eth/[common/eth_types, rlp],
   eth/p2p/discoveryv5/[protocol, enr],

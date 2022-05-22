@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[options, sugar],
+  std/options,
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,

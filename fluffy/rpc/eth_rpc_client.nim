@@ -10,7 +10,7 @@ import
   json_rpc/rpcclient,
   json_rpc/errors, # TODO: should be exported in json_rpc/clients/httpclient
   web3/conversions, # sigh
-  ../../nimbus/rpc/[rpc_types, hexstrings, rpc_utils]
+  ../../nimbus/rpc/[rpc_types, hexstrings]
 
 export rpcclient, rpc_types, errors
 

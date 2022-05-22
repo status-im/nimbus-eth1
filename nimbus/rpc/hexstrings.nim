@@ -27,6 +27,7 @@
 ]#
 
 import
+  std/strutils,
   stint, stew/byteutils, eth/[keys, rlp],
   eth/common/eth_types,
   json_serialization
