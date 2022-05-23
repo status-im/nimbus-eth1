@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[protocol, types],
-  ./snap/[base_desc, collect, peer/sync_xdesc]
+  ./snap/[base_desc, collect]
 
 {.push raises: [Defect].}
 
@@ -24,7 +24,7 @@ logScope:
   topics = "snap sync"
 
 type
-  SnapSyncCtx* = ref object of SnapSyncEx
+  SnapSyncCtx* = ref object of SnapSync
     peerTab: KeyedQueue[Peer,SnapPeer] ## LRU cache
     tabSize: int                       ## maximal number of entries
     pool: PeerPool                     ## for starting the system, debugging

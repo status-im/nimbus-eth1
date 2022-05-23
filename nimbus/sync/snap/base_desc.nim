@@ -78,20 +78,29 @@ type
 
   # -------
 
+  SnapSyncSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
+    ## Temporary for pretty debugging, `BlockHash` keyed lru cache
+
+  SnapSyncFetchBase* = ref object of RootObj
+    ## Stub object, to be inherited
+
+  # -------
+
   SnapPeer* = ref object
     ## Non-inheritable peer state tracking descriptor.
-    ns*: SnapSyncBase               ## Snap descriptor object back reference
-    peer*: Peer                     ## Object reference to eth p2pProtocol entry
+    ns*: SnapSync                   ## Snap descriptor object back reference
+    peer*: Peer                     ## Reference to eth p2pProtocol entry
     stats*: SnapPeerStats           ## Statistics counters
     hunt*: SnapPeerHunt             ## Peer chain head search state
     ctrl*: SnapPeerCtrl             ## Control and state settings
     requests*: SnapPeerRequestsBase ## Opaque object reference
     fetchState*: SnapPeerFetchBase  ## Opaque object reference
 
-  SnapSyncBase* = ref object of RootObj
-    ## Shared state among all peers of a snap syncing node.
-    seenBlock: KeyedQueue[array[32,byte],BlockNumber]
-      ## Temporary for pretty debugging, BlockHash keyed lru cache
+  SnapSync* = ref object of RootObj
+    ## Shared state among all peers of a snap syncing node. Will be
+    ## amended/inherited into `SnapSyncCtx` by the `snap` module.
+    seenBlock: SnapSyncSeenBlocks   ## Temporary, debugging, prettyfied logs
+    sharedFetch*: SnapSyncFetchBase ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor
@@ -99,7 +108,7 @@ type
 
 proc new*(
     T: type SnapPeer;
-    ns: SnapSyncBase;
+    ns: SnapSync;
     peer: Peer;
     syncMode: SnapPeerMode;
     runState: SnapPeerRunState): T =
@@ -130,21 +139,21 @@ proc inc(stat: var SnapPeerStat) {.borrow.}
 # Public functions, debugging helpers (will go away eventually)
 # ------------------------------------------------------------------------------
 
-proc pp*(sn: SnapSyncBase; bh: BlockHash): string =
+proc pp*(sn: SnapSync; bh: BlockHash): string =
   ## Pretty printer for debugging
   let rc = sn.seenBlock.lruFetch(bh.untie.data)
   if rc.isOk:
     return "#" & $rc.value
   $bh.untie.data.toHex
 
-proc pp*(sn: SnapSyncBase; bh: BlockHash; bn: BlockNumber): string =
+proc pp*(sn: SnapSync; bh: BlockHash; bn: BlockNumber): string =
   ## Pretty printer for debugging
   let rc = sn.seenBlock.lruFetch(bh.untie.data)
   if rc.isOk:
     return "#" & $rc.value
   "#" & $sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
 
-proc pp*(sn: SnapSyncBase; bhn: HashOrNum): string =
+proc pp*(sn: SnapSync; bhn: HashOrNum): string =
   if not bhn.isHash:
     return "num(#" & $bhn.number & ")"
   let rc = sn.seenBlock.lruFetch(bhn.hash.data)
@@ -152,7 +161,7 @@ proc pp*(sn: SnapSyncBase; bhn: HashOrNum): string =
     return "hash(#" & $rc.value & ")"
   return "hash(" & $bhn.hash.data.toHex & ")"
 
-proc seen*(sn: SnapSyncBase; bh: BlockHash; bn: BlockNumber) =
+proc seen*(sn: SnapSync; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
   if not sn.seenBlock.lruFetch(bh.untie.data).isOk:
     discard sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)

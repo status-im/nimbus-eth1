@@ -28,7 +28,7 @@ import
   eth/[common/eth_types, p2p],
   "../.."/[protocol/trace_config, types],
   ".."/[base_desc, path_desc],
-  "."/[common, reply_data, sync_xdesc, validate_trienode]
+  "."/[common, reply_data, sync_fetch_xdesc, validate_trienode]
 
 {.push raises: [Defect].}
 
@@ -309,8 +309,8 @@ proc traverse(fetch: FetchStateEx, hash: NodeHash, path: InteriorPath,
       template leafBytes: auto = leafPtr[2]
       inc fetch.unwindAccounts
       fetch.unwindAccountBytes += leafBytes.len
-      inc fetch.sp.nsx.sharedFetch.countAccounts
-      fetch.sp.nsx.sharedFetch.countAccountBytes += leafBytes.len
+      inc fetch.sp.ns.sharedFetchEx.countAccounts
+      fetch.sp.ns.sharedFetchEx.countAccountBytes += leafBytes.len
 
   dec fetch.nodesInFlight
   if fetch.nodesInFlight == 0:
@@ -361,8 +361,8 @@ proc fetchTrie*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
   if fetch.getNodeDataErrors == 0:
     sp.countSlice(leafRange, false)
   else:
-    sp.nsx.sharedFetch.countAccounts -= fetch.unwindAccounts
-    sp.nsx.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
+    sp.ns.sharedFetchEx.countAccounts -= fetch.unwindAccounts
+    sp.ns.sharedFetchEx.countAccountBytes -= fetch.unwindAccountBytes
     sp.putSlice(leafRange)
 
 proc fetchTrieOk*(sp: SnapPeer): bool =
