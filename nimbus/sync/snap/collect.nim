@@ -63,7 +63,7 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
-  ../../p2p/chain/chain_desc,
+  "../.."/[constants, p2p/chain/chain_desc],
   ".."/[protocol, types],
   "."/[base_desc, peer/fetch]
 
@@ -73,7 +73,7 @@ logScope:
   topics = "snap collect"
 
 const
-  syncLockedMinimumReply        = 8
+  syncLockedMinimumReply    = 8
     ## Minimum number of headers we assume any peers will send if they have
     ## them in contiguous ascending queries.  Fewer than this confirms we have
     ## found the peer's canonical chain head boundary.  Must be at least 2, and
@@ -82,7 +82,7 @@ const
     ## about peer implementations.  8 is chosen as it allows 3-deep extensions
     ## and 3-deep reorgs to be followed in a single round trip.
 
-  syncLockedQueryOverlap        = 4
+  syncLockedQueryOverlap    = 4
     ## Number of headers to re-query on each poll when `SyncLocked` so that we
     ## get small reorg updates in one round trip.  Must be no more than
     ## `syncLockedMinimumReply-1`, no more than `syncLockedMinimumReply-2` to
@@ -90,34 +90,72 @@ const
     ## excessive duplicate fetching.  4 is chosen as it allows 3-deep reorgs
     ## to be followed in single round trip.
 
-  syncLockedQuerySize           = 192
+  syncLockedQuerySize       = 192
     ## Query size when polling `SyncLocked`.  Must be at least
     ## `syncLockedMinimumReply`.  Large is fine, if we get a large reply the
     ## values are almost always useful.
 
-  syncHuntQuerySize             = 16
+  huntQuerySize             = 16
     ## Query size when hunting for canonical head boundary.  Small is good
     ## because we don't want to keep most of the headers at hunt time.
 
-  syncHuntForwardExpandShift    = 4
+  huntForwardExpandShift    = 4
     ## Expansion factor during `SyncHuntForward` exponential search.
     ## 16 is chosen for rapid convergence when bootstrapping or catching up.
 
-  syncHuntBackwardExpandShift   = 1
+  huntBackwardExpandShift   = 1
     ## Expansion factor during `SyncHuntBackward` exponential search.
     ## 2 is chosen for better convergence when tracking a chain reorg.
+
+type
+  CollectMode = enum
+    ## The current state of tracking the peer's canonical chain head.
+    ## `bestBlockNumber` is only valid when this is `SyncLocked`.
+    SyncLocked
+    SyncOnlyHash
+    HuntForward
+    HuntBackward
+    HuntRange
+    HuntRangeFinal
+
+  CollectHuntEx = ref object of SnapPeerCollectBase
+    ## Peer canonical chain head ("best block") search state.
+    syncMode:      CollectMode   ## Action mode
+    lowNumber:     BlockNumber   ## Recent lowest known block number.
+    highNumber:    BlockNumber   ## Recent highest known block number.
+    bestNumber:    BlockNumber
+    bestHash:      BlockHash
+    step:          uint
 
 static:
   doAssert syncLockedMinimumReply >= 2
   doAssert syncLockedMinimumReply >= syncLockedQueryOverlap + 2
   doAssert syncLockedQuerySize <= maxHeadersFetch
-  doAssert syncHuntQuerySize >= 1 and syncHuntQuerySize <= maxHeadersFetch
-  doAssert syncHuntForwardExpandShift >= 1 and syncHuntForwardExpandShift <= 8
-  doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
+  doAssert huntQuerySize >= 1 and huntQuerySize <= maxHeadersFetch
+  doAssert huntForwardExpandShift >= 1 and huntForwardExpandShift <= 8
+  doAssert huntBackwardExpandShift >= 1 and huntBackwardExpandShift <= 8
 
   # Make sure that request/response wire protocol messages are id-tracked and
   # would not overlap (no multi-protocol legacy support)
   doAssert 66 <= protocol.ethVersion
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc hunt(sp: SnapPeer): CollectHuntEx =
+  sp.collect.CollectHuntEx
+
+proc `hunt=`(sp: SnapPeer; value: CollectHuntEx) =
+  sp.collect = value
+
+proc new(T: type CollectHuntEx; syncMode: CollectMode): T =
+  T(syncMode:   syncMode,
+    lowNumber:  0.toBlockNumber.BlockNumber,
+    highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
+    bestNumber: 0.toBlockNumber.BlockNumber,
+    bestHash:   ZERO_HASH256.BlockHash,        # whatever
+    step:       0u)
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
@@ -150,19 +188,19 @@ proc traceSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
 #     of SyncOnlyHash:
 #       trace "OnlyHash",
 #         bestBlock = sp.ns.pp(sp.hunt.bestHash, sp.hunt.bestNumber)
-#     of SyncHuntForward:
+#     of HuntForward:
 #       template highMax(n: BlockNumber): string =
 #         if n == high(BlockNumber): "max" else: $n
 #       trace "HuntForward",
 #         low=sp.hunt.lowNumber, high=highMax(sp.hunt.highNumber),
 #         step=sp.hunt.step
-#     of SyncHuntBackward:
+#     of HuntBackward:
 #       trace "HuntBackward",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=sp.hunt.step
-#     of SyncHuntRange:
+#     of HuntRange:
 #       trace "HuntRange",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=sp.hunt.step
-#     of SyncHuntRangeFinal:
+#     of HuntRangeFinal:
 #       trace "HuntRangeFinal",
 #         low=sp.hunt.lowNumber, high=sp.hunt.highNumber, step=1
 
@@ -204,7 +242,7 @@ proc lockSyncStateRoot(sp: SnapPeer, number: BlockNumber, hash: BlockHash,
 
 proc setHuntBackward(sp: SnapPeer, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
-  sp.hunt.syncMode = SyncHuntBackward
+  sp.hunt.syncMode = HuntBackward
   sp.hunt.step = 0
   # Block zero is always present.
   sp.hunt.lowNumber = 0.toBlockNumber
@@ -214,7 +252,7 @@ proc setHuntBackward(sp: SnapPeer, lowestAbsent: BlockNumber) =
 
 proc setHuntForward(sp: SnapPeer, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
-  sp.hunt.syncMode = SyncHuntForward
+  sp.hunt.syncMode = HuntForward
   sp.hunt.step = 0
   sp.hunt.lowNumber = highestPresent
   sp.hunt.highNumber = high(BlockNumber)
@@ -279,7 +317,7 @@ proc peerSyncChainEmptyReply(sp: SnapPeer, request: BlocksRequest) =
       # Due to a reorg, peer doesn't have the block hash it originally gave us.
       # Switch to hunt forward from block zero to find the canonical head.
       sp.setHuntForward(0.toBlockNumber)
-    of SyncHuntForward, SyncHuntBackward, SyncHuntRange, SyncHuntRangeFinal:
+    of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
       # Update the hunt range.
       sp.updateHuntAbsent(lowestAbsent)
 
@@ -336,7 +374,7 @@ proc peerSyncChainNonEmptyReply(sp: SnapPeer, request: BlocksRequest,
     of SyncOnlyHash:
       # As `SyncLocked` but without the block number check.
       sp.setHuntForward(highestPresent)
-    of SyncHuntForward, SyncHuntBackward, SyncHuntRange, SyncHuntRangeFinal:
+    of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
       # Update the hunt range.
       sp.updateHuntPresent(highestPresent)
 
@@ -397,7 +435,7 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
   # `hunt.lowNumber+1` must not be used consistently as the start, even with a
   # large enough query step size, as that will sometimes take O(N) to converge
   # in both the exponential and quasi-binary searches.  (Ending at
-  # `hunt.highNumber-1` is fine if `syncHuntQuerySize > 1`.  This asymmetry is
+  # `hunt.highNumber-1` is fine if `huntQuerySize > 1`.  This asymmetry is
   # due to ascending queries (see earlier comment), and non-empty truncated
   # query reply being proof of presence before the truncation point, but not
   # proof of absence after it.  A reply can be truncated just because the peer
@@ -406,7 +444,7 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
   # The proportional gap requirement is why we divide by query size here,
   # instead of stretching to fit more strictly with `(range-1)/(size-1)`.
 
-  const syncHuntFinalSize = max(2, syncHuntQuerySize)
+  const huntFinalSize = max(2, huntQuerySize)
   var maxStep = 0u
 
   let fullRangeClamped =
@@ -414,23 +452,23 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
     else: min(high(uint).toBlockNumber,
               sp.hunt.highNumber - sp.hunt.lowNumber).truncate(uint) - 1
 
-  if fullRangeClamped >= syncHuntFinalSize: # `SyncHuntRangeFinal` condition.
-    maxStep = if syncHuntQuerySize == 1:
+  if fullRangeClamped >= huntFinalSize: # `HuntRangeFinal` condition.
+    maxStep = if huntQuerySize == 1:
                 fullRangeClamped
-              elif (syncHuntQuerySize and (syncHuntQuerySize-1)) == 0:
-                fullRangeClamped shr fastLog2(syncHuntQuerySize)
+              elif (huntQuerySize and (huntQuerySize-1)) == 0:
+                fullRangeClamped shr fastLog2(huntQuerySize)
               else:
-                fullRangeClamped div syncHuntQuerySize
-    doAssert syncHuntFinalSize >= syncHuntQuerySize
+                fullRangeClamped div huntQuerySize
+    doAssert huntFinalSize >= huntQuerySize
     doAssert maxStep >= 1 # Ensured by the above assertion.
 
   # Check for exponential search (expanding).  Iterate `hunt.step`.  O(log N)
   # requires `startBlock` to be offset from `hunt.lowNumber`/`hunt.highNumber`.
-  if sp.hunt.syncMode in {SyncHuntForward, SyncHuntBackward} and
-     fullRangeClamped >= syncHuntFinalSize:
-    let forward = sp.hunt.syncMode == SyncHuntForward
-    let expandShift = if forward: syncHuntForwardExpandShift
-                      else: syncHuntBackwardExpandShift
+  if sp.hunt.syncMode in {HuntForward, HuntBackward} and
+     fullRangeClamped >= huntFinalSize:
+    let forward = sp.hunt.syncMode == HuntForward
+    let expandShift = if forward: huntForwardExpandShift
+                      else: huntBackwardExpandShift
     # Switches to range search when this condition is no longer true.
     if sp.hunt.step < maxStep shr expandShift:
       # The `if` above means the next line cannot overflow.
@@ -438,25 +476,25 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
       # Satisfy the O(log N) convergence conditions.
       result.startBlock.number =
         if forward: sp.hunt.lowNumber + sp.hunt.step.toBlockNumber
-        else: sp.hunt.highNumber - (sp.hunt.step * syncHuntQuerySize).toBlockNumber
-      result.maxResults = syncHuntQuerySize
+        else: sp.hunt.highNumber - (sp.hunt.step * huntQuerySize).toBlockNumber
+      result.maxResults = huntQuerySize
       result.skip = sp.hunt.step - 1
       return
 
   # For tracing/display.
   sp.hunt.step = maxStep
-  sp.hunt.syncMode = SyncHuntRange
+  sp.hunt.syncMode = HuntRange
   if maxStep > 0:
     # Quasi-binary search (converging in a range).  O(log N) requires
     # `startBlock` to satisfy the constraints described above, with the
     # proportionality from both ends of the range.  The optimal information
     # gathering position is tricky and doesn't make much difference, so don't
     # bother.  We'll centre the query in the range.
-    var offset = fullRangeClamped - maxStep * (syncHuntQuerySize-1)
+    var offset = fullRangeClamped - maxStep * (huntQuerySize-1)
     # Rounding must bias towards end to ensure `offset >= 1` after this.
     offset -= offset shr 1
     result.startBlock.number = sp.hunt.lowNumber + offset.toBlockNumber
-    result.maxResults = syncHuntQuerySize
+    result.maxResults = huntQuerySize
     result.skip = maxStep - 1
   else:
     # Small range, final step.  At `fullRange == 0` we must query at least one
@@ -468,7 +506,7 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
     # in one round trip, and accommodate a small reorg or extension.
     const afterSoftMax = syncLockedMinimumReply - syncLockedQueryOverlap
     const beforeHardMax = syncLockedQueryOverlap
-    let extra = syncHuntFinalSize - fullRangeClamped
+    let extra = huntFinalSize - fullRangeClamped
     var before = (extra + 1) shr 1
     before = max(before + afterSoftMax, extra) - afterSoftMax
     before = min(before, beforeHardMax)
@@ -476,9 +514,9 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
     result.startBlock.number =
       if sp.hunt.bestNumber <= before.toBlockNumber: 1.toBlockNumber
       else: min(sp.hunt.bestNumber - before.toBlockNumber,
-                high(BlockNumber) - (syncHuntFinalSize - 1).toBlockNumber)
-    result.maxResults = syncHuntFinalSize
-    sp.hunt.syncMode = SyncHuntRangeFinal
+                high(BlockNumber) - (huntFinalSize - 1).toBlockNumber)
+    result.maxResults = huntFinalSize
+    sp.hunt.syncMode = HuntRangeFinal
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -542,9 +580,39 @@ proc collectBlockHeaders*(sp: SnapPeer) {.async.} =
   else:
     sp.peerSyncChainEmptyReply(request)
 
-proc collectDataSetup*(sp: SnapPeer) =
-  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+
+proc collectStart*(sp: SnapPeer): bool =
+  ## Initialise `SnapPeer` to support `collectBlockHeaders()` calls
+
+  # Initialise `DataNode` reply handling
   sp.fetchSetup
+
+  # Link in hunt descriptor
+  sp.hunt = CollectHuntEx.new(HuntForward)
+
+  if sp.peer.state(eth).initialized:
+    # We know the hash but not the block number.
+    sp.hunt.bestHash = sp.peer.state(eth).bestBlockHash.BlockHash
+    # TODO: Temporarily disabled because it's useful to test the head hunter.
+    # sp.syncMode = SyncOnlyHash
+    return true
+
+  trace "State(eth) not initialized!"
+
+proc collectLockedOk*(sp: SnapPeer): bool =
+  sp.hunt.syncMode == SyncLocked
+
+# ------------------------------------------------------------------------------
+# Debugging
+# ------------------------------------------------------------------------------
+
+proc huntPp*(sn: SnapPeer): string =
+  let hx = sn.hunt
+  result &= "(mode=" & $hx.syncMode
+  result &= ",num=(" & hx.lowNumber.pp & "," & hx.highNumber.pp & ")"
+  result &= ",best=(" & hx.bestNumber.pp & "," & hx.bestHash.pp & ")"
+  result &= ",step=" & $hx.step
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # End

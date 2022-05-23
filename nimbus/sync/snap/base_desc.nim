@@ -30,15 +30,8 @@ type
   SnapPeerRequestsBase* = ref object of RootObj
     ## Stub object, to be inherited
 
-  SnapPeerMode* = enum
-    ## The current state of tracking the peer's canonical chain head.
-    ## `bestBlockNumber` is only valid when this is `SyncLocked`.
-    SyncLocked
-    SyncOnlyHash
-    SyncHuntForward
-    SyncHuntBackward
-    SyncHuntRange
-    SyncHuntRangeFinal
+  SnapPeerCollectBase* = ref object of RootObj
+    ## Stub object, to be inherited (see collect.nim)
 
   SnapPeerRunState* = enum
     SyncRunningOk
@@ -59,15 +52,6 @@ type
       networkErrors:       SnapPeerStat,
       excessBlockHeaders:  SnapPeerStat,
       wrongBlockHeader:    SnapPeerStat]
-
-  SnapPeerHunt* = tuple
-    ## Peer canonical chain head ("best block") search state.
-    syncMode:              SnapPeerMode   ## Action mode
-    lowNumber:             BlockNumber    ## Recent lowest known block number.
-    highNumber:            BlockNumber    ## Recent highest known block number.
-    bestNumber:            BlockNumber
-    bestHash:              BlockHash
-    step:                  uint
 
   SnapPeerCtrl* = tuple
     ## Control and state settings
@@ -91,8 +75,8 @@ type
     ns*: SnapSync                   ## Snap descriptor object back reference
     peer*: Peer                     ## Reference to eth p2pProtocol entry
     stats*: SnapPeerStats           ## Statistics counters
-    hunt*: SnapPeerHunt             ## Peer chain head search state
     ctrl*: SnapPeerCtrl             ## Control and state settings
+    collect*: SnapPeerCollectBase   ## Opaque object reference
     requests*: SnapPeerRequestsBase ## Opaque object reference
     fetchState*: SnapPeerFetchBase  ## Opaque object reference
 
@@ -110,21 +94,14 @@ proc new*(
     T: type SnapPeer;
     ns: SnapSync;
     peer: Peer;
-    syncMode: SnapPeerMode;
-    runState: SnapPeerRunState): T =
+    runState: SnapPeerRunState
+      ): T =
   ## Initial state, maximum uncertainty range.
   T(ns:           ns,
     peer:         peer,
     ctrl: (
       stateRoot:  none(TrieHash),
-      runState:   runState),
-    hunt: (
-      syncMode:   syncMode,
-      lowNumber:  0.toBlockNumber.BlockNumber,
-      highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
-      bestNumber: 0.toBlockNumber.BlockNumber,
-      bestHash:   ZERO_HASH256.BlockHash,        # whatever
-      step:       0u))
+      runState:   runState))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -177,13 +154,6 @@ proc pp*(bh: BlockHash): string =
 proc pp*(bn: BlockNumber): string =
   if bn == high(BlockNumber): "#max"
   else: "#" & $bn
-
-proc pp*(sp: SnapPeerHunt): string =
-  result &= "(mode=" & $sp.syncMode
-  result &= ",num=(" & sp.lowNumber.pp & "," & sp.highNumber.pp & ")"
-  result &= ",best=(" & sp.bestNumber.pp & "," & sp.bestHash.pp & ")"
-  result &= ",step=" & $sp.step
-  result &= ")"
 
 # ------------------------------------------------------------------------------
 # End

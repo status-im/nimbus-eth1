@@ -59,7 +59,7 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
       var n = sn.peerTab.len - 1
       for sp in sn.peerTab.prevValues:
         trace "*** Peer list entry",
-          n, poolSize, peer=sp, hunt=sp.hunt.pp
+          n, poolSize, peer=sp, collect=sp.huntPp
         n.dec
 
 # ------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ proc syncPeerLoop(sp: SnapPeer) {.async.} =
     # TODO: Update implementation of lruFetch() using re-link, only
     discard sp.nsCtx.peerTab.lruFetch(sp.peer)
 
-    let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
+    let delayMs = if sp.collectLockedOk: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
@@ -97,21 +97,15 @@ proc syncPeerStop(sp: SnapPeer) =
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer connected", peer
 
-  let sp = SnapPeer.new(ns, peer, SyncHuntForward, SyncRunningOk)
-  sp.collectDataSetup()
-
-  if peer.state(eth).initialized:
-    # We know the hash but not the block number.
-    sp.hunt.bestHash = peer.state(eth).bestBlockHash.BlockHash
-    # TODO: Temporarily disabled because it's useful to test the head hunter.
-    # sp.syncMode = SyncOnlyHash
-  else:
-    trace "State(eth) not initialized!"
+  let sp = SnapPeer.new(ns, peer, SyncRunningOk)
 
   # Manage connection table, check for existing entry
   if ns.peerTab.hasKey(peer):
-    trace "Peer exists already!", peer
+    trace "Peer exists already!", peer # can this happen, at all?
     return
+
+  # Initialise snap sync for this peer
+  discard sp.collectStart
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.
