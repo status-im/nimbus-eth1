@@ -15,9 +15,8 @@ import
   chronos,
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
- "."/[protocol, types],
-  ./snap/[base_desc, collect],
-  ./snap/peer/[sync_xdesc, peer_xdesc]
+  "."/[protocol, types],
+  ./snap/[base_desc, collect, peer/sync_xdesc]
 
 {.push raises: [Defect].}
 
@@ -26,9 +25,9 @@ logScope:
 
 type
   SnapSyncCtx* = ref object of SnapSyncEx
-    peerTab: KeyedQueue[Peer,SnapPeerEx] ## LRU cache
-    tabSize: int                         ## maximal number of entries
-    pool: PeerPool                       ## for starting the system, debugging
+    peerTab: KeyedQueue[Peer,SnapPeer] ## LRU cache
+    tabSize: int                       ## maximal number of entries
+    pool: PeerPool                     ## for starting the system, debugging
 
     # debugging
     lastDump: seq[string]
@@ -38,18 +37,12 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nsx(sp: SnapPeerEx): SnapSyncCtx =
+proc nsCtx(sp: SnapPeer): SnapSyncCtx =
   sp.ns.SnapSyncCtx
 
 proc hash(peer: Peer): Hash =
   ## Needed for `peerTab` table key comparison
   hash(peer.remote.id)
-
-proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
-  # Initial state: hunt forward, maximum uncertainty range.
-  T(ns:   ns,
-    peer: peer,
-    hunt: SnapPeerHunt.new(SyncHuntForward))
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -73,7 +66,7 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
+proc syncPeerLoop(sp: SnapPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   var cache = ""
   while sp.ctrl.runState != SyncStopped:
@@ -86,16 +79,16 @@ proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
 
     # Rotate LRU connection table so the most used entry is at the list end
     # TODO: Update implementation of lruFetch() using re-link, only
-    discard sp.nsx.peerTab.lruFetch(sp.peer)
+    discard sp.nsCtx.peerTab.lruFetch(sp.peer)
 
     let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
-proc syncPeerStart(sp: SnapPeerEx) =
+proc syncPeerStart(sp: SnapPeer) =
   asyncSpawn sp.syncPeerLoop()
 
-proc syncPeerStop(sp: SnapPeerEx) =
+proc syncPeerStop(sp: SnapPeer) =
   sp.ctrl.runState = SyncStopped
   # TODO: Cancel running `SnapPeer` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
@@ -104,7 +97,7 @@ proc syncPeerStop(sp: SnapPeerEx) =
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer connected", peer
 
-  let sp = SnapPeerEx.new(ns, peer)
+  let sp = SnapPeer.new(ns, peer, SyncHuntForward, SyncRunningOk)
   sp.collectDataSetup()
 
   if peer.state(eth).initialized:

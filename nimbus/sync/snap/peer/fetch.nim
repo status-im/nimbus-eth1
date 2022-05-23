@@ -17,7 +17,7 @@ import
   eth/[common/eth_types, p2p],
   ../../types,
   ".."/[path_desc, base_desc],
-  "."/[common, fetch_trie, fetch_snap, peer_xdesc]
+  "."/[common, fetch_trie, fetch_snap]
 
 {.push raises: [Defect].}
 
@@ -27,7 +27,7 @@ logScope:
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
 # `fetchSnapOk` where those are defined.
 
-proc fetch*(sp: SnapPeerEx) {.async.} =
+proc fetch*(sp: SnapPeer) {.async.} =
   var stateRoot = sp.ctrl.stateRoot.get
   trace "Syncing from stateRoot", peer=sp, stateRoot
 

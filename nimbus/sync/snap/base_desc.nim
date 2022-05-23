@@ -22,7 +22,13 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  SnapStat* = distinct uint
+  SnapPeerStat* = distinct uint
+
+  SnapPeerFetchBase* = ref object of RootObj
+    ## Stub object, to be inherited
+
+  SnapPeerRequestsBase* = ref object of RootObj
+    ## Stub object, to be inherited
 
   SnapPeerMode* = enum
     ## The current state of tracking the peer's canonical chain head.
@@ -43,42 +49,44 @@ type
     ## Statistics counters for events associated with this peer.
     ## These may be used to recognise errors and select good peers.
     ok: tuple[
-      reorgDetected:       SnapStat,
-      getBlockHeaders:     SnapStat,
-      getNodeData:         SnapStat]
+      reorgDetected:       SnapPeerStat,
+      getBlockHeaders:     SnapPeerStat,
+      getNodeData:         SnapPeerStat]
     minor: tuple[
-      timeoutBlockHeaders: SnapStat,
-      unexpectedBlockHash: SnapStat]
+      timeoutBlockHeaders: SnapPeerStat,
+      unexpectedBlockHash: SnapPeerStat]
     major: tuple[
-      networkErrors:       SnapStat,
-      excessBlockHeaders:  SnapStat,
-      wrongBlockHeader:    SnapStat]
+      networkErrors:       SnapPeerStat,
+      excessBlockHeaders:  SnapPeerStat,
+      wrongBlockHeader:    SnapPeerStat]
 
   SnapPeerHunt* = tuple
     ## Peer canonical chain head ("best block") search state.
-    syncMode:   SnapPeerMode   ## Action mode
-    lowNumber:  BlockNumber    ## Recent lowest known block number.
-    highNumber: BlockNumber    ## Recent highest known block number.
-    bestNumber: BlockNumber
-    bestHash:   BlockHash
-    step:       uint
+    syncMode:              SnapPeerMode   ## Action mode
+    lowNumber:             BlockNumber    ## Recent lowest known block number.
+    highNumber:            BlockNumber    ## Recent highest known block number.
+    bestNumber:            BlockNumber
+    bestHash:              BlockHash
+    step:                  uint
 
   SnapPeerCtrl* = tuple
     ## Control and state settings
-    stateRoot:   Option[TrieHash]
+    stateRoot:             Option[TrieHash]
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
-    runState:    SnapPeerRunState
+    runState:              SnapPeerRunState
 
   # -------
 
-  SnapPeerBase* = ref object of RootObj
-    ## Peer state tracking descriptor.
-    ns*: SnapSyncBase      ## Main snap descriptor object back reference
-    peer*: Peer            ## Object reference to eth p2pProtocol entry
-    stats*: SnapPeerStats  ## Statistics counters
-    hunt*: SnapPeerHunt    ## Peer chain head search state
-    ctrl*: SnapPeerCtrl    ## Control and state settings
+  SnapPeer* = ref object
+    ## Non-inheritable peer state tracking descriptor.
+    ns*: SnapSyncBase               ## Snap descriptor object back reference
+    peer*: Peer                     ## Object reference to eth p2pProtocol entry
+    stats*: SnapPeerStats           ## Statistics counters
+    hunt*: SnapPeerHunt             ## Peer chain head search state
+    ctrl*: SnapPeerCtrl             ## Control and state settings
+    requests*: SnapPeerRequestsBase ## Opaque object reference
+    fetchState*: SnapPeerFetchBase  ## Opaque object reference
 
   SnapSyncBase* = ref object of RootObj
     ## Shared state among all peers of a snap syncing node.
@@ -89,23 +97,34 @@ type
 # Public Constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SnapPeerHunt; syncMode: SnapPeerMode): T =
-  result = (
-    syncMode:   syncMode,
-    lowNumber:  0.toBlockNumber.BlockNumber,
-    highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
-    bestNumber: 0.toBlockNumber.BlockNumber,
-    bestHash:   ZERO_HASH256.BlockHash,        # whatever
-    step:       0u)
+proc new*(
+    T: type SnapPeer;
+    ns: SnapSyncBase;
+    peer: Peer;
+    syncMode: SnapPeerMode;
+    runState: SnapPeerRunState): T =
+  ## Initial state, maximum uncertainty range.
+  T(ns:           ns,
+    peer:         peer,
+    ctrl: (
+      stateRoot:  none(TrieHash),
+      runState:   runState),
+    hunt: (
+      syncMode:   syncMode,
+      lowNumber:  0.toBlockNumber.BlockNumber,
+      highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
+      bestNumber: 0.toBlockNumber.BlockNumber,
+      bestHash:   ZERO_HASH256.BlockHash,        # whatever
+      step:       0u))
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc `$`*(sp: SnapPeerBase): string =
+proc `$`*(sp: SnapPeer): string =
   $sp.peer
 
-proc inc(stat: var SnapStat) {.borrow.}
+proc inc(stat: var SnapPeerStat) {.borrow.}
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

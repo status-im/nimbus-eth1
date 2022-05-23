@@ -28,7 +28,7 @@ import
   eth/[common/eth_types, p2p],
   "../.."/[protocol/trace_config, types],
   ".."/[base_desc, path_desc],
-  "."/[common, reply_data, peer_xdesc, sync_xdesc, validate_trienode]
+  "."/[common, reply_data, sync_xdesc, validate_trienode]
 
 {.push raises: [Defect].}
 
@@ -43,46 +43,54 @@ const
     ## Maximum number of `GetNodeData` requests in parallel to a single peer.
 
 type
-  SingleNodeRequestEx = ref object of SingleNodeRequestBase
-    hash:                   NodeHash
-    path:                   InteriorPath
-    future:                 Future[Blob]
+  SingleNodeRequest = ref object
+    hash:               NodeHash
+    path:               InteriorPath
+    future:             Future[Blob]
 
-proc hash(n: SingleNodeRequestBase): NodeHash =
-  n.SingleNodeRequestEx.hash
+  FetchStateEx = ref object of SnapPeerFetchBase
+    ## Account fetching state on a single peer.
+    sp:                 SnapPeer
+    nodeGetQueue:       seq[SingleNodeRequest]
+    nodeGetsInFlight:   int
+    scheduledBatch:     bool
+    progressPrefix:     string
+    progressCount:      int
+    nodesInFlight:      int
+    getNodeDataErrors:  int
+    leafRange:          LeafRange
+    unwindAccounts:     int64
+    unwindAccountBytes: int64
+    finish:             Future[void]
 
-proc path(n: SingleNodeRequestBase): InteriorPath =
-  n.SingleNodeRequestEx.path
+proc fetchStateEx(sp: SnapPeer): FetchStateEx =
+  sp.fetchState.FetchStateEx
 
-proc future(n: SingleNodeRequestBase): Future[Blob] =
-  n.SingleNodeRequestEx.future
+proc `fetchStateEx=`(sp: SnapPeer; value: FetchStateEx) =
+  sp.fetchState = value
 
+proc new(T: type FetchStateEx; peer: SnapPeer): T =
+  FetchStateEx(sp: peer)
 
 # Forward declaration.
-proc scheduleBatchGetNodeData(fetch: FetchState) {.gcsafe.}
+proc scheduleBatchGetNodeData(fetch: FetchStateEx) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
+proc wrapCallGetNodeData(fetch: FetchStateEx, hashes: seq[NodeHash],
                          futures: seq[Future[Blob]],
                          pathFrom, pathTo: InteriorPath) {.async.} =
   inc fetch.nodeGetsInFlight
-  let reply = await fetch.sp.replyDataGet(hashes, pathFrom, pathTo)
+  let reply = await ReplyData.new(fetch.sp, hashes, pathFrom, pathTo)
 
   # Timeout, packet and packet error trace messages are done in `get_nodedata`,
   # where there is more context than here.  Here we always received just valid
   # data with hashes already verified, or empty list of `nil`.
-  if reply.isNil:
-    # Timeout or error.
-    fetch.sp.ctrl.runState = SyncStopRequest
-    for i in 0 ..< futures.len:
-      futures[i].complete(@[])
-
-  elif reply.hashVerifiedData.len == 0:
-    # Empty reply, matched to request.
-    # It means there are none of the nodes available, but it's not an error.
+  if reply.replyType == NoReplyData:
+    # Empty reply, timeout or error (i.e. `reply.isNil`).
+    # It means there are none of the nodes available.
     fetch.sp.ctrl.runState = SyncStopRequest
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
@@ -90,18 +98,14 @@ proc wrapCallGetNodeData(fetch: FetchState, hashes: seq[NodeHash],
   else:
     # Non-empty reply.
     for i in 0 ..< futures.len:
-      let index = reply.replyDataReverseMap(i)
-      if index >= 0:
-        futures[i].complete(reply.hashVerifiedData[index])
-      else:
-        futures[i].complete(@[])
+      futures[i].complete(reply[i])
 
   dec fetch.nodeGetsInFlight
   # Receiving a reply may allow more requests to be sent.
   if fetch.nodeGetQueue.len > 0 and not fetch.scheduledBatch:
     fetch.scheduleBatchGetNodeData()
 
-proc batchGetNodeData(fetch: FetchState) =
+proc batchGetNodeData(fetch: FetchStateEx) =
   var i = fetch.nodeGetQueue.len
   if i == 0 or fetch.nodeGetsInFlight >= maxParallelGetNodeData:
     return
@@ -147,7 +151,7 @@ proc batchGetNodeData(fetch: FetchState) =
   #   internally (like SQLite by default), the left-to-right write order will
   #   improve read performance when other peers sync reading this local node.
 
-  proc cmpSingleNodeRequest(x, y: SingleNodeRequestBase): int =
+  proc cmpSingleNodeRequest(x, y: SingleNodeRequest): int =
     # `x` and `y` are deliberately swapped to get descending order.  See above.
     cmp(y.path, x.path)
   sort(fetch.nodeGetQueue, cmpSingleNodeRequest)
@@ -184,18 +188,18 @@ proc batchGetNodeData(fetch: FetchState) =
     futures.setLen(0)
     fetch.nodeGetQueue.setLen(i)
 
-proc scheduleBatchGetNodeData(fetch: FetchState) =
+proc scheduleBatchGetNodeData(fetch: FetchStateEx) =
   if not fetch.scheduledBatch:
     fetch.scheduledBatch = true
     proc batchGetNodeData(arg: pointer) =
-      let fetch = cast[FetchState](arg)
+      let fetch = cast[FetchStateEx](arg)
       fetch.scheduledBatch = false
       fetch.batchGetNodeData()
     # We rely on `callSoon` scheduling for the _end_ of the current run list,
     # after other async functions finish adding more single node requests.
     callSoon(batchGetNodeData, cast[pointer](fetch))
 
-proc getNodeData(fetch: FetchState,
+proc getNodeData(fetch: FetchStateEx,
                  hash: TrieHash, path: InteriorPath): Future[Blob] {.async.} =
   ## Request _one_ item of trie node data asynchronously.  This function
   ## batches requested into larger `eth.GetNodeData` requests efficiently.
@@ -204,7 +208,7 @@ proc getNodeData(fetch: FetchState,
       depth=path.depth, path, hash=($hash)
 
   let future = newFuture[Blob]()
-  fetch.nodeGetQueue.add SingleNodeRequestEx(
+  fetch.nodeGetQueue.add SingleNodeRequest(
     hash: hash.NodeHash,
     path: path,
     future: future)
@@ -230,7 +234,7 @@ proc getNodeData(fetch: FetchState,
         nodeLen=nodeBytes.len
   return nodeBytes
 
-proc pathInRange(fetch: FetchState, path: InteriorPath): bool =
+proc pathInRange(fetch: FetchStateEx, path: InteriorPath): bool =
   # TODO: This method is ugly and unnecessarily slow.
   var compare = fetch.leafRange.leafLow.toInteriorPath
   while compare.depth > path.depth:
@@ -244,7 +248,7 @@ proc pathInRange(fetch: FetchState, path: InteriorPath): bool =
     return false
   return true
 
-proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
+proc traverse(fetch: FetchStateEx, hash: NodeHash, path: InteriorPath,
               fromExtension: bool) {.async.} =
   template errorReturn() =
     fetch.sp.ctrl.runState = SyncStopRequest
@@ -312,7 +316,7 @@ proc traverse(fetch: FetchState, hash: NodeHash, path: InteriorPath,
   if fetch.nodesInFlight == 0:
     fetch.finish.complete()
 
-proc probeGetNodeData(sp: SnapPeerEx, stateRoot: TrieHash): Future[bool]
+proc probeGetNodeData(sp: SnapPeer, stateRoot: TrieHash): Future[bool]
     {.async.} =
   # Before doing real trie traversal on this peer, send a probe request for
   # `stateRoot` to see if it's worth pursuing at all.  We will avoid reserving
@@ -332,19 +336,19 @@ proc probeGetNodeData(sp: SnapPeerEx, stateRoot: TrieHash): Future[bool]
   #   send an empty reply.  We don't want to cut off a peer for other purposes
   #   such as a source of blocks and transactions, just because it doesn't
   #   reply to `GetNodeData`.
-  let reply = await sp.replyDataGet(
-    @[stateRoot.NodeHash], InteriorPath(), InteriorPath())
-  return not reply.isNil and reply.hashVerifiedData.len == 1
+  let reply = await ReplyData.new(sp, @[stateRoot.NodeHash])
+  return reply.replyType == SingleEntryReply
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchTrie*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+proc fetchTrie*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
     {.async.} =
-  if sp.fetchState.isNil:
-    sp.fetchState = FetchState(sp: sp)
-  template fetch: auto = sp.fetchState
+  if sp.fetchStateEx.isNil:
+    sp.fetchStateEx = FetchStateEx.new(sp)
+
+  let fetch = sp.fetchStateEx
 
   fetch.leafRange = leafRange
   fetch.finish = newFuture[void]()
@@ -361,9 +365,9 @@ proc fetchTrie*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
     sp.nsx.sharedFetch.countAccountBytes -= fetch.unwindAccountBytes
     sp.putSlice(leafRange)
 
-proc fetchTrieOk*(sp: SnapPeerEx): bool =
+proc fetchTrieOk*(sp: SnapPeer): bool =
   sp.ctrl.runState != SyncStopped and
-   (sp.fetchState.isNil or sp.fetchState.getNodeDataErrors == 0)
+   (sp.fetchStateEx.isNil or sp.fetchStateEx.getNodeDataErrors == 0)
 
 # ------------------------------------------------------------------------------
 # End

@@ -27,7 +27,7 @@ import
   #stint,
   "../.."/[protocol, types],
   ".."/[base_desc, path_desc],
-  "."/[common, peer_xdesc]
+  ./common
 
 {.push raises: [Defect].}
 
@@ -38,7 +38,7 @@ const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc fetchSnap*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
+proc fetchSnap*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
     {.async.} =
   ## Fetch data using the `snap#` protocol
   var origin = leafRange.leafLow
@@ -137,7 +137,7 @@ proc fetchSnap*(sp: SnapPeerEx, stateRoot: TrieHash, leafRange: LeafRange)
 
   sp.countAccounts(keepAccounts)
 
-proc fetchSnapOk*(sp: SnapPeerEx): bool =
+proc fetchSnapOk*(sp: SnapPeer): bool =
   ## Sort of getter: if `true`, fetching data using the `snap#` protocol
   ## is supported.
   sp.ctrl.runState != SyncStopped and sp.peer.supports(snap)

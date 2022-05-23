@@ -65,7 +65,7 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   ../../p2p/chain/chain_desc,
   ".."/[protocol, types],
-  "."/[base_desc, peer/fetch, peer/peer_xdesc,  peer/reply_data]
+  "."/[base_desc, peer/fetch, peer/reply_data]
 
 {.push raises: [Defect].}
 
@@ -123,7 +123,7 @@ static:
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-proc traceSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
+proc traceSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
   ## Trace messages when peer canonical head is confirmed or updated.
   let
     bestBlock = sp.ns.pp(hash, number)
@@ -141,7 +141,7 @@ proc traceSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
     debug "Peer chain head reorg detected", peer,
       advance=(sp.hunt.bestNumber - number), bestBlock
 
-# proc peerSyncChainTrace(sp: SnapPeerEx) =
+# proc peerSyncChainTrace(sp: SnapPeer) =
 #   ## To be called after `peerSyncChainRequest` has updated state.
 #   case sp.hunt.syncMode:
 #     of SyncLocked:
@@ -170,19 +170,19 @@ proc traceSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setSyncLocked(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash) =
+proc setSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
   ## Actions to take when peer canonical head is confirmed or updated.
   sp.traceSyncLocked(number, hash)
   sp.hunt.bestNumber = number
   sp.hunt.bestHash = hash
   sp.hunt.syncMode = SyncLocked
 
-proc clearSyncStateRoot(sp: SnapPeerEx) =
+proc clearSyncStateRoot(sp: SnapPeer) =
   if sp.ctrl.stateRoot.isSome:
     debug "Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
-proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
+proc lockSyncStateRoot(sp: SnapPeer, number: BlockNumber, hash: BlockHash,
                        stateRoot: TrieHash) =
   sp.setSyncLocked(number, hash)
 
@@ -202,7 +202,7 @@ proc lockSyncStateRoot(sp: SnapPeerEx, number: BlockNumber, hash: BlockHash,
       thisBlock, stateRoot
     asyncSpawn sp.fetch()
 
-proc setHuntBackward(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
+proc setHuntBackward(sp: SnapPeer, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
   sp.hunt.syncMode = SyncHuntBackward
   sp.hunt.step = 0
@@ -212,7 +212,7 @@ proc setHuntBackward(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
   sp.hunt.highNumber = if lowestAbsent > 0: lowestAbsent else: 1.toBlockNumber
   sp.clearSyncStateRoot()
 
-proc setHuntForward(sp: SnapPeerEx, highestPresent: BlockNumber) =
+proc setHuntForward(sp: SnapPeer, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
   sp.hunt.syncMode = SyncHuntForward
   sp.hunt.step = 0
@@ -220,7 +220,7 @@ proc setHuntForward(sp: SnapPeerEx, highestPresent: BlockNumber) =
   sp.hunt.highNumber = high(BlockNumber)
   sp.clearSyncStateRoot()
 
-proc updateHuntAbsent(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
+proc updateHuntAbsent(sp: SnapPeer, lowestAbsent: BlockNumber) =
   ## Converge uncertainty range backward.
   if lowestAbsent < sp.hunt.highNumber:
     sp.hunt.highNumber = lowestAbsent
@@ -231,7 +231,7 @@ proc updateHuntAbsent(sp: SnapPeerEx, lowestAbsent: BlockNumber) =
       sp.setHuntBackward(lowestAbsent)
   sp.clearSyncStateRoot()
 
-proc updateHuntPresent(sp: SnapPeerEx, highestPresent: BlockNumber) =
+proc updateHuntPresent(sp: SnapPeer, highestPresent: BlockNumber) =
   ## Converge uncertainty range forward.
   if highestPresent > sp.hunt.lowNumber:
     sp.hunt.lowNumber = highestPresent
@@ -242,7 +242,7 @@ proc updateHuntPresent(sp: SnapPeerEx, highestPresent: BlockNumber) =
       sp.setHuntForward(highestPresent)
   sp.clearSyncStateRoot()
 
-proc peerSyncChainEmptyReply(sp: SnapPeerEx, request: BlocksRequest) =
+proc peerSyncChainEmptyReply(sp: SnapPeer, request: BlocksRequest) =
   ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
   ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
   ## and the previous canonical chain head has disappeared.  If hunting, this
@@ -291,7 +291,7 @@ proc peerSyncChainEmptyReply(sp: SnapPeerEx, request: BlocksRequest) =
     sp.hunt.bestHash = default(typeof(sp.hunt.bestHash))
     sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
 
-proc peerSyncChainNonEmptyReply(sp: SnapPeerEx, request: BlocksRequest,
+proc peerSyncChainNonEmptyReply(sp: SnapPeer, request: BlocksRequest,
                                 headers: openArray[BlockHeader]) =
   ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
   ## is present on the peer and in its canonical chain (unless the request was
@@ -347,7 +347,7 @@ proc peerSyncChainNonEmptyReply(sp: SnapPeerEx, request: BlocksRequest,
     sp.hunt.bestHash = headers[highestIndex].blockHash.BlockHash
     sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
 
-proc peerSyncChainRequest(sp: SnapPeerEx): BlocksRequest =
+proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
   ## Choose `GetBlockHeaders` parameters when hunting or following the canonical
   ## chain of a peer.
   if sp.hunt.syncMode == SyncLocked:
@@ -484,7 +484,7 @@ proc peerSyncChainRequest(sp: SnapPeerEx): BlocksRequest =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc collectBlockHeaders*(sp: SnapPeerEx) {.async.} =
+proc collectBlockHeaders*(sp: SnapPeer) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -542,7 +542,7 @@ proc collectBlockHeaders*(sp: SnapPeerEx) {.async.} =
   else:
     sp.peerSyncChainEmptyReply(request)
 
-proc collectDataSetup*(sp: SnapPeerEx) =
+proc collectDataSetup*(sp: SnapPeer) =
   sp.replyDataSetup
 
 # ------------------------------------------------------------------------------
