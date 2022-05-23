@@ -287,110 +287,9 @@ proc updateHuntPresent(sp: WorkerBuddy, highestPresent: BlockNumber) =
       sp.setHuntForward(highestPresent)
   sp.clearSyncStateRoot()
 
-proc peerSyncChainEmptyReply(sp: WorkerBuddy, request: BlocksRequest) =
-  ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
-  ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
-  ## and the previous canonical chain head has disappeared.  If hunting, this
-  ## updates the range of uncertainty.
-
-  # Treat empty response to a request starting from block 1 as equivalent to
-  # length 1 starting from block 0 in `peerSyncChainNonEmptyReply`.  We treat
-  # every peer as if it would send genesis for block 0, without asking for it.
-  if request.skip == 0 and
-     not request.reverse and
-     not request.startBlock.isHash and
-     request.startBlock.number == 1.toBlockNumber:
-    sp.lockSyncStateRoot(0.toBlockNumber,
-                         sp.peer.network.chain.genesisHash.BlockHash,
-                         sp.peer.network.chain.Chain.genesisStateRoot.TrieHash)
-    return
-
-  if sp.hunt.syncMode == SyncLocked or sp.hunt.syncMode == SyncOnlyHash:
-    inc sp.stats.ok.reorgDetected
-    trace "Peer reorg detected, best block disappeared", peer=sp,
-      startBlock=request.startBlock
-
-  let lowestAbsent = request.startBlock.number
-  case sp.hunt.syncMode:
-    of SyncLocked:
-      # If this message doesn't change our knowledge, ignore it.
-      if lowestAbsent > sp.hunt.bestNumber:
-        return
-      # Due to a reorg, peer's canonical head has lower block number, outside
-      # our tracking window.  Sync lock is no longer valid.  Switch to hunt
-      # backward to find the new canonical head.
-      sp.setHuntBackward(lowestAbsent)
-    of SyncOnlyHash:
-      # Due to a reorg, peer doesn't have the block hash it originally gave us.
-      # Switch to hunt forward from block zero to find the canonical head.
-      sp.setHuntForward(0.toBlockNumber)
-    of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
-      # Update the hunt range.
-      sp.updateHuntAbsent(lowestAbsent)
-
-  # Update best block number.  It is invalid except when `SyncLocked`, but
-  # still useful as a hint of what we knew recently, for example in displays.
-  if lowestAbsent <= sp.hunt.bestNumber:
-    sp.hunt.bestNumber = if lowestAbsent == 0.toBlockNumber: lowestAbsent
-                         else: lowestAbsent - 1.toBlockNumber
-    sp.hunt.bestHash = default(typeof(sp.hunt.bestHash))
-    sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
-
-proc peerSyncChainNonEmptyReply(sp: WorkerBuddy, request: BlocksRequest,
-                                headers: openArray[BlockHeader]) =
-  ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
-  ## is present on the peer and in its canonical chain (unless the request was
-  ## made with a hash).  If it's a short, contiguous, ascending order reply, it
-  ## reveals the abrupt transition at the end of the chain and we have learned
-  ## or reconfirmed the real-time head block.  If hunting, this updates the
-  ## range of uncertainty.
-
-  let len = headers.len
-  let highestIndex = if request.reverse: 0 else: len - 1
-
-  # We assume a short enough reply means we've learned the peer's canonical
-  # head, because it would have replied with another header if not at the head.
-  # This is not justified when the request used a general hash, because the
-  # peer doesn't have to reply with its canonical chain in that case, except it
-  # is still justified if the hash was the known canonical head, which is
-  # the case in a `SyncOnlyHash` request.
-  if len < syncLockedMinimumReply and
-     request.skip == 0 and not request.reverse and
-     len.uint < request.maxResults:
-    sp.lockSyncStateRoot(headers[highestIndex].blockNumber,
-                         headers[highestIndex].blockHash.BlockHash,
-                         headers[highestIndex].stateRoot.TrieHash)
-    return
-
-  # Be careful, this number is from externally supplied data and arithmetic
-  # in the upward direction could overflow.
-  let highestPresent = headers[highestIndex].blockNumber
-
-  # A reply that isn't short enough for the canonical head criterion above
-  # tells us headers up to some number, but it doesn't tell us if there are
-  # more after it in the peer's canonical chain.  We have to request more
-  # headers to find out.
-  case sp.hunt.syncMode:
-    of SyncLocked:
-      # If this message doesn't change our knowledge, ignore it.
-      if highestPresent <= sp.hunt.bestNumber:
-        return
-      # Sync lock is no longer valid as we don't have confirmed canonical head.
-      # Switch to hunt forward to find the new canonical head.
-      sp.setHuntForward(highestPresent)
-    of SyncOnlyHash:
-      # As `SyncLocked` but without the block number check.
-      sp.setHuntForward(highestPresent)
-    of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
-      # Update the hunt range.
-      sp.updateHuntPresent(highestPresent)
-
-  # Update best block number.  It is invalid except when `SyncLocked`, but
-  # still useful as a hint of what we knew recently, for example in displays.
-  if highestPresent > sp.hunt.bestNumber:
-    sp.hunt.bestNumber = highestPresent
-    sp.hunt.bestHash = headers[highestIndex].blockHash.BlockHash
-    sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
+# ------------------------------------------------------------------------------
+# Private functions, assemble request
+# ------------------------------------------------------------------------------
 
 proc peerSyncChainRequest(sp: WorkerBuddy): BlocksRequest =
   ## Choose `GetBlockHeaders` parameters when hunting or following the canonical
@@ -526,6 +425,123 @@ proc peerSyncChainRequest(sp: WorkerBuddy): BlocksRequest =
     sp.hunt.syncMode = HuntRangeFinal
 
 # ------------------------------------------------------------------------------
+# Private functions, reply handling
+# ------------------------------------------------------------------------------
+
+proc peerSyncChainEmptyReply(
+    sp: WorkerBuddy,
+    request: BlocksRequest) =
+  ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
+  ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
+  ## and the previous canonical chain head has disappeared.  If hunting, this
+  ## updates the range of uncertainty.
+
+  # Treat empty response to a request starting from block 1 as equivalent to
+  # length 1 starting from block 0 in `peerSyncChainNonEmptyReply`.  We treat
+  # every peer as if it would send genesis for block 0, without asking for it.
+  if request.skip == 0 and
+     not request.reverse and
+     not request.startBlock.isHash and
+     request.startBlock.number == 1.toBlockNumber:
+    sp.lockSyncStateRoot(
+      0.toBlockNumber,
+      sp.peer.network.chain.genesisHash.BlockHash,
+      sp.peer.network.chain.Chain.genesisStateRoot.TrieHash)
+    return
+
+  if sp.hunt.syncMode in {SyncLocked, SyncOnlyHash}:
+    inc sp.stats.ok.reorgDetected
+    trace "Peer reorg detected, best block disappeared", peer=sp,
+      startBlock=request.startBlock
+
+  let lowestAbsent = request.startBlock.number
+  case sp.hunt.syncMode:
+  of SyncLocked:
+    # If this message doesn't change our knowledge, ignore it.
+    if lowestAbsent > sp.hunt.bestNumber:
+      return
+    # Due to a reorg, peer's canonical head has lower block number, outside
+    # our tracking window.  Sync lock is no longer valid.  Switch to hunt
+    # backward to find the new canonical head.
+    sp.setHuntBackward(lowestAbsent)
+  of SyncOnlyHash:
+    # Due to a reorg, peer doesn't have the block hash it originally gave us.
+    # Switch to hunt forward from block zero to find the canonical head.
+    sp.setHuntForward(0.toBlockNumber)
+  of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
+    # Update the hunt range.
+    sp.updateHuntAbsent(lowestAbsent)
+
+  # Update best block number.  It is invalid except when `SyncLocked`, but
+  # still useful as a hint of what we knew recently, for example in displays.
+  if lowestAbsent <= sp.hunt.bestNumber:
+    sp.hunt.bestNumber =
+      if lowestAbsent == 0.toBlockNumber: lowestAbsent
+      else: lowestAbsent - 1.toBlockNumber
+    sp.hunt.bestHash = default(typeof(sp.hunt.bestHash))
+    sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
+
+
+proc peerSyncChainNonEmptyReply(
+    sp: WorkerBuddy,
+    request: BlocksRequest,
+    headers: openArray[BlockHeader]) =
+  ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
+  ## is present on the peer and in its canonical chain (unless the request was
+  ## made with a hash).  If it's a short, contiguous, ascending order reply, it
+  ## reveals the abrupt transition at the end of the chain and we have learned
+  ## or reconfirmed the real-time head block.  If hunting, this updates the
+  ## range of uncertainty.
+
+  let len = headers.len
+  let highestIndex = if request.reverse: 0 else: len - 1
+
+  # We assume a short enough reply means we've learned the peer's canonical
+  # head, because it would have replied with another header if not at the head.
+  # This is not justified when the request used a general hash, because the
+  # peer doesn't have to reply with its canonical chain in that case, except it
+  # is still justified if the hash was the known canonical head, which is
+  # the case in a `SyncOnlyHash` request.
+  if len < syncLockedMinimumReply and
+     request.skip == 0 and not request.reverse and
+     len.uint < request.maxResults:
+    sp.lockSyncStateRoot(
+      headers[highestIndex].blockNumber,
+      headers[highestIndex].blockHash.BlockHash,
+      headers[highestIndex].stateRoot.TrieHash)
+    return
+
+  # Be careful, this number is from externally supplied data and arithmetic
+  # in the upward direction could overflow.
+  let highestPresent = headers[highestIndex].blockNumber
+
+  # A reply that isn't short enough for the canonical head criterion above
+  # tells us headers up to some number, but it doesn't tell us if there are
+  # more after it in the peer's canonical chain.  We have to request more
+  # headers to find out.
+  case sp.hunt.syncMode:
+  of SyncLocked:
+    # If this message doesn't change our knowledge, ignore it.
+    if highestPresent <= sp.hunt.bestNumber:
+      return
+    # Sync lock is no longer valid as we don't have confirmed canonical head.
+    # Switch to hunt forward to find the new canonical head.
+    sp.setHuntForward(highestPresent)
+  of SyncOnlyHash:
+    # As `SyncLocked` but without the block number check.
+    sp.setHuntForward(highestPresent)
+  of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
+    # Update the hunt range.
+    sp.updateHuntPresent(highestPresent)
+
+  # Update best block number.  It is invalid except when `SyncLocked`, but
+  # still useful as a hint of what we knew recently, for example in displays.
+  if highestPresent > sp.hunt.bestNumber:
+    sp.hunt.bestNumber = highestPresent
+    sp.hunt.bestHash = headers[highestIndex].blockHash.BlockHash
+    sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -555,7 +571,7 @@ proc workerExec*(sp: WorkerBuddy) {.async.} =
     trace trEthRecvError & "waiting for reply to GetBlockHeaders", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = BuddyStopped
+    sp.ctrl.setStopped
     return
 
   if reply.isNone:
@@ -600,11 +616,9 @@ proc workerStart*(sp: WorkerBuddy): bool =
   if sp.peer.state(eth).initialized:
     # We know the hash but not the block number.
     sp.hunt.bestHash = sp.peer.state(eth).bestBlockHash.BlockHash
-    # TODO: Temporarily disabled because it's useful to test the head hunter.
+    # TODO: Temporarily disabled because it's useful to test the worker.
     # sp.syncMode = SyncOnlyHash
     return true
-
-  trace "State(eth) not initialized!"
 
 proc workerLockedOk*(sp: WorkerBuddy): bool =
   sp.hunt.syncMode == SyncLocked

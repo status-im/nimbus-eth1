@@ -33,9 +33,12 @@ type
   BuddyStat* = distinct uint
 
   BuddyRunState* = enum
-    BuddyRunningOk
-    BuddyStopRequest
-    BuddyStopped
+    ## Combined state of two boolean values (`stopped`,`stopThisState`) as used
+    ## in the original source set up (should be double checked and simplified.)
+    BuddyRunningOk = 0   ## running, not requested to stop
+    BuddyStopRequested   ## running, stop request
+    BuddyStopPending     ## stopped, no stop request (for completeness)
+    BuddyStoppedOk       ## stopped, stop request
 
   WorkerBuddyStats* = tuple
     ## Statistics counters for events associated with this peer.
@@ -52,9 +55,9 @@ type
       excessBlockHeaders:  BuddyStat,
       wrongBlockHeader:    BuddyStat]
 
-  WorkerBuddyCtrl* = tuple
+  WorkerBuddyCtrl* = object
     ## Control and state settings
-    stateRoot:             Option[TrieHash]
+    stateRoot*:            Option[TrieHash]
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
     runState:              BuddyRunState
@@ -91,18 +94,9 @@ type
 # Public Constructor
 # ------------------------------------------------------------------------------
 
-proc new*(
-    T: type WorkerBuddy;
-    ns: Worker;
-    peer: Peer;
-    runState: BuddyRunState
-      ): T =
-  ## Initial state, maximum uncertainty range.
-  T(ns:           ns,
-    peer:         peer,
-    ctrl: (
-      stateRoot:  none(TrieHash),
-      runState:   runState))
+proc new*(T: type WorkerBuddy; ns: Worker; peer: Peer): T =
+  ## Initial state all default settings.
+  T(ns: ns, peer: peer)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -112,6 +106,58 @@ proc `$`*(sp: WorkerBuddy): string =
   $sp.peer
 
 proc inc(stat: var BuddyStat) {.borrow.}
+
+# ------------------------------------------------------------------------------
+# Public `BuddyRunState` execution control functions, start stop etc
+# ------------------------------------------------------------------------------
+
+proc isStopped*(ctrl: WorkerBuddyCtrl): bool =
+  ctrl.runState in {BuddyStoppedOk,BuddyStopPending}
+
+proc isStopRequest*(ctrl: WorkerBuddyCtrl): bool =
+  ctrl.runState in {BuddyStopRequested,BuddyStoppedOk}
+
+proc isRunningOk*(ctrl: WorkerBuddyCtrl): bool =
+  ctrl.runState == BuddyRunningOk
+
+proc setRunning*(ctrl: var WorkerBuddyCtrl) =
+  ## Request running
+  case ctrl.runState:
+  of BuddyStopPending:
+    ctrl.runState = BuddyRunningOk
+  of BuddyStoppedOk:
+    ctrl.runState = BuddyStopRequested
+  of BuddyRunningOk, BuddyStopRequested:
+    discard
+
+proc setStopRequest*(ctrl: var WorkerBuddyCtrl) =
+  ## Request stop
+  case ctrl.runState:
+  of BuddyRunningOk:
+    ctrl.runState = BuddyStopRequested
+  of BuddyStopPending:
+    ctrl.runState = BuddyStoppedOk
+  of BuddyStopRequested, BuddyStoppedOk:
+    discard
+
+proc resStopRequest*(ctrl: var WorkerBuddyCtrl) =
+  ## Undo stop request
+  case ctrl.runState:
+  of BuddyStopRequested:
+    ctrl.runState = BuddyRunningOk
+  of BuddyStoppedOk:
+    ctrl.runState = BuddyStopPending
+  of BuddyRunningOk, BuddyStopPending:
+    discard
+
+proc setStopped*(ctrl: var WorkerBuddyCtrl) =
+  case ctrl.runState:
+  of BuddyRunningOk:
+    ctrl.runState = BuddyStopPending
+  of BuddyStopRequested:
+    ctrl.runState = BuddyStoppedOk
+  of BuddyStopPending, BuddyStoppedOk:
+    discard
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

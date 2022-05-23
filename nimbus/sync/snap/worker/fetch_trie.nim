@@ -92,7 +92,7 @@ proc wrapCallGetNodeData(fetch: FetchStateEx, hashes: seq[NodeHash],
   if reply.replyType == NoReplyData:
     # Empty reply, timeout or error (i.e. `reply.isNil`).
     # It means there are none of the nodes available.
-    fetch.sp.ctrl.runState = BuddyStopRequest
+    fetch.sp.ctrl.setStopRequest
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
 
@@ -160,7 +160,7 @@ proc batchGetNodeData(fetch: FetchStateEx) =
   trace "Trie: Sort length", sortLen=i
 
   # If stopped, abort all waiting nodes, so they clean up.
-  if fetch.sp.ctrl.runState != BuddyRunningOk:
+  if not fetch.sp.ctrl.isRunningOk:
     while i > 0:
       fetch.nodeGetQueue[i].future.complete(@[])
       dec i
@@ -218,7 +218,7 @@ proc getNodeData(fetch: FetchStateEx,
     fetch.scheduleBatchGetNodeData()
   let nodeBytes = await future
 
-  if fetch.sp.ctrl.runState != BuddyRunningOk:
+  if not fetch.sp.ctrl.isRunningOk:
     return nodebytes
 
   when trEthTracePacketsOk:
@@ -252,20 +252,20 @@ proc pathInRange(fetch: FetchStateEx, path: InteriorPath): bool =
 proc traverse(fetch: FetchStateEx, hash: NodeHash, path: InteriorPath,
               fromExtension: bool) {.async.} =
   template errorReturn() =
-    fetch.sp.ctrl.runState = BuddyStopRequest
+    fetch.sp.ctrl.setStopRequest
     dec fetch.nodesInFlight
     if fetch.nodesInFlight == 0:
       fetch.finish.complete()
     return
 
   # If something triggered stop earlier, don't request, and clean up now.
-  if fetch.sp.ctrl.runState != BuddyRunningOk:
+  if not fetch.sp.ctrl.isRunningOk:
     errorReturn()
 
   let nodeBytes = await fetch.getNodeData(hash.TrieHash, path)
 
   # If something triggered stop, clean up now.
-  if fetch.sp.ctrl.runState != BuddyRunningOk:
+  if not fetch.sp.ctrl.isRunningOk:
     errorReturn()
   # Don't keep emitting error messages after one error.  We'll allow 10.
   if fetch.getNodeDataErrors >= 10:
@@ -367,7 +367,7 @@ proc fetchTrie*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     sp.putSlice(leafRange)
 
 proc fetchTrieOk*(sp: WorkerBuddy): bool =
-  sp.ctrl.runState != BuddyStopped and
+  not sp.ctrl.isStopped and
    (sp.fetchStateEx.isNil or sp.fetchStateEx.getNodeDataErrors == 0)
 
 proc fetchTrieSetup*(sp: WorkerBuddy) =

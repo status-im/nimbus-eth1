@@ -52,9 +52,9 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
     if stateRoot != sp.ctrl.stateRoot.get:
       trace "Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.ctrl.stateRoot.get
-      sp.ctrl.runState = BuddyRunningOK
+      sp.ctrl.setRunning
 
-    if sp.ctrl.runState == BuddyStopRequest:
+    if sp.ctrl.isStopRequest:
       trace "Pausing sync until we get a new state root", peer=sp
       while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
             (sp.fetchTrieOk or sp.fetchSnapOk) and

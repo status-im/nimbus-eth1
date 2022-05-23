@@ -335,11 +335,13 @@ proc nodeDataRequestDequeue(rq: RequestDataQueue,
     rq.itemHash.del(addr request.hashes[j])
 
 # Forward declarations.
-proc nodeDataTryEmpties(rq: RequestDataQueue)
+proc nodeDataTryEmpties(rq: RequestDataQueue) {.gcsafe.}
 proc nodeDataEnqueueAndSend(request: RequestData) {.async.}
 
-proc nodeDataComplete(request: RequestData, reply: ReplyData,
-                      insideTryEmpties = false) =
+proc nodeDataComplete(
+    request: RequestData,
+    reply: ReplyData,
+    insideTryEmpties = false) {.gcsafe.} =
   ## Complete `request` with received data or other reply.
   if request.future.finished:
     # Subtle: Timer can trigger and its callback be added to Chronos run loop,
@@ -406,7 +408,7 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   ## Helper function to send an `eth.GetNodeData` request.
   ## But not when we're draining the in flight queue to match empty replies.
   let sp = request.sp
-  if sp.ctrl.runState == BuddyStopped:
+  if sp.ctrl.isStopped:
     request.traceGetNodeDataDisconnected()
     request.future.complete(nil)
     return
@@ -426,10 +428,10 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = BuddyStopped
+    sp.ctrl.setStopped
     request.future.fail(e)
 
-proc onNodeData(sp: WorkerBuddy, data: openArray[Blob]) =
+proc onNodeData(sp: WorkerBuddy, data: openArray[Blob]) {.gcsafe.} =
   ## Handle an incoming `eth.NodeData` reply.
   ## Practically, this is also where all the incoming packet trace messages go.
   let rq = sp.requestsEx
@@ -513,7 +515,7 @@ proc new*(
   except CatchableError as e:
     request.traceReplyDataError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = BuddyStopped
+    sp.ctrl.setStopped
     return nil
 
   # Timeout, packet and packet error trace messages are done in `onNodeData`
@@ -556,7 +558,8 @@ proc replyDataSetup*(sp: WorkerBuddy) =
 
   sp.peer.state(eth).onNodeData =
     proc (_: Peer, data: openArray[Blob]) =
-      {.gcsafe.}: onNodeData(sp, data)
+      trace "Custom handler onNodeData", peer=sp, blobs=data.len
+      onNodeData(sp, data)
 
   sp.peer.state(eth).onGetNodeData =
     proc (_: Peer, hashes: openArray[Hash256], data: var seq[Blob]) =

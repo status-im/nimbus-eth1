@@ -69,11 +69,11 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
 proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   var cache = ""
-  while sp.ctrl.runState != BuddyStopped:
+  while not sp.ctrl.isStopped:
 
     # Do something, work a bit
     await sp.workerExec
-    if sp.ctrl.runState == BuddyStopped:
+    if sp.ctrl.isStopped:
       trace "Ignoring stopped peer", peer=sp
       return
 
@@ -89,7 +89,7 @@ proc syncPeerStart(sp: WorkerBuddy) =
   asyncSpawn sp.syncPeerLoop()
 
 proc syncPeerStop(sp: WorkerBuddy) =
-  sp.ctrl.runState = BuddyStopped
+  sp.ctrl.setStopped
   # TODO: Cancel running `WorkerBuddy` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
@@ -97,7 +97,7 @@ proc syncPeerStop(sp: WorkerBuddy) =
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer connected", peer
 
-  let sp = WorkerBuddy.new(ns, peer, BuddyRunningOk)
+  let sp = WorkerBuddy.new(ns, peer)
 
   # Manage connection table, check for existing entry
   if ns.peerTab.hasKey(peer):
@@ -105,7 +105,9 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
     return
 
   # Initialise snap sync for this peer
-  discard sp.workerStart
+  if not sp.workerStart:
+    trace "State(eth) not initialized!"
+    return
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.
