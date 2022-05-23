@@ -15,9 +15,12 @@ import
   eth/[common/eth_types, p2p],
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
-  "."/[protocol, trace_helper]
+  "."/[protocol, types]
 
 {.push raises:[Defect].}
+
+logScope:
+  topics = "fast sync"
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this
@@ -210,16 +213,16 @@ proc getBestBlockNumber(p: Peer): Future[BlockNumber] {.async.} =
     skip: 0,
     reverse: true)
 
-  tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=p,
+  trace trEthSendSending & "GetBlockHeaders (0x03)", peer=p,
     startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await p.getBlockHeaders(request)
 
   if latestBlock.isSome:
     if latestBlock.get.headers.len > 0:
       result = latestBlock.get.headers[0].blockNumber
-    tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer=p,
-     count=latestBlock.get.headers.len,
-     blockNumber=(if latestBlock.get.headers.len > 0: $result else: "missing")
+    trace trEthRecvGot & "BlockHeaders (0x04)", peer=p,
+      count=latestBlock.get.headers.len,
+      blockNumber=(if latestBlock.get.headers.len > 0: $result else: "missing")
 
 proc obtainBlocksFromPeer(syncCtx: FastSyncCtx, peer: Peer) {.async.} =
   # Update our best block number
@@ -249,25 +252,26 @@ proc obtainBlocksFromPeer(syncCtx: FastSyncCtx, peer: Peer) {.async.} =
 
     var dataReceived = false
     try:
-      tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer,
+      trace trEthSendSending & "GetBlockHeaders (0x03)", peer,
         startBlock=request.startBlock.number, max=request.maxResults,
         step=traceStep(request)
       let results = await peer.getBlockHeaders(request)
       if results.isSome:
-        tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer,
+        trace trEthRecvGot & "BlockHeaders (0x04)", peer,
           count=results.get.headers.len, requested=request.maxResults
         shallowCopy(workItem.headers, results.get.headers)
 
         var bodies = newSeqOfCap[BlockBody](workItem.headers.len)
         var hashes = newSeqOfCap[KeccakHash](maxBodiesFetch)
         template fetchBodies() =
-          tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
+          trace trEthSendSending & "GetBlockBodies (0x05)", peer,
             hashes=hashes.len
           let b = await peer.getBlockBodies(hashes)
           if b.isNone:
-            raise newException(CatchableError, "Was not able to get the block bodies")
+            raise newException(
+              CatchableError, "Was not able to get the block bodies")
           let bodiesLen = b.get.blocks.len
-          tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
+          trace trEthRecvGot & "BlockBodies (0x06)", peer,
             count=bodiesLen, requested=hashes.len
           if bodiesLen == 0:
             raise newException(CatchableError, "Zero block bodies received for request")
@@ -342,15 +346,15 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
     skip: 0,
     reverse: true)
 
-  tracePacket ">> Sending eth.GetBlockHeaders (0x03)", peer=a,
+  trace trEthSendSending & "GetBlockHeaders (0x03)", peer=a,
     startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await a.getBlockHeaders(request)
 
   result = latestBlock.isSome and latestBlock.get.headers.len > 0
-  if tracePackets and latestBlock.isSome:
+  if latestBlock.isSome:
     let blockNumber = if result: $latestBlock.get.headers[0].blockNumber
                       else: "missing"
-    tracePacket "<< Got reply eth.BlockHeaders (0x04)", peer=a,
+    trace trEthRecvGot & "BlockHeaders (0x04)", peer=a,
       count=latestBlock.get.headers.len, blockNumber
 
 proc randomTrustedPeer(ctx: FastSyncCtx): Peer =
@@ -362,7 +366,7 @@ proc randomTrustedPeer(ctx: FastSyncCtx): Peer =
     inc i
 
 proc startSyncWithPeer(ctx: FastSyncCtx, peer: Peer) {.async.} =
-  trace "start sync", peer, trustedPeers = ctx.trustedPeers.len
+  trace "Start sync", peer, trustedPeers = ctx.trustedPeers.len
   if ctx.trustedPeers.len >= minPeersToStartSync:
     # We have enough trusted peers. Validate new peer against trusted
     if await peersAgreeOnChain(peer, ctx.randomTrustedPeer()):

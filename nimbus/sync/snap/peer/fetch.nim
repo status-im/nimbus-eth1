@@ -9,51 +9,55 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [Defect].}
-
 import
   std/[sets, random],
   chronos,
   nimcrypto/keccak,
   stint,
   eth/[common/eth_types, p2p],
-  ".."/[path_desc, base_desc, types],
-  "."/[common, fetch_trie, fetch_snap, peer_desc]
+  ../../types,
+  ".."/[path_desc, base_desc],
+  "."/[common, fetch_trie, fetch_snap]
+
+{.push raises: [Defect].}
+
+logScope:
+  topics = "snap peer fetch"
 
 # Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
-# `peerSupportsSnap` where those are defined.
+# `fetchSnapOk` where those are defined.
 
-proc stateFetch*(sp: SnapPeerEx) {.async.} =
-  var stateRoot = sp.syncStateRoot.get
-  trace "Snap: Syncing from stateRoot", peer=sp, stateRoot
+proc fetch*(sp: SnapPeer) {.async.} =
+  var stateRoot = sp.ctrl.stateRoot.get
+  trace "Syncing from stateRoot", peer=sp, stateRoot
 
   while true:
-    if not sp.peerSupportsGetNodeData() and not sp.peerSupportsSnap():
-      trace "Snap: Cannot sync more from this peer", peer=sp
+    if not sp.fetchTrieOk and not sp.fetchSnapOk:
+      trace "No more sync available from this peer", peer=sp
       return
 
     if not sp.hasSlice():
-      trace "Snap: Nothing more to sync from this peer", peer=sp
+      trace "Nothing more to sync from this peer", peer=sp
       while not sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
-    if sp.syncStateRoot.isNone:
-      trace "Snap: No current state root for this peer", peer=sp
-      while sp.syncStateRoot.isNone and
-            (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
+    if sp.ctrl.stateRoot.isNone:
+      trace "No current state root for this peer", peer=sp
+      while sp.ctrl.stateRoot.isNone and
+            (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    if stateRoot != sp.syncStateRoot.get:
-      trace "Snap: Syncing from new stateRoot", peer=sp, stateRoot
-      stateRoot = sp.syncStateRoot.get
-      sp.stopThisState = false
+    if stateRoot != sp.ctrl.stateRoot.get:
+      trace "Syncing from new stateRoot", peer=sp, stateRoot
+      stateRoot = sp.ctrl.stateRoot.get
+      sp.ctrl.runState = SyncRunningOK
 
-    if sp.stopThisState:
-      trace "Snap: Pausing sync until we get a new state root", peer=sp
-      while sp.syncStateRoot.isSome and stateRoot == sp.syncStateRoot.get and
-            (sp.peerSupportsGetNodeData() or sp.peerSupportsSnap()) and
+    if sp.ctrl.runState == SyncStopRequest:
+      trace "Pausing sync until we get a new state root", peer=sp
+      while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
+            (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
@@ -63,17 +67,18 @@ proc stateFetch*(sp: SnapPeerEx) {.async.} =
     # Mix up different slice modes, because when connecting to static nodes one
     # mode or the other tends to dominate, which makes the mix harder to test.
     var allowSnap = true
-    if sp.peerSupportsSnap() and sp.peerSupportsGetNodeData():
+    if sp.fetchSnapOk and sp.fetchTrieOk:
       if rand(99) < 50:
         allowSnap = false
 
-    if sp.peerSupportsSnap() and allowSnap:
+    if sp.fetchSnapOk and allowSnap:
       discard sp.getSlice(leafRange)
-      trace "Snap: snap.GetAccountRange segment", peer=sp,
+      trace "GetAccountRange segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
-      await sp.snapFetch(stateRoot, leafRange)
-    elif sp.peerSupportsGetNodeData():
+      await sp.fetchSnap(stateRoot, leafRange)
+
+    elif sp.fetchTrieOk:
       discard sp.getSlice(leafRange)
-      trace "Snap: eth.GetNodeData segment", peer=sp,
+      trace "GetNodeData segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
-      await sp.trieFetch(stateRoot, leafRange)
+      await sp.fetchTrie(stateRoot, leafRange)

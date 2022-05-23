@@ -46,8 +46,11 @@ type
 # Public Constructor
 # ------------------------------------------------------------------------------
 
+proc new*(T: type TxHash): T = Hash256().T
 proc new*(T: type NodeHash): T = Hash256().T
-  
+proc new*(T: type BlockHash): T = Hash256().T
+proc new*(T: type TrieHash): T = Hash256().T
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -69,12 +72,36 @@ proc `==`*(a,b: BlockHash): bool {.borrow.}
 proc toNodeHash*(data: Blob): NodeHash =
   keccak256.digest(data).NodeHash
 
+proc toHashOrNum*(bh: BlockHash): HashOrNum =
+  HashOrNum(isHash: true, hash: bh.Hash256)
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc `$`*(th: TrieHash|NodeHash): string =
-  th.Hash256.data.toHex
+func toHex*(hash: Hash256): string =
+  ## Shortcut for buteutils.toHex(hash.data)
+  hash.data.toHex
+
+func `$`*(th: TrieHash|NodeHash): string =
+  th.Hash256.toHex
+
+func `$`*(hash: Hash256): string =
+  hash.toHex
+
+func `$`*(blob: Blob): string =
+  blob.toHex
+
+func `$`*(hashOrNum: HashOrNum): string =
+  # It's always obvious which one from the visible length of the string.
+  if hashOrNum.isHash: $hashOrNum.hash
+  else: $hashOrNum.number
+
+func traceStep*(request: BlocksRequest): string =
+  var str = if request.reverse: "-" else: "+"
+  if request.skip < high(typeof(request.skip)):
+    return str & $(request.skip + 1)
+  return static($(high(typeof(request.skip)).u256 + 1))
 
 # ------------------------------------------------------------------------------
 # End

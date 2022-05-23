@@ -15,31 +15,34 @@ import
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
-  ../path_desc,
-  "."/[peer_desc, sync_desc]
+  ".."/[base_desc, path_desc],
+  ./sync_fetch_xdesc
 
 {.push raises: [Defect].}
 
-proc hasSlice*(sp: SnapPeerEx): bool =
-  ## Return `true` iff `getSlice` would return a free slice to work on.
-  if sp.nsx.sharedFetch.isNil:
-    sp.nsx.sharedFetch = SharedFetchState.new
-  result = 0 < sp.nsx.sharedFetch.leafRanges.len
-  trace "Snap: hasSlice", peer=sp, hasSlice=result
+logScope:
+  topics = "snap peer common"
 
-proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
+proc hasSlice*(sp: SnapPeer): bool =
+  ## Return `true` iff `getSlice` would return a free slice to work on.
+  if sp.ns.sharedFetchEx.isNil:
+    sp.ns.sharedFetchEx = SnapSyncFetchEx.new
+  result = 0 < sp.ns.sharedFetchEx.leafRanges.len
+  trace "hasSlice", peer=sp, hasSlice=result
+
+proc getSlice*(sp: SnapPeer, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
   ## `leadLow` and `leafHigh` are set to the slice range and `true` is
   ## returned.  Otherwise `false` is returned.
 
-  if sp.nsx.sharedFetch.isNil:
-    sp.nsx.sharedFetch = SharedFetchState.new
-  let sharedFetch = sp.nsx.sharedFetch
+  if sp.ns.sharedFetchEx.isNil:
+    sp.ns.sharedFetchEx = SnapSyncFetchEx.new
+  let sharedFetch = sp.ns.sharedFetchEx
   template ranges: auto = sharedFetch.leafRanges
   const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
 
   if ranges.len == 0:
-    trace "Snap: getSlice", leafRange="none"
+    trace "GetSlice", leafRange="none"
     return false
   leafLow = ranges[0].leafLow
   if ranges[0].leafHigh - ranges[0].leafLow <= leafMaxFetchRange:
@@ -48,16 +51,16 @@ proc getSlice*(sp: SnapPeerEx, leafLow, leafHigh: var LeafPath): bool =
   else:
     leafHigh = leafLow + leafMaxFetchRange
     ranges[0].leafLow = leafHigh + 1
-  trace "Snap: getSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
+  trace "GetSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
   return true
 
-proc putSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath) =
+proc putSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath) =
   ## Return a slice to the free list, merging with the rest of the list.
 
-  let sharedFetch = sp.nsx.sharedFetch
+  let sharedFetch = sp.ns.sharedFetchEx
   template ranges: auto = sharedFetch.leafRanges
 
-  trace "Snap: putSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
+  trace "PutSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
   var i = 0
   while i < ranges.len and leafLow > ranges[i].leafHigh:
     inc i
@@ -79,25 +82,25 @@ proc putSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath) =
     if leafHigh > ranges[i].leafHigh:
       ranges[i].leafHigh = leafHigh
 
-template getSlice*(sp: SnapPeerEx, leafRange: var LeafRange): bool =
+template getSlice*(sp: SnapPeer, leafRange: var LeafRange): bool =
   sp.getSlice(leafRange.leafLow, leafRange.leafHigh)
 
-template putSlice*(sp: SnapPeerEx, leafRange: LeafRange) =
+template putSlice*(sp: SnapPeer, leafRange: LeafRange) =
   sp.putSlice(leafRange.leafLow, leafRange.leafHigh)
 
-proc countSlice*(sp: SnapPeerEx, leafLow, leafHigh: LeafPath, which: bool) =
+proc countSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath, which: bool) =
   doAssert leafLow <= leafHigh
-  sp.nsx.sharedFetch.countRange += leafHigh - leafLow + 1
-  sp.nsx.sharedFetch.countRangeStarted = true
+  sp.ns.sharedFetchEx.countRange += leafHigh - leafLow + 1
+  sp.ns.sharedFetchEx.countRangeStarted = true
   if which:
-    sp.nsx.sharedFetch.countRangeSnap += leafHigh - leafLow + 1
-    sp.nsx.sharedFetch.countRangeSnapStarted = true
+    sp.ns.sharedFetchEx.countRangeSnap += leafHigh - leafLow + 1
+    sp.ns.sharedFetchEx.countRangeSnapStarted = true
   else:
-    sp.nsx.sharedFetch.countRangeTrie += leafHigh - leafLow + 1
-    sp.nsx.sharedFetch.countRangeTrieStarted = true
+    sp.ns.sharedFetchEx.countRangeTrie += leafHigh - leafLow + 1
+    sp.ns.sharedFetchEx.countRangeTrieStarted = true
 
-template countSlice*(sp: SnapPeerEx, leafRange: LeafRange, which: bool) =
+template countSlice*(sp: SnapPeer, leafRange: LeafRange, which: bool) =
   sp.countSlice(leafRange.leafLow, leafRange.leafHigh, which)
 
-proc countAccounts*(sp: SnapPeerEx, len: int) =
-  sp.nsx.sharedFetch.countAccounts += len
+proc countAccounts*(sp: SnapPeer, len: int) =
+  sp.ns.sharedFetchEx.countAccounts += len

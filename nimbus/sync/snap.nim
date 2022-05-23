@@ -10,102 +10,149 @@
 # except according to those terms.
 
 import
+  std/[hashes, strutils],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, rlp],
-  eth/p2p/[peer_pool, private/p2p_types, rlpx],
-  stint,
-  ./protocol,
-  ./snap/[base_desc, chain_head_tracker, get_nodedata, types],
-  ./snap/pie/[sync_desc, peer_desc]
+  eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
+  stew/keyed_queue,
+  "."/[protocol, types],
+  ./snap/[base_desc, collect]
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "snap sync"
+
 type
-  SnapSyncCtx* = ref object of SnapSyncEx
-    peerPool: PeerPool
+  SnapSyncCtx* = ref object of SnapSync
+    peerTab: KeyedQueue[Peer,SnapPeer] ## LRU cache
+    tabSize: int                       ## maximal number of entries
+    pool: PeerPool                     ## for starting the system, debugging
+
+    # debugging
+    lastDump: seq[string]
+    lastlen: int
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fetchPeerDesc(ns: SnapSyncCtx, peer: Peer): SnapPeerEx =
-  ## Find matching peer and remove descriptor from list
-  for i in 0 ..< ns.syncPeers.len:
-    if ns.syncPeers[i].peer == peer:
-      result = ns.syncPeers[i].ex
-      ns.syncPeers.delete(i)
-      return
+proc nsCtx(sp: SnapPeer): SnapSyncCtx =
+  sp.ns.SnapSyncCtx
 
-proc new(T: type SnapPeerEx; ns: SnapSyncCtx; peer: Peer): T =
-  T(
-    ns:              ns,
-    peer:            peer,
-    stopped:         false,
-    # Initial state: hunt forward, maximum uncertainty range.
-    syncMode:        SyncHuntForward,
-    huntLow:         0.toBlockNumber,
-    huntHigh:        high(BlockNumber),
-    huntStep:        0,
-    bestBlockNumber: 0.toBlockNumber)
+proc hash(peer: Peer): Hash =
+  ## Needed for `peerTab` table key comparison
+  hash(peer.remote.id)
+
+# ------------------------------------------------------------------------------
+# Private debugging helpers
+# ------------------------------------------------------------------------------
+
+proc dumpPeers(sn: SnapSyncCtx; force = false) =
+  if sn.lastLen != sn.peerTab.len or force:
+    sn.lastLen = sn.peerTab.len
+
+    let poolSize = sn.pool.len
+    if sn.peerTab.len == 0:
+      trace "*** Empty peer list", poolSize
+    else:
+      var n = sn.peerTab.len - 1
+      for sp in sn.peerTab.prevValues:
+        trace "*** Peer list entry",
+          n, poolSize, peer=sp, hunt=sp.hunt.pp
+        n.dec
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc syncPeerLoop(sp: SnapPeerEx) {.async.} =
+proc syncPeerLoop(sp: SnapPeer) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
-  while not sp.stopped:
-    await sp.peerHuntCanonical()
-    if sp.stopped:
+  var cache = ""
+  while sp.ctrl.runState != SyncStopped:
+
+    # Do something, work a bit
+    await sp.collectBlockHeaders()
+    if sp.ctrl.runState == SyncStopped:
+      trace "Ignoring stopped peer", peer=sp
       return
-    let delayMs = if sp.syncMode == SyncLocked: 1000 else: 50
+
+    # Rotate LRU connection table so the most used entry is at the list end
+    # TODO: Update implementation of lruFetch() using re-link, only
+    discard sp.nsCtx.peerTab.lruFetch(sp.peer)
+
+    let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
-proc syncPeerStart(sp: SnapPeerEx) =
+proc syncPeerStart(sp: SnapPeer) =
   asyncSpawn sp.syncPeerLoop()
 
-proc syncPeerStop(sp: SnapPeerEx) =
-  sp.stopped = true
-  # TODO: Cancel running `SnapPeerEx` instances.  We need clean cancellation
+proc syncPeerStop(sp: SnapPeer) =
+  sp.ctrl.runState = SyncStopped
+  # TODO: Cancel running `SnapPeer` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
 
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Snap: Peer connected", peer
+  trace "Peer connected", peer
 
-  let sp = SnapPeerEx.new(ns, peer)
-  sp.setupGetNodeData()
+  let sp = SnapPeer.new(ns, peer, SyncHuntForward, SyncRunningOk)
+  sp.collectDataSetup()
 
   if peer.state(eth).initialized:
     # We know the hash but not the block number.
-    sp.bestBlockHash = peer.state(eth).bestBlockHash.BlockHash
+    sp.hunt.bestHash = peer.state(eth).bestBlockHash.BlockHash
     # TODO: Temporarily disabled because it's useful to test the head hunter.
     # sp.syncMode = SyncOnlyHash
   else:
-    trace "Snap: state(eth) not initialized!"
+    trace "State(eth) not initialized!"
 
-  ns.syncPeers.add(sp)
+  # Manage connection table, check for existing entry
+  if ns.peerTab.hasKey(peer):
+    trace "Peer exists already!", peer
+    return
+
+  # Check for table overflow. An overflow should not happen if the table is
+  # as large as the peer connection table.
+  if ns.tabSize <= ns.peerTab.len:
+    let leastPeer = ns.peerTab.shift.value.data
+    leastPeer.syncPeerStop
+    trace "Peer table full, deleted least used",
+      leastPeer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
+
+  # Add peer entry
+  discard ns.peerTab.append(sp.peer,sp)
+  trace "Starting peer",
+    peer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
+
+  # Debugging, peer table dump after adding gentry
+  #ns.dumpPeers(true)
   sp.syncPeerStart()
 
 proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Snap: Peer disconnected", peer
+  trace "Peer disconnected", peer
 
-  let sp = ns.fetchPeerDesc(peer)
-  if sp.isNil:
-    debug "Snap: Disconnected from unregistered peer", peer
+  # Debugging, peer table dump before removing entry
+  #ns.dumpPeers(true)
+
+  let rc = ns.peerTab.delete(peer)
+  if rc.isOk:
+    rc.value.data.syncPeerStop()
   else:
-    sp.syncPeerStop()
+    debug "Disconnected from unregistered peer", peer
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SnapSyncCtx; ethNode: EthereumNode): T =
+proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
   ## Constructor
   new result
-  result.peerPool = ethNode.peerPool
+  let size = max(1,2*maxPeers) # allow double argument size
+  result.peerTab.init(size)
+  result.tabSize = size
+  result.pool = ethNode.peerPool
 
 proc start*(ctx: SnapSyncCtx) =
   ## Set up syncing. This call should come early.
@@ -117,7 +164,7 @@ proc start*(ctx: SnapSyncCtx) =
       proc(p: Peer) {.gcsafe.} =
         ctx.onPeerDisconnected(p))
   po.setProtocol eth
-  ctx.peerPool.addObserver(ctx, po)
+  ctx.pool.addObserver(ctx, po)
 
 # ------------------------------------------------------------------------------
 # End

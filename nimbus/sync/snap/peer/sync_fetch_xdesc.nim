@@ -20,7 +20,7 @@ import
 {.push raises: [Defect].}
 
 type
-  SharedFetchState* = ref object
+  SnapSyncFetchEx* = ref object of SnapSyncFetchBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
     leafRanges*:            seq[LeafRange]
@@ -33,9 +33,6 @@ type
     countRangeTrie*:        UInt256
     countRangeTrieStarted*: bool
     logTicker:              TimerCallback
-
-  SnapSyncEx* = ref object of SnapSyncBase
-    sharedFetch*: SharedFetchState
 
 # ------------------------------------------------------------------------------
 # Private  timer helpers
@@ -69,9 +66,9 @@ proc percent(value: UInt256, discriminator: bool): string =
   result.add('%')
 
 
-proc setLogTicker(sf: SharedFetchState; at: Moment) {.gcsafe.}
+proc setLogTicker(sf: SnapSyncFetchEx; at: Moment) {.gcsafe.}
 
-proc runLogTicker(sf: SharedFetchState) {.gcsafe.} =
+proc runLogTicker(sf: SnapSyncFetchEx) {.gcsafe.} =
   doAssert not sf.isNil
   info "State: Account sync progress",
     percent = percent(sf.countRange, sf.countRangeStarted),
@@ -80,20 +77,20 @@ proc runLogTicker(sf: SharedFetchState) {.gcsafe.} =
     trie = percent(sf.countRangeTrie, sf.countRangeTrieStarted)
   sf.setLogTicker(Moment.fromNow(1.seconds))
 
-proc setLogTicker(sf: SharedFetchState; at: Moment) =
+proc setLogTicker(sf: SnapSyncFetchEx; at: Moment) =
   sf.logTicker = safeSetTimer(at, runLogTicker, sf)
 
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SharedFetchState; startLoggingAfter = 100.milliseconds): T =
-  result = SharedFetchState(
+proc new*(T: type SnapSyncFetchEx; startAfter = 100.milliseconds): T =
+  result = SnapSyncFetchEx(
     leafRanges: @[LeafRange(
       leafLow: LeafPath.low,
       leafHigh: LeafPath.high)])
   result.logTicker = safeSetTimer(
-    Moment.fromNow(startLoggingAfter),
+    Moment.fromNow(startAfter),
     runLogTicker,
     result)
 
@@ -101,9 +98,17 @@ proc new*(T: type SharedFetchState; startLoggingAfter = 100.milliseconds): T =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc nsx*[T](sp: T): SnapSyncEx =
-  ## Handy helper, typically used with `T` instantiated as `SnapPeerEx`
-  sp.ns.SnapSyncEx
+proc sharedFetchEx*(ns: SnapSync): SnapSyncFetchEx =
+  ## Handy helper
+  ns.sharedFetch.SnapSyncFetchEx
+
+# ------------------------------------------------------------------------------
+# Public setters
+# ------------------------------------------------------------------------------
+
+proc `sharedFetchEx=`*(ns: SnapSync; value: SnapSyncFetchEx) =
+  ## Handy helper
+  ns.sharedFetch = value
 
 # ------------------------------------------------------------------------------
 # End
