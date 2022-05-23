@@ -15,18 +15,111 @@ import
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
-  ".."/[base_desc, path_desc],
-  ./sync_fetch_xdesc
+  ".."/[base_desc, path_desc, timer_helper]
 
 {.push raises: [Defect].}
 
 logScope:
   topics = "snap peer common"
 
+type
+  CommonFetchEx* = ref object of SnapSyncFetchBase
+    ## Account fetching state that is shared among all peers.
+    # Leaf path ranges not fetched or in progress on any peer.
+    leafRanges*:            seq[LeafRange]
+    countAccounts*:         int64
+    countAccountBytes*:     int64
+    countRange*:            UInt256
+    countRangeStarted*:     bool
+    countRangeSnap*:        UInt256
+    countRangeSnapStarted*: bool
+    countRangeTrie*:        UInt256
+    countRangeTrieStarted*: bool
+    logTicker:              TimerCallback
+
+# ------------------------------------------------------------------------------
+# Private timer helpers
+# ------------------------------------------------------------------------------
+
+proc rangeFraction(value: UInt256, discriminator: bool): int =
+  ## Format a value in the range 0..2^256 as a percentage, 0-100%.  As the
+  ## top of the range 2^256 cannot be represented in `UInt256` it actually
+  ## has the value `0: UInt256`, and with that value, `discriminator` is
+  ## consulted to decide between 0% and 100%.  For other values, the value is
+  ## constrained to be between slightly above 0% and slightly below 100%,
+  ## so that the endpoints are distinctive when displayed.
+  const multiplier = 10000
+  var fraction: int = 0 # Fixed point, fraction 0.0-1.0 multiplied up.
+  if value == 0:
+    return if discriminator: multiplier else: 0 # Either 100.00% or 0.00%.
+
+  const shift = 8 * (sizeof(value) - sizeof(uint64))
+  const wordHigh: uint64 = (high(typeof(value)) shr shift).truncate(uint64)
+  # Divide `wordHigh+1` by `multiplier`, rounding up, avoiding overflow.
+  const wordDiv: uint64 = 1 + ((wordHigh shr 1) div (multiplier.uint64 shr 1))
+  let wordValue: uint64 = (value shr shift).truncate(uint64)
+  let divided: uint64 = wordValue div wordDiv
+  return if divided >= multiplier: multiplier - 1
+         elif divided <= 0: 1
+         else: divided.int
+
+proc percent(value: UInt256, discriminator: bool): string =
+  result = intToStr(rangeFraction(value, discriminator), 3)
+  result.insert(".", result.len - 2)
+  result.add('%')
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc setLogTicker(sf: CommonFetchEx; at: Moment) {.gcsafe.}
+
+proc runLogTicker(sf: CommonFetchEx) {.gcsafe.} =
+  doAssert not sf.isNil
+  info "State: Account sync progress",
+    percent = percent(sf.countRange, sf.countRangeStarted),
+    accounts = sf.countAccounts,
+    snap = percent(sf.countRangeSnap, sf.countRangeSnapStarted),
+    trie = percent(sf.countRangeTrie, sf.countRangeTrieStarted)
+  sf.setLogTicker(Moment.fromNow(1.seconds))
+
+proc setLogTicker(sf: CommonFetchEx; at: Moment) =
+  sf.logTicker = safeSetTimer(at, runLogTicker, sf)
+
+proc new*(T: type CommonFetchEx; startAfter = 100.milliseconds): T =
+  result = CommonFetchEx(
+    leafRanges: @[LeafRange(
+      leafLow: LeafPath.low,
+      leafHigh: LeafPath.high)])
+  result.logTicker = safeSetTimer(
+    Moment.fromNow(startAfter),
+    runLogTicker,
+    result)
+
+# ------------------------------------------------------------------------------
+# Private setters
+# ------------------------------------------------------------------------------
+
+proc `sharedFetchEx=`(ns: SnapSync; value: CommonFetchEx) =
+  ## Handy helper
+  ns.sharedFetch = value
+
+# ------------------------------------------------------------------------------
+# Public getters
+# ------------------------------------------------------------------------------
+
+proc sharedFetchEx*(ns: SnapSync): CommonFetchEx =
+  ## Handy helper
+  ns.sharedFetch.CommonFetchEx
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
 proc hasSlice*(sp: SnapPeer): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
   if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = SnapSyncFetchEx.new
+    sp.ns.sharedFetchEx = CommonFetchEx.new
   result = 0 < sp.ns.sharedFetchEx.leafRanges.len
   trace "hasSlice", peer=sp, hasSlice=result
 
@@ -36,7 +129,7 @@ proc getSlice*(sp: SnapPeer, leafLow, leafHigh: var LeafPath): bool =
   ## returned.  Otherwise `false` is returned.
 
   if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = SnapSyncFetchEx.new
+    sp.ns.sharedFetchEx = CommonFetchEx.new
   let sharedFetch = sp.ns.sharedFetchEx
   template ranges: auto = sharedFetch.leafRanges
   const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
@@ -104,3 +197,7 @@ template countSlice*(sp: SnapPeer, leafRange: LeafRange, which: bool) =
 
 proc countAccounts*(sp: SnapPeer, len: int) =
   sp.ns.sharedFetchEx.countAccounts += len
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

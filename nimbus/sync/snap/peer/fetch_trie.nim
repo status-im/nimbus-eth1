@@ -28,7 +28,7 @@ import
   eth/[common/eth_types, p2p],
   "../.."/[protocol/trace_config, types],
   ".."/[base_desc, path_desc],
-  "."/[common, reply_data, sync_fetch_xdesc, validate_trienode]
+  "."/[common, reply_data, validate_trienode]
 
 {.push raises: [Defect].}
 
