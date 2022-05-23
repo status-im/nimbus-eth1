@@ -24,10 +24,10 @@ logScope:
   topics = "snap sync"
 
 type
-  SnapSyncCtx* = ref object of SnapSync
-    peerTab: KeyedQueue[Peer,SnapPeer] ## LRU cache
-    tabSize: int                       ## maximal number of entries
-    pool: PeerPool                     ## for starting the system, debugging
+  SnapSyncCtx* = ref object of Worker
+    peerTab: KeyedQueue[Peer,WorkerBuddy] ## LRU cache
+    tabSize: int                          ## maximal number of entries
+    pool: PeerPool                        ## for starting the system, debugging
 
     # debugging
     lastDump: seq[string]
@@ -37,7 +37,7 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nsCtx(sp: SnapPeer): SnapSyncCtx =
+proc nsCtx(sp: WorkerBuddy): SnapSyncCtx =
   sp.ns.SnapSyncCtx
 
 proc hash(peer: Peer): Hash =
@@ -66,14 +66,14 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc syncPeerLoop(sp: SnapPeer) {.async.} =
+proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   var cache = ""
-  while sp.ctrl.runState != SyncStopped:
+  while sp.ctrl.runState != BuddyStopped:
 
     # Do something, work a bit
     await sp.workerExec
-    if sp.ctrl.runState == SyncStopped:
+    if sp.ctrl.runState == BuddyStopped:
       trace "Ignoring stopped peer", peer=sp
       return
 
@@ -85,19 +85,19 @@ proc syncPeerLoop(sp: SnapPeer) {.async.} =
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
-proc syncPeerStart(sp: SnapPeer) =
+proc syncPeerStart(sp: WorkerBuddy) =
   asyncSpawn sp.syncPeerLoop()
 
-proc syncPeerStop(sp: SnapPeer) =
-  sp.ctrl.runState = SyncStopped
-  # TODO: Cancel running `SnapPeer` instances.  We need clean cancellation
+proc syncPeerStop(sp: WorkerBuddy) =
+  sp.ctrl.runState = BuddyStopped
+  # TODO: Cancel running `WorkerBuddy` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
 
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer connected", peer
 
-  let sp = SnapPeer.new(ns, peer, SyncRunningOk)
+  let sp = WorkerBuddy.new(ns, peer, BuddyRunningOk)
 
   # Manage connection table, check for existing entry
   if ns.peerTab.hasKey(peer):

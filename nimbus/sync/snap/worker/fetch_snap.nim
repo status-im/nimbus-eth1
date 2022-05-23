@@ -38,14 +38,14 @@ const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc fetchSnap*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
+proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     {.async.} =
   ## Fetch data using the `snap#` protocol
   var origin = leafRange.leafLow
   var limit = leafRange.leafHigh
   const responseBytes = 2 * 1024 * 1024
 
-  if sp.ctrl.runState == SyncStopped:
+  if sp.ctrl.runState == BuddyStopped:
     trace trSnapRecvError &
       "peer already disconnected, not sending GetAccountRange",
       peer=sp, accountRange=pathRange(origin, limit),
@@ -65,7 +65,7 @@ proc fetchSnap*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
     trace trSnapRecvError & "waiting for reply to GetAccountRange", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = SyncStopped
+    sp.ctrl.runState = BuddyStopped
     sp.putSlice(leafRange)
     return
 
@@ -97,7 +97,7 @@ proc fetchSnap*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
         got=len, proofLen=proof.len, gotRange="-", requestedRange, stateRoot
       sp.putSlice(leafRange)
       # Don't keep retrying snap for this state.
-      sp.ctrl.runState = SyncStopRequest
+      sp.ctrl.runState = BuddyStopRequest
     else:
       trace trSnapRecvGot & "END reply AccountRange", peer=sp,
         got=len, proofLen=proof.len, gotRange=pathRange(origin, high(LeafPath)),
@@ -137,7 +137,7 @@ proc fetchSnap*(sp: SnapPeer, stateRoot: TrieHash, leafRange: LeafRange)
 
   sp.countAccounts(keepAccounts)
 
-proc fetchSnapOk*(sp: SnapPeer): bool =
+proc fetchSnapOk*(sp: WorkerBuddy): bool =
   ## Sort of getter: if `true`, fetching data using the `snap#` protocol
   ## is supported.
-  sp.ctrl.runState != SyncStopped and sp.peer.supports(snap)
+  sp.ctrl.runState != BuddyStopped and sp.peer.supports(snap)

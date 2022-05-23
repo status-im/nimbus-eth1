@@ -100,11 +100,11 @@ const
     ## because we don't want to keep most of the headers at hunt time.
 
   huntForwardExpandShift    = 4
-    ## Expansion factor during `SyncHuntForward` exponential search.
+    ## Expansion factor during `HuntForward` exponential search.
     ## 16 is chosen for rapid convergence when bootstrapping or catching up.
 
   huntBackwardExpandShift   = 1
-    ## Expansion factor during `SyncHuntBackward` exponential search.
+    ## Expansion factor during `HuntBackward` exponential search.
     ## 2 is chosen for better convergence when tracking a chain reorg.
 
 type
@@ -118,7 +118,7 @@ type
     HuntRange
     HuntRangeFinal
 
-  WorkerHuntEx = ref object of SnapPeerWorkerBase
+  WorkerHuntEx = ref object of WorkerBuddyWorkerBase
     ## Peer canonical chain head ("best block") search state.
     syncMode:      WorkerMode    ## Action mode
     lowNumber:     BlockNumber   ## Recent lowest known block number.
@@ -143,10 +143,10 @@ static:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hunt(sp: SnapPeer): WorkerHuntEx =
+proc hunt(sp: WorkerBuddy): WorkerHuntEx =
   sp.worker.WorkerHuntEx
 
-proc `hunt=`(sp: SnapPeer; value: WorkerHuntEx) =
+proc `hunt=`(sp: WorkerBuddy; value: WorkerHuntEx) =
   sp.worker = value
 
 proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
@@ -161,7 +161,7 @@ proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-proc traceSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
+proc traceSyncLocked(sp: WorkerBuddy, number: BlockNumber, hash: BlockHash) =
   ## Trace messages when peer canonical head is confirmed or updated.
   let
     bestBlock = sp.ns.pp(hash, number)
@@ -179,7 +179,7 @@ proc traceSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
     debug "Peer chain head reorg detected", peer,
       advance=(sp.hunt.bestNumber - number), bestBlock
 
-# proc peerSyncChainTrace(sp: SnapPeer) =
+# proc peerSyncChainTrace(sp: WorkerBuddy) =
 #   ## To be called after `peerSyncChainRequest` has updated state.
 #   case sp.hunt.syncMode:
 #     of SyncLocked:
@@ -208,19 +208,19 @@ proc traceSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setSyncLocked(sp: SnapPeer, number: BlockNumber, hash: BlockHash) =
+proc setSyncLocked(sp: WorkerBuddy, number: BlockNumber, hash: BlockHash) =
   ## Actions to take when peer canonical head is confirmed or updated.
   sp.traceSyncLocked(number, hash)
   sp.hunt.bestNumber = number
   sp.hunt.bestHash = hash
   sp.hunt.syncMode = SyncLocked
 
-proc clearSyncStateRoot(sp: SnapPeer) =
+proc clearSyncStateRoot(sp: WorkerBuddy) =
   if sp.ctrl.stateRoot.isSome:
     debug "Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
-proc lockSyncStateRoot(sp: SnapPeer, number: BlockNumber, hash: BlockHash,
+proc lockSyncStateRoot(sp: WorkerBuddy, number: BlockNumber, hash: BlockHash,
                        stateRoot: TrieHash) =
   sp.setSyncLocked(number, hash)
 
@@ -234,13 +234,13 @@ proc lockSyncStateRoot(sp: SnapPeer, number: BlockNumber, hash: BlockHash,
 
   sp.ctrl.stateRoot = some(stateRoot)
 
-  if sp.ctrl.runState != SyncRunningOK:
-    sp.ctrl.runState = SyncRunningOK
+  if sp.ctrl.runState != BuddyRunningOK:
+    sp.ctrl.runState = BuddyRunningOK
     trace "Starting to download block state", peer=sp,
       thisBlock, stateRoot
     asyncSpawn sp.fetch()
 
-proc setHuntBackward(sp: SnapPeer, lowestAbsent: BlockNumber) =
+proc setHuntBackward(sp: WorkerBuddy, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
   sp.hunt.syncMode = HuntBackward
   sp.hunt.step = 0
@@ -250,7 +250,7 @@ proc setHuntBackward(sp: SnapPeer, lowestAbsent: BlockNumber) =
   sp.hunt.highNumber = if lowestAbsent > 0: lowestAbsent else: 1.toBlockNumber
   sp.clearSyncStateRoot()
 
-proc setHuntForward(sp: SnapPeer, highestPresent: BlockNumber) =
+proc setHuntForward(sp: WorkerBuddy, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
   sp.hunt.syncMode = HuntForward
   sp.hunt.step = 0
@@ -258,7 +258,7 @@ proc setHuntForward(sp: SnapPeer, highestPresent: BlockNumber) =
   sp.hunt.highNumber = high(BlockNumber)
   sp.clearSyncStateRoot()
 
-proc updateHuntAbsent(sp: SnapPeer, lowestAbsent: BlockNumber) =
+proc updateHuntAbsent(sp: WorkerBuddy, lowestAbsent: BlockNumber) =
   ## Converge uncertainty range backward.
   if lowestAbsent < sp.hunt.highNumber:
     sp.hunt.highNumber = lowestAbsent
@@ -269,7 +269,7 @@ proc updateHuntAbsent(sp: SnapPeer, lowestAbsent: BlockNumber) =
       sp.setHuntBackward(lowestAbsent)
   sp.clearSyncStateRoot()
 
-proc updateHuntPresent(sp: SnapPeer, highestPresent: BlockNumber) =
+proc updateHuntPresent(sp: WorkerBuddy, highestPresent: BlockNumber) =
   ## Converge uncertainty range forward.
   if highestPresent > sp.hunt.lowNumber:
     sp.hunt.lowNumber = highestPresent
@@ -280,7 +280,7 @@ proc updateHuntPresent(sp: SnapPeer, highestPresent: BlockNumber) =
       sp.setHuntForward(highestPresent)
   sp.clearSyncStateRoot()
 
-proc peerSyncChainEmptyReply(sp: SnapPeer, request: BlocksRequest) =
+proc peerSyncChainEmptyReply(sp: WorkerBuddy, request: BlocksRequest) =
   ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
   ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
   ## and the previous canonical chain head has disappeared.  If hunting, this
@@ -329,7 +329,7 @@ proc peerSyncChainEmptyReply(sp: SnapPeer, request: BlocksRequest) =
     sp.hunt.bestHash = default(typeof(sp.hunt.bestHash))
     sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
 
-proc peerSyncChainNonEmptyReply(sp: SnapPeer, request: BlocksRequest,
+proc peerSyncChainNonEmptyReply(sp: WorkerBuddy, request: BlocksRequest,
                                 headers: openArray[BlockHeader]) =
   ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
   ## is present on the peer and in its canonical chain (unless the request was
@@ -385,7 +385,7 @@ proc peerSyncChainNonEmptyReply(sp: SnapPeer, request: BlocksRequest,
     sp.hunt.bestHash = headers[highestIndex].blockHash.BlockHash
     sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
 
-proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
+proc peerSyncChainRequest(sp: WorkerBuddy): BlocksRequest =
   ## Choose `GetBlockHeaders` parameters when hunting or following the canonical
   ## chain of a peer.
   if sp.hunt.syncMode == SyncLocked:
@@ -522,7 +522,7 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc workerExec*(sp: SnapPeer) {.async.} =
+proc workerExec*(sp: WorkerBuddy) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -548,7 +548,7 @@ proc workerExec*(sp: SnapPeer) {.async.} =
     trace trEthRecvError & "waiting for reply to GetBlockHeaders", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = SyncStopped
+    sp.ctrl.runState = BuddyStopped
     return
 
   if reply.isNone:
@@ -581,8 +581,8 @@ proc workerExec*(sp: SnapPeer) {.async.} =
     sp.peerSyncChainEmptyReply(request)
 
 
-proc workerStart*(sp: SnapPeer): bool =
-  ## Initialise `SnapPeer` to support `workerBlockHeaders()` calls
+proc workerStart*(sp: WorkerBuddy): bool =
+  ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
 
   # Initialise `DataNode` reply handling
   sp.fetchSetup
@@ -599,14 +599,14 @@ proc workerStart*(sp: SnapPeer): bool =
 
   trace "State(eth) not initialized!"
 
-proc workerLockedOk*(sp: SnapPeer): bool =
+proc workerLockedOk*(sp: WorkerBuddy): bool =
   sp.hunt.syncMode == SyncLocked
 
 # ------------------------------------------------------------------------------
 # Debugging
 # ------------------------------------------------------------------------------
 
-proc huntPp*(sn: SnapPeer): string =
+proc huntPp*(sn: WorkerBuddy): string =
   let hx = sn.hunt
   result &= "(mode=" & $hx.syncMode
   result &= ",num=(" & hx.lowNumber.pp & "," & hx.highNumber.pp & ")"

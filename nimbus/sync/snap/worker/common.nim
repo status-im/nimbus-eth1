@@ -23,7 +23,7 @@ logScope:
   topics = "snap peer common"
 
 type
-  CommonFetchEx* = ref object of SnapSyncFetchBase
+  CommonFetchEx* = ref object of WorkerFetchBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
     leafRanges*:            seq[LeafRange]
@@ -100,7 +100,7 @@ proc new*(T: type CommonFetchEx; startAfter = 100.milliseconds): T =
 # Private setters
 # ------------------------------------------------------------------------------
 
-proc `sharedFetchEx=`(ns: SnapSync; value: CommonFetchEx) =
+proc `sharedFetchEx=`(ns: Worker; value: CommonFetchEx) =
   ## Handy helper
   ns.sharedFetch = value
 
@@ -108,7 +108,7 @@ proc `sharedFetchEx=`(ns: SnapSync; value: CommonFetchEx) =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc sharedFetchEx*(ns: SnapSync): CommonFetchEx =
+proc sharedFetchEx*(ns: Worker): CommonFetchEx =
   ## Handy helper
   ns.sharedFetch.CommonFetchEx
 
@@ -116,14 +116,14 @@ proc sharedFetchEx*(ns: SnapSync): CommonFetchEx =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hasSlice*(sp: SnapPeer): bool =
+proc hasSlice*(sp: WorkerBuddy): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
   if sp.ns.sharedFetchEx.isNil:
     sp.ns.sharedFetchEx = CommonFetchEx.new
   result = 0 < sp.ns.sharedFetchEx.leafRanges.len
   trace "hasSlice", peer=sp, hasSlice=result
 
-proc getSlice*(sp: SnapPeer, leafLow, leafHigh: var LeafPath): bool =
+proc getSlice*(sp: WorkerBuddy, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
   ## `leadLow` and `leafHigh` are set to the slice range and `true` is
   ## returned.  Otherwise `false` is returned.
@@ -147,7 +147,7 @@ proc getSlice*(sp: SnapPeer, leafLow, leafHigh: var LeafPath): bool =
   trace "GetSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
   return true
 
-proc putSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath) =
+proc putSlice*(sp: WorkerBuddy, leafLow, leafHigh: LeafPath) =
   ## Return a slice to the free list, merging with the rest of the list.
 
   let sharedFetch = sp.ns.sharedFetchEx
@@ -175,13 +175,13 @@ proc putSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath) =
     if leafHigh > ranges[i].leafHigh:
       ranges[i].leafHigh = leafHigh
 
-template getSlice*(sp: SnapPeer, leafRange: var LeafRange): bool =
+template getSlice*(sp: WorkerBuddy, leafRange: var LeafRange): bool =
   sp.getSlice(leafRange.leafLow, leafRange.leafHigh)
 
-template putSlice*(sp: SnapPeer, leafRange: LeafRange) =
+template putSlice*(sp: WorkerBuddy, leafRange: LeafRange) =
   sp.putSlice(leafRange.leafLow, leafRange.leafHigh)
 
-proc countSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath, which: bool) =
+proc countSlice*(sp: WorkerBuddy, leafLow, leafHigh: LeafPath, which: bool) =
   doAssert leafLow <= leafHigh
   sp.ns.sharedFetchEx.countRange += leafHigh - leafLow + 1
   sp.ns.sharedFetchEx.countRangeStarted = true
@@ -192,10 +192,10 @@ proc countSlice*(sp: SnapPeer, leafLow, leafHigh: LeafPath, which: bool) =
     sp.ns.sharedFetchEx.countRangeTrie += leafHigh - leafLow + 1
     sp.ns.sharedFetchEx.countRangeTrieStarted = true
 
-template countSlice*(sp: SnapPeer, leafRange: LeafRange, which: bool) =
+template countSlice*(sp: WorkerBuddy, leafRange: LeafRange, which: bool) =
   sp.countSlice(leafRange.leafLow, leafRange.leafHigh, which)
 
-proc countAccounts*(sp: SnapPeer, len: int) =
+proc countAccounts*(sp: WorkerBuddy, len: int) =
   sp.ns.sharedFetchEx.countAccounts += len
 
 # ------------------------------------------------------------------------------

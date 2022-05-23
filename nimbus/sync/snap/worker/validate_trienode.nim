@@ -88,7 +88,7 @@ template nodeError(msg: string{lit}, more: varargs[untyped]) =
   #echo inspect(rlpFromBytes(nodeBytes))
   inc context.errors
 
-proc parseLeafValue(sp: SnapPeer,
+proc parseLeafValue(sp: WorkerBuddy,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     nodeRlp: var Rlp, leafPath: InteriorPath,
                     context: var TrieNodeParseContext
@@ -129,13 +129,13 @@ proc parseLeafValue(sp: SnapPeer,
 #    echo inspect(rlpFromBytes(leafBytes))
 
 # Forward declaration, used for bounded, rare recursion.
-proc parseTrieNode*(sp: SnapPeer,
+proc parseTrieNode*(sp: WorkerBuddy,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool,
                     context: var TrieNodeParseContext
                    ) {.gcsafe, raises: [Defect, RlpError].}
 
-proc parseExtensionChild(sp: SnapPeer,
+proc parseExtensionChild(sp: WorkerBuddy,
                          nodePath: InteriorPath, nodeHash: NodeHash,
                          nodeBytes: Blob, nodeRlp: var Rlp,
                          childPath: InteriorPath,
@@ -183,7 +183,7 @@ proc parseExtensionChild(sp: SnapPeer,
   else:
     childError "Extension node child (RLP element 1) has length > 32 bytes"
 
-proc parseExtensionOrLeaf(sp: SnapPeer,
+proc parseExtensionOrLeaf(sp: WorkerBuddy,
                           nodePath: InteriorPath, nodeHash: NodeHash,
                           nodeBytes: Blob, nodeRlp: var Rlp,
                           fromExtension: bool,
@@ -271,7 +271,7 @@ proc parseExtensionOrLeaf(sp: SnapPeer,
     sp.parseExtensionChild(nodePath, nodeHash, nodeBytes, nodeRlp,
                            childPath, context)
 
-proc parseBranchNode(sp: SnapPeer,
+proc parseBranchNode(sp: WorkerBuddy,
                      nodePath: InteriorPath, nodeHash: NodeHash,
                      nodeBytes: Blob, nodeRlp: var Rlp,
                      context: var TrieNodeParseContext
@@ -345,7 +345,7 @@ proc parseBranchNode(sp: SnapPeer,
         branches=branchCount, minBranches=2
     return
 
-proc parseTrieNode*(sp: SnapPeer,
+proc parseTrieNode*(sp: WorkerBuddy,
                     nodePath: InteriorPath, nodeHash: NodeHash, nodeBytes: Blob,
                     fromExtension: bool, context: var TrieNodeParseContext
                    ) {.raises: [Defect, RlpError].} =
@@ -381,8 +381,8 @@ proc parseTrieNode*(sp: SnapPeer,
   ##   root node of a trie, otherwise it is the value stored in `childQueue`
   ##   from parsing the parent node.
   ##
-  ## - The `sp: SnapPeerBase` is like the hash, only used for diagnostics.  When
-  ##   there is invalid data, it's useful to show where we got it from.
+  ## - The `sp: WorkerBuddyBase` is like the hash, only used for diagnostics.
+  ##   When there is invalid data, it's useful to show where we got it from.
   ##
   ## - Some limited recursion is possible while parsing, because of how < 32
   ##   byte nodes are encoded inside others.  When recursion occurs, the number
@@ -445,7 +445,7 @@ proc parseTrieNode*(sp: SnapPeer,
       listLen=nodeListLen
     return
 
-proc parseTrieNodeError*(sp: SnapPeer, nodePath: InteriorPath,
+proc parseTrieNodeError*(sp: WorkerBuddy, nodePath: InteriorPath,
                          nodeHash: NodeHash, nodeBytes: Blob,
                          context: var TrieNodeParseContext,
                          exception: ref RlpError) =
