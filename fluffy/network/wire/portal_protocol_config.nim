@@ -21,6 +21,7 @@ type
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
+  defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -44,34 +45,39 @@ proc init*(
   )
 
 proc parseCmdArg*(T: type RadiusConfig, p: TaintedString): T
-      {.raises: [Defect, ConfigurationError].} =
-
+    {.raises: [Defect, ConfigurationError].} =
   if p.startsWith("dynamic") and len(p) == 7:
-    return RadiusConfig(kind: Dynamic)
+    RadiusConfig(kind: Dynamic)
   elif p.startsWith("static:"):
     let num = p[7..^1]
-    try:
-      let parsed = uint16.parseCmdArg(num)
+    let parsed =
+      try:
+        uint16.parseCmdArg(num)
+      except ValueError:
+        let msg = "Provided logRadius: " & num & " is not a valid number"
+        raise newException(ConfigurationError, msg)
 
-      if parsed > 256:
-        raise newException(
-          ConfigurationError, "Provided logRadius should be <= 256"
-        )
-
-      return RadiusConfig(kind: Static, logRadius: parsed)
-    except ValueError:
-      let msg = "Provided logRadius: " & num & " is not a valid number"
+    if parsed > 256:
       raise newException(
-        ConfigurationError, msg
+        ConfigurationError, "Provided logRadius should be <= 256"
       )
+
+    RadiusConfig(kind: Static, logRadius: parsed)
   else:
-    let msg = 
-      "Not supported radius config option: " & p & " . " & 
-      "Supported options: dynamic, static:logRadius"
-    raise newException(
-      ConfigurationError, 
-      msg
-    )
+    let parsed =
+      try:
+        uint16.parseCmdArg(p)
+      except ValueError:
+        let msg =
+          "Not supported radius config option: " & p & " . " &
+          "Supported options: dynamic and static:logRadius"
+        raise newException(ConfigurationError, msg)
+
+    if parsed > 256:
+      raise newException(
+        ConfigurationError, "Provided logRadius should be <= 256")
+
+    RadiusConfig(kind: Static, logRadius: parsed)
 
 proc completeCmdArg*(T: type RadiusConfig, val: TaintedString): seq[string] =
   return @[]

@@ -248,7 +248,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     BOOTSTRAP_ARG="--bootstrap-file=${BOOTSTRAP_ENR_FILE}"
     # All nodes but bootstrap node run with log. radius of 254 which should
     # result in ~1/4th of the data set stored.
-    RADIUS_ARG="--radius-config=static:254"
+    RADIUS_ARG="--radius=static:254"
 
     # Wait for the bootstrap node to write out its enr file
     START_TIMESTAMP=$(date +%s)

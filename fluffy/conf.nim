@@ -183,20 +183,20 @@ type
       name: "bits-per-hop" .}: int
 
     radiusConfig* {.
-      hidden
-      desc: "Radius configuration for a fluffy node. Radius can be either `dynamic`" &
-            "where node adjust radius based on storage size limit," &
-            "or `static:logRadius` where node have hardcoded logRadius value. " &
-            "Warning: Setting it `static:logRadius` disable storage size limits and" &
-            "makes fluffy node to store fraction of the network."
+      desc: "Radius configuration for a fluffy node. Radius can be either `dynamic` " &
+            "where the node adjusts the radius based on `storage-size` option, " &
+            "or `static:<logRadius>` where the node has a hardcoded logarithmic radius value. " &
+            "Warning: `static:<logRadius>` disables `storage-size` limits and " &
+            "makes the node store a fraction of the network based on set radius."
       defaultValue: defaultRadiusConfig
-      name: "radius-config" .}: RadiusConfig
+      defaultValueDesc: $defaultRadiusConfigDesc
+      name: "radius" .}: RadiusConfig
 
     # TODO maybe it is worth defining minimal storage size and throw error if
     # value provided is smaller than minimum
     storageSize* {.
       desc: "Maximum amount (in bytes) of content which will be stored " &
-            "in local database."
+            "in the local database."
       defaultValue: defaultStorageSize
       defaultValueDesc: $defaultStorageSizeDesc
       name: "storage-size" .}: uint32
