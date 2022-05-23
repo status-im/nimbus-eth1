@@ -82,3 +82,7 @@ proc fetch*(sp: SnapPeer) {.async.} =
       trace "GetNodeData segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.fetchTrie(stateRoot, leafRange)
+
+proc fetchSetup*(sp: SnapPeer) =
+  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+  sp.fetchTrieSetup

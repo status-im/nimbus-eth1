@@ -549,7 +549,8 @@ proc `[]`*(reply: ReplyData; inx: int): Blob =
       return reply.hashVerifiedData[inx]
 
 proc replyDataSetup*(sp: SnapPeer) =
-  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+  ## Initialise `SnapPeer` to support `NodeData` replies to `GetNodeData`
+  ## requests issued by `new()`.
 
   if sp.requestsEx.isNil:
     sp.requestsEx = RequestDataQueue()

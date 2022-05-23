@@ -369,6 +369,10 @@ proc fetchTrieOk*(sp: SnapPeer): bool =
   sp.ctrl.runState != SyncStopped and
    (sp.fetchStateEx.isNil or sp.fetchStateEx.getNodeDataErrors == 0)
 
+proc fetchTrieSetup*(sp: SnapPeer) =
+  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+  sp.replyDataSetup
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

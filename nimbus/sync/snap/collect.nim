@@ -65,7 +65,7 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   ../../p2p/chain/chain_desc,
   ".."/[protocol, types],
-  "."/[base_desc, peer/fetch, peer/reply_data]
+  "."/[base_desc, peer/fetch]
 
 {.push raises: [Defect].}
 
@@ -543,7 +543,8 @@ proc collectBlockHeaders*(sp: SnapPeer) {.async.} =
     sp.peerSyncChainEmptyReply(request)
 
 proc collectDataSetup*(sp: SnapPeer) =
-  sp.replyDataSetup
+  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+  sp.fetchSetup
 
 # ------------------------------------------------------------------------------
 # End
