@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[protocol, types],
-  ./snap/[base_desc, worker]
+  ./snap/worker
 
 {.push raises: [Defect].}
 

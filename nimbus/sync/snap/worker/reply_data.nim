@@ -64,10 +64,9 @@ import
   std/[sequtils, sets, tables, hashes],
   chronos,
   eth/[common/eth_types, p2p],
-  nimcrypto/keccak,
-  stint,
   "../.."/[protocol, protocol/trace_config, types],
-  ".."/[base_desc, path_desc, timer_helper]
+  ../path_desc,
+  "."/[timer_helper, worker_desc]
 
 {.push raises: [Defect].}
 

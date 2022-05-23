@@ -16,8 +16,8 @@ import
   stint,
   eth/[common/eth_types, p2p],
   ../../types,
-  ".."/[path_desc, base_desc],
-  "."/[common, fetch_trie, fetch_snap]
+  ../path_desc,
+  "."/[common, fetch_trie, fetch_snap, worker_desc]
 
 {.push raises: [Defect].}
 

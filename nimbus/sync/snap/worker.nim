@@ -65,9 +65,12 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   "../.."/[constants, p2p/chain/chain_desc],
   ".."/[protocol, types],
-  "."/[base_desc, worker/fetch]
+  ./worker/[worker_desc, fetch]
 
 {.push raises: [Defect].}
+
+export
+  worker_desc
 
 logScope:
   topics = "snap worker"

@@ -27,8 +27,8 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   "../.."/[protocol/trace_config, types],
-  ".."/[base_desc, path_desc],
-  "."/[common, reply_data, validate_trienode]
+  ../path_desc,
+  "."/[common, reply_data, validate_trienode, worker_desc]
 
 {.push raises: [Defect].}
 
