@@ -30,8 +30,8 @@ type
   SnapPeerRequestsBase* = ref object of RootObj
     ## Stub object, to be inherited
 
-  SnapPeerCollectBase* = ref object of RootObj
-    ## Stub object, to be inherited (see collect.nim)
+  SnapPeerWorkerBase* = ref object of RootObj
+    ## Stub object, to be inherited (see worker.nim)
 
   SnapPeerRunState* = enum
     SyncRunningOk
@@ -76,7 +76,7 @@ type
     peer*: Peer                     ## Reference to eth p2pProtocol entry
     stats*: SnapPeerStats           ## Statistics counters
     ctrl*: SnapPeerCtrl             ## Control and state settings
-    collect*: SnapPeerCollectBase   ## Opaque object reference
+    worker*: SnapPeerWorkerBase     ## Opaque object reference
     requests*: SnapPeerRequestsBase ## Opaque object reference
     fetchState*: SnapPeerFetchBase  ## Opaque object reference
 

@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[protocol, types],
-  ./snap/[base_desc, collect]
+  ./snap/[base_desc, worker]
 
 {.push raises: [Defect].}
 
@@ -59,7 +59,7 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
       var n = sn.peerTab.len - 1
       for sp in sn.peerTab.prevValues:
         trace "*** Peer list entry",
-          n, poolSize, peer=sp, collect=sp.huntPp
+          n, poolSize, peer=sp, worker=sp.huntPp
         n.dec
 
 # ------------------------------------------------------------------------------
@@ -72,7 +72,7 @@ proc syncPeerLoop(sp: SnapPeer) {.async.} =
   while sp.ctrl.runState != SyncStopped:
 
     # Do something, work a bit
-    await sp.collectBlockHeaders()
+    await sp.workerExec
     if sp.ctrl.runState == SyncStopped:
       trace "Ignoring stopped peer", peer=sp
       return
@@ -81,7 +81,7 @@ proc syncPeerLoop(sp: SnapPeer) {.async.} =
     # TODO: Update implementation of lruFetch() using re-link, only
     discard sp.nsCtx.peerTab.lruFetch(sp.peer)
 
-    let delayMs = if sp.collectLockedOk: 1000 else: 50
+    let delayMs = if sp.workerLockedOk: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
@@ -105,7 +105,7 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
     return
 
   # Initialise snap sync for this peer
-  discard sp.collectStart
+  discard sp.workerStart
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.

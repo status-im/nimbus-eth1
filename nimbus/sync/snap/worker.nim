@@ -70,7 +70,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap collect"
+  topics = "snap worker"
 
 const
   syncLockedMinimumReply    = 8
@@ -108,7 +108,7 @@ const
     ## 2 is chosen for better convergence when tracking a chain reorg.
 
 type
-  CollectMode = enum
+  WorkerMode = enum
     ## The current state of tracking the peer's canonical chain head.
     ## `bestBlockNumber` is only valid when this is `SyncLocked`.
     SyncLocked
@@ -118,9 +118,9 @@ type
     HuntRange
     HuntRangeFinal
 
-  CollectHuntEx = ref object of SnapPeerCollectBase
+  WorkerHuntEx = ref object of SnapPeerWorkerBase
     ## Peer canonical chain head ("best block") search state.
-    syncMode:      CollectMode   ## Action mode
+    syncMode:      WorkerMode    ## Action mode
     lowNumber:     BlockNumber   ## Recent lowest known block number.
     highNumber:    BlockNumber   ## Recent highest known block number.
     bestNumber:    BlockNumber
@@ -143,13 +143,13 @@ static:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hunt(sp: SnapPeer): CollectHuntEx =
-  sp.collect.CollectHuntEx
+proc hunt(sp: SnapPeer): WorkerHuntEx =
+  sp.worker.WorkerHuntEx
 
-proc `hunt=`(sp: SnapPeer; value: CollectHuntEx) =
-  sp.collect = value
+proc `hunt=`(sp: SnapPeer; value: WorkerHuntEx) =
+  sp.worker = value
 
-proc new(T: type CollectHuntEx; syncMode: CollectMode): T =
+proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
   T(syncMode:   syncMode,
     lowNumber:  0.toBlockNumber.BlockNumber,
     highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
@@ -522,7 +522,7 @@ proc peerSyncChainRequest(sp: SnapPeer): BlocksRequest =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc collectBlockHeaders*(sp: SnapPeer) {.async.} =
+proc workerExec*(sp: SnapPeer) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -581,14 +581,14 @@ proc collectBlockHeaders*(sp: SnapPeer) {.async.} =
     sp.peerSyncChainEmptyReply(request)
 
 
-proc collectStart*(sp: SnapPeer): bool =
-  ## Initialise `SnapPeer` to support `collectBlockHeaders()` calls
+proc workerStart*(sp: SnapPeer): bool =
+  ## Initialise `SnapPeer` to support `workerBlockHeaders()` calls
 
   # Initialise `DataNode` reply handling
   sp.fetchSetup
 
   # Link in hunt descriptor
-  sp.hunt = CollectHuntEx.new(HuntForward)
+  sp.hunt = WorkerHuntEx.new(HuntForward)
 
   if sp.peer.state(eth).initialized:
     # We know the hash but not the block number.
@@ -599,7 +599,7 @@ proc collectStart*(sp: SnapPeer): bool =
 
   trace "State(eth) not initialized!"
 
-proc collectLockedOk*(sp: SnapPeer): bool =
+proc workerLockedOk*(sp: SnapPeer): bool =
   sp.hunt.syncMode == SyncLocked
 
 # ------------------------------------------------------------------------------
