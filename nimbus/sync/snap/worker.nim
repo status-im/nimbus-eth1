@@ -65,7 +65,7 @@ import
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
   "../.."/[constants, p2p/chain/chain_desc],
   ".."/[protocol, types],
-  "."/[base_desc, peer/fetch]
+  "."/[base_desc, worker/fetch]
 
 {.push raises: [Defect].}
 
