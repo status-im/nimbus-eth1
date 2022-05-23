@@ -24,7 +24,7 @@ logScope:
   topics = "snap peer common"
 
 type
-  CommonFetchEx* = ref object of WorkerFetchBase
+  CommonFetchEx* = ref object of CommonBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
     leafRanges*:            seq[LeafRange]
@@ -103,7 +103,7 @@ proc new*(T: type CommonFetchEx; startAfter = 100.milliseconds): T =
 
 proc `sharedFetchEx=`(ns: Worker; value: CommonFetchEx) =
   ## Handy helper
-  ns.sharedFetch = value
+  ns.commonBase = value
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -111,7 +111,7 @@ proc `sharedFetchEx=`(ns: Worker; value: CommonFetchEx) =
 
 proc sharedFetchEx*(ns: Worker): CommonFetchEx =
   ## Handy helper
-  ns.sharedFetch.CommonFetchEx
+  ns.commonBase.CommonFetchEx
 
 # ------------------------------------------------------------------------------
 # Public functions

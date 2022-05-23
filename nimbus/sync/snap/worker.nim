@@ -121,7 +121,7 @@ type
     HuntRange
     HuntRangeFinal
 
-  WorkerHuntEx = ref object of WorkerBuddyWorkerBase
+  WorkerHuntEx = ref object of WorkerBase
     ## Peer canonical chain head ("best block") search state.
     syncMode:      WorkerMode    ## Action mode
     lowNumber:     BlockNumber   ## Recent lowest known block number.
@@ -147,10 +147,10 @@ static:
 # ------------------------------------------------------------------------------
 
 proc hunt(sp: WorkerBuddy): WorkerHuntEx =
-  sp.worker.WorkerHuntEx
+  sp.workerBase.WorkerHuntEx
 
 proc `hunt=`(sp: WorkerBuddy; value: WorkerHuntEx) =
-  sp.worker = value
+  sp.workerBase = value
 
 proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
   T(syncMode:   syncMode,

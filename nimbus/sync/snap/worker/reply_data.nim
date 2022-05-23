@@ -92,7 +92,7 @@ type
     pathRange:          (InteriorPath, InteriorPath)
     fullHashed:         bool
 
-  RequestDataQueue = ref object of WorkerBuddyRequestsBase
+  RequestDataQueue = ref object of ReplyDataBase
     liveRequests:       HashSet[RequestData]
     empties:            int
     # `OrderedSet` was considered instead of `seq` here, but it has a slow
@@ -115,10 +115,10 @@ proc `==`(hash1, hash2: ptr Hash256): bool =
   hash1[] == hash2[]
 
 proc requestsEx(sp: WorkerBuddy): RequestDataQueue =
-  sp.requests.RequestDataQueue
+  sp.replyDataBase.RequestDataQueue
 
 proc `requestsEx=`(sp: WorkerBuddy; value: RequestDataQueue) =
-  sp.requests = value
+  sp.replyDataBase = value
 
 # ------------------------------------------------------------------------------
 # Private logging helpers

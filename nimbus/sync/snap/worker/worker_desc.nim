@@ -21,18 +21,18 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerBuddyStat* = distinct uint
+  FetchTrieBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `fetch_trie.nim`
 
-  WorkerBuddyFetchBase* = ref object of RootObj
-    ## Stub object, to be inherited
+  ReplyDataBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `reply_data.nim`
 
-  WorkerBuddyRequestsBase* = ref object of RootObj
-    ## Stub object, to be inherited
+  WorkerBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `worker.nim`
 
-  WorkerBuddyWorkerBase* = ref object of RootObj
-    ## Stub object, to be inherited (see worker.nim)
+  BuddyStat* = distinct uint
 
-  WorkerBuddyRunState* = enum
+  BuddyRunState* = enum
     BuddyRunningOk
     BuddyStopRequest
     BuddyStopped
@@ -41,49 +41,51 @@ type
     ## Statistics counters for events associated with this peer.
     ## These may be used to recognise errors and select good peers.
     ok: tuple[
-      reorgDetected:       WorkerBuddyStat,
-      getBlockHeaders:     WorkerBuddyStat,
-      getNodeData:         WorkerBuddyStat]
+      reorgDetected:       BuddyStat,
+      getBlockHeaders:     BuddyStat,
+      getNodeData:         BuddyStat]
     minor: tuple[
-      timeoutBlockHeaders: WorkerBuddyStat,
-      unexpectedBlockHash: WorkerBuddyStat]
+      timeoutBlockHeaders: BuddyStat,
+      unexpectedBlockHash: BuddyStat]
     major: tuple[
-      networkErrors:       WorkerBuddyStat,
-      excessBlockHeaders:  WorkerBuddyStat,
-      wrongBlockHeader:    WorkerBuddyStat]
+      networkErrors:       BuddyStat,
+      excessBlockHeaders:  BuddyStat,
+      wrongBlockHeader:    BuddyStat]
 
   WorkerBuddyCtrl* = tuple
     ## Control and state settings
     stateRoot:             Option[TrieHash]
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
-    runState:              WorkerBuddyRunState
+    runState:              BuddyRunState
 
   # -------
 
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  WorkerFetchBase* = ref object of RootObj
-    ## Stub object, to be inherited
+  CommonBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `common.nim`
 
   # -------
 
   WorkerBuddy* = ref object
     ## Non-inheritable peer state tracking descriptor.
-    ns*: Worker                        ## Snap descriptor object back reference
-    peer*: Peer                        ## Reference to eth p2pProtocol entry
-    stats*: WorkerBuddyStats           ## Statistics counters
-    ctrl*: WorkerBuddyCtrl             ## Control and state settings
-    worker*: WorkerBuddyWorkerBase     ## Opaque object reference
-    requests*: WorkerBuddyRequestsBase ## Opaque object reference
-    fetchState*: WorkerBuddyFetchBase  ## Opaque object reference
+    ns*: Worker                      ## Worker descriptor object back reference
+    peer*: Peer                      ## Reference to eth p2pProtocol entry
+    stats*: WorkerBuddyStats         ## Statistics counters
+    ctrl*: WorkerBuddyCtrl           ## Control and state settings
+
+    workerBase*: WorkerBase          ## Opaque object reference
+    replyDataBase*: ReplyDataBase    ## Opaque object reference
+    fetchTrieBase*: FetchTrieBase    ## Opaque object reference
 
   Worker* = ref object of RootObj
     ## Shared state among all peers of a snap syncing node. Will be
     ## amended/inherited into `WorkerCtx` by the `snap` module.
-    seenBlock: WorkerSeenBlocks        ## Temporary, debugging, prettyfied logs
-    sharedFetch*: WorkerFetchBase      ## Opaque object reference
+    seenBlock: WorkerSeenBlocks      ## Temporary, debugging, pretty logs
+
+    commonBase*: CommonBase          ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor
@@ -93,7 +95,7 @@ proc new*(
     T: type WorkerBuddy;
     ns: Worker;
     peer: Peer;
-    runState: WorkerBuddyRunState
+    runState: BuddyRunState
       ): T =
   ## Initial state, maximum uncertainty range.
   T(ns:           ns,
@@ -109,7 +111,7 @@ proc new*(
 proc `$`*(sp: WorkerBuddy): string =
   $sp.peer
 
-proc inc(stat: var WorkerBuddyStat) {.borrow.}
+proc inc(stat: var BuddyStat) {.borrow.}
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

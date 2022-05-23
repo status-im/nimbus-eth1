@@ -28,6 +28,7 @@ import
   eth/[common/eth_types, p2p],
   "../.."/[protocol/trace_config, types],
   ../path_desc,
+
   "."/[common, reply_data, validate_trienode, worker_desc]
 
 {.push raises: [Defect].}
@@ -48,7 +49,7 @@ type
     path:               InteriorPath
     future:             Future[Blob]
 
-  FetchStateEx = ref object of WorkerBuddyFetchBase
+  FetchStateEx = ref object of FetchTrieBase
     ## Account fetching state on a single peer.
     sp:                 WorkerBuddy
     nodeGetQueue:       seq[SingleNodeRequest]
@@ -64,10 +65,10 @@ type
     finish:             Future[void]
 
 proc fetchStateEx(sp: WorkerBuddy): FetchStateEx =
-  sp.fetchState.FetchStateEx
+  sp.fetchTrieBase.FetchStateEx
 
 proc `fetchStateEx=`(sp: WorkerBuddy; value: FetchStateEx) =
-  sp.fetchState = value
+  sp.fetchTrieBase = value
 
 proc new(T: type FetchStateEx; peer: WorkerBuddy): T =
   FetchStateEx(sp: peer)
