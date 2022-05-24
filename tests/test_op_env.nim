@@ -8,6 +8,21 @@ proc opEnvMain*() =
   suite "Environmental Information Opcodes":
     let (vmState, chainDB) = initDatabase()
 
+    assembler: # EVM bug reported in discord
+      title: "stack's operator [] bug"
+      code:
+        PUSH1 "0x0A"
+        DUP1
+        RETURNDATASIZE
+        MSIZE
+        ADDRESS
+        GAS
+        STATICCALL
+        CALL
+      fork: london
+      success: false
+      memory: "0x0000000000000000000000000000000000000000000000000000000000000000"
+
     assembler: # CODECOPY OP
       title: "CODECOPY_1"
       code:

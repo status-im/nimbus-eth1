@@ -124,7 +124,7 @@ proc `$`*(stack: Stack): string =
   &"Stack:\n{values}"
 
 proc `[]`*(stack: Stack, i: BackwardsIndex, T: typedesc): T =
-  # This should be used only for tracer/test/debugging
+  ensurePop(stack, int(i))
   fromStackElement(stack.values[i], result)
 
 proc peekInt*(stack: Stack): UInt256 =
