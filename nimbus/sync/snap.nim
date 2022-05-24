@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[protocol, types],
-  ./snap/[base_desc, collect]
+  ./snap/worker
 
 {.push raises: [Defect].}
 
@@ -24,10 +24,10 @@ logScope:
   topics = "snap sync"
 
 type
-  SnapSyncCtx* = ref object of SnapSync
-    peerTab: KeyedQueue[Peer,SnapPeer] ## LRU cache
-    tabSize: int                       ## maximal number of entries
-    pool: PeerPool                     ## for starting the system, debugging
+  SnapSyncCtx* = ref object of Worker
+    peerTab: KeyedQueue[Peer,WorkerBuddy] ## LRU cache
+    tabSize: int                          ## maximal number of entries
+    pool: PeerPool                        ## for starting the system, debugging
 
     # debugging
     lastDump: seq[string]
@@ -37,7 +37,7 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nsCtx(sp: SnapPeer): SnapSyncCtx =
+proc nsCtx(sp: WorkerBuddy): SnapSyncCtx =
   sp.ns.SnapSyncCtx
 
 proc hash(peer: Peer): Hash =
@@ -59,21 +59,21 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
       var n = sn.peerTab.len - 1
       for sp in sn.peerTab.prevValues:
         trace "*** Peer list entry",
-          n, poolSize, peer=sp, hunt=sp.hunt.pp
+          n, poolSize, peer=sp, worker=sp.huntPp
         n.dec
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc syncPeerLoop(sp: SnapPeer) {.async.} =
+proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   var cache = ""
-  while sp.ctrl.runState != SyncStopped:
+  while sp.ctrl.runState != BuddyStopped:
 
     # Do something, work a bit
-    await sp.collectBlockHeaders()
-    if sp.ctrl.runState == SyncStopped:
+    await sp.workerExec
+    if sp.ctrl.runState == BuddyStopped:
       trace "Ignoring stopped peer", peer=sp
       return
 
@@ -81,37 +81,31 @@ proc syncPeerLoop(sp: SnapPeer) {.async.} =
     # TODO: Update implementation of lruFetch() using re-link, only
     discard sp.nsCtx.peerTab.lruFetch(sp.peer)
 
-    let delayMs = if sp.hunt.syncMode == SyncLocked: 1000 else: 50
+    let delayMs = if sp.workerLockedOk: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
 
-proc syncPeerStart(sp: SnapPeer) =
+proc syncPeerStart(sp: WorkerBuddy) =
   asyncSpawn sp.syncPeerLoop()
 
-proc syncPeerStop(sp: SnapPeer) =
-  sp.ctrl.runState = SyncStopped
-  # TODO: Cancel running `SnapPeer` instances.  We need clean cancellation
+proc syncPeerStop(sp: WorkerBuddy) =
+  sp.ctrl.runState = BuddyStopped
+  # TODO: Cancel running `WorkerBuddy` instances.  We need clean cancellation
   # for this.  Doing so reliably will be addressed at a later time.
 
 
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer connected", peer
 
-  let sp = SnapPeer.new(ns, peer, SyncHuntForward, SyncRunningOk)
-  sp.collectDataSetup()
-
-  if peer.state(eth).initialized:
-    # We know the hash but not the block number.
-    sp.hunt.bestHash = peer.state(eth).bestBlockHash.BlockHash
-    # TODO: Temporarily disabled because it's useful to test the head hunter.
-    # sp.syncMode = SyncOnlyHash
-  else:
-    trace "State(eth) not initialized!"
+  let sp = WorkerBuddy.new(ns, peer, BuddyRunningOk)
 
   # Manage connection table, check for existing entry
   if ns.peerTab.hasKey(peer):
-    trace "Peer exists already!", peer
+    trace "Peer exists already!", peer # can this happen, at all?
     return
+
+  # Initialise snap sync for this peer
+  discard sp.workerStart
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.

@@ -16,18 +16,18 @@ import
   stint,
   eth/[common/eth_types, p2p],
   ../../types,
-  ".."/[path_desc, base_desc],
-  "."/[common, fetch_trie, fetch_snap]
+  ../path_desc,
+  "."/[common, fetch_trie, fetch_snap, worker_desc]
 
 {.push raises: [Defect].}
 
 logScope:
   topics = "snap peer fetch"
 
-# Note: To test disabling snap (or trie), modify `peerSupportsGetNodeData` or
+# Note: To test disabling snap (or trie), modify `fetchTrieOk` or
 # `fetchSnapOk` where those are defined.
 
-proc fetch*(sp: SnapPeer) {.async.} =
+proc fetch*(sp: WorkerBuddy) {.async.} =
   var stateRoot = sp.ctrl.stateRoot.get
   trace "Syncing from stateRoot", peer=sp, stateRoot
 
@@ -52,9 +52,9 @@ proc fetch*(sp: SnapPeer) {.async.} =
     if stateRoot != sp.ctrl.stateRoot.get:
       trace "Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.ctrl.stateRoot.get
-      sp.ctrl.runState = SyncRunningOK
+      sp.ctrl.runState = BuddyRunningOK
 
-    if sp.ctrl.runState == SyncStopRequest:
+    if sp.ctrl.runState == BuddyStopRequest:
       trace "Pausing sync until we get a new state root", peer=sp
       while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
             (sp.fetchTrieOk or sp.fetchSnapOk) and
@@ -82,3 +82,7 @@ proc fetch*(sp: SnapPeer) {.async.} =
       trace "GetNodeData segment", peer=sp,
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.fetchTrie(stateRoot, leafRange)
+
+proc fetchSetup*(sp: WorkerBuddy) =
+  ## Initialise `WorkerBuddy` to support `ReplyData.new()` calls.
+  sp.fetchTrieSetup

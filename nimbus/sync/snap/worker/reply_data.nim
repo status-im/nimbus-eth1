@@ -64,10 +64,9 @@ import
   std/[sequtils, sets, tables, hashes],
   chronos,
   eth/[common/eth_types, p2p],
-  nimcrypto/keccak,
-  stint,
   "../.."/[protocol, protocol/trace_config, types],
-  ".."/[base_desc, path_desc, timer_helper]
+  ../path_desc,
+  "."/[timer_helper, worker_desc]
 
 {.push raises: [Defect].}
 
@@ -86,14 +85,14 @@ type
     MultipleEntriesReply
 
   RequestData = ref object
-    sp:                 SnapPeer
+    sp:                 WorkerBuddy
     hashes:             seq[NodeHash]
     future:             Future[ReplyData]
     timer:              TimerCallback
     pathRange:          (InteriorPath, InteriorPath)
     fullHashed:         bool
 
-  RequestDataQueue = ref object of SnapPeerRequestsBase
+  RequestDataQueue = ref object of ReplyDataBase
     liveRequests:       HashSet[RequestData]
     empties:            int
     # `OrderedSet` was considered instead of `seq` here, but it has a slow
@@ -115,11 +114,11 @@ proc hash(hash: ptr Hash256): Hash =
 proc `==`(hash1, hash2: ptr Hash256): bool =
   hash1[] == hash2[]
 
-proc requestsEx(sp: SnapPeer): RequestDataQueue =
-  sp.requests.RequestDataQueue
+proc requestsEx(sp: WorkerBuddy): RequestDataQueue =
+  sp.replyDataBase.RequestDataQueue
 
-proc `requestsEx=`(sp: SnapPeer; value: RequestDataQueue) =
-  sp.requests = value
+proc `requestsEx=`(sp: WorkerBuddy; value: RequestDataQueue) =
+  sp.replyDataBase = value
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
@@ -155,7 +154,7 @@ proc traceGetNodeDataDisconnected(request: RequestData) =
   trace trEthRecvError & "peer disconnected, not sending GetNodeData",
     peer=request.sp, hashes=request.hashes.len, pathRange=request.pathRange
 
-proc traceReplyDataEmpty(sp: SnapPeer, request: RequestData) =
+proc traceReplyDataEmpty(sp: WorkerBuddy, request: RequestData) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
@@ -164,7 +163,7 @@ proc traceReplyDataEmpty(sp: SnapPeer, request: RequestData) =
     trace trEthRecvGot & "NodeData", peer=sp, got=0,
       requested=request.hashes.len, pathRange=request.pathRange
 
-proc traceReplyDataUnmatched(sp: SnapPeer, got: int) =
+proc traceReplyDataUnmatched(sp: WorkerBuddy, got: int) =
   # There is no request for this reply.  Therefore `sp` must be included.
   trace trEthRecvProtocolViolation & "non-reply NodeData", peer=sp, got
   debug "Warning: Unexpected non-reply NodeData from peer"
@@ -384,7 +383,7 @@ proc nodeDataTryEmpties(rq: RequestDataQueue) =
 
 proc new(
     T: type RequestData,
-    sp: SnapPeer,
+    sp: WorkerBuddy,
     hashes: seq[NodeHash],
     pathFrom, pathTo: InteriorPath
      ): RequestData  =
@@ -407,7 +406,7 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   ## Helper function to send an `eth.GetNodeData` request.
   ## But not when we're draining the in flight queue to match empty replies.
   let sp = request.sp
-  if sp.ctrl.runState == SyncStopped:
+  if sp.ctrl.runState == BuddyStopped:
     request.traceGetNodeDataDisconnected()
     request.future.complete(nil)
     return
@@ -427,10 +426,10 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = SyncStopped
+    sp.ctrl.runState = BuddyStopped
     request.future.fail(e)
 
-proc onNodeData(sp: SnapPeer, data: openArray[Blob]) =
+proc onNodeData(sp: WorkerBuddy, data: openArray[Blob]) =
   ## Handle an incoming `eth.NodeData` reply.
   ## Practically, this is also where all the incoming packet trace messages go.
   let rq = sp.requestsEx
@@ -484,7 +483,7 @@ proc onNodeData(sp: SnapPeer, data: openArray[Blob]) =
 
 proc new*(
     T: type ReplyData,
-    sp: SnapPeer,
+    sp: WorkerBuddy,
     hashes: seq[NodeHash],
     pathFrom = InteriorPath(),
     pathTo = InteriorPath()
@@ -514,7 +513,7 @@ proc new*(
   except CatchableError as e:
     request.traceReplyDataError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = SyncStopped
+    sp.ctrl.runState = BuddyStopped
     return nil
 
   # Timeout, packet and packet error trace messages are done in `onNodeData`
@@ -548,8 +547,9 @@ proc `[]`*(reply: ReplyData; inx: int): Blob =
     if inx < reply.hashVerifiedData.len:
       return reply.hashVerifiedData[inx]
 
-proc replyDataSetup*(sp: SnapPeer) =
-  ## Initialise `SnapPeer` to support `replyDataGet()` calls.
+proc replyDataSetup*(sp: WorkerBuddy) =
+  ## Initialise `WorkerBuddy` to support `NodeData` replies to `GetNodeData`
+  ## requests issued by `new()`.
 
   if sp.requestsEx.isNil:
     sp.requestsEx = RequestDataQueue()
