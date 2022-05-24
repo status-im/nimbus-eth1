@@ -124,6 +124,7 @@ type
   WorkerHuntEx = ref object of WorkerBase
     ## Peer canonical chain head ("best block") search state.
     syncMode:      WorkerMode    ## Action mode
+    startedFetch:  bool          ## Start download once, only
     lowNumber:     BlockNumber   ## Recent lowest known block number.
     highNumber:    BlockNumber   ## Recent highest known block number.
     bestNumber:    BlockNumber
@@ -223,8 +224,11 @@ proc clearSyncStateRoot(sp: WorkerBuddy) =
     debug "Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
-proc lockSyncStateRoot(sp: WorkerBuddy, number: BlockNumber, hash: BlockHash,
-                       stateRoot: TrieHash) =
+proc lockSyncStateRoot(
+    sp: WorkerBuddy,
+    number: BlockNumber,
+    hash: BlockHash,
+    stateRoot: TrieHash) =
   sp.setSyncLocked(number, hash)
 
   let thisBlock = sp.ns.pp(hash, number)
@@ -237,8 +241,8 @@ proc lockSyncStateRoot(sp: WorkerBuddy, number: BlockNumber, hash: BlockHash,
 
   sp.ctrl.stateRoot = some(stateRoot)
 
-  if sp.ctrl.runState != BuddyRunningOK:
-    sp.ctrl.runState = BuddyRunningOK
+  if not sp.hunt.startedFetch:
+    sp.hunt.startedFetch = true
     trace "Starting to download block state", peer=sp,
       thisBlock, stateRoot
     asyncSpawn sp.fetch()
