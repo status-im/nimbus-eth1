@@ -26,10 +26,11 @@ import
   std/[sets, tables, algorithm],
   chronos,
   eth/[common/eth_types, p2p],
-  "../.."/[protocol/trace_config, types],
-  ../path_desc,
+  "../../.."/[protocol/trace_config, types],
+  ../../path_desc,
+  ../worker_desc,
   ./fetch_trie/[reply_data, validate_trienode],
-  "."/[common, worker_desc]
+  ./common
 
 {.push raises: [Defect].}
 

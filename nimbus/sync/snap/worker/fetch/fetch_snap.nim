@@ -24,9 +24,10 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
-  "../.."/[protocol, types],
-  ../path_desc,
-  "."/[common, worker_desc]
+  "../../.."/[protocol, types],
+  ../../path_desc,
+  ../worker_desc,
+  ./common
 
 {.push raises: [Defect].}
 

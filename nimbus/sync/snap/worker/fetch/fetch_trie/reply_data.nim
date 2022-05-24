@@ -64,9 +64,10 @@ import
   std/[sequtils, sets, tables, hashes],
   chronos,
   eth/[common/eth_types, p2p],
-  "../../.."/[protocol, protocol/trace_config, types],
-  ../../path_desc,
-  ".."/[timer_helper, worker_desc]
+  "../../../.."/[protocol, protocol/trace_config, types],
+  ../../../path_desc,
+  ../../worker_desc,
+  ../timer_helper
 
 {.push raises: [Defect].}
 

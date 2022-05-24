@@ -32,9 +32,9 @@
 
 import
   eth/[common/eth_types, p2p],
-  ../../../types,
-  ../../path_desc,
-  ../worker_desc
+  ../../../../types,
+  ../../../path_desc,
+  ../../worker_desc
 
 {.push raises: [Defect].}
 

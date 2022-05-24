@@ -17,7 +17,8 @@ import
   eth/[common/eth_types, p2p],
   ../../types,
   ../path_desc,
-  "."/[common, fetch_trie, fetch_snap, worker_desc]
+  ./fetch/[common, fetch_snap, fetch_trie],
+  ./worker_desc
 
 {.push raises: [Defect].}
 
