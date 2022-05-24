@@ -34,7 +34,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer fetch"
+  topics = "snap fetch"
 
 const
   maxBatchGetNodeData = 384

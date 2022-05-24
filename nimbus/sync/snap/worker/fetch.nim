@@ -22,7 +22,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer fetch"
+  topics = "snap fetch"
 
 # Note: To test disabling snap (or trie), modify `fetchTrieOk` or
 # `fetchSnapOk` where those are defined.

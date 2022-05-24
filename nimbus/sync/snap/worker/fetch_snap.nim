@@ -31,7 +31,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer fetch"
+  topics = "snap fetch"
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024

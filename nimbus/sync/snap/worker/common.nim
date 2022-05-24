@@ -21,7 +21,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer common"
+  topics = "snap common"
 
 type
   CommonFetchEx* = ref object of CommonBase

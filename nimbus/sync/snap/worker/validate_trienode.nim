@@ -39,7 +39,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap validate trie node"
+  topics = "snap validate"
 
 type
   TrieNodeParseContext* = object
