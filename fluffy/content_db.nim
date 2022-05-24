@@ -31,7 +31,7 @@ export kvstore_sqlite3
 
 const
   # Maximal number of ObjInfo objects held in memory per database scan. 100k
-  # objects should result in memory usage of around 7mb which should be 
+  # objects should result in memory usage of around 7mb which should be
   # appropriate for even low resource devices
   maxObjPerScan = 100000
 
@@ -138,7 +138,7 @@ proc getNFurthestElements*(
     else:
       if obj > heap[0]:
         discard heap.replace(obj)
-    
+
     totalContentSize = totalContentSize + ri.payloadLength
 
   var res: seq[ObjInfo] = newSeq[ObjInfo](heap.len())
@@ -211,9 +211,9 @@ proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
 
 proc deleteFractionOfContent(
-  db: ContentDB, 
-  target: Uint256,
-  targetFraction: float64): (UInt256, int64, int64, int64) =
+    db: ContentDB,
+    target: Uint256,
+    targetFraction: float64): (UInt256, int64, int64, int64) =
   ## Procedure which tries to delete fraction of database by scanning maxObjPerScan
   ## furthest elements.
   ## If the maxObjPerScan furthest elements, is not enough to attain required fraction
@@ -238,7 +238,7 @@ proc deleteFractionOfContent(
       # this is our last element, do not delete it and report it as last non deleted
       # element
       return (elem.distFrom, bytesDeleted, totalContentSize, numOfDeletedElements)
-    
+
     if bytesDeleted + elem.payloadLength < bytesToDelete:
       db.del(elem.contentId)
       bytesDeleted = bytesDeleted + elem.payloadLength
@@ -247,15 +247,15 @@ proc deleteFractionOfContent(
       return (elem.distFrom, bytesDeleted, totalContentSize, numOfDeletedElements)
 
 proc put*(
-  db: ContentDB, 
-  key: ContentId, 
-  value: openArray[byte],
-  target: UInt256): PutResult =
+    db: ContentDB,
+    key: ContentId,
+    value: openArray[byte],
+    target: UInt256): PutResult =
 
   db.put(key, value)
 
   let dbSize = db.size()
-  
+
   if dbSize < int64(db.maxSize):
     return PutResult(kind: ContentStored)
   else:

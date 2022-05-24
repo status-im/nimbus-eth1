@@ -159,7 +159,7 @@ type
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     contentDB*: ContentDB
-    toContentId: ToContentIdHandler
+    toContentId*: ToContentIdHandler
     validateContent: ContentValidationHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
@@ -1093,9 +1093,9 @@ proc neighborhoodGossip*(
       await p.offerQueue.addLast(req)
 
 proc adjustRadius(
-  p: PortalProtocol,
-  fractionOfDeletedContent: float64,
-  furthestElementInDbDistance: UInt256) =
+    p: PortalProtocol,
+    fractionOfDeletedContent: float64,
+    furthestElementInDbDistance: UInt256) =
 
   if fractionOfDeletedContent == 0.0:
     # even though pruning was triggered no content was deleted, it could happen
@@ -1108,14 +1108,13 @@ proc adjustRadius(
   # multiplication by float
   let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
 
-  let scaledRadius =  p.dataRadius div u256(invertedFractionAsInt)
+  let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
 
   # Chose larger value to avoid situation, where furthestElementInDbDistance
   # is super close to local id, so local radius would end up too small
   # to accept any more data to local database
   # If scaledRadius radius will be larger it will still contain all elements
   let newRadius = max(scaledRadius, furthestElementInDbDistance)
-  
 
   debug "Database pruned",
     oldRadius = p.dataRadius,

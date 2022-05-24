@@ -97,9 +97,9 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
 
     portalConfig = PortalProtocolConfig.init(
-      config.tableIpLimit, 
-      config.bucketIpLimit, 
-      config.bitsPerHop, 
+      config.tableIpLimit,
+      config.bucketIpLimit,
+      config.bitsPerHop,
       config.radiusConfig
     )
     stateNetwork = StateNetwork.new(d, db,
@@ -176,10 +176,3 @@ when isMainModule:
   case config.cmd
   of PortalCmd.noCommand:
     run(config)
-  of PortalCmd.populateHistoryDb:
-    let
-      db = ContentDB.new(config.dbDir.string, config.storageSize)
-      res = populateHistoryDb(db, config.dataFile.string)
-    if res.isErr():
-      fatal "Failed populating the history content db", error = $res.error
-      quit 1

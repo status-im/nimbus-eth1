@@ -56,7 +56,7 @@ iterator blockHashes*(blockData: BlockDataTable): BlockHash =
 
     yield blockHash
 
-proc readBlockData(
+func readBlockData(
     hash: string, blockData: BlockData, verify = false):
     Result[seq[(ContentKey, seq[byte])], string] =
   var res: seq[(ContentKey, seq[byte])]
@@ -139,7 +139,7 @@ iterator blocks*(
     else:
       error "Failed reading block from block data", error = res.error
 
-proc readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
+func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   var rlp =
     try:
       rlpFromHex(blockData.rlp)
@@ -155,21 +155,19 @@ proc readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   else:
     return err("Item is not a valid rlp list, number " & $blockData.number)
 
-# TODO pass nodeid as uint256 so it will be possible to use put method which
-# preserves size
-proc populateHistoryDb*(
-    db: ContentDB, dataFile: string, verify = false): Result[void, string] =
+proc historyStore*(
+    p: PortalProtocol, dataFile: string, verify = false):
+    Result[void, string] =
   let blockData = ? readBlockDataTable(dataFile)
 
   for b in blocks(blockData, verify):
     for value in b:
       # Note: This is the slowest part due to the hashing that takes place.
-      # TODO use put method which preserves size
-      db.put(history_content.toContentId(value[0]), value[1])
+      p.storeContent(history_content.toContentId(value[0]), value[1])
 
   ok()
 
-proc propagateHistoryDb*(
+proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false):
     Future[Result[void, string]] {.async.} =
 
@@ -196,8 +194,7 @@ proc propagateHistoryDb*(
         info "Seeding block content into the network", contentKey = value[0]
         # Note: This is the slowest part due to the hashing that takes place.
         let contentId = history_content.toContentId(value[0])
-        if p.inRange(contentId):
-          p.contentDB.put(contentId, value[1])
+        p.storeContent(contentId, value[1])
 
         await gossipQueue.addLast(
           (ContentKeysList(@[encode(value[0])]), value[1]))
@@ -206,7 +203,7 @@ proc propagateHistoryDb*(
   else:
     return err(blockData.error)
 
-proc propagateBlockHistoryDb*(
+proc historyPropagateBlock*(
     p: PortalProtocol, dataFile: string, blockHash: string, verify = false):
     Future[Result[void, string]] {.async.} =
   let blockDataTable = readBlockDataTable(dataFile)
@@ -227,8 +224,7 @@ proc propagateBlockHistoryDb*(
     for value in blockData:
       info "Seeding block content into the network", contentKey = value[0]
       let contentId = history_content.toContentId(value[0])
-      if p.inRange(contentId):
-        p.contentDB.put(contentId, value[1])
+      p.storeContent(contentId, value[1])
 
       await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), value[1])
 
