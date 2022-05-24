@@ -20,17 +20,28 @@ proc installPortalDebugApiHandlers*(
     {.raises: [Defect, CatchableError].} =
 
   rpcServer.rpc("portal_" & network & "_store") do(
-      contentId: string, content: string) -> bool:
-    # Using content id as parameter to make it more easy to store. Might evolve
-    # in using content key.
-    let cId = UInt256.fromBytesBE(hexToSeqByte(contentId))
-    discard p.contentDB.put(cId, hexToSeqByte(content), p.localNode.id)
+      contentKey: string, content: string) -> bool:
+    let key = ByteList.init(hexToSeqByte(contentKey))
+    let contentId = p.toContentId(key)
 
-    return true
+    if contentId.isSome():
+      p.storeContent(contentId.get(), hexToSeqByte(content))
+
+      return true
+    else:
+      raise newException(ValueError, "Invalid content key")
+
+  rpcServer.rpc("portal_" & network & "_storeContent") do(
+      dataFile: string) -> bool:
+    let res = p.historyStore(dataFile)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_propagate") do(
       dataFile: string) -> bool:
-    let res = await p.propagateHistoryDb(dataFile)
+    let res = await p.historyPropagate(dataFile)
     if res.isOk():
       return true
     else:
@@ -38,7 +49,7 @@ proc installPortalDebugApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "_propagateBlock") do(
       dataFile: string, blockHash: string) -> bool:
-    let res = await p.propagateBlockHistoryDb(dataFile, blockHash)
+    let res = await p.historyPropagateBlock(dataFile, blockHash)
     if res.isOk():
       return true
     else:

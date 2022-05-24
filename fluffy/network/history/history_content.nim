@@ -46,6 +46,7 @@ func decode*(contentKey: ByteList): Option[ContentKey] =
     return none[ContentKey]()
 
 func toContentId*(contentKey: ByteList): ContentId =
+  # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha2.sha_256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)
 
