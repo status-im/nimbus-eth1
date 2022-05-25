@@ -49,6 +49,7 @@ type
     kv: KvStoreRef
     maxSize: uint32
     sizeStmt: SqliteStmt[NoParams, int64]
+    unusedSizeStmt: SqliteStmt[NoParams, int64]
     vacStmt: SqliteStmt[NoParams, void]
     getAll: SqliteStmt[NoParams, RowInfo]
 
@@ -85,6 +86,10 @@ proc new*(T: type ContentDB, path: string, maxSize: uint32, inMemory = false): C
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64).get()
 
+  let unusedSize = db.prepareStmt(
+    "SELECT freelist_count * page_size as size FROM pragma_freelist_count(), pragma_page_size();",
+    NoParams, int64).get()
+
   let vacStmt = db.prepareStmt(
     "VACUUM;",
     NoParams, void).get()
@@ -99,7 +104,13 @@ proc new*(T: type ContentDB, path: string, maxSize: uint32, inMemory = false): C
   ).get()
 
   ContentDB(
-    kv: kvStore, maxSize: maxSize, sizeStmt: getSizeStmt, vacStmt: vacStmt, getAll: getKeysStmt)
+    kv: kvStore,
+    maxSize: maxSize,
+    sizeStmt: getSizeStmt,
+    vacStmt: vacStmt,
+    getAll: getKeysStmt,
+    unusedSizeStmt: unusedSize
+  )
 
 proc getNFurthestElements*(
     db: ContentDB, target: UInt256, n: uint64): (seq[ObjInfo], int64) =
@@ -172,6 +183,18 @@ proc size*(db: ContentDB): int64 =
     size = res).expectDb()
   return size
 
+proc unusedSize*(db: ContentDB): int64 =
+  ## Return size of pages which are used by databse, but are currently empty i.e
+  ## they can be re-used for new content
+
+  var size: int64 = 0
+  discard (db.unusedSizeStmt.exec do(res: int64):
+    size = res).expectDb()
+  return size
+
+proc realSize*(db: ContentDB): int64 =
+  db.size() - db.unusedSize()
+
 proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
   var res: Option[seq[byte]]
   proc onData(data: openArray[byte]) = res = some(@data)
@@ -210,7 +233,7 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
 
-proc deleteFractionOfContent(
+proc deleteFractionOfContent*(
     db: ContentDB,
     target: Uint256,
     targetFraction: float64): (UInt256, int64, int64, int64) =
@@ -253,8 +276,18 @@ proc put*(
     target: UInt256): PutResult =
 
   db.put(key, value)
-
-  let dbSize = db.size()
+  
+  # We use real size for our pruning treshold, which means that database file
+  # will reach size specified in db.maxSize, and will stay that size thourough
+  # node life time, as after content deletion free pages will be re used.
+  # TODO:
+  # 1. Devise vacuum strategy - after few pruning cycles database can be
+  # fragmented which may impact performance, so at some point in time `VACCUM`
+  # will need to be run to defragment db.
+  # 2. Deal with edge case when user would configre max db size lower than
+  # current db.size(). With such config data base would try to prune iteslf with
+  # each addition
+  let dbSize = db.realSize()
 
   if dbSize < int64(db.maxSize):
     return PutResult(kind: ContentStored)
@@ -269,8 +302,6 @@ proc put*(
       db.deleteFractionOfContent(target, 0.25)
 
     let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
-
-    db.reclaimSpace()
 
     return PutResult(
       kind: DbPruned,
