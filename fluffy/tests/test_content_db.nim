@@ -72,27 +72,35 @@ suite "Content Database":
     let size3 = db.size()
     discard db.put(u256(2), genByteSeq(numBytes), testId)
     let size4 = db.size()
+    let realSize = db.realSize()
 
     check:
       size2 > size1
       size3 > size2
       size3 == size4
+      realSize == size4
 
     db.del(u256(2))
     db.del(u256(1))
     
+    let realSize1 = db.realSize()
     let size5 = db.size()
     
     check:
       size4 == size5
+      # real size will be smaller as after del, there are free pages in sqlite
+      # which can be re-used for further additions
+      realSize1 < size5
 
     db.reclaimSpace()
 
     let size6 = db.size()
+    let realSize2 = db.realSize()
 
     check:
       # After space reclamation size of db should be equal to initial size
       size6 == size1
+      realSize2 == size6
 
   type TestCase = object
     keys: seq[UInt256]
@@ -183,7 +191,7 @@ suite "Content Database":
 
     check:
       pr10.numOfDeletedElements == 2
-      uint32(db.size()) < maxDbSize
+      uint32(db.realSize()) < maxDbSize
       # With current settings 2 furthers elements will be delted i.e 30 and 40
       # so the furthest non deleted one will be 20
       pr10.furthestStoredElementDistance == thirdFurthest
