@@ -183,9 +183,9 @@ proc size*(db: ContentDB): int64 =
     size = res).expectDb()
   return size
 
-proc unusedSize*(db: ContentDB): int64 =
-  ## Return size of pages which are used by databse, but are currently empty i.e
-  ## they can be re-used for new content
+proc unusedSize(db: ContentDB): int64 =
+  ## Returns the total size of the pages which are unused by the database,
+  ## i.e they can be re-used for new content.
 
   var size: int64 = 0
   discard (db.unusedSizeStmt.exec do(res: int64):
@@ -277,16 +277,16 @@ proc put*(
 
   db.put(key, value)
   
-  # We use real size for our pruning treshold, which means that database file
-  # will reach size specified in db.maxSize, and will stay that size thourough
+  # We use real size for our pruning threshold, which means that database file
+  # will reach size specified in db.maxSize, and will stay that size thorough
   # node life time, as after content deletion free pages will be re used.
   # TODO:
-  # 1. Devise vacuum strategy - after few pruning cycles database can be
-  # fragmented which may impact performance, so at some point in time `VACCUM`
-  # will need to be run to defragment db.
-  # 2. Deal with edge case when user would configre max db size lower than
-  # current db.size(). With such config data base would try to prune iteslf with
-  # each addition
+  # 1. Devise vacuum strategy - after few pruning cycles database can become
+  # fragmented which may impact performance, so at some point in time `VACUUM`
+  # will need to be run to defragment the db.
+  # 2. Deal with the edge case where a user configures max db size lower than
+  # current db.size(). With such config the database would try to prune itself with
+  # each addition.
   let dbSize = db.realSize()
 
   if dbSize < int64(db.maxSize):
