@@ -180,6 +180,13 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
   if rc.isErr:
     return err(rc.error)
 
+  # if we are not voting, coinbase should be filled with zero
+  # because other subsystem e.g txpool can produce block header
+  # with non zero coinbase. if that coinbase is one of the signer
+  # and the nonce is zero, that signer will be vote out from
+  # signer list
+  header.coinbase.reset
+
   if (header.blockNumber mod c.cfg.epoch) != 0:
     c.doExclusively:
       # Gather all the proposals that make sense voting on
