@@ -29,7 +29,7 @@ type
 
     # Merge related
     firstPoSBlockNumber  : Option[uint64]
-    ttdReached           : bool
+    ttdReached*          : bool
 
     client               : RpcClient
     ttd                  : DifficultyInt

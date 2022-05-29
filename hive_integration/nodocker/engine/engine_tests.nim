@@ -45,16 +45,19 @@ proc invalidTerminalBlockForkchoiceUpdated(t: TestEnv): TestStatus =
   let res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceState)
 
   # Execution specification:
-  # {payloadStatus: {status: INVALID_TERMINAL_BLOCK, latestValidHash: null, validationError: errorMessage | null}, payloadId: null}
+  # {payloadStatus: {status: INVALID, latestValidHash=0x00..00}, payloadId: null}
   # either obtained from the Payload validation process or as a result of validating a PoW block referenced by forkchoiceState.headBlockHash
   testCond res.isOk
 
   let s = res.get()
-  testCond s.payloadStatus.status == PayloadExecutionStatus.invalid_terminal_block
+  testCond s.payloadStatus.status == PayloadExecutionStatus.invalid
   testCond s.payloadStatus.latestValidHash.isNone
   testCond s.payloadId.isNone
 
   # ValidationError is not validated since it can be either null or a string message
+
+  # Check that PoW chain progresses
+  testCond t.verifyPoWProgress(t.gHeader.blockHash)
 
 # Invalid GetPayload Under PoW: Client must reject GetPayload directives under PoW.
 proc invalidGetPayloadUnderPoW(t: TestEnv): TestStatus =
@@ -90,7 +93,7 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
   testCond res.isOk
 
   let s = res.get()
-  testCond s.status == PayloadExecutionStatus.invalid_terminal_block
+  testCond s.status == PayloadExecutionStatus.invalid
   testCond s.latestValidHash.isNone
 
 proc unknownHeadBlockHash(t: TestEnv): TestStatus =
@@ -989,17 +992,29 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
     error "balance does not match fees",
       feeRecipientBalance, feeRecipientFees
 
+proc sendTx(t: TestEnv): Future[void] {.async.} =
+  let
+    client = t.rpcClient
+    clMock = t.clMock
+    period = chronos.milliseconds(100)
+
+  while not clMock.ttdReached:
+    await sleepAsync(period)
+
+    let
+      tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
+      rr = client.sendTransaction(tx)
+
+    if rr.isErr:
+      error "Unable to send transaction", msg=rr.error
+
 proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
   result = TestStatus.OK
 
   let
     client = t.rpcClient
     clMock = t.clMock
-    tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
-    rr = client.sendTransaction(tx)
-
-  testCond rr.isOk:
-    error "Unable to send transaction", msg=rr.error
+    sendTxFuture = sendTx(t)
 
   # Wait until TTD is reached by this client
   let ok = waitFor clMock.waitForTTD()
@@ -1039,7 +1054,7 @@ proc postMergeSync(t: TestEnv): TestStatus =
   # TODO: need multiple client
 
 const engineTestList* = [
-  TestSpec(
+  #[TestSpec(
     name: "Invalid Terminal Block in ForkchoiceUpdated",
     run: invalidTerminalBlockForkchoiceUpdated,
     ttd: 1000000
@@ -1186,7 +1201,7 @@ const engineTestList* = [
   TestSpec(
     name: "Suggested Fee Recipient Test",
     run:  suggestedFeeRecipient,
-  ),
+  ),]#
 
   # TODO: debug and fix
   # PrevRandao opcode tests

@@ -84,7 +84,7 @@ proc setupEngineAPI*(
     if td < ttd:
       warn "Ignoring pre-merge payload",
         number = header.blockNumber, hash = blockHash.data.toHex, td, ttd
-      return PayloadStatusV1(status: PayloadExecutionStatus.invalid_terminal_block)
+      return PayloadStatusV1(status: PayloadExecutionStatus.invalid)
 
     if header.timestamp <= parent.timestamp:
       warn "Invalid timestamp",
@@ -231,7 +231,7 @@ proc setupEngineAPI*(
           ptd = ptd,
           ttd = ttd
 
-        return simpleFCU(PayloadExecutionStatus.invalid_terminal_block)
+        return simpleFCU(PayloadExecutionStatus.invalid)
 
     # If the head block is already in our canonical chain, the beacon client is
     # probably resyncing. Ignore the update.

@@ -124,7 +124,7 @@ proc blockByNumber*(client: RpcClient, number: uint64, output: var common.EthBlo
     return ok()
   except ValueError as e:
     return err(e.msg)
-    
+
 proc latestHeader*(client: RpcClient, output: var common.BlockHeader): Result[void, string] =
   try:
     let res = waitFor client.eth_getBlockByNumber("latest", false)
@@ -189,3 +189,33 @@ proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: c
     return ok(UInt256.fromHex(res.string))
   except ValueError as e:
     return err(e.msg)
+
+proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Result[void, string]] {.async.} =
+  let res = await client.eth_getBlockByHash(lastBlockHash, false)
+  if res.isNone:
+    return err("cannot get block by hash " & lastBlockHash.data.toHex)
+
+  let header = res.get()
+  let number = toBlockNumber(header.number)
+
+  let period = chronos.seconds(3)
+  var loop = 0
+  while loop < 5:
+    let res = await client.eth_getBlockByNumber("latest", false)
+    if res.isNone:
+      return err("cannot get latest block")
+
+    # Chain has progressed, check that the next block is also PoW
+    # Difficulty must NOT be zero
+    let bc = res.get()
+    let diff = hexToInt(string bc.difficulty, int64)
+    if diff == 0:
+      return err("Expected PoW chain to progress in PoW mode, but following block difficulty: " & $diff)
+
+    if toBlockNumber(bc.number) > number:
+      return ok()
+
+    await sleepAsync(period)
+    inc loop
+
+  return err("verify PoW Progress timeout")
