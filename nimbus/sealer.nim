@@ -78,7 +78,6 @@ proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
   number >= c.londonBlock
 
 proc prepareBlock(engine: SealingEngineRef,
-                   coinbase: EthAddress,
                    parent: BlockHeader,
                    time: Time,
                    prevRandao: Hash256): Result[EthBlock, string] =
@@ -122,7 +121,6 @@ proc prepareBlock(engine: SealingEngineRef,
   ok(blk)
 
 proc generateBlock(engine: SealingEngineRef,
-                   coinbase: EthAddress,
                    parentBlockHeader: BlockHeader,
                    outBlock: var EthBlock,
                    timestamp = getTime(),
@@ -133,7 +131,7 @@ proc generateBlock(engine: SealingEngineRef,
   # - no DAO hard fork
   # - no local and remote uncles inclusion
 
-  let res = prepareBlock(engine, coinbase, parentBlockHeader, timestamp, prevRandao)
+  let res = prepareBlock(engine, parentBlockHeader, timestamp, prevRandao)
   if res.isErr:
     return err("error prepare header")
 
@@ -151,30 +149,28 @@ proc generateBlock(engine: SealingEngineRef,
   ok()
 
 proc generateBlock(engine: SealingEngineRef,
-                   coinbase: EthAddress,
                    parentHash: Hash256,
                    outBlock: var EthBlock,
                    timestamp = getTime(),
                    prevRandao = Hash256()): Result[void, string] =
   var parentBlockHeader: BlockHeader
   if engine.chain.db.getBlockHeader(parentHash, parentBlockHeader):
-    generateBlock(engine, coinbase, parentBlockHeader, outBlock, timestamp, prevRandao)
+    generateBlock(engine, parentBlockHeader, outBlock, timestamp, prevRandao)
   else:
     # TODO:
     # This hack shouldn't be necessary if the database can find
     # the genesis block hash in `getBlockHeader`.
     let maybeGenesisBlock = engine.chain.currentBlock()
     if parentHash == maybeGenesisBlock.blockHash:
-      generateBlock(engine, coinbase, maybeGenesisBlock, outBlock, timestamp, prevRandao)
+      generateBlock(engine, maybeGenesisBlock, outBlock, timestamp, prevRandao)
     else:
       return err "parent block not found"
 
 proc generateBlock(engine: SealingEngineRef,
-                   coinbase: EthAddress,
                    outBlock: var EthBlock,
                    timestamp = getTime(),
                    prevRandao = Hash256()): Result[void, string] =
-  generateBlock(engine, coinbase, engine.chain.currentBlock(),
+  generateBlock(engine, engine.chain.currentBlock(),
                 outBlock, timestamp, prevRandao)
 
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
@@ -192,9 +188,6 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
   clique.authorize(engine.signer, signerFunc)
 
-  # TODO: This should be configurable
-  var coinbase: EthAddress
-
   # convert times.Duration to chronos.Duration
   let period = chronos.seconds(clique.cfg.period.inSeconds)
 
@@ -209,7 +202,7 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
     # - no queue for chain reorgs
     # - no async lock/guard against race with sync algo
     var blk: EthBlock
-    let blkRes = engine.generateBlock(coinbase, blk)
+    let blkRes = engine.generateBlock(blk)
     if blkRes.isErr:
       error "sealing engine generateBlock error", msg=blkRes.error
       break
@@ -246,7 +239,6 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   engine.txPool.feeRecipient = coinbase
 
   let blkRes = engine.generateBlock(
-    coinbase,
     headBlock,
     blk,
     timestamp,
