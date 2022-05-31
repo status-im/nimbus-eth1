@@ -457,7 +457,7 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
     ChainConfig()
 
 proc genesisBlockForNetwork(id: NetworkId): Genesis
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect, ValueError, RlpError].} =
   result = case id
   of MainNet:
     Genesis(
@@ -497,6 +497,6 @@ proc genesisBlockForNetwork(id: NetworkId): Genesis
     Genesis()
 
 proc networkParams*(id: NetworkId): NetworkParams
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [Defect, ValueError, RlpError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
