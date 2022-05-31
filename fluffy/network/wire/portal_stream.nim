@@ -140,7 +140,18 @@ proc connectTo*(
     nodeAddress: NodeAddress,
     connectionId: uint16):
     Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
-  let socketRes = await stream.transport.connectTo(nodeAddress, connectionId)
+  let connectFut = stream.transport.connectTo(nodeAddress, connectionId)
+
+  # using yield, not await, as await does not play nice with cancellation
+  # interacting with async procs which allocates some resource
+  yield connectFut
+
+  var socketRes: ConnectionResult[NodeAddress]
+
+  if connectFut.completed():
+    socketRes = connectFut.read()
+  else:
+    raise connectFut.error
 
   if socketRes.isErr():
     case socketRes.error.kind

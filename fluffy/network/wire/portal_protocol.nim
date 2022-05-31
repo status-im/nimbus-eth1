@@ -614,12 +614,20 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         error "Trying to connect to node with unknown address",
           id = dst.id
         return err("Trying to connect to node with unknown address")
-
-      let connectionResult =
-        await p.stream.connectTo(
+        
+      let connFuture = p.stream.connectTo(
           nodeAddress.unsafeGet(),
           uint16.fromBytesBE(m.connectionId)
         )
+
+      yield connFuture
+
+      var connectionResult: Result[UtpSocket[NodeAddress], string]
+
+      if connFuture.completed():
+        connectionResult = connFuture.read()
+      else:
+        raise connFuture.error
 
       if connectionResult.isErr():
         debug "Utp connection error while trying to find content",
@@ -627,24 +635,43 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         return err("Error connecting uTP socket")
 
       let socket = connectionResult.get()
-      # Read all bytes from the socket
-      # This will either end with a FIN, or because the read action times out.
-      # A FIN does not necessarily mean that the data read is complete. Further
-      # validation is required, using a length prefix here might be beneficial for
-      # this.
-      let readData = socket.read()
-      readData.cancelCallback = proc(udate: pointer) {.gcsafe.} =
-        # In case this `findContent` gets cancelled while reading the data,
-        # send a FIN and clean up the socket.
-        socket.close()
 
-      if await readData.withTimeout(p.stream.readTimeout):
-        let content = readData.read
-        await socket.destroyWait()
-        return ok(FoundContent(src: dst, kind: Content, content: content))
-      else:
+      try:
+        # Read all bytes from the socket
+        # This will either end with a FIN, or because the read action times out.
+        # A FIN does not necessarily mean that the data read is complete. Further
+        # validation is required, using a length prefix here might be beneficial for
+        # this.
+        let readFut = socket.read()
+
+        readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
+          debug "Socket read cancelled",
+            socketKey = socket.socketKey
+          # In case this `findContent` gets cancelled while reading the data,
+          # send a FIN and clean up the socket.
+          socket.close()
+
+        if await readFut.withTimeout(p.stream.readTimeout):
+          let content = readFut.read
+          # socket received remote FIN and drained whole buffer, it can be
+          # safely destroyed without notifing remote
+          debug "Socket read fully",
+            socketKey = socket.socketKey
+          socket.destroy()
+          return ok(FoundContent(src: dst, kind: Content, content: content))
+        else :
+          debug "Socket read time-out",
+            socketKey = socket.socketKey
+          socket.close()
+          return err("Reading data from socket timed out, content request failed")
+      except CancelledError as exc:
+        # even though we already installed cancelCallback on readFut, it is worth
+        # catching CancelledError in case that withTimeout throws CancelledError 
+        # but readFut have already finished.
+        debug "Socket read cancelled",
+          socketKey = socket.socketKey
         socket.close()
-        return err("Reading data from socket timed out, content request failed")
+        raise exc
     of contentType:
       return ok(FoundContent(src: dst, kind: Content, content: m.content.asSeq()))
     of enrsType:
