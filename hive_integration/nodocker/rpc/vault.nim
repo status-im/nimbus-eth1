@@ -93,6 +93,29 @@ proc makeFundingTx*(v: Vault, recipient: EthAddress, amount: UInt256): Transacti
 
   signTransaction(unsignedTx, v.vaultKey, v.chainId, eip155 = true)
 
+proc signTx*(v: Vault,
+             sender: EthAddress,
+             nonce: AccountNonce,
+             recipient: EthAddress,
+             amount: UInt256,
+             gasLimit, gasPrice: GasInt,
+             payload: seq[byte] = @[]): Transaction =
+
+  let
+    unsignedTx = Transaction(
+      txType  : TxLegacy,
+      chainId : v.chainId,
+      nonce   : nonce,
+      gasPrice: gasPrice,
+      gasLimit: gasLimit,
+      to      : some(recipient),
+      value   : amount,
+      payload : payload
+    )
+
+  let key = v.accounts[sender]
+  signTransaction(unsignedTx, key, v.chainId, eip155 = true)
+
 # createAccount creates a new account that is funded from the vault contract.
 # It will panic when the account could not be created and funded.
 proc createAccount*(v: Vault, amount: UInt256): Future[EthAddress] {.async.} =

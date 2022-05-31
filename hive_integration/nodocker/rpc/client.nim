@@ -40,3 +40,32 @@ proc balanceAt*(client: RpcClient, address: EthAddress, blockNumber: uint64): Fu
 proc balanceAt*(client: RpcClient, address: EthAddress): Future[UInt256] {.async.} =
   let hex = await client.eth_getBalance(ethAddressStr(address), "latest")
   result = UInt256.fromHex(hex.string)
+
+proc nonceAt*(client: RpcClient, address: EthAddress): Future[AccountNonce] {.async.} =
+  let hex = await client.eth_getTransactionCount(ethAddressStr(address), "latest")
+  result = parseHexInt(hex.string).AccountNonce
+
+proc txReceipt*(client: RpcClient, txHash: Hash256): Future[Option[Receipt]] {.async.} =
+  let rr = await client.eth_getTransactionReceipt(txHash)
+  if rr.isNone:
+    return none(Receipt)
+
+  let rc = rr.get()
+  let rec = Receipt(
+    receiptType: LegacyReceipt,
+    isHash     : rc.root.isSome,
+    status     : rc.status.isSome,
+    hash       : rc.root.get(Hash256()),
+    cumulativeGasUsed: parseHexInt(rc.cumulativeGasUsed.string).GasInt,
+    bloom      : BloomFilter(rc.logsBloom),
+    logs       : rc.logs
+  )
+  result = some(rec)
+
+proc gasUsed*(client: RpcClient, txHash: Hash256): Future[Option[GasInt]] {.async.} =
+  let rr = await client.eth_getTransactionReceipt(txHash)
+  if rr.isNone:
+    return none(GasInt)
+
+  let rc = rr.get()
+  result = some(parseHexInt(rc.gasUsed.string).GasInt)
