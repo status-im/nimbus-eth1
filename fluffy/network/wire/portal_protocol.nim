@@ -643,24 +643,35 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         # validation is required, using a length prefix here might be beneficial for
         # this.
         let readFut = socket.read()
+
+        readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
+          debug "Socket read cancelled",
+            socketKey = socket.socketKey
+          # In case this `findContent` gets cancelled while reading the data,
+          # send a FIN and clean up the socket.
+          socket.close()
+
         if await readFut.withTimeout(p.stream.readTimeout):
           let content = readFut.read
-          return ok(FoundContent(src: dst, kind: Content, content: content))
-        else :
-          return err("Reading data from socket timed out, content request failed")
-      finally:
-        if socket.atEof():
           # socket received remote FIN and drained whole buffer, it can be
           # safely destroyed without notifing remote
           debug "Socket read fully",
             socketKey = socket.socketKey
           socket.destroy()
-        else:
-          # socket read interrupted, either cancelled or timeout on reading
-          # data, inform remote by sending FIN and cleaning up resources
-          debug "Socket read interrupted",
+          return ok(FoundContent(src: dst, kind: Content, content: content))
+        else :
+          debug "Socket read time-out",
             socketKey = socket.socketKey
           socket.close()
+          return err("Reading data from socket timed out, content request failed")
+      except CancelledError as exc:
+        # even though we already installed cancelCallback on readFut, it is worth
+        # catching CancelledError in case that withTimeout throws CancelledError 
+        # but readFut have already finished.
+        debug "Socket read cancelled",
+          socketKey = socket.socketKey
+        socket.close()
+        raise exc
     of contentType:
       return ok(FoundContent(src: dst, kind: Content, content: m.content.asSeq()))
     of enrsType:
