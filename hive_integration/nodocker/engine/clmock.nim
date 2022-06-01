@@ -21,8 +21,8 @@ type
     executedPayloadHistory*: Table[uint64, ExecutionPayloadV1]
 
     # Latest broadcasted data using the PoS Engine API
-    latestFinalizedNumber*: uint64
-    latestFinalizedHeader*: common.BlockHeader
+    latestHeadNumber*: uint64
+    latestHeader*: common.BlockHeader
     latestPayloadBuilt*   : ExecutionPayloadV1
     latestExecutedPayload*: ExecutionPayloadV1
     latestForkchoice*     : ForkchoiceStateV1
@@ -35,13 +35,13 @@ type
     ttd                  : DifficultyInt
 
   BlockProcessCallbacks* = object
-    onPayloadProducerSelected*           : proc(): bool {.gcsafe.}
-    onGetPayloadID*                      : proc(): bool {.gcsafe.}
-    onGetPayload*                        : proc(): bool {.gcsafe.}
-    onNewPayloadBroadcast*               : proc(): bool {.gcsafe.}
-    onHeadBlockForkchoiceBroadcast*      : proc(): bool {.gcsafe.}
-    onSafeBlockForkchoiceBroadcast*      : proc(): bool {.gcsafe.}
-    onFinalizedBlockForkchoiceBroadcast* : proc(): bool {.gcsafe.}
+    onPayloadProducerSelected* : proc(): bool {.gcsafe.}
+    onGetPayloadID*            : proc(): bool {.gcsafe.}
+    onGetPayload*              : proc(): bool {.gcsafe.}
+    onNewPayloadBroadcast*     : proc(): bool {.gcsafe.}
+    onForkchoiceBroadcast*     : proc(): bool {.gcsafe.}
+    onSafeBlockChange *        : proc(): bool {.gcsafe.}
+    onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
 
 proc init*(cl: CLMocker, client: RpcClient, ttd: DifficultyInt) =
@@ -58,14 +58,14 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
     error "timeout while waiting for TTD"
     return false
 
-  cl.latestFinalizedHeader = header
+  cl.latestHeader = header
   cl.ttdReached = true
 
-  let headerHash = BlockHash(common.blockHash(cl.latestFinalizedHeader).data)
+  let headerHash = BlockHash(common.blockHash(cl.latestHeader).data)
   cl.latestForkchoice.headBlockHash = headerHash
   cl.latestForkchoice.safeBlockHash = headerHash
   cl.latestForkchoice.finalizedBlockHash = headerHash
-  cl.latestFinalizedNumber = cl.latestFinalizedHeader.blockNumber.truncate(uint64)
+  cl.latestHeadNumber = cl.latestHeader.blockNumber.truncate(uint64)
 
   let res = cl.client.forkchoiceUpdatedV1(cl.latestForkchoice)
   if res.isErr:
@@ -87,7 +87,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
     return false
 
   let lastBlockNumber = nRes.get
-  if cl.latestFinalizedNumber != lastBlockNumber:
+  if cl.latestHeadNumber != lastBlockNumber:
     return false
 
   var header: common.BlockHeader
@@ -97,7 +97,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
     return false
 
   let lastBlockHash = header.blockHash
-  if cl.latestFinalizedHeader.blockHash != lastBlockHash:
+  if cl.latestHeader.blockHash != lastBlockHash:
     error "CLMocker: Failed to obtain a client on the latest block number"
     return false
 
@@ -108,7 +108,7 @@ proc getNextPayloadID(cl: CLMocker): bool =
   var nextPrevRandao: Hash256
   doAssert nimcrypto.randomBytes(nextPrevRandao.data) == 32
 
-  let timestamp = Quantity toUnix(cl.latestFinalizedHeader.timestamp + 1.seconds)
+  let timestamp = Quantity toUnix(cl.latestHeader.timestamp + 1.seconds)
   let payloadAttributes = PayloadAttributesV1(
     timestamp:             timestamp,
     prevRandao:            FixedBytes[32] nextPrevRandao.data,
@@ -116,7 +116,7 @@ proc getNextPayloadID(cl: CLMocker): bool =
   )
 
   # Save random value
-  let number = cl.latestFinalizedHeader.blockNumber.truncate(uint64) + 1
+  let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
   cl.prevRandaoHistory[number] = nextPrevRandao
 
   let res = cl.client.forkchoiceUpdatedV1(cl.latestForkchoice, some(payloadAttributes))
@@ -261,8 +261,8 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   if not cl.broadcastLatestForkchoice():
     return false
 
-  if cb.onHeadBlockForkchoiceBroadcast != nil:
-    if not cb.onHeadBlockForkchoiceBroadcast():
+  if cb.onForkchoiceBroadcast != nil:
+    if not cb.onForkchoiceBroadcast():
       return false
 
   # Broadcast forkchoice updated with new SafeBlock to all clients
@@ -270,8 +270,8 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   if not cl.broadcastLatestForkchoice():
     return false
 
-  if cb.onSafeBlockForkchoiceBroadcast != nil:
-    if not cb.onSafeBlockForkchoiceBroadcast():
+  if cb.onSafeBlockChange != nil:
+    if not cb.onSafeBlockChange():
       return false
 
   # Broadcast forkchoice updated with new FinalizedBlock to all clients
@@ -281,15 +281,15 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
 
   # Save the number of the first PoS block
   if cl.firstPoSBlockNumber.isNone:
-    let number = cl.latestFinalizedHeader.blockNumber.truncate(uint64) + 1
+    let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
     cl.firstPoSBlockNumber = some(number)
 
   # Save the header of the latest block in the PoS chain
-  cl.latestFinalizedNumber = cl.latestFinalizedNumber + 1
+  cl.latestHeadNumber = cl.latestHeadNumber + 1
 
   # Check if any of the clients accepted the new payload
   var newHeader: common.BlockHeader
-  let res = cl.client.headerByNumber(cl.latestFinalizedNumber, newHeader)
+  let res = cl.client.headerByNumber(cl.latestHeadNumber, newHeader)
   if res.isErr:
     error "CLMock ProduceSingleBlock", msg=res.error
     return false
@@ -300,10 +300,10 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
       hash=newHash.toHex
     return false
 
-  cl.latestFinalizedHeader = newHeader
+  cl.latestHeader = newHeader
 
-  if cb.onFinalizedBlockForkchoiceBroadcast != nil:
-    if not cb.onFinalizedBlockForkchoiceBroadcast():
+  if cb.onFinalizedBlockChange != nil:
+    if not cb.onFinalizedBlockChange():
       return false
 
   return true

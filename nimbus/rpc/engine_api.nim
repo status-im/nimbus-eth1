@@ -300,7 +300,7 @@ proc setupEngineAPI*(
 
       if res.isErr:
         error "Failed to create sealing payload", err = res.error
-        return simpleFCU(PayloadExecutionStatus.invalid, res.error)
+        raise (ref InvalidRequest)(code: engineApiInvalidPayloadAttributes, msg: res.error)
 
       let id = computePayloadId(blockHash, payloadAttrs)
       api.put(id, payload)
