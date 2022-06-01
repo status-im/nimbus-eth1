@@ -19,7 +19,7 @@ export merkleization
 
 const
   epochSize = 8192 # blocks
-  maxHistoricalEpochs = 100_000 # Doesn't really need a limit, does it?
+  maxHistoricalEpochs = 131072 # 2^17
 
 type
   # Header Gossip Content Keys

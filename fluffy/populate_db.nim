@@ -11,6 +11,9 @@ import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], nimcrypto/keccak, chronos, chronicles,
   eth/[rlp, common/eth_types],
+  # TODO: `NetworkId` should not be in these private types
+  eth/p2p/private/p2p_types,
+  ../nimbus/[chain_config, genesis],
   ./content_db,
   ./network/wire/portal_protocol,
   ./network/history/history_content
@@ -154,6 +157,18 @@ func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
       return err("Invalid header, number " & $blockData.number & ": " & e.msg)
   else:
     return err("Item is not a valid rlp list, number " & $blockData.number)
+
+proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
+  let params =
+    try:
+      networkParams(id)
+    except ValueError, RlpError:
+      raise (ref Defect)(msg: "Network parameters should be valid")
+
+  try:
+    toGenesisHeader(params)
+  except RlpError:
+    raise (ref Defect)(msg: "Genesis should be valid")
 
 proc historyStore*(
     p: PortalProtocol, dataFile: string, verify = false):
