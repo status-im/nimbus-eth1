@@ -230,7 +230,7 @@ proc deleteContentFraction(
       inc numOfDeletedElements
     else:
       return (
-        UInt256.fromBytesBE(ri.contentid),
+        UInt256.fromBytesBE(ri.distance),
         bytesDeleted,
         totalContentSize, 
         numOfDeletedElements
