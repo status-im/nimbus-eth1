@@ -210,10 +210,12 @@ proc deleteContentFraction(
   db: ContentDB,
   target: UInt256,
   fraction: float64): (UInt256, int64, int64, int64) =
+  ## Deletes at most `fraction` percent of content form database.
+  ## First, content furthest from provided `target` is deleted.
 
   doAssert(
     fraction > 0 and fraction < 1, 
-    "Deleted fraction shohould be > 0 and < 1"
+    "Deleted fraction should be > 0 and < 1"
   )
 
   let totalContentSize = db.contentSize()
