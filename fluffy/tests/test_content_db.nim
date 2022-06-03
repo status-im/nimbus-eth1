@@ -102,59 +102,6 @@ suite "Content Database":
       size6 == size1
       realSize2 == size6
 
-  type TestCase = object
-    keys: seq[UInt256]
-    n: uint64
-
-  proc init(T: type TestCase, keys: seq[UInt256], n: uint64): T =
-    TestCase(keys: keys, n: n)
-
-  proc hasCorrectOrder(s: seq[ObjInfo], expectedOrder: seq[Uint256]): bool =
-    var i = 0
-    for e in s:
-      if (e.distFrom != expectedOrder[i]):
-        return false
-      inc i
-    return true
-  
-  test "Get N furthest elements from db":
-    # we check distances from zero as num xor 0 = num, so each uint in sequence is valid
-    # distance
-    let zero = u256(0)
-    let testCases = @[
-      TestCase.init(@[], 10),
-      TestCase.init(@[u256(1), u256(2)], 1),
-      TestCase.init(@[u256(1), u256(2)], 2),
-      TestCase.init(@[u256(5), u256(1), u256(2), u256(4)], 2),
-      TestCase.init(@[u256(5), u256(1), u256(2), u256(4)], 4),
-      TestCase.init(@[u256(57), u256(32), u256(108), u256(4)], 2),
-      TestCase.init(@[u256(57), u256(32), u256(108), u256(4)], 4),
-      TestCase.init(generateNRandomU256(rng[], 10), 5),
-      TestCase.init(generateNRandomU256(rng[], 10), 10)
-    ]
-
-    for testCase in testCases:
-      let
-        db = ContentDB.new("", uint32.high, inMemory = true)
-
-      for elem in testCase.keys:
-        discard db.put(elem, genByteSeq(32), testId)
-
-      let (furthest, _) = db.getNFurthestElements(zero, testCase.n)
-
-      var sortedKeys = testCase.keys
-
-      sortedKeys.sort(SortOrder.Descending)
-
-      if uint64(len(testCase.keys)) < testCase.n:
-        check:
-          len(furthest) == len(testCase.keys)
-      else:
-        check:
-          uint64(len(furthest)) == testCase.n
-      check:
-        furthest.hasCorrectOrder(sortedKeys)
-
   test "ContentDB pruning":
     let
       maxDbSize = uint32(100000)
