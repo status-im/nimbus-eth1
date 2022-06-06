@@ -17,15 +17,43 @@ import
   eth/[common/eth_types, p2p],
   ../../types,
   ../path_desc,
-  "."/[common, fetch_trie, fetch_snap, worker_desc]
+  ./fetch/[common, fetch_snap, fetch_trie],
+  ./worker_desc
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer fetch"
+  topics = "snap fetch"
 
 # Note: To test disabling snap (or trie), modify `fetchTrieOk` or
 # `fetchSnapOk` where those are defined.
+
+# ------------------------------------------------------------------------------
+# Public start/stop and admin functions
+# ------------------------------------------------------------------------------
+
+proc fetchSetup*(ns: Worker) =
+  ## Global set up
+  ns.commonSetup()
+
+proc fetchRelease*(ns: Worker) =
+  ## Global clean up
+  ns.commonRelease()
+
+proc fetchStart*(sp: WorkerBuddy) =
+  ## Initialise `WorkerBuddy` to support `ReplyData.new()` calls.
+  sp.fetchTrieStart()
+
+  trace "Supported fetch modes", peer=sp,
+    ctrlState=sp.ctrl.state, trieMode=sp.fetchTrieOk, snapMode=sp.fetchSnapOk
+
+proc fetchStop*(sp: WorkerBuddy) =
+  ## Clean up for this peer
+  sp.fetchTrieStop()
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc fetch*(sp: WorkerBuddy) {.async.} =
   var stateRoot = sp.ctrl.stateRoot.get
@@ -52,9 +80,9 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
     if stateRoot != sp.ctrl.stateRoot.get:
       trace "Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.ctrl.stateRoot.get
-      sp.ctrl.runState = BuddyRunningOK
+      sp.ctrl.stopped = false
 
-    if sp.ctrl.runState == BuddyStopRequest:
+    if sp.ctrl.stopRequest:
       trace "Pausing sync until we get a new state root", peer=sp
       while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
             (sp.fetchTrieOk or sp.fetchSnapOk) and
@@ -83,6 +111,6 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
         leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
       await sp.fetchTrie(stateRoot, leafRange)
 
-proc fetchSetup*(sp: WorkerBuddy) =
-  ## Initialise `WorkerBuddy` to support `ReplyData.new()` calls.
-  sp.fetchTrieSetup
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

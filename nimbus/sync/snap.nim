@@ -29,10 +29,6 @@ type
     tabSize: int                          ## maximal number of entries
     pool: PeerPool                        ## for starting the system, debugging
 
-    # debugging
-    lastDump: seq[string]
-    lastlen: int
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -48,19 +44,15 @@ proc hash(peer: Peer): Hash =
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc dumpPeers(sn: SnapSyncCtx; force = false) =
-  if sn.lastLen != sn.peerTab.len or force:
-    sn.lastLen = sn.peerTab.len
-
-    let poolSize = sn.pool.len
-    if sn.peerTab.len == 0:
-      trace "*** Empty peer list", poolSize
-    else:
-      var n = sn.peerTab.len - 1
-      for sp in sn.peerTab.prevValues:
-        trace "*** Peer list entry",
-          n, poolSize, peer=sp, worker=sp.huntPp
-        n.dec
+proc dumpPeers(sn: SnapSyncCtx) =
+  let poolSize = sn.pool.len
+  if sn.peerTab.len == 0:
+    trace "*** Empty peer list", poolSize
+  else:
+    var n = sn.peerTab.len - 1
+    for sp in sn.peerTab.prevValues:
+      trace "*** Peer list entry", n, poolSize, peer=sp, worker=sp.huntPp
+      n.dec
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -69,11 +61,11 @@ proc dumpPeers(sn: SnapSyncCtx; force = false) =
 proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
   # This basic loop just runs the head-hunter for each peer.
   var cache = ""
-  while sp.ctrl.runState != BuddyStopped:
+  while not sp.ctrl.stopped:
 
     # Do something, work a bit
     await sp.workerExec
-    if sp.ctrl.runState == BuddyStopped:
+    if sp.ctrl.stopped:
       trace "Ignoring stopped peer", peer=sp
       return
 
@@ -84,20 +76,13 @@ proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
     let delayMs = if sp.workerLockedOk: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
-
-proc syncPeerStart(sp: WorkerBuddy) =
-  asyncSpawn sp.syncPeerLoop()
-
-proc syncPeerStop(sp: WorkerBuddy) =
-  sp.ctrl.runState = BuddyStopped
-  # TODO: Cancel running `WorkerBuddy` instances.  We need clean cancellation
-  # for this.  Doing so reliably will be addressed at a later time.
-
-
 proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Peer connected", peer
+  let
+    ethOk = peer.supports(protocol.eth)
+    snapOk = peer.supports(protocol.snap)
+  trace "Peer connected", peer, ethOk, snapOk
 
-  let sp = WorkerBuddy.new(ns, peer, BuddyRunningOk)
+  let sp = WorkerBuddy.new(ns, peer)
 
   # Manage connection table, check for existing entry
   if ns.peerTab.hasKey(peer):
@@ -105,13 +90,15 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
     return
 
   # Initialise snap sync for this peer
-  discard sp.workerStart
+  if not sp.workerStart():
+    trace "State(eth) not initialized!"
+    return
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.
   if ns.tabSize <= ns.peerTab.len:
     let leastPeer = ns.peerTab.shift.value.data
-    leastPeer.syncPeerStop
+    leastPeer.workerStop()
     trace "Peer table full, deleted least used",
       leastPeer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
 
@@ -121,18 +108,19 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
     peer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
 
   # Debugging, peer table dump after adding gentry
-  #ns.dumpPeers(true)
-  sp.syncPeerStart()
+  #ns.dumpPeers
+  asyncSpawn sp.syncPeerLoop()
 
 proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
   trace "Peer disconnected", peer
+  echo "onPeerDisconnected peer=", peer
 
   # Debugging, peer table dump before removing entry
-  #ns.dumpPeers(true)
+  #ns.dumpPeers
 
   let rc = ns.peerTab.delete(peer)
   if rc.isOk:
-    rc.value.data.syncPeerStop()
+    rc.value.data.workerStop()
   else:
     debug "Disconnected from unregistered peer", peer
 
@@ -157,8 +145,16 @@ proc start*(ctx: SnapSyncCtx) =
     onPeerDisconnected:
       proc(p: Peer) {.gcsafe.} =
         ctx.onPeerDisconnected(p))
+
+  # Initialise sub-systems
+  ctx.workerSetup()
   po.setProtocol eth
   ctx.pool.addObserver(ctx, po)
+
+proc stop*(ctx: SnapSyncCtx) =
+  ## Stop syncing
+  ctx.pool.delObserver(ctx)
+  ctx.workerRelease()
 
 # ------------------------------------------------------------------------------
 # End

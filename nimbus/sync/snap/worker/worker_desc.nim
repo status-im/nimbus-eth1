@@ -32,10 +32,13 @@ type
 
   BuddyStat* = distinct uint
 
-  BuddyRunState* = enum
-    BuddyRunningOk
-    BuddyStopRequest
-    BuddyStopped
+  BuddyRunState = enum
+    ## Combined state of two boolean values (`stopped`,`stopThisState`) as used
+    ## in the original source set up (should be double checked and simplified.)
+    FullyRunning    ## running, not requested to stop
+    StopRequested   ## running, stop request
+    SingularStop    ## stopped, no stop request (for completeness)
+    FullyStopped    ## stopped, stop request
 
   WorkerBuddyStats* = tuple
     ## Statistics counters for events associated with this peer.
@@ -52,9 +55,9 @@ type
       excessBlockHeaders:  BuddyStat,
       wrongBlockHeader:    BuddyStat]
 
-  WorkerBuddyCtrl* = tuple
+  WorkerBuddyCtrl* = object
     ## Control and state settings
-    stateRoot:             Option[TrieHash]
+    stateRoot*:            Option[TrieHash]
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
     runState:              BuddyRunState
@@ -91,18 +94,14 @@ type
 # Public Constructor
 # ------------------------------------------------------------------------------
 
-proc new*(
-    T: type WorkerBuddy;
-    ns: Worker;
-    peer: Peer;
-    runState: BuddyRunState
-      ): T =
-  ## Initial state, maximum uncertainty range.
-  T(ns:           ns,
-    peer:         peer,
-    ctrl: (
-      stateRoot:  none(TrieHash),
-      runState:   runState))
+proc new*(T: type WorkerBuddy; ns: Worker; peer: Peer): T =
+  ## Initial state all default settings.
+  T(ns: ns, peer: peer)
+
+proc init*(ctrl: var WorkerBuddyCtrl; fullyRunning: bool) =
+  ## Set initial running state `fullyRunning` if the argument `fullyRunning`
+  ## is `true`.  Otherwise the running state is set `fullyStopped`.
+  ctrl.runState = if fullyRunning: FullyRunning else: FullyStopped
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -112,6 +111,76 @@ proc `$`*(sp: WorkerBuddy): string =
   $sp.peer
 
 proc inc(stat: var BuddyStat) {.borrow.}
+
+# ------------------------------------------------------------------------------
+# Public getters, `BuddyRunState` execution control functions
+# ------------------------------------------------------------------------------
+
+proc state*(ctrl: WorkerBuddyCtrl): BuddyRunState =
+  ## Getter (logging only, details of `BuddyRunState` are private)
+  ctrl.runState
+
+proc fullyRunning*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, if `true`, `stopped` and `stopRequest` are `false`
+  ctrl.runState == FullyRunning
+
+proc fullyStopped*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, if `true`, `stopped` and `stopRequest` are `true`
+  ctrl.runState == FullyStopped
+
+proc stopped*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, not running (ignoring pending stop request)
+  ctrl.runState in {FullyStopped,SingularStop}
+
+proc stopRequest*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, pending stop request (ignoring running state)
+  ctrl.runState in {StopRequested,FullyStopped}
+
+# ------------------------------------------------------------------------------
+# Public setters, `BuddyRunState` execution control functions
+# ------------------------------------------------------------------------------
+
+proc `stopped=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
+  ## Setter
+  if value:
+    case ctrl.runState:
+    of FullyRunning:
+      ctrl.runState = SingularStop
+    of StopRequested:
+      ctrl.runState = FullyStopped
+    of SingularStop, FullyStopped:
+      discard
+  else:
+    case ctrl.runState:
+    of FullyRunning, StopRequested:
+      discard
+    of SingularStop:
+      ctrl.runState = FullyRunning
+    of FullyStopped:
+      ctrl.runState = StopRequested
+
+proc `stopRequest=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
+  ## Setter, stop request (ignoring running state)
+  if value:
+    case ctrl.runState:
+    of FullyRunning:
+      ctrl.runState = StopRequested
+    of StopRequested:
+      discard
+    of SingularStop:
+      ctrl.runState = FullyStopped
+    of FullyStopped:
+      discard
+  else:
+    case ctrl.runState:
+    of FullyRunning:
+      discard
+    of StopRequested:
+      ctrl.runState = FullyRunning
+    of SingularStop:
+      discard
+    of FullyStopped:
+      ctrl.runState = SingularStop
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

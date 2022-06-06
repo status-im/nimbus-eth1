@@ -24,36 +24,41 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
-  "../.."/[protocol, types],
-  ../path_desc,
-  "."/[common, worker_desc]
+  "../../.."/[protocol, protocol/trace_config, types],
+  ../../path_desc,
+  ../worker_desc,
+  ./common
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap peer fetch"
+  topics = "snap fetch"
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
-    {.async.} =
+proc fetchSnap*(
+    sp: WorkerBuddy,
+    stateRoot: TrieHash,
+    leafRange: LeafRange) {.async.} =
   ## Fetch data using the `snap#` protocol
   var origin = leafRange.leafLow
   var limit = leafRange.leafHigh
   const responseBytes = 2 * 1024 * 1024
 
-  if sp.ctrl.runState == BuddyStopped:
+  if sp.ctrl.stopped:
     trace trSnapRecvError &
       "peer already disconnected, not sending GetAccountRange",
       peer=sp, accountRange=pathRange(origin, limit),
       stateRoot, bytesLimit=snapRequestBytesLimit
     sp.putSlice(leafRange)
+    return # FIXME: was there a return missing?
 
-  trace trSnapSendSending & "GetAccountRange", peer=sp,
-    accountRange=pathRange(origin, limit),
-    stateRoot, bytesLimit=snapRequestBytesLimit
+  if trSnapTracePacketsOk:
+    trace trSnapSendSending & "GetAccountRange", peer=sp,
+      accountRange=pathRange(origin, limit),
+      stateRoot, bytesLimit=snapRequestBytesLimit
 
   var
     reply: Option[accountRangeObj]
@@ -64,7 +69,7 @@ proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     trace trSnapRecvError & "waiting for reply to GetAccountRange", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.runState = BuddyStopped
+    sp.ctrl.stopped = true
     sp.putSlice(leafRange)
     return
 
@@ -92,13 +97,13 @@ proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     # This makes all the difference to terminating the fetch.  For now we'll
     # trust the mere existence of the proof rather than verifying it.
     if proof.len == 0:
-      trace trSnapRecvGot & "EMPTY reply AccountRange", peer=sp,
+      trace trSnapRecvReceived & "EMPTY AccountRange message", peer=sp,
         got=len, proofLen=proof.len, gotRange="-", requestedRange, stateRoot
       sp.putSlice(leafRange)
       # Don't keep retrying snap for this state.
-      sp.ctrl.runState = BuddyStopRequest
+      sp.ctrl.stopRequest = true
     else:
-      trace trSnapRecvGot & "END reply AccountRange", peer=sp,
+      trace trSnapRecvReceived & "END AccountRange message", peer=sp,
         got=len, proofLen=proof.len, gotRange=pathRange(origin, high(LeafPath)),
         requestedRange, stateRoot
       # Current slicer can't accept more result data than was requested, so
@@ -107,7 +112,7 @@ proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     return
 
   var lastPath = accounts[len-1].accHash
-  trace trSnapRecvGot & "reply AccountRange", peer=sp,
+  trace trSnapRecvReceived & "AccountRange message", peer=sp,
     got=len, proofLen=proof.len, gotRange=pathRange(origin, lastPath),
     requestedRange, stateRoot
 
@@ -139,4 +144,6 @@ proc fetchSnap*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
 proc fetchSnapOk*(sp: WorkerBuddy): bool =
   ## Sort of getter: if `true`, fetching data using the `snap#` protocol
   ## is supported.
-  sp.ctrl.runState != BuddyStopped and sp.peer.supports(snap)
+  result = not sp.ctrl.stopped and sp.peer.supports(protocol.snap)
+  trace "fetchSnapOk()", peer=sp,
+    ctrlState=sp.ctrl.state, snapOk=sp.peer.supports(protocol.snap), result
