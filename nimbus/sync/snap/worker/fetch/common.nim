@@ -39,6 +39,10 @@ type
     countRangeTrieStarted*: bool
     logTicker:              TimerCallback
 
+const
+  defaultTickerStartDelay = 100.milliseconds
+  tickerLogInterval = 1.seconds
+
 # ------------------------------------------------------------------------------
 # Private timer helpers
 # ------------------------------------------------------------------------------
@@ -78,17 +82,20 @@ proc setLogTicker(sf: CommonFetchEx; at: Moment) {.gcsafe.}
 
 proc runLogTicker(sf: CommonFetchEx) {.gcsafe.} =
   doAssert not sf.isNil
-  info "State: Account sync progress",
-    percent = percent(sf.countRange, sf.countRangeStarted),
+  info "Sync accounts progress",
     accounts = sf.countAccounts,
+    percent = percent(sf.countRange, sf.countRangeStarted),
     snap = percent(sf.countRangeSnap, sf.countRangeSnapStarted),
     trie = percent(sf.countRangeTrie, sf.countRangeTrieStarted)
-  sf.setLogTicker(Moment.fromNow(1.seconds))
+  sf.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(sf: CommonFetchEx; at: Moment) =
-  sf.logTicker = safeSetTimer(at, runLogTicker, sf)
+  if sf.logTicker.isNil:
+    debug "Sync accounts progress ticker has stopped"
+  else:
+    sf.logTicker = safeSetTimer(at, runLogTicker, sf)
 
-proc new*(T: type CommonFetchEx; startAfter = 100.milliseconds): T =
+proc new(T: type CommonFetchEx; startAfter = defaultTickerStartDelay): T =
   result = CommonFetchEx(
     leafRanges: @[LeafRange(
       leafLow: LeafPath.low,
@@ -115,13 +122,27 @@ proc sharedFetchEx*(ns: Worker): CommonFetchEx =
   ns.commonBase.CommonFetchEx
 
 # ------------------------------------------------------------------------------
+# Public start/stop functions
+# ------------------------------------------------------------------------------
+
+proc commonSetup*(ns: Worker) =
+  ## Global set up
+  discard
+
+proc commonRelease*(ns: Worker) =
+  ## Global clean up
+  if not ns.sharedFetchEx.isNil:
+    ns.sharedFetchEx.logTicker = nil # stop timer
+    ns.sharedFetchEx = nil           # unlink `CommonFetchEx` object
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc hasSlice*(sp: WorkerBuddy): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
   if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = CommonFetchEx.new
+    sp.ns.sharedFetchEx = CommonFetchEx.new()
   result = 0 < sp.ns.sharedFetchEx.leafRanges.len
   trace "hasSlice", peer=sp, hasSlice=result
 
@@ -129,9 +150,8 @@ proc getSlice*(sp: WorkerBuddy, leafLow, leafHigh: var LeafPath): bool =
   ## Claim a free slice to work on.  If a slice was available, it's claimed,
   ## `leadLow` and `leafHigh` are set to the slice range and `true` is
   ## returned.  Otherwise `false` is returned.
-
   if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = CommonFetchEx.new
+    sp.ns.sharedFetchEx = CommonFetchEx.new()
   let sharedFetch = sp.ns.sharedFetchEx
   template ranges: auto = sharedFetch.leafRanges
   const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
@@ -139,6 +159,7 @@ proc getSlice*(sp: WorkerBuddy, leafLow, leafHigh: var LeafPath): bool =
   if ranges.len == 0:
     trace "GetSlice", leafRange="none"
     return false
+
   leafLow = ranges[0].leafLow
   if ranges[0].leafHigh - ranges[0].leafLow <= leafMaxFetchRange:
     leafHigh = ranges[0].leafHigh

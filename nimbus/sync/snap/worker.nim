@@ -542,6 +542,43 @@ proc peerSyncChainNonEmptyReply(
     sp.ns.seen(sp.hunt.bestHash,sp.hunt.bestNumber)
 
 # ------------------------------------------------------------------------------
+# Public start/stop and admin functions
+# ------------------------------------------------------------------------------
+
+proc workerSetup*(ns: Worker) =
+  ## Global set up
+  ns.fetchSetup()
+
+proc workerRelease*(ns: Worker) =
+  ## Global clean up
+  ns.fetchRelease()
+
+proc workerStart*(sp: WorkerBuddy): bool =
+  ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
+  sp.ctrl.init(fullyRunning = true)
+
+  # Initialise `DataNode` reply handling
+  sp.fetchStart()
+
+  # Link in hunt descriptor
+  sp.hunt = WorkerHuntEx.new(HuntForward)
+
+  if sp.peer.state(protocol.eth).initialized:
+    # We know the hash but not the block number.
+    sp.hunt.bestHash = sp.peer.state(protocol.eth).bestBlockHash.BlockHash
+    # TODO: Temporarily disabled because it's useful to test the worker.
+    # sp.syncMode = SyncOnlyHash
+    return true
+
+proc workerStop*(sp: WorkerBuddy) =
+  ## Clean up this peer
+  sp.ctrl.stopped = true
+  sp.fetchStop()
+
+proc workerLockedOk*(sp: WorkerBuddy): bool =
+  sp.hunt.syncMode == SyncLocked
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -559,7 +596,7 @@ proc workerExec*(sp: WorkerBuddy) {.async.} =
 
   let request = sp.peerSyncChainRequest
 
-  trace trEthSendSending & "GetBlockHeaders", peer=sp,
+  trace trEthSendSendingGetBlockHeaders, peer=sp,
     count=request.maxResults,
     startBlock=sp.ns.pp(request.startBlock), step=request.traceStep
 
@@ -568,30 +605,30 @@ proc workerExec*(sp: WorkerBuddy) {.async.} =
   try:
     reply = await sp.peer.getBlockHeaders(request)
   except CatchableError as e:
-    trace trEthRecvError & "waiting for reply to GetBlockHeaders", peer=sp,
+    trace trEthRecvError & "waiting for GetBlockHeaders reply", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.setStopped
+    sp.ctrl.stopped = true
     return
 
   if reply.isNone:
-    trace trEthRecvTimeoutWaiting & "for reply to GetBlockHeaders", peer=sp
+    trace trEthRecvTimeoutWaiting & "for GetBlockHeaders reply", peer=sp
     # TODO: Should disconnect?
     inc sp.stats.minor.timeoutBlockHeaders
     return
 
   let nHeaders = reply.get.headers.len
   if nHeaders == 0:
-    trace trEthRecvGot & "EMPTY reply BlockHeaders", peer=sp,
+    trace trEthRecvReceivedBlockHeaders, peer=sp,
       got=0, requested=request.maxResults
   else:
-    trace trEthRecvGot & "reply BlockHeaders", peer=sp,
+    trace trEthRecvReceivedBlockHeaders, peer=sp,
       got=nHeaders, requested=request.maxResults,
       firstBlock=reply.get.headers[0].blockNumber,
       lastBlock=reply.get.headers[^1].blockNumber
 
   if request.maxResults.int < nHeaders:
-    trace trEthRecvProtocolViolation & "excess headers in BlockHeaders",
+    trace trEthRecvProtocolViolation & "excess headers in BlockHeaders message",
       peer=sp, got=nHeaders, requested=request.maxResults
     # TODO: Should disconnect.
     inc sp.stats.major.excessBlockHeaders
@@ -602,26 +639,6 @@ proc workerExec*(sp: WorkerBuddy) {.async.} =
     sp.peerSyncChainNonEmptyReply(request, reply.get.headers)
   else:
     sp.peerSyncChainEmptyReply(request)
-
-
-proc workerStart*(sp: WorkerBuddy): bool =
-  ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
-
-  # Initialise `DataNode` reply handling
-  sp.fetchSetup
-
-  # Link in hunt descriptor
-  sp.hunt = WorkerHuntEx.new(HuntForward)
-
-  if sp.peer.state(eth).initialized:
-    # We know the hash but not the block number.
-    sp.hunt.bestHash = sp.peer.state(eth).bestBlockHash.BlockHash
-    # TODO: Temporarily disabled because it's useful to test the worker.
-    # sp.syncMode = SyncOnlyHash
-    return true
-
-proc workerLockedOk*(sp: WorkerBuddy): bool =
-  sp.hunt.syncMode == SyncLocked
 
 # ------------------------------------------------------------------------------
 # Debugging

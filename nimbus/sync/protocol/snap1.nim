@@ -230,19 +230,17 @@ const
   # Pickeled tracer texts
   trSnapRecvReceived* =
     "<< " & prettySnapProtoName & " Received "
-  trSnapRecvGot* =
-    "<< " & prettySnapProtoName & " Got "
   trSnapRecvProtocolViolation* =
     "<< " & prettySnapProtoName & " Protocol violation, "
   trSnapRecvError* =
     "<< " & prettySnapProtoName & " Error "
   trSnapRecvTimeoutWaiting* =
     "<< " & prettySnapProtoName & " Timeout waiting "
+
   trSnapSendSending* =
     ">> " & prettySnapProtoName & " Sending "
   trSnapSendReplying* =
     ">> " & prettySnapProtoName & " Replying "
-
 
 # The `snap` protocol represents `Account` differently from the regular RLP
 # serialisation used in `eth` protocol as well as the canonical Merkle hash

@@ -159,9 +159,9 @@ proc traceReplyDataEmpty(sp: WorkerBuddy, request: RequestData) =
   # `request` can be `nil` because we don't always know which request
   # the empty reply goes with.  Therefore `sp` must be included.
   if request.isNil:
-    trace trEthRecvGot & "EMPTY NodeData", peer=sp, got=0
+    trace trEthRecvReceivedNodeData, peer=sp, got=0
   else:
-    trace trEthRecvGot & "NodeData", peer=sp, got=0,
+    trace trEthRecvReceivedNodeData, peer=sp, got=0,
       requested=request.hashes.len, pathRange=request.pathRange
 
 proc traceReplyDataUnmatched(sp: WorkerBuddy, got: int) =
@@ -177,11 +177,11 @@ proc traceReplyData(request: RequestData,
     logScope: pathRange=request.pathRange
     logScope: peer=request.sp
     if got > request.hashes.len and (unmatched + other) == 0:
-      trace trEthRecvGot & "EXCESS reply NodeData"
+      trace trEthRecvReceivedNodeData & " (EXCESS data)"
     elif got == request.hashes.len or use != got:
-      trace trEthRecvGot & "reply NodeData"
+      trace trEthRecvReceivedNodeData
     elif got < request.hashes.len:
-      trace trEthRecvGot & "TRUNCATED reply NodeData"
+      trace trEthRecvReceivedNodeData & " TRUNCATED"
 
   if use != got:
     logScope:
@@ -409,7 +409,7 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   ## Helper function to send an `eth.GetNodeData` request.
   ## But not when we're draining the in flight queue to match empty replies.
   let sp = request.sp
-  if sp.ctrl.isStopped:
+  if sp.ctrl.stopped:
     request.traceGetNodeDataDisconnected()
     request.future.complete(nil)
     return
@@ -429,7 +429,7 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.setStopped
+    sp.ctrl.stopped = true
     request.future.fail(e)
 
 proc onNodeData(sp: WorkerBuddy, data: openArray[Blob]) {.gcsafe.} =
@@ -481,7 +481,32 @@ proc onNodeData(sp: WorkerBuddy, data: openArray[Blob]) {.gcsafe.} =
   request.nodeDataComplete(reply)
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public start/stop and admin functions
+# ------------------------------------------------------------------------------
+
+proc replyDataStart*(sp: WorkerBuddy) =
+  ## Initialise `WorkerBuddy` to support `NodeData` replies to `GetNodeData`
+  ## requests issued by `new()`.
+  if sp.requestsEx.isNil:
+    sp.requestsEx = RequestDataQueue()
+
+  sp.peer.state(protocol.eth).onNodeData =
+    proc (_: Peer, data: openArray[Blob]) =
+      trace "Custom handler onNodeData", peer=sp, blobs=data.len
+      onNodeData(sp, data)
+
+  sp.peer.state(protocol.eth).onGetNodeData =
+    proc (_: Peer, hashes: openArray[Hash256], data: var seq[Blob]) =
+      ## Return empty nodes result.  This callback is installed to
+      ## ensure we don't reply with nodes from the chainDb.
+      discard
+
+proc replyDataStop*(sp: WorkerBuddy) =
+  sp.peer.state(protocol.eth).onNodeData = nil
+  sp.peer.state(protocol.eth).onGetNodeData = nil
+
+# ------------------------------------------------------------------------------
+# Public constructor
 # ------------------------------------------------------------------------------
 
 proc new*(
@@ -516,13 +541,17 @@ proc new*(
   except CatchableError as e:
     request.traceReplyDataError(e)
     inc sp.stats.major.networkErrors
-    sp.ctrl.setStopped
+    sp.ctrl.stopped = true
     return nil
 
   # Timeout, packet and packet error trace messages are done in `onNodeData`
   # and `nodeDataTimeout`, where there is more context than here.  Here we
   # always received just valid data with hashes already verified, or `nil`.
   return reply
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc replyType*(reply: ReplyData): ReplyDataType =
   ## Fancy interface for evaluating the reply lengths for none, 1, or many.
@@ -549,24 +578,6 @@ proc `[]`*(reply: ReplyData; inx: int): Blob =
         return reply.hashVerifiedData[xni]
     if inx < reply.hashVerifiedData.len:
       return reply.hashVerifiedData[inx]
-
-proc replyDataSetup*(sp: WorkerBuddy) =
-  ## Initialise `WorkerBuddy` to support `NodeData` replies to `GetNodeData`
-  ## requests issued by `new()`.
-
-  if sp.requestsEx.isNil:
-    sp.requestsEx = RequestDataQueue()
-
-  sp.peer.state(eth).onNodeData =
-    proc (_: Peer, data: openArray[Blob]) =
-      trace "Custom handler onNodeData", peer=sp, blobs=data.len
-      onNodeData(sp, data)
-
-  sp.peer.state(eth).onGetNodeData =
-    proc (_: Peer, hashes: openArray[Hash256], data: var seq[Blob]) =
-      ## Return empty nodes result.  This callback is installed to
-      ## ensure we don't reply with nodes from the chainDb.
-      discard
 
 # ------------------------------------------------------------------------------
 # End

@@ -213,14 +213,14 @@ proc getBestBlockNumber(p: Peer): Future[BlockNumber] {.async.} =
     skip: 0,
     reverse: true)
 
-  trace trEthSendSending & "GetBlockHeaders (0x03)", peer=p,
+  trace trEthSendSendingGetBlockHeaders, peer=p,
     startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await p.getBlockHeaders(request)
 
   if latestBlock.isSome:
     if latestBlock.get.headers.len > 0:
       result = latestBlock.get.headers[0].blockNumber
-    trace trEthRecvGot & "BlockHeaders (0x04)", peer=p,
+    trace trEthRecvReceivedBlockHeaders, peer=p,
       count=latestBlock.get.headers.len,
       blockNumber=(if latestBlock.get.headers.len > 0: $result else: "missing")
 
@@ -252,26 +252,26 @@ proc obtainBlocksFromPeer(syncCtx: FastSyncCtx, peer: Peer) {.async.} =
 
     var dataReceived = false
     try:
-      trace trEthSendSending & "GetBlockHeaders (0x03)", peer,
+      trace trEthSendSendingGetBlockHeaders, peer,
         startBlock=request.startBlock.number, max=request.maxResults,
         step=traceStep(request)
       let results = await peer.getBlockHeaders(request)
       if results.isSome:
-        trace trEthRecvGot & "BlockHeaders (0x04)", peer,
+        trace trEthRecvReceivedBlockHeaders, peer,
           count=results.get.headers.len, requested=request.maxResults
         shallowCopy(workItem.headers, results.get.headers)
 
         var bodies = newSeqOfCap[BlockBody](workItem.headers.len)
         var hashes = newSeqOfCap[KeccakHash](maxBodiesFetch)
         template fetchBodies() =
-          trace trEthSendSending & "GetBlockBodies (0x05)", peer,
+          trace trEthSendSendingGetBlockBodies, peer,
             hashes=hashes.len
           let b = await peer.getBlockBodies(hashes)
           if b.isNone:
             raise newException(
               CatchableError, "Was not able to get the block bodies")
           let bodiesLen = b.get.blocks.len
-          trace trEthRecvGot & "BlockBodies (0x06)", peer,
+          trace trEthRecvReceivedBlockBodies, peer,
             count=bodiesLen, requested=hashes.len
           if bodiesLen == 0:
             raise newException(CatchableError, "Zero block bodies received for request")
@@ -346,7 +346,7 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
     skip: 0,
     reverse: true)
 
-  trace trEthSendSending & "GetBlockHeaders (0x03)", peer=a,
+  trace trEthSendSendingGetBlockHeaders, peer=a,
     startBlock=request.startBlock.hash.toHex, max=request.maxResults
   let latestBlock = await a.getBlockHeaders(request)
 
@@ -354,7 +354,7 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
   if latestBlock.isSome:
     let blockNumber = if result: $latestBlock.get.headers[0].blockNumber
                       else: "missing"
-    trace trEthRecvGot & "BlockHeaders (0x04)", peer=a,
+    trace trEthRecvReceivedBlockHeaders, peer=a,
       count=latestBlock.get.headers.len, blockNumber
 
 proc randomTrustedPeer(ctx: FastSyncCtx): Peer =

@@ -79,22 +79,38 @@ const
   # Pickeled tracer texts
   trEthRecvReceived* =
     "<< " & prettyEthProtoName & " Received "
-  trEthRecvGot* =
-    "<< " & prettyEthProtoName & " Got "
+  trEthRecvReceivedBlockHeaders* =
+    trEthRecvReceived & "BlockHeaders (0x04)"
+  trEthRecvReceivedBlockBodies* =
+    trEthRecvReceived & "BlockBodies (0x06)"
+  trEthRecvReceivedGetNodeData* =
+    trEthRecvReceived & "GetNodeData (0x0d)"
+  trEthRecvReceivedNodeData* =
+    trEthRecvReceived & "NodeData (0x0e)"
+
   trEthRecvProtocolViolation* =
     "<< " & prettyEthProtoName & " Protocol violation, "
   trEthRecvError* =
     "<< " & prettyEthProtoName & " Error "
   trEthRecvTimeoutWaiting* =
     "<< " & prettyEthProtoName & " Timeout waiting "
+  trEthRecvDiscarding* =
+    "<< " & prettyEthProtoName & " Discarding "
+
   trEthSendSending* =
     ">> " & prettyEthProtoName & " Sending "
+  trEthSendSendingGetBlockHeaders* =
+    trEthSendSending & "GetBlockHeaders (0x03)"
+  trEthSendSendingGetBlockBodies* =
+    trEthSendSending & "GetBlockBodies (0x05)"
+
   trEthSendReplying* =
     ">> " & prettyEthProtoName & " Replying "
+  trEthSendReplyingNodeData* =
+    trEthSendReplying & "NodeData (0x0e)"
+
   trEthSendDelaying* =
     ">> " & prettyEthProtoName & " Delaying "
-  trEthSendDiscarding* =
-    "<< " & prettyEthProtoName & " Discarding "
 
 p2pProtocol eth66(version = ethVersion,
                   rlpxName = "eth",
@@ -168,14 +184,14 @@ p2pProtocol eth66(version = ethVersion,
   # User message 0x01: NewBlockHashes.
   proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
     when trEthTraceGossipOk:
-      trace trEthSendDiscarding & "NewBlockHashes (0x01)", peer,
+      trace trEthRecvDiscarding & "NewBlockHashes (0x01)", peer,
         hashes=hashes.len
     discard
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
     when trEthTraceGossipOk:
-      trace trEthSendDiscarding & "Transactions (0x02)", peer,
+      trace trEthRecvDiscarding & "Transactions (0x02)", peer,
         transactions=transactions.len
     discard
 
@@ -241,7 +257,7 @@ p2pProtocol eth66(version = ethVersion,
     # (Note, needs to use `EthBlock` instead of its alias `NewBlockAnnounce`
     # because either `p2pProtocol` or RLPx doesn't work with an alias.)
     when trEthTraceGossipOk:
-      trace trEthSendDiscarding & "NewBlock (0x07)", peer,
+      trace trEthRecvDiscarding & "NewBlock (0x07)", peer,
         totalDifficulty,
         blockNumber = bh.header.blockNumber,
         blockDifficulty = bh.header.difficulty
@@ -250,7 +266,7 @@ p2pProtocol eth66(version = ethVersion,
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(peer: Peer, txHashes: openArray[Hash256]) =
     when trEthTraceGossipOk:
-      trace trEthSendDiscarding & "NewPooledTransactionHashes (0x08)", peer,
+      trace trEthRecvDiscarding & "NewPooledTransactionHashes (0x08)", peer,
         hashes=txHashes.len
     discard
 
@@ -271,7 +287,7 @@ p2pProtocol eth66(version = ethVersion,
 
   # User message 0x0d: GetNodeData.
   proc getNodeData(peer: Peer, nodeHashes: openArray[Hash256]) =
-    trace trEthRecvReceived & "GetNodeData (0x0d)", peer,
+    trace trEthRecvReceivedGetNodeData, peer,
       hashes=nodeHashes.len
 
     var data: seq[Blob]
@@ -280,12 +296,8 @@ p2pProtocol eth66(version = ethVersion,
     else:
       data = peer.network.chain.getStorageNodes(nodeHashes)
 
-    if data.len > 0:
-      trace trEthSendReplying & "with NodeData (0x0e)", peer,
-        sent=data.len, requested=nodeHashes.len
-    else:
-      trace trEthSendReplying & "EMPTY NodeData (0x0e)", peer,
-        sent=0, requested=nodeHashes.len
+    trace trEthSendReplyingNodeData, peer,
+      sent=data.len, requested=nodeHashes.len
 
     await peer.nodeData(data)
 
@@ -296,7 +308,7 @@ p2pProtocol eth66(version = ethVersion,
       # know if this is a valid reply ("Got reply") or something else.
       peer.state.onNodeData(peer, data)
     else:
-      trace trEthSendDiscarding & "NodeData (0x0e)", peer,
+      trace trEthRecvDiscarding & "NodeData (0x0e)", peer,
         bytes=data.len
 
   requestResponse:

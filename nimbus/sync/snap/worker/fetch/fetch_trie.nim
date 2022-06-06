@@ -93,7 +93,7 @@ proc wrapCallGetNodeData(fetch: FetchStateEx, hashes: seq[NodeHash],
   if reply.replyType == NoReplyData:
     # Empty reply, timeout or error (i.e. `reply.isNil`).
     # It means there are none of the nodes available.
-    fetch.sp.ctrl.setStopRequest
+    fetch.sp.ctrl.stopRequest = true
     for i in 0 ..< futures.len:
       futures[i].complete(@[])
 
@@ -161,7 +161,7 @@ proc batchGetNodeData(fetch: FetchStateEx) =
   trace "Trie: Sort length", sortLen=i
 
   # If stopped, abort all waiting nodes, so they clean up.
-  if not fetch.sp.ctrl.isRunningOk:
+  if not fetch.sp.ctrl.fullyRunning:
     while i > 0:
       fetch.nodeGetQueue[i].future.complete(@[])
       dec i
@@ -219,7 +219,7 @@ proc getNodeData(fetch: FetchStateEx,
     fetch.scheduleBatchGetNodeData()
   let nodeBytes = await future
 
-  if not fetch.sp.ctrl.isRunningOk:
+  if not fetch.sp.ctrl.fullyRunning:
     return nodebytes
 
   when trEthTracePacketsOk:
@@ -253,20 +253,20 @@ proc pathInRange(fetch: FetchStateEx, path: InteriorPath): bool =
 proc traverse(fetch: FetchStateEx, hash: NodeHash, path: InteriorPath,
               fromExtension: bool) {.async.} =
   template errorReturn() =
-    fetch.sp.ctrl.setStopRequest
+    fetch.sp.ctrl.stopRequest = true
     dec fetch.nodesInFlight
     if fetch.nodesInFlight == 0:
       fetch.finish.complete()
     return
 
   # If something triggered stop earlier, don't request, and clean up now.
-  if not fetch.sp.ctrl.isRunningOk:
+  if not fetch.sp.ctrl.fullyRunning:
     errorReturn()
 
   let nodeBytes = await fetch.getNodeData(hash.TrieHash, path)
 
   # If something triggered stop, clean up now.
-  if not fetch.sp.ctrl.isRunningOk:
+  if not fetch.sp.ctrl.fullyRunning:
     errorReturn()
   # Don't keep emitting error messages after one error.  We'll allow 10.
   if fetch.getNodeDataErrors >= 10:
@@ -342,6 +342,23 @@ proc probeGetNodeData(sp: WorkerBuddy, stateRoot: TrieHash): Future[bool]
   return reply.replyType == SingleEntryReply
 
 # ------------------------------------------------------------------------------
+# Public start/stop and admin functions
+# ------------------------------------------------------------------------------
+
+proc fetchTrieStart*(sp: WorkerBuddy) =
+  ## Initialise `WorkerBuddy` to support `replyDataGet()` calls.
+  sp.replyDataStart()
+
+proc fetchTrieStop*(sp: WorkerBuddy) =
+  sp.replyDataStop()
+
+proc fetchTrieOk*(sp: WorkerBuddy): bool =
+  result = not sp.ctrl.stopped and
+   (sp.fetchStateEx.isNil or sp.fetchStateEx.getNodeDataErrors == 0)
+  trace "fetchTrieOk()", peer=sp,
+    ctrlState=sp.ctrl.state, result
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -366,14 +383,6 @@ proc fetchTrie*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
     sp.ns.sharedFetchEx.countAccounts -= fetch.unwindAccounts
     sp.ns.sharedFetchEx.countAccountBytes -= fetch.unwindAccountBytes
     sp.putSlice(leafRange)
-
-proc fetchTrieOk*(sp: WorkerBuddy): bool =
-  not sp.ctrl.isStopped and
-   (sp.fetchStateEx.isNil or sp.fetchStateEx.getNodeDataErrors == 0)
-
-proc fetchTrieSetup*(sp: WorkerBuddy) =
-  ## Initialise `WorkerBuddy` to support `replyDataGet()` calls.
-  sp.replyDataSetup
 
 # ------------------------------------------------------------------------------
 # End
