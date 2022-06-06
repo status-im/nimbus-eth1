@@ -14,6 +14,7 @@ cliBuilder:
           ./test_accounts_cache,
           ./test_custom_network,
           ./test_jwt_auth,
+          ./test_interval_set,
           ./test_gas_meter,
           ./test_memory,
           ./test_stack,
