@@ -26,10 +26,11 @@ import
   std/[sets, tables, algorithm],
   chronos,
   eth/[common/eth_types, p2p],
+  ../../../../utils/interval_set,
   "../../.."/[protocol/trace_config, types],
   ../../path_desc,
   ../worker_desc,
-  ./fetch_trie/[reply_data, validate_trienode],
+  ./fetch_trie/[reply_data, parse_node],
   ./common
 
 {.push raises: [Defect].}
@@ -238,12 +239,12 @@ proc getNodeData(fetch: FetchStateEx,
 
 proc pathInRange(fetch: FetchStateEx, path: InteriorPath): bool =
   # TODO: This method is ugly and unnecessarily slow.
-  var compare = fetch.leafRange.leafLow.toInteriorPath
+  var compare = fetch.leafRange.minPt.to(InteriorPath)
   while compare.depth > path.depth:
     compare.pop()
   if path < compare:
     return false
-  compare = fetch.leafRange.leafHigh.toInteriorPath
+  compare = fetch.leafRange.maxPt.to(InteriorPath)
   while compare.depth > path.depth:
     compare.pop()
   if path > compare:
@@ -305,14 +306,13 @@ proc traverse(fetch: FetchStateEx, hash: NodeHash, path: InteriorPath,
       let leafPtr = addr parseContext.leafQueue[i]
       template leafPath: auto = leafPtr[0]
       # Discard leaves outside the current leaf range.
-      if leafPtr[0] < fetch.leafRange.leafLow or
-         leafPtr[0] > fetch.leafRange.leafHigh:
+      if leafPtr[0] < fetch.leafRange.minPt or
+         leafPtr[0] > fetch.leafRange.maxPt:
         continue
       template leafBytes: auto = leafPtr[2]
       inc fetch.unwindAccounts
       fetch.unwindAccountBytes += leafBytes.len
-      inc fetch.sp.ns.sharedFetchEx.countAccounts
-      fetch.sp.ns.sharedFetchEx.countAccountBytes += leafBytes.len
+      fetch.sp.accountsInc(leafBytes.len)
 
   dec fetch.nodesInFlight
   if fetch.nodesInFlight == 0:
@@ -378,10 +378,9 @@ proc fetchTrie*(sp: WorkerBuddy, stateRoot: TrieHash, leafRange: LeafRange)
   await fetch.traverse(stateRoot.NodeHash, InteriorPath(), false)
   await fetch.finish
   if fetch.getNodeDataErrors == 0:
-    sp.countSlice(leafRange, false)
+    sp.countTrieSlice(leafRange)
   else:
-    sp.ns.sharedFetchEx.countAccounts -= fetch.unwindAccounts
-    sp.ns.sharedFetchEx.countAccountBytes -= fetch.unwindAccountBytes
+    sp.accountsDec(fetch.unwindAccountBytes, fetch.unwindAccounts)
     sp.putSlice(leafRange)
 
 # ------------------------------------------------------------------------------

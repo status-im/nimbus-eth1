@@ -67,8 +67,8 @@ type
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  CommonBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `common.nim`
+  FetchBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `fetch/common.nim`
 
   # -------
 
@@ -88,7 +88,7 @@ type
     ## amended/inherited into `WorkerCtx` by the `snap` module.
     seenBlock: WorkerSeenBlocks      ## Temporary, debugging, pretty logs
 
-    commonBase*: CommonBase          ## Opaque object reference
+    fetchBase*: FetchBase            ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor

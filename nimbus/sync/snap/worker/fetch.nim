@@ -16,7 +16,6 @@ import
   stint,
   eth/[common/eth_types, p2p],
   ../../types,
-  ../path_desc,
   ./fetch/[common, fetch_snap, fetch_trie],
   ./worker_desc
 
@@ -90,8 +89,6 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    var leafRange: LeafRange
-
     # Mix up different slice modes, because when connecting to static nodes one
     # mode or the other tends to dominate, which makes the mix harder to test.
     var allowSnap = true
@@ -100,15 +97,13 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
         allowSnap = false
 
     if sp.fetchSnapOk and allowSnap:
-      discard sp.getSlice(leafRange)
-      trace "GetAccountRange segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
+      let leafRange = sp.getSlice.value
+      trace "GetAccountRange segment", peer=sp, leafRange, stateRoot
       await sp.fetchSnap(stateRoot, leafRange)
 
     elif sp.fetchTrieOk:
-      discard sp.getSlice(leafRange)
-      trace "GetNodeData segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
+      let leafRange = sp.getSlice.value
+      trace "GetNodeData segment", peer=sp, leafRange, stateRoot
       await sp.fetchTrie(stateRoot, leafRange)
 
 # ------------------------------------------------------------------------------

@@ -10,11 +10,12 @@
 # except according to those terms.
 
 import
-  std/[sets, sequtils, strutils],
+  std/[math, sets, sequtils, strutils],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
+  ../../../../utils/interval_set,
   ../../path_desc,
   ../worker_desc,
   ./timer_helper
@@ -25,104 +26,116 @@ logScope:
   topics = "snap common"
 
 type
-  CommonFetchEx* = ref object of CommonBase
+  RangeCounter = object
+    counted: UInt256
+    started: bool
+
+  AccountsStats = object
+    counted: int64
+    bytes: int64
+
+  LeafRangeSet = ##\
+    ## Internal shortcut
+    IntervalSetRef[LeafItem,UInt256]
+
+  FetchEx = ref object of FetchBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
-    leafRanges*:            seq[LeafRange]
-    countAccounts*:         int64
-    countAccountBytes*:     int64
-    countRange*:            UInt256
-    countRangeStarted*:     bool
-    countRangeSnap*:        UInt256
-    countRangeSnapStarted*: bool
-    countRangeTrie*:        UInt256
-    countRangeTrieStarted*: bool
-    logTicker:              TimerCallback
+    leafRanges: LeafRangeSet
+    accounts:   AccountsStats
+    cRange:     RangeCounter
+    cRangeSnap: RangeCounter
+    cRangeTrie: RangeCounter
+    logTicker:  TimerCallback
 
 const
   defaultTickerStartDelay = 100.milliseconds
   tickerLogInterval = 1.seconds
+  leafRangeMaxLen = (high(LeafItem) - low(LeafItem)) div 1000
 
 # ------------------------------------------------------------------------------
 # Private timer helpers
 # ------------------------------------------------------------------------------
 
-proc rangeFraction(value: UInt256, discriminator: bool): int =
-  ## Format a value in the range 0..2^256 as a percentage, 0-100%.  As the
-  ## top of the range 2^256 cannot be represented in `UInt256` it actually
-  ## has the value `0: UInt256`, and with that value, `discriminator` is
-  ## consulted to decide between 0% and 100%.  For other values, the value is
-  ## constrained to be between slightly above 0% and slightly below 100%,
-  ## so that the endpoints are distinctive when displayed.
-  const multiplier = 10000
-  var fraction: int = 0 # Fixed point, fraction 0.0-1.0 multiplied up.
-  if value == 0:
-    return if discriminator: multiplier else: 0 # Either 100.00% or 0.00%.
+proc to(num: UInt256;T: type float): T =
+  let mantissaLen = 256 - num.leadingZeros
+  if mantissaLen <= 64:
+    num.truncate(uint64).T
+  else:
+    let exp = mantissaLen - 64
+    (num shr exp).truncate(uint64).T * (2.0 ^ exp)
 
-  const shift = 8 * (sizeof(value) - sizeof(uint64))
-  const wordHigh: uint64 = (high(typeof(value)) shr shift).truncate(uint64)
-  # Divide `wordHigh+1` by `multiplier`, rounding up, avoiding overflow.
-  const wordDiv: uint64 = 1 + ((wordHigh shr 1) div (multiplier.uint64 shr 1))
-  let wordValue: uint64 = (value shr shift).truncate(uint64)
-  let divided: uint64 = wordValue div wordDiv
-  return if divided >= multiplier: multiplier - 1
-         elif divided <= 0: 1
-         else: divided.int
-
-proc percent(value: UInt256, discriminator: bool): string =
-  result = intToStr(rangeFraction(value, discriminator), 3)
-  result.insert(".", result.len - 2)
-  result.add('%')
+proc percent(cc: RangeCounter): string =
+  if cc.started:
+    result = ((cc.counted.to(float)*10000 / (2.0^256)).int).intToStr(3) & "%"
+    result.insert(".", result.len - 3)
+  else:
+    result = "n/a"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setLogTicker(sf: CommonFetchEx; at: Moment) {.gcsafe.}
+proc setLogTicker(sf: FetchEx; at: Moment) {.gcsafe.}
 
-proc runLogTicker(sf: CommonFetchEx) {.gcsafe.} =
+proc runLogTicker(sf: FetchEx) {.gcsafe.} =
   doAssert not sf.isNil
   info "Sync accounts progress",
-    accounts = sf.countAccounts,
-    percent = percent(sf.countRange, sf.countRangeStarted),
-    snap = percent(sf.countRangeSnap, sf.countRangeSnapStarted),
-    trie = percent(sf.countRangeTrie, sf.countRangeTrieStarted)
+    accounts = sf.accounts.counted,
+    snap = sf.cRangeSnap.percent,
+    trie = sf.cRangeTrie.percent,
+    both = sf.cRange.percent
   sf.setLogTicker(Moment.fromNow(tickerLogInterval))
 
-proc setLogTicker(sf: CommonFetchEx; at: Moment) =
+proc setLogTicker(sf: FetchEx; at: Moment) =
   if sf.logTicker.isNil:
     debug "Sync accounts progress ticker has stopped"
   else:
     sf.logTicker = safeSetTimer(at, runLogTicker, sf)
 
-proc new(T: type CommonFetchEx; startAfter = defaultTickerStartDelay): T =
-  result = CommonFetchEx(
-    leafRanges: @[LeafRange(
-      leafLow: LeafPath.low,
-      leafHigh: LeafPath.high)])
+proc init(T: type FetchEx; startAfter = defaultTickerStartDelay): T =
+  result = FetchEx(
+    leafRanges: LeafRangeSet.init())
+  discard result.leafRanges.merge(low(LeafItem),high(LeafItem))
   result.logTicker = safeSetTimer(
     Moment.fromNow(startAfter),
     runLogTicker,
     result)
 
+proc withMaxLen(iv: LeafRange): LeafRange =
+  ## Reduce interval to maximal size
+  if 0 < iv.len and iv.len < leafRangeMaxLen:
+    # Note that `[0,high].len` is `0` (rather than `high+1`)
+    iv
+  else:
+    LeafRange.new(iv.minPt, iv.minPt + (leafRangeMaxLen - 1).u256)
+
+# ------------------------------------------------------------------------------
+# Private getters
+# ------------------------------------------------------------------------------
+
+proc leafRanges(sp: WorkerBuddy): LeafRangeSet =
+  ## Handy helper
+  sp.ns.fetchBase.FetchEx.leafRanges
+
+proc fetchEx(ns: Worker): FetchEx =
+  ## Handy helper
+  ns.fetchBase.FetchEx
+
 # ------------------------------------------------------------------------------
 # Private setters
 # ------------------------------------------------------------------------------
 
-proc `sharedFetchEx=`(ns: Worker; value: CommonFetchEx) =
+proc `fetchEx=`(ns: Worker; value: FetchEx) =
   ## Handy helper
-  ns.commonBase = value
+  ns.fetchBase = value
+
+proc `+=`(cc: var RangeCounter; val: UInt256) =
+  cc.counted += val # at most `leafRangeMaxLen`
+  cc.started = true
 
 # ------------------------------------------------------------------------------
-# Public getters
-# ------------------------------------------------------------------------------
-
-proc sharedFetchEx*(ns: Worker): CommonFetchEx =
-  ## Handy helper
-  ns.commonBase.CommonFetchEx
-
-# ------------------------------------------------------------------------------
-# Public start/stop functions
+# Public start/stop functions!
 # ------------------------------------------------------------------------------
 
 proc commonSetup*(ns: Worker) =
@@ -131,9 +144,9 @@ proc commonSetup*(ns: Worker) =
 
 proc commonRelease*(ns: Worker) =
   ## Global clean up
-  if not ns.sharedFetchEx.isNil:
-    ns.sharedFetchEx.logTicker = nil # stop timer
-    ns.sharedFetchEx = nil           # unlink `CommonFetchEx` object
+  if not ns.fetchEx.isNil:
+    ns.fetchEx.logTicker = nil # stop timer
+    ns.fetchEx = nil           # unlink `CommonFetchEx` object
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -141,85 +154,50 @@ proc commonRelease*(ns: Worker) =
 
 proc hasSlice*(sp: WorkerBuddy): bool =
   ## Return `true` iff `getSlice` would return a free slice to work on.
-  if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = CommonFetchEx.new()
-  result = 0 < sp.ns.sharedFetchEx.leafRanges.len
+  if sp.ns.fetchEx.isNil:
+    sp.ns.fetchEx = FetchEx.init()
+  result = 0 < sp.leafRanges.chunks
   trace "hasSlice", peer=sp, hasSlice=result
 
-proc getSlice*(sp: WorkerBuddy, leafLow, leafHigh: var LeafPath): bool =
-  ## Claim a free slice to work on.  If a slice was available, it's claimed,
-  ## `leadLow` and `leafHigh` are set to the slice range and `true` is
-  ## returned.  Otherwise `false` is returned.
-  if sp.ns.sharedFetchEx.isNil:
-    sp.ns.sharedFetchEx = CommonFetchEx.new()
-  let sharedFetch = sp.ns.sharedFetchEx
-  template ranges: auto = sharedFetch.leafRanges
-  const leafMaxFetchRange = (high(LeafPath) - low(LeafPath)) div 1000
 
-  if ranges.len == 0:
-    trace "GetSlice", leafRange="none"
-    return false
+proc getSlice*(sp: WorkerBuddy): Result[LeafRange,void] =
+  ## Claim a free slice to work on, ie. remove the leftmost interval from
+  ## the set of leaf ranges.
+  if sp.ns.fetchEx.isNil:
+    sp.ns.fetchEx = FetchEx.init()
 
-  leafLow = ranges[0].leafLow
-  if ranges[0].leafHigh - ranges[0].leafLow <= leafMaxFetchRange:
-    leafHigh = ranges[0].leafHigh
-    ranges.delete(0)
-  else:
-    leafHigh = leafLow + leafMaxFetchRange
-    ranges[0].leafLow = leafHigh + 1
-  trace "GetSlice", peer=sp, leafRange=pathRange(leafLow, leafHigh)
-  return true
+  let rc = sp.leafRanges.ge()
+  if rc.isErr:
+    trace "getSlice()", leafRange="none"
+    return err()
 
-proc putSlice*(sp: WorkerBuddy, leafLow, leafHigh: LeafPath) =
-  ## Return a slice to the free list, merging with the rest of the list.
+  let iv = rc.value.withMaxLen
+  discard sp.leafRanges.reduce(iv.minPt, iv.maxPt)
+  trace "getSlice()", peer=sp , leafRange=iv
+  ok(iv)
 
-  let sharedFetch = sp.ns.sharedFetchEx
-  template ranges: auto = sharedFetch.leafRanges
 
-  trace "PutSlice", leafRange=pathRange(leafLow, leafHigh), peer=sp
-  var i = 0
-  while i < ranges.len and leafLow > ranges[i].leafHigh:
-    inc i
-  if i > 0 and leafLow - 1 == ranges[i-1].leafHigh:
-    dec i
-  var j = i
-  while j < ranges.len and leafHigh >= ranges[j].leafLow:
-    inc j
-  if j < ranges.len and leafHigh + 1 == ranges[j].leafLow:
-    inc j
-  if j == i:
-    ranges.insert(LeafRange(leafLow: leafLow, leafHigh: leafHigh), i)
-  else:
-    if j-1 > i:
-      ranges[i].leafHigh = ranges[j-1].leafHigh
-      ranges.delete(i+1, j-1)
-    if leafLow < ranges[i].leafLow:
-      ranges[i].leafLow = leafLow
-    if leafHigh > ranges[i].leafHigh:
-      ranges[i].leafHigh = leafHigh
+proc putSlice*(sp: WorkerBuddy, iv: LeafRange) =
+  discard sp.leafRanges.merge(iv.minPt, iv.maxPt)
+  trace "putSlice()", peer=sp, leafRange=iv
 
-template getSlice*(sp: WorkerBuddy, leafRange: var LeafRange): bool =
-  sp.getSlice(leafRange.leafLow, leafRange.leafHigh)
 
-template putSlice*(sp: WorkerBuddy, leafRange: LeafRange) =
-  sp.putSlice(leafRange.leafLow, leafRange.leafHigh)
+proc countSnapSlice*(sp: WorkerBuddy; iv: LeafRange) =
+  sp.ns.fetchEx.cRange += iv.len
+  sp.ns.fetchEx.cRangeSnap += iv.len
 
-proc countSlice*(sp: WorkerBuddy, leafLow, leafHigh: LeafPath, which: bool) =
-  doAssert leafLow <= leafHigh
-  sp.ns.sharedFetchEx.countRange += leafHigh - leafLow + 1
-  sp.ns.sharedFetchEx.countRangeStarted = true
-  if which:
-    sp.ns.sharedFetchEx.countRangeSnap += leafHigh - leafLow + 1
-    sp.ns.sharedFetchEx.countRangeSnapStarted = true
-  else:
-    sp.ns.sharedFetchEx.countRangeTrie += leafHigh - leafLow + 1
-    sp.ns.sharedFetchEx.countRangeTrieStarted = true
+proc countTrieSlice*(sp: WorkerBuddy; iv: LeafRange) =
+  sp.ns.fetchEx.cRange += iv.len
+  sp.ns.fetchEx.cRangeTrie += iv.len
 
-template countSlice*(sp: WorkerBuddy, leafRange: LeafRange, which: bool) =
-  sp.countSlice(leafRange.leafLow, leafRange.leafHigh, which)
 
-proc countAccounts*(sp: WorkerBuddy, len: int) =
-  sp.ns.sharedFetchEx.countAccounts += len
+proc accountsInc*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
+  sp.ns.fetchEx.accounts.counted += nAcc
+  sp.ns.fetchEx.accounts.bytes += bytes
+
+proc accountsDec*(sp: WorkerBuddy; bytes: SomeInteger; nAcc:SomeInteger = 1) =
+  sp.ns.fetchEx.accounts.counted -= nAcc
+  sp.ns.fetchEx.accounts.bytes -= bytes
 
 # ------------------------------------------------------------------------------
 # End

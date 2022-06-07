@@ -44,7 +44,7 @@ logScope:
 type
   TrieNodeParseContext* = object
     childQueue*:            seq[(InteriorPath, NodeHash, bool)]
-    leafQueue*:             seq[(LeafPath, NodeHash, Blob)]
+    leafQueue*:             seq[(LeafItem, NodeHash, Blob)]
     errors*:                int
 
 const
@@ -119,7 +119,7 @@ proc parseLeafValue(sp: WorkerBuddy,
     leafError "Leaf value (RLP element 1) is zero length"
     return
 
-  context.leafQueue.add((leafPath.toLeafPath, nodeHash, nodeRlp.toBytes))
+  context.leafQueue.add((leafPath.to(LeafItem), nodeHash, nodeRlp.toBytes))
 
   when traceIndividualNodesOk:
     let leafBytes = context.leafQueue[^1][2]

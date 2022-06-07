@@ -64,6 +64,10 @@ proc untie*(w: seq[NodeHash|NodeHash]): seq[Hash256] =
   ## Ditto
   cast[seq[Hash256]](w)
 
+proc read*(rlp: var Rlp, T: type TrieHash): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  rlp.read(Hash256).T
+
 proc `==`*(a: NodeHash; b: TrieHash): bool = a.Hash256 == b.Hash256
 proc `==`*(a,b: TrieHash): bool {.borrow.}
 proc `==`*(a,b: NodeHash): bool {.borrow.}

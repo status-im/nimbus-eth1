@@ -24,6 +24,7 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
+  ../../../../utils/interval_set,
   "../../.."/[protocol, protocol/trace_config, types],
   ../../path_desc,
   ../worker_desc,
@@ -43,21 +44,21 @@ proc fetchSnap*(
     stateRoot: TrieHash,
     leafRange: LeafRange) {.async.} =
   ## Fetch data using the `snap#` protocol
-  var origin = leafRange.leafLow
-  var limit = leafRange.leafHigh
+  var origin = leafRange.minPt
+  var limit = leafRange.maxPt
   const responseBytes = 2 * 1024 * 1024
 
   if sp.ctrl.stopped:
     trace trSnapRecvError &
       "peer already disconnected, not sending GetAccountRange",
-      peer=sp, accountRange=pathRange(origin, limit),
+      peer=sp, accountRange=leafRange,
       stateRoot, bytesLimit=snapRequestBytesLimit
     sp.putSlice(leafRange)
     return # FIXME: was there a return missing?
 
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer=sp,
-      accountRange=pathRange(origin, limit),
+      accountRange=leafRange,
       stateRoot, bytesLimit=snapRequestBytesLimit
 
   var
@@ -89,7 +90,7 @@ proc fetchSnap*(
   template proof: auto = accountsAndProof.proof
 
   let len = accounts.len
-  let requestedRange = pathRange(origin, limit)
+  let requestedRange = $leafRange
   if len == 0:
     # If there's no proof, this reply means the peer has no accounts available
     # in the range for this query.  But if there's a proof, this reply means
@@ -104,42 +105,43 @@ proc fetchSnap*(
       sp.ctrl.stopRequest = true
     else:
       trace trSnapRecvReceived & "END AccountRange message", peer=sp,
-        got=len, proofLen=proof.len, gotRange=pathRange(origin, high(LeafPath)),
+        got=len, proofLen=proof.len, gotRange=leafRangePp(origin, high(LeafItem)),
         requestedRange, stateRoot
       # Current slicer can't accept more result data than was requested, so
       # just leave the requested slice claimed and update statistics.
-      sp.countSlice(origin, limit, true)
+      sp.countSnapSlice(leafRange)
     return
 
   var lastPath = accounts[len-1].accHash
   trace trSnapRecvReceived & "AccountRange message", peer=sp,
-    got=len, proofLen=proof.len, gotRange=pathRange(origin, lastPath),
+    got=len, proofLen=proof.len, gotRange=leafRangePp(origin, lastPath),
     requestedRange, stateRoot
 
   # Missing proof isn't allowed, unless `origin` is min path in which case
   # there might be no proof if the result spans the entire range.
-  if proof.len == 0 and origin != low(LeafPath):
+  if proof.len == 0 and origin != low(LeafItem):
     trace trSnapRecvProtocolViolation & "missing proof in AccountRange",
-      peer=sp, got=len, proofLen=proof.len, gotRange=pathRange(origin,lastPath),
+      peer=sp, got=len, proofLen=proof.len, gotRange=leafRangePp(origin,lastPath),
       requestedRange, stateRoot
     sp.putSlice(leafRange)
     return
 
   var keepAccounts = len
   if lastPath < limit:
-    sp.countSlice(origin, lastPath, true)
-    sp.putSlice(lastPath + 1, limit)
+    let notUsed = LeafRange.new(lastPath + 1.u256, limit)
+    sp.countSnapSlice((leafRange - notUsed).value)
+    sp.putSlice(notUsed)
   else:
     # Current slicer can't accept more result data than was requested.
     # So truncate to limit before updating statistics.
-    sp.countSlice(origin, limit, true)
+    sp.countSnapSlice(leafRange)
     while lastPath > limit:
       dec keepAccounts
       if keepAccounts == 0:
         break
       lastPath = accounts[keepAccounts-1].accHash
 
-  sp.countAccounts(keepAccounts)
+  sp.accountsInc(0, keepAccounts)
 
 proc fetchSnapOk*(sp: WorkerBuddy): bool =
   ## Sort of getter: if `true`, fetching data using the `snap#` protocol
