@@ -9,8 +9,8 @@
 
 import
   std/[strutils, tables],
-  nimcrypto, eth/common as eth_common, stint, json_rpc/server,
-  eth/p2p, eth/p2p/enode,
+  nimcrypto, eth/common as eth_common, stint, json_rpc/server, json_rpc/errors,
+  eth/p2p, eth/p2p/enode, eth/p2p/peer_pool,
   ../config, ./hexstrings
 
 type
@@ -57,3 +57,10 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
         listener: $enode.address.tcpPort
       )
     )
+
+  server.rpc("nimbus_addPeer") do(enode: string) -> bool:
+    var res = ENode.fromString(enode)
+    if res.isOk:
+      asyncCheck node.peerPool.connectToNode(newNode(res.get()))
+      return true
+    raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")
