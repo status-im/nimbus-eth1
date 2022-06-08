@@ -61,6 +61,6 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("nimbus_addPeer") do(enode: string) -> bool:
     var res = ENode.fromString(enode)
     if res.isOk:
-      asyncCheck node.peerPool.connectToNode(newNode(res.get()))
+      asyncSpawn node.peerPool.connectToNode(newNode(res.get()))
       return true
     raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")
