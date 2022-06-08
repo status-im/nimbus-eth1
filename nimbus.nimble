@@ -67,6 +67,7 @@ task fluffy, "Build fluffy":
 task fluffy_tools, "Build fluffy tools":
   buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
   buildBinary "blockwalk", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
+  buildBinary "eth_data_exporter", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
 
 task utp_test_app, "Build uTP test app":
   buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
