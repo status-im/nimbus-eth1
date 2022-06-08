@@ -26,7 +26,7 @@
 import
   std/[json, typetraits, strutils, os],
   confutils,
-  stew/byteutils,
+  stew/[byteutils, io2],
   json_serialization,
   faststreams, chronicles,
   eth/[common, rlp], chronos,
@@ -59,11 +59,11 @@ type
       defaultValue: 0
       name: "initial-block" .}: uint64
     endBlock* {.
-      desc: "Number of first block which should be downloaded"
+      desc: "Number of last block which should be downloaded"
       defaultValue: 0
       name: "end-block" .}: uint64
     dataDir* {.
-      desc: "The directory where generated file will be places"
+      desc: "The directory where generated file will be placed"
       defaultValue: defaultDataDir()
       defaultValueDesc: $defaultDataDirDesc
       name: "data-dir" .}: OutDir
@@ -72,18 +72,20 @@ type
       defaultValue: defaultFileName
       name: "filename" .}: string
 
-type DataRecord = object
-  rlp: string
-  number: uint64
+  DataRecord = object
+    rlp: string
+    number: uint64
 
-proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect].} = 
-  let enc = rlp.encodeList(blck.header, blck.body, blck.receipts)
-  let asHex = to0xHex(enc)
-  let dataRecord = DataRecord(rlp: asHex, number: cast[uint64](blck.header.blockNumber))
-  let headerHash = to0xHex(rlpHash(blck.header).data)
+proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect].} =
+  let 
+    enc = rlp.encodeList(blck.header, blck.body, blck.receipts)
+    asHex = to0xHex(enc)
+    dataRecord = DataRecord(rlp: asHex, number: cast[uint64](blck.header.blockNumber))
+    headerHash = to0xHex(rlpHash(blck.header).data)
+
   writer.writeField(headerHash, dataRecord)
 
-proc downloadBlock(i: uint64): Block = 
+proc downloadBlock(i: uint64): Block =
   let num = u256(i)
   try:
     # premix has hardcoded making request to local host which is "127.0.0.1:8545"
@@ -97,23 +99,25 @@ proc createAndOpenFile(config: ExporterConf): OutputStreamHandle =
   # Creates directory and file specified in config, if file already exists 
   # program is aborted with info to user, to avoid losing data
 
+  let filePath = config.dataDir / config.filename
+
+  if isFile(filePath):
+    fatal "File under provided path already exists and would be overwritten",
+      path = filePath
+    quit 1
+
+  let res = createPath(distinctBase(config.dataDir))
+
+  if res.isErr():
+    fatal "Error occurred while creating directory", error = res.error
+    quit 1
+
   try:
-    let filePath = config.dataDir / config.filename
-
-    if fileExists(filePath):
-      fatal "File under provided path already exists and would be overwritten",
-        path = filePath
-      quit 1
-
-    createDir(distinctBase(config.dataDir))
     # this means that each time file be overwritten, but it is ok for such one
     # off toll
     return fileOutput(filePath)
   except IOError as e:
-    fatal "Error occurred while opening the file  ", error = e.msg
-    quit 1
-  except OSError as e:
-    fatal "Error occurred while creating directory ", error = e.msg
+    fatal "Error occurred while opening the file", error = e.msg
     quit 1
 
 proc run(config: ExporterConf) =
@@ -143,7 +147,7 @@ when isMainModule:
   {.push raises: [Defect].}
 
   if (config.endBlock < config.initialBlock):
-    fatal "Inital block number should be smaller than end block number",
+    fatal "Initial block number should be smaller than end block number",
       initialBlock = config.initialBlock,
       endBlock = config.endBlock
     quit 1
