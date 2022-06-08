@@ -71,11 +71,8 @@ func readBlockData(
       return err("Invalid hex for rlp block data, number " &
         $blockData.number & ": " & e.msg)
 
-  # The data is currently formatted as an rlp encoded `EthBlock`, thus
-  # containing header, txs and uncles: [header, txs, uncles]. No receipts are
-  # available.
-  # TODO: Change to format to rlp data as it gets stored and send over the
-  # network over the network. I.e. [header, [txs, uncles], receipts]
+  # Data is formatted as it gets stored and send over the
+  # network. I.e. [header, [txs, uncles], receipts]
   if rlp.enterList():
     var blockHash: BlockHash
     try:
@@ -106,24 +103,16 @@ func readBlockData(
           contentType: blockBody,
           blockBodyKey: contentKeyType)
 
-        # Note: Temporary until the data format gets changed.
-        let blockBody = BlockBody(
-          transactions: rlp.read(seq[Transaction]),
-          uncles: rlp.read(seq[BlockHeader]))
-        let rlpdata = encode(blockBody)
+        res.add((contentKey, @(rlp.rawData())))
+        rlp.skipElem()
 
-        res.add((contentKey, rlpdata))
-        # res.add((contentKey, @(rlp.rawData())))
-        # rlp.skipElem()
+      block:
+        let contentKey = ContentKey(
+          contentType: receipts,
+          receiptsKey: contentKeyType)
 
-      # Note: No receipts yet in the data set
-      # block:
-        # let contentKey = ContentKey(
-        #   contentType: receipts,
-        #   receiptsKey: contentKeyType)
-
-        # res.add((contentKey, @(rlp.rawData())))
-        # rlp.skipElem()
+        res.add((contentKey, @(rlp.rawData())))
+        rlp.skipElem()
 
     except RlpError as e:
       return err("Invalid rlp data, number " & $blockData.number & ": " & e.msg)

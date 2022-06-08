@@ -91,6 +91,19 @@ make fluffy-tools
 ./build/blockwalk --block-hash:0xf6bfad56d1a45d1661506343dd1e511b5d7e17565b3ec293125ff0890b9709e5
 ```
 
+One can also use the `eth-data-exporter` tool to download history data from
+local geth instance into the format which is suitable for propagating data into
+fluffy client e.g:
+
+```bash
+make fluffy-tools
+
+./build/eth_data_exporter --initial-block:1 --end-block: 10 --data-dir:"/userDirectory/"
+```
+
+Will download blocks from 1 to 10 into user provided director in one json file.
+
+
 ### Run fluffy test suite
 ```bash
 # From the nimbus-eth1 repository
