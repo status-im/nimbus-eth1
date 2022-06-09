@@ -13,7 +13,7 @@ import
   eth/[common/eth_types, rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../../../nimbus/utils,
+  ../../../nimbus/[utils, constants],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./history_content
 
@@ -198,6 +198,73 @@ proc getBlock*(
   h.portalProtocol.storeContent(contentId, bodyContent.content)
 
   return some[Block]((header, blockBody))
+
+proc validateReceiptsBytes*(bytes: openArray[byte], receiptRoot: KeccakHash): Option[seq[Receipt]] =
+  try:
+    var rlp = rlpFromBytes(bytes)
+
+    let receipts = rlp.read(seq[Receipt])
+
+    let calculatedReceiptsRoot = calcReceiptRoot(receipts)
+
+    if receiptRoot != calculatedReceiptsRoot:
+      # we got receipts which do not match
+      # header. For now just ignore it, but maybe we should penalize peer
+      # sending us such data?
+      return none(seq[Receipt])
+
+    return some(receipts)
+
+  except RlpError, MalformedRlpError, UnsupportedRlpError, RlpTypeMismatch:
+    # TODO add some logging about failed decoding
+    return none(seq[Receipt])
+
+proc getReceipts*(
+  h: HistoryNetwork,
+  hash: BlockHash,
+  header: BlockHeader,
+  chainId: uint16): Future[seq[Receipt]] {.async.} =
+  # header does not have any receipts, return early and do not save empty bytes
+  # into the database
+  if header.receiptRoot == BLANK_ROOT_HASH:
+    return newSeq[Receipt]()
+
+  let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
+
+  let maybeReceiptsFromDb = h.getContentFromDb(seq[Receipt], contentId)
+
+  if maybeReceiptsFromDb.isSome():
+    info "Fetched receipts from database", hash
+    return maybeReceiptsFromDb.unsafeGet()
+
+  let maybeReceiptsContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
+
+  if maybeReceiptsContent.isNone():
+    warn "Failed fetching receipts from the network", hash
+    return newSeq[Receipt]()
+
+  let receiptsContent = maybeReceiptsContent.unsafeGet()
+
+  let maybeReceipts = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
+
+  if maybeReceipts.isNone():
+    return newSeq[Receipt]()
+
+  info "Fetched receipts from the network", hash
+
+  let receipts = maybeReceipts.unsafeGet()
+
+  # receips are valid, propagate it to interested peers
+  h.portalProtocol.triggerPoke(
+    receiptsContent.nodesInterestedInContent,
+    keyEncoded,
+    receiptsContent.content
+  )
+
+  # content is in range and valid, put into db
+  h.portalProtocol.storeContent(contentId, receiptsContent.content)
+
+  return receipts
 
 proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   let keyOpt = contentKey.decode()
