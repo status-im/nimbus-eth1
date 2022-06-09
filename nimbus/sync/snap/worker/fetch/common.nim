@@ -10,12 +10,13 @@
 # except according to those terms.
 
 import
-  std/[math, sets, sequtils, strutils],
+  std/[sets, sequtils],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
   ../../../../utils/interval_set,
+  ../../../types,
   ../../path_desc,
   ../worker_desc,
   ./timer_helper
@@ -26,10 +27,6 @@ logScope:
   topics = "snap common"
 
 type
-  RangeCounter = object
-    counted: UInt256
-    started: bool
-
   AccountsStats = object
     counted: int64
     bytes: int64
@@ -41,36 +38,18 @@ type
   FetchEx = ref object of FetchBase
     ## Account fetching state that is shared among all peers.
     # Leaf path ranges not fetched or in progress on any peer.
-    leafRanges: LeafRangeSet
-    accounts:   AccountsStats
-    cRange:     RangeCounter
-    cRangeSnap: RangeCounter
-    cRangeTrie: RangeCounter
-    logTicker:  TimerCallback
+    leafRanges:  LeafRangeSet
+    accounts:    AccountsStats
+    snapCounter: UInt256
+    trieCounter: UInt256
+    trieQuLen:   uint
+    logTicker:   TimerCallback
+    tick:        uint64 # 58494241735y when ticking 10 times a second
 
 const
   defaultTickerStartDelay = 100.milliseconds
   tickerLogInterval = 1.seconds
   leafRangeMaxLen = (high(LeafItem) - low(LeafItem)) div 1000
-
-# ------------------------------------------------------------------------------
-# Private timer helpers
-# ------------------------------------------------------------------------------
-
-proc to(num: UInt256;T: type float): T =
-  let mantissaLen = 256 - num.leadingZeros
-  if mantissaLen <= 64:
-    num.truncate(uint64).T
-  else:
-    let exp = mantissaLen - 64
-    (num shr exp).truncate(uint64).T * (2.0 ^ exp)
-
-proc percent(cc: RangeCounter): string =
-  if cc.started:
-    result = ((cc.counted.to(float)*10000 / (2.0^256)).int).intToStr(3) & "%"
-    result.insert(".", result.len - 3)
-  else:
-    result = "n/a"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -79,12 +58,13 @@ proc percent(cc: RangeCounter): string =
 proc setLogTicker(sf: FetchEx; at: Moment) {.gcsafe.}
 
 proc runLogTicker(sf: FetchEx) {.gcsafe.} =
-  doAssert not sf.isNil
   info "Sync accounts progress",
+    tick = sf.tick.toSI,
     accounts = sf.accounts.counted,
-    snap = sf.cRangeSnap.percent,
-    trie = sf.cRangeTrie.percent,
-    both = sf.cRange.percent
+    snap = sf.snapCounter.toPc256,
+    trie = sf.trieCounter.toPc256,
+    trieQuLen = sf.trieQuLen.toSI
+  sf.tick.inc
   sf.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(sf: FetchEx; at: Moment) =
@@ -105,7 +85,6 @@ proc init(T: type FetchEx; startAfter = defaultTickerStartDelay): T =
 proc withMaxLen(iv: LeafRange): LeafRange =
   ## Reduce interval to maximal size
   if 0 < iv.len and iv.len < leafRangeMaxLen:
-    # Note that `[0,high].len` is `0` (rather than `high+1`)
     iv
   else:
     LeafRange.new(iv.minPt, iv.minPt + (leafRangeMaxLen - 1).u256)
@@ -129,10 +108,6 @@ proc fetchEx(ns: Worker): FetchEx =
 proc `fetchEx=`(ns: Worker; value: FetchEx) =
   ## Handy helper
   ns.fetchBase = value
-
-proc `+=`(cc: var RangeCounter; val: UInt256) =
-  cc.counted += val # at most `leafRangeMaxLen`
-  cc.started = true
 
 # ------------------------------------------------------------------------------
 # Public start/stop functions!
@@ -183,12 +158,10 @@ proc putSlice*(sp: WorkerBuddy, iv: LeafRange) =
 
 
 proc countSnapSlice*(sp: WorkerBuddy; iv: LeafRange) =
-  sp.ns.fetchEx.cRange += iv.len
-  sp.ns.fetchEx.cRangeSnap += iv.len
+  sp.ns.fetchEx.snapCounter += iv.len
 
 proc countTrieSlice*(sp: WorkerBuddy; iv: LeafRange) =
-  sp.ns.fetchEx.cRange += iv.len
-  sp.ns.fetchEx.cRangeTrie += iv.len
+  sp.ns.fetchEx.trieCounter += iv.len
 
 
 proc accountsInc*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
@@ -198,6 +171,10 @@ proc accountsInc*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
 proc accountsDec*(sp: WorkerBuddy; bytes: SomeInteger; nAcc:SomeInteger = 1) =
   sp.ns.fetchEx.accounts.counted -= nAcc
   sp.ns.fetchEx.accounts.bytes -= bytes
+
+
+proc `trieQueueLen=`*(sp: WorkerBuddy; value: int) =
+  sp.ns.fetchEx.trieQuLen = value.uint
 
 # ------------------------------------------------------------------------------
 # End

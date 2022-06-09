@@ -233,7 +233,7 @@ proc nodeDataMatchRequest(
   for i in 0 ..< data.len:
     var itemRequest: RequestData
     var index = 0
-    let hash = data[i].toNodeHash
+    let hash = data[i].to(NodeHash)
     if i == 0:
       # Efficiently guess the request belongs to the oldest queued request and
       # the items are in requested order.  This lets us skip storing any item
@@ -425,7 +425,7 @@ proc nodeDataEnqueueAndSend(request: RequestData) {.async.} =
   try:
     # TODO: What exactly does this `await` do, wait for space in send buffer?
     # TODO: Check if this copies the hashes redundantly.
-    await sp.peer.getNodeData(request.hashes.untie)
+    await sp.peer.getNodeData(request.hashes.to(seq[Hash256]))
   except CatchableError as e:
     request.traceGetNodeDataSendError(e)
     inc sp.stats.major.networkErrors

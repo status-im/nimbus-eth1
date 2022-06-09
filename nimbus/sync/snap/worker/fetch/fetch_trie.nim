@@ -224,7 +224,7 @@ proc getNodeData(fetch: FetchStateEx,
     return nodebytes
 
   when trEthTracePacketsOk:
-    doAssert nodeBytes.len == 0 or nodeBytes.toNodeHash == hash
+    doAssert nodeBytes.len == 0 or nodeBytes.to(NodeHash) == hash
 
   when trEthTraceIndividualNodesOk:
     if nodeBytes.len > 0:

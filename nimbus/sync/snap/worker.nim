@@ -316,7 +316,7 @@ proc peerSyncChainRequest(sp: WorkerBuddy): BlocksRequest =
     # We only have the hash of the recent head of the peer's canonical chain.
     # Like `SyncLocked`, query more than one item to detect when the
     # canonical chain gets shorter, no change or longer.
-    result.startBlock = sp.hunt.bestHash.toHashOrNum
+    result.startBlock = sp.hunt.bestHash.to(HashOrNum)
     result.maxResults = syncLockedQuerySize
     return
 

@@ -65,7 +65,7 @@ proc fetchSnap*(
     reply: Option[accountRangeObj]
   try:
     reply = await sp.peer.getAccountRange(
-      stateRoot.untie, origin, limit, snapRequestBytesLimit)
+      stateRoot.to(Hash256), origin, limit, snapRequestBytesLimit)
   except CatchableError as e:
     trace trSnapRecvError & "waiting for reply to GetAccountRange", peer=sp,
       error=e.msg

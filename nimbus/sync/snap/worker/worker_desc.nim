@@ -188,17 +188,17 @@ proc `stopRequest=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
 
 proc pp*(sn: Worker; bh: BlockHash): string =
   ## Pretty printer for debugging
-  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  let rc = sn.seenBlock.lruFetch(bh.to(Hash256).data)
   if rc.isOk:
     return "#" & $rc.value
-  $bh.untie.data.toHex
+  $bh.to(Hash256).data.toHex
 
 proc pp*(sn: Worker; bh: BlockHash; bn: BlockNumber): string =
   ## Pretty printer for debugging
-  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  let rc = sn.seenBlock.lruFetch(bh.to(Hash256).data)
   if rc.isOk:
     return "#" & $rc.value
-  "#" & $sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+  "#" & $sn.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
 
 proc pp*(sn: Worker; bhn: HashOrNum): string =
   if not bhn.isHash:
@@ -210,8 +210,8 @@ proc pp*(sn: Worker; bhn: HashOrNum): string =
 
 proc seen*(sn: Worker; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
-  if not sn.seenBlock.lruFetch(bh.untie.data).isOk:
-    discard sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+  if not sn.seenBlock.lruFetch(bh.to(Hash256).data).isOk:
+    discard sn.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
 
 # -----------
 
