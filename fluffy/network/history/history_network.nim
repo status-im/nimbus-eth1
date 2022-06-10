@@ -13,7 +13,7 @@ import
   eth/[common/eth_types, rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../../../nimbus/utils,
+  ../../../nimbus/[utils, constants],
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./history_content
 
@@ -57,46 +57,74 @@ func getEncodedKeyForContent(
 
   return encodeKey(contentKey)
 
+proc getContentFromBytes(bytes: openArray[byte], T: type): Result[T, string] =
+  var rlp = rlpFromBytes(bytes)
+  try:
+    let content = rlp.read(T)
+    ok[T](content)
+  except RlpError as e:
+    err(e.msg)
+
 proc validateHeaderBytes*(
     bytes: openArray[byte], hash: BlockHash): Option[BlockHeader] =
-  try:
-    var rlp = rlpFromBytes(bytes)
-
-    let blockHeader = rlp.read(BlockHeader)
-
-    if not (blockHeader.blockHash() == hash):
-      # TODO: Header with different hash than expected, maybe we should punish
-      # peer which sent us this ?
-      return none(BlockHeader)
-
-    return some(blockHeader)
-
-  except MalformedRlpError, UnsupportedRlpError, RlpTypeMismatch:
-    # TODO add some logging about failed decoding
+  
+  let headerResult = getContentFromBytes(bytes, BlockHeader)
+  
+  if headerResult.isErr():
+    error "Failed to decode header ", msg = headerResult.error()
     return none(BlockHeader)
+  
+  let header = headerResult.unsafeGet()
 
-proc validateBodyBytes*(
-    bytes: openArray[byte], txRoot: KeccakHash, ommersHash: KeccakHash):
-    Option[BlockBody] =
+  if not (header.blockHash() == hash):
+    # TODO: Header with different hash than expected, maybe we should punish
+    # peer which sent us this ?
+    return none(BlockHeader)
+  
+  return some(header)
+
+proc validateExpectedBody(
+    bb: BlockBody,
+    txRoot: KeccakHash,
+    ommersHash: KeccakHash): Result[void, string] =
   try:
-    var rlp = rlpFromBytes(bytes)
+    let calculatedTxRoot = calcTxRoot(bb.transactions)
+    let calculatedOmmersHash = rlpHash(bb.uncles)
 
-    let blockBody = rlp.read(BlockBody)
+    if calculatedTxRoot != txRoot:
+      return err("Unexpected transaction root")
+    elif calculatedOmmersHash != ommersHash:
+      return err("Unexpected ommers hash")
+    else:
+      return ok()
+  except RlpError as e:
+    return err(e.msg)
+    
+proc validateBodyBytes*(
+    bytes: openArray[byte],
+    txRoot: KeccakHash,
+    ommersHash: KeccakHash):Option[BlockBody] =
 
-    let calculatedTxRoot = calcTxRoot(blockBody.transactions)
-    let calculatedOmmersHash = rlpHash(blockBody.uncles)
+  let bodyResult = getContentFromBytes(bytes, BlockBody)
 
-    if txRoot != calculatedTxRoot or ommersHash != calculatedOmmersHash:
-      # we got block body (bundle of transactions and uncles) which do not match
-      # header. For now just ignore it, but maybe we should penalize peer
-      # sending us such data?
-      return none(BlockBody)
-
-    return some(blockBody)
-
-  except RlpError, MalformedRlpError, UnsupportedRlpError, RlpTypeMismatch:
-    # TODO add some logging about failed decoding
+  if bodyResult.isErr():
+    error "Failed to decode block body", msg = bodyResult.error()
     return none(BlockBody)
+  
+  let blockBody = bodyResult.unsafeGet()
+
+  let expectedResult = validateExpectedBody(blockBody, txRoot, ommersHash)
+
+  if expectedResult.isErr():
+    error "Failed to validate if block body matches header", 
+      msg = expectedResult.error()
+
+    # we got block body (bundle of transactions and uncles) which do not match
+    # header. For now just ignore it, but maybe we should penalize peer
+    # sending us such data?
+    return none(BlockBody)
+    
+  return some(blockBody)
 
 proc getContentFromDb(
     h: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
@@ -157,7 +185,7 @@ proc getBlock*(
 
   if maybeHeader.isNone():
     # we do not have header for given hash,so we would not be able to validate
-    # that received body really belong it
+    # that received body really belong to it
     return none(Block)
 
   let header = maybeHeader.unsafeGet()
@@ -194,10 +222,93 @@ proc getBlock*(
     bodyContent.content
   )
 
-  # content is in range and valid, put into db
   h.portalProtocol.storeContent(contentId, bodyContent.content)
 
   return some[Block]((header, blockBody))
+
+proc validateExpectedReceipts(
+    receipts: seq[Receipt],
+    receiptRoot: KeccakHash): Result[void, string] =
+  try:
+    let calculatedReceiptRoot = calcReceiptRoot(receipts)
+
+    if calculatedReceiptRoot != receiptRoot:
+      return err("Unexpected receipt root")
+    else:
+      return ok()
+  except RlpError as e:
+    return err(e.msg)
+    
+proc validateReceiptsBytes*(
+    bytes: openArray[byte],
+    receiptRoot: KeccakHash): Option[seq[Receipt]] =
+
+  let receiptResult = getContentFromBytes(bytes, seq[Receipt])
+
+  if receiptResult.isErr():
+    error "Failed to decode receipts", msg = receiptResult.error()
+    return none(seq[Receipt])
+  
+  let receipts = receiptResult.unsafeGet()
+
+  let expectedReceiptsResult = validateExpectedReceipts(receipts, receiptRoot)
+
+  if expectedReceiptsResult.isErr():
+    error "Failed to validate if receipts matches header", 
+      msg = expectedReceiptsResult.error()
+
+    # we got receipts which do not match
+    # header. For now just ignore it, but maybe we should penalize peer
+    # sending us such data?
+    return none(seq[Receipt])
+
+  return some(receipts)
+
+proc getReceipts*(
+    h: HistoryNetwork,
+    hash: BlockHash,
+    header: BlockHeader,
+    chainId: uint16): Future[Option[seq[Receipt]]] {.async.} =
+  # header does not have any receipts, return early and do not save empty bytes
+  # into the database
+  if header.receiptRoot == BLANK_ROOT_HASH:
+    return some(newSeq[Receipt]())
+
+  let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
+
+  let maybeReceiptsFromDb = h.getContentFromDb(seq[Receipt], contentId)
+
+  if maybeReceiptsFromDb.isSome():
+    info "Fetched receipts from database", hash
+    return some(maybeReceiptsFromDb.unsafeGet())
+
+  let maybeReceiptsContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
+
+  if maybeReceiptsContent.isNone():
+    warn "Failed fetching receipts from the network", hash
+    return none[seq[Receipt]]()
+
+  let receiptsContent = maybeReceiptsContent.unsafeGet()
+
+  let maybeReceipts = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
+
+  if maybeReceipts.isNone():
+    return none[seq[Receipt]]()
+
+  info "Fetched receipts from the network", hash
+
+  let receipts = maybeReceipts.unsafeGet()
+
+  # receips are valid, propagate it to interested peers
+  h.portalProtocol.triggerPoke(
+    receiptsContent.nodesInterestedInContent,
+    keyEncoded,
+    receiptsContent.content
+  )
+
+  h.portalProtocol.storeContent(contentId, receiptsContent.content)
+
+  return some(receipts)
 
 proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   let keyOpt = contentKey.decode()
