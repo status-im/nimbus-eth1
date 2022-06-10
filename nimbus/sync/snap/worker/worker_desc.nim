@@ -15,7 +15,8 @@ import
   nimcrypto/hash,
   stew/[byteutils, keyed_queue, results],
   ../../../constants,
-  ../../types
+  ../../types,
+  ../path_desc
 
 {.push raises: [Defect].}
 
@@ -64,8 +65,8 @@ type
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  FetchBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `fetch/common.nim`
+  TickerBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `ticker.nim`
 
   # -------
 
@@ -85,7 +86,8 @@ type
     ## will also manage a list of `WorkerBuddy` objects.
     seenBlock: WorkerSeenBlocks      ## Temporary, debugging, pretty logs
 
-    fetchBase*: FetchBase            ## Opaque object reference
+    accRange*: LeafRangeSet          ## Hash intervals, accounts to try
+    tickerBase*: TickerBase          ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor

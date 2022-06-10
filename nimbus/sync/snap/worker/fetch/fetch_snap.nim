@@ -27,8 +27,7 @@ import
   ../../../../utils/interval_set,
   "../../.."/[protocol, protocol/trace_config, types],
   ../../path_desc,
-  ../worker_desc,
-  ./common
+  ".."/[ticker, worker_desc]
 
 {.push raises: [Defect].}
 
@@ -39,110 +38,108 @@ const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
-proc fetchSnap*(
+proc getAccountRange(
     sp: WorkerBuddy;
-    stateRoot: TrieHash;
-    leafRange: LeafRange) {.async.} =
-  ## Fetch data using the `snap#` protocol
-  if sp.ctrl.stopped:
-    trace trSnapRecvError & "peer disconnected, not sending GetAccountRange",
-      peer=sp, accountRange=leafRange,
-      stateRoot, bytesLimit=snapRequestBytesLimit
-    sp.putSlice(leafRange)
-    return # FIXME: was there a return missing?
-
-  if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetAccountRange", peer=sp,
-      accountRange=leafRange,
-      stateRoot, bytesLimit=snapRequestBytesLimit
-
-  var
-    reply: Option[accountRangeObj]
+    root: TrieHash;
+    iv: LeafRange
+      ): Future[Result[Option[accountRangeObj],void]] {.async.} =
   try:
-    reply = await sp.peer.getAccountRange(
-      stateRoot.to(Hash256),
-      leafRange.minPt, leafRange.maxPt,
-      snapRequestBytesLimit)
+    let reply = await sp.peer.getAccountRange(
+      root.to(Hash256), iv.minPt, iv.maxPt, snapRequestBytesLimit)
+    return ok(reply)
+
   except CatchableError as e:
     trace trSnapRecvError & "waiting for reply to GetAccountRange", peer=sp,
       error=e.msg
-    inc sp.stats.major.networkErrors
-    sp.ctrl.stopped = true
-    sp.putSlice(leafRange)
-    return
+    return err()
 
-  if reply.isNone:
-    trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer=sp
-    sp.putSlice(leafRange)
-    return
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc fetchSnap*(
+    peer: WorkerBuddy;
+    stateRoot: TrieHash;
+    iv: LeafRange
+      ): Future[Result[LeafRange,void]] {.async.} =
+  ## Fetch data using the `snap#` protocol, returns the unused left-over range
+  ## from `iv` (error return result means empty interval in that context.)
+  if trSnapTracePacketsOk:
+    trace trSnapSendSending & "GetAccountRange", peer,
+      accRange=iv, stateRoot, bytesLimit=snapRequestBytesLimit
+
+  let reply = block:
+    let rc = await peer.getAccountRange(stateRoot, iv)
+    if rc.isErr:
+      inc peer.stats.major.networkErrors
+      peer.ctrl.stopped = true
+      return ok(iv)
+    if rc.value.isNone:
+      trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
+      return ok(iv)
+    rc.value.get
 
   let
-    accountsAndProof = reply.get
-    accounts = accountsAndProof.accounts
+    accounts = reply.accounts
+    nAccounts = accounts.len
 
     # TODO: We're not currently verifying boundary proofs, but we do depend on
     # whether there is a proof supplied.  Unlike Snap sync, the Pie sync
     # algorithm doesn't verify most boundary proofs at this stage.
-    proof = accountsAndProof.proof
+    proof = reply.proof
+    nProof = proof.len
 
-  if accounts.len == 0:
+  if nAccounts == 0:
     # If there's no proof, this reply means the peer has no accounts available
     # in the range for this query.  But if there's a proof, this reply means
     # there are no more accounts starting at path `origin` up to max path.
     # This makes all the difference to terminating the fetch.  For now we'll
     # trust the mere existence of the proof rather than verifying it.
-    if proof.len == 0:
-      trace trSnapRecvReceived & "EMPTY AccountRange message", peer=sp,
-        got=accounts.len, proofLen=proof.len, gotRange="n/a",
-        requestedRange=leafRange, stateRoot
-      sp.putSlice(leafRange)
+    if nProof == 0:
+      trace trSnapRecvReceived & "EMPTY AccountRange message", peer,
+        nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
       # Don't keep retrying snap for this state.
-      sp.ctrl.stopRequest = true
+      peer.ctrl.stopRequest = true
+      return ok(iv)
     else:
-      let gotRange = LeafRange.new(leafRange.minPt, high(LeafItem))
-      trace trSnapRecvReceived & "END AccountRange message", peer=sp,
-        got=accounts.len, proofLen=proof.len, gotRange,
-        requestedRange=leafRange, stateRoot
+      let accRange = LeafRange.new(iv.minPt, high(LeafItem))
+      trace trSnapRecvReceived & "END AccountRange message", peer,
+        nAccounts, nProof, accRange, reqRange=iv, stateRoot
       # Current slicer can't accept more result data than was requested, so
       # just leave the requested slice claimed and update statistics.
-      sp.countSnapSlice(leafRange)
-    return
+      return err()
 
-  let accRange = LeafRange.new(leafRange.minPt, accounts[^1].accHash)
-  trace trSnapRecvReceived & "AccountRange message", peer=sp,
-    got=accounts.len, proofLen=proof.len, gotRange=accRange,
-    requestedRange=leafRange, stateRoot
+  let accRange = LeafRange.new(iv.minPt, accounts[^1].accHash)
+  trace trSnapRecvReceived & "AccountRange message", peer,
+    accounts=accounts.len, proofs=proof.len, accRange,
+    reqRange=iv, stateRoot
 
   # Missing proof isn't allowed, unless `minPt` is min path in which case
   # there might be no proof if the result spans the entire range.
-  if proof.len == 0 and leafRange.minPt != low(LeafItem):
-    trace trSnapRecvProtocolViolation & "missing proof in AccountRange",
-      peer=sp, got=accounts.len, proofLen=proof.len, gotRange=accRange,
-      requestedRange=leafRange, stateRoot
-    sp.putSlice(leafRange)
-    return
+  if proof.len == 0 and iv.minPt != low(LeafItem):
+    trace trSnapRecvProtocolViolation & "missing proof in AccountRange", peer,
+      nAccounts, nProof, accRange, reqRange=iv, stateRoot
+    return ok(iv)
 
-  var keepAccounts = accounts.len
-  if accRange.maxPt < leafRange.maxPt:
-    let notUsed = LeafRange.new(accRange.maxPt + 1.u256, leafRange.maxPt)
-    sp.countSnapSlice((leafRange - notUsed).value)
-    sp.putSlice(notUsed)
-  else:
-    # Current slicer can't accept more result data than was requested.
-    # So truncate to limit before updating statistics.
-    sp.countSnapSlice(leafRange)
-    while leafRange.maxPt < accounts[keepAccounts-1].accHash:
-      dec keepAccounts
-      if keepAccounts == 0:
-        break
+  if accRange.maxPt < iv.maxPt:
+    peer.tickerCountAccounts(0, nAccounts)
+    return ok(LeafRange.new(accRange.maxPt + 1.u256, iv.maxPt))
 
-  sp.countAccounts(0, keepAccounts)
+  var keepAccounts = nAccounts
+  # Current slicer can't accept more result data than was requested.
+  # So truncate to limit before updating statistics.
+  while iv.maxPt < accounts[keepAccounts-1].accHash:
+    dec keepAccounts
+    if keepAccounts == 0:
+      break
 
+  peer.tickerCountAccounts(0, keepAccounts)
+  return err() # all of `iv` used
 
-proc fetchSnapOk*(sp: WorkerBuddy): bool =
-  ## Sort of getter: if `true`, fetching data using the `snap#` protocol
-  ## is supported.
-  result = not sp.ctrl.stopped and sp.peer.supports(protocol.snap)
-  trace "fetchSnapOk()", peer=sp,
-    ctrlState=sp.ctrl.state, snapOk=sp.peer.supports(protocol.snap), result
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

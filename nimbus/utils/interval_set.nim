@@ -699,6 +699,11 @@ proc merge*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
     else:
       result = scalarZero
 
+proc merge*[P,S](ds: IntervalSetRef[P,S]; iv: Interval[P,S]): S =
+  ## Variant of `merge()`
+  ds.merge(iv.least, iv.last)
+
+
 proc reduce*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
   ## For the argument interval `I` implied as `[minPt,max(minPt,maxPt)]`,
   ## remove the points from `I` from intervals of the argument set `ds`.
@@ -726,6 +731,11 @@ proc reduce*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
     else:
       result = scalarZero
 
+proc reduce*[P,S](ds: IntervalSetRef[P,S]; iv: Interval[P,S]): S =
+  ## Variant of `reduce()`
+  ds.reduce(iv.least, iv.last)
+
+
 proc covered*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
   ## For the argument interval `I` implied as `[minPt,max(minPt,maxPt)]`,
   ## calulate the accumulated points `I` contained in some interval in the
@@ -746,6 +756,10 @@ proc covered*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
       result += scalarOne
     else:
       result = scalarZero
+
+proc covered*[P,S](ds: IntervalSetRef[P,S]; iv: Interval[P,S]): S =
+  ## Variant of `covered()`
+  ds.covered(iv.least, iv.last)
 
 
 proc ge*[P,S](ds: IntervalSetRef[P,S]; minPt: P): IntervalRc[P,S] =

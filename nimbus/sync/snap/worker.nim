@@ -557,7 +557,7 @@ proc workerStart*(sp: WorkerBuddy): bool =
   ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
   sp.ctrl.init(fullyRunning = true)
 
-  # Initialise `DataNode` reply handling
+  # Initialise data retrieval
   sp.fetchStart()
 
   # Link in hunt descriptor

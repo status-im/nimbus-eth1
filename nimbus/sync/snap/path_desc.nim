@@ -10,10 +10,12 @@
 # distributed except according to those terms.
 
 import
+  std/math,
   eth/common/eth_types,
   stew/byteutils,
   stint,
-  ../../utils/interval_set
+  ../../utils/interval_set,
+  ../types
 
 {.push raises: [Defect].}
 
@@ -26,11 +28,14 @@ type
     ## `IntervalSet` data type.
     Interval[LeafItem,UInt256]
 
+  LeafRangeSet* = ##\
+    ## Managed structure to handle non-adjacent `LeafRange` intervals
+    IntervalSetRef[LeafItem,UInt256]
+
   LeafItemData* = ##\
     ## Serialisation of `LeafItem`
     array[32,byte]
 
-# [
   InteriorPath* = object
     ## Path to an interior node in an Ethereum hexary trie.
     bytes: LeafItemData ## at most 64 nibbles (unused nibbles must be zero)
@@ -38,7 +43,6 @@ type
 
 #const
 #   interiorPathMaxDepth = 2 * sizeof(LeafItemData)
-#]#
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -195,6 +199,14 @@ proc read*(rlp: var Rlp, T: type LeafItem): T
 proc append*(rlpWriter: var RlpWriter, leafPath: LeafItem) =
   rlpWriter.append(leafPath.to(LeafItemData))
 
+proc freeFactor*(lrs: LeafRangeSet): float =
+  ## Free factor, ie. `#items-free / 2^256` to be used in statistics
+  if 0 < lrs.total:
+    ((high(LeafItem) - lrs.total).u256 + 1).to(float) / (2.0^256)
+  elif lrs.chunks == 0:
+    1.0
+  else:
+    0.0
 
 # Printing & pretty printing
 proc toHex*(lp: LeafItem): string = lp.to(LeafItemData).toHex

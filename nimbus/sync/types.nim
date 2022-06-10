@@ -104,12 +104,21 @@ proc `==`*(a,b: BlockHash): bool {.borrow.}
 # Public printing and pretty printing
 # ------------------------------------------------------------------------------
 
-proc toPc256*(num: UInt256): string =
-  ## prints  `num` argument value as rounded percentage of `2^256`.
-  if num == 0:
-    return "0"
-  result = (((num + 5).to(float)*10000 / (2.0^256)).int).intToStr(3) & "%"
-  result.insert(".", result.len - 3)
+proc toPC*(
+    num: float;
+    digitsAfterDot: static[int] = 2;
+    rounding: static[float] = 5.0
+      ): string =
+  ## Convert argument number `num` to percent string with decimal precision
+  ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
+  ## default adjusting the first invisible digit, set `rounding = 0` to disable.
+  const
+    minDigits = digitsAfterDot + 1
+    multiplier = (10 ^ (minDigits + 1)).float
+    roundUp = rounding / 10.0
+  result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
+  result.insert(".", result.len - minDigits)
+
 
 proc toSI*(num: SomeUnsignedInt): string =
   ## Prints `num` argument value greater than 99 as rounded SI unit.
