@@ -225,7 +225,7 @@ type
     canonicalPayloads  : seq[ExecutableData]
     alternativePayloads: seq[ExecutableData]
 
-template inconsistentForkchoiceStateGen(procName: untyped, inconsistency: Inconsistency) =
+template inconsistentForkchoiceStateGen(procname: untyped, inconsistency: Inconsistency) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -295,7 +295,7 @@ inconsistentForkchoiceStateGen(inconsistentForkchoiceState2, Inconsistency.Safe)
 inconsistentForkchoiceStateGen(inconsistentForkchoiceState3, Inconsistency.Finalized)
 
 # Verify behavior on a forkchoiceUpdated with invalid payload attributes
-template invalidPayloadAttributesGen(procName: untyped, syncingCond: bool) =
+template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -423,7 +423,7 @@ type
   Shadow = ref object
     hash: Hash256
 
-template badHashOnNewPayloadGen(procName: untyped, syncingCond: bool, sideChain: bool) =
+template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -548,12 +548,174 @@ proc parentHashOnExecPayload(t: TestEnv): TestStatus =
   ))
   testCond produceSingleBlockRes
 
-proc invalidPayloadTestCaseGen(payloadField: string): proc (t: TestEnv): TestStatus =
-  return proc (t: TestEnv): TestStatus =
-    result = TestStatus.SKIPPED
+template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPayloadField, emptyTxs: bool = false) =
+  proc procName(t: TestEnv): TestStatus =
+    result = TestStatus.OK
+
+    # Wait until TTD is reached by this client
+    let ok = waitFor t.clMock.waitForTTD()
+    testCond ok
+
+    let clMock = t.clMock
+    let client = t.rpcClient
+
+    template txProc() =
+      when not emptyTxs:
+        let
+          tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
+          rr = client.sendTransaction(tx)
+
+        if rr.isErr:
+          error "Unable to send transaction", msg=rr.error
+          return false
+
+    # Produce blocks before starting the test
+    var pbRes = clMock.produceBlocks(5, BlockProcessCallbacks(
+      # Make sure at least one transaction is included in each block
+      onPayloadProducerSelected: proc(): bool =
+        txProc()
+        return true
+    ))
+
+    testCond pbRes
+
+    let invalidPayload = Shadow()
+
+    pbRes = clMock.produceSingleBlock(BlockProcessCallbacks(
+      # Make sure at least one transaction is included in the payload
+      onPayloadProducerSelected: proc(): bool =
+        txProc()
+        return true
+      ,
+      # Run test after the new payload has been obtained
+      onGetPayload: proc(): bool =
+        # Alter the payload while maintaining a valid hash and send it to the client, should produce an error
+
+        # We need at least one transaction for most test cases to work
+        when not emptyTxs:
+          if clMock.latestPayloadBuilt.transactions.len == 0:
+            # But if the payload has no transactions, the test is invalid
+            error "No transactions in the base payload"
+            return false
+
+        let execData = clMock.latestPayloadBuilt.toExecutableData
+        let alteredPayload = generateInvalidPayload(execData, payloadField, t.vaultKey)
+        invalidPayload.hash = hash256(alteredPayload.blockHash)
+
+        # Depending on the field we modified, we expect a different status
+        let rr = client.newPayloadV1(alteredPayload)
+        if rr.isErr:
+          error "unable to send altered payload", msg=rr.error
+          return false
+        let s = rr.get()
+
+        when payloadField == InvalidParentHash:
+          # Execution specification::
+          # {status: ACCEPTED, latestValidHash: null, validationError: null} if the following conditions are met:
+          #  - the blockHash of the payload is valid
+          #  - the payload doesn't extend the canonical chain
+          #  - the payload hasn't been fully validated
+          # {status: SYNCING, latestValidHash: null, validationError: null}
+          # if the payload extends the canonical chain and requisite data for its validation is missing
+          # (the client can assume the payload extends the canonical because the linking payload could be missing)
+          if s.status notin {PayloadExecutionStatus.syncing, PayloadExecutionStatus.accepted}:
+            error "newPayloadV1 status expect syncing or accepted", get=s.status
+            return false
+
+          if s.latestValidHash.isSome:
+            error "newPayloadV1 latestValidHash not empty"
+            return false
+        else:
+          if s.status != PayloadExecutionStatus.invalid:
+            error "newPayloadV1 status expect invalid", get=s.status
+            return false
+
+          if s.latestValidHash.isNone:
+            return false
+
+          let latestValidHash = s.latestValidHash.get
+          if latestValidHash != alteredPayload.parentHash:
+            error "latestValidHash is not the same with parentHash",
+              expected = alteredPayload.parentHash.toHex, get = latestValidHash.toHex
+            return false
+
+        # Send the forkchoiceUpdated with a reference to the invalid payload.
+        let fcState = ForkchoiceStateV1(
+          headBlockHash:      alteredPayload.blockHash,
+          safeBlockHash:      alteredPayload.blockHash,
+          finalizedBlockHash: alteredPayload.blockHash,
+        )
+
+        let timestamp = Quantity(alteredPayload.timestamp.int64 + 1)
+        let payloadAttr = PayloadAttributesV1(timestamp: timestamp)
+
+        # Execution specification:
+        #  {payloadStatus: {status: INVALID, latestValidHash: null, validationError: errorMessage | null}, payloadId: null}
+        #  obtained from the Payload validation process if the payload is deemed INVALID
+        let rs = client.forkchoiceUpdatedV1(fcState, some(payloadAttr))
+        # Execution specification:
+        #  {payloadStatus: {status: INVALID, latestValidHash: null, validationError: errorMessage | null}, payloadId: null}
+        #  obtained from the Payload validation process if the payload is deemed INVALID
+        # Note: SYNCING/ACCEPTED is acceptable here as long as the block produced after this test is produced successfully
+        if rs.isErr:
+          error "unable to send altered payload", msg=rs.error
+          return false
+
+        let z = rs.get()
+        if z.payloadStatus.status notin {PayloadExecutionStatus.syncing, PayloadExecutionStatus.accepted, PayloadExecutionStatus.invalid}:
+          return false
+
+        # Finally, attempt to fetch the invalid payload using the JSON-RPC endpoint
+        var header: BlockHeader
+        let rp = client.headerByHash(alteredPayload.blockHash.hash256, header)
+        rp.isErr
+    ))
+
+    testCond pbRes
+
+    # Lastly, attempt to build on top of the invalid payload
+    let psb = clMock.produceSingleBlock(BlockProcessCallbacks(
+      # Run test after the new payload has been obtained
+      onGetPayload: proc(): bool =
+        let alteredPayload = customizePayload(clMock.latestPayloadBuilt.toExecutableData, CustomPayload(
+          parentHash: some(invalidPayload.hash),
+        ))
+
+        info "Sending customized NewPayload: ParentHash",
+          fromHash=clMock.latestPayloadBuilt.parentHash.toHex, toHash=invalidPayload.hash.toHex
+        # Response status can be ACCEPTED (since parent payload could have been thrown out by the client)
+        # or SYNCING (parent payload is thrown out and also client assumes that the parent is part of canonical chain)
+        # or INVALID (client still has the payload and can verify that this payload is incorrectly building on top of it),
+        # but a VALID response is incorrect.
+        let rr = client.newPayloadV1(alteredPayload)
+        if rr.isErr:
+          error "unable to send altered payload", msg=rr.error
+          return false
+
+        let z = rr.get()
+        z.status in {PayloadExecutionStatus.syncing, PayloadExecutionStatus.accepted, PayloadExecutionStatus.invalid}
+    ))
+
+    testCond psb
+
+invalidPayloadTestCaseGen(invalidPayload1, InvalidParentHash)
+invalidPayloadTestCaseGen(invalidPayload2, InvalidStateRoot)
+invalidPayloadTestCaseGen(invalidPayload3, InvalidStateRoot, true)
+invalidPayloadTestCaseGen(invalidPayload4, InvalidReceiptsRoot)
+invalidPayloadTestCaseGen(invalidPayload5, InvalidNumber)
+invalidPayloadTestCaseGen(invalidPayload6, InvalidGasLimit)
+invalidPayloadTestCaseGen(invalidPayload7, InvalidGasUsed)
+invalidPayloadTestCaseGen(invalidPayload8, InvalidTimestamp)
+invalidPayloadTestCaseGen(invalidPayload9, InvalidPrevRandao)
+invalidPayloadTestCaseGen(invalidPayload10, RemoveTransaction)
+invalidPayloadTestCaseGen(invalidPayload11, InvalidTransactionSignature)
+invalidPayloadTestCaseGen(invalidPayload12, InvalidTransactionNonce)
+invalidPayloadTestCaseGen(invalidPayload13, InvalidTransactionGasPrice)
+invalidPayloadTestCaseGen(invalidPayload14, InvalidTransactionGas)
+invalidPayloadTestCaseGen(invalidPayload15, InvalidTransactionValue)
 
 # Test to verify Block information available at the Eth RPC after NewPayload
-template blockStatusExecPayloadGen(procName: untyped, transitionBlock: bool) =
+template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -622,7 +784,7 @@ template blockStatusExecPayloadGen(procName: untyped, transitionBlock: bool) =
 blockStatusExecPayloadGen(blockStatusExecPayload1, false)
 blockStatusExecPayloadGen(blockStatusExecPayload2, true)
 
-template blockStatusHeadBlockGen(procName: untyped, transitionBlock: bool) =
+template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -676,7 +838,7 @@ template blockStatusHeadBlockGen(procName: untyped, transitionBlock: bool) =
 blockStatusHeadBlockGen(blockStatusHeadBlock1, false)
 blockStatusHeadBlockGen(blockStatusHeadBlock2, true)
 
-template blockStatusSafeBlockGen(procName: untyped, transitionBlock: bool) =
+template blockStatusSafeBlockGen(procname: untyped, transitionBlock: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -729,7 +891,7 @@ template blockStatusSafeBlockGen(procName: untyped, transitionBlock: bool) =
 blockStatusSafeBlockGen(blockStatusSafeBlock1, false)
 blockStatusSafeBlockGen(blockStatusSafeBlock2, true)
 
-template blockStatusFinalizedBlockGen(procName: untyped, transitionBlock: bool) =
+template blockStatusFinalizedBlockGen(procname: untyped, transitionBlock: bool) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
 
@@ -1482,7 +1644,7 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
 
   let shadow = ShadowTx(currentTxIndex: 0)
 
-  let produceBlockRes = clMock.produceBlocks(1, BlockProcessCallbacks(
+  let produceBlockRes = clMock.produceBlocks(10, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       let
         tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
@@ -1604,63 +1766,66 @@ const engineTestList* = [
   ),
   TestSpec(
     name: "Invalid ParentHash NewPayload",
-    run:  invalidPayloadTestCaseGen("ParentHash"),
+    run:  invalidPayload1,
   ),
   TestSpec(
     name: "Invalid StateRoot NewPayload",
-    run:  invalidPayloadTestCaseGen("StateRoot"),
+    run:  invalidPayload2,
+  ),
+  TestSpec(
+    name: "Invalid StateRoot NewPayload, Empty Transactions",
+    run:  invalidPayload3,
   ),
   TestSpec(
     name: "Invalid ReceiptsRoot NewPayload",
-    run:  invalidPayloadTestCaseGen("ReceiptsRoot"),
+    run:  invalidPayload4,
   ),
   TestSpec(
     name: "Invalid Number NewPayload",
-    run:  invalidPayloadTestCaseGen("Number"),
+    run:  invalidPayload5,
   ),
   TestSpec(
     name: "Invalid GasLimit NewPayload",
-    run:  invalidPayloadTestCaseGen("GasLimit"),
+    run:  invalidPayload6,
   ),
   TestSpec(
     name: "Invalid GasUsed NewPayload",
-    run:  invalidPayloadTestCaseGen("GasUsed"),
+    run:  invalidPayload7,
   ),
   TestSpec(
     name: "Invalid Timestamp NewPayload",
-    run:  invalidPayloadTestCaseGen("Timestamp"),
+    run:  invalidPayload8,
   ),
   TestSpec(
     name: "Invalid PrevRandao NewPayload",
-    run:  invalidPayloadTestCaseGen("PrevRandao"),
+    run:  invalidPayload9,
   ),
   TestSpec(
     name: "Invalid Incomplete Transactions NewPayload",
-    run:  invalidPayloadTestCaseGen("RemoveTransaction"),
+    run:  invalidPayload10,
   ),
   TestSpec(
     name: "Invalid Transaction Signature NewPayload",
-    run:  invalidPayloadTestCaseGen("Transaction/Signature"),
+    run:  invalidPayload11,
   ),
   TestSpec(
     name: "Invalid Transaction Nonce NewPayload",
-    run:  invalidPayloadTestCaseGen("Transaction/Nonce"),
+    run:  invalidPayload12,
   ),
   TestSpec(
     name: "Invalid Transaction GasPrice NewPayload",
-    run:  invalidPayloadTestCaseGen("Transaction/GasPrice"),
+    run:  invalidPayload13,
   ),
   TestSpec(
     name: "Invalid Transaction Gas NewPayload",
-    run:  invalidPayloadTestCaseGen("Transaction/Gas"),
+    run:  invalidPayload14,
   ),
   TestSpec(
     name: "Invalid Transaction Value NewPayload",
-    run:  invalidPayloadTestCaseGen("Transaction/Value"),
+    run:  invalidPayload15,
   ),
 
   # Eth RPC Status on ForkchoiceUpdated Events
-
   TestSpec( # TODO: fix/debug
     name: "Latest Block after NewPayload",
     run:  blockStatusExecPayload1,

@@ -89,14 +89,14 @@ proc setupEngineAPI*(
     if header.timestamp <= parent.timestamp:
       warn "Invalid timestamp",
         parent = header.timestamp, header = header.timestamp
-      return invalidStatus(db.getCurrentBlockHash(), "Invalid timestamp")
+      return invalidStatus(db.getHeadBlockHash(), "Invalid timestamp")
 
     trace "Inserting block without sethead",
       hash = blockHash.data.toHex, number = header.blockNumber
     let body = toBlockBody(payload)
     let vres = sealingEngine.chain.insertBlockWithoutSetHead(header, body)
     if vres != ValidationResult.OK:
-      return invalidStatus(db.getCurrentBlockHash(), "Failed to insert block")
+      return invalidStatus(db.getHeadBlockHash(), "Failed to insert block")
 
     # We've accepted a valid payload from the beacon client. Mark the local
     # chain transitions to notify other subsystems (e.g. downloader) of the

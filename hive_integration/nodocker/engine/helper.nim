@@ -1,10 +1,12 @@
 import
   std/[typetraits, json, strutils],
+  nimcrypto,
   test_env,
-  eth/rlp,
+  eth/[rlp, keys],
   stew/byteutils,
   json_rpc/rpcclient,
-  ../../../nimbus/rpc/hexstrings
+  ../../../nimbus/rpc/hexstrings,
+  ../../../nimbus/transaction
 
 type
   ExecutableData* = object
@@ -38,6 +40,36 @@ type
     baseFeePerGas*: Option[UInt256]
     blockHash*    : Option[Hash256]
     transactions* : Option[seq[Transaction]]
+
+  InvalidPayloadField* = enum
+    InvalidParentHash
+    InvalidStateRoot
+    InvalidReceiptsRoot
+    InvalidNumber
+    InvalidGasLimit
+    InvalidGasUsed
+    InvalidTimestamp
+    InvalidPrevRandao
+    RemoveTransaction
+    InvalidTransactionSignature
+    InvalidTransactionNonce
+    InvalidTransactionGas
+    InvalidTransactionGasPrice
+    InvalidTransactionValue
+
+  SignatureVal = object
+    V: int64
+    R: UInt256
+    S: UInt256
+
+  CustomTx = object
+    nonce   : Option[AccountNonce]
+    gasPrice: Option[GasInt]
+    gasLimit: Option[GasInt]
+    to      : Option[EthAddress]
+    value   : Option[UInt256]
+    data    : Option[seq[byte]]
+    sig     : Option[SignatureVal]
 
 proc customizePayload*(basePayload: ExecutableData, customData: CustomPayload): ExecutionPayloadV1 =
   let txs = if customData.transactions.isSome:
@@ -185,3 +217,110 @@ proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPre
     ok()
   except ValueError as e:
     err(e.msg)
+
+proc customizeTx(baseTx: Transaction, vaultKey: PrivateKey, customTx: CustomTx): Transaction =
+  # Create a modified transaction base, from the base transaction and customData mix
+  var modTx = Transaction(
+    txType  : TxLegacy,
+    nonce   : baseTx.nonce,
+    gasPrice: baseTx.gasPrice,
+    gasLimit: baseTx.gasLimit,
+    to      : baseTx.to,
+    value   : baseTx.value,
+    payload : baseTx.payload
+   )
+
+  if customTx.nonce.isSome:
+    modTx.nonce = customTx.nonce.get
+
+  if customTx.gasPrice.isSome:
+    modTx.gasPrice = customTx.gasPrice.get
+
+  if customTx.gasLimit.isSome:
+    modTx.gasLimit = customTx.gasLimit.get
+
+  if customTx.to.isSome:
+    modTx.to = customTx.to
+
+  if customTx.value.isSome:
+    modTx.value = customTx.value.get
+
+  if customTx.data.isSome:
+    modTx.payload = customTx.data.get
+
+  if customTx.sig.isSome:
+    let sig = customTx.sig.get
+    modTx.V = sig.V
+    modTx.R = sig.R
+    modTx.S = sig.S
+    modTx
+  else:
+    # If a custom signature was not specified, simply sign the transaction again
+    let chainId = baseTx.chainId
+    signTransaction(modTx, vaultKey, chainId, eip155 = true)
+
+proc modifyHash(x: Hash256): Hash256 =
+  result = x
+  result.data[^1] = byte(255 - x.data[^1].int)
+
+proc generateInvalidPayload*(basePayload: ExecutableData, payloadField: InvalidPayloadField, vaultKey: PrivateKey): ExecutionPayloadV1 =
+  var customPayload: CustomPayload
+
+  case payloadField
+  of InvalidParentHash:
+    customPayload.parentHash = some(modifyHash(basePayload.parentHash))
+  of InvalidStateRoot:
+    customPayload.stateRoot = some(modifyHash(basePayload.stateRoot))
+  of InvalidReceiptsRoot:
+    customPayload.receiptsRoot = some(modifyHash(basePayload.receiptsRoot))
+  of InvalidNumber:
+    customPayload.number = some(basePayload.number - 1'u64)
+  of InvalidGasLimit:
+    customPayload.gasLimit = some(basePayload.gasLimit * 2)
+  of InvalidGasUsed:
+    customPayload.gasUsed = some(basePayload.gasUsed - 1)
+  of InvalidTimestamp:
+    customPayload.timestamp = some(basePayload.timestamp - 1.seconds)
+  of InvalidPrevRandao:
+    # This option potentially requires a transaction that uses the PREVRANDAO opcode.
+    # Otherwise the payload will still be valid.
+    var randomHash: Hash256
+    doAssert nimcrypto.randomBytes(randomHash.data) == 32
+    customPayload.prevRandao = some(randomHash)
+  of RemoveTransaction:
+    let emptyTxs: seq[Transaction] = @[]
+    customPayload.transactions = some(emptyTxs)
+  of InvalidTransactionSignature,
+    InvalidTransactionNonce,
+    InvalidTransactionGas,
+    InvalidTransactionGasPrice,
+    InvalidTransactionValue:
+
+    doAssert(basePayload.transactions.len != 0, "No transactions available for modification")
+
+    var baseTx = basePayload.transactions[0]
+    var customTx: CustomTx
+    case payloadField
+    of InvalidTransactionSignature:
+      let sig = SignatureVal(
+        V: baseTx.V,
+        R: baseTx.R - 1.u256,
+        S: baseTx.S
+      )
+      customTx.sig = some(sig)
+    of InvalidTransactionNonce:
+      customTx.nonce = some(baseTx.nonce - 1)
+    of InvalidTransactionGas:
+      customTx.gasLimit = some(0.GasInt)
+    of InvalidTransactionGasPrice:
+      customTx.gasPrice = some(0.GasInt)
+    of InvalidTransactionValue:
+      # Vault account initially has 0x123450000000000000000, so this value should overflow
+      customTx.value = some(UInt256.fromHex("0x123450000000000000001"))
+    else:
+      discard
+
+    let modTx = customizeTx(baseTx, vaultKey, customTx)
+    customPayload.transactions = some(@[modTx])
+
+  customizePayload(basePayload, customPayload)

@@ -49,7 +49,7 @@ type
     ttd*: DifficultyInt
     clMock*: CLMocker
     nonce: uint64
-    vaultKey: PrivateKey
+    vaultKey*: PrivateKey
 
   Web3BlockHash* = web3types.BlockHash
   Web3Address* = web3types.Address

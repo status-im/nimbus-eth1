@@ -125,6 +125,17 @@ proc blockByNumber*(client: RpcClient, number: uint64, output: var common.EthBlo
   except ValueError as e:
     return err(e.msg)
 
+proc headerByHash*(client: RpcClient, hash: Hash256, output: var common.BlockHeader): Result[void, string] =
+  try:
+    let res = waitFor client.eth_getBlockByHash(hash, false)
+    if res.isNone:
+      return err("failed to get block: " & hash.data.toHex)
+    let blk = res.get()
+    output = toBlockHeader(blk)
+    return ok()
+  except ValueError as e:
+    return err(e.msg)
+
 proc latestHeader*(client: RpcClient, output: var common.BlockHeader): Result[void, string] =
   try:
     let res = waitFor client.eth_getBlockByNumber("latest", false)

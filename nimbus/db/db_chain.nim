@@ -119,8 +119,8 @@ proc getBlockHash*(self: BaseChainDB, n: BlockNumber): Hash256 {.inline.} =
   if not self.getHash(blockNumberToHashKey(n), result):
     raise newException(BlockNotFound, "No block hash for number " & $n)
 
-proc getCurrentBlockHash*(self: BaseChainDB): Hash256 =
-  if not self.getHash(blockNumberToHashKey(self.currentBlock), result):
+proc getHeadBlockHash*(self: BaseChainDB): Hash256 =
+  if not self.getHash(canonicalHeadHashKey(), result):
     result = Hash256()
 
 proc getBlockHeader*(self: BaseChainDB; n: BlockNumber, output: var BlockHeader): bool =
