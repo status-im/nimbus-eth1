@@ -335,11 +335,13 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
   if conf.rpcEnabled:
     await nimbus.rpcServer.stop()
-  if conf.engineApiEnabled:
+  # nimbus.engineApiServer can be nil if conf.engineApiPort == conf.rpcPort
+  if conf.engineApiEnabled and nimbus.engineApiServer.isNil.not:
     await nimbus.engineApiServer.stop()
   if conf.wsEnabled:
     nimbus.wsRpcServer.stop()
-  if conf.engineApiWsEnabled:
+  # nimbus.engineApiWsServer can be nil if conf.engineApiWsPort == conf.wsPort
+  if conf.engineApiWsEnabled and nimbus.engineApiWsServer.isNil.not:
     nimbus.engineApiWsServer.stop()
   if conf.graphqlEnabled:
     await nimbus.graphqlServer.stop()

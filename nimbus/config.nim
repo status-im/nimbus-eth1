@@ -678,6 +678,10 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
 
+    # enable rpc server or ws server if they share common port with engine api
+    result.rpcEnabled = result.engineApiEnabled and (result.engineApiPort == result.rpcPort)
+    result.wsEnabled = result.engineApiWsEnabled and (result.engineApiWsPort == result.wsPort)
+
 when isMainModule:
   # for testing purpose
   discard makeConfig()

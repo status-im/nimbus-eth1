@@ -216,7 +216,7 @@ proc seen*(sn: Worker; bh: BlockHash; bn: BlockNumber) =
 # -----------
 
 import
-  ../../../tests/replay/pp_light
+  ../../../../tests/replay/pp_light
 
 proc pp*(bh: BlockHash): string =
   bh.Hash256.pp
