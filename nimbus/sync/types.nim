@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  std/[math, strutils],
+  std/[math, strutils, hashes],
   eth/common/eth_types,
   nimcrypto/keccak,
   stew/byteutils
@@ -99,6 +99,10 @@ proc `==`*(a: NodeHash; b: TrieHash): bool = a.Hash256 == b.Hash256
 proc `==`*(a,b: TrieHash): bool {.borrow.}
 proc `==`*(a,b: NodeHash): bool {.borrow.}
 proc `==`*(a,b: BlockHash): bool {.borrow.}
+
+proc hash*(root: TrieHash): Hash =
+  ## Mixin for `Table` or `keyedQueue`
+  root.to(Hash256).data.hash
 
 # ------------------------------------------------------------------------------
 # Public printing and pretty printing

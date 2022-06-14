@@ -13,10 +13,9 @@ import
   std/[sequtils, strutils],
   eth/[common/eth_types, p2p],
   nimcrypto/hash,
-  stew/[byteutils, keyed_queue, results],
+  stew/[byteutils, keyed_queue],
   ../../../constants,
-  ../../types,
-  ../path_desc
+  ../../types
 
 {.push raises: [Defect].}
 
@@ -59,14 +58,18 @@ type
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
     runState:              BuddyRunState
+      ## Access with getters
 
   # -------
 
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  TickerBase* = ref object of RootObj
+  WorkerTickerBase* = ref object of RootObj
     ## Stub object, to be inherited in file `ticker.nim`
+
+  WorkerFetchBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `fetch.nim`
 
   # -------
 
@@ -86,8 +89,10 @@ type
     ## will also manage a list of `WorkerBuddy` objects.
     seenBlock: WorkerSeenBlocks      ## Temporary, debugging, pretty logs
 
-    accRange*: LeafRangeSet          ## Hash intervals, accounts to try
-    tickerBase*: TickerBase          ## Opaque object reference
+    buddiesMax*: int                 ## Max number of buddies (for LRU caches)
+
+    fetchBase*: WorkerFetchBase      ## Opaque object reference
+    tickerBase*: WorkerTickerBase    ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor

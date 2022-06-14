@@ -15,24 +15,32 @@ import
   eth/[common/eth_types, p2p],
   stint,
   ../../types,
-  ../path_desc,
   "."/[timer_helper, worker_desc]
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap ticker"
+  topics = "snap-ticker"
 
 type
+  TickerStats* = object
+    activeQueues*: uint
+    totalQueues*: uint64
+    avFillFactor*: float
+
+  TickerStatsUpdater* =
+    proc(ns: Worker): TickerStats {.gcsafe, raises: [Defect].}
+
   AccountsStats = object
     counted: int64
     bytes: int64
 
-  TickerEx = ref object of TickerBase
+  TickerEx = ref object of WorkerTickerBase
     ## Account fetching state that is shared among all peers.
     ns:           Worker
     accounts:     AccountsStats
     peersActive:  int
+    statsCb:      TickerStatsUpdater
     logTicker:    TimerCallback
     tick:         uint64 # 58494241735y when ticking 10 times a second
 
@@ -41,17 +49,25 @@ const
   tickerLogInterval = 1.seconds
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private functions: ticking log messages
 # ------------------------------------------------------------------------------
 
 proc setLogTicker(sf: TickerEx; at: Moment) {.gcsafe.}
 
 proc runLogTicker(sf: TickerEx) {.gcsafe.} =
+  let
+    y = sf.statsCb(sf.ns)
+    fill = if 0 < y.activeQueues: y.avFillFactor/y.activeQueues.float else: 0.0
+    utilisation = fill.toPC(rounding = 0)
+
   info "Sync accounts progress",
     tick = sf.tick.toSI,
     peers = sf.peersActive,
     accounts = sf.accounts.counted,
-    accRange = sf.ns.accRange.freeFactor.toPC(rounding = 0)
+    states = y.totalQueues,
+    queues = y.activeQueues,
+    utilisation
+
   sf.tick.inc
   sf.setLogTicker(Moment.fromNow(tickerLogInterval))
 
@@ -77,16 +93,29 @@ proc `tickerEx=`(ns: Worker; value: TickerEx) =
 # Public start/stop functions!
 # ------------------------------------------------------------------------------
 
-proc tickerSetup*(ns: Worker) =
+proc tickerSetup*(ns: Worker; cb: TickerStatsUpdater) =
   ## Global set up
   if ns.tickerEx.isNil:
     ns.tickerEx = TickerEx(ns: ns)
+  ns.tickerEx.statsCb = cb
 
 proc tickerRelease*(ns: Worker) =
   ## Global clean up
   if not ns.tickerEx.isNil:
     ns.tickerEx.logTicker = nil # stop timer
     ns.tickerEx = nil           # unlink `TickerEx` object
+
+proc tickerStart*(ns: Worker) =
+  ## Re/start ticker unconditionally
+  ns.tickerEx.tick = 0
+  ns.tickerEx.logTicker = safeSetTimer(
+    Moment.fromNow(defaultTickerStartDelay),
+    runLogTicker,
+    ns.tickerEx)
+
+proc tickerStop*(ns: Worker) =
+  ## Stop ticker unconditionally
+  ns.tickerEx.logTicker = nil
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -98,21 +127,15 @@ proc tickerCountAccounts*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
 
 proc tickerStartPeer*(sp: WorkerBuddy) =
   if sp.ns.tickerEx.peersActive <= 0:
-    # start ticker
     sp.ns.tickerEx.peersActive = 1
-    sp.ns.tickerEx.tick = 0
-    sp.ns.tickerEx.logTicker = safeSetTimer(
-      Moment.fromNow(defaultTickerStartDelay),
-      runLogTicker,
-      sp.ns.tickerEx)
+    sp.ns.tickerStart()
   else:
     sp.ns.tickerEx.peersActive.inc
 
 proc tickerStopPeer*(sp: WorkerBuddy) =
   sp.ns.tickerEx.peersActive.dec
   if sp.ns.tickerEx.peersActive <= 0:
-    # stop ticker
-    sp.ns.tickerEx.logTicker = nil
+    sp.ns.tickerStop()
 
 # ------------------------------------------------------------------------------
 # End

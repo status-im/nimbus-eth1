@@ -21,13 +21,12 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap sync"
+  topics = "snap-sync"
 
 type
   SnapSyncCtx* = ref object of Worker
-    peerTab: KeyedQueue[Peer,WorkerBuddy] ## LRU cache
-    tabSize: int                          ## maximal number of entries
-    pool: PeerPool                        ## for starting the system, debugging
+    buddies: KeyedQueue[Peer,WorkerBuddy] ## LRU cache with worker descriptors
+    pool: PeerPool                        ## for starting the system
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -37,92 +36,78 @@ proc nsCtx(sp: WorkerBuddy): SnapSyncCtx =
   sp.ns.SnapSyncCtx
 
 proc hash(peer: Peer): Hash =
-  ## Needed for `peerTab` table key comparison
+  ## Needed for `buddies` table key comparison
   hash(peer.remote.id)
-
-# ------------------------------------------------------------------------------
-# Private debugging helpers
-# ------------------------------------------------------------------------------
-
-proc dumpPeers(sn: SnapSyncCtx) =
-  let poolSize = sn.pool.len
-  if sn.peerTab.len == 0:
-    trace "*** Empty peer list", poolSize
-  else:
-    var n = sn.peerTab.len - 1
-    for sp in sn.peerTab.prevValues:
-      trace "*** Peer list entry", n, poolSize, peer=sp, worker=sp.huntPp
-      n.dec
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc syncPeerLoop(sp: WorkerBuddy) {.async.} =
-  # This basic loop just runs the head-hunter for each peer.
-  var cache = ""
+proc workerLoop(sp: WorkerBuddy) {.async.} =
+  let ns = sp.nsCtx
+  trace "Starting peer worker", peer=sp,
+    peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+
+  # Do something, work a bit
+  await sp.workerExec
+
+  # Continue until stopped
   while not sp.ctrl.stopped:
-
-    # Do something, work a bit
-    await sp.workerExec
-    if sp.ctrl.stopped:
-      trace "Ignoring stopped peer", peer=sp
-      return
-
-    # Rotate LRU connection table so the most used entry is at the list end
-    # TODO: Update implementation of lruFetch() using re-link, only
-    discard sp.nsCtx.peerTab.lruFetch(sp.peer)
+    # Rotate connection table so the most used entry is at the end
+    discard sp.nsCtx.buddies.lruFetch(sp.peer)
 
     let delayMs = if sp.workerLockedOk: 1000 else: 50
     await sleepAsync(chronos.milliseconds(delayMs))
 
-proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
-  let
-    ethOk = peer.supports(protocol.eth)
-    snapOk = peer.supports(protocol.snap)
-  trace "Peer connected", peer, ethOk, snapOk
+    # Do something, work a bit
+    await sp.workerExec
 
+  trace "Peer worker done", peer=sp,
+    peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+
+
+proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   let sp = WorkerBuddy.new(ns, peer)
 
-  # Manage connection table, check for existing entry
-  if ns.peerTab.hasKey(peer):
-    trace "Peer exists already!", peer # can this happen, at all?
+  # Check for known entry (which should not exist.)
+  if ns.buddies.hasKey(peer):
+    trace "Ignoring already registered peer!", peer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
     return
 
-  # Initialise snap sync for this peer
+  # Initialise worker for this peer
   if not sp.workerStart():
-    trace "State(eth) not initialized!"
+    trace "Ignoring useless peer", peer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+    asyncSpawn peer.disconnect(UselessPeer)
     return
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.
-  if ns.tabSize <= ns.peerTab.len:
-    let leastPeer = ns.peerTab.shift.value.data
+  if ns.buddiesMax <= ns.buddies.len:
+    let leastPeer = ns.buddies.shift.value.data
+    trace "Peer overflow! Deleting least used entry", leastPeer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
     leastPeer.workerStop()
-    trace "Peer table full, deleted least used",
-      leastPeer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
+    asyncSpawn leastPeer.peer.disconnect(UselessPeer)
 
   # Add peer entry
-  discard ns.peerTab.append(sp.peer,sp)
-  trace "Starting peer",
-    peer, poolSize=ns.pool.len, tabLen=ns.peerTab.len, tabMax=ns.tabSize
+  discard ns.buddies.lruAppend(sp.peer, sp, ns.buddiesMax)
 
-  # Debugging, peer table dump after adding gentry
-  #ns.dumpPeers
-  asyncSpawn sp.syncPeerLoop()
+  # Run worker
+  asyncSpawn sp.workerLoop()
+
 
 proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
-  trace "Peer disconnected", peer
-  echo "onPeerDisconnected peer=", peer
-
-  # Debugging, peer table dump before removing entry
-  #ns.dumpPeers
-
-  let rc = ns.peerTab.delete(peer)
+  let rc = ns.buddies.delete(peer)
   if rc.isOk:
     rc.value.data.workerStop()
+    trace "Disconnected peer", peer,
+     peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
   else:
-    debug "Disconnected from unregistered peer", peer
+    debug "Disconnected from unregistered peer", peer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+    discard
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -131,9 +116,9 @@ proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
 proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
   ## Constructor
   new result
-  let size = max(1,2*maxPeers) # allow double argument size
-  result.peerTab.init(size)
-  result.tabSize = size
+  let size = max(1,maxPeers)
+  result.buddies.init(size)
+  result.buddiesMax = size
   result.pool = ethNode.peerPool
 
 proc start*(ctx: SnapSyncCtx) =

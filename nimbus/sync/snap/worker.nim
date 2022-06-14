@@ -73,7 +73,7 @@ export
   worker_desc
 
 logScope:
-  topics = "snap worker"
+  topics = "snap-worker"
 
 const
   syncLockedMinimumReply    = 8
@@ -224,7 +224,7 @@ proc clearSyncStateRoot(sp: WorkerBuddy) =
     debug "Stopping state sync from this peer", peer=sp
     sp.ctrl.stateRoot = none(TrieHash)
 
-proc lockSyncStateRoot(
+proc lockSyncStateAndFetch(
     sp: WorkerBuddy,
     number: BlockNumber,
     hash: BlockHash,
@@ -443,7 +443,7 @@ proc peerSyncChainEmptyReply(
      not request.reverse and
      not request.startBlock.isHash and
      request.startBlock.number == 1.toBlockNumber:
-    sp.lockSyncStateRoot(
+    sp.lockSyncStateAndFetch(
       0.toBlockNumber,
       sp.peer.network.chain.genesisHash.BlockHash,
       sp.peer.network.chain.Chain.genesisStateRoot.TrieHash)
@@ -505,7 +505,7 @@ proc peerSyncChainNonEmptyReply(
   if len < syncLockedMinimumReply and
      request.skip == 0 and not request.reverse and
      len.uint < request.maxResults:
-    sp.lockSyncStateRoot(
+    sp.lockSyncStateAndFetch(
       headers[highestIndex].blockNumber,
       headers[highestIndex].blockHash.BlockHash,
       headers[highestIndex].stateRoot.TrieHash)
@@ -555,15 +555,18 @@ proc workerRelease*(ns: Worker) =
 
 proc workerStart*(sp: WorkerBuddy): bool =
   ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
-  sp.ctrl.init(fullyRunning = true)
+  if sp.peer.supports(protocol.snap) and
+     sp.peer.supports(protocol.eth) and
+     sp.peer.state(protocol.eth).initialized:
 
-  # Initialise data retrieval
-  sp.fetchStart()
+    sp.ctrl.init(fullyRunning = true)
 
-  # Link in hunt descriptor
-  sp.hunt = WorkerHuntEx.new(HuntForward)
+    # Initialise data retrieval
+    sp.fetchStart()
 
-  if sp.peer.state(protocol.eth).initialized:
+    # Link in hunt descriptor
+    sp.hunt = WorkerHuntEx.new(HuntForward)
+
     # We know the hash but not the block number.
     sp.hunt.bestHash = sp.peer.state(protocol.eth).bestBlockHash.BlockHash
     # TODO: Temporarily disabled because it's useful to test the worker.

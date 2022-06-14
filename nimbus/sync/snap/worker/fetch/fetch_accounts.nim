@@ -32,7 +32,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap fetch"
+  topics = "snap-fetch"
 
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
@@ -61,13 +61,12 @@ proc getAccountRange(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchSnap*(
+proc fetchAccounts*(
     peer: WorkerBuddy;
     stateRoot: TrieHash;
     iv: LeafRange
       ): Future[Result[LeafRange,void]] {.async.} =
-  ## Fetch data using the `snap#` protocol, returns the unused left-over range
-  ## from `iv` (error return result means empty interval in that context.)
+  ## Fetch data using the `snap#` protocol, returns the range covered.
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer,
       accRange=iv, stateRoot, bytesLimit=snapRequestBytesLimit
@@ -77,10 +76,10 @@ proc fetchSnap*(
     if rc.isErr:
       inc peer.stats.major.networkErrors
       peer.ctrl.stopped = true
-      return ok(iv)
+      return err()
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
-      return ok(iv)
+      return err()
     rc.value.get
 
   let
@@ -104,14 +103,14 @@ proc fetchSnap*(
         nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
       # Don't keep retrying snap for this state.
       peer.ctrl.stopRequest = true
-      return ok(iv)
+      return err()
     else:
       let accRange = LeafRange.new(iv.minPt, high(LeafItem))
       trace trSnapRecvReceived & "END AccountRange message", peer,
         nAccounts, nProof, accRange, reqRange=iv, stateRoot
       # Current slicer can't accept more result data than was requested, so
       # just leave the requested slice claimed and update statistics.
-      return err()
+      return ok(iv)
 
   let accRange = LeafRange.new(iv.minPt, accounts[^1].accHash)
   trace trSnapRecvReceived & "AccountRange message", peer,
@@ -123,11 +122,11 @@ proc fetchSnap*(
   if proof.len == 0 and iv.minPt != low(LeafItem):
     trace trSnapRecvProtocolViolation & "missing proof in AccountRange", peer,
       nAccounts, nProof, accRange, reqRange=iv, stateRoot
-    return ok(iv)
+    return err()
 
   if accRange.maxPt < iv.maxPt:
     peer.tickerCountAccounts(0, nAccounts)
-    return ok(LeafRange.new(accRange.maxPt + 1.u256, iv.maxPt))
+    return ok(LeafRange.new(iv.minPt, accRange.maxPt))
 
   var keepAccounts = nAccounts
   # Current slicer can't accept more result data than was requested.
@@ -138,7 +137,7 @@ proc fetchSnap*(
       break
 
   peer.tickerCountAccounts(0, keepAccounts)
-  return err() # all of `iv` used
+  return ok(iv) # all of `iv` used
 
 # ------------------------------------------------------------------------------
 # End
