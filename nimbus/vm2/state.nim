@@ -65,6 +65,7 @@ proc init(
       gasLimit:    GasInt;
       fee:         Option[UInt256];
       prevRandao:  Hash256;
+      difficulty:  UInt256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       ttdReached:  bool;
@@ -78,6 +79,7 @@ proc init(
   self.gasLimit = gasLimit
   self.fee = fee
   self.prevRandao = prevRandao
+  self.blockDifficulty = difficulty
   self.chainDB = chainDB
   self.ttdReached = ttdReached
   self.tracer = tracer
@@ -94,6 +96,7 @@ proc init(
       gasLimit:    GasInt;
       fee:         Option[UInt256];
       prevRandao:  Hash256;
+      difficulty:  UInt256;
       miner:       EthAddress;
       chainDB:     BaseChainDB;
       tracerFlags: set[TracerFlags])
@@ -107,6 +110,7 @@ proc init(
     gasLimit  = gasLimit,
     fee       = fee,
     prevRandao= prevRandao,
+    difficulty= difficulty,
     miner     = miner,
     chainDB   = chainDB,
     ttdReached= chainDB.isTtdReached(parent.blockHash),
@@ -130,6 +134,7 @@ proc new*(
       gasLimit:    GasInt;          ## tx env: gas limit
       fee:         Option[UInt256]; ## tx env: optional base fee
       prevRandao:  Hash256;         ## tx env: POS block randomness
+      difficulty:  UInt256,         ## tx env: difficulty
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       chainDB:     BaseChainDB;     ## block chain database
       tracerFlags: set[TracerFlags] = {};
@@ -150,6 +155,7 @@ proc new*(
     gasLimit    = gasLimit,
     fee         = fee,
     prevRandao  = prevRandao,
+    difficulty  = difficulty,
     miner       = miner,
     chainDB     = chainDB,
     tracerFlags = tracerFlags)
@@ -160,6 +166,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              gasLimit:  GasInt;          ## tx env: gas limit
              fee:       Option[UInt256]; ## tx env: optional base fee
              prevRandao:Hash256;         ## tx env: POS block randomness
+             difficulty:UInt256,         ## tx env: difficulty
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              pruneTrie: bool = true): bool
     {.gcsafe, raises: [Defect,CatchableError].} =
@@ -185,6 +192,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
       gasLimit    = gasLimit,
       fee         = fee,
       prevRandao  = prevRandao,
+      difficulty  = difficulty,
       miner       = miner,
       chainDB     = db,
       ttdReached  = db.isTtdReached(parent.blockHash),
@@ -209,6 +217,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
     gasLimit  = header.gasLimit,
     fee       = header.fee,
     prevRandao= header.prevRandao,
+    difficulty= header.difficulty,
     miner     = self.chainDB.getMinerAddress(header),
     pruneTrie = pruneTrie)
 
@@ -247,6 +256,7 @@ proc init*(
     gasLimit    = header.gasLimit,
     fee         = header.fee,
     prevRandao  = header.prevRandao,
+    difficulty  = header.difficulty,
     miner       = chainDB.getMinerAddress(header),
     chainDB     = chainDB,
     tracerFlags = tracerFlags)
@@ -290,13 +300,6 @@ proc new*(
     tracerFlags = tracerFlags,
     pruneTrie   = pruneTrie)
 
-
-proc consensusEnginePoA*(vmState: BaseVMState): bool =
-  # PoA consensus engine have no reward for miner
-  # TODO: this need to be fixed somehow
-  # using `real` engine configuration
-  vmState.chainDB.config.poaEngine
-
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
   vmState.minerAddress
 
@@ -310,7 +313,7 @@ method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.prevRandao.data, allowPadding = false)
   else:
-    vmState.chainDB.config.calcDifficulty(vmState.timestamp, vmState.parent)
+    vmState.blockDifficulty
 
 method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   if vmState.fee.isSome:

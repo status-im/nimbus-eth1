@@ -26,7 +26,6 @@ export
   vms.blockNumber,
   vms.buildWitness,
   vms.coinbase,
-  vms.consensusEnginePoA,
   vms.difficulty,
   vms.disableTracing,
   vms.enableTracing,

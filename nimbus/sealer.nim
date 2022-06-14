@@ -126,8 +126,6 @@ proc generateBlock(engine: SealingEngineRef,
                    timestamp = getTime(),
                    prevRandao = Hash256()): Result[void, string] =
   # deviation from standard block generator
-  # - no local and remote transactions inclusion(need tx pool)
-  # - no receipts from tx
   # - no DAO hard fork
   # - no local and remote uncles inclusion
 
@@ -187,6 +185,20 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
     ok(rawSign)
 
   clique.authorize(engine.signer, signerFunc)
+
+  proc diffCalculator(timeStamp: EthTime, parent: BlockHeader): DifficultyInt {.gcsafe, raises:[].}  =
+    # pesky Nim effect system
+    try:
+      discard timestamp
+      let rc = clique.calcDifficulty(parent)
+      if rc.isErr:
+        return 0.u256
+      rc.get()
+    except:
+      0.u256
+
+  # switch to PoA difficulty calculator
+  engine.txPool.calcDifficulty = diffCalculator
 
   # convert times.Duration to chronos.Duration
   let period = chronos.seconds(clique.cfg.period.inSeconds)

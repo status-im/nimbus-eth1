@@ -30,6 +30,7 @@ type
     gasLimit*      : GasInt
     fee*           : Option[UInt256]
     prevRandao*    : Hash256
+    blockDifficulty*: UInt256
     ttdReached*    : bool
     name*          : string
     flags*         : set[VMFlag]

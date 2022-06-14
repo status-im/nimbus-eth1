@@ -20,6 +20,7 @@ import
   ../../forks,
   ../../p2p/executor,
   ../../utils,
+  ../../utils/difficulty,
   ../../vm_state,
   ../../vm_types,
   ./tx_chain/[tx_basefee, tx_gaslimits],
@@ -53,6 +54,8 @@ type
     txRoot: Hash256          ## `rootHash` after packing
     stateRoot: Hash256       ## `stateRoot` after packing
 
+  DifficultyCalculator* = proc(timeStamp: EthTime, parent: BlockHeader): DifficultyInt {.gcsafe, raises:[].}
+
   TxChainRef* = ref object ##\
     ## State cache of the transaction environment for creating a new\
     ## block. This state is typically synchrionised with the canonical\
@@ -69,6 +72,9 @@ type
     # EIP-4399 and EIP-3675
     prevRandao: Hash256      ## PoS block randomness
 
+    # overrideable difficulty calculator
+    calcDifficulty: DifficultyCalculator
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -77,12 +83,16 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   {.gcsafe,raises: [Defect,CatchableError].} =
   dh.txEnv.reset
 
+  let timestamp = getTime().utc.toTime
+  # we don't consider PoS difficulty here
+  # because that is handled in vmState
   dh.txEnv.vmState = BaseVMState.new(
     parent    = parent,
-    timestamp = getTime().utc.toTime,
+    timestamp = timestamp,
     gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
     fee       = fee,
     prevRandao= dh.prevRandao,
+    difficulty= dh.calcDifficulty(timestamp, parent),
     miner     = dh.miner,
     chainDB   = dh.db)
 
@@ -118,6 +128,12 @@ proc new*(T: type TxChainRef; db: BaseChainDB; miner: EthAddress): T
   result.miner = miner
   result.lhwm.lwmTrg = TRG_THRESHOLD_PER_CENT
   result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
+  result.calcDifficulty = proc(timeStamp: EthTime, parent: BlockHeader):
+                               DifficultyInt {.gcsafe, raises:[].} =
+    try:
+      db.config.calcDifficulty(timestamp, parent)
+    except:
+      0.u256
   result.update(db.getCanonicalHead)
 
 # ------------------------------------------------------------------------------
@@ -310,6 +326,10 @@ proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `prevRandao=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.prevRandao = val
+
+proc `calcDifficulty=`*(dh: TxChainRef; val: DifficultyCalculator) =
+  ## Setter
+  dh.calcDifficulty = val
 
 # ------------------------------------------------------------------------------
 # End

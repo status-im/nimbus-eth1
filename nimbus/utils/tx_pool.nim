@@ -772,6 +772,11 @@ proc `feeRecipient=`*(xp: TxPoolRef; beneficiary: EthAddress) =
   ## a.k.a miner in PoW chain or coinbase
   xp.chain.miner = beneficiary
 
+proc `calcDifficulty=`*(xp: TxPoolRef; val: DifficultyCalculator) =
+  ## Setter, either PoW or PoA difficulty calculator
+  ## PoS difficulty always zero
+  xp.chain.calcDifficulty = val
+
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
 # ------------------------------------------------------------------------------

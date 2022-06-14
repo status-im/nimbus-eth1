@@ -12,8 +12,6 @@
 ## Mining Support for Clique PoA Consensus Protocol
 ## ================================================
 ##
-## Note that mining in currently unsupported by `NIMBUS`
-##
 ## For details see
 ## `EIP-225 <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ## and
@@ -322,7 +320,7 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
   ok()
 
 # clique/clique.go(673): func (c *Clique) CalcDifficulty(chain [..]
-proc calcDifficulty(c: Clique;
+proc calcDifficulty*(c: Clique;
                     parent: BlockHeader): Result[DifficultyInt,CliqueError]
                       {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `calcDifficulty()` is the difficulty adjustment
