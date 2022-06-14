@@ -18,6 +18,7 @@ import
     db/db_chain,
     rpc/p2p,
     rpc/engine_api,
+    rpc/debug,
     sync/protocol,
     utils/tx_pool
   ],
@@ -93,6 +94,7 @@ proc setupELClient*(t: TestEnv) =
 
   setupEthRpc(t.ethNode, t.ctx, t.chainDB, txPool, t.rpcServer)
   setupEngineAPI(t.sealingEngine, t.rpcServer)
+  setupDebugRpc(t.chainDB, t.rpcServer)
 
   t.sealingEngine.start()
   t.rpcServer.start()
@@ -155,6 +157,5 @@ proc verifyPoWProgress*(t: TestEnv, lastBlockHash: Hash256): bool =
   if res.isErr:
     error "verify PoW Progress error", msg=res.error
     return false
-    
+
   true
-  

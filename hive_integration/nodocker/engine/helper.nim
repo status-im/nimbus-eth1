@@ -1,7 +1,10 @@
 import
-  std/typetraits,
+  std/[typetraits, json, strutils],
   test_env,
-  eth/rlp
+  eth/rlp,
+  stew/byteutils,
+  json_rpc/rpcclient,
+  ../../../nimbus/rpc/hexstrings
 
 type
   ExecutableData* = object
@@ -144,3 +147,41 @@ proc toExecutableData*(payload: ExecutionPayloadV1): ExecutableData =
   for data in payload.transactions:
     let tx = rlp.decode(distinctBase data, Transaction)
     result.transactions.add tx
+
+proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPrevRandao: Hash256): Result[void, string] =
+  try:
+    let hash = tx.rlpHash
+    # we only interested in stack, disable all other elems
+    let opts = %* {
+      "disableStorage": true,
+      "disableMemory": true,
+      "disableState": true,
+      "disableStateDiff": true
+    }
+
+    let res = waitFor client.call("debug_traceTransaction", %[%hash, opts])
+    let structLogs = res["structLogs"]
+
+    var prevRandaoFound = false
+    for i, x in structLogs.elems:
+      let op = x["op"].getStr
+      if op != "DIFFICULTY": continue
+
+      if i+1 >= structLogs.len:
+        return err("No information after PREVRANDAO operation")
+
+      prevRandaoFound = true
+      let stack = structLogs[i+1]["stack"]
+      if stack.len < 1:
+        return err("Invalid stack after PREVRANDAO operation")
+
+      let stackHash = Hash256(data: hextoByteArray[32](stack[0].getStr))
+      if stackHash != expectedPrevRandao:
+        return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
+
+    if not prevRandaoFound:
+      return err("PREVRANDAO opcode not found")
+
+    ok()
+  except ValueError as e:
+    err(e.msg)

@@ -1421,7 +1421,7 @@ proc sendTx(t: TestEnv): Future[void] {.async.} =
   let
     client = t.rpcClient
     clMock = t.clMock
-    period = chronos.milliseconds(100)
+    period = chronos.milliseconds(500)
 
   while not clMock.ttdReached:
     await sleepAsync(period)
@@ -1473,6 +1473,55 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
       error "Incorrect difficulty value in block",
         expect=2,
         get=opcodeValueAtBlock
+
+  # Send transactions now past TTD, the value of the storage in these blocks must match the prevRandao value
+  type
+    ShadowTx = ref object
+      currentTxIndex: int
+      txs: seq[Transaction]
+
+  let shadow = ShadowTx(currentTxIndex: 0)
+
+  let produceBlockRes = clMock.produceBlocks(1, BlockProcessCallbacks(
+    onPayloadProducerSelected: proc(): bool =
+      let
+        tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
+        rr = client.sendTransaction(tx)
+
+      if rr.isErr:
+        error "Unable to send transaction", msg=rr.error
+        return false
+
+      shadow.txs.add tx
+      inc shadow.currentTxIndex
+      return true
+    ,
+    onForkchoiceBroadcast: proc(): bool =
+      # Check the transaction tracing, which is client specific
+      let expectedPrevRandao = clMock.prevRandaoHistory[clMock.latestHeadNumber + 1'u64]
+      let res = debugPrevRandaoTransaction(client, shadow.txs[shadow.currentTxIndex-1], expectedPrevRandao)
+      if res.isErr:
+        error "unable to debug prev randao", msg=res.error
+        return false
+      return true
+  ))
+
+  let rr = client.blockNumber()
+  testCond rr.isOk:
+    error "Unable to get latest block number"
+
+  let lastBlockNumber = rr.get()
+  for i in ttdBlockNumber + 1 ..< lastBlockNumber:
+    let expectedPrevRandao = UInt256.fromBytesBE(clMock.prevRandaoHistory[i].data)
+    let storageKey = i.u256
+
+    let rz = client.storageAt(prevRandaoContractAddr, storageKey)
+    testCond rz.isOk:
+      error "Unable to get storage", msg=rz.error
+
+    let storage = rz.get()
+    testCond storage == expectedPrevRandao:
+      error "Unexpected storage", expected=expectedPrevRandao.toHex, get=storage.toHex
 
 proc postMergeSync(t: TestEnv): TestStatus =
   result = TestStatus.SKIPPED
@@ -1612,11 +1661,11 @@ const engineTestList* = [
 
   # Eth RPC Status on ForkchoiceUpdated Events
 
-  TestSpec(
+  TestSpec( # TODO: fix/debug
     name: "Latest Block after NewPayload",
     run:  blockStatusExecPayload1,
   ),
-  TestSpec(
+  TestSpec( # TODO: fix/debug
     name: "Latest Block after NewPayload (Transition Block)",
     run:  blockStatusExecPayload2,
     ttd:  5,
@@ -1691,7 +1740,6 @@ const engineTestList* = [
     run:  suggestedFeeRecipient,
   ),
 
-  # TODO: debug and fix
   # PrevRandao opcode tests
   TestSpec(
     name: "PrevRandao Opcode Transactions",
