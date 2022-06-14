@@ -44,7 +44,7 @@ func encodeKey(k: ContentKey): (ByteList, ContentId) =
 func getEncodedKeyForContent(
     cType: ContentType, chainId: uint16, hash: BlockHash):
     (ByteList, ContentId) =
-  let contentKeyType = ContentKeyType(chainId: chainId, blockHash: hash)
+  let contentKeyType = BlockKey(chainId: chainId, blockHash: hash)
 
   let contentKey =
     case cType
@@ -54,6 +54,10 @@ func getEncodedKeyForContent(
       ContentKey(contentType: cType, blockBodyKey: contentKeyType)
     of receipts:
       ContentKey(contentType: cType, receiptsKey: contentKeyType)
+    of epochAccumulator:
+      raiseAssert("Not implemented")
+    of masterAccumulator:
+      raiseAssert("Not implemented")
 
   return encodeKey(contentKey)
 
@@ -67,20 +71,20 @@ proc getContentFromBytes(bytes: openArray[byte], T: type): Result[T, string] =
 
 proc validateHeaderBytes*(
     bytes: openArray[byte], hash: BlockHash): Option[BlockHeader] =
-  
+
   let headerResult = getContentFromBytes(bytes, BlockHeader)
-  
+
   if headerResult.isErr():
     error "Failed to decode header ", msg = headerResult.error()
     return none(BlockHeader)
-  
+
   let header = headerResult.unsafeGet()
 
   if not (header.blockHash() == hash):
     # TODO: Header with different hash than expected, maybe we should punish
     # peer which sent us this ?
     return none(BlockHeader)
-  
+
   return some(header)
 
 proc validateExpectedBody(
@@ -99,7 +103,7 @@ proc validateExpectedBody(
       return ok()
   except RlpError as e:
     return err(e.msg)
-    
+
 proc validateBodyBytes*(
     bytes: openArray[byte],
     txRoot: KeccakHash,
@@ -110,20 +114,20 @@ proc validateBodyBytes*(
   if bodyResult.isErr():
     error "Failed to decode block body", msg = bodyResult.error()
     return none(BlockBody)
-  
+
   let blockBody = bodyResult.unsafeGet()
 
   let expectedResult = validateExpectedBody(blockBody, txRoot, ommersHash)
 
   if expectedResult.isErr():
-    error "Failed to validate if block body matches header", 
+    error "Failed to validate if block body matches header",
       msg = expectedResult.error()
 
     # we got block body (bundle of transactions and uncles) which do not match
     # header. For now just ignore it, but maybe we should penalize peer
     # sending us such data?
     return none(BlockBody)
-    
+
   return some(blockBody)
 
 proc getContentFromDb(
@@ -238,7 +242,7 @@ proc validateExpectedReceipts(
       return ok()
   except RlpError as e:
     return err(e.msg)
-    
+
 proc validateReceiptsBytes*(
     bytes: openArray[byte],
     receiptRoot: KeccakHash): Option[seq[Receipt]] =
@@ -248,13 +252,13 @@ proc validateReceiptsBytes*(
   if receiptResult.isErr():
     error "Failed to decode receipts", msg = receiptResult.error()
     return none(seq[Receipt])
-  
+
   let receipts = receiptResult.unsafeGet()
 
   let expectedReceiptsResult = validateExpectedReceipts(receipts, receiptRoot)
 
   if expectedReceiptsResult.isErr():
-    error "Failed to validate if receipts matches header", 
+    error "Failed to validate if receipts matches header",
       msg = expectedReceiptsResult.error()
 
     # we got receipts which do not match
@@ -326,6 +330,10 @@ proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
     # TODO: Need to get the header from the db or the network for this. Or how
     # to deal with this?
   of receipts:
+    true
+  of epochAccumulator:
+    true
+  of masterAccumulator:
     true
 
 proc new*(
