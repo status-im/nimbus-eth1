@@ -22,19 +22,39 @@ type
     blockHeader = 0x00
     blockBody = 0x01
     receipts = 0x02
+    epochAccumulator = 0x03
+    masterAccumulator = 0x04
 
-  ContentKeyType* = object
+  BlockKey* = object
     chainId*: uint16
     blockHash*: BlockHash
+
+  EpochAccumulatorKey* = object
+    epochHash*: Digest
+
+  MasterAccumulatorKeyType* = enum
+    latest = 0x00 # An SSZ Union None
+    masterHash = 0x01
+
+  MasterAccumulatorKey* = object
+    case accumulaterKeyType*: MasterAccumulatorKeyType
+    of latest:
+      discard
+    of masterHash:
+      masterHashKey*: Digest
 
   ContentKey* = object
     case contentType*: ContentType
     of blockHeader:
-      blockHeaderKey*: ContentKeyType
+      blockHeaderKey*: BlockKey
     of blockBody:
-      blockBodyKey*: ContentKeyType
+      blockBodyKey*: BlockKey
     of receipts:
-      receiptsKey*: ContentKeyType
+      receiptsKey*: BlockKey
+    of epochAccumulator:
+      epochAccumulatorKey*: EpochAccumulatorKey
+    of masterAccumulator:
+      masterAccumulatorKey*: MasterAccumulatorKey
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -56,16 +76,30 @@ func toContentId*(contentKey: ContentKey): ContentId =
 func `$`*(x: BlockHash): string =
   "0x" & x.data.toHex()
 
-func `$`*(x: ContentKey): string =
-  let key =
-    case x.contentType:
-    of blockHeader:
-      x.blockHeaderKey
-    of blockBody:
-      x.blockBodyKey
-    of receipts:
-      x.receiptsKey
+func `$`*(x: BlockKey): string =
+  "blockHash: " & $x.blockHash & ", chainId: " & $x.chainId
 
-  "(contentType: " & $x.contentType &
-    ", blockHash: " & $key.blockHash &
-    ", chainId: " & $key.chainId & ")"
+func `$`*(x: ContentKey): string =
+  var res = "(type: " & $x.contentType & ", "
+
+  case x.contentType:
+  of blockHeader:
+    res.add($x.blockHeaderKey)
+  of blockBody:
+    res.add($x.blockBodyKey)
+  of receipts:
+    res.add($x.receiptsKey)
+  of epochAccumulator:
+    let key = x.epochAccumulatorKey
+    res.add("epochHash: " & $key.epochHash)
+  of masterAccumulator:
+    let key = x.masterAccumulatorKey
+    case key.accumulaterKeyType:
+    of latest:
+      res.add($key.accumulaterKeyType)
+    of masterHash:
+      res.add($key.accumulaterKeyType & ": " & $key.masterHashKey)
+
+  res.add(")")
+
+  res

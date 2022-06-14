@@ -82,7 +82,7 @@ func readBlockData(
         $blockData.number & ": " & e.msg)
 
     let contentKeyType =
-      ContentKeyType(chainId: 1'u16, blockHash: blockHash)
+      BlockKey(chainId: 1'u16, blockHash: blockHash)
 
     try:
       # If wanted the hash for the corresponding header can be verified
