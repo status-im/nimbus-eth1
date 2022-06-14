@@ -10,10 +10,11 @@
 # distributed except according to those terms.
 
 import
-   stint,
-   stew/results,
-   unittest2,
-   ../nimbus/utils/interval_set
+  chronicles,
+  stint,
+  stew/results,
+  unittest2,
+  ../nimbus/utils/interval_set
 
 type
   FancyPoint = distinct UInt256              # instead of BlockNumber
@@ -79,8 +80,15 @@ proc ge(br: FancyRanges; start: uint64): Result[FancyInterval,void] =
 proc iv(left, right: uint64): FancyInterval =
   FancyInterval.new(left.to(FancyPoint), right.to(FancyPoint))
 
-#proc `==`(a: Result[FancyInterval,void], iv: FancyInterval): bool =
-#  a.isOk and a.value == iv
+proc setTraceLevel* =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel* =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -97,14 +105,12 @@ proc intervalSetRunner(noisy = true) =
       check br.merge(0,uHigh) == 0
       check br.chunks == 1
       check br.total == 0
-      #interval_set.noisy = true
       check br.verify.isOk
 
       check br.reduce(uHigh,uHigh) == 1
       check br.chunks == 1
       check br.total == uHigh.u256
       check br.verify.isOk
-      #interval_set.noisy = false
 
     test "Verify handling of maximal interval points (edge cases)":
       br.clear()
@@ -141,8 +147,24 @@ proc intervalSetRunner(noisy = true) =
       check br.ge(uHigh-2) == iv(uHigh,uHigh)
       check br.ge(0) == iv(uHigh,uHigh)
 
+      br.clear()
+      check br.total == 0 and br.chunks == 0
+      check br.merge(0,uHigh) == 0
+      check br.reduce(0,9999999) == 10000000
+      check br.total.truncate(uint64) == (uHigh - 10000000) + 1
+      check br.verify.isOk
+
+      check br.merge(uHigh,uHigh) == 0
+      check br.verify.isOk
+
+      check br.reduce(uHigh,uHigh-1) == 1 # same as reduce(uHigh,uHigh)
+      check br.total.truncate(uint64) == (uHigh - 10000000)
+      check br.verify.isOk
+      check br.merge(uHigh,uHigh-1) == 1 # same as merge(uHigh,uHigh)
+      check br.total.truncate(uint64) == (uHigh - 10000000) + 1
+      check br.verify.isOk
+
       #interval_set.noisy = true
-      #check br.verify.isOk
       #interval_set.noisy = false
 
     test "Merge disjunct intervals on 1st set":
@@ -183,14 +205,11 @@ proc intervalSetRunner(noisy = true) =
       check dup.verify.isOk
 
     test "Merge overlapping intervals on 2nd set":
-      #interval_set.noisy = true
-      #check dup.verify.isOk
       check dup.merge( 50, 250) == 100
       check dup.merge(450, 850) == 200
       check dup.verify.isOk
 
     test "Verify covered data ranges on 2nd set":
-      #interval_set.noisy = true
       check dup.covered(  0, 299) == 300
       check dup.covered(300, 399) == 0
       check dup.covered(400, 899) == 500
@@ -215,8 +234,6 @@ proc intervalSetRunner(noisy = true) =
       check dup == dup
 
     test "Find intervals in the 1st set":
-      #interval_set.noisy = true
-      #check br.verify.isOk
       check br.le(100) == iv(  0,  99)
       check br.le(199) == iv(  0,  99)
       check br.le(200) == iv(  0,  99)
@@ -230,7 +247,6 @@ proc intervalSetRunner(noisy = true) =
       check br.ge(801) == ivError
 
     test "Delete intervals from the 2nd set":
-      # interval_set.noisy = true
       check dup.delete(200) == iv(200, 299)
       check dup.delete(800) == iv(800, 899)
       check dup.verify.isOk
@@ -295,6 +311,7 @@ proc intervalSetMain*(noisy = defined(debug)) =
 
 when isMainModule:
   let noisy = defined(debug) or true
+  setTraceLevel()
   noisy.intervalSetRunner
 
 # ------------------------------------------------------------------------------

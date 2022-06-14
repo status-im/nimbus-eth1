@@ -128,7 +128,8 @@ type
     isErrorBogusInterval   ## Illegal interval end points or zero size
     isErrorOverlapping     ## Overlapping intervals in database
     isErrorAdjacent        ## Adjacent intervals, should be joined
-    isErrorTotalMismatch   ## Total accumulator resiter is wrong
+    isErrorTotalMismatch   ## Total accumulator register is wrong
+    isErrorTotalLastHigh   ## Total accumulator mismatch counting `high(P)`
 
   Interval*[P,S] = object
     ## Compact interval `[least,last]`
@@ -193,37 +194,75 @@ when NoisyDebuggingOk:
       else:
         echo pfx, args.toSeq.join
 
+  proc pp[P,S](n: S): string =
+    let
+      lowS = S.default
+      highS = S.default + (high(P) - low(P))
+    if highS <= n:
+      return "high(S)"
+    if (highS - 1) <= n:
+      return "high(S)-1"
+    if (highS - 1 - 1) == n:
+      return "high(S)-2"
+    if n <= lowS:
+      return "low(S)"
+    if n <= (lowS + 1):
+      return "low(S)+1"
+    if n <= (lowS + 1 + 1):
+      return "low(S)+2"
+    $n
+
+  proc pp[P,S](pt: P): string =
+    template one: untyped = (S.default + 1)
+    if high(P) <= pt:
+      return "high(P)"
+    if (high(P) - one) <= pt:
+      return "high(P)-1"
+    if (high(P) - one - one) == pt:
+      return "high(P)-2"
+    if pt <= low(P):
+      return "low(P)"
+    if pt <= (low(P) + one):
+      return "low(P)+1"
+    if pt <= (low(P) + one + one):
+      return "low(P)+2"
+    $pt
+
   proc pp[P,S](ds: Desc[P,S]): string =
     if ds.isNil:
       "nil"
     else:
       cast[pointer](ds).repr.strip
 
-  proc pp[P,S](iv: Segm[P,S]): string =
-    "[" & $iv.left & "," & $iv.right & ")"
+  proc pp[P,S](seg: Segm[P,S]): string =
+    template one: untyped = (S.default + 1)
+    "[" & pp[P,S](seg.start) & "," & pp[P,S](seg.start + seg.size) & ")"
 
   proc pp[P,S](iv: Interval[P,S]): string =
-    template one: (S.default + 1)
-    result = "[" & $iv.least & ","
-    if high(P) <= iv.last:
-      result &= "high(P)"
-    elif (high(P) - one) <= iv.last:
-      result &= "high(P)-1"
-    elif (high(P) - one - one) == iv.last:
-      result &= "high(P)-2"
-    else:
-      result &= $iv.last
-    result &= "]"
+    template one: untyped = (S.default + 1)
+    "[" & pp[P,S](iv.least) & "," & pp[P,S](iv.last) & "]"
 
   proc pp[P,S](kvp: DataRef[P,S]): string =
-    Segm[P,S].new(kvp).pp
+    Segm[P,S](start: kvp.key, size: kvp.data.size).pp
+
+  proc pp[P,S](p: var SortedSet[P,BlockRef[S]]): string =
+    template one: untyped = (S.default + 1)
+    result = "{"
+    var rc = p.ge(low(P))
+    while rc.isOk:
+      let (key,blk) = (rc.value.key,rc.value.data)
+      if 1 < result.len:
+        result &= ","
+      result &= "[" & pp[P,S](key) & "," & pp[P,S](key + blk.size) & ")"
+      rc = p.gt(key)
+    result &= "}"
 
 var
   noisy* = false
 
 template say(noisy = false; pfx = "***"; v: varargs[untyped]): untyped =
   when NoisyDebuggingOk:
-    noisy.sayImpl(pfx, v)
+    sayImpl(noisy,pfx, v)
   discard
 
 # ------------------------------------------------------------------------------
@@ -255,12 +294,22 @@ proc len[P,S](kvp: DataRef[P,S]): S =
 
 # -----
 
-proc new[P,S](T: type Segm[P,S]; kvp: DataRef[P,S]): T =
-  T(start: kvp.left, size: kvp.blk.size)
-
 proc new[P,S](T: type Segm[P,S]; left, right: P): T =
   ## Constructor using `[left,right)` points representation
   T(start: left, size: right - left)
+
+proc brew[P,S](T: type Segm[P,S]; left, right: P): Result[T,void] =
+  ## Constructor providing `[left, max(left,right)-left)` (if any.)
+  if high(P) <= left:
+    return err()
+  let length =
+    if right <= left:
+      scalarOne
+    elif right < high(P):
+      (right - left) + scalarOne
+    else:
+      (high(P) - left)
+  ok(T(start: left, size: length))
 
 proc left[P,S](iv: Segm[P,S]): P =
   iv.start
@@ -298,13 +347,13 @@ proc overlapOrLeftJoin[P,S](ds: Desc[P,S]; l, r: P): Rc[P,S] =
   ## Find and return
   ## * either the rightmost `[l,r)` overlapping interval `[a,b)`
   ## * or `[a,b)` with `b==l`
-  if l < r:
-    let rc = ds.leftPos.le(r) # search for `max(a) <= r`
-    if rc.isOK:
-      # note that `b` is the first point outside right of `[a,b)`
-      let b = rc.value.right
-      if l <= b:
-        return ok(rc.value)
+  doAssert l < r
+  let rc = ds.leftPos.le(r) # search for `max(a) <= r`
+  if rc.isOK:
+    # note that `b` is the first point outside right of `[a,b)`
+    let b = rc.value.right
+    if l <= b:
+      return ok(rc.value)
   err()
 
 proc overlapOrLeftJoin[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Rc[P,S] =
@@ -313,13 +362,13 @@ proc overlapOrLeftJoin[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Rc[P,S] =
 
 proc overlap[P,S](ds: Desc[P,S]; l, r: P): Rc[P,S] =
   ## Find and return the rightmost `[l,r)` overlapping interval `[a,b)`.
-  if l < r:
-    let rc = ds.leftPos.lt(r) # search for `max(a) < r`
-    if rc.isOK:
-      # note that `b` is the first point outside right of `[a,b)`
-      let b = rc.value.right
-      if l < b:
-        return ok(rc.value)
+  doAssert l < r
+  let rc = ds.leftPos.lt(r) # search for `max(a) < r`
+  if rc.isOK:
+    # note that `b` is the first point outside right of `[a,b)`
+    let b = rc.value.right
+    if l < b:
+      return ok(rc.value)
   err()
 
 proc overlap[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Rc[P,S] =
@@ -350,10 +399,11 @@ proc findInlet[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Segm[P,S] =
 
 
 proc merge[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Segm[P,S] =
-  # Merge argument into into database and returns added segment (if any)
+  ## Merges argument interval into into database and returns
+  ## the segment really added (if any)
 
   noisy.say "***", "merge(1)",
-    " ds=", ds.pp, " iv=", iv.pp
+    " ds=", ds.pp, " segm=", iv.pp
 
   if ds.isNil:
     return iv
@@ -408,7 +458,7 @@ proc merge[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Segm[P,S] =
     result = iv
 
   noisy.say "***", "merge(2)",
-    " iv=", iv.pp, " p=", p.pp, " result=", result.pp
+    " segm=", iv.pp, " p=", p.pp, " result=", result.pp
 
   # No need for interval `p` anymore.
   doAssert p.left == result.right
@@ -427,7 +477,7 @@ proc merge[P,S](ds: Desc[P,S]; iv: Segm[P,S]): Segm[P,S] =
     let q = rc.value
 
     noisy.say "***", "merge(3)",
-      " iv=", iv.pp, " p=", p.pp, " q=", q.pp, " result=", result.pp
+      " segm=", iv.pp, " p=", p.pp, " q=", q.pp, " result=", result.pp
     #
     #   iv:         [------...
     #   p:                  [------)    // deleted
@@ -532,7 +582,7 @@ proc transferImpl[P,S](src, trg: Desc[P,S]; iv: Segm[P,S]): S =
     var fromIv = src.findInlet(pfx)
 
     noisy.say "***", "transfer(2)",
-      " pfx=", pfx.pp, " fromIv=", fromIv.pp, "\n"
+      " pfx=", pfx.pp, " fromSegm=", fromIv.pp, "\n"
 
     # Chop right end from [pfx) -> [pfx) + [fromIv)
     pfx = Segm[P,S].new(pfx.left, fromIv.left)
@@ -543,7 +593,7 @@ proc transferImpl[P,S](src, trg: Desc[P,S]; iv: Segm[P,S]): S =
       let toIv = trg.merge(fromIv)
 
       noisy.say "***", "transfer(3)",
-        " pfx=", pfx.pp, " fromIv=", fromIv.pp, " toIv=", toIv.pp
+        " pfx=", pfx.pp, " fromSegm=", fromIv.pp, " toSegm=", toIv.pp
 
       # Chop right end from [fromIv) -> [fromIv) + [toIv)
       fromIv = Segm[P,S].new(fromIv.left, toIv.left)
@@ -554,7 +604,7 @@ proc transferImpl[P,S](src, trg: Desc[P,S]; iv: Segm[P,S]): S =
       result += toIv.len
 
     noisy.say "***", "transfer(9)",
-      " pfx=", pfx.pp, " fromIv=", fromIv.pp, " result=", result
+      " pfx=", pfx.pp, " fromSegm=", fromIv.pp, " result=", result
 
 # ------------------------------------------------------------------------------
 # Private covered() function implementation
@@ -566,16 +616,16 @@ proc coveredImpl[P,S](ds: IntervalSetRef[P,S]; start: P; length: S): S =
   ## argument `length` (of course.)
   var iv = Segm[P,S](start: start, size: length)
 
-  noisy.say "***", "covered(1)", " iv=", iv.pp
+  noisy.say "***", "covered(1)", " segm=", iv.pp
 
   while 0 < iv.len:
     let rc = ds.overlap(iv)
     if rc.isErr:
-      noisy.say "***", "covered(2)", " iv=", iv.pp, " no oberlap"
+      noisy.say "***", "covered(2)", " segm=", iv.pp, " no oberlap"
       break
 
     let p = rc.value
-    noisy.say "***", "covered(3)", " iv=", iv.pp, " p=", p.pp
+    noisy.say "***", "covered(3)", " segm=", iv.pp, " p=", p.pp
 
     # Now `p` is the right most interval overlapping `iv`
     if p.left <= iv.left:
@@ -681,18 +731,11 @@ proc merge*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
   ## If the argument interval `I` is `[low(P),high(P)]` and is fully merged,
   ## the scalar *zero* is returned instead of `high(P)-low(P)+1` (which might
   ## not exisit in `S`.).
-  let length =
-    if maxPt <= minPt:
-      scalarOne
-    elif maxPt < high(P):
-      (maxPt - minPt) + scalarOne
-    else:
-      (high(P) - minPt)
+  let rc = Segm[P,S].brew(minPt, maxPt)
+  if rc.isOk:
+    result = transferImpl[P,S](src=nil, trg=ds, iv=rc.value)
 
-  result = transferImpl[P,S]( # zero length is ok
-    src=nil, trg=ds, iv=Segm[P,S](start: minPt, size: length))
-
-  if high(P) <= maxPt and not ds.lastHigh:
+  if not ds.lastHigh and high(P) <= max(minPt,maxPt):
     ds.lastHigh = true
     if result < maxSegmSize:
       result += scalarOne
@@ -713,18 +756,11 @@ proc reduce*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
   ## If the argument interval `I` is `[low(P),high(P)]` and is fully removed,
   ## the scalar *zero* is returned instead of `high(P)-low(P)+1` (which might
   ## not exisit in `S`.).
-  let length =
-    if maxPt <= minPt:
-      scalarOne
-    elif maxPt < high(P):
-      (maxPt - minPt) + scalarOne
-    else:
-      (high(P) - minPt)
+  let rc = Segm[P,S].brew(minPt, maxPt)
+  if rc.isOk:
+    result = transferImpl[P,S](src=ds, trg=nil, iv=rc.value)
 
-  result = transferImpl[P,S]( # zero length is ok
-    src=ds, trg=nil, iv=Segm[P,S](start: minPt, size: length))
-
-  if high(P) <= maxPt and ds.lastHigh:
+  if ds.lastHigh and high(P) <= max(minPt,maxPt):
     ds.lastHigh = false
     if result < maxSegmSize:
       result += scalarOne
@@ -741,17 +777,11 @@ proc covered*[P,S](ds: IntervalSetRef[P,S]; minPt, maxPt: P): S =
   ## calulate the accumulated points `I` contained in some interval in the
   ## set `ds`. The return value is the same as that for `reduce()` (only
   ## that `ds` is left unchanged, here.)
-  let length =
-    if maxPt <= minPt:
-      scalarOne
-    elif maxPt < high(P):
-      (maxPt - minPt) + scalarOne
-    else:
-      (high(P) - minPt)
+  let rc = Segm[P,S].brew(minPt, maxPt)
+  if rc.isOk:
+    result = ds.coveredImpl(rc.value.left, rc.value.size)
 
-  result = ds.coveredImpl(minPt, length) # zero length is ok
-
-  if high(P) <= maxPt and ds.lastHigh:
+  if ds.lastHigh and high(P) <= max(minPt,maxPt):
     if result < maxSegmSize:
       result += scalarOne
     else:
@@ -1130,15 +1160,19 @@ proc verify*[P,S](
         return err((rbOk,isErrorAdjacent))
       maxPt = iv.last
       if iv.least == low(P) and iv.last == high(P):
+        if ds.lastHigh and 0 < count or not ds.lastHigh and count == 0:
+          return err((rbOk,isErrorTotalLastHigh))
         count += high(P) - low(P)
+      elif iv.last == high(P) and ds.lastHigh:
+        count += (iv.len - 1)
       else:
         count += iv.len
 
     if count != ds.ptsCount:
       noisy.say "***", "verify(fwd)",
         " error=", isErrorTotalMismatch,
-        " count=", ds.ptsCount,
-        " expected=", count
+        " count=", pp[P,S](ds.ptsCount),
+        " expected=",  pp[P,S](count)
       return err((rbOk,isErrorTotalMismatch))
 
   block:
@@ -1158,11 +1192,19 @@ proc verify*[P,S](
         return err((rbOk,isErrorAdjacent))
       minPt = iv.least
       if iv.least == low(P) and iv.last == high(P):
+        if ds.lastHigh and 0 < count or not ds.lastHigh and count == 0:
+          return err((rbOk,isErrorTotalLastHigh))
         count += high(P) - low(P)
+      elif iv.last == high(P) and ds.lastHigh:
+        count += (iv.len - 1)
       else:
         count += iv.len
 
     if count != ds.ptsCount:
+      noisy.say "***", "verify(rev)",
+        " error=", isErrorTotalMismatch,
+        " count=", pp[P,S](ds.ptsCount),
+        " expected=",  pp[P,S](count)
       return err((rbOk,isErrorTotalMismatch))
 
   ok()
