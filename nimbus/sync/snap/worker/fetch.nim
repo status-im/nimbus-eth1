@@ -186,45 +186,70 @@ proc fetchStop*(sp: WorkerBuddy) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetch*(peer: WorkerBuddy) {.async.} =
+proc fetch*(sp: WorkerBuddy) {.async.} =
+  ## Concurrently fetch account data. The data are fetched from `sp.peer` where
+  ## `sp` is the argument descriptor. Currently, accounts data are fetched but
+  ## not further processed (i.e. discarded.)
+  ##
+  ## The accounts requested depend on
+  ## * the currrent state root `sp.ctrl.stateRoot`,
+  ## * an account list `accTab(stateRoot)` depending on the current state root.
+  ##
+  ## The account list keeps track of account ranges already requested. It is
+  ## shared among  all instances of `fetch()` (sharing the same `ds`
+  ## descriptor.) So the accounts requested for a shared accounts list are
+  ## mutually exclusive.
+  ##
+  ## Currently the accounts list to retrieve by `accTab()` is implemented as
+  ## follows.
+  ## * For each state root there is a separate accounts list.
+  ## * If the state root changes and there is no account list yet, create a
+  ##   new one.
+  ## * Account ranges are fetched from an accoiunts list with increasing values
+  ##   starting at a (typically positive) `pivot` value. The fetch wraps around
+  ##   when the highest values are exhausted. This `pivot` value is increased
+  ##   with each new accounts list (derived from the last used accounts list.)
+  ## * Accounts list are kept in a LRU table and automatically cleared. The
+  ##   size of the  LRU table is set to `sp.ns.buddiesMax`, the maximal number
+  ##   of workers or peers.
 
-  trace "Fetching from peer", peer, ctrlState=peer.ctrl.state
-  peer.tickerStartPeer()
+  trace "Fetching from peer", peer=sp, ctrlState=sp.ctrl.state
+  sp.tickerStartPeer()
 
   var
-    stateRoot = peer.ctrl.stateRoot.get
-    accTab = peer.getAccTab(stateRoot)
+    stateRoot = sp.ctrl.stateRoot.get
+    accTab = sp.getAccTab(stateRoot)
 
-  while not peer.ctrl.stopped:
+  while not sp.ctrl.stopped:
 
     if not accTab.haveAccRange():
-      trace "Nothing more to sync from this peer", peer
+      trace "Nothing more to sync from this peer", peer=sp
       while not accTab.haveAccRange():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
-    if peer.ctrl.stateRoot.isNone:
-      trace "No current state root for this peer", peer
-      while not peer.ctrl.stopped and
+    if sp.ctrl.stateRoot.isNone:
+      trace "No current state root for this peer", peer=sp
+      while not sp.ctrl.stopped and
             accTab.haveAccRange() and
-            peer.ctrl.stateRoot.isNone:
+            sp.ctrl.stateRoot.isNone:
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    if stateRoot != peer.ctrl.stateRoot.get:
-      stateRoot = peer.ctrl.stateRoot.get
-      accTab = peer.getAccTab(stateRoot)
-      peer.ctrl.stopped = false
+    if stateRoot != sp.ctrl.stateRoot.get:
+      stateRoot = sp.ctrl.stateRoot.get
+      accTab = sp.getAccTab(stateRoot)
+      sp.ctrl.stopped = false
 
-    if peer.ctrl.stopRequest:
-      trace "Pausing sync until we get a new state root", peer
-      while not peer.ctrl.stopped and
+    if sp.ctrl.stopRequest:
+      trace "Pausing sync until we get a new state root", peer=sp
+      while not sp.ctrl.stopped and
             accTab.haveAccRange() and
-            peer.ctrl.stateRoot.isSome and
-            stateRoot == peer.ctrl.stateRoot.get:
+            sp.ctrl.stateRoot.isSome and
+            stateRoot == sp.ctrl.stateRoot.get:
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    if peer.ctrl.stopped:
+    if sp.ctrl.stopped:
       continue
 
     # Get a new interval, a range of accounts to visit
@@ -235,7 +260,7 @@ proc fetch*(peer: WorkerBuddy) {.async.} =
       rc.value
 
     # Fetch data for this interval, function returned the range covered
-    let rc = await peer.fetchAccounts(stateRoot, iv)
+    let rc = await sp.fetchAccounts(stateRoot, iv)
     if rc.isErr:
       accTab.putAccRange(iv) # fail => interval back to pool
     elif rc.value.maxPt < iv.maxPt:
@@ -244,8 +269,8 @@ proc fetch*(peer: WorkerBuddy) {.async.} =
 
   # while end
 
-  trace "No more sync available from this peer", peer
-  peer.tickerStopPeer()
+  trace "No more sync available from this peer", peer=sp
+  sp.tickerStopPeer()
 
 # ------------------------------------------------------------------------------
 # End

@@ -140,7 +140,7 @@ proc toSI*(num: SomeUnsignedInt): string =
       #           <no-limit-here>                 <multiplier>   <symbol>
       (                           1000_000_000_000_000_000_000f64, 'z')
 
-  if num < 100:
+  if num < 1000:
     return $num
 
   block checkRange:
