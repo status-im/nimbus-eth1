@@ -27,6 +27,7 @@ type
   FetchEx = ref object of WorkerFetchBase
     accTab: AccLruCache             ## Global worker data
     quCount: uint64                 ## Count visited roots
+    lastPivot: LeafItem             ## Used for calculating pivots
 
   AccTabEntryRef = ref object
     ## Global worker table
@@ -40,7 +41,13 @@ logScope:
   topics = "snap-fetch"
 
 const
-  accRangeMaxLen = (high(LeafItem) - low(LeafItem)) div 1000
+  accRangeMaxLen = ##\
+    ## ask for that many accounts at once (not the range is sparse)
+    (high(LeafItem) - low(LeafItem)) div 1000
+
+  pivotAccIncrement = ##\
+    ## increment when `lastPivot` would stay put
+    10_000_000.u256
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -75,31 +82,34 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
       return rc.value
 
   # Calculate some new start address for the range fetcher
-  var start: LeafItem
   while true:
     # Derive pivot from last interval set in table
     let rc = sp.ns.fetchEx.accTab.last
     if rc.isErr:
       break # no more => stop
     # Check last interval
-    let blkRc = rc.value.data.avail.le(high(LeafItem))
+    let blkRc = rc.value.data.avail.le() # rightmost interval
     if blkRc.isErr:
       # Delete useless interval set, repeat
       sp.ns.fetchEx.accTab.del(rc.value.key)
       continue
-    if blkRc.value.minPt < high(LeafItem) - accRangeMaxLen:
-      # Start after somewhere in the middle of the last block
-      start = blkRc.value.minPt + accRangeMaxLen
-    else:
-      # Otherwise start at 0
-      discard
+    # use increasing `pivot` values
+    if sp.ns.fetchEx.lastPivot < blkRc.value.minPt:
+      sp.ns.fetchEx.lastPivot = blkRc.value.minPt
+      break
+    if sp.ns.fetchEx.lastPivot < high(LeafItem) - pivotAccIncrement:
+      sp.ns.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
+      break
+    # Otherwise start at 0
+    sp.ns.fetchEx.lastPivot = 0.to(LeafItem)
     break
 
   let accRange = AccTabEntryRef(
-    pivot: start,
+    pivot: sp.ns.fetchEx.lastPivot,
     avail: LeafRangeSet.init())
 
-  trace "New accounts list for syncing", peer=sp, stateRoot=key, pivot=start
+  trace "New accounts list for syncing",
+    peer=sp, stateRoot=key, pivot=sp.ns.fetchEx.lastPivot
 
   # Statistics
   sp.ns.fetchEx.quCount.inc
@@ -252,6 +262,9 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
     if sp.ctrl.stopped:
       continue
 
+    # Rotate LRU table
+    accTab = sp.getAccTab(stateRoot)
+
     # Get a new interval, a range of accounts to visit
     let iv = block:
       let rc = accTab.fetchAccRange()
@@ -259,7 +272,7 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
         continue
       rc.value
 
-    # Fetch data for this interval, function returned the range covered
+    # Fetch data for this interval, `fetchAccounts()` returns the range covered
     let rc = await sp.fetchAccounts(stateRoot, iv)
     if rc.isErr:
       accTab.putAccRange(iv) # fail => interval back to pool

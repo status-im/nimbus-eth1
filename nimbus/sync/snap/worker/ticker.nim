@@ -42,7 +42,7 @@ type
     peersActive:  int
     statsCb:      TickerStatsUpdater
     logTicker:    TimerCallback
-    tick:         uint64 # 58494241735y when ticking 10 times a second
+    tick:         uint64 # more than 5*10^11y before wrap when ticking every sec
 
 const
   defaultTickerStartDelay = 100.milliseconds

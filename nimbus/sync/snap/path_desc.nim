@@ -54,6 +54,9 @@ proc to*(lp: LeafItem; T: type LeafItemData): T =
 proc to*(data: LeafItemData; T: type LeafItem): T =
   UInt256.fromBytesBE(data).T
 
+proc to*(n: SomeUnsignedInt; T: type LeafItem): T =
+  n.u256.T
+
 proc to*(hash: UInt256; T: type LeafItem): T =
   hash.T
 
