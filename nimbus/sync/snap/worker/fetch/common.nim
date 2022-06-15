@@ -10,7 +10,6 @@
 # except according to those terms.
 
 import
-  std/[sets, sequtils],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
@@ -41,8 +40,6 @@ type
     leafRanges:  LeafRangeSet
     accounts:    AccountsStats
     snapCounter: UInt256
-    trieCounter: UInt256
-    trieQuLen:   uint
     logTicker:   TimerCallback
     tick:        uint64 # 58494241735y when ticking 10 times a second
 
@@ -61,9 +58,7 @@ proc runLogTicker(sf: FetchEx) {.gcsafe.} =
   info "Sync accounts progress",
     tick = sf.tick.toSI,
     accounts = sf.accounts.counted,
-    snap = sf.snapCounter.toPc256,
-    trie = sf.trieCounter.toPc256,
-    trieQuLen = sf.trieQuLen.toSI
+    snap = sf.snapCounter.toPc256
   sf.tick.inc
   sf.setLogTicker(Moment.fromNow(tickerLogInterval))
 
@@ -160,21 +155,9 @@ proc putSlice*(sp: WorkerBuddy, iv: LeafRange) =
 proc countSnapSlice*(sp: WorkerBuddy; iv: LeafRange) =
   sp.ns.fetchEx.snapCounter += iv.len
 
-proc countTrieSlice*(sp: WorkerBuddy; iv: LeafRange) =
-  sp.ns.fetchEx.trieCounter += iv.len
-
-
-proc accountsInc*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
+proc countAccounts*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
   sp.ns.fetchEx.accounts.counted += nAcc
   sp.ns.fetchEx.accounts.bytes += bytes
-
-proc accountsDec*(sp: WorkerBuddy; bytes: SomeInteger; nAcc:SomeInteger = 1) =
-  sp.ns.fetchEx.accounts.counted -= nAcc
-  sp.ns.fetchEx.accounts.bytes -= bytes
-
-
-proc `trieQueueLen=`*(sp: WorkerBuddy; value: int) =
-  sp.ns.fetchEx.trieQuLen = value.uint
 
 # ------------------------------------------------------------------------------
 # End

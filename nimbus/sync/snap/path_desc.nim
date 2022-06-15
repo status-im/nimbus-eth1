@@ -30,15 +30,15 @@ type
     ## Serialisation of `LeafItem`
     array[32,byte]
 
+# [
   InteriorPath* = object
-    ## Path to an interior node in an Ethereum hexary trie.  This is a sequence
-    ## of 0 to 64 hex digits.  0 digits means the root node, and 64 hex digits
-    ## means a leaf node whose path hasn't been converted to `LeafItem` yet.
-    bytes: LeafItemData
-    numDigits: byte
+    ## Path to an interior node in an Ethereum hexary trie.
+    bytes: LeafItemData ## at most 64 nibbles (unused nibbles must be zero)
+    nDigits: byte       ## left prefix length, number of nibbles
 
-const
-   interiorPathMaxDepth = 2 * sizeof(LeafItemData)
+#const
+#   interiorPathMaxDepth = 2 * sizeof(LeafItemData)
+#]#
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -50,11 +50,12 @@ proc to*(lp: LeafItem; T: type LeafItemData): T =
 proc to*(data: LeafItemData; T: type LeafItem): T =
   UInt256.fromBytesBE(data).T
 
-proc to*(ip: InteriorPath; T: type LeafItem): T =
-  ip.bytes.to(T)
-
 proc to*(hash: UInt256; T: type LeafItem): T =
   hash.T
+
+#[
+proc to*(ip: InteriorPath; T: type LeafItem): T =
+  ip.bytes.to(T)
 
 proc to*(lp: LeafItem; T: type InteriorPath): T =
   InteriorPath(bytes: lp.to(LeafItemData), numDigits: interiorPathMaxDepth)
@@ -167,6 +168,7 @@ proc `$`*(path: InteriorPath): string =
 
 proc `$`*(paths: (InteriorPath, InteriorPath)): string =
   pathRange(paths[0], paths[1])
+#]#
 
 # ------------------------------------------------------------------------------
 # Public `LeafItem` and `LeafRange` functions

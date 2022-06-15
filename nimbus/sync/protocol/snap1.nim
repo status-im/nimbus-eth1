@@ -262,8 +262,7 @@ proc read(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
     result.storageRoot = rlp.read(typeof(result.storageRoot))
     if result.storageRoot == BLANK_ROOT_HASH:
       raise newException(RlpTypeMismatch,
-        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol"
-      )
+        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
   else:
     rlp.skipElem()
     result.storageRoot = BLANK_ROOT_HASH

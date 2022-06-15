@@ -144,7 +144,7 @@ proc toSI*(num: SomeUnsignedInt): string =
 
 
 func toHex*(hash: Hash256): string =
-  ## Shortcut for buteutils.toHex(hash.data)
+  ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
 
 func `$`*(th: TrieHash|NodeHash): string =

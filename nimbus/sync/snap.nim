@@ -10,7 +10,7 @@
 # except according to those terms.
 
 import
-  std/[hashes, strutils],
+  std/hashes,
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],

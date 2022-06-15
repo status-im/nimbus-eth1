@@ -10,13 +10,13 @@
 # except according to those terms.
 
 import
-  std/[sets, random],
+  # std/[sets, random],
   chronos,
   nimcrypto/keccak,
   stint,
   eth/[common/eth_types, p2p],
   ../../types,
-  ./fetch/[common, fetch_snap, fetch_trie],
+  ./fetch/[common, fetch_snap], # fetch_trie],
   ./worker_desc
 
 {.push raises: [Defect].}
@@ -41,27 +41,23 @@ proc fetchRelease*(ns: Worker) =
 
 proc fetchStart*(sp: WorkerBuddy) =
   ## Initialise `WorkerBuddy` to support `ReplyData.new()` calls.
-  sp.fetchTrieStart()
-
   trace "Supported fetch modes", peer=sp,
-    ctrlState=sp.ctrl.state, trieMode=sp.fetchTrieOk, snapMode=sp.fetchSnapOk
+    ctrlState=sp.ctrl.state, snapMode=sp.fetchSnapOk
 
 proc fetchStop*(sp: WorkerBuddy) =
   ## Clean up for this peer
-  sp.fetchTrieStop()
+  discard
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc fetch*(sp: WorkerBuddy) {.async.} =
+
   var stateRoot = sp.ctrl.stateRoot.get
   trace "Syncing from stateRoot", peer=sp, stateRoot
 
-  while true:
-    if not sp.fetchTrieOk and not sp.fetchSnapOk:
-      trace "No more sync available from this peer", peer=sp
-      return
+  while sp.fetchSnapOk: # sp.fetchTrieOk or sp.fetchSnapOk:
 
     if not sp.hasSlice():
       trace "Nothing more to sync from this peer", peer=sp
@@ -71,7 +67,7 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
     if sp.ctrl.stateRoot.isNone:
       trace "No current state root for this peer", peer=sp
       while sp.ctrl.stateRoot.isNone and
-            (sp.fetchTrieOk or sp.fetchSnapOk) and
+            sp.fetchSnapOk and # (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
@@ -83,28 +79,21 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
 
     if sp.ctrl.stopRequest:
       trace "Pausing sync until we get a new state root", peer=sp
-      while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
-            (sp.fetchTrieOk or sp.fetchSnapOk) and
+      while sp.ctrl.stateRoot.isSome and
+            stateRoot == sp.ctrl.stateRoot.get and
+            sp.fetchSnapOk and # (sp.fetchTrieOk or sp.fetchSnapOk) and
             sp.hasSlice():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    # Mix up different slice modes, because when connecting to static nodes one
-    # mode or the other tends to dominate, which makes the mix harder to test.
-    var allowSnap = true
-    if sp.fetchSnapOk and sp.fetchTrieOk:
-      if rand(99) < 50:
-        allowSnap = false
-
-    if sp.fetchSnapOk and allowSnap:
+    if sp.fetchSnapOk: # and allowSnap:
       let leafRange = sp.getSlice.value
       trace "GetAccountRange segment", peer=sp, leafRange, stateRoot
       await sp.fetchSnap(stateRoot, leafRange)
 
-    elif sp.fetchTrieOk:
-      let leafRange = sp.getSlice.value
-      trace "GetNodeData segment", peer=sp, leafRange, stateRoot
-      await sp.fetchTrie(stateRoot, leafRange)
+  # while end
+
+  trace "No more sync available from this peer", peer=sp
 
 # ------------------------------------------------------------------------------
 # End
