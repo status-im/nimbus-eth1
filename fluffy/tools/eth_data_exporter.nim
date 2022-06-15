@@ -6,8 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 # Tool to download chain history data from local node, and save it to the json
-# file.
-# Data of each block is rlp encoded list of: 
+# file or sqlite database.
+# In case of json:
+# Data of each block is rlp encoded list of:
 # [blockHeader, [block_transactions, block_uncles], block_receipts]
 # Json file has following format:
 # {
@@ -18,7 +19,11 @@
 #   ...,
 #   ...,
 # }
-#
+# In case of sqlite:
+# Data is saved in format friendly to history network i.e one tablse with 3
+# columns: contentid, contentkey, content.
+# Such format enables queries to quickly find content in range of some node
+# which makes it possible to offer content to nodes in bulk.
 #
 
 {.push raises: [Defect].}
@@ -31,7 +36,9 @@ import
   faststreams, chronicles,
   eth/[common, rlp], chronos,
   eth/common/eth_types_json_serialization,
-  ../../premix/downloader
+  ./seed_db,
+  ../../premix/downloader,
+  ../network/history/history_content
 
 proc defaultDataDir*(): string =
   let dataDir = when defined(windows):
@@ -45,9 +52,12 @@ proc defaultDataDir*(): string =
 
 const
   defaultDataDirDesc = defaultDataDir()
-  defaultFileName = "eth-history-data.json"
+  defaultFileName = "eth-history-data"
 
 type
+  Mode* = enum
+    Json, Db
+
   ExporterConf* = object
     logLevel* {.
       defaultValue: LogLevel.INFO
@@ -70,14 +80,32 @@ type
     filename* {.
       desc: "default name of the file with history data"
       defaultValue: defaultFileName
+      defaultValueDesc: $defaultFileName
       name: "filename" .}: string
+    mode* {.
+      desc: "default mode of data export"
+      defaultValue: Json
+      name: "mode" .}: Mode
 
   DataRecord = object
     rlp: string
     number: uint64
 
+proc parseCmdArg*(T: type Mode, p: TaintedString): T
+    {.raises: [Defect, ConfigurationError].} =
+  if p == "db":
+    return Db
+  elif p == "json":
+    return Json
+  else:
+    let msg = "Provided mode: " & p & " is not a valid. Should be `json` or `db`"
+    raise newException(ConfigurationError, msg)
+
+proc completeCmdArg*(T: type Mode, val: TaintedString): seq[string] =
+  return @[]
+
 proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect].} =
-  let 
+  let
     enc = rlp.encodeList(blck.header, blck.body, blck.receipts)
     asHex = to0xHex(enc)
     dataRecord = DataRecord(rlp: asHex, number: cast[uint64](blck.header.blockNumber))
@@ -92,14 +120,20 @@ proc downloadBlock(i: uint64): Block =
     # which is defult port of geth json rpc server
     return requestBlock(num, flags = {DownloadReceipts})
   except CatchableError as e:
-    fatal "Error while requesting Block", error = e.msg
+    fatal "Error while requesting Block", error = e.msg, number = i
     quit 1
 
 proc createAndOpenFile(config: ExporterConf): OutputStreamHandle =
-  # Creates directory and file specified in config, if file already exists 
+  # Creates directory and file specified in config, if file already exists
   # program is aborted with info to user, to avoid losing data
 
-  let filePath = config.dataDir / config.filename
+  let fileName: string =
+    if not config.filename.endsWith(".json"):
+      config.filename & ".json"
+    else:
+      config.filename
+
+  let filePath = config.dataDir / fileName
 
   if isFile(filePath):
     fatal "File under provided path already exists and would be overwritten",
@@ -120,7 +154,7 @@ proc createAndOpenFile(config: ExporterConf): OutputStreamHandle =
     fatal "Error occurred while opening the file", error = e.msg
     quit 1
 
-proc run(config: ExporterConf) =
+proc writeToJson(config: ExporterConf) =
   let fh = createAndOpenFile(config)
 
   try:
@@ -140,6 +174,37 @@ proc run(config: ExporterConf) =
     except IOError as e:
       fatal "Error occoured while closing file", error = e.msg
       quit 1
+
+proc writeToDb(config: ExporterConf) =
+  let db = SeedDb.new(distinctBase(config.dataDir), config.filename)
+  defer:
+    db.close()
+
+  for i in config.initialBlock..config.endBlock:
+    let blck = downloadBlock(i)
+    let blockHash = blck.header.blockHash()
+    let contentKeyType = ContentKeyType(chainId: 1, blockHash: blockHash)
+    let headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
+    let bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
+    let receiptsKey = encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
+
+    db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode[BlockHeader](blck.header))
+
+    # No need to seed empty stuff into database
+    if len(blck.body.transactions) > 0 or len(blck.body.uncles) > 0:
+      db.put(bodyKey.toContentId(), bodyKey.asSeq(), rlp.encode[BlockBody](blck.body))
+
+    if len(blck.receipts) > 0:
+      db.put(receiptsKey.toContentId(), receiptsKey.asSeq(), rlp.encode[seq[Receipt]](blck.receipts))
+
+  info "Data successfuly written to db"
+
+proc run(config: ExporterConf) =
+  case config.mode
+  of Json:
+    writeToJson(config)
+  of Db:
+    writeToDb(config)
 
 when isMainModule:
   {.pop.}
