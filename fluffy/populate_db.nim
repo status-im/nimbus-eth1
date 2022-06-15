@@ -18,7 +18,7 @@ import
   ./network/wire/portal_protocol,
   ./network/history/history_content
 
-export results
+export results, tables
 
 # Helper calls to, offline, populate the database with the current existing json
 # files with block data. Might move to some other storage format later on.

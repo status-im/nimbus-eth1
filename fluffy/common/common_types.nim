@@ -11,6 +11,8 @@ import
   ssz_serialization/types,
   stew/byteutils, nimcrypto/hash
 
+export hash
+
 type
   ByteList* = List[byte, 2048]
   Bytes2* = array[2, byte]
