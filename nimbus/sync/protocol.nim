@@ -8,8 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+when defined(legacy_eth66_enabled):
+  import ./protocol/eth66 as proto_eth
+  type eth* = eth66
+else:
+  import ./protocol/eth67 as proto_eth
+  type eth* = eth67
+
 import
-  ./protocol/eth66 as proto_eth,
+  #./protocol/eth67 as proto_eth
   ./protocol/snap1 as proto_snap
 
 export
@@ -17,7 +24,7 @@ export
   proto_snap
 
 type
-  eth* = eth66
+  #eth* = eth67
   snap* = snap1
 
 # End

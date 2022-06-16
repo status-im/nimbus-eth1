@@ -10,23 +10,164 @@
 # except according to those terms.
 
 import
-  std/[sets, random],
   chronos,
-  nimcrypto/keccak,
-  stint,
   eth/[common/eth_types, p2p],
+  nimcrypto/keccak,
+  stew/keyed_queue,
+  stint,
+  ../../../utils/interval_set,
   ../../types,
   ../path_desc,
-  ./fetch/[common, fetch_snap, fetch_trie],
-  ./worker_desc
+  ./fetch/fetch_accounts,
+  "."/[ticker, worker_desc]
 
 {.push raises: [Defect].}
 
-logScope:
-  topics = "snap fetch"
+type
+  FetchEx = ref object of WorkerFetchBase
+    accTab: AccLruCache             ## Global worker data
+    quCount: uint64                 ## Count visited roots
+    lastPivot: LeafItem             ## Used for calculating pivots
 
-# Note: To test disabling snap (or trie), modify `fetchTrieOk` or
-# `fetchSnapOk` where those are defined.
+  AccTabEntryRef = ref object
+    ## Global worker table
+    avail: LeafRangeSet             ## Accounts to visit (organised as ranges)
+    pivot: LeafItem                 ## where to to start fetching from
+
+  AccLruCache =
+    KeyedQueue[TrieHash,AccTabEntryRef]
+
+logScope:
+  topics = "snap-fetch"
+
+const
+  accRangeMaxLen = ##\
+    ## ask for that many accounts at once (not the range is sparse)
+    (high(LeafItem) - low(LeafItem)) div 1000
+
+  pivotAccIncrement = ##\
+    ## increment when `lastPivot` would stay put
+    10_000_000.u256
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc withMaxLen(iv: LeafRange): LeafRange =
+  ## Reduce accounts interval to maximal size
+  if 0 < iv.len and iv.len < accRangeMaxLen:
+    iv
+  else:
+    LeafRange.new(iv.minPt, iv.minPt + (accRangeMaxLen - 1).u256)
+
+proc fetchEx(ns: Worker): FetchEx =
+  ## Getter
+  ns.fetchBase.FetchEx
+
+proc fetchEx(sp: WorkerBuddy): FetchEx =
+  ## Getter
+  sp.ns.fetchEx
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
+  ## Fetch LRU table item, create a new one if missing.
+  # fetch existing table (if any)
+  block:
+    let rc = sp.ns.fetchEx.accTab.lruFetch(key)
+    if rc.isOk:
+      # Item was moved to the end of queue
+      return rc.value
+
+  # Calculate some new start address for the range fetcher
+  while true:
+    # Derive pivot from last interval set in table
+    let rc = sp.ns.fetchEx.accTab.last
+    if rc.isErr:
+      break # no more => stop
+    # Check last interval
+    let blkRc = rc.value.data.avail.le() # rightmost interval
+    if blkRc.isErr:
+      # Delete useless interval set, repeat
+      sp.ns.fetchEx.accTab.del(rc.value.key)
+      continue
+    # use increasing `pivot` values
+    if sp.ns.fetchEx.lastPivot < blkRc.value.minPt:
+      sp.ns.fetchEx.lastPivot = blkRc.value.minPt
+      break
+    if sp.ns.fetchEx.lastPivot < high(LeafItem) - pivotAccIncrement:
+      sp.ns.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
+      break
+    # Otherwise start at 0
+    sp.ns.fetchEx.lastPivot = 0.to(LeafItem)
+    break
+
+  let accRange = AccTabEntryRef(
+    pivot: sp.ns.fetchEx.lastPivot,
+    avail: LeafRangeSet.init())
+
+  trace "New accounts list for syncing",
+    peer=sp, stateRoot=key, pivot=sp.ns.fetchEx.lastPivot
+
+  # Statistics
+  sp.ns.fetchEx.quCount.inc
+
+  # Pre-filled with the largest possible interval
+  discard accRange.avail.merge(low(LeafItem),high(LeafItem))
+
+  # Append and curb LRU table as needed
+  return sp.ns.fetchEx.accTab.lruAppend(key, accRange, sp.ns.buddiesMax)
+
+
+proc fetchAccRange(atb: AccTabEntryRef): Result[LeafRange,void] =
+  ## Fetch an interval from the account range list. Use the `atb.pivot` value
+  ## as a start entry to fetch data from, wrapping around if necessary.
+  block:
+    # Check whether there the start point is in the middle of an interval
+    let rc = atb.avail.le(atb.pivot)
+    if rc.isOk:
+      if atb.pivot <= rc.value.maxPt:
+        let iv = LeafRange.new(atb.pivot, rc.value.maxPt)
+        discard atb.avail.reduce(iv)
+        return ok(iv)
+
+  block:
+    # Take the next interval to the right
+    let rc = atb.avail.ge(atb.pivot)
+    if rc.isOk:
+      let iv = rc.value.withMaxLen
+      discard atb.avail.reduce(iv)
+      return ok(iv)
+
+  # Otherwise wrap around
+  let rc = atb.avail.ge()
+  if rc.isOk:
+    let iv = rc.value.withMaxLen
+    discard atb.avail.reduce(iv)
+    return ok(iv)
+
+  err()
+
+
+proc putAccRange(atb: AccTabEntryRef; iv: LeafRange) =
+  discard atb.avail.merge(iv)
+
+proc putAccRange(atb: AccTabEntryRef; a, b: LeafItem) =
+  discard atb.avail.merge(a, b)
+
+
+proc haveAccRange(atb: AccTabEntryRef): bool =
+  0 < atb.avail.chunks
+
+
+proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
+  result.totalQueues = ns.fetchEx.quCount
+  for it in ns.fetchEx.accTab.nextValues:
+    if 0 < it.avail.chunks:
+      result.avFillFactor += it.avail.freeFactor
+      result.activeQueues.inc
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -34,82 +175,115 @@ logScope:
 
 proc fetchSetup*(ns: Worker) =
   ## Global set up
-  ns.commonSetup()
+  ns.fetchBase = FetchEx()
+  ns.fetchEx.accTab.init(ns.buddiesMax)
+  ns.tickerSetup(cb = tickerStats)
 
 proc fetchRelease*(ns: Worker) =
   ## Global clean up
-  ns.commonRelease()
+  ns.tickerRelease()
+  ns.fetchBase = nil
 
 proc fetchStart*(sp: WorkerBuddy) =
-  ## Initialise `WorkerBuddy` to support `ReplyData.new()` calls.
-  sp.fetchTrieStart()
-
-  trace "Supported fetch modes", peer=sp,
-    ctrlState=sp.ctrl.state, trieMode=sp.fetchTrieOk, snapMode=sp.fetchSnapOk
+  ## Initialise fetching for particular peer
+  discard
 
 proc fetchStop*(sp: WorkerBuddy) =
   ## Clean up for this peer
-  sp.fetchTrieStop()
+  discard
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc fetch*(sp: WorkerBuddy) {.async.} =
-  var stateRoot = sp.ctrl.stateRoot.get
-  trace "Syncing from stateRoot", peer=sp, stateRoot
+  ## Concurrently fetch account data. The data are fetched from `sp.peer` where
+  ## `sp` is the argument descriptor. Currently, accounts data are fetched but
+  ## not further processed (i.e. discarded.)
+  ##
+  ## The accounts requested depend on
+  ## * the currrent state root `sp.ctrl.stateRoot`,
+  ## * an account list `accTab(stateRoot)` depending on the current state root.
+  ##
+  ## The account list keeps track of account ranges already requested. It is
+  ## shared among  all instances of `fetch()` (sharing the same `ds`
+  ## descriptor.) So the accounts requested for a shared accounts list are
+  ## mutually exclusive.
+  ##
+  ## Currently the accounts list to retrieve by `accTab()` is implemented as
+  ## follows.
+  ## * For each state root there is a separate accounts list.
+  ## * If the state root changes and there is no account list yet, create a
+  ##   new one.
+  ## * Account ranges are fetched from an accoiunts list with increasing values
+  ##   starting at a (typically positive) `pivot` value. The fetch wraps around
+  ##   when the highest values are exhausted. This `pivot` value is increased
+  ##   with each new accounts list (derived from the last used accounts list.)
+  ## * Accounts list are kept in a LRU table and automatically cleared. The
+  ##   size of the  LRU table is set to `sp.ns.buddiesMax`, the maximal number
+  ##   of workers or peers.
 
-  while true:
-    if not sp.fetchTrieOk and not sp.fetchSnapOk:
-      trace "No more sync available from this peer", peer=sp
-      return
+  trace "Fetching from peer", peer=sp, ctrlState=sp.ctrl.state
+  sp.tickerStartPeer()
 
-    if not sp.hasSlice():
+  var
+    stateRoot = sp.ctrl.stateRoot.get
+    accTab = sp.getAccTab(stateRoot)
+
+  while not sp.ctrl.stopped:
+
+    if not accTab.haveAccRange():
       trace "Nothing more to sync from this peer", peer=sp
-      while not sp.hasSlice():
+      while not accTab.haveAccRange():
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
 
     if sp.ctrl.stateRoot.isNone:
       trace "No current state root for this peer", peer=sp
-      while sp.ctrl.stateRoot.isNone and
-            (sp.fetchTrieOk or sp.fetchSnapOk) and
-            sp.hasSlice():
+      while not sp.ctrl.stopped and
+            accTab.haveAccRange() and
+            sp.ctrl.stateRoot.isNone:
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
     if stateRoot != sp.ctrl.stateRoot.get:
-      trace "Syncing from new stateRoot", peer=sp, stateRoot
       stateRoot = sp.ctrl.stateRoot.get
+      accTab = sp.getAccTab(stateRoot)
       sp.ctrl.stopped = false
 
     if sp.ctrl.stopRequest:
       trace "Pausing sync until we get a new state root", peer=sp
-      while sp.ctrl.stateRoot.isSome and stateRoot == sp.ctrl.stateRoot.get and
-            (sp.fetchTrieOk or sp.fetchSnapOk) and
-            sp.hasSlice():
+      while not sp.ctrl.stopped and
+            accTab.haveAccRange() and
+            sp.ctrl.stateRoot.isSome and
+            stateRoot == sp.ctrl.stateRoot.get:
         await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
       continue
 
-    var leafRange: LeafRange
+    if sp.ctrl.stopped:
+      continue
 
-    # Mix up different slice modes, because when connecting to static nodes one
-    # mode or the other tends to dominate, which makes the mix harder to test.
-    var allowSnap = true
-    if sp.fetchSnapOk and sp.fetchTrieOk:
-      if rand(99) < 50:
-        allowSnap = false
+    # Rotate LRU table
+    accTab = sp.getAccTab(stateRoot)
 
-    if sp.fetchSnapOk and allowSnap:
-      discard sp.getSlice(leafRange)
-      trace "GetAccountRange segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
-      await sp.fetchSnap(stateRoot, leafRange)
+    # Get a new interval, a range of accounts to visit
+    let iv = block:
+      let rc = accTab.fetchAccRange()
+      if rc.isErr:
+        continue
+      rc.value
 
-    elif sp.fetchTrieOk:
-      discard sp.getSlice(leafRange)
-      trace "GetNodeData segment", peer=sp,
-        leafRange=pathRange(leafRange.leafLow, leafRange.leafHigh), stateRoot
-      await sp.fetchTrie(stateRoot, leafRange)
+    # Fetch data for this interval, `fetchAccounts()` returns the range covered
+    let rc = await sp.fetchAccounts(stateRoot, iv)
+    if rc.isErr:
+      accTab.putAccRange(iv) # fail => interval back to pool
+    elif rc.value.maxPt < iv.maxPt:
+      # return some unused range
+      accTab.putAccRange(rc.value.maxPt + 1.u256, iv.maxPt)
+
+  # while end
+
+  trace "No more sync available from this peer", peer=sp
+  sp.tickerStopPeer()
 
 # ------------------------------------------------------------------------------
 # End

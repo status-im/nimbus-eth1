@@ -212,13 +212,13 @@ logScope:
 
 type
   SnapAccount* = object
-    accHash*: LeafPath
+    accHash*: LeafItem
     accBody* {.rlpCustomSerialization.}: Account
 
   SnapAccountProof* = seq[Blob]
 
   SnapStorage* = object
-    slotHash*: LeafPath
+    slotHash*: LeafItem
     slotData*: Blob
 
   SnapStorageProof* = seq[Blob]
@@ -262,8 +262,7 @@ proc read(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
     result.storageRoot = rlp.read(typeof(result.storageRoot))
     if result.storageRoot == BLANK_ROOT_HASH:
       raise newException(RlpTypeMismatch,
-        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol"
-      )
+        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
   else:
     rlp.skipElem()
     result.storageRoot = BLANK_ROOT_HASH
@@ -295,14 +294,6 @@ proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   else:
     rlpWriter.append(account.codeHash)
 
-# RLP serialisation for `LeafPath`.
-
-template read(rlp: var Rlp, T: type LeafPath): T =
-  rlp.read(array[sizeof(LeafPath().toBytes), byte]).toLeafPath
-
-template append(rlpWriter: var RlpWriter, leafPath: LeafPath) =
-  rlpWriter.append(leafPath.toBytes)
-
 
 p2pProtocol snap1(version = 1,
                   rlpxName = "snap",
@@ -313,11 +304,10 @@ p2pProtocol snap1(version = 1,
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getAccountRange(peer: Peer, rootHash: Hash256,
                          # Next line differs from spec to match Geth.
-                         origin: LeafPath, limit: LeafPath,
+                         origin: LeafItem, limit: LeafItem,
                          responseBytes: uint64) =
       trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
-      # traceRecvReceived "GetAccountRange (0x00)", peer,
-        accountRange=pathRange(origin, limit),
+        accountRange=leafRangePp(origin, limit),
         stateRoot=($rootHash), responseBytes
 
       trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer, sent=0
@@ -331,7 +321,7 @@ p2pProtocol snap1(version = 1,
     # User message 0x02: GetStorageRanges.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getStorageRanges(peer: Peer, rootHash: Hash256,
-                          accounts: openArray[LeafPath],
+                          accounts: openArray[LeafItem],
                           # Next line differs from spec to match Geth.
                           origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =

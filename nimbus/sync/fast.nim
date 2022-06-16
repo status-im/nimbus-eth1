@@ -20,7 +20,7 @@ import
 {.push raises:[Defect].}
 
 logScope:
-  topics = "fast sync"
+  topics = "fast-sync"
 
 const
   minPeersToStartSync* = 2 # Wait for consensus of at least this

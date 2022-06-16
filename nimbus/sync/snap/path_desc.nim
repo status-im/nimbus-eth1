@@ -10,71 +10,77 @@
 # distributed except according to those terms.
 
 import
-  eth/[common/eth_types, p2p],
+  std/math,
+  eth/common/eth_types,
   stew/byteutils,
-  stint
+  stint,
+  ../../utils/interval_set,
+  ../types
 
 {.push raises: [Defect].}
 
 type
+  LeafItem* =
+    distinct UInt256
+
+  LeafRange* = ##\
+    ## Interval `[minPt,maxPt]` of` LeafItem` elements, can be managed in an
+    ## `IntervalSet` data type.
+    Interval[LeafItem,UInt256]
+
+  LeafRangeSet* = ##\
+    ## Managed structure to handle non-adjacent `LeafRange` intervals
+    IntervalSetRef[LeafItem,UInt256]
+
+  LeafItemData* = ##\
+    ## Serialisation of `LeafItem`
+    array[32,byte]
+
   InteriorPath* = object
-    ## Path to an interior node in an Ethereum hexary trie.  This is a sequence
-    ## of 0 to 64 hex digits.  0 digits means the root node, and 64 digits
-    ## means a leaf node whose path hasn't been converted to `LeafPath` yet.
-    bytes: array[32, byte]
-    numDigits: byte
+    ## Path to an interior node in an Ethereum hexary trie.
+    bytes: LeafItemData ## at most 64 nibbles (unused nibbles must be zero)
+    nDigits: byte       ## left prefix length, number of nibbles
 
-  LeafPath* = object
-    ## Path to a leaf in an Ethereum hexary trie.  Individually, each leaf path
-    ## is a hash, but rather than being the hash of the contents, it's the hash
-    ## of the item's address.  Collectively, these hashes have some 256-bit
-    ## numerical properties: ordering, intervals and meaningful difference.
-    number: UInt256
-
-  LeafRange* = object
-    leafLow*, leafHigh*: LeafPath
-
-const
-   interiorPathMaxDepth = 64
-   leafPathBytes = sizeof(LeafPath().number.toBytesBE)
+#const
+#   interiorPathMaxDepth = 2 * sizeof(LeafItemData)
 
 # ------------------------------------------------------------------------------
-# Public getters
+# Public helpers
 # ------------------------------------------------------------------------------
 
-proc maxDepth*(_: InteriorPath | typedesc[InteriorPath]): int =
-  interiorPathMaxDepth
+proc to*(lp: LeafItem; T: type LeafItemData): T =
+  lp.UInt256.toBytesBE.T
 
-proc depth*(path: InteriorPath): int =
-  path.numDigits.int
+proc to*(data: LeafItemData; T: type LeafItem): T =
+  UInt256.fromBytesBE(data).T
 
-proc digit*(path: InteriorPath, index: int): int =
-  doAssert 0 <= index and index < path.depth
-  let b = path.bytes[index shr 1]
-  (if (index and 1) == 0: (b shr 4) else: (b and 0x0f)).int
+proc to*(n: SomeUnsignedInt; T: type LeafItem): T =
+  n.u256.T
 
-proc low*(_: LeafPath | type LeafPath): LeafPath =
-  LeafPath(number: low(UInt256))
+proc to*(hash: UInt256; T: type LeafItem): T =
+  hash.T
 
-proc high*(_: LeafPath | type LeafPath): LeafPath =
-  LeafPath(number: high(UInt256))
+#[
+proc to*(ip: InteriorPath; T: type LeafItem): T =
+  ip.bytes.to(T)
 
-# ------------------------------------------------------------------------------
-# Public setters
-# ------------------------------------------------------------------------------
+proc to*(lp: LeafItem; T: type InteriorPath): T =
+  InteriorPath(bytes: lp.to(LeafItemData), numDigits: interiorPathMaxDepth)
 
 # ------------------------------------------------------------------------------
 # Public `InteriorPath` functions
 # ------------------------------------------------------------------------------
 
-proc toInteriorPath*(interiorPath: InteriorPath): InteriorPath =
-  interiorPath
+proc maxDepth*(_: InteriorPath | typedesc[InteriorPath]): int =
+  interiorPathMaxDepth
 
-proc toInteriorPath*(leafPath: LeafPath): InteriorPath =
-  doAssert sizeof(leafPath.number.toBytesBE) * 2 == interiorPathMaxDepth
-  doAssert sizeof(leafPath.number.toBytesBE) == sizeof(InteriorPath().bytes)
-  InteriorPath(bytes: leafPath.number.toBytesBE,
-               numDigits: interiorPathMaxDepth)
+proc depth*(ip: InteriorPath): int =
+  ip.numDigits.int
+
+proc digit*(ip: InteriorPath, index: int): int =
+  doAssert 0 <= index and index < ip.depth
+  let b = ip.bytes[index shr 1]
+  (if (index and 1) == 0: (b shr 4) else: (b and 0x0f)).int
 
 proc add*(path: var InteriorPath, digit: byte) =
   doAssert path.numDigits < interiorPathMaxDepth
@@ -94,7 +100,7 @@ proc addPair*(path: var InteriorPath, digitPair: byte) =
     path.bytes[path.numDigits shr 1] = (digitPair shl 4)
 
 proc pop*(path: var InteriorPath) =
-  doAssert path.numDigits >= 1
+  doAssert 0 < path.numDigits
   dec path.numDigits
   path.bytes[path.numDigits shr 1] =
     if (path.numDigits and 1) == 0: 0.byte
@@ -103,6 +109,9 @@ proc pop*(path: var InteriorPath) =
 # ------------------------------------------------------------------------------
 # Public comparison functions for `InteriorPath`
 # ------------------------------------------------------------------------------
+
+proc low*(T: type InteriorPath): T = low(UInt256).to(LeafItem).to(T)
+proc high*(T: type InteriorPath): T = high(UInt256).to(LeafItem).to(T)
 
 proc `==`*(path1, path2: InteriorPath): bool =
   # Paths are zero-padded to the end of the array, so comparison is easy.
@@ -118,21 +127,32 @@ proc `<=`*(path1, path2: InteriorPath): bool =
       return path1.bytes[i] <= path2.bytes[i]
   return true
 
-proc cmp*(path1, path2: InteriorPath): int =
-  # Paths are zero-padded to the end of the array, so comparison is easy.
-  for i in 0 ..< (max(path1.numDigits, path2.numDigits).int + 1) shr 1:
-    if path1.bytes[i] != path2.bytes[i]:
-      return path1.bytes[i].int - path2.bytes[i].int
-  return 0
-
-proc `!=`*(path1, path2: InteriorPath): bool = not(path1 == path2)
 proc `<`*(path1, path2: InteriorPath): bool = not(path2 <= path1)
-proc `>=`*(path1, path2: InteriorPath): bool = path2 <= path1
-proc `>`*(path1, path2: InteriorPath): bool = not(path1 <= path2)
 
-# ------------------------------------------------------------------------------
-# Public string output functions for `LeafPath`
-# ------------------------------------------------------------------------------
+#proc cmp*(path1, path2: InteriorPath): int =
+#  # Paths are zero-padded to the end of the array, so comparison is easy.
+#  for i in 0 ..< (max(path1.numDigits, path2.numDigits).int + 1) shr 1:
+#    if path1.bytes[i] != path2.bytes[i]:
+#      return path1.bytes[i].int - path2.bytes[i].int
+#  return 0
+
+proc prefix*(lp: LeafItem; digits: byte): InteriorPath =
+  ## From the argument item `lp`, return the prefix made up by preserving the
+  ## leading `digit` nibbles (ie. `(digits+1)/2` bytes.)
+  doAssert digits <= interiorPathMaxDepth
+  result = InteriorPath(
+    bytes:     lp.to(LeafItemData),
+    numDigits: digits)
+  let tailInx = (digits + 1) shr 1
+  # reset the tail to zero
+  for inx in tailInx ..< interiorPathMaxDepth:
+    result.bytes[inx] = 0.byte
+  if (digits and 1) != 0: # fix leftlost nibble
+    result.bytes[digits shr 1] = result.bytes[digits shr 1] and 0xf0.byte
+
+proc `in`*(ip: InteriorPath; iv: LeafRange): bool =
+  iv.minPt.prefix(ip.numDigits) <= ip and ip <= iv.maxPt.prefix(ip.numDigits)
+
 
 proc toHex*(path: InteriorPath, withEllipsis = true): string =
   const hexChars = "0123456789abcdef"
@@ -155,63 +175,60 @@ proc `$`*(path: InteriorPath): string =
 
 proc `$`*(paths: (InteriorPath, InteriorPath)): string =
   pathRange(paths[0], paths[1])
+#]#
 
 # ------------------------------------------------------------------------------
-# Public `LeafPath` functions
+# Public `LeafItem` and `LeafRange` functions
 # ------------------------------------------------------------------------------
 
-proc toLeafPath*(leafPath: LeafPath): LeafPath =
-  leafPath
+proc u256*(lp: LeafItem): UInt256 = lp.UInt256
+proc low*(T: type LeafItem): T = low(UInt256).T
+proc high*(T: type LeafItem): T = high(UInt256).T
 
-proc toLeafPath*(interiorPath: InteriorPath): LeafPath =
-  doAssert interiorPath.depth == InteriorPath.maxDepth
-  doAssert sizeof(interiorPath.bytes) * 2 == InteriorPath.maxDepth
-  doAssert sizeof(interiorPath.bytes) == leafPathBytes
-  LeafPath(number: UInt256.fromBytesBE(interiorPath.bytes))
+proc `+`*(a: LeafItem; b: UInt256): LeafItem = (a.u256+b).LeafItem
+proc `-`*(a: LeafItem; b: UInt256): LeafItem = (a.u256-b).LeafItem
+proc `-`*(a, b: LeafItem): UInt256 = (a.u256 - b.u256)
 
-proc toLeafPath*(bytes: array[leafPathBytes, byte]): LeafPath =
-  doAssert sizeof(bytes) == leafPathBytes
-  LeafPath(number: UInt256.fromBytesBE(bytes))
+proc `==`*(a, b: LeafItem): bool = a.u256 == b.u256
+proc `<=`*(a, b: LeafItem): bool = a.u256 <= b.u256
+proc `<`*(a, b: LeafItem): bool = a.u256 < b.u256
 
-proc toBytes*(leafPath: LeafPath): array[leafPathBytes, byte] =
-  doAssert sizeof(LeafPath().number.toBytesBE) == leafPathBytes
-  leafPath.number.toBytesBE
 
-# Note, `{.borrow.}` didn't work for these symbols (with Nim 1.2.12) when we
-# defined `LeafPath = distinct UInt256`.  The `==` didn't match any symbol to
-# borrow from, and the auto-generated `<` failed to compile, with a peculiar
-# type mismatch error.
-proc `==`*(path1, path2: LeafPath): bool = path1.number == path2.number
-proc `!=`*(path1, path2: LeafPath): bool = path1.number != path2.number
-proc `<`*(path1, path2: LeafPath): bool = path1.number < path2.number
-proc `<=`*(path1, path2: LeafPath): bool = path1.number <= path2.number
-proc `>`*(path1, path2: LeafPath): bool = path1.number > path2.number
-proc `>=`*(path1, path2: LeafPath): bool = path1.number >= path2.number
-proc cmp*(path1, path2: LeafPath): int = cmp(path1.number, path2.number)
+# RLP serialisation for `LeafItem`.
+proc read*(rlp: var Rlp, T: type LeafItem): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  rlp.read(LeafItemData).to(T)
 
-proc `-`*(path1, path2: LeafPath): UInt256 =
-  path1.number - path2.number
-proc `+`*(base: LeafPath, step: UInt256): LeafPath =
-  LeafPath(number: base.number + step)
-proc `+`*(base: LeafPath, step: SomeInteger): LeafPath =
-  LeafPath(number: base.number + step.u256)
-proc `-`*(base: LeafPath, step: UInt256): LeafPath =
-  LeafPath(number: base.number - step)
-proc `-`*(base: LeafPath, step: SomeInteger): LeafPath =
-  LeafPath(number: base.number - step.u256)
+proc append*(rlpWriter: var RlpWriter, leafPath: LeafItem) =
+  rlpWriter.append(leafPath.to(LeafItemData))
 
-# ------------------------------------------------------------------------------
-# Public string output functions for `LeafPath`
-# ------------------------------------------------------------------------------
+proc freeFactor*(lrs: LeafRangeSet): float =
+  ## Free factor, ie. `#items-free / 2^256` to be used in statistics
+  if 0 < lrs.total:
+    ((high(LeafItem) - lrs.total).u256 + 1).to(float) / (2.0^256)
+  elif lrs.chunks == 0:
+    1.0
+  else:
+    0.0
 
-proc toHex*(path: LeafPath): string =
-  path.number.toBytesBE.toHex
+# Printing & pretty printing
+proc toHex*(lp: LeafItem): string = lp.to(LeafItemData).toHex
+proc `$`*(lp: LeafItem): string = lp.toHex
 
-proc `$`*(path: LeafPath): string =
-  path.toHex
+proc leafRangePp*(a, b: LeafItem): string =
+  ## Needed for macro generated DSL files like `snap.nim` because the
+  ## `distinct` flavour of `LeafItem` is discarded there.
+  result = "[" & $a
+  if a < b:
+    result &= ',' & (if b < high(LeafItem): $b else: "high")
+  result &= "]"
 
-proc pathRange*(path1, path2: LeafPath): string =
-  path1.toHex & '-' & path2.toHex
+proc `$`*(a, b: LeafItem): string =
+  ## Prettyfied prototype
+  leafRangePp(a,b)
+
+proc `$`*(iv: LeafRange): string =
+  leafRangePp(iv.minPt, iv.maxPt)
 
 # ------------------------------------------------------------------------------
 # End

@@ -21,26 +21,6 @@ these messages happen continuously.  Don't output them and don't waste CPU
 trying.
 
 
-## Sync: Update protocol code to use `BlockHash`, `TxHash`, `NodeHash`
-
-New hash type aliases added and used.  They're not `distinct` because that
-would be disruptive, but perhaps they will be eventually, when code is
-harmonised around using them.
-
-Changes:
-
-- Use `BlockHash` more consistently, to match the rest of the sync code.
-
-- Use `BlockNumber` where currently `uint64` is used in the protocol (and
-  `uint` was used before that, which was 32-bit on 32-bit targets).
-
-- New alias `TxHash` is for transactions and is used in
-  `NewPooledTransactionHashes` and `GetPooledTransactions`.
-
-- New alias `NodeHash` is for trie nodes (or contract bytecode)
-  and is used in `GetNodeData`.
-
-
 ## Sync: Set and update `syncStateRoot` for each peer
 
 State syncing requires the `stateRoot` value of the selected block to sync to.

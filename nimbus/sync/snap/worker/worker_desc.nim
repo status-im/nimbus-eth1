@@ -10,8 +10,11 @@
 # except according to those terms.
 
 import
+  std/[sequtils, strutils],
   eth/[common/eth_types, p2p],
-  stew/[byteutils, keyed_queue, results],
+  nimcrypto/hash,
+  stew/[byteutils, keyed_queue],
+  ../../../constants,
   ../../types
 
 {.push raises: [Defect].}
@@ -21,12 +24,6 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  FetchTrieBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `fetch_trie.nim`
-
-  ReplyDataBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `reply_data.nim`
-
   WorkerBase* = ref object of RootObj
     ## Stub object, to be inherited in file `worker.nim`
 
@@ -61,14 +58,18 @@ type
       ## State root to fetch state for. This changes during sync and is
       ## slightly different for each peer.
     runState:              BuddyRunState
+      ## Access with getters
 
   # -------
 
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  CommonBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `common.nim`
+  WorkerTickerBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `ticker.nim`
+
+  WorkerFetchBase* = ref object of RootObj
+    ## Stub object, to be inherited in file `fetch.nim`
 
   # -------
 
@@ -79,16 +80,19 @@ type
     stats*: WorkerBuddyStats         ## Statistics counters
     ctrl*: WorkerBuddyCtrl           ## Control and state settings
 
-    workerBase*: WorkerBase          ## Opaque object reference
-    replyDataBase*: ReplyDataBase    ## Opaque object reference
-    fetchTrieBase*: FetchTrieBase    ## Opaque object reference
+    workerBase*: WorkerBase          ## Opaque object reference for sub-module
+    # ...
 
   Worker* = ref object of RootObj
     ## Shared state among all peers of a snap syncing node. Will be
-    ## amended/inherited into `WorkerCtx` by the `snap` module.
+    ## amended/inherited into `SnapSyncCtx` by the `snap` module which
+    ## will also manage a list of `WorkerBuddy` objects.
     seenBlock: WorkerSeenBlocks      ## Temporary, debugging, pretty logs
 
-    commonBase*: CommonBase          ## Opaque object reference
+    buddiesMax*: int                 ## Max number of buddies (for LRU caches)
+
+    fetchBase*: WorkerFetchBase      ## Opaque object reference
+    tickerBase*: WorkerTickerBase    ## Opaque object reference
 
 # ------------------------------------------------------------------------------
 # Public Constructor
@@ -188,17 +192,17 @@ proc `stopRequest=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
 
 proc pp*(sn: Worker; bh: BlockHash): string =
   ## Pretty printer for debugging
-  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  let rc = sn.seenBlock.lruFetch(bh.to(Hash256).data)
   if rc.isOk:
     return "#" & $rc.value
-  $bh.untie.data.toHex
+  $bh.to(Hash256).data.toHex
 
 proc pp*(sn: Worker; bh: BlockHash; bn: BlockNumber): string =
   ## Pretty printer for debugging
-  let rc = sn.seenBlock.lruFetch(bh.untie.data)
+  let rc = sn.seenBlock.lruFetch(bh.to(Hash256).data)
   if rc.isOk:
     return "#" & $rc.value
-  "#" & $sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+  "#" & $sn.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
 
 proc pp*(sn: Worker; bhn: HashOrNum): string =
   if not bhn.isHash:
@@ -210,13 +214,22 @@ proc pp*(sn: Worker; bhn: HashOrNum): string =
 
 proc seen*(sn: Worker; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
-  if not sn.seenBlock.lruFetch(bh.untie.data).isOk:
-    discard sn.seenBlock.lruAppend(bh.untie.data, bn, seenBlocksMax)
+  if not sn.seenBlock.lruFetch(bh.to(Hash256).data).isOk:
+    discard sn.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
 
-# -----------
-
-import
-  ../../../../tests/replay/pp_light
+proc pp*(a: MDigest[256]; collapse = true): string =
+  if not collapse:
+    a.data.mapIt(it.toHex(2)).join.toLowerAscii
+  elif a == BLANK_ROOT_HASH:
+    "BLANK_ROOT_HASH"
+  elif a == EMPTY_UNCLE_HASH:
+    "EMPTY_UNCLE_HASH"
+  elif a == EMPTY_SHA3:
+    "EMPTY_SHA3"
+  elif a == ZERO_HASH256:
+    "ZERO_HASH256"
+  else:
+    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
 proc pp*(bh: BlockHash): string =
   bh.Hash256.pp

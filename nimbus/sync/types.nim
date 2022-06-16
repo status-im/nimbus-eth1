@@ -10,6 +10,7 @@
 # distributed except according to those terms.
 
 import
+  std/[math, strutils, hashes],
   eth/common/eth_types,
   nimcrypto/keccak,
   stew/byteutils
@@ -43,7 +44,7 @@ type
     ## `Hash256` type which needs to be converted to `TrieHash`.
 
 # ------------------------------------------------------------------------------
-# Public Constructor
+# Public constructors
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TxHash): T = Hash256().T
@@ -52,35 +53,111 @@ proc new*(T: type BlockHash): T = Hash256().T
 proc new*(T: type TrieHash): T = Hash256().T
 
 # ------------------------------------------------------------------------------
+# Public (probably non-trivial) type conversions
+# ------------------------------------------------------------------------------
+
+proc to*(num: UInt256; T: type float): T =
+  ## Convert to float
+  let mantissaLen = 256 - num.leadingZeros
+  if mantissaLen <= 64:
+    num.truncate(uint64).T
+  else:
+    let exp = mantissaLen - 64
+    (num shr exp).truncate(uint64).T * (2.0 ^ exp)
+
+proc to*(num: SomeInteger; T: type float): T =
+  ## Convert to float
+  num.T
+
+proc to*(w: TrieHash|NodeHash|BlockHash; T: type Hash256): T =
+  ## Get rid of `distinct` harness (needed for `snap1` and `eth1` protocol
+  ## driver access.)
+  w.Hash256
+
+proc to*(w: seq[NodeHash|NodeHash]; T: type seq[Hash256]): T =
+  ## Ditto
+  cast[seq[Hash256]](w)
+
+proc to*(data: Blob; T: type NodeHash): T =
+  ## Convert argument `data` to `NodeHash`
+  keccak256.digest(data).T
+
+proc to*(bh: BlockHash; T: type HashOrNum): T =
+  ## Convert argument blocj hash `bh` to `HashOrNum`
+  T(isHash: true, hash: bh.Hash256)
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc untie*(w: TrieHash|NodeHash|BlockHash): Hash256 =
-  ## Get rid of `distinct`  harness, needed for `snap1` and `eth1` protocol
-  ## driver access.
-  w.Hash256
-
-proc untie*(w: seq[NodeHash|NodeHash]): seq[Hash256] =
-  ## Ditto
-  cast[seq[Hash256]](w)
+proc read*(rlp: var Rlp, T: type TrieHash): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## RLP mixin reader
+  rlp.read(Hash256).T
 
 proc `==`*(a: NodeHash; b: TrieHash): bool = a.Hash256 == b.Hash256
 proc `==`*(a,b: TrieHash): bool {.borrow.}
 proc `==`*(a,b: NodeHash): bool {.borrow.}
 proc `==`*(a,b: BlockHash): bool {.borrow.}
 
-proc toNodeHash*(data: Blob): NodeHash =
-  keccak256.digest(data).NodeHash
-
-proc toHashOrNum*(bh: BlockHash): HashOrNum =
-  HashOrNum(isHash: true, hash: bh.Hash256)
+proc hash*(root: TrieHash): Hash =
+  ## Mixin for `Table` or `keyedQueue`
+  root.to(Hash256).data.hash
 
 # ------------------------------------------------------------------------------
-# Public debugging helpers
+# Public printing and pretty printing
 # ------------------------------------------------------------------------------
+
+proc toPC*(
+    num: float;
+    digitsAfterDot: static[int] = 2;
+    rounding: static[float] = 5.0
+      ): string =
+  ## Convert argument number `num` to percent string with decimal precision
+  ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
+  ## default adjusting the first invisible digit, set `rounding = 0` to disable.
+  const
+    minDigits = digitsAfterDot + 1
+    multiplier = (10 ^ (minDigits + 1)).float
+    roundUp = rounding / 10.0
+  result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
+  result.insert(".", result.len - minDigits)
+
+
+proc toSI*(num: SomeUnsignedInt): string =
+  ## Prints `num` argument value greater than 99 as rounded SI unit.
+  const
+    siUnits = [
+      #                   <limit>                 <multiplier>   <symbol>
+      (                    10_000u64,                     1000f64, 'k'),
+      (                10_000_000u64,                 1000_000f64, 'm'),
+      (            10_000_000_000u64,             1000_000_000f64, 'g'),
+      (        10_000_000_000_000u64,         1000_000_000_000f64, 't'),
+      (    10_000_000_000_000_000u64,     1000_000_000_000_000f64, 'p'),
+      (10_000_000_000_000_000_000u64, 1000_000_000_000_000_000f64, 'e')]
+
+    lastUnit =
+      #           <no-limit-here>                 <multiplier>   <symbol>
+      (                           1000_000_000_000_000_000_000f64, 'z')
+
+  if num < 1000:
+    return $num
+
+  block checkRange:
+    let
+      uNum = num.uint64
+      fRnd = (num.to(float) + 5) * 100
+    for (top, base, sig) in siUnits:
+      if uNum < top:
+        result = (fRnd / base).int.intToStr(3) & $sig
+        break checkRange
+    result = (fRnd / lastUnit[0]).int.intToStr(3) & $lastUnit[1]
+
+  result.insert(".", result.len - 3)
+
 
 func toHex*(hash: Hash256): string =
-  ## Shortcut for buteutils.toHex(hash.data)
+  ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
 
 func `$`*(th: TrieHash|NodeHash): string =
@@ -96,6 +173,10 @@ func `$`*(hashOrNum: HashOrNum): string =
   # It's always obvious which one from the visible length of the string.
   if hashOrNum.isHash: $hashOrNum.hash
   else: $hashOrNum.number
+
+# ------------------------------------------------------------------------------
+# Public debug printing helpers
+# ------------------------------------------------------------------------------
 
 func traceStep*(request: BlocksRequest): string =
   var str = if request.reverse: "-" else: "+"
