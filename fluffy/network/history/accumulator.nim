@@ -217,3 +217,103 @@ proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
     headers[header.blockNumber.truncate(int)] = header
 
   ok(buildAccumulator(headers))
+
+## Calls and helper calls for building header proofs and verifying headers
+## against the Accumulator and the header proofs.
+
+func inCurrentEpoch*(header: BlockHeader, a: Accumulator): bool =
+  let blockNumber = header.blockNumber.truncate(uint64)
+
+  blockNumber > uint64(a.historicalEpochs.len() * epochSize) - 1
+
+func getEpochIndex(header: BlockHeader): uint64 =
+  ## Get the index for the historical epochs
+  header.blockNumber.truncate(uint64) div epochSize
+
+func getHeaderRecordIndex(header: BlockHeader, epochIndex: uint64): uint64 =
+  ## Get the relative header index for the epoch accumulator
+  uint64(header.blockNumber.truncate(uint64) - epochIndex * epochSize)
+
+proc buildProof*(db: AccumulatorDB, header: BlockHeader):
+    Result[seq[Digest], string] =
+  let accumulatorOpt = db.getAccumulator()
+  if accumulatorOpt.isNone():
+    return err("Master accumulator not found in database")
+
+  let
+    accumulator = accumulatorOpt.get()
+    epochIndex = getEpochIndex(header)
+    epochHash = Digest(data: accumulator.historicalEpochs[epochIndex])
+
+    key = ContentKey(
+      contentType: epochAccumulator,
+      epochAccumulatorKey: EpochAccumulatorKey(
+        epochHash: epochHash))
+
+    epochAccumulatorOpt = db.getEpochAccumulator(key.toContentId())
+
+  if epochAccumulatorOpt.isNone():
+    return err("Epoch accumulator not found in database")
+
+  let
+    epochAccumulator = epochAccumulatorOpt.get()
+    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+    # TODO: Implement more generalized `get_generalized_index`
+    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+
+  epochAccumulator.build_proof(gIndex)
+
+func verifyProof*(
+    a: Accumulator, proof: openArray[Digest], header: BlockHeader): bool =
+  let
+    epochIndex = getEpochIndex(header)
+    epochAccumulatorHash = Digest(data: a.historicalEpochs[epochIndex])
+
+    leave = hash_tree_root(header.blockHash())
+    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+
+    # TODO: Implement more generalized `get_generalized_index`
+    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+
+  verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
+
+proc verifyProof*(
+    db: AccumulatorDB, proof: openArray[Digest], header: BlockHeader):
+    Result[void, string] =
+  let accumulatorOpt = db.getAccumulator()
+  if accumulatorOpt.isNone():
+    return err("Master accumulator not found in database")
+
+  if accumulatorOpt.get().verifyProof(proof, header):
+    ok()
+  else:
+    err("Proof verification failed")
+
+proc verifyHeader*(
+    db: AccumulatorDB, header: BlockHeader, proof: Option[seq[Digest]]):
+    Result[void, string] =
+  let accumulatorOpt = db.getAccumulator()
+  if accumulatorOpt.isNone():
+    return err("Master accumulator not found in database")
+
+  let accumulator = accumulatorOpt.get()
+
+  if header.inCurrentEpoch(accumulator):
+    let blockNumber = header.blockNumber.truncate(uint64)
+    let relIndex = blockNumber - uint64(accumulator.historicalEpochs.len()) * epochSize
+
+    if relIndex > uint64(accumulator.currentEpoch.len() - 1):
+      return err("Blocknumber ahead of accumulator")
+
+    if accumulator.currentEpoch[relIndex].blockHash == header.blockHash():
+      ok()
+    else:
+      err("Header not part of canonical chain")
+  else:
+    if proof.isSome():
+      if accumulator.verifyProof(proof.get, header):
+        ok()
+      else:
+        err("Proof verification failed")
+    else:
+      err("Need proof to verify header")
