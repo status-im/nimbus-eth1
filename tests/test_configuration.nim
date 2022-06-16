@@ -179,5 +179,33 @@ proc configurationMain*() =
       check conf.networkParams.config.londonBlock == 1337
       check conf.getBootnodes().len == 0
 
+    test "json-rpc enabled when json-engine api enabled and share same port":
+      let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--rpc-port:8545"])
+      check conf.engineApiEnabled
+      check conf.rpcEnabled
+      check conf.wsEnabled == false
+      check conf.engineApiWsEnabled == false
+
+    test "ws-rpc enabled when ws-engine api enabled and share same port":
+      let conf = makeConfig(@["--engine-api-ws", "--engine-api-ws-port:8546", "--ws-port:8546"])
+      check conf.engineApiWsEnabled
+      check conf.wsEnabled
+      check conf.engineApiEnabled == false
+      check conf.rpcEnabled == false
+
+    test "json-rpc stay enabled when json-engine api enabled and using different port":
+      let conf = makeConfig(@["--rpc", "--engine-api", "--engine-api-port:8550", "--rpc-port:8545"])
+      check conf.engineApiEnabled
+      check conf.rpcEnabled
+      check conf.engineApiWsEnabled == false
+      check conf.wsEnabled == false
+
+    test "ws-rpc stay enabled when ws-engine api enabled and using different port":
+      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-ws-port:8551", "--ws-port:8546"])
+      check conf.engineApiWsEnabled
+      check conf.wsEnabled
+      check conf.engineApiEnabled == false
+      check conf.rpcEnabled == false
+
 when isMainModule:
   configurationMain()
