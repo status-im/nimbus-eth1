@@ -12,9 +12,8 @@
 import
   std/math,
   eth/common/eth_types,
-  stew/byteutils,
+  stew/[byteutils, interval_set],
   stint,
-  ../../utils/interval_set,
   ../types
 
 {.push raises: [Defect].}

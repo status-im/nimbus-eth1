@@ -20,11 +20,10 @@
 ## eventually becomes a full trie for a single block.
 
 import
-  std/sets,
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
-  ../../../../utils/interval_set,
+  stew/interval_set,
   "../../.."/[protocol, protocol/trace_config, types],
   ../../path_desc,
   ".."/[ticker, worker_desc]
