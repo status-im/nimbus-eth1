@@ -16,7 +16,7 @@ import
   ssz_serialization,
   ../../common/common_types
 
-export ssz_serialization, common_types
+export ssz_serialization, common_types, hash
 
 type
   NodeHash* = MDigest[32 * 8] # keccak256

@@ -15,7 +15,7 @@ import
   ssz_serialization,
   ../../common/common_types
 
-export ssz_serialization, common_types
+export ssz_serialization, common_types, hash
 
 type
   ContentType* = enum

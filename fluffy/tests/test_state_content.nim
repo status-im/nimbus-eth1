@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,7 @@ import
   ../network/state/state_content
 
 # According to test vectors:
-# TODO: Add link once test vectors are merged
+# https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md#state-network-keys
 
 suite "State ContentKey Encodings":
   # Common input
@@ -24,10 +24,9 @@ suite "State ContentKey Encodings":
 
   test "AccountTrieNode":
     # Input
-    var nodeHash: NodeHash
-    nodeHash.data = hexToByteArray[sizeof(NodeHash)](
-      "0xb8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2b")
     const
+      nodeHash = NodeHash.fromHex(
+        "0xb8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2b")
       path = ByteList.init(@[byte 1, 2, 0, 1])
 
     # Output
@@ -61,10 +60,9 @@ suite "State ContentKey Encodings":
 
   test "ContractStorageTrieNode":
     # Input
-    var nodeHash: NodeHash
-    nodeHash.data = hexToByteArray[sizeof(NodeHash)](
-      "0x3e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5")
     const
+      nodeHash = NodeHash.fromHex(
+        "0x3e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5")
       path = ByteList.init(@[byte 1, 0, 15, 14, 12, 0])
 
     # Output
@@ -168,8 +166,7 @@ suite "State ContentKey Encodings":
 
   test "ContractBytecode":
     # Input
-    var codeHash: CodeHash
-    codeHash.data = hexToByteArray[sizeof(CodeHash)](
+    const codeHash = CodeHash.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
 
     # Output

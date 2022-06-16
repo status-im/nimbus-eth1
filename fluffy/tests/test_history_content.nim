@@ -17,8 +17,7 @@ import
 suite "History ContentKey Encodings":
   test "BlockHeader":
     # Input
-    var blockHash: BlockHash
-    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+    const blockHash = BlockHash.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
 
     # Output
@@ -51,8 +50,7 @@ suite "History ContentKey Encodings":
 
   test "BlockBody":
     # Input
-    var blockHash: BlockHash
-    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+    const blockHash = BlockHash.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
 
     # Output
@@ -84,8 +82,8 @@ suite "History ContentKey Encodings":
       toContentId(contentKey).toHex() == contentIdHexBE
 
   test "Receipts":
-    var blockHash: BlockHash
-    blockHash.data = hexToByteArray[sizeof(BlockHash)](
+    # Input
+    const blockHash = BlockHash.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
 
     # Output
@@ -117,10 +115,11 @@ suite "History ContentKey Encodings":
       toContentId(contentKey).toHex() == contentIdHexBE
 
   test "Epoch Accumulator":
-    var epochHash: Digest
-    epochHash.data = hexToByteArray[sizeof(Digest)](
+    # Input
+    const epochHash = Digest.fromHex(
       "0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
 
+    # Output
     const
       contentKeyHex =
         "03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491"
@@ -149,10 +148,7 @@ suite "History ContentKey Encodings":
       toContentId(contentKey).toHex() == contentIdHexBE
 
   test "Master Accumulator - Latest":
-    var accumulatorHash: Digest
-    accumulatorHash.data = hexToByteArray[sizeof(Digest)](
-      "0x88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
-
+    # Output
     const
       contentKeyHex =
         "0400"
@@ -182,10 +178,11 @@ suite "History ContentKey Encodings":
       toContentId(contentKey).toHex() == contentIdHexBE
 
   test "Master Accumulator - Hash":
-    var accumulatorHash: Digest
-    accumulatorHash.data = hexToByteArray[sizeof(Digest)](
+    # Input
+    const accumulatorHash = Digest.fromHex(
       "0x88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
 
+    # Output
     const
       contentKeyHex =
         "040188cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7"

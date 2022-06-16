@@ -10,42 +10,42 @@
 {.push raises: [Defect].}
 
 import
-  std/tables,
   unittest2, stew/byteutils,
-  eth/common/eth_types,
-  ../network/header/header_content,
-  ../populate_db
+  ../network/header/header_content
 
-suite "Header Gossip Content":
-  test "Header Accumulator Update":
-    const
-      hashTreeRoots = [
-        "b629833240bb2f5eabfb5245be63d730ca4ed30d6a418340ca476e7c1f1d98c0",
-        "00cbebed829e1babb93f2300bebe7905a98cb86993c7fc09bb5b04626fd91ae5",
-        "88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7"]
+suite "Header Gossip ContentKey Encodings":
+  test "BlockHeader":
+      # Input
+      const
+        blockHash = BlockHash.fromHex(
+          "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+        blockNumber = 2.stuint(256)
 
-      dataFile = "./fluffy/tests/blocks/mainnet_blocks_1-2.json"
+      # Output
+      const
+        contentKeyHex =
+          "00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d0200000000000000000000000000000000000000000000000000000000000000"
+        contentId =
+          "93053813395975896824800219097617621670658136800980011170166846009189305194644"
+        # or
+        contentIdHexBE =
+          "cdba9789eec7a1994ec7c033c46c2c94242da2c016051bf09240fd9a81589894"
 
-    let blockDataRes = readBlockDataTable(dataFile)
+      let contentKey = ContentKey(
+        contentType: newBlockHeader,
+        newBlockHeaderKey:
+          NewBlockHeaderKey(blockHash: blockHash, blockNumber: blockNumber))
 
-    check blockDataRes.isOk()
-    let blockData = blockDataRes.get()
+      let encoded = encode(contentKey)
+      check encoded.asSeq.toHex == contentKeyHex
+      let decoded = decode(encoded)
+      check decoded.isSome()
 
-    var headers: seq[BlockHeader]
-    # Len of headers from blockdata + genesis header
-    headers.setLen(blockData.len() + 1)
+      let contentKeyDecoded = decoded.get()
+      check:
+        contentKeyDecoded.contentType == contentKey.contentType
+        contentKeyDecoded.newBlockHeaderKey == contentKey.newBlockHeaderKey
 
-    headers[0] = getGenesisHeader()
-
-    for k, v in blockData.pairs:
-      let res = v.readBlockHeader()
-      check res.isOk()
-      let header = res.get()
-      headers[header.blockNumber.truncate(int)] = header
-
-    var accumulator: Accumulator
-
-    for i, hash in hashTreeRoots:
-      updateAccumulator(accumulator, headers[i])
-
-      check accumulator.hash_tree_root().data.toHex() == hashTreeRoots[i]
+        toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+        # In stint this does BE hex string
+        toContentId(contentKey).toHex() == contentIdHexBE
