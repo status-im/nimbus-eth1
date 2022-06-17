@@ -327,3 +327,6 @@ proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
     return false
 
   return true
+
+proc posBlockNumber*(cl: CLMocker): uint64 =
+  cl.firstPoSBlockNumber.get(0'u64)

@@ -8,6 +8,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
     config,
+    conf_utils,
     genesis,
     context,
     constants,
@@ -48,8 +49,9 @@ type
     gHeader*: EthBlockHeader
     ttd*: DifficultyInt
     clMock*: CLMocker
-    nonce: uint64
+    nonce*: uint64
     vaultKey*: PrivateKey
+    tx*: Transaction
 
   Web3BlockHash* = web3types.BlockHash
   Web3Address* = web3types.Address
@@ -62,12 +64,17 @@ const
   baseFolder  = "hive_integration" / "nodocker" / "engine"
   genesisFile = baseFolder / "genesis.json"
   sealerKey   = baseFolder / "sealer.key"
+  chainFolder = baseFolder / "chains"
 
   # This is the account that sends vault funding transactions.
   vaultAccountAddr* = hexToByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
   vaultKeyHex = "63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376"
 
-proc setupELClient*(t: TestEnv) =
+proc setupELClient*(t: TestEnv, chainFile: string) =
+  if chainFile.len > 0:
+    # disable clique if we are using PoW chain
+    t.conf.networkParams.config.poaEngine = false
+
   t.ctx  = newEthContext()
   let res = t.ctx.am.importPrivateKey(sealerKey)
   if res.isErr:
@@ -96,7 +103,13 @@ proc setupELClient*(t: TestEnv) =
   setupEngineAPI(t.sealingEngine, t.rpcServer)
   setupDebugRpc(t.chainDB, t.rpcServer)
 
-  t.sealingEngine.start()
+  # Do not start clique sealing engine if we are using a Proof of Work chain file
+  if chainFile.len > 0:
+    if not importRlpBlock(chainFolder / chainFile, t.chainDB):
+      quit(QuitFailure)
+  else:
+    t.sealingEngine.start()
+
   t.rpcServer.start()
 
   t.rpcClient = newRpcSocketClient()
@@ -110,11 +123,11 @@ proc setupELClient*(t: TestEnv) =
 
   t.vaultKey = kRes.get
 
-proc setupELClient*(): TestEnv =
+proc setupELClient*(chainFile: string): TestEnv =
   result = TestEnv(
     conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
   )
-  setupELClient(result)
+  setupELClient(result, chainFile)
 
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()

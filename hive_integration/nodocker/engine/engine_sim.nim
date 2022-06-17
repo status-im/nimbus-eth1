@@ -9,7 +9,7 @@ proc main() =
   let start = getTime()
 
   for x in engineTestList:
-    var t = setupELClient()
+    var t = setupELClient(x.chainFile)
     t.setRealTTD(x.ttd)
     let status = x.run(t)
     t.stopELClient()
@@ -17,5 +17,6 @@ proc main() =
 
   let elpd = getTime() - start
   print(stat, elpd, "engine")
+  echo stat
 
 main()

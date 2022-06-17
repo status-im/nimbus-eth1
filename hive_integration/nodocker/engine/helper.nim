@@ -263,7 +263,10 @@ proc modifyHash(x: Hash256): Hash256 =
   result = x
   result.data[^1] = byte(255 - x.data[^1].int)
 
-proc generateInvalidPayload*(basePayload: ExecutableData, payloadField: InvalidPayloadField, vaultKey: PrivateKey): ExecutionPayloadV1 =
+proc generateInvalidPayload*(basePayload: ExecutableData,
+                             payloadField: InvalidPayloadField,
+                             vaultKey: PrivateKey): ExecutionPayloadV1 =
+
   var customPayload: CustomPayload
 
   case payloadField
@@ -324,3 +327,8 @@ proc generateInvalidPayload*(basePayload: ExecutableData, payloadField: InvalidP
     customPayload.transactions = some(@[modTx])
 
   customizePayload(basePayload, customPayload)
+
+proc generateInvalidPayload*(basePayload: ExecutionPayloadV1,
+                             payloadField: InvalidPayloadField,
+                             vaultKey = default(PrivateKey)): ExecutionPayloadV1 =
+  generateInvalidPayload(basePayload.toExecutableData, payloadField, vaultKey)

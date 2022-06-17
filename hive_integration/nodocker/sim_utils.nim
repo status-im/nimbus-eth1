@@ -19,6 +19,7 @@ type
     ok*: int
     skipped*: int
     failed*: int
+    failingCases*: seq[string]
 
 proc inc*(stat: var SimStat, name: string, status: TestStatus) =
   echo name, ", ", status
@@ -28,9 +29,13 @@ proc inc*(stat: var SimStat, name: string, status: TestStatus) =
     inc stat.skipped
   else:
     inc stat.failed
+    stat.failingCases.add name
 
 proc `$`*(stat: SimStat): string =
-  "ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
+  result.add "Failing Cases:\n"
+  for c in stat.failingCases:
+    result.add "- $1 \n" % [c]
+  result.add "ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
 
 proc print*(stat: SimStat, dur: Duration, name: string) =
   var f = open(name & ".md", fmWrite)

@@ -16,18 +16,91 @@ type
     name*: string
     run*: proc(t: TestEnv): TestStatus
     ttd*: int64
+    chainFile*: string
 
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
 
 template testCond(expr: untyped) =
   if not (expr):
-    return TestStatus.Failed
+    when result is bool:
+      return false
+    else:
+      return TestStatus.Failed
 
 template testCond(expr, body: untyped) =
   if not (expr):
     body
-    return TestStatus.Failed
+    when result is bool:
+      return false
+    else:
+      return TestStatus.Failed
+
+proc `$`(x: Option[Hash256]): string =
+  if x.isNone:
+    "none"
+  else:
+    x.get().data.toHex
+
+proc `$`(x: Option[BlockHash]): string =
+  if x.isNone:
+    "none"
+  else:
+    x.get().toHex
+
+proc `$`(x: Option[PayloadID]): string =
+  if x.isNone:
+    "none"
+  else:
+    x.get().toHex
+
+proc `==`(a: Option[BlockHash], b: Option[Hash256]): bool =
+  if a.isNone or b.isNone:
+    return false
+  a.get() == b.get().data.BlockHash
+
+template testFCU(res, cond: untyped, validHash: Option[Hash256], id = none(PayloadID)) =
+  testCond res.isOk
+  let s = res.get()
+  testCond s.payloadStatus.status == PayloadExecutionStatus.cond:
+    error "Unexpected FCU status", expect=PayloadExecutionStatus.cond, get=s.payloadStatus.status
+  testCond s.payloadStatus.latestValidHash == validHash:
+    error "Unexpected FCU latestValidHash", expect=validHash, get=s.payloadStatus.latestValidHash
+  testCond s.payloadId == id:
+    error "Unexpected FCU payloadID", expect=id, get=s.payloadId
+
+template testFCU(res, cond: untyped) =
+  testCond res.isOk
+  let s = res.get()
+  testCond s.payloadStatus.status == PayloadExecutionStatus.cond:
+    error "Unexpected FCU status", expect=PayloadExecutionStatus.cond, get=s.payloadStatus.status
+
+template testNP(res, cond: untyped, validHash = none(Hash256)) =
+  testCond res.isOk
+  let s = res.get()
+  testCond s.status == PayloadExecutionStatus.cond:
+    error "Unexpected NewPayload status", expect=PayloadExecutionStatus.cond, get=s.status
+  testCond s.latestValidHash == validHash:
+    error "Unexpected NewPayload latestValidHash", expect=validHash, get=s.latestValidHash
+
+template testNPEither(res, cond: untyped, validHash = none(Hash256)) =
+  testCond res.isOk
+  let s = res.get()
+  testCond s.status in cond:
+    error "Unexpected NewPayload status", expect=cond, get=s.status
+  testCond s.latestValidHash == validHash:
+    error "Unexpected NewPayload latestValidHash", expect=validHash, get=s.latestValidHash
+
+proc sendTx(t: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
+  t.tx = t.makeNextTransaction(recipient, val, data)
+  let rr = t.rpcClient.sendTransaction(t.tx)
+  if rr.isErr:
+    error "Unable to send transaction", msg=rr.error
+    return false
+  return true
+
+proc sendTx(t: TestEnv, val: UInt256): bool =
+  t.sendTx(prevRandaoContractAddr, val)
 
 # Invalid Terminal Block in ForkchoiceUpdated:
 # Client must reject ForkchoiceUpdated directives if the referenced HeadBlockHash does not meet the TTD requirement.
@@ -43,17 +116,11 @@ proc invalidTerminalBlockForkchoiceUpdated(t: TestEnv): TestStatus =
     )
 
   let res = t.rpcClient.forkchoiceUpdatedV1(forkchoiceState)
-
   # Execution specification:
   # {payloadStatus: {status: INVALID, latestValidHash=0x00..00}, payloadId: null}
   # either obtained from the Payload validation process or as a result of validating a PoW block referenced by forkchoiceState.headBlockHash
-  testCond res.isOk
 
-  let s = res.get()
-  testCond s.payloadStatus.status == PayloadExecutionStatus.invalid
-  testCond s.payloadStatus.latestValidHash.isNone
-  testCond s.payloadId.isNone
-
+  testFCU(res, invalid, some(Hash256()))
   # ValidationError is not validated since it can be either null or a string message
 
   # Check that PoW chain progresses
@@ -91,13 +158,9 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
   let res = t.rpcClient.newPayloadV1(hashedPayload)
 
   # Execution specification:
-  # {status: INVALID_TERMINAL_BLOCK, latestValidHash: null, validationError: errorMessage | null}
+  # {status: INVALID, latestValidHash=0x00..00}
   # if terminal block conditions are not satisfied
-  testCond res.isOk
-
-  let s = res.get()
-  testCond s.status == PayloadExecutionStatus.invalid
-  testCond s.latestValidHash.isNone
+  testNP(res, invalid, some(Hash256()))
 
   # Check that PoW chain progresses
   testCond t.verifyPoWProgress(t.gHeader.blockHash)
@@ -346,7 +409,6 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
         else:
           let r = client.forkchoiceUpdatedV1(fcu, some(attr))
           if r.isOk:
-            debugEcho "EEEE"
             return false
 
           # Check that the forkchoice was applied, regardless of the error
@@ -385,13 +447,10 @@ proc preTTDFinalizedBlockHash(t: TestEnv): TestStatus =
     clMock = t.clMock
 
   var res = client.forkchoiceUpdatedV1(forkchoiceState)
-  # TBD: Behavior on this edge-case is undecided, as behavior of the Execution client
-  # if not defined on re-orgs to a point before the latest finalized block.
+  testFCU(res, invalid, some(Hash256()))
 
   res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
-  testCond res.isOk
-  let s = res.get()
-  testCond s.payloadStatus.status == PayloadExecutionStatus.valid
+  testFCU(res, valid)
 
 # Corrupt the hash of a valid payload, client should reject the payload.
 # All possible scenarios:
@@ -548,6 +607,55 @@ proc parentHashOnExecPayload(t: TestEnv): TestStatus =
   ))
   testCond produceSingleBlockRes
 
+# Attempt to re-org to a chain containing an invalid transition payload
+proc invalidTransitionPayload(t: TestEnv): TestStatus =
+  result = TestStatus.OK
+
+  # Wait until TTD is reached by main client
+  let ok = waitFor t.clMock.waitForTTD()
+  testCond ok
+
+  let clMock = t.clMock
+  let client = t.rpcClient
+
+  # Produce two blocks before trying to re-org
+  t.nonce = 2 # Initial PoW chain already contains 2 transactions
+  var pbRes = clMock.produceBlocks(2, BlockProcessCallbacks(
+    onPayloadProducerSelected: proc(): bool =
+      t.sendTx(1.u256)
+  ))
+
+  testCond pbRes
+
+  # Introduce the invalid transition payload
+  pbRes = clMock.produceSingleBlock(BlockProcessCallbacks(
+    # This is being done in the middle of the block building
+    # process simply to be able to re-org back.
+    onGetPayload: proc(): bool =
+      let basePayload = clMock.executedPayloadHistory[clMock.posBlockNumber]
+      let alteredPayload = generateInvalidPayload(basePayload, InvalidStateRoot)
+
+      let res = client.newPayloadV1(alteredPayload)
+      let cond = {PayloadExecutionStatus.invalid, PayloadExecutionStatus.accepted}
+      testNPEither(res, cond, some(Hash256()))
+
+      let rr = client.forkchoiceUpdatedV1(
+        ForkchoiceStateV1(headBlockHash: alteredPayload.blockHash)
+      )
+      testFCU(rr, invalid, some(Hash256()))
+
+      var header: EthBlockHeader
+      let rz = client.latestHeader(header)
+      if rz.isErr:
+        error "unable to get header", msg=rz.error
+        return false
+
+      let blockHash = BlockHash header.blockHash.data
+      blockHash == clMock.latestExecutedPayload.blockHash
+  ))
+
+  testCond pbRes
+
 template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPayloadField, emptyTxs: bool = false) =
   proc procName(t: TestEnv): TestStatus =
     result = TestStatus.OK
@@ -559,22 +667,17 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
     let clMock = t.clMock
     let client = t.rpcClient
 
-    template txProc() =
+    template txProc(): bool =
       when not emptyTxs:
-        let
-          tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
-          rr = client.sendTransaction(tx)
-
-        if rr.isErr:
-          error "Unable to send transaction", msg=rr.error
-          return false
+        t.sendTx(0.u256)
+      else:
+        true
 
     # Produce blocks before starting the test
     var pbRes = clMock.produceBlocks(5, BlockProcessCallbacks(
       # Make sure at least one transaction is included in each block
       onPayloadProducerSelected: proc(): bool =
         txProc()
-        return true
     ))
 
     testCond pbRes
@@ -585,7 +688,6 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
       # Make sure at least one transaction is included in the payload
       onPayloadProducerSelected: proc(): bool =
         txProc()
-        return true
       ,
       # Run test after the new payload has been obtained
       onGetPayload: proc(): bool =
@@ -598,8 +700,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
             error "No transactions in the base payload"
             return false
 
-        let execData = clMock.latestPayloadBuilt.toExecutableData
-        let alteredPayload = generateInvalidPayload(execData, payloadField, t.vaultKey)
+        let alteredPayload = generateInvalidPayload(clMock.latestPayloadBuilt, payloadField, t.vaultKey)
         invalidPayload.hash = hash256(alteredPayload.blockHash)
 
         # Depending on the field we modified, we expect a different status
@@ -735,13 +836,8 @@ template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadProducerSelected: proc(): bool =
         var address: EthAddress
-        let tx = t.makeNextTransaction(address, 1.u256)
-        let res = client.sendTransaction(tx)
-        if res.isErr:
-          error "Unable to send transaction"
-          return false
-
-        shadow.hash = rlpHash(tx)
+        testCond t.sendTx(address, 1.u256)
+        shadow.hash = rlpHash(t.tx)
         return true
       ,
       onNewPayloadBroadcast: proc(): bool =
@@ -804,13 +900,8 @@ template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadProducerSelected: proc(): bool =
         var address: EthAddress
-        let tx = t.makeNextTransaction(address, 1.u256)
-        let res = client.sendTransaction(tx)
-        if res.isErr:
-          error "Unable to send transaction"
-          return false
-
-        shadow.hash = rlpHash(tx)
+        testCond t.sendTx(address, 1.u256)
+        shadow.hash = rlpHash(t.tx)
         return true
       ,
       # Run test after a forkchoice with new HeadBlockHash has been broadcasted
@@ -858,13 +949,8 @@ template blockStatusSafeBlockGen(procname: untyped, transitionBlock: bool) =
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadProducerSelected: proc(): bool =
         var address: EthAddress
-        let tx = t.makeNextTransaction(address, 1.u256)
-        let res = client.sendTransaction(tx)
-        if res.isErr:
-          error "Unable to send transaction"
-          return false
-
-        shadow.hash = rlpHash(tx)
+        testCond t.sendTx(address, 1.u256)
+        shadow.hash = rlpHash(t.tx)
         return true
       ,
       # Run test after a forkchoice with new HeadBlockHash has been broadcasted
@@ -911,13 +997,8 @@ template blockStatusFinalizedBlockGen(procname: untyped, transitionBlock: bool) 
     var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadProducerSelected: proc(): bool =
         var address: EthAddress
-        let tx = t.makeNextTransaction(address, 1.u256)
-        let res = client.sendTransaction(tx)
-        if res.isErr:
-          error "Unable to send transaction"
-          return false
-
-        shadow.hash = rlpHash(tx)
+        testCond t.sendTx(address, 1.u256)
+        shadow.hash = rlpHash(t.tx)
         return true
       ,
       # Run test after a forkchoice with new HeadBlockHash has been broadcasted
@@ -1149,11 +1230,7 @@ proc outOfOrderPayloads(t: TestEnv): TestStatus =
     # We send the transactions after we got the Payload ID, before the clMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
       for i in 0..<txPerPayload:
-        let tx = t.makeNextTransaction(recipient, amountPerTx)
-        let res = client.sendTransaction(tx)
-        if res.isErr:
-          error "Unable to send transaction"
-          return false
+        testCond t.sendTx(recipient, amountPerTx)
       return true
   ))
   testCond produceBlockRes
@@ -1293,8 +1370,7 @@ proc transactionReorg(t: TestEnv): TestStatus =
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  testCond produce5BlockRes
+  testCond t.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   # Create transactions that modify the state in order to testCond after the reorg.
   const
@@ -1312,20 +1388,14 @@ proc transactionReorg(t: TestEnv): TestStatus =
   for i in 0..<txCount:
     # Data is the key where a `1` will be stored
     let data = i.u256
-    let tx = t.makeNextTransaction(contractAddr, 0.u256, data.toBytesBE)
-    txs[i] = tx
-
-    # Send the transaction
-    let res = client.sendTransaction(tx)
-    testCond res.isOk:
-      error "Unable to send transaction", msg=res.error
+    testCond t.sendTx(contractAddr, 0.u256, data.toBytesBE)
+    txs[i] = t.tx
 
     # Produce the block containing the transaction
-    var blockRes = clMock.produceSingleBlock(BlockProcessCallbacks())
-    testCond blockRes
+    testCond clMock.produceSingleBlock(BlockProcessCallbacks())
 
     # Get the receipt
-    let rr = client.txReceipt(rlpHash(tx))
+    let rr = client.txReceipt(rlpHash(t.tx))
     testCond rr.isOk:
       error "Unable to obtain transaction receipt", msg=rr.error
 
@@ -1416,8 +1486,7 @@ proc sidechainReorg(t: TestEnv): TestStatus =
   testCond ok
 
   # Produce blocks before starting the test
-  let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-  testCond produce5BlockRes
+  testCond t.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   let
     client = t.rpcClient
@@ -1426,10 +1495,7 @@ proc sidechainReorg(t: TestEnv): TestStatus =
   # Produce two payloads, send fcU with first payload, testCond transaction outcome, then reorg, testCond transaction outcome again
 
   # This single transaction will change its outcome based on the payload
-  let tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
-  let rr = client.sendTransaction(tx)
-  testCond rr.isOk:
-    error "Unable to send transaction", msg=rr.error
+  testCond t.sendTx(0.u256)
 
   let singleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
     onNewPayloadBroadcast: proc(): bool =
@@ -1524,10 +1590,7 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
   # Send multiple transactions
   for i in 0..<txCount:
     # Empty self tx
-    let tx = t.makeNextTransaction(vaultAccountAddr, 0.u256)
-    let res = client.sendTransaction(tx)
-    testCond res.isOk:
-      error "unable to send transaction", msg=res.error
+    discard t.sendTx(vaultAccountAddr, 0.u256)
 
   # Produce the next block with the fee recipient set
   clMock.nextFeeRecipient = feeRecipient
@@ -1579,21 +1642,14 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
     error "balance does not match fees",
       feeRecipientBalance, feeRecipientFees
 
-proc sendTx(t: TestEnv): Future[void] {.async.} =
+proc sendTxAsync(t: TestEnv): Future[void] {.async.} =
   let
-    client = t.rpcClient
     clMock = t.clMock
     period = chronos.milliseconds(500)
 
   while not clMock.ttdReached:
     await sleepAsync(period)
-
-    let
-      tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
-      rr = client.sendTransaction(tx)
-
-    if rr.isErr:
-      error "Unable to send transaction", msg=rr.error
+    discard t.sendTx(0.u256)
 
 proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
   result = TestStatus.OK
@@ -1601,7 +1657,7 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
   let
     client = t.rpcClient
     clMock = t.clMock
-    sendTxFuture = sendTx(t)
+    sendTxFuture = sendTxAsync(t)
 
   # Wait until TTD is reached by this client
   let ok = waitFor clMock.waitForTTD()
@@ -1646,15 +1702,8 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
 
   let produceBlockRes = clMock.produceBlocks(10, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-      let
-        tx = t.makeNextTransaction(prevRandaoContractAddr, 0.u256)
-        rr = client.sendTransaction(tx)
-
-      if rr.isErr:
-        error "Unable to send transaction", msg=rr.error
-        return false
-
-      shadow.txs.add tx
+      testCond t.sendTx(0.u256)
+      shadow.txs.add t.tx
       inc shadow.currentTxIndex
       return true
     ,
@@ -1763,6 +1812,12 @@ const engineTestList* = [
   TestSpec(
     name: "ParentHash==BlockHash on NewPayload",
     run:  parentHashOnExecPayload,
+  ),
+  TestSpec(
+    name: "Invalid Transition Payload",
+    run: invalidTransitionPayload,
+    ttd: 393504,
+    chainFile: "blocks_2_td_393504.rlp",
   ),
   TestSpec(
     name: "Invalid ParentHash NewPayload",

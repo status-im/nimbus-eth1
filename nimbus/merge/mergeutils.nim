@@ -75,6 +75,14 @@ proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
 proc simpleFCU*(status: PayloadExecutionStatus, msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status, validationError: some(msg)))
 
+proc invalidFCU*(hash: Hash256 = Hash256()): ForkchoiceUpdatedResponse =
+  ForkchoiceUpdatedResponse(payloadStatus:
+    PayloadStatusV1(
+      status: PayloadExecutionStatus.invalid,
+      latestValidHash: some(BlockHash hash.data)
+    )
+  )
+
 proc validFCU*(id: Option[PayloadID], validHash: Hash256): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
@@ -91,8 +99,13 @@ proc invalidStatus*(validHash: Hash256, msg: string): PayloadStatusV1 =
     validationError: some(msg)
   )
 
+proc invalidStatus*(validHash: Hash256 = Hash256()): PayloadStatusV1 =
+  PayloadStatusV1(
+    status: PayloadExecutionStatus.invalid,
+    latestValidHash: some(BlockHash validHash.data)
+  )
+
 proc toBlockBody*(payload: ExecutionPayloadV1): BlockBody =
-  # TODO the transactions from the payload have to be converted here
   result.transactions.setLen(payload.transactions.len)
   for i, tx in payload.transactions:
     result.transactions[i] = rlp.decode(distinctBase tx, Transaction)

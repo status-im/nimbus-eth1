@@ -84,7 +84,7 @@ proc setupEngineAPI*(
     if td < ttd:
       warn "Ignoring pre-merge payload",
         number = header.blockNumber, hash = blockHash.data.toHex, td, ttd
-      return PayloadStatusV1(status: PayloadExecutionStatus.invalid)
+      return invalidStatus()
 
     if header.timestamp <= parent.timestamp:
       warn "Invalid timestamp",
@@ -96,7 +96,14 @@ proc setupEngineAPI*(
     let body = toBlockBody(payload)
     let vres = sealingEngine.chain.insertBlockWithoutSetHead(header, body)
     if vres != ValidationResult.OK:
-      return invalidStatus(db.getHeadBlockHash(), "Failed to insert block")
+      let ptd = db.getScore(parent.parentHash)
+      let blockHash = if ptd >= ttd:
+                        db.getHeadBlockHash()
+                      else:
+                        # If the most recent valid ancestor is a PoW block,
+                        # latestValidHash MUST be set to ZERO
+                        Hash256()
+      return invalidStatus(blockHash, "Failed to insert block")
 
     # We've accepted a valid payload from the beacon client. Mark the local
     # chain transitions to notify other subsystems (e.g. downloader) of the
@@ -231,7 +238,7 @@ proc setupEngineAPI*(
           ptd = ptd,
           ttd = ttd
 
-        return simpleFCU(PayloadExecutionStatus.invalid)
+        return invalidFCU()
 
     # If the head block is already in our canonical chain, the beacon client is
     # probably resyncing. Ignore the update.
