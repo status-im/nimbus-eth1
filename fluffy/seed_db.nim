@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -26,7 +26,7 @@ type
     contentKey: seq[byte]
     content: seq[byte]
     distance: array[32, byte]
-  
+
   SeedDb* = ref object
     store: SqStoreRef
     putStmt: SqliteStmt[(array[32, byte], seq[byte], seq[byte]), void]
@@ -72,13 +72,13 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
 
     db.exec(createSql).expectDb()
 
-  let putStmt = 
+  let putStmt =
     db.prepareStmt(
       "INSERT OR REPLACE INTO seed_data (contentid, contentkey, content) VALUES (?, ?, ?);",
       (array[32, byte], seq[byte], seq[byte]),
       void).get()
 
-  let getStmt = 
+  let getStmt =
     db.prepareStmt(
       "SELECT contentid, contentkey, content FROM seed_data WHERE contentid = ?;",
       array[32, byte],
@@ -88,10 +88,10 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
   db.registerCustomScalarFunction("xorDistance", xorDistance)
     .expect("Couldn't register custom xor function")
 
-  let getInRangeStmt = 
+  let getInRangeStmt =
     db.prepareStmt(
       """
-        SELECT contentid, contentkey, content, xorDistance(?, contentid) as distance 
+        SELECT contentid, contentkey, content, xorDistance(?, contentid) as distance
         FROM seed_data
         WHERE distance <= ?
         LIMIT ?;
@@ -107,10 +107,10 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
     getInRangeStmt: getInRangeStmt
   )
 
-proc put*(db: SeedDb, contentId: array[32, byte], contentKey: seq[byte], content: seq[byte]): void = 
+proc put*(db: SeedDb, contentId: array[32, byte], contentKey: seq[byte], content: seq[byte]): void =
   db.putStmt.exec((contentId, contentKey, content)).expectDb()
 
-proc put*(db: SeedDb, contentId: UInt256, contentKey: seq[byte], content: seq[byte]): void = 
+proc put*(db: SeedDb, contentId: UInt256, contentKey: seq[byte], content: seq[byte]): void =
   db.put(contentId.toByteArrayBE(), contentKey, content)
 
 proc get*(db: SeedDb, contentId: array[32, byte]): Option[ContentData] =
@@ -126,7 +126,7 @@ proc getContentInRange*(
     nodeId: UInt256,
     nodeRadius: UInt256,
     max: int64): seq[ContentDataDist] =
-  
+
   var res: seq[ContentDataDist] = @[]
   var cd: ContentDataDist
   for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max), cd):

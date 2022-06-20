@@ -20,7 +20,7 @@
 #   ...,
 # }
 # In case of sqlite:
-# Data is saved in format friendly to history network i.e one tablse with 3
+# Data is saved in a format friendly to history network i.e one table with 3
 # columns: contentid, contentkey, content.
 # Such format enables queries to quickly find content in range of some node
 # which makes it possible to offer content to nodes in bulk.
@@ -36,7 +36,7 @@ import
   faststreams, chronicles,
   eth/[common, rlp], chronos,
   eth/common/eth_types_json_serialization,
-  ./seed_db,
+  ../seed_db,
   ../../premix/downloader,
   ../network/history/history_content
 
@@ -55,7 +55,7 @@ const
   defaultFileName = "eth-history-data"
 
 type
-  Mode* = enum
+  StorageMode* = enum
     Json, Db
 
   ExporterConf* = object
@@ -78,20 +78,20 @@ type
       defaultValueDesc: $defaultDataDirDesc
       name: "data-dir" .}: OutDir
     filename* {.
-      desc: "default name of the file with history data"
+      desc: "File name (minus extension) where history data will be exported to"
       defaultValue: defaultFileName
       defaultValueDesc: $defaultFileName
       name: "filename" .}: string
-    mode* {.
-      desc: "default mode of data export"
+    storageMode* {.
+      desc: "Storage mode of data export"
       defaultValue: Json
-      name: "mode" .}: Mode
+      name: "storage-mode" .}: StorageMode
 
   DataRecord = object
     rlp: string
     number: uint64
 
-proc parseCmdArg*(T: type Mode, p: TaintedString): T
+proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
     {.raises: [Defect, ConfigurationError].} =
   if p == "db":
     return Db
@@ -101,7 +101,7 @@ proc parseCmdArg*(T: type Mode, p: TaintedString): T
     let msg = "Provided mode: " & p & " is not a valid. Should be `json` or `db`"
     raise newException(ConfigurationError, msg)
 
-proc completeCmdArg*(T: type Mode, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type StorageMode, val: TaintedString): seq[string] =
   return @[]
 
 proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect].} =
@@ -181,12 +181,13 @@ proc writeToDb(config: ExporterConf) =
     db.close()
 
   for i in config.initialBlock..config.endBlock:
-    let blck = downloadBlock(i)
-    let blockHash = blck.header.blockHash()
-    let contentKeyType = ContentKeyType(chainId: 1, blockHash: blockHash)
-    let headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
-    let bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
-    let receiptsKey = encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
+    let
+      blck = downloadBlock(i)
+      blockHash = blck.header.blockHash()
+      contentKeyType = ContentKeyType(chainId: 1, blockHash: blockHash)
+      headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
+      bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
+      receiptsKey = encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
 
     db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode[BlockHeader](blck.header))
 
@@ -200,7 +201,7 @@ proc writeToDb(config: ExporterConf) =
   info "Data successfuly written to db"
 
 proc run(config: ExporterConf) =
-  case config.mode
+  case config.storageMode
   of Json:
     writeToJson(config)
   of Db:
