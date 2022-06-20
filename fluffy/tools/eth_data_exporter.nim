@@ -184,7 +184,7 @@ proc writeToDb(config: ExporterConf) =
     let
       blck = downloadBlock(i)
       blockHash = blck.header.blockHash()
-      contentKeyType = ContentKeyType(chainId: 1, blockHash: blockHash)
+      contentKeyType = BlockKey(chainId: 1, blockHash: blockHash)
       headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
       bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
       receiptsKey = encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
