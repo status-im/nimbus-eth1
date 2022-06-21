@@ -18,14 +18,23 @@ type
     DownloadTxTrace
     DownloadAndValidate
 
-proc request*(methodName: string, params: JsonNode): JsonNode =
-  var client = newRpcHttpClient()
-  #client.httpMethod(MethodPost)
-  waitFor client.connect("127.0.0.1", Port(8545), false)
-  result = waitFor client.call(methodName, params)
-  waitFor client.close()
+proc request*(
+    methodName: string,
+    params: JsonNode,
+    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
+  if client.isSome():
+    result = waitFor client.unsafeGet().call(methodName, params)
+  else:
+    var client = newRpcHttpClient()
+    #client.httpMethod(MethodPost)
+    waitFor client.connect("127.0.0.1", Port(8545), false)
+    result = waitFor client.call(methodName, params)
+    waitFor client.close()
 
-proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
+proc requestBlockBody(
+    n: JsonNode,
+    blockNumber: BlockNumber,
+    client: Option[RpcClient] = none[RpcClient]()): BlockBody =
   let txs = n["transactions"]
   if txs.len > 0:
     result.transactions = newSeqOfCap[Transaction](txs.len)
@@ -40,53 +49,62 @@ proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
     let blockNumber = blockNumber.prefixHex
     for i in 0 ..< uncles.len:
       let idx = i.prefixHex
-      let uncle = request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx])
+      let uncle = request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
       if uncle.kind == JNull:
         error "requested uncle not available", blockNumber=blockNumber, uncleIdx=i
         raise newException(ValueError, "Error when retrieving block uncles")
       result.uncles.add parseBlockHeader(uncle)
 
-proc requestReceipts(n: JsonNode): seq[Receipt] =
+proc requestReceipts(
+    n: JsonNode,
+    client: Option[RpcClient] = none[RpcClient]()): seq[Receipt] =
   let txs = n["transactions"]
   if txs.len > 0:
     result = newSeqOfCap[Receipt](txs.len)
     for tx in txs:
       let txHash = tx["hash"]
-      let rec = request("eth_getTransactionReceipt", %[txHash])
+      let rec = request("eth_getTransactionReceipt", %[txHash], client)
       if rec.kind == JNull:
         error "requested receipt not available", txHash=txHash
         raise newException(ValueError, "Error when retrieving block receipts")
       result.add parseReceipt(rec)
 
-proc requestTxTraces(n: JsonNode): JsonNode =
+proc requestTxTraces(
+    n: JsonNode,
+    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
   result = newJArray()
   let txs = n["transactions"]
   if txs.len == 0: return
   for tx in txs:
     let txHash = tx["hash"]
-    let txTrace = request("debug_traceTransaction", %[txHash])
+    let txTrace = request("debug_traceTransaction", %[txHash], client)
     if txTrace.kind == JNull:
       error "requested trace not available", txHash=txHash
       raise newException(ValueError, "Error when retrieving transaction trace")
     result.add txTrace
 
-proc requestHeader*(blockNumber: BlockNumber): JsonNode =
-  result = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true])
+proc requestHeader*(
+    blockNumber: BlockNumber,
+    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
+  result = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true], client)
   if result.kind == JNull:
     error "requested block not available", blockNumber=blockNumber
     raise newException(ValueError, "Error when retrieving block header")
 
-proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Block =
-  let header = requestHeader(blockNumber)
+proc requestBlock*(
+    blockNumber: BlockNumber,
+    flags: set[DownloadFlags] = {},
+    client: Option[RpcClient] = none[RpcClient]()): Block =
+  let header = requestHeader(blockNumber, client)
   result.jsonData   = header
   result.header     = parseBlockHeader(header)
-  result.body       = requestBlockBody(header, blockNumber)
+  result.body       = requestBlockBody(header, blockNumber, client)
 
   if DownloadTxTrace in flags:
-    result.traces     = requestTxTraces(header)
+    result.traces     = requestTxTraces(header, client)
 
   if DownloadReceipts in flags:
-    result.receipts   = requestReceipts(header)
+    result.receipts   = requestReceipts(header, client)
     let
       receiptRoot   = calcReceiptRoot(result.receipts).prefixHex
       receiptRootOK = result.header.receiptRoot.prefixHex
