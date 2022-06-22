@@ -8,19 +8,26 @@
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
   },
   "description": "Dashboard for Fluffy, a Portal network client",
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 13,
+  "id": 16,
+  "iteration": 1655903691488,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -66,11 +73,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "time() - process_start_time_seconds",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "time() - process_start_time_seconds{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -80,7 +91,6 @@
       "type": "stat"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -128,11 +138,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(process_cpu_seconds_total[$__rate_interval]) * 100",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(process_cpu_seconds_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval]) * 100",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -142,7 +156,6 @@
       "type": "stat"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -188,11 +201,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "process_resident_memory_bytes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "process_resident_memory_bytes{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -202,7 +219,6 @@
       "type": "stat"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -247,11 +263,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "discovery_enr_auto_update_total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "discovery_enr_auto_update_total{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -261,7 +281,6 @@
       "type": "stat"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -306,11 +325,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "utp_established_connections",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "utp_established_connections{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -324,11 +347,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -355,7 +373,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -365,15 +383,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(portal_message_requests_outgoing_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_message_requests_outgoing_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(portal_message_response_incoming_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_message_response_incoming_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "",
@@ -381,9 +407,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Portal message requests out / responses in",
       "tooltip": {
         "shared": true,
@@ -392,9 +416,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -402,25 +424,18 @@
         {
           "$$hashKey": "object:536",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:537",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -428,11 +443,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -459,7 +469,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -485,39 +495,59 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(process_cpu_seconds_total[$__rate_interval]) * 100",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(process_cpu_seconds_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval]) * 100",
           "interval": "",
           "legendFormat": "CPU usage %",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "process_open_fds",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "process_open_fds{instance=\"${instance}\",container=\"${container}\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "open file descriptors",
           "refId": "B"
         },
         {
-          "exemplar": true,
-          "expr": "process_resident_memory_bytes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "process_resident_memory_bytes{instance=\"${instance}\",container=\"${container}\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "RSS",
           "refId": "C"
         },
         {
-          "exemplar": true,
-          "expr": "sum(nim_gc_mem_bytes)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "sum(nim_gc_mem_bytes{instance=\"${instance}\",container=\"${container}\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "Nim GC mem total",
           "refId": "D"
         },
         {
-          "exemplar": true,
-          "expr": "sum(nim_gc_mem_occupied_bytes)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "sum(nim_gc_mem_occupied_bytes{instance=\"${instance}\",container=\"${container}\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "Nim GC mem used",
@@ -525,9 +555,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Resource usage",
       "tooltip": {
         "shared": true,
@@ -536,9 +564,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -546,25 +572,18 @@
         {
           "$$hashKey": "object:2080",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:2081",
           "format": "bytes",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -572,11 +591,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -603,7 +617,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -613,14 +627,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(portal_message_requests_incoming_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_message_requests_incoming_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         },
         {
-          "exemplar": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
           "expr": "",
           "hide": false,
           "interval": "",
@@ -629,9 +651,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Portal message requests in",
       "tooltip": {
         "shared": true,
@@ -640,9 +660,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -650,25 +668,18 @@
         {
           "$$hashKey": "object:477",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:478",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -676,11 +687,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -707,7 +713,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -717,17 +723,19 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "nim_gc_heap_instance_occupied_bytes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "nim_gc_heap_instance_occupied_bytes{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "{{type_name}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "GC heap objects",
       "tooltip": {
         "shared": true,
@@ -736,9 +744,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -746,29 +752,21 @@
         {
           "$$hashKey": "object:2326",
           "format": "bytes",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:2327",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -811,24 +809,25 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_lookup_content_requests_bucket",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_lookup_content_requests_bucket{instance=\"${instance}\",container=\"${container}\"}",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Content Requests per lookup",
       "type": "bargauge"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -871,19 +870,21 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_nodes_enrs_packed_bucket",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_nodes_enrs_packed_bucket{instance=\"${instance}\",container=\"${container}\"}",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "ENRs packed per Nodes msg",
       "type": "bargauge"
     },
@@ -892,11 +893,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -923,7 +919,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -933,16 +929,24 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(discovery_session_lru_cache_hits_total[$__rate_interval]) / (rate(discovery_session_lru_cache_hits_total[$__rate_interval]) + rate(discovery_session_lru_cache_misses_total[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(discovery_session_lru_cache_hits_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval]) / (rate(discovery_session_lru_cache_hits_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval]) + rate(discovery_session_lru_cache_misses_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "session cache hits / (hits + misses)",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(discovery_session_decrypt_failures_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(discovery_session_decrypt_failures_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "session decrypt failures",
@@ -950,9 +954,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Discv5 session cache hit/miss ratio",
       "tooltip": {
         "shared": true,
@@ -961,9 +963,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -971,29 +971,21 @@
         {
           "$$hashKey": "object:1438",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1439",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1036,11 +1028,15 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_content_keys_offered_bucket",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_content_keys_offered_bucket{instance=\"${instance}\",container=\"${container}\"}",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1051,7 +1047,6 @@
       "type": "bargauge"
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1094,19 +1089,21 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_content_enrs_packed_bucket",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_content_enrs_packed_bucket{instance=\"${instance}\",container=\"${container}\"}",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "ENRs packed per Content msg",
       "type": "bargauge"
     },
@@ -1115,11 +1112,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1146,7 +1138,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1156,23 +1148,35 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(discovery_message_requests_incoming_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(discovery_message_requests_incoming_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "discovery_message_requests_incoming [{{response}}]",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(discovery_message_requests_outgoing_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(discovery_message_requests_outgoing_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "discovery_message_requests_outgoing [{{response}}]",
           "refId": "B"
         },
         {
-          "exemplar": true,
-          "expr": "rate(discovery_unsolicited_messages_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(discovery_unsolicited_messages_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "unsolicited messages",
@@ -1180,9 +1184,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Discv5 message rates",
       "tooltip": {
         "shared": true,
@@ -1191,9 +1193,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1201,29 +1201,21 @@
         {
           "$$hashKey": "object:2385",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:2386",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1266,11 +1258,15 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_content_keys_accepted_bucket",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_content_keys_accepted_bucket{instance=\"${instance}\",container=\"${container}\"}",
           "format": "heatmap",
           "hide": false,
           "interval": "",
@@ -1286,12 +1282,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
       "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1318,7 +1309,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1328,17 +1319,19 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "routing_table_nodes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "routing_table_nodes{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Routing table nodes - BUGGED: Metrics count over all routing tables together",
       "tooltip": {
         "shared": true,
@@ -1347,9 +1340,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1357,25 +1348,18 @@
         {
           "$$hashKey": "object:301",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:302",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1383,11 +1367,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1414,7 +1393,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1424,15 +1403,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(portal_gossip_offers_successful_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_gossip_offers_successful_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "portal_gossip_offers_successful[{{protocol_id}}]",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(portal_gossip_offers_failed_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_gossip_offers_failed_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "portal_gossip_offers_failed[{{protocol_id}}]",
@@ -1440,9 +1427,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Neighborhood gossip content offers",
       "tooltip": {
         "shared": true,
@@ -1451,9 +1436,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1461,25 +1444,18 @@
         {
           "$$hashKey": "object:4139",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:4140",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1487,11 +1463,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1518,7 +1489,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1528,15 +1499,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(utp_allowed_incoming_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_allowed_incoming_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "utp_allowed_incoming",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(utp_declined_incoming_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_declined_incoming_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "utp_declined_incoming",
@@ -1544,9 +1523,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "uTP incoming connections",
       "tooltip": {
         "shared": true,
@@ -1555,9 +1532,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1565,25 +1540,18 @@
         {
           "$$hashKey": "object:3063",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:3064",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1591,11 +1559,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1622,7 +1585,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1632,15 +1595,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(portal_gossip_with_lookup_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_gossip_with_lookup_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "portal_gossip_with_lookup[{{protocol_id}}]",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(portal_gossip_without_lookup_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(portal_gossip_without_lookup_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "portal_gossip_without_lookup[{{protocol_id}}]",
@@ -1648,9 +1619,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Neighborhood gossip node lookups",
       "tooltip": {
         "shared": true,
@@ -1659,9 +1628,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1669,25 +1636,18 @@
         {
           "$$hashKey": "object:97",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:98",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1695,11 +1655,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1726,7 +1681,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1736,15 +1691,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(utp_success_outgoing_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_success_outgoing_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "utp_success_outgoing",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(utp_failed_outgoing_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_failed_outgoing_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "utp_failed_outgoing",
@@ -1752,9 +1715,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "uTP outgoing connections",
       "tooltip": {
         "shared": true,
@@ -1763,9 +1724,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1773,25 +1732,18 @@
         {
           "$$hashKey": "object:3122",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:3123",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1799,11 +1751,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1830,7 +1777,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1840,17 +1787,19 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "portal_message_decoding_failures_total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "portal_message_decoding_failures_total{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Portal message decoding failures",
       "tooltip": {
         "shared": true,
@@ -1859,9 +1808,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1869,25 +1816,18 @@
         {
           "$$hashKey": "object:595",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:596",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1895,11 +1835,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1926,7 +1861,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1936,15 +1871,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "rate(utp_failed_packets_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_failed_packets_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "utp_failed_packets",
           "refId": "A"
         },
         {
-          "exemplar": true,
-          "expr": "rate(utp_received_packets_total[$__rate_interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "rate(utp_received_packets_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "utp_received_packets",
@@ -1952,9 +1895,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "uTP Packets",
       "tooltip": {
         "shared": true,
@@ -1963,9 +1904,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1973,25 +1912,18 @@
         {
           "$$hashKey": "object:3181",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:3182",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1999,11 +1931,6 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2030,7 +1957,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "8.4.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2040,17 +1967,19 @@
       "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "utp_established_connections",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "exemplar": false,
+          "expr": "utp_established_connections{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "uTP established connections",
       "tooltip": {
         "shared": true,
@@ -2059,9 +1988,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2069,29 +1996,21 @@
         {
           "$$hashKey": "object:3811",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:3812",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
-      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2163,18 +2082,28 @@
       },
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
           "editorMode": "code",
-          "exemplar": true,
-          "expr": "portal_pruning_counter_total{protocol_id=\"500b\"}",
+          "exemplar": false,
+          "expr": "portal_pruning_counter_total{instance=\"${instance}\",container=\"${container}\",protocol_id=\"500b\"}",
+          "interval": "",
           "legendFormat": "Number of pruning event",
           "range": true,
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
           "editorMode": "code",
-          "exemplar": true,
-          "expr": "portal_pruning_deleted_elements{protocol_id=\"500b\"}",
+          "exemplar": false,
+          "expr": "portal_pruning_deleted_elements{instance=\"${instance}\",container=\"${container}\",protocol_id=\"500b\"}",
           "hide": false,
+          "interval": "",
           "legendFormat": "Number of elements deleted in pruning event",
           "range": true,
           "refId": "B"
@@ -2185,11 +2114,56 @@
     }
   ],
   "refresh": "5s",
-  "schemaVersion": 27,
+  "schemaVersion": 35,
   "style": "dark",
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "metal-01.he-eu-hel1.nimbus.fluffy",
+          "value": "metal-01.he-eu-hel1.nimbus.fluffy"
+        },
+        "definition": "label_values(portal_message_requests_incoming_total{job=\"nimbus-fluffy-metrics\"}, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(portal_message_requests_incoming_total{job=\"nimbus-fluffy-metrics\"}, instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "nimbus-fluffy-mainnet-master-03",
+          "value": "nimbus-fluffy-mainnet-master-03"
+        },
+        "definition": "label_values(portal_message_requests_incoming_total{job=\"nimbus-fluffy-metrics\"}, container)",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "container",
+        "options": [],
+        "query": {
+          "query": "label_values(portal_message_requests_incoming_total{job=\"nimbus-fluffy-metrics\"}, container)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-30m",
@@ -2197,7 +2171,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Fluffy Dashboard",
+  "title": "Nimbus Fluffy Dashboard",
   "uid": "iWQQPuPnkadsf",
-  "version": 7
+  "version": 8,
+  "weekStart": ""
 }
