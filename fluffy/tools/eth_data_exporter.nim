@@ -36,6 +36,7 @@ import
   faststreams, chronicles,
   eth/[common, rlp], chronos,
   eth/common/eth_types_json_serialization,
+  json_rpc/rpcclient,
   ../seed_db,
   ../../premix/downloader,
   ../network/history/history_content
@@ -113,12 +114,10 @@ proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect]
 
   writer.writeField(headerHash, dataRecord)
 
-proc downloadBlock(i: uint64): Block =
+proc downloadBlock(i: uint64, client: RpcClient): Block =
   let num = u256(i)
   try:
-    # premix has hardcoded making request to local host which is "127.0.0.1:8545"
-    # which is defult port of geth json rpc server
-    return requestBlock(num, flags = {DownloadReceipts})
+    return requestBlock(num, flags = {DownloadReceipts}, client = some(client))
   except CatchableError as e:
     fatal "Error while requesting Block", error = e.msg, number = i
     quit 1
@@ -154,14 +153,14 @@ proc createAndOpenFile(config: ExporterConf): OutputStreamHandle =
     fatal "Error occurred while opening the file", error = e.msg
     quit 1
 
-proc writeToJson(config: ExporterConf) =
+proc writeToJson(config: ExporterConf, client: RpcClient) =
   let fh = createAndOpenFile(config)
 
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s)
     writer.beginRecord()
     for i in config.initialBlock..config.endBlock:
-      let blck = downloadBlock(i)
+      let blck = downloadBlock(i, client)
       writer.writeBlock(blck)
     writer.endRecord()
     info "File successfully written"
@@ -175,14 +174,15 @@ proc writeToJson(config: ExporterConf) =
       fatal "Error occoured while closing file", error = e.msg
       quit 1
 
-proc writeToDb(config: ExporterConf) =
+proc writeToDb(config: ExporterConf, client: RpcClient) =
   let db = SeedDb.new(distinctBase(config.dataDir), config.filename)
+
   defer:
     db.close()
 
   for i in config.initialBlock..config.endBlock:
     let
-      blck = downloadBlock(i)
+      blck = downloadBlock(i, client)
       blockHash = blck.header.blockHash()
       contentKeyType = BlockKey(chainId: 1, blockHash: blockHash)
       headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
@@ -200,12 +200,12 @@ proc writeToDb(config: ExporterConf) =
 
   info "Data successfuly written to db"
 
-proc run(config: ExporterConf) =
+proc run(config: ExporterConf, client: RpcClient) =
   case config.storageMode
   of Json:
-    writeToJson(config)
+    writeToJson(config, client)
   of Db:
-    writeToDb(config)
+    writeToDb(config, client)
 
 when isMainModule:
   {.pop.}
@@ -220,4 +220,19 @@ when isMainModule:
 
   setLogLevel(config.logLevel)
 
-  run(config)
+  var client: RpcClient
+
+  try:
+    let c = newRpcWebSocketClient()
+    # TODO Currently hardcoded to default geth ws address, at some point it may
+    # be moved to config
+    waitFor c.connect("ws://127.0.0.1:8546")
+    client = c
+  except CatchableError as e:
+    fatal "Error while connecting to data provider", error = e.msg
+    quit 1
+
+  try:
+    run(config, client)
+  finally:
+    waitFor client.close()
