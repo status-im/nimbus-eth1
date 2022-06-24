@@ -14,7 +14,8 @@ import
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
-proc initDiscoveryNode*(rng: ref BrHmacDrbgContext,
+proc initDiscoveryNode*(
+    rng: ref BrHmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
     bootstrapRecords: openArray[Record] = [],
