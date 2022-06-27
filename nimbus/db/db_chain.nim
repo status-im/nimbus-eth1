@@ -101,6 +101,9 @@ proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
     raise newException(CanonicalHeadNotFound,
                       "No canonical head set for this chain")
 
+proc getCanonicalHeaderHash*(self: BaseChainDB): Hash256 =
+  discard self.getHash(canonicalHeadHashKey(), result)
+
 proc populateProgress*(self: BaseChainDB) =
   try:
     self.startingBlock = self.getCanonicalHead().blockNumber

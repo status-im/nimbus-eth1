@@ -108,17 +108,17 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       balance = accDB.getBalance(address)
     result = encodeQuantity(balance)
 
-  server.rpc("eth_getStorageAt") do(data: EthAddressStr, quantity: HexQuantityStr, quantityTag: string) -> HexDataStr:
+  server.rpc("eth_getStorageAt") do(data: EthAddressStr, slot: HexDataStr, quantityTag: string) -> HexDataStr:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
-    ## quantity: integer of the position in the storage.
+    ## slot: integer of the position in the storage.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.toAddress
-      key     = fromHex(UInt256, quantity.string)
+      key     = fromHex(UInt256, slot.string)
       value   = accDB.getStorage(address, key)[0]
     result = hexDataStr(value)
 

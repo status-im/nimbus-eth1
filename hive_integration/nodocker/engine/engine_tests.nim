@@ -1215,9 +1215,11 @@ proc reorgBack(t: TestEnv): TestStatus =
 
       # It is only expected that the client does not produce an error and the CL Mocker is able to progress after the re-org
       let r = client.forkchoiceUpdatedV1(forkchoiceUpdatedBack)
-      r.isOk
+      if r.isErr:
+        error "failed to reorg back", msg = r.error
+        return false
+      return true
   ))
-
   testCond r2
 
   # Verify that the client is pointing to the latest payload sent

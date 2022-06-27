@@ -99,6 +99,9 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
   let lastBlockNumber = nRes.get
   if cl.latestHeadNumber != lastBlockNumber:
+    error "CLMocker: unexpected lastBlockNumber",
+      get = lastBlockNumber,
+      expect = cl.latestHeadNumber
     return false
 
   var header: common.BlockHeader
