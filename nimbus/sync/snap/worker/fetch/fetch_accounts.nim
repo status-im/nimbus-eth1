@@ -12,12 +12,6 @@
 ## This module fetches the Ethereum account state trie from network peers by
 ## traversing leaves of the trie in leaf path order, making network requests
 ## using the `snap` protocol.
-##
-## From the leaves it is possible to reconstruct parts of a full trie.  With a
-## separate trie traversal process it is possible to efficiently update the
-## leaf states for related tries (new blocks), and merge partial data from
-## different related tries (blocks at different times) together in a way that
-## eventually becomes a full trie for a single block.
 
 import
   chronos,
@@ -26,7 +20,7 @@ import
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config, types],
   ../../path_desc,
-  ".."/[ticker, worker_desc]
+  ../worker_desc
 
 {.push raises: [Defect].}
 
@@ -36,6 +30,19 @@ logScope:
 const
   snapRequestBytesLimit = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
+
+type
+  FetchError* = enum
+    NothingSerious,
+    MissingProof,
+    AccountsMinTooSmall,
+    AccountsMaxTooLarge,
+    NoAccountsForStateRoot,
+    NetworkProblem
+
+  FetchAccounts* = object
+    consumed*: UInt256     ## Leftmost accounts used from argument range
+    data*: accountRangeObj ## reply data
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -64,79 +71,96 @@ proc fetchAccounts*(
     peer: WorkerBuddy;
     stateRoot: TrieHash;
     iv: LeafRange
-      ): Future[Result[LeafRange,void]] {.async.} =
+      ): Future[Result[FetchAccounts,FetchError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer,
       accRange=iv, stateRoot, bytesLimit=snapRequestBytesLimit
 
-  let reply = block:
+  var dd = block:
     let rc = await peer.getAccountRange(stateRoot, iv)
     if rc.isErr:
-      inc peer.stats.major.networkErrors
-      peer.ctrl.stopped = true
-      return err()
+      return err(NetworkProblem)
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
-      return err()
-    rc.value.get
+      return err(NothingSerious)
+    FetchAccounts(
+      consumed: iv.len,
+      data: rc.value.get)
 
   let
-    accounts = reply.accounts
-    nAccounts = accounts.len
-
-    # TODO: We're not currently verifying boundary proofs, but we do depend on
-    # whether there is a proof supplied.  Unlike Snap sync, the Pie sync
-    # algorithm doesn't verify most boundary proofs at this stage.
-    proof = reply.proof
-    nProof = proof.len
+    nAccounts = dd.data.accounts.len
+    nProof = dd.data.proof.len
 
   if nAccounts == 0:
-    # If there's no proof, this reply means the peer has no accounts available
-    # in the range for this query.  But if there's a proof, this reply means
-    # there are no more accounts starting at path `origin` up to max path.
-    # This makes all the difference to terminating the fetch.  For now we'll
-    # trust the mere existence of the proof rather than verifying it.
+    # github.com/ethereum/devp2p/blob/master/caps/snap.md#getaccountrange-0x00:
+    # Notes:
+    # * Nodes must always respond to the query.
+    # * If the node does not have the state for the requested state root, it
+    #   must return an empty reply. It is the responsibility of the caller to
+    #   query an state not older than 128 blocks.
+    # * The responding node is allowed to return less data than requested (own
+    #   QoS limits), but the node must return at least one account. If no
+    #   accounts exist between startingHash and limitHash, then the first (if
+    #   any) account after limitHash must be provided.
     if nProof == 0:
-      trace trSnapRecvReceived & "EMPTY AccountRange message", peer,
+      # Maybe try another peer
+      trace trSnapRecvReceived & "EMPTY AccountRange reply", peer,
         nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
-      # Don't keep retrying snap for this state.
-      peer.ctrl.stopRequest = true
-      return err()
-    else:
-      let accRange = LeafRange.new(iv.minPt, high(LeafItem))
-      trace trSnapRecvReceived & "END AccountRange message", peer,
-        nAccounts, nProof, accRange, reqRange=iv, stateRoot
-      # Current slicer can't accept more result data than was requested, so
-      # just leave the requested slice claimed and update statistics.
-      return ok(iv)
+      return err(NoAccountsForStateRoot)
 
-  let accRange = LeafRange.new(iv.minPt, accounts[^1].accHash)
+    # So there is no data, otherwise an account beyond the interval end
+    # `iv.maxPt` would have been returned.
+    trace trSnapRecvReceived & "END AccountRange message", peer,
+      nAccounts, nProof, accRange=LeafRange.new(iv.minPt, high(NodeTag)),
+      reqRange=iv, stateRoot
+    dd.consumed = high(NodeTag) - iv.minPt
+    return ok(dd)
+
+  let (accMinPt, accMaxPt) =
+        (dd.data.accounts[0].accHash, dd.data.accounts[^1].accHash)
+
+  if nProof == 0:
+    # github.com/ethereum/devp2p/blob/master/caps/snap.md#accountrange-0x01
+    # Notes:
+    # * If the account range is the entire state (requested origin was 0x00..0
+    #   and all accounts fit into the response), no proofs should be sent along
+    #   the response. This is unlikely for accounts, but since it's a common
+    #   situation for storage slots, this clause keeps the behavior the same
+    #   across both.
+    if 0.to(NodeTag) < iv.minPt:
+      trace trSnapRecvProtocolViolation & "missing proof in AccountRange", peer,
+        nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
+        reqRange=iv, stateRoot
+      return err(MissingProof)
+    # TODO: How do I know that the full accounts list is correct?
+
+  if accMinPt < iv.minPt:
+    # Not allowed
+    trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
+      nAccounts, nProof, accRange=LeafRange.new(accMinPt, accMaxPt),
+      reqRange=iv, stateRoot
+    return err(AccountsMinTooSmall)
+
+  if iv.maxPt < accMaxPt:
+    # github.com/ethereum/devp2p/blob/master/caps/snap.md#getaccountrange-0x00:
+    # Notes:
+    # * [..]
+    # * [..]
+    # * [..] If no accounts exist between startingHash and limitHash, then the
+    #   first (if any) account after limitHash must be provided.
+    if 1 < nAccounts:
+      trace trSnapRecvProtocolViolation & "max too large in AccountRange", peer,
+        nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
+        reqRange=iv, stateRoot
+      return err(AccountsMaxTooLarge)
+
   trace trSnapRecvReceived & "AccountRange message", peer,
-    accounts=accounts.len, proofs=proof.len, accRange,
+    nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
     reqRange=iv, stateRoot
 
-  # Missing proof isn't allowed, unless `minPt` is min path in which case
-  # there might be no proof if the result spans the entire range.
-  if proof.len == 0 and iv.minPt != low(LeafItem):
-    trace trSnapRecvProtocolViolation & "missing proof in AccountRange", peer,
-      nAccounts, nProof, accRange, reqRange=iv, stateRoot
-    return err()
-
-  if accRange.maxPt < iv.maxPt:
-    peer.tickerCountAccounts(0, nAccounts)
-    return ok(LeafRange.new(iv.minPt, accRange.maxPt))
-
-  var keepAccounts = nAccounts
-  # Current slicer can't accept more result data than was requested.
-  # So truncate to limit before updating statistics.
-  while iv.maxPt < accounts[keepAccounts-1].accHash:
-    dec keepAccounts
-    if keepAccounts == 0:
-      break
-
-  peer.tickerCountAccounts(0, keepAccounts)
-  return ok(iv) # all of `iv` used
+  dd.consumed = (accMaxPt - iv.minPt) + 1
+  return ok(dd)
 
 # ------------------------------------------------------------------------------
 # End

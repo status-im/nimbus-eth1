@@ -17,21 +17,24 @@ import
   stint,
   ../../types,
   ../path_desc,
-  ./fetch/fetch_accounts,
+  ./fetch/[fetch_accounts, proof_db],
   "."/[ticker, worker_desc]
 
 {.push raises: [Defect].}
 
 type
   FetchEx = ref object of WorkerFetchBase
-    accTab: AccLruCache             ## Global worker data
-    quCount: uint64                 ## Count visited roots
-    lastPivot: LeafItem             ## Used for calculating pivots
+    accTab: AccLruCache      ## Global worker data
+    quCount: uint64          ## Count visited roots
+    lastPivot: NodeTag       ## Used for calculating pivots
+    accRangeMaxLen: UInt256  ## Maximap interval length, high(u256)/#peers
 
   AccTabEntryRef = ref object
     ## Global worker table
-    avail: LeafRangeSet             ## Accounts to visit (organised as ranges)
-    pivot: LeafItem                 ## where to to start fetching from
+    avail: LeafRangeSet      ## Accounts to visit (organised as ranges)
+    pivot: NodeTag           ## Where to to start fetching from
+    proof: ProofDbRef        ## Proof processing, TODO: find a better name
+    base: WorkerFetchBase    ## Back reference (`FetchEx` not working, here)
 
   AccLruCache =
     KeyedQueue[TrieHash,AccTabEntryRef]
@@ -42,7 +45,7 @@ logScope:
 const
   accRangeMaxLen = ##\
     ## ask for that many accounts at once (not the range is sparse)
-    (high(LeafItem) - low(LeafItem)) div 1000
+    (high(NodeTag) - low(NodeTag)) div 1000
 
   pivotAccIncrement = ##\
     ## increment when `lastPivot` would stay put
@@ -52,12 +55,9 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc withMaxLen(iv: LeafRange): LeafRange =
-  ## Reduce accounts interval to maximal size
-  if 0 < iv.len and iv.len < accRangeMaxLen:
-    iv
-  else:
-    LeafRange.new(iv.minPt, iv.minPt + (accRangeMaxLen - 1).u256)
+proc `==`(a, b: AccTabEntryRef): bool =
+  ## Just to make things clear, should be default action anyway
+  cast[pointer](a) == cast[pointer](b)
 
 proc fetchEx(ns: Worker): FetchEx =
   ## Getter
@@ -66,6 +66,14 @@ proc fetchEx(ns: Worker): FetchEx =
 proc fetchEx(sp: WorkerBuddy): FetchEx =
   ## Getter
   sp.ns.fetchEx
+
+proc withMaxLen(atb: AccTabEntryRef; iv: LeafRange): LeafRange =
+  ## Reduce accounts interval to maximal size
+  let maxlen = atb.base.FetchEx.accRangeMaxLen
+  if 0 < iv.len and iv.len <= maxLen:
+    iv
+  else:
+    LeafRange.new(iv.minPt, iv.minPt + maxLen - 1.u256)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -96,16 +104,18 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
     if sp.ns.fetchEx.lastPivot < blkRc.value.minPt:
       sp.ns.fetchEx.lastPivot = blkRc.value.minPt
       break
-    if sp.ns.fetchEx.lastPivot < high(LeafItem) - pivotAccIncrement:
+    if sp.ns.fetchEx.lastPivot < high(NodeTag) - pivotAccIncrement:
       sp.ns.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
       break
     # Otherwise start at 0
-    sp.ns.fetchEx.lastPivot = 0.to(LeafItem)
+    sp.ns.fetchEx.lastPivot = 0.to(NodeTag)
     break
 
   let accRange = AccTabEntryRef(
     pivot: sp.ns.fetchEx.lastPivot,
-    avail: LeafRangeSet.init())
+    avail: LeafRangeSet.init(),
+    proof: ProofDBRef.init(key),
+    base: sp.fetchEx)
 
   trace "New accounts list for syncing",
     peer=sp, stateRoot=key, pivot=sp.ns.fetchEx.lastPivot
@@ -114,10 +124,19 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
   sp.ns.fetchEx.quCount.inc
 
   # Pre-filled with the largest possible interval
-  discard accRange.avail.merge(low(LeafItem),high(LeafItem))
+  discard accRange.avail.merge(low(NodeTag),high(NodeTag))
 
   # Append and curb LRU table as needed
   return sp.ns.fetchEx.accTab.lruAppend(key, accRange, sp.ns.buddiesMax)
+
+
+proc sameAccTab(sp: WorkerBuddy; key: TrieHash; accTab: AccTabEntryRef): bool =
+  ## Verify that account list entry has not changed.
+  let rc = sp.ns.fetchEx.accTab.eq(key)
+  if rc.isErr:
+    return accTab.isNil
+  if not accTab.isNil:
+    return accTab == rc.value
 
 
 proc fetchAccRange(atb: AccTabEntryRef): Result[LeafRange,void] =
@@ -136,14 +155,14 @@ proc fetchAccRange(atb: AccTabEntryRef): Result[LeafRange,void] =
     # Take the next interval to the right
     let rc = atb.avail.ge(atb.pivot)
     if rc.isOk:
-      let iv = rc.value.withMaxLen
+      let iv = atb.withMaxLen(rc.value)
       discard atb.avail.reduce(iv)
       return ok(iv)
 
   # Otherwise wrap around
   let rc = atb.avail.ge()
   if rc.isOk:
-    let iv = rc.value.withMaxLen
+    let iv = atb.withMaxLen(rc.value)
     discard atb.avail.reduce(iv)
     return ok(iv)
 
@@ -153,7 +172,7 @@ proc fetchAccRange(atb: AccTabEntryRef): Result[LeafRange,void] =
 proc putAccRange(atb: AccTabEntryRef; iv: LeafRange) =
   discard atb.avail.merge(iv)
 
-proc putAccRange(atb: AccTabEntryRef; a, b: LeafItem) =
+proc putAccRange(atb: AccTabEntryRef; a, b: NodeTag) =
   discard atb.avail.merge(a, b)
 
 
@@ -176,6 +195,7 @@ proc fetchSetup*(ns: Worker) =
   ## Global set up
   ns.fetchBase = FetchEx()
   ns.fetchEx.accTab.init(ns.buddiesMax)
+  ns.fetchEx.accRangeMaxLen = high(UInt256) div ns.buddiesMax.u256
   ns.tickerSetup(cb = tickerStats)
 
 proc fetchRelease*(ns: Worker) =
@@ -225,63 +245,80 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
   trace "Fetching from peer", peer=sp, ctrlState=sp.ctrl.state
   sp.tickerStartPeer()
 
-  var
-    stateRoot = sp.ctrl.stateRoot.get
-    accTab = sp.getAccTab(stateRoot)
-
   while not sp.ctrl.stopped:
 
-    if not accTab.haveAccRange():
-      trace "Nothing more to sync from this peer", peer=sp
-      while not accTab.haveAccRange():
-        await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
-
+    # We need a state root and an access range list (depending on state root)
     if sp.ctrl.stateRoot.isNone:
-      trace "No current state root for this peer", peer=sp
+      trace "Currently no state root", peer=sp
+      # Wait for a new state root
       while not sp.ctrl.stopped and
-            accTab.haveAccRange() and
             sp.ctrl.stateRoot.isNone:
-        await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
+        await sleepAsync(5.seconds)
       continue
 
-    if stateRoot != sp.ctrl.stateRoot.get:
+    # Ok, here is the `stateRoot`, tentatively try the access range list
+    let
       stateRoot = sp.ctrl.stateRoot.get
       accTab = sp.getAccTab(stateRoot)
-      sp.ctrl.stopped = false
 
-    if sp.ctrl.stopRequest:
-      trace "Pausing sync until we get a new state root", peer=sp
+    if not accTab.haveAccRange():
+      trace "Currently no account ranges", peer=sp
+      # Account ranges exhausted, wait for a new state root
       while not sp.ctrl.stopped and
-            accTab.haveAccRange() and
             sp.ctrl.stateRoot.isSome and
-            stateRoot == sp.ctrl.stateRoot.get:
-        await sleepAsync(5.seconds) # TODO: Use an event trigger instead.
+            stateRoot == sp.ctrl.stateRoot.get and
+            sp.sameAccTab(stateRoot, accTab) and
+            not accTab.haveAccRange():
+        await sleepAsync(5.seconds)
       continue
 
-    if sp.ctrl.stopped:
-      continue
-
-    # Rotate LRU table
-    accTab = sp.getAccTab(stateRoot)
-
-    # Get a new interval, a range of accounts to visit
+    # Get a range of accounts to fetch from
     let iv = block:
       let rc = accTab.fetchAccRange()
       if rc.isErr:
         continue
       rc.value
 
-    # Fetch data for this interval, `fetchAccounts()` returns the range covered
-    let rc = await sp.fetchAccounts(stateRoot, iv)
-    if rc.isErr:
-      accTab.putAccRange(iv) # fail => interval back to pool
-    elif rc.value.maxPt < iv.maxPt:
+    # Fetch data for this range delegated to `fetchAccounts()`
+    let dd = block:
+      let rc = await sp.fetchAccounts(stateRoot, iv)
+      if rc.isErr:
+        accTab.putAccRange(iv) # fail => interval back to pool
+        case rc.error:
+        of NetworkProblem, MissingProof, AccountsMinTooSmall,
+           AccountsMaxTooLarge:
+          # Mark this peer dead, i.e. avoid fetching from this peer for a while
+          sp.stats.major.networkErrors.inc()
+          sp.ctrl.zombie = true
+        of NothingSerious:
+          discard
+        of NoAccountsForStateRoot:
+          # One could wait for a new state root but this may result in a
+          # temporary standstill if all `fetch()` instances do the same. So
+          # waiting for a while here might be preferable in the hope that the
+          # situation changes at the peer.
+          await sleepAsync(5.seconds)
+        continue
+      rc.value
+
+    # Register consumed accounts range
+    if dd.consumed < iv.len:
       # return some unused range
-      accTab.putAccRange(rc.value.maxPt + 1.u256, iv.maxPt)
+      accTab.putAccRange(iv.minPt + dd.consumed.u256, iv.maxPt)
+
+    # Statistics
+    sp.tickerCountAccounts(0, dd.data.accounts.len)
+
+    # Process data
+    block:
+      let rc = accTab.proof.mergeProved(
+        iv.minPt, dd.data.accounts, dd.data.proof)
+      if rc.isErr:
+        discard # ??
 
   # while end
 
-  trace "No more sync available from this peer", peer=sp
+  trace "Done syncing for this peer", peer=sp, ctrlState=sp.ctrl.state
   sp.tickerStopPeer()
 
 # ------------------------------------------------------------------------------

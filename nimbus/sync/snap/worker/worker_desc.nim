@@ -32,10 +32,10 @@ type
   BuddyRunState = enum
     ## Combined state of two boolean values (`stopped`,`stopThisState`) as used
     ## in the original source set up (should be double checked and simplified.)
-    FullyRunning    ## running, not requested to stop
-    StopRequested   ## running, stop request
-    SingularStop    ## stopped, no stop request (for completeness)
-    FullyStopped    ## stopped, stop request
+    Running    ## running, not requested to stop
+    Stopped    ## stopped, stop request
+    ZombieStop ## abanon/ignore (LRU tab overflow, odd packets)
+    ZombieRun  ## additional zombie state to potentially recover from
 
   WorkerBuddyStats* = tuple
     ## Statistics counters for events associated with this peer.
@@ -102,10 +102,10 @@ proc new*(T: type WorkerBuddy; ns: Worker; peer: Peer): T =
   ## Initial state all default settings.
   T(ns: ns, peer: peer)
 
-proc init*(ctrl: var WorkerBuddyCtrl; fullyRunning: bool) =
-  ## Set initial running state `fullyRunning` if the argument `fullyRunning`
-  ## is `true`.  Otherwise the running state is set `fullyStopped`.
-  ctrl.runState = if fullyRunning: FullyRunning else: FullyStopped
+proc init*(ctrl: var WorkerBuddyCtrl; running: bool) =
+  ## Set initial running state `Running` if the argument `running`
+  ## is `true`.  Otherwise the running state is set `stopped`.
+  ctrl.runState = if running: Running else: Stopped
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -124,67 +124,56 @@ proc state*(ctrl: WorkerBuddyCtrl): BuddyRunState =
   ## Getter (logging only, details of `BuddyRunState` are private)
   ctrl.runState
 
-proc fullyRunning*(ctrl: WorkerBuddyCtrl): bool =
-  ## Getter, if `true`, `stopped` and `stopRequest` are `false`
-  ctrl.runState == FullyRunning
-
-proc fullyStopped*(ctrl: WorkerBuddyCtrl): bool =
-  ## Getter, if `true`, `stopped` and `stopRequest` are `true`
-  ctrl.runState == FullyStopped
+proc running*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, if `true` if `ctrl.state()` is `Running`
+  ctrl.runState == Running
 
 proc stopped*(ctrl: WorkerBuddyCtrl): bool =
-  ## Getter, not running (ignoring pending stop request)
-  ctrl.runState in {FullyStopped,SingularStop}
+  ## Getter, if `true`, if `ctrl.state()` is not `Running`
+  ctrl.runState in {Stopped, ZombieStop, ZombieRun}
 
-proc stopRequest*(ctrl: WorkerBuddyCtrl): bool =
-  ## Getter, pending stop request (ignoring running state)
-  ctrl.runState in {StopRequested,FullyStopped}
+proc zombie*(ctrl: WorkerBuddyCtrl): bool =
+  ## Getter, `true` if `ctrl.state()` is `Zombie` (i.e. not `running()` and
+  ## not `stopped()`)
+  ctrl.runState in {ZombieStop, ZombieRun}
 
 # ------------------------------------------------------------------------------
 # Public setters, `BuddyRunState` execution control functions
 # ------------------------------------------------------------------------------
 
+proc `zombie=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
+  ## Setter
+  if value:
+    case ctrl.runState:
+    of Running:
+      ctrl.runState = ZombieRun
+    of Stopped:
+      ctrl.runState = ZombieStop
+    else:
+      discard
+  else:
+    case ctrl.runState:
+    of ZombieRun:
+      ctrl.runState = Running
+    of ZombieStop:
+      ctrl.runState = Stopped
+    else:
+      discard
+
 proc `stopped=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
   ## Setter
   if value:
     case ctrl.runState:
-    of FullyRunning:
-      ctrl.runState = SingularStop
-    of StopRequested:
-      ctrl.runState = FullyStopped
-    of SingularStop, FullyStopped:
+    of Running:
+      ctrl.runState = Stopped
+    else:
       discard
   else:
     case ctrl.runState:
-    of FullyRunning, StopRequested:
+    of Stopped:
+      ctrl.runState = Running
+    else:
       discard
-    of SingularStop:
-      ctrl.runState = FullyRunning
-    of FullyStopped:
-      ctrl.runState = StopRequested
-
-proc `stopRequest=`*(ctrl: var WorkerBuddyCtrl; value: bool) =
-  ## Setter, stop request (ignoring running state)
-  if value:
-    case ctrl.runState:
-    of FullyRunning:
-      ctrl.runState = StopRequested
-    of StopRequested:
-      discard
-    of SingularStop:
-      ctrl.runState = FullyStopped
-    of FullyStopped:
-      discard
-  else:
-    case ctrl.runState:
-    of FullyRunning:
-      discard
-    of StopRequested:
-      ctrl.runState = FullyRunning
-    of SingularStop:
-      discard
-    of FullyStopped:
-      ctrl.runState = SingularStop
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

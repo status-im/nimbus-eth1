@@ -559,7 +559,7 @@ proc workerStart*(sp: WorkerBuddy): bool =
      sp.peer.supports(protocol.eth) and
      sp.peer.state(protocol.eth).initialized:
 
-    sp.ctrl.init(fullyRunning = true)
+    sp.ctrl.init(running = true)
 
     # Initialise data retrieval
     sp.fetchStart()
@@ -575,8 +575,9 @@ proc workerStart*(sp: WorkerBuddy): bool =
 
 proc workerStop*(sp: WorkerBuddy) =
   ## Clean up this peer
-  sp.ctrl.stopped = true
-  sp.fetchStop()
+  if not sp.ctrl.stopped:
+    sp.ctrl.stopped = true
+    sp.fetchStop()
 
 proc workerLockedOk*(sp: WorkerBuddy): bool =
   sp.hunt.syncMode == SyncLocked
@@ -611,7 +612,7 @@ proc workerExec*(sp: WorkerBuddy) {.async.} =
     trace trEthRecvError & "waiting for GetBlockHeaders reply", peer=sp,
       error=e.msg
     inc sp.stats.major.networkErrors
-    sp.ctrl.stopped = true
+    sp.workerStop()
     return
 
   if reply.isNone:

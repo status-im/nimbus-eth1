@@ -12,7 +12,6 @@
 import
   std/[math, strutils, hashes],
   eth/common/eth_types,
-  nimcrypto/keccak,
   stew/byteutils
 
 {.push raises: [Defect].}
@@ -69,18 +68,14 @@ proc to*(num: SomeInteger; T: type float): T =
   ## Convert to float
   num.T
 
-proc to*(w: TrieHash|NodeHash|BlockHash; T: type Hash256): T =
+proc to*(w: TrieHash|NodeHash|BlockHash|TxHash; T: type Hash256): T =
   ## Get rid of `distinct` harness (needed for `snap1` and `eth1` protocol
   ## driver access.)
   w.Hash256
 
-proc to*(w: seq[NodeHash|NodeHash]; T: type seq[Hash256]): T =
+proc to*(w: seq[TrieHash|NodeHash|BlockHash|TxHash]; T: type seq[Hash256]): T =
   ## Ditto
   cast[seq[Hash256]](w)
-
-proc to*(data: Blob; T: type NodeHash): T =
-  ## Convert argument `data` to `NodeHash`
-  keccak256.digest(data).T
 
 proc to*(bh: BlockHash; T: type HashOrNum): T =
   ## Convert argument blocj hash `bh` to `HashOrNum`
@@ -100,9 +95,9 @@ proc `==`*(a,b: TrieHash): bool {.borrow.}
 proc `==`*(a,b: NodeHash): bool {.borrow.}
 proc `==`*(a,b: BlockHash): bool {.borrow.}
 
-proc hash*(root: TrieHash): Hash =
+proc hash*(root: TrieHash|NodeHash|BlockHash): Hash =
   ## Mixin for `Table` or `keyedQueue`
-  root.to(Hash256).data.hash
+  root.Hash256.data.hash
 
 # ------------------------------------------------------------------------------
 # Public printing and pretty printing
@@ -155,16 +150,12 @@ proc toSI*(num: SomeUnsignedInt): string =
 
   result.insert(".", result.len - 3)
 
-
 func toHex*(hash: Hash256): string =
   ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
 
-func `$`*(th: TrieHash|NodeHash): string =
-  th.Hash256.toHex
-
-func `$`*(hash: Hash256): string =
-  hash.toHex
+func `$`*(h: TrieHash|NodeHash|BlockHash|TxHash): string =
+  $h.Hash256.data.toHex
 
 func `$`*(blob: Blob): string =
   blob.toHex
