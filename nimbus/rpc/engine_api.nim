@@ -277,6 +277,7 @@ proc setupEngineAPI*(
           finalHash=finalHash.data.toHex,
           finalizedBlockHash=finalizedBlockHash.data.toHex
         raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalilized block not canonical")
+      db.finalizedHeaderHash(finalizedBlockHash)
 
     let safeBlockHash = update.safeBlockHash.asEthHash
     if safeBlockHash != Hash256():
@@ -295,6 +296,7 @@ proc setupEngineAPI*(
           safeHash=safeHash.data.toHex,
           safeBlockHash=safeBlockHash.data.toHex
         raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe head not canonical")
+      db.safeHeaderHash(safeBlockHash)
 
     # If payload generation was requested, create a new block to be potentially
     # sealed by the beacon client. The payload will be requested later, and we

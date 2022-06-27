@@ -435,3 +435,21 @@ proc persistUncles*(self: BaseChainDB, uncles: openArray[BlockHeader]): Hash256 
   let enc = rlp.encode(uncles)
   result = keccakHash(enc)
   self.db.put(genericHashKey(result).toOpenArray, enc)
+
+proc safeHeaderHash*(self: BaseChainDB): Hash256 =
+  discard self.getHash(safeHashKey(), result)
+
+proc safeHeaderHash*(self: BaseChainDB, headerHash: Hash256) =
+  self.db.put(safeHashKey().toOpenArray, rlp.encode(headerHash))
+
+proc finalizedHeaderHash*(self: BaseChainDB): Hash256 =
+  discard self.getHash(finalizedHashKey(), result)
+
+proc finalizedHeaderHash*(self: BaseChainDB, headerHash: Hash256) =
+  self.db.put(finalizedHashKey().toOpenArray, rlp.encode(headerHash))
+
+proc safeHeader*(self: BaseChainDB): BlockHeader =
+  self.getBlockHeader(self.safeHeaderHash)
+
+proc finalizedHeader*(self: BaseChainDB): BlockHeader =
+  self.getBlockHeader(self.finalizedHeaderHash)

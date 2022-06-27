@@ -158,6 +158,16 @@ proc latestBlock*(client: RpcClient, output: var common.EthBlock): Result[void, 
   except ValueError as e:
     return err(e.msg)
 
+proc namedHeader*(client: RpcClient, name: string, output: var common.BlockHeader): Result[void, string] =
+  try:
+    let res = waitFor client.eth_getBlockByNumber(name, false)
+    if res.isNone:
+      return err("failed to get named blockHeader")
+    output = toBlockHeader(res.get())
+    return ok()
+  except ValueError as e:
+    return err(e.msg)
+    
 proc sendTransaction*(client: RpcClient, tx: common.Transaction): Result[void, string] =
   try:
     let encodedTx = rlp.encode(tx)

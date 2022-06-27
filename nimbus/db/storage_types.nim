@@ -13,6 +13,8 @@ type
     cliqueSnapshot
     transitionStatus
     terminalHash
+    safeHash
+    finalizedHash
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -67,6 +69,14 @@ proc transitionStatusKey*(): DbKey =
 
 proc terminalHashKey*(): DbKey =
   result.data[0] = byte ord(terminalHash)
+  result.dataEndPos = uint8 1
+
+proc safeHashKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(safeHash)
+  result.dataEndPos = uint8 1
+
+proc finalizedHashKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
 
 template toOpenArray*(k: DbKey): openArray[byte] =

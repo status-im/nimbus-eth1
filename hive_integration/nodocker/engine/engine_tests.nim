@@ -929,101 +929,67 @@ template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
 blockStatusHeadBlockGen(blockStatusHeadBlock1, false)
 blockStatusHeadBlockGen(blockStatusHeadBlock2, true)
 
-template blockStatusSafeBlockGen(procname: untyped, transitionBlock: bool) =
-  proc procName(t: TestEnv): TestStatus =
-    result = TestStatus.OK
+proc blockStatusSafeBlock(t: TestEnv): TestStatus =
+  result = TestStatus.OK
 
-    # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
-    testCond ok
+  let clMock = t.clMock
+  let client = t.rpcClient
 
-    # Produce blocks before starting the test, only if we are not testing the transition block
-    when not transitionBlock:
-      let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-      testCond produce5BlockRes
+  # On PoW mode, `safe` tag shall return error.
+  var header: EthBlockHeader
+  var rr = client.namedHeader("safe", header)
+  testCond rr.isErr
 
-    let clMock = t.clMock
-    let client = t.rpcClient
-    let shadow = Shadow()
+  # Wait until this client catches up with latest PoS Block
+  let ok = waitFor t.clMock.waitForTTD()
+  testCond ok
 
-    var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
-      onPayloadProducerSelected: proc(): bool =
-        var address: EthAddress
-        testCond t.sendTx(address, 1.u256)
-        shadow.hash = rlpHash(t.tx)
-        return true
-      ,
-      # Run test after a forkchoice with new HeadBlockHash has been broadcasted
-      onSafeBlockChange: proc(): bool =
-        var lastHeader: EthBlockHeader
-        var hRes = client.latestHeader(lastHeader)
-        if hRes.isErr:
-          error "unable to get latest header", msg=hRes.error
-          return false
+  # First ForkchoiceUpdated sent was equal to 0x00..00, `safe` should return error now
+  rr = client.namedHeader("safe", header)
+  testCond rr.isErr
 
-        let lastHash = BlockHash lastHeader.blockHash.data
-        if lastHash != clMock.latestForkchoice.headBlockHash:
-          error "latest block header doesn't match SafeBlock hash", hash=lastHash.toHex
-          return false
+  let pbres = clMock.produceBlocks(3, BlockProcessCallbacks(
+    # Run test after a forkchoice with new SafeBlockHash has been broadcasted
+    onSafeBlockChange: proc(): bool =
+      var header: EthBlockHeader
+      let rr = client.namedHeader("safe", header)
+      testCond rr.isOk
+      let safeBlockHash = hash256(clMock.latestForkchoice.safeBlockHash)
+      header.blockHash == safeBlockHash
+  ))
 
-        let rr = client.txReceipt(shadow.hash)
-        if rr.isErr:
-          error "unable to get transaction receipt"
-          return false
-        return true
-    ))
-    testCond produceSingleBlockRes
+  testCond pbres
 
-blockStatusSafeBlockGen(blockStatusSafeBlock1, false)
-blockStatusSafeBlockGen(blockStatusSafeBlock2, true)
+proc blockStatusFinalizedBlock(t: TestEnv): TestStatus =
+  result = TestStatus.OK
 
-template blockStatusFinalizedBlockGen(procname: untyped, transitionBlock: bool) =
-  proc procName(t: TestEnv): TestStatus =
-    result = TestStatus.OK
+  let clMock = t.clMock
+  let client = t.rpcClient
 
-    # Wait until TTD is reached by this client
-    let ok = waitFor t.clMock.waitForTTD()
-    testCond ok
+  # On PoW mode, `finalized` tag shall return error.
+  var header: EthBlockHeader
+  var rr = client.namedHeader("finalized", header)
+  testCond rr.isErr
 
-    # Produce blocks before starting the test, only if we are not testing the transition block
-    when not transitionBlock:
-      let produce5BlockRes = t.clMock.produceBlocks(5, BlockProcessCallbacks())
-      testCond produce5BlockRes
+  # Wait until this client catches up with latest PoS Block
+  let ok = waitFor t.clMock.waitForTTD()
+  testCond ok
 
-    let clMock = t.clMock
-    let client = t.rpcClient
-    let shadow = Shadow()
+  # First ForkchoiceUpdated sent was equal to 0x00..00, `finalized` should return error now
+  rr = client.namedHeader("finalized", header)
+  testCond rr.isErr
 
-    var produceSingleBlockRes = clMock.produceSingleBlock(BlockProcessCallbacks(
-      onPayloadProducerSelected: proc(): bool =
-        var address: EthAddress
-        testCond t.sendTx(address, 1.u256)
-        shadow.hash = rlpHash(t.tx)
-        return true
-      ,
-      # Run test after a forkchoice with new HeadBlockHash has been broadcasted
-      onFinalizedBlockChange: proc(): bool =
-        var lastHeader: EthBlockHeader
-        var hRes = client.latestHeader(lastHeader)
-        if hRes.isErr:
-          error "unable to get latest header", msg=hRes.error
-          return false
+  let pbres = clMock.produceBlocks(3, BlockProcessCallbacks(
+    # Run test after a forkchoice with new FinalizedBlockHash has been broadcasted
+    onFinalizedBlockChange: proc(): bool =
+      var header: EthBlockHeader
+      let rr = client.namedHeader("finalized", header)
+      testCond rr.isOk
+      let finalizedBlockHash = hash256(clMock.latestForkchoice.finalizedBlockHash)
+      header.blockHash == finalizedBlockHash
+  ))
 
-        let lastHash = BlockHash lastHeader.blockHash.data
-        if lastHash != clMock.latestForkchoice.headBlockHash:
-          error "latest block header doesn't match FinalizedBlock hash", hash=lastHash.toHex
-          return false
-
-        let rr = client.txReceipt(shadow.hash)
-        if rr.isErr:
-          error "unable to get transaction receipt"
-          return false
-        return true
-    ))
-    testCond produceSingleBlockRes
-
-blockStatusFinalizedBlockGen(blockStatusFinalizedBlock1, false)
-blockStatusFinalizedBlockGen(blockStatusFinalizedBlock2, true)
+  testCond pbres
 
 proc blockStatusReorg(t: TestEnv): TestStatus =
   result = TestStatus.OK
@@ -1900,21 +1866,13 @@ const engineTestList* = [
     ttd:  5,
   ),
   TestSpec(
-    name: "Latest Block after New SafeBlock",
-    run:  blockStatusSafeBlock1,
-  ),
-  TestSpec(
-    name: "Latest Block after New SafeBlock (Transition Block)",
-    run:  blockStatusSafeBlock2,
+    name: "safe Block after New SafeBlockHash",
+    run:  blockStatusSafeBlock,
     ttd:  5,
   ),
   TestSpec(
-    name: "Latest Block after New FinalizedBlock",
-    run:  blockStatusFinalizedBlock1,
-  ),
-  TestSpec(
-    name: "Latest Block after New FinalizedBlock (Transition Block)",
-    run:  blockStatusFinalizedBlock2,
+    name: "finalized Block after New FinalizedBlockHash",
+    run:  blockStatusFinalizedBlock,
     ttd:  5,
   ),
   TestSpec(

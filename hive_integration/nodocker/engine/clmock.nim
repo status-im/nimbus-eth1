@@ -7,7 +7,7 @@ import
   web3/engine_api_types,
   json_rpc/rpcclient,
   ../../../nimbus/merge/mergeutils,
-  ../../../nimbus/debug,
+  ../../../nimbus/[debug, constants],
   ./engine_client
 
 # Consensus Layer Client Mock used to sync the Execution Clients once the TTD has been reached
@@ -34,6 +34,10 @@ type
     client               : RpcClient
     ttd                  : DifficultyInt
 
+    slotsToSafe          : int
+    slotsToFinalized     : int
+    headHashHistory      : seq[BlockHash]
+
   BlockProcessCallbacks* = object
     onPayloadProducerSelected* : proc(): bool {.gcsafe.}
     onGetPayloadID*            : proc(): bool {.gcsafe.}
@@ -47,6 +51,8 @@ type
 proc init*(cl: CLMocker, client: RpcClient, ttd: DifficultyInt) =
   cl.client = client
   cl.ttd = ttd
+  cl.slotsToSafe = 1
+  cl.slotsToFinalized = 2
 
 proc newClMocker*(client: RpcClient, ttd: DifficultyInt): CLMocker =
   new result
@@ -63,8 +69,13 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
 
   let headerHash = BlockHash(common.blockHash(cl.latestHeader).data)
   cl.latestForkchoice.headBlockHash = headerHash
-  cl.latestForkchoice.safeBlockHash = headerHash
-  cl.latestForkchoice.finalizedBlockHash = headerHash
+
+  if cl.slotsToSafe == 0:
+    cl.latestForkchoice.safeBlockHash = headerHash
+
+  if cl.slotsToFinalized == 0:
+    cl.latestForkchoice.finalizedBlockHash = headerHash
+
   cl.latestHeadNumber = cl.latestHeader.blockNumber.truncate(uint64)
 
   let res = cl.client.forkchoiceUpdatedV1(cl.latestForkchoice)
@@ -256,8 +267,19 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
       return false
 
   # Broadcast forkchoice updated with new HeadBlock to all clients
-  let blockHash = cl.latestPayloadBuilt.blockHash
-  cl.latestForkchoice.headBlockHash = blockHash
+  let previousForkchoice = cl.latestForkchoice
+  cl.headHashHistory.add cl.latestPayloadBuilt.blockHash
+
+  cl.latestForkchoice = ForkchoiceStateV1()
+  cl.latestForkchoice.headBlockHash = cl.latestPayloadBuilt.blockHash
+
+  let hhLen = cl.headHashHistory.len
+  if hhLen > cl.slotsToSafe:
+    cl.latestForkchoice.safeBlockHash = cl.headHashHistory[hhLen - cl.slotsToSafe - 1]
+
+  if hhLen > cl.slotsToFinalized:
+    cl.latestForkchoice.finalizedBlockHash = cl.headHashHistory[hhLen - cl.slotsToFinalized - 1]
+
   if not cl.broadcastLatestForkchoice():
     return false
 
@@ -266,19 +288,16 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
       return false
 
   # Broadcast forkchoice updated with new SafeBlock to all clients
-  cl.latestForkchoice.safeBlockHash = blockHash
-  if not cl.broadcastLatestForkchoice():
-    return false
-
-  if cb.onSafeBlockChange != nil:
+  if cb.onSafeBlockChange != nil and cl.latestForkchoice.safeBlockHash != previousForkchoice.safeBlockHash:
     if not cb.onSafeBlockChange():
       return false
 
   # Broadcast forkchoice updated with new FinalizedBlock to all clients
-  cl.latestForkchoice.finalizedBlockHash = blockHash
-  if not cl.broadcastLatestForkchoice():
-    return false
+  if cb.onFinalizedBlockChange != nil and cl.latestForkchoice.finalizedBlockHash != previousForkchoice.finalizedBlockHash:
+    if not cb.onFinalizedBlockChange():
+      return false
 
+  # Broadcast forkchoice updated with new FinalizedBlock to all clients
   # Save the number of the first PoS block
   if cl.firstPoSBlockNumber.isNone:
     let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
@@ -300,11 +319,36 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
       hash=newHash.toHex
     return false
 
-  cl.latestHeader = newHeader
+  # Check that the new finalized header has the correct properties
+  # ommersHash == 0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347
+  if newHeader.ommersHash != EMPTY_UNCLE_HASH:
+    error "CLMocker: Client produced a new header with incorrect ommersHash", ommersHash = newHeader.ommersHash
+    return false
 
-  if cb.onFinalizedBlockChange != nil:
-    if not cb.onFinalizedBlockChange():
-      return false
+  # difficulty == 0
+  if newHeader.difficulty != 0.u256:
+    error "CLMocker: Client produced a new header with incorrect difficulty", difficulty = newHeader.difficulty
+    return false
+
+  # mixHash == prevRandao
+  if newHeader.mixDigest != cl.prevRandaoHistory[cl.latestHeadNumber]:
+    error "CLMocker: Client produced a new header with incorrect mixHash",
+      get = newHeader.mixDigest.data.toHex,
+      expect = cl.prevRandaoHistory[cl.latestHeadNumber].data.toHex
+    return false
+
+  # nonce == 0x0000000000000000
+  if newHeader.nonce != default(BlockNonce):
+    error "CLMocker: Client produced a new header with incorrect nonce",
+      nonce = newHeader.nonce.toHex
+    return false
+
+  if newHeader.extraData.len > 32:
+    error "CLMocker: Client produced a new header with incorrect extraData (len > 32)",
+      len = newHeader.extraData.len
+    return false
+
+  cl.latestHeader = newHeader
 
   return true
 

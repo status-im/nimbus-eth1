@@ -35,6 +35,8 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
   case tag
   of "latest": result = chain.getCanonicalHead()
   of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
+  of "safe": result = chain.safeHeader()
+  of "finalized": result = chain.finalizedHeader()
   of "pending":
     #TODO: Implement get pending block
     raise newException(ValueError, "Pending tag not yet implemented")
