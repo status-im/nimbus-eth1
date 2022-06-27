@@ -1,4 +1,6 @@
 import
+  json_rpc/jsonmarshal,
+  stew/byteutils,
   hexstrings, options, eth/[common, rlp], json
 
 from
@@ -97,11 +99,10 @@ type
     blockHash*: Option[Hash256]         # hash of the block where this log was in. null when its pending. null when its pending log.
     blockNumber*: Option[BlockNumber]   # the block number where this log was in. null when its pending. null when its pending log.
     address*: EthAddress                # address from which this log originated.
-    data*: seq[Hash256]                 # contains one or more 32 Bytes non-indexed arguments of the log.
-    topics*: array[4, Hash256]          # array of 0 to 4 32 Bytes DATA of indexed log arguments.
+    data*: seq[byte]                    # contains one or more 32 Bytes non-indexed arguments of the log.
+    topics*: seq[Hash256]               # array of 0 to 4 32 Bytes DATA of indexed log arguments.
                                         # (In solidity: The first topic is the hash of the signature of the event.
                                         # (e.g. Deposit(address,bytes32,uint256)), except you declared the event with the anonymous specifier.)
-
   ReceiptObject* = object
     # A transaction receipt object, or null when no receipt was found:
     transactionHash*: Hash256             # hash of the transaction.
@@ -121,17 +122,114 @@ type
                                           # Before EIP-1559, this is equal to the transaction's gas price.
                                           # After, it is equal to baseFeePerGas + min(maxFeePerGas - baseFeePerGas, maxPriorityFeePerGas).
 
-  FilterDataKind* = enum fkItem, fkList
-  FilterData* = object
-    # Difficult to process variant objects in input data, as kind is immutable.
-    # TODO: This might need more work to handle "or" options
-    kind*: FilterDataKind
-    items*: seq[FilterData]
-    item*: UInt256
-
   FilterOptions* = object
     # Parameter from user
-    fromBlock*: Option[string]            # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    toBlock*: Option[string]              # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    address*: Option[EthAddress]          # (optional) contract address or a list of addresses from which logs should originate.
-    topics*: Option[seq[FilterData]]      # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
+    fromBlock*: Option[string]                      # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    toBlock*: Option[string]                        # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    address*: seq[EthAddress]                       # (optional) contract address or a list of addresses from which logs should originate.
+    topics*: seq[Option[seq[Hash256]]]              # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
+    blockhash*: Option[Hash256]                     # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
+
+proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
+  proc getOptionString(argName: string): Option[string] =
+    let s = n.getOrDefault(argName)
+    if s == nil:
+      return none[string]()
+    else:
+      s.kind.expect(JString, argName)
+      return some[string](s.getStr())
+
+  proc getAddress(): seq[EthAddress] =
+    let addressNode = n.getOrDefault("address")
+    if addressNode.isNil:
+      return @[]
+    else:
+      case addressNode.kind
+      of JString:
+        var addrs: EthAddress
+        fromJson(addressNode, "address", addrs)
+        return @[addrs]
+      of JArray:
+        var addresses = newSeq[EthAddress]()
+        for i, e in addressNode.elems:
+          if e.kind == JString and e.str.isValidEthAddress:
+            var address: EthAddress
+            hexToByteArray(e.getStr(), address)
+            addresses.add(address)
+          else:
+            let msg = "Address at index " & $i & "is not a valid Ethereum address"
+            raise newException(ValueError, msg)
+        return addresses
+      else:
+        raise newException(ValueError, "Parameter 'address` should be either string or of array of strings")
+
+  proc getTopics(): seq[Option[seq[Hash256]]] =
+    let topicsNode  = n.getOrDefault("topics")
+    if topicsNode.isNil:
+      return @[]
+    else:
+      n.kind.expect(JArray, "topics")
+      var filterArr = newSeq[Option[seq[Hash256]]]()
+      for i, e in n.elems:
+        case e.kind
+        of JNull:
+          # catch all match
+          filterArr.add(none[seq[Hash256]]())
+        of JString:
+          let hexstring = e.getStr()
+          # specific topic match
+          if hexstring.isValidHash256:
+            var hash: Hash256
+            hexToByteArray(hexstring, hash.data)
+            filterArr.add(some(@[hash]))
+          else:
+            let msg = "Invalid topic at pos: " & $i & ". Expected 32byte hex string"
+            raise newException(ValueError, msg)
+        of JArray:
+          if len(e.elems) == 0:
+            filterArr.add(none[seq[Hash256]]())
+          else:
+            var orFilters = newSeq[Hash256]()
+            for j, orTopic in e.elems:
+              if orTopic.kind == JString and orTopic.str.isValidHash256:
+                var hash: Hash256
+                hexToByteArray(orTopic.getStr(), hash.data)
+                orFilters.add(hash)
+              else:
+                let msg = "Invlid topic at pos: " & $i & ", sub pos: " & $j & ". Expected 32byte hex string"
+                raise newException(ValueError, msg)
+            filterArr.add(some(orFilters))
+        else:
+          let msg = "Invalid arg at pos: " & $i & ". Expected (null, string, array)"
+          raise newException(ValueError, msg)
+      return filterArr
+
+  proc getBlockHash(): Option[Hash256] =
+    let s = getOptionString("blockhash")
+    if s.isNone():
+      return none[Hash256]()
+    else:
+      let strHash = s.unsafeGet()
+      if strHash.isValidHash256:
+        var hash: Hash256
+        hexToByteArray(strHash, hash.data)
+        return some(hash)
+      else:
+        let msg = "Invalid 'blockhash'. Expected 32byte hex string"
+        raise newException(ValueError, msg)
+
+  n.kind.expect(JObject, argName)
+
+  let blockHash = getBlockHash()
+  let fromBlock = getOptionString("fromBlock")
+  let toBlock = getOptionString("toBlock")
+
+  if blockHash.isSome():
+    if fromBlock.isSome() or toBlock.isSome():
+       raise newException(ValueError, "fromBlock and toBlock are not allowed if blockHash is present")
+
+  result.fromBlock = fromBlock
+  result.toBlock = toBlock
+  result.address = getAddress()
+  result.topics = getTopics()
+  result.blockhash = blockHash

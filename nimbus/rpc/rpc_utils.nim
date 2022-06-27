@@ -13,6 +13,9 @@ import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../utils, ../transaction,
   ../transaction/call_evm, ../forks
 
+const
+  defaultTag = "latest"
+
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 
 func toHash*(value: array[32, byte]): Hash256 {.inline.} =
@@ -45,6 +48,12 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
+
+proc headerFromTag*(chain: BaseChainDB, blockTag: Option[string]): BlockHeader =
+  if blockTag.isSome():
+    return chain.headerFromTag(blockTag.unsafeGet())
+  else:
+    return chain.headerFromTag(defaultTag)
 
 proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
   var prices  = newSeqOfCap[GasInt](64)

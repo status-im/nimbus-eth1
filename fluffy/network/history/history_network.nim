@@ -182,17 +182,11 @@ proc getBlockHeader*(
 
   return maybeHeader
 
-proc getBlock*(
-    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
-    Future[Option[Block]] {.async.} =
-  let maybeHeader = await h.getBlockHeader(chainId, hash)
-
-  if maybeHeader.isNone():
-    # we do not have header for given hash,so we would not be able to validate
-    # that received body really belong to it
-    return none(Block)
-
-  let header = maybeHeader.unsafeGet()
+proc getBlockBody*(
+    h: HistoryNetwork,
+    chainId: uint16,
+    hash: BlockHash,
+    header: BlockHeader):Future[Option[BlockBody]] {.async.} =
 
   let (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
 
@@ -200,20 +194,20 @@ proc getBlock*(
 
   if maybeBodyFromDb.isSome():
     info "Fetched block body from database", hash
-    return some[Block]((header, maybeBodyFromDb.unsafeGet()))
+    return some[BlockBody](maybeBodyFromDb.unsafeGet())
 
   let maybeBodyContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if maybeBodyContent.isNone():
     warn "Failed fetching block body from the network", hash
-    return none(Block)
+    return none(BlockBody)
 
   let bodyContent = maybeBodyContent.unsafeGet()
 
   let maybeBody = validateBodyBytes(bodyContent.content, header.txRoot, header.ommersHash)
 
   if maybeBody.isNone():
-    return none(Block)
+    return none(BlockBody)
 
   info "Fetched block body from the network", hash
 
@@ -228,7 +222,28 @@ proc getBlock*(
 
   h.portalProtocol.storeContent(contentId, bodyContent.content)
 
-  return some[Block]((header, blockBody))
+  return some(blockBody)
+
+proc getBlock*(
+    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    Future[Option[Block]] {.async.} =
+  let maybeHeader = await h.getBlockHeader(chainId, hash)
+
+  if maybeHeader.isNone():
+    # we do not have header for given hash,so we would not be able to validate
+    # that received body really belong to it
+    return none(Block)
+
+  let header = maybeHeader.unsafeGet()
+
+  let maybeBody = await h.getBlockBody(chainId, hash, header)
+
+  if maybeBody.isNone():
+    return none(Block)
+
+  let body = maybeBody.unsafeGet()
+
+  return some[Block]((header, body))
 
 proc validateExpectedReceipts(
     receipts: seq[Receipt],
@@ -270,9 +285,9 @@ proc validateReceiptsBytes*(
 
 proc getReceipts*(
     h: HistoryNetwork,
+    chainId: uint16,
     hash: BlockHash,
-    header: BlockHeader,
-    chainId: uint16): Future[Option[seq[Receipt]]] {.async.} =
+    header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
   # header does not have any receipts, return early and do not save empty bytes
   # into the database
   if header.receiptRoot == BLANK_ROOT_HASH:

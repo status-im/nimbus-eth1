@@ -18,7 +18,8 @@ import
   rpc_types, rpc_utils,
   ../transaction/call_evm,
   ../utils/tx_pool,
-  ../chain_config
+  ../chain_config,
+  ./filters
 
 #[
   Note:
@@ -427,6 +428,68 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     var uncle = populateBlockObject(uncles[index], chain, false, true)
     uncle.totalDifficulty = encodeQuantity(chain.getScore(header.hash))
     result = some(uncle)
+
+  proc getLogsForBlock(
+      chain: BaseChainDB,
+      hash: Hash256,
+      header: BlockHeader,
+      opts: FilterOptions): seq[FilterLog] =
+    if headerBloomFilter(header, opts.address, opts.topics):
+      let blockBody = chain.getBlockBody(hash)
+      let receipts = chain.getReceipts(header.receiptRoot)
+      # Note: this will hit assertion error if number of block transactions
+      # do not match block receitps.
+      # Although this is fine as number of receipts should always match number
+      # of transactions
+      let logs = deriveLogs(header, blockBody.transactions, receipts)
+      let filteredLogs = filterLogs(logs, opts.address, opts.topics)
+      return filteredLogs
+    else:
+      return @[]
+
+  proc getLogsForRange(chain: BaseChainDB, start: UInt256, finish: UInt256, opts: FilterOptions): seq[FilterLog] =
+    var logs = newSeq[FilterLog]()
+    var i = start
+    while i <= finish:
+      let res = chain.getBlockHeaderWithHash(i)
+      if res.isSome():
+        let (hash, header)= res.unsafeGet()
+        let filtered = chain.getLogsForBlock(header, hash, opts)
+        logs.add(filtered)
+      else:
+        #
+        return logs
+      i = i + 1
+
+  server.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
+    ## filterOptions: settings for this filter.
+    ## Returns a list of all logs matching a given filter object.
+    ## TODO: Current implementation is pretty naive and not efficient
+    ## as it requires to fetch all transactions and all receitps from database.
+    ## Other clients (Geth):
+    ## - Store logs related data in receipts.
+    ## - Have separate indexes for Logs in given block
+    ## Both of those changes require improvements to the way how we keep our data
+    ## in Nimbus.
+    if filterOptions.blockHash.isSome():
+      let hash = filterOptions.blockHash.unsafeGet()
+      let header = chain.getBlockHeader(hash)
+      return getLogsForBlock(chain, hash, header, filterOptions)
+    else:
+      # TODO: do something smarter with tags. It would be the best if
+      # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
+      # would operate on this enum instead of raw strings. This change would need
+      # to be done on every endpoint to be consistent.
+      let fromHeader = chain.headerFromTag(filterOptions.fromBlock)
+      let toHeader = chain.headerFromTag(filterOptions.fromBlock)
+      # Note: if fromHeader.blockNumber > toHeader.blockNumber, no logs will be
+      # returned. This is consistent with, what other ethereum clients return
+      let logs = chain.getLogsForRange(
+        fromHeader.blockNumber,
+        toHeader.blockNumber,
+        filterOptions
+      )
+      return logs
 
 #[
   server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
