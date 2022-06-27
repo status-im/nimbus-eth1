@@ -91,8 +91,8 @@ type
   FilterLog* = object
     # Returned to user
     removed*: bool                      # true when the log was removed, due to a chain reorganization. false if its a valid log.
-    logIndex*: Option[int]              # integer of the log index position in the block. null when its pending log.
-    transactionIndex*: Option[int]      # integer of the transactions index position log was created from. null when its pending log.
+    logIndex*: Option[HexQuantityStr]   # integer of the log index position in the block. null when its pending log.
+    transactionIndex*: Option[HexQuantityStr] # integer of the transactions index position log was created from. null when its pending log.
     transactionHash*: Option[Hash256]   # hash of the transactions this log was created from. null when its pending log.
     blockHash*: Option[Hash256]         # hash of the block where this log was in. null when its pending. null when its pending log.
     blockNumber*: Option[BlockNumber]   # the block number where this log was in. null when its pending. null when its pending log.
@@ -116,7 +116,7 @@ type
     logs*: seq[Log]                       # list of log objects which this transaction generated.
     logsBloom*: FixedBytes[256]           # bloom filter for light clients to quickly retrieve related logs.
     root*: Option[Hash256]                # post-transaction stateroot (pre Byzantium).
-    status*: Option[int]                  # 1 = success, 0 = failure.
+    status*: Option[HexQuantityStr]       # 1 = success, 0 = failure.
     effectiveGasPrice*: HexQuantityStr    # The actual value per gas deducted from the senders account.
                                           # Before EIP-1559, this is equal to the transaction's gas price.
                                           # After, it is equal to baseFeePerGas + min(maxFeePerGas - baseFeePerGas, maxPriorityFeePerGas).

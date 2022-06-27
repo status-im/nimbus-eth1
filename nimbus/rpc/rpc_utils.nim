@@ -196,7 +196,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
     result.root = some(receipt.stateRoot)
   else:
     # 1 = success, 0 = failure.
-    result.status = some(receipt.status.int)
+    result.status = some(encodeQuantity(receipt.status.uint64))
 
   let normTx = eip1559TxNormalization(tx, header.baseFee.truncate(GasInt), fork)
   result.effectiveGasPrice = encodeQuantity(normTx.gasPrice.uint64)
