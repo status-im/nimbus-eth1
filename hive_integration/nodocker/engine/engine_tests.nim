@@ -17,6 +17,8 @@ type
     run*: proc(t: TestEnv): TestStatus
     ttd*: int64
     chainFile*: string
+    slotsToFinalized*: int
+    slotsToSafe*: int
 
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
@@ -870,6 +872,130 @@ template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
 
 blockStatusExecPayloadGen(blockStatusExecPayload1, false)
 blockStatusExecPayloadGen(blockStatusExecPayload2, true)
+
+type
+  MissingAncestorShadow = ref object
+    cA: ExecutionPayloadV1
+    n: int
+    altChainPayloads: seq[ExecutionPayloadV1]
+
+# Attempt to re-org to a chain which at some point contains an unknown payload which is also invalid.
+# Then reveal the invalid payload and expect that the client rejects it and rejects forkchoice updated calls to this chain.
+# The invalid_index parameter determines how many payloads apart is the common ancestor from the block that invalidates the chain,
+# with a value of 1 meaning that the immediate payload after the common ancestor will be invalid.
+template invalidMissingAncestorReOrgGen(procName: untyped,
+  invalid_index: int, payloadField: InvalidPayloadField, p2psync: bool, emptyTxs: bool) =
+
+  proc procName(t: TestEnv): TestStatus =
+    result = TestStatus.OK
+
+    # Wait until TTD is reached by this client
+    let ok = waitFor t.clMock.waitForTTD()
+    testCond ok
+
+    let clMock = t.clMock
+    let client = t.rpcClient
+
+    # Produce blocks before starting the test
+    testCond clMock.produceBlocks(5, BlockProcessCallbacks())
+
+    let shadow = MissingAncestorShadow(
+      # Save the common ancestor
+      cA: clMock.latestPayloadBuilt,
+
+      # Amount of blocks to deviate starting from the common ancestor
+      n: 10,
+
+      # Slice to save the alternate B chain
+      altChainPayloads: @[]
+    )
+
+    # Append the common ancestor
+    shadow.altChainPayloads.add shadow.cA
+
+    # Produce blocks but at the same time create an alternate chain which contains an invalid payload at some point (INV_P)
+    # CommonAncestor◄─▲── P1 ◄─ P2 ◄─ P3 ◄─ ... ◄─ Pn
+    #                 │
+    #                 └── P1' ◄─ P2' ◄─ ... ◄─ INV_P ◄─ ... ◄─ Pn'
+    var pbRes = clMock.produceBlocks(shadow.n, BlockProcessCallbacks(
+      onPayloadProducerSelected: proc(): bool =
+        # Function to send at least one transaction each block produced.
+        # Empty Txs Payload with invalid stateRoot discovered an issue in geth sync, hence this is customizable.
+        when not emptyTxs:
+          # Send the transaction to the prevRandaoContractAddr
+          t.sendTx(1.u256)
+        return true
+      ,
+      onGetPayload: proc(): bool =
+        # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
+        var alternatePayload = customizePayload(clMock.latestPayloadBuilt, CustomPayload(
+          parentHash: some(shadow.altChainPayloads[^1].blockHash.hash256),
+          extraData:  some(@[1.byte]),
+        ))
+
+        if shadow.altChainPayloads.len == invalid_index:
+          alternatePayload = generateInvalidPayload(alternatePayload, payloadField)
+
+        shadow.altChainPayloads.add alternatePayload
+        return true
+    ))
+    testCond pbRes
+
+    pbRes = clMock.produceSingleBlock(BlockProcessCallbacks(
+      # Note: We perform the test in the middle of payload creation by the CL Mock, in order to be able to
+      # re-org back into this chain and use the new payload without issues.
+      onGetPayload: proc(): bool =
+        # Now let's send the alternate chain to the client using newPayload/sync
+        for i in 1..shadow.n:
+          # Send the payload
+          var payloadValidStr = "VALID"
+          if i == invalid_index:
+            payloadValidStr = "INVALID"
+          elif i > invalid_index:
+            payloadValidStr = "VALID with INVALID ancestor"
+
+          info "Invalid chain payload",
+            i,
+            payloadValidStr,
+            hash = shadow.altChainPayloads[i].blockHash.toHex
+
+          let rr = client.newPayloadV1(shadow.altChainPayloads[i])
+          testCond rr.isOk
+
+          let rs = client.forkchoiceUpdatedV1(ForkchoiceStateV1(
+            headBlockHash: shadow.altChainPayloads[i].blockHash,
+            safeBlockHash: shadow.altChainPayloads[i].blockHash
+          ))
+
+          if i == invalid_index:
+            # If this is the first payload after the common ancestor, and this is the payload we invalidated,
+            # then we have all the information to determine that this payload is invalid.
+            testNP(rr, invalid, some(shadow.altChainPayloads[i-1].blockHash.hash256))
+          elif i > invalid_index:
+            # We have already sent the invalid payload, but the client could've discarded it.
+            # In reality the CL will not get to this point because it will have already received the `INVALID`
+            # response from the previous payload.
+            let cond = {PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing, PayloadExecutionStatus.invalid}
+            testNPEither(rr, cond, some(Hash256()))
+          else:
+            # This is one of the payloads before the invalid one, therefore is valid.
+            testNP(rr, valid)
+            testFCU(rs, valid, some(shadow.altChainPayloads[i].blockHash.hash256))
+
+
+        # Resend the latest correct fcU
+        let rx = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
+        testCond rx.isOk
+
+        # After this point, the CL Mock will send the next payload of the canonical chain
+        return true
+    ))
+
+    testCond pbRes
+
+invalidMissingAncestorReOrgGen(invalidMissingAncestor1, 1, InvalidStateRoot, false, true)
+invalidMissingAncestorReOrgGen(invalidMissingAncestor2, 9, InvalidStateRoot, false, true)
+invalidMissingAncestorReOrgGen(invalidMissingAncestor3, 10, InvalidStateRoot, false, true)
 
 template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
   proc procName(t: TestEnv): TestStatus =
@@ -1817,6 +1943,23 @@ const engineTestList* = [
   TestSpec(
     name: "Invalid Transaction Value NewPayload",
     run:  invalidPayload15,
+  ),
+
+  # Invalid Ancestor Re-Org Tests (Reveal via newPayload)
+  TestSpec(
+    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P1', Reveal using newPayload",
+    slotsToFinalized: 20,
+    run:  invalidMissingAncestor1,
+  ),
+  TestSpec(
+    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P9', Reveal using newPayload",
+    slotsToFinalized: 20,
+    run:  invalidMissingAncestor2,
+  ),
+  TestSpec(
+    name: "Invalid Ancestor Chain Re-Org, Invalid StateRoot, Invalid P10', Reveal using newPayload",
+    slotsToFinalized: 20,
+    run:  invalidMissingAncestor3,
   ),
 
   # Eth RPC Status on ForkchoiceUpdated Events

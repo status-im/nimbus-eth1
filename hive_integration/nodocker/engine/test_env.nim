@@ -142,6 +142,12 @@ proc setRealTTD*(t: TestEnv, ttdValue: int64) =
   t.ttd = realTTD
   t.clmock = newCLMocker(t.rpcClient, realTTD)
 
+proc slotsToSafe*(t: TestEnv, x: int) =
+  t.clMock.slotsToSafe = x
+
+proc slotsToFinalized*(t: TestEnv, x: int) =
+  t.clMock.slotsToFinalized = x
+
 func gwei(n: int): GasInt {.compileTime.} =
   GasInt(n * (10 ^ 9))
 

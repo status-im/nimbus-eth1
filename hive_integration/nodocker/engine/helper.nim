@@ -180,6 +180,9 @@ proc toExecutableData*(payload: ExecutionPayloadV1): ExecutableData =
     let tx = rlp.decode(distinctBase data, Transaction)
     result.transactions.add tx
 
+proc customizePayload*(basePayload: ExecutionPayloadV1, customData: CustomPayload): ExecutionPayloadV1 =
+  customizePayload(basePayload.toExecutableData, customData)
+
 proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPrevRandao: Hash256): Result[void, string] =
   try:
     let hash = tx.rlpHash

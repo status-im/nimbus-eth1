@@ -167,7 +167,7 @@ proc namedHeader*(client: RpcClient, name: string, output: var common.BlockHeade
     return ok()
   except ValueError as e:
     return err(e.msg)
-    
+
 proc sendTransaction*(client: RpcClient, tx: common.Transaction): Result[void, string] =
   try:
     let encodedTx = rlp.encode(tx)
@@ -196,9 +196,14 @@ proc txReceipt*(client: RpcClient, txHash: Hash256): Result[eth_api.ReceiptObjec
   except ValueError as e:
     return err(e.msg)
 
+proc toDataStr(slot: UInt256): HexDataStr =
+  let hex = slot.toHex
+  let prefix = if hex.len mod 2 == 0: "0x" else: "0x0"
+  HexDataStr(prefix & hex)
+
 proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[UInt256, string] =
   try:
-    let res = waitFor client.eth_getStorageAt(ethAddressStr(address), encodeQuantity(slot), "latest")
+    let res = waitFor client.eth_getStorageAt(ethAddressStr(address), toDataStr(slot), "latest")
     return ok(UInt256.fromHex(res.string))
   except ValueError as e:
     return err(e.msg)
@@ -206,7 +211,7 @@ proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[U
 proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber): Result[UInt256, string] =
   try:
     let tag = encodeQuantity(number)
-    let res = waitFor client.eth_getStorageAt(ethAddressStr(address), encodeQuantity(slot), tag.string)
+    let res = waitFor client.eth_getStorageAt(ethAddressStr(address), toDataStr(slot), tag.string)
     return ok(UInt256.fromHex(res.string))
   except ValueError as e:
     return err(e.msg)

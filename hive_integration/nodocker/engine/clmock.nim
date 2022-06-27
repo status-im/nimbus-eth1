@@ -34,8 +34,8 @@ type
     client               : RpcClient
     ttd                  : DifficultyInt
 
-    slotsToSafe          : int
-    slotsToFinalized     : int
+    slotsToSafe*         : int
+    slotsToFinalized*    : int
     headHashHistory      : seq[BlockHash]
 
   BlockProcessCallbacks* = object
