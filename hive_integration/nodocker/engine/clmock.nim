@@ -114,7 +114,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
   return true
 
-proc getNextPayloadID(cl: CLMocker): bool =
+proc getNextPayloadID*(cl: CLMocker): bool =
   # Generate a random value for the PrevRandao field
   var nextPrevRandao: Hash256
   doAssert nimcrypto.randomBytes(nextPrevRandao.data) == 32
@@ -144,7 +144,7 @@ proc getNextPayloadID(cl: CLMocker): bool =
   cl.nextPayloadID = s.payloadID.get()
   return true
 
-proc getNextPayload(cl: CLMocker): bool =
+proc getNextPayload*(cl: CLMocker): bool =
   let res = cl.client.getPayloadV1(cl.nextPayloadID)
   if res.isErr:
     error "CLMocker: Could not getPayload",

@@ -2,7 +2,7 @@ import
   std/[typetraits, json, strutils],
   nimcrypto,
   test_env,
-  eth/[rlp, keys],
+  eth/[common,  rlp, keys],
   stew/byteutils,
   json_rpc/rpcclient,
   ../../../nimbus/rpc/hexstrings,
@@ -332,3 +332,9 @@ proc generateInvalidPayload*(basePayload: ExecutionPayloadV1,
                              payloadField: InvalidPayloadField,
                              vaultKey = default(PrivateKey)): ExecutionPayloadV1 =
   generateInvalidPayload(basePayload.toExecutableData, payloadField, vaultKey)
+
+proc txInPayload*(payload: ExecutionPayloadV1, txHash: Hash256): bool =
+  for txBytes in payload.transactions:
+    let currTx = rlp.decode(Blob txBytes, Transaction)
+    if rlpHash(currTx) == txHash:
+      return true

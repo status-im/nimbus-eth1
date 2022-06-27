@@ -91,6 +91,19 @@ template testNPEither(res, cond: untyped, validHash = none(Hash256)) =
   testCond s.latestValidHash == validHash:
     error "Unexpected NewPayload latestValidHash", expect=validHash, get=s.latestValidHash
 
+template testLatestHeader(client: untyped, expectedHash: BlockHash) =
+  var lastHeader: EthBlockHeader
+  var hRes = client.latestHeader(lastHeader)
+  testCond hRes.isOk:
+    error "unable to get latest header", msg=hRes.error
+
+  let lastHash = BlockHash lastHeader.blockHash.data
+  # Latest block header available via Eth RPC should not have changed at this point
+  testCond lastHash == expectedHash:
+    error "latest block header incorrect",
+      expect = expectedHash.toHex,
+      get = lastHash.toHex
+
 proc sendTx(t: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
   t.tx = t.makeNextTransaction(recipient, val, data)
   let rr = t.rpcClient.sendTransaction(t.tx)
@@ -412,12 +425,7 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
             return false
 
           # Check that the forkchoice was applied, regardless of the error
-          var header: EthBlockHeader
-          let s = client.latestHeader(header)
-          if s.isErr:
-            return false
-          if header.blockHash != blockHash:
-            return false
+          testLatestHeader(client, BlockHash blockHash.data)
         return true
     ))
 
@@ -644,14 +652,8 @@ proc invalidTransitionPayload(t: TestEnv): TestStatus =
       )
       testFCU(rr, invalid, some(Hash256()))
 
-      var header: EthBlockHeader
-      let rz = client.latestHeader(header)
-      if rz.isErr:
-        error "unable to get header", msg=rz.error
-        return false
-
-      let blockHash = BlockHash header.blockHash.data
-      blockHash == clMock.latestExecutedPayload.blockHash
+      testLatestHeader(client, clMock.latestExecutedPayload.blockHash)
+      return true
   ))
 
   testCond pbRes
@@ -841,18 +843,7 @@ template blockStatusExecPayloadGen(procname: untyped, transitionBlock: bool) =
         return true
       ,
       onNewPayloadBroadcast: proc(): bool =
-        # TODO: Ideally, we would need to testCond that the newPayload returned VALID
-        var lastHeader: EthBlockHeader
-        var hRes = client.latestHeader(lastHeader)
-        if hRes.isErr:
-          error "unable to get latest header", msg=hRes.error
-          return false
-
-        let lastHash = BlockHash lastHeader.blockHash.data
-        # Latest block header available via Eth RPC should not have changed at this point
-        if lastHash!= clMock.latestForkchoice.headBlockHash:
-          error "latest block header incorrect after newPayload", hash=lastHash.toHex
-          return false
+        testLatestHeader(client, clMock.latestForkchoice.headBlockHash)
 
         let nRes = client.blockNumber()
         if nRes.isErr:
@@ -906,16 +897,7 @@ template blockStatusHeadBlockGen(procname: untyped, transitionBlock: bool) =
       ,
       # Run test after a forkchoice with new HeadBlockHash has been broadcasted
       onForkchoiceBroadcast: proc(): bool =
-        var lastHeader: EthBlockHeader
-        var hRes = client.latestHeader(lastHeader)
-        if hRes.isErr:
-          error "unable to get latest header", msg=hRes.error
-          return false
-
-        let lastHash = BlockHash lastHeader.blockHash.data
-        if lastHash != clMock.latestForkchoice.headBlockHash:
-          error "latest block header doesn't match HeadBlock hash", hash=lastHash.toHex
-          return false
+        testLatestHeader(client, clMock.latestForkchoice.headBlockHash)
 
         let rr = client.txReceipt(shadow.hash)
         if rr.isErr:
@@ -1050,17 +1032,7 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
         return false
 
       # testCond that we reorg to the previous block
-      hRes = client.latestHeader(currHeader)
-      if hRes.isErr:
-        error "unable to get latest header", msg=hRes.error
-        return false
-
-      currHash = BlockHash currHeader.blockHash.data
-      if currHash != reorgForkchoice.headBlockHash:
-        error "`latest` block hash doesn't match reorg hash",
-          expected=reorgForkchoice.headBlockHash.toHex,
-          get=currHash.toHex
-        return false
+      testLatestHeader(client, reorgForkchoice.headBlockHash)
 
       # Send the HeadBlock again to leave everything back the way it was
       res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
@@ -1249,11 +1221,7 @@ proc reorgBack(t: TestEnv): TestStatus =
   testCond r2
 
   # Verify that the client is pointing to the latest payload sent
-  var header: EthBlockHeader
-  let r = client.latestHeader(header)
-  testCond r.isOk
-  let blockHash = hash256(clMock.latestPayloadBuilt.blockHash)
-  testCond blockHash == header.blockHash
+  testLatestHeader(client, clMock.latestPayloadBuilt.blockHash)
 
 # Test that performs a re-org back to the canonical chain after re-org to syncing/unavailable chain.
 type
@@ -1328,6 +1296,11 @@ proc reorgBackFromSyncing(t: TestEnv): TestStatus =
 
   testCond r2
 
+type
+  TxReorgShadow = ref object
+    noTxnPayload: ExecutionPayloadV1
+    txHash: Hash256
+
 proc transactionReorg(t: TestEnv): TestStatus =
   result = TestStatus.OK
 
@@ -1343,89 +1316,87 @@ proc transactionReorg(t: TestEnv): TestStatus =
     txCount      = 5
     contractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
 
-  var
-    receipts: array[txCount, rpc_types.ReceiptObject]
-    txs: array[txCount, Transaction]
-
   let
     client = t.rpcClient
     clMock = t.clMock
+    shadow = TxReorgShadow()
 
   for i in 0..<txCount:
-    # Data is the key where a `1` will be stored
-    let data = i.u256
-    testCond t.sendTx(contractAddr, 0.u256, data.toBytesBE)
-    txs[i] = t.tx
+    # Generate two payloads, one with the transaction and the other one without it
+    let pbres = clMock.produceSingleBlock(BlockProcessCallbacks(
+      onPayloadProducerSelected: proc(): bool =
+        # At this point we have not broadcast the transaction,
+        # therefore any payload we get should not contain any transactions
+        if not clMock.getNextPayloadID(): return false
+        if not clMock.getNextPayload(): return false
 
-    # Produce the block containing the transaction
-    testCond clMock.produceSingleBlock(BlockProcessCallbacks())
+        shadow.noTxnPayload = clMock.latestPayloadBuilt
+        if shadow.noTxnPayload.transactions.len != 0:
+          error "Empty payload contains transactions"
+          return false
 
-    # Get the receipt
-    let rr = client.txReceipt(rlpHash(t.tx))
-    testCond rr.isOk:
-      error "Unable to obtain transaction receipt", msg=rr.error
+        # At this point we can broadcast the transaction and it will be included in the next payload
+        # Data is the key where a `1` will be stored
+        let data = i.u256
+        testCond t.sendTx(contractAddr, 0.u256, data.toBytesBE)
+        shadow.txHash = rlpHash(t.tx)
 
-    receipts[i] = rr.get()
+        # Get the receipt
+        let rr = client.txReceipt(shadow.txHash)
+        if rr.isOk:
+          error "Receipt obtained before tx included in block"
+          return false
+        return true
+      ,
+      onGetPayload: proc(): bool =
+        # Check that indeed the payload contains the transaction
+        if not txInPayload(clMock.latestPayloadBuilt, shadow.txHash):
+          error "Payload built does not contain the transaction"
+          return false
+        return true
+      ,
+      onForkchoiceBroadcast: proc(): bool =
+        # Transaction is now in the head of the canonical chain, re-org and verify it's removed
+        var rr = client.txReceipt(shadow.txHash)
+        if rr.isErr:
+          error "Unable to obtain transaction receipt"
+          return false
 
-  for i in 0..<txCount:
-    # The sstore contract stores a `1` to key specified in data
-    let storageKey = i.u256
+        if shadow.noTxnPayload.parentHash != clMock.latestPayloadBuilt.parentHash:
+          error "Incorrect parent hash for payloads",
+            get = shadow.noTxnPayload.parentHash.toHex,
+            expect = clMock.latestPayloadBuilt.parentHash.toHex
+          return false
 
-    var rr = client.storageAt(contractAddr, storageKey)
-    testCond rr.isOk:
-      error "Could not get storage", msg=rr.error
+        if shadow.noTxnPayload.blockHash == clMock.latestPayloadBuilt.blockHash:
+          error "Incorrect hash for payloads",
+            get = shadow.noTxnPayload.blockHash.toHex,
+            expect = clMock.latestPayloadBuilt.blockHash.toHex
+          return false
 
-    let valueWithTxApplied = rr.get()
-    testCond valueWithTxApplied == 1.u256
-    if valueWithTxApplied != 1.u256:
-      error "Expected storage not set after transaction", valueWithTxApplied
-      return
+        let rz = client.newPayloadV1(shadow.noTxnPayload)
+        testNP(rz, valid, some(hash256(shadow.noTxnPayload.blockHash)))
 
-    # Get value at a block before the tx was included
-    let number = UInt256.fromHex(receipts[i].blockNumber.string).truncate(uint64)
-    var reorgBlock: EthBlockHeader
-    let blockRes = client.headerByNumber(number - 1, reorgBlock)
-    rr = client.storageAt(contractAddr, storageKey, reorgBlock.blockNumber)
-    testCond rr.isOk:
-      error "could not get storage", msg= rr.error
+        let rx = client.forkchoiceUpdatedV1(ForkchoiceStateV1(
+          headBlockHash:      shadow.noTxnPayload.blockHash,
+          safeBlockHash:      clMock.latestForkchoice.safeBlockHash,
+          finalizedBlockHash: clMock.latestForkchoice.finalizedBlockHash
+        ))
+        testFCU(rx, valid)
 
-    let valueWithoutTxApplied = rr.get()
-    testCond valueWithoutTxApplied == 0.u256:
-      error "Storage not unset before transaction!", valueWithoutTxApplied
+        testLatestHeader(client, shadow.noTxnPayload.blockHash)
 
-    # Re-org back to a previous block where the tx is not included using forkchoiceUpdated
-    let rHash = Web3BlockHash reorgBlock.blockHash.data
-    let reorgForkchoice = ForkchoiceStateV1(
-      headBlockHash:      rHash,
-      safeBlockHash:      rHash,
-      finalizedBlockHash: rHash,
-    )
+        let rk = client.txReceipt(shadow.txHash)
+        if rk.isOk:
+          error "Receipt was obtained when the tx had been re-org'd out"
+          return false
 
-    var res = client.forkchoiceUpdatedV1(reorgForkchoice)
-    testCond res.isOk:
-      error "Could not send forkchoiceUpdatedV1", msg=res.error
+        # Re-org back
+        let ry = clMock.broadcastForkchoiceUpdated(clMock.latestForkchoice)
+        ry.isOk
+    ))
 
-    var s = res.get()
-    testCond s.payloadStatus.status == PayloadExecutionStatus.valid:
-      error "Could not send forkchoiceUpdatedV1", status=s.payloadStatus.status
-
-    # testCond storage again using `latest`, should be unset
-    rr = client.storageAt( contractAddr, storageKey)
-    testCond rr.isOk:
-      error "could not get storage", msg= rr.error
-
-    let valueAfterReOrgBeforeTxApplied = rr.get()
-    testCond valueAfterReOrgBeforeTxApplied == 0.u256:
-      error "Storage not unset after re-org", valueAfterReOrgBeforeTxApplied
-
-    # Re-send latest forkchoice to test next transaction
-    res = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
-    testCond res.isOk:
-      error "Could not send forkchoiceUpdatedV1", msg=res.error
-
-    s = res.get()
-    testCond s.payloadStatus.status == PayloadExecutionStatus.valid:
-      error "Could not send forkchoiceUpdatedV1", status=s.payloadStatus.status
+    testCond pbres
 
 proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
