@@ -441,7 +441,7 @@ proc rpcMain*() =
         check:
           l.blockHash.isSome()
           l.blockHash.unsafeGet() == testHash
-          l.logIndex.unsafeGet() == i
+          fromHex[int](distinctBase(l.logIndex.unsafeGet())) == i
         inc i
 
     test "eth_getLogs by blockNumber, no filters":
@@ -463,7 +463,7 @@ proc rpcMain*() =
         check:
           l.blockHash.isSome()
           l.blockHash.unsafeGet() == testHash
-          l.logIndex.unsafeGet() == i
+          fromHex[int](distinctBase(l.logIndex.unsafeGet())) == i
         inc i
 
     test "eth_getLogs by blockhash, filter logs at specific postions":

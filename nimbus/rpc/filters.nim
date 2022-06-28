@@ -38,8 +38,8 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
       # level, to keep track about potential re-orgs
       # - in fluffy there is no concept of re-org
       filterLog.removed = false
-      filterLog.logIndex = some(logIndex)
-      filterLog.transactionIndex = some(i)
+      filterLog.logIndex = some(encodeQuantity(uint32(logIndex)))
+      filterLog.transactionIndex = some(encodeQuantity(uint32(i)))
       filterLog.transactionHash = some(transactions[i].rlpHash)
       filterLog.blockHash = some(header.blockHash)
       filterLog.blockNumber = some(encodeQuantity(header.blockNumber))
