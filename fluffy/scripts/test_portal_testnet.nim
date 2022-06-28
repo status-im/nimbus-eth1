@@ -192,7 +192,7 @@ procSuite "Portal testnet tests":
     # because the data needs to propagate over the nodes. What one could do is
     # add a json-rpc debug proc that returns whether the offer queue is empty or
     # not. And then poll every node until all nodes have an empty queue.
-    await sleepAsync(20.seconds)
+    await sleepAsync(40.seconds)
 
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
