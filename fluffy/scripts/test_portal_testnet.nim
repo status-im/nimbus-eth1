@@ -212,6 +212,16 @@ procSuite "Portal testnet tests":
           tx.fromJson("tx", txObj)
           check txObj.blockHash.get() == hash
 
+        let filterOptions = FilterOptions(
+          blockHash: some(hash)
+        )
+
+        let logs = await client.eth_getLogs(filterOptions)
+
+        for l in logs:
+          check:
+            l.blockHash == some(hash)
+
         # TODO: Check ommersHash, need the headers and not just the hashes
         # for uncle in blockObj.uncles:
         #   discard

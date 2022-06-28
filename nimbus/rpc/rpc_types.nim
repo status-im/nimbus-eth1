@@ -92,17 +92,17 @@ type
 
   FilterLog* = object
     # Returned to user
-    removed*: bool                      # true when the log was removed, due to a chain reorganization. false if its a valid log.
-    logIndex*: Option[HexQuantityStr]   # integer of the log index position in the block. null when its pending log.
-    transactionIndex*: Option[HexQuantityStr] # integer of the transactions index position log was created from. null when its pending log.
-    transactionHash*: Option[Hash256]   # hash of the transactions this log was created from. null when its pending log.
-    blockHash*: Option[Hash256]         # hash of the block where this log was in. null when its pending. null when its pending log.
-    blockNumber*: Option[BlockNumber]   # the block number where this log was in. null when its pending. null when its pending log.
-    address*: EthAddress                # address from which this log originated.
-    data*: seq[byte]                    # contains one or more 32 Bytes non-indexed arguments of the log.
-    topics*: seq[Hash256]               # array of 0 to 4 32 Bytes DATA of indexed log arguments.
-                                        # (In solidity: The first topic is the hash of the signature of the event.
-                                        # (e.g. Deposit(address,bytes32,uint256)), except you declared the event with the anonymous specifier.)
+    removed*: bool                        # true when the log was removed, due to a chain reorganization. false if its a valid log.
+    logIndex*: Option[HexQuantityStr]                # integer of the log index position in the block. null when its pending log.
+    transactionIndex*: Option[HexQuantityStr]        # integer of the transactions index position log was created from. null when its pending log.
+    transactionHash*: Option[Hash256]     # hash of the transactions this log was created from. null when its pending log.
+    blockHash*: Option[Hash256]           # hash of the block where this log was in. null when its pending. null when its pending log.
+    blockNumber*: Option[HexQuantityStr]  # the block number where this log was in. null when its pending. null when its pending log.
+    address*: EthAddress                  # address from which this log originated.
+    data*: seq[byte]                      # contains one or more 32 Bytes non-indexed arguments of the log.
+    topics*: seq[Hash256]                 # array of 0 to 4 32 Bytes DATA of indexed log arguments.
+                                          # (In solidity: The first topic is the hash of the signature of the event.
+                                          # (e.g. Deposit(address,bytes32,uint256)), except you declared the event with the anonymous specifier.)
   ReceiptObject* = object
     # A transaction receipt object, or null when no receipt was found:
     transactionHash*: Hash256             # hash of the transaction.
@@ -124,22 +124,29 @@ type
 
   FilterOptions* = object
     # Parameter from user
-    fromBlock*: Option[string]                      # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    toBlock*: Option[string]                        # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    address*: seq[EthAddress]                       # (optional) contract address or a list of addresses from which logs should originate.
-    topics*: seq[Option[seq[Hash256]]]              # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
-    blockhash*: Option[Hash256]                     # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
+    fromBlock*: Option[string]          # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    toBlock*: Option[string]            # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    address*: seq[EthAddress]           # (optional) contract address or a list of addresses from which logs should originate.
+    topics*: seq[Option[seq[Hash256]]]  # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
+    blockhash*: Option[Hash256]         # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
 
 proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
   proc getOptionString(argName: string): Option[string] =
     let s = n.getOrDefault(argName)
     if s == nil:
       return none[string]()
+    elif s.kind == JNull:
+      return none[string]()
     else:
       s.kind.expect(JString, argName)
       return some[string](s.getStr())
 
   proc getAddress(): seq[EthAddress] =
+    ## Address can by provided in two formats:
+    ## 1. {"address": "hexAddress"}
+    ## 2. {"address": ["hexAddress1", "hexAddress2" ...]}
+    ## So either as sigle string or array of strings
+
     let addressNode = n.getOrDefault("address")
     if addressNode.isNil:
       return @[]
@@ -164,13 +171,24 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
         raise newException(ValueError, "Parameter 'address` should be either string or of array of strings")
 
   proc getTopics(): seq[Option[seq[Hash256]]] =
+    ## Topics can be provided in many forms:
+    ## [] "anything"
+    ## [A] "A in first position (and anything after)"
+    ## [null, B] "anything in first position AND B in second position (and anything after)"
+    ## [A, B] "A in first position AND B in second position (and anything after)"
+    ## [[A, B], [A, B]] "(A OR B) in first position AND (A OR B) in second position (and anything after)"
+    ##
+    ## In this custom deserialized JNull is desarializing to None subtopic seq.
+    ## alternative would be to deserialize to empty seq, it would simplify some
+    ## filters code but would be less explicit
+
     let topicsNode  = n.getOrDefault("topics")
     if topicsNode.isNil:
       return @[]
     else:
-      n.kind.expect(JArray, "topics")
+      topicsNode.kind.expect(JArray, "topics")
       var filterArr = newSeq[Option[seq[Hash256]]]()
-      for i, e in n.elems:
+      for i, e in topicsNode.elems:
         case e.kind
         of JNull:
           # catch all match
@@ -221,6 +239,8 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
   n.kind.expect(JObject, argName)
 
   let blockHash = getBlockHash()
+  # TODO: Tags should deserialize to some kind of Enum, to avoid using raw strings
+  # in other layers. But this should be done on all endpoint to keep them constistent
   let fromBlock = getOptionString("fromBlock")
   let toBlock = getOptionString("toBlock")
 

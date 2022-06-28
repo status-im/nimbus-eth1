@@ -12,7 +12,8 @@ import
   eth/common/eth_types,
   eth/bloom as bFilter,
   stint,
-  ./rpc_types
+  ./rpc_types,
+  ./hexstrings
 
 proc topicToDigest(t: seq[Topic]): seq[Hash256] =
   var resSeq: seq[Hash256] = @[]
@@ -41,7 +42,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
       filterLog.transactionIndex = some(i)
       filterLog.transactionHash = some(transactions[i].rlpHash)
       filterLog.blockHash = some(header.blockHash)
-      filterLog.blockNumber = some(header.blockNumber)
+      filterLog.blockNumber = some(encodeQuantity(header.blockNumber))
       filterLog.address = log.address
       filterLog.data = log.data
       #  TODO topics should probably be kept as Hash256 in receipts
@@ -77,7 +78,10 @@ proc bloomFilter*(
     let subTops = sub.unsafeGet()
     var topicIncluded = len(subTops) == 0
     for topic in subTops:
-      if bloomFilter.contains(topic):
+      # This is is quite not obvious, but passing topic as MDigest256 fails, as
+      # it does not use internal keccak256 hashing. To achieve desired semantics,
+      # we need use digest bare bytes so that they will be properly kec256 hashes
+      if bloomFilter.contains(topic.data):
         topicIncluded = true
         break
 

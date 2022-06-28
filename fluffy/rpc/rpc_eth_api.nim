@@ -172,7 +172,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getFilterLogs")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getLogs")
+  # rpcServerWithProxy.registerProxyMethod("eth_getLogs")
 
   rpcServerWithProxy.registerProxyMethod("eth_newBlockFilter")
 
@@ -207,7 +207,6 @@ proc installEthApiHandlers*(
       let (header, body) = blockRes.unsafeGet()
       return some(BlockObject.init(header, body))
 
-
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: EthHashStr) -> HexQuantityStr:
     ## Returns the number of transactions in a block from a block matching the
@@ -238,8 +237,9 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
     if filterOptions.blockhash.isNone():
-      # currently only queries with provided blockhash are supported
-      raise newException(ValueError, "Usupported query. FIeld `blockhash` need to be provided")
+      # currently only queries with provided blockhash are supported. To support
+      # range queries it would require Indicies network.
+      raise newException(ValueError, "Usupported query. Field `blockhash` need to be provided")
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 

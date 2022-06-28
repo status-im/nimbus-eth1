@@ -447,7 +447,11 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     else:
       return @[]
 
-  proc getLogsForRange(chain: BaseChainDB, start: UInt256, finish: UInt256, opts: FilterOptions): seq[FilterLog] =
+  proc getLogsForRange(
+      chain: BaseChainDB,
+      start: UInt256,
+      finish: UInt256,
+      opts: FilterOptions): seq[FilterLog] =
     var logs = newSeq[FilterLog]()
     var i = start
     while i <= finish:
@@ -460,6 +464,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
         #
         return logs
       i = i + 1
+    return logs
 
   server.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
     ## filterOptions: settings for this filter.
@@ -482,6 +487,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       # to be done on every endpoint to be consistent.
       let fromHeader = chain.headerFromTag(filterOptions.fromBlock)
       let toHeader = chain.headerFromTag(filterOptions.fromBlock)
+
       # Note: if fromHeader.blockNumber > toHeader.blockNumber, no logs will be
       # returned. This is consistent with, what other ethereum clients return
       let logs = chain.getLogsForRange(
