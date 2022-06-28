@@ -15,6 +15,8 @@ type
     terminalHash
     safeHash
     finalizedHash
+    snapSyncAccount
+    snapSyncProof
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -78,6 +80,16 @@ proc safeHashKey*(): DbKey {.inline.} =
 proc finalizedHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
+
+proc snapSyncAccountKey*(h: Hash256): DbKey =
+  result.data[0] = byte ord(snapSyncAccount)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+proc snapSyncProofKey*(h: Hash256): DbKey =
+  result.data[0] = byte ord(snapSyncProof)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

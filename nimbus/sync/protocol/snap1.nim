@@ -186,50 +186,13 @@ const
 # avoids transmitting these hashes in about 90% of accounts.  We need to
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
-proc read(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
-  ## RLP decoding for `SnapAccount`, which contains a path and account.
-  ## The snap representation of the account differs from `Account` RLP.
-  ## Empty storage hash and empty code hash are each represented by an
-  ## RLP zero-length string instead of the full hash.
-  rlp.tryEnterList()
-  result.nonce = rlp.read(typeof(result.nonce))
-  result.balance = rlp.read(typeof(result.balance))
-
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.storageRoot = rlp.read(typeof(result.storageRoot))
-    if result.storageRoot == BLANK_ROOT_HASH:
-      raise newException(RlpTypeMismatch,
-        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.storageRoot = BLANK_ROOT_HASH
-
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.codeHash = rlp.read(typeof(result.codeHash))
-    if result.codeHash == EMPTY_SHA3:
-      raise newException(RlpTypeMismatch,
-        "EMPTY_SHA3 not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.codeHash = EMPTY_SHA3
+proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
+  ## RLP Mixin: decoding for `SnapAccount`.
+  result = rlp.snapRead(T)
 
 proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
-  ## RLP encoding for `SnapAccount`, which contains a path and account.
-  ## The snap representation of the account differs from `Account` RLP.
-  ## Empty storage hash and empty code hash are each represented by an
-  ## RLP zero-length string instead of the full hash.
-  rlpWriter.append(account.nonce)
-  rlpWriter.append(account.balance)
-
-  if account.storageRoot == BLANK_ROOT_HASH:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(account.storageRoot)
-
-  if account.codeHash == EMPTY_SHA3:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(account.codeHash)
+  ##  RLP Mixin: encoding for `SnapAccount`.
+  rlpWriter.snapAppend(account)
 
 
 p2pProtocol snap1(version = 1,

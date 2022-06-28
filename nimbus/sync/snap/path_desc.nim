@@ -15,6 +15,7 @@ import
   nimcrypto/keccak,
   stew/[byteutils, interval_set],
   stint,
+  ../../constants,
   ../types
 
 {.push raises: [Defect].}
@@ -238,14 +239,62 @@ proc read*(rlp: var Rlp, T: type NodeTag): T
     {.gcsafe, raises: [Defect,RlpError]} =
   rlp.read(Hash256).to(T)
 
-proc append*(rlpWriter: var RlpWriter, nid: NodeTag) =
-  rlpWriter.append(nid.to(Hash256))
+proc append*(writer: var RlpWriter, nid: NodeTag) =
+  writer.append(nid.to(Hash256))
 
-proc read*(rlp: var Rlp, T: type PathSegment): T
+# -------------
+
+proc snapRead*(rlp: var Rlp; T: type Account): T
     {.gcsafe, raises: [Defect,RlpError]} =
+  ## RLP decoding for `Account`. The snap RLP representation of the account
+  ## differs from standard `Account` RLP. Empty storage hash and empty code
+  ## hash are each represented by an RLP zero-length string instead of the
+  ## full hash.
+  rlp.tryEnterList()
+  result.nonce = rlp.read(typeof(result.nonce))
+  result.balance = rlp.read(typeof(result.balance))
+  if rlp.blobLen != 0 or not rlp.isBlob:
+    result.storageRoot = rlp.read(typeof(result.storageRoot))
+    if result.storageRoot == BLANK_ROOT_HASH:
+      raise newException(RlpTypeMismatch,
+        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
+  else:
+    rlp.skipElem()
+    result.storageRoot = BLANK_ROOT_HASH
+  if rlp.blobLen != 0 or not rlp.isBlob:
+    result.codeHash = rlp.read(typeof(result.codeHash))
+    if result.codeHash == EMPTY_SHA3:
+      raise newException(RlpTypeMismatch,
+        "EMPTY_SHA3 not encoded as empty string in Snap protocol")
+  else:
+    rlp.skipElem()
+    result.codeHash = EMPTY_SHA3
+
+proc snapAppend*(writer: var RlpWriter; account: Account) =
+  ## RLP encoding for `Account`. The snap RLP representation of the account
+  ## differs from standard `Account` RLP. Empty storage hash and empty code
+  ## hash are each represented by an RLP zero-length string instead of the
+  ## full hash.
+  writer.startList(4)
+  writer.append(account.nonce)
+  writer.append(account.balance)
+  if account.storageRoot == BLANK_ROOT_HASH:
+    writer.append("")
+  else:
+    writer.append(account.storageRoot)
+  if account.codeHash == EMPTY_SHA3:
+    writer.append("")
+  else:
+    writer.append(account.codeHash)
+
+# -------------
+
+proc compactRead*(rlp: var Rlp, T: type PathSegment): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Read compact encoded path segment
   rlp.tryEnterList()
   let
-    hash = rlp.read(Hash256)
+    path = rlp.read(array[32, byte])
     length = rlp.read(byte)
   if 64 < length:
     raise newException(
@@ -254,25 +303,38 @@ proc read*(rlp: var Rlp, T: type PathSegment): T
     # initalise as even extension
     result.bytes.setLen(1 + (length shr 1))
     for n in 1 ..< result.bytes.len:
-      result.bytes[n] = hash.data[n-1]
+      result.bytes[n] = path[n-1]
   else:
     # initalise as odd extension
     result.bytes.setLen((length + 1) shr 1)
-    result.bytes[0] = 0x10 or (hash.data[0] shl 4)
+    result.bytes[0] = 0x10 or (path[0] shl 4)
     for n in 1 ..< result.bytes.len:
-      result.bytes[n] = (hash.data[n-1] shl 4) or (hash.data[n] shr 4)
+      result.bytes[n] = (path[n-1] shl 4) or (path[n] shr 4)
 
-proc append*(rlpWriter: var RlpWriter, ps: PathSegment) =
-  var h: Hash256
+proc compactAppend*(writer: var RlpWriter, ps: PathSegment) =
+  ## Append compact encoded path segment
+  var path: array[32, byte]
   if (ps.bytes[0] and 0x10) == 0:
     for n in 1 ..< ps.bytes.len:
-      h.data[n-1] = ps.bytes[n]
+      path[n-1] = ps.bytes[n]
   else:
-    for n in 0 ..< ps.bytes.len:
-      h.data[n] = (ps.bytes[n] shl 4) or (ps.bytes[n+1] shr 4)
-  rlpWriter.startList(2)
-  rlpWriter.append(h)
-  rlpWriter.append(ps.len.byte)
+    for n in 1 ..< ps.bytes.len:
+      path[n-1] = (ps.bytes[n-1] shl 4) or (ps.bytes[n] shr 4)
+    path[ps.bytes.len-1] = ps.bytes[^1] shl 4
+  writer.startList(2)
+  writer.append(path)
+  writer.append(ps.len.byte)
+
+# -------------
+
+proc dbRead*(rlp: var Rlp, T: type PathSegment): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Read as stored in the database
+  result.bytes = rlp.read(Blob)
+
+proc dbAppend*(writer: var RlpWriter, ps: PathSegment) =
+  ## Append in database record format
+  writer.append(ps.bytes)
 
 # ------------------------------------------------------------------------------
 # Public `NodeTag` and `LeafRange` functions
@@ -309,14 +371,19 @@ proc freeFactor*(lrs: LeafRangeSet): float =
 
 # Printing & pretty printing
 proc `$`*(nt: NodeTag): string =
-  nt.to(Hash256).data.toHex
+  if nt == high(NodeTag):
+    "high(NodeTag)"
+  elif nt == 0.u256.NodeTag:
+    "0"
+  else:
+    nt.to(Hash256).data.toHex
 
 proc leafRangePp*(a, b: NodeTag): string =
   ## Needed for macro generated DSL files like `snap.nim` because the
   ## `distinct` flavour of `NodeTag` is discarded there.
   result = "[" & $a
   if a < b:
-    result &= ',' & (if b < high(NodeTag): $b else: "high")
+    result &= ',' & $b
   result &= "]"
 
 proc `$`*(a, b: NodeTag): string =

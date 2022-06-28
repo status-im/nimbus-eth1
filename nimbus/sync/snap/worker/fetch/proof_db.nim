@@ -12,10 +12,11 @@
 import
   std/[algorithm, hashes, sequtils, sets, strutils, strformat, tables],
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common/eth_types, p2p, rlp, trie/db],
   nimcrypto/keccak,
   stew/[byteutils, interval_set],
   stint,
+  ../../../../db/storage_types,
   "../../.."/[protocol, types],
   ../../path_desc
 
@@ -50,41 +51,35 @@ type
     Extension,
     Leaf
 
-  ProofNodeKey = ##\
-    ## Local alias for a `NodeTag` which is `UInt256`. Note that there should
-    ## be no more than `high(int)` entries in a table as the `len()` function
-    ## returns an `int` value.
-    distinct uint32
-
   ProofRowRef = ref object
-    nodeTag: NodeTag              # allows for reverse mapping key -> tag
     case kind: ProofRowType
     of Branch:
-      vertex: array[16,ProofNodeKey]
+      vertex: array[16,NodeTag]
       value: Blob                 # name starts with a `v` as in vertex
     of Extension:
       extend: PathSegment
-      follow: ProofNodeKey
+      follow: NodeTag
     of Leaf:
       path: PathSegment
       payload: Blob               # name starts with a `p` as in path
 
   ProofKvp = object
-    key: ProofNodeKey
+    key: NodeTag
     data: ProofRowRef
 
   ProofDbRef* = ref object
+    keyMap: Table[NodeTag,uint]              # for debugging only
+
     rootTag: NodeTag
-    rootKey: ProofNodeKey
+    accounts: TrieDatabaseRef                # partial accounts database
+    proofs: TrieDatabaseRef                  # table: NodeTag -> ProofXRowRef
+    proofTx: DbTransaction
+    proofBias: int
 
-    keys: Table[NodeTag,ProofNodeKey]        # hash -> key mapping
-    proofs: Table[ProofNodeKey,ProofRowRef]  # partial trie database
-    accounts: Table[NodeTag,Account]         # partial accounts database
-
+    proofCount: int
     newAccs: seq[(NodeTag,seq[SnapAccount])] # newly created accounts
-    newKeys: seq[NodeTag]                    # newly created key map
-    newRows: seq[ProofNodeKey]               # newly added rows
-    refPool: HashSet[ProofNodeKey]           # newly referenced rows
+    newRows: seq[NodeTag]                    # newly added rows
+    refPool: HashSet[NodeTag]                # newly referencing rows
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -96,6 +91,12 @@ template noKeyError(info: static[string]; code: untyped) =
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
 
+template noRlpError(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError as e:
+    raiseAssert "Inconveivable (" & info & "): " & e.msg
+
 template noFmtError(info: static[string]; code: untyped) =
   try:
     code
@@ -104,19 +105,6 @@ template noFmtError(info: static[string]; code: untyped) =
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
 
-proc `==`(a, b: ProofNodeKey): bool {.borrow.}
-proc `<`(a, b: ProofNodeKey): bool {.borrow.}
-
-# Handy shortcuts
-proc `==`(a: ProofNodeKey; b: static[int]): bool = a == b.ProofNodeKey
-proc `<`(a: static[int]; b: ProofNodeKey): bool = a.ProofNodeKey < b
-
-proc `$`(a: ProofNodeKey): string =
-  noFmtError("`$`"):
-    result = &"${a.uint64:x}"
-
-proc to(n: static[int]; T: type ProofNodeKey): T =
-  n.T
 
 func nibble(a: array[32,byte]; inx: int): int =
   let byteInx = inx shr 1
@@ -126,24 +114,10 @@ func nibble(a: array[32,byte]; inx: int): int =
     else:
       result = (a[byteInx] and 15).int
 
-proc getKey(pv: ProofDbRef; nodeTag: NodeTag): ProofNodeKey =
-  ## Simple `NodeTag` -> <key> mapper. New keys are also recorded in the
-  ## `unwind` list.
-  noKeyError("getKey"):
-    if pv.keys.hasKey(nodeTag):
-      return pv.keys[nodeTag]
-
-  result = (pv.keys.len + 1).ProofNodeKey
-  pv.keys[nodeTag] = result
-  pv.newKeys.add nodeTag
-
-  # Special treatment while root is not initialised
-  if pv.rootKey == 0:
-    if nodeTag == pv.rootTag:
-      pv.rootKey = result
-
-proc decode(blob: Blob; T: type Account): Result[T,void] =
-  ## Decode blob with `Account` data
+proc snapDecode(blob: Blob; T: type Account): Result[T,void] =
+  ## Decode blob with `Account` data.
+  ## TODO: These are `snap/1` encoded data which silghtly differ from standard
+  ##       encoding.
   var rlp = blob.rlpFromBytes
   try:
     let acc = rlp.read(Account)
@@ -153,28 +127,9 @@ proc decode(blob: Blob; T: type Account): Result[T,void] =
   err()
 
 proc clearJournal(pv: ProofDBRef) =
-  pv.newKeys.setLen(0)
-  pv.newRows.setLen(0)
   pv.newAccs.setLen(0)
+  pv.newRows.setLen(0)
   pv.refPool.clear
-
-#[
-proc `==`(a, b: Account): bool =
-  ## For debugging, only
-  if a.nonce != b.nonce:
-    trace "==(Account) nonce", a=a.nonce, b=b.nonce
-    return false
-  if a.balance != b.balance:
-    trace "==(Account) balance", a=a.balance, b=b.balance
-    return false
-  if a.storageRoot != b.storageRoot:
-    trace "==(Account) storageRoot", a=a.storageRoot, b=b.storageRoot
-    return false
-  if a.codeHash != b.codeHash:
-    trace "==(Account) codeHash", a=a.codeHash, b=b.codeHash
-    return false
-  true
-#]#
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -216,9 +171,14 @@ proc pp(a: NodeHash|TrieHash; collapse = true): string =
 proc pp(a: NodeTag; collapse = true): string =
   a.to(Hash256).pp(collapse)
 
-proc pp(a: ProofNodeKey): string =
-  if 0 < a:
-    result = $a
+proc toKey(a: NodeTag; pv: ProofDbRef): uint =
+  noKeyError("pp(NodeTag)"):
+    if not pv.keyMap.hasKey(a):
+      pv.keyMap[a] = pv.keyMap.len.uint + 1
+    result = pv.keyMap[a]
+
+proc pp(a: NodeTag; pv: ProofDbRef): string =
+  $a.toKey(pv)
 
 proc pp(q: openArray[byte]; noHash = false): string =
   if q.len == 32 and not noHash:
@@ -258,40 +218,116 @@ proc pp(blobs: seq[Blob]): string =
   else:
     result &= "]"
 
-proc pp(row: ProofRowRef): string =
+proc pp(hs: seq[NodeTag]; pv: ProofDbRef): string =
+ "<" & hs.mapIt(it.pp(pv)).join(",") & ">"
+
+proc pp(hs: HashSet[NodeTag]; pv: ProofDbRef): string =
+  "{" & toSeq(hs.items).mapIt(it.toKey(pv)).sorted.mapIt($it).join(",") & "}"
+
+proc pp(row: ProofRowRef; pv: ProofDbRef): string =
   if row.isNil:
     return "nil"
   noFmtError("pp(ProofRowRef)"):
     case row.kind:
     of Branch: result &=
-      "b(" & row.vertex.mapIt(it.pp).join(",") & "," & row.value.pp & ")"
+      "b(" & row.vertex.mapIt(it.pp(pv)).join(",") & "," &
+        row.value.pp.pp(true) & ")"
     of Leaf: result &=
-      "l(" & ($row.path).pp(true) & "," & row.payload.pp & ")"
+      "l(" & ($row.path).pp(true) & "," & row.payload.pp.pp(true) & ")"
     of Extension: result &=
-      "x(" & ($row.extend).pp(true) & "," & row.follow.pp & ")"
+      "x(" & ($row.extend).pp(true) & "," & row.follow.pp(pv) & ")"
 
-proc pp(q: seq[ProofKvp]): string =
+proc pp(q: seq[ProofKvp]; pv: ProofDbRef): string =
   result="@["
   for kvp in q:
-    result &= "(" & kvp.key.pp & "," & kvp.data.pp & "),"
+    result &= "(" & kvp.key.pp(pv) & "," & kvp.data.pp(pv) & "),"
   if q.len == 0:
     result &= "]"
   else:
     result[^1] = ']'
 
-proc dumpProofs(pv: ProofDBRef): string =
-  noFmtError("dumpProofs"):
-    for key in toSeq(pv.proofs.keys).sorted:
-      var keyPp = key.pp
-      if key == pv.rootKey:
-        keyPp[0] = '*'
-      result &= &"({keyPp},{pv.proofs[key].pp})|"
-  if 0 < result.len: # cut off trailing '|'
-    result.setLen(result.len-1)
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+template toAccKey(tag: NodeTag): openArray[byte] =
+  let key = tag.to(Hash256).snapSyncAccountKey
+  key.data.toOpenArray(0, int(key.dataEndPos))
+
+template toProofKey(tag: NodeTag): openArray[byte] =
+  let key = tag.to(Hash256).snapSyncProofKey
+  key.data.toOpenArray(0, int(key.dataEndPos))
+
+proc read(rlp: var Rlp; T: type ProofRowRef): T =
+  ## RLP mixin
+  noRlpError("read(ProofRowRef)"):
+    new result
+    result.kind = rlp.read(typeof result.kind)
+    rlp.tryEnterList()
+    case result.kind:
+    of Branch:
+      result.vertex = rlp.read(typeof result.vertex)
+      result.value = rlp.read(typeof result.value)
+    of Extension:
+      result.extend = rlp.dbRead(typeof result.extend)
+      result.follow = rlp.read(typeof result.follow)
+    of Leaf:
+      result.path = rlp.dbRead(typeof result.path)
+      result.payload = rlp.read(typeof result.payload)
+
+proc append(rlpWriter: var RlpWriter; row: ProofRowRef) =
+  ## RLP mixin
+  append(rlpWriter, row.kind)
+  startList(rlpWriter, 2)
+  case row.kind:
+  of Branch:
+    append(rlpWriter, row.vertex)
+    append(rlpWriter, row.value)
+  of Extension:
+    dbAppend(rlpWriter, row.extend)
+    append(rlpWriter, row.follow)
+  of Leaf:
+    dbAppend(rlpWriter, row.path)
+    append(rlpWriter, row.payload)
+
+proc getProofsRow(pv: ProofDBRef; tag: NodeTag): ProofRowRef =
+  let rowData = pv.proofs.get(tag.toProofKey)
+  if 0 < rowData.len:
+    result = rowData.decode(ProofRowRef)
+
+proc hasProofsRow(pv: ProofDBRef; tag: NodeTag): bool =
+  pv.proofs.contains(tag.toProofKey)
+
+proc delProofsRow(pv: ProofDBRef; tag: NodeTag): bool =
+  if pv.hasProofsRow(tag):
+    pv.proofs.del(tag.toProofKey)
+    pv.proofCount.dec
+    return true
+
+proc collectRefs(pv: ProofDBRef; row: ProofRowRef) =
+  case row.kind:
+  of Branch:
+    for v in row.vertex:
+      pv.refPool.incl v
+  of Extension:
+    pv.refPool.incl row.follow
+  of Leaf:
+    discard
+
+proc collectRefs(pv: ProofDBRef; tag: NodeTag) =
+  let row = pv.getProofsRow(tag)
+  if not row.isNil:
+    pv.collectRefs(row)
+
+proc addProofsRow(pv: ProofDBRef; tag: NodeTag; row: ProofRowRef) =
+  #debug "addProofsRow", size=pv.proofCount, tag=tag.pp(pv), row=row.pp(pv)
+  pv.proofs.put(tag.toProofKey, rlp.encode(row))
+  pv.proofCount.inc
+  # Add references to pool
+  pv.newRows.add tag
+  # Always add references, the row might have been added earlier outside
+  # the current transaction.
+  pv.collectRefs(row)
 
 # Example trie from https://eth.wiki/en/fundamentals/patricia-tree
 #
@@ -322,42 +358,16 @@ proc dumpProofs(pv: ProofDBRef): string =
 #        "dodge":  6 4 6 f 6 7 6 5
 #        "horse":  6 8 6 f 7 2 7 3 6 5
 #
-# This is sort of implemented as
-#
-#   keys:
-#     root: $1 -- the state root is always $1, $0 is unused in table
-#     A:    $2
-#     B:    $3
-#     C:    $4
-#     D:    $5
-#     E:    $6
-#     F:    $7 -- resolving embedded reference
-#     G:    $8 -- resolving embedded reference
-#     H:    $9 -- resolving embedded reference
-#
-#   proofs:
-#     root: x(16, $2)
-#     $2:   b(,,,,$3,,,,$7,,,,,,,,)
-#     $3:   x(00+"o", $5)
-#     $5:   b(,,,,,,$6,,,,,,,,,,"verb")
-#     $6:   x(17, $8)
-#     $7:   l(20+"orse", "stallion")
-#     $8:   b(,,,,,,$9,,,,,,,,,,"puppy")
-#     $9:   l(35, "coin")
-#
-#     with
-#       b(..) for a branch node
-#       x(..) for an extension node
-#       l(..) for a leaf node
 
 proc parse(pv: ProofDBRef; rlpData: Blob): Result[ProofKvp,ProofError]
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [Defect, RlpError].} =
   ## Decode a single trie item for adding to the table
-  let
-    rowKey = pv.getKey(rlpData.digestTo(NodeTag)) # map of row hash
-  if pv.proofs.hasKey(rowKey):
+  let rowTag = rlpData.digestTo(NodeTag)
+  when RowColumnParserDump:
+    debug "Rlp column parser", rowTag
+  if pv.hasProofsRow(rowTag):
     # No need to do this row again
-    return ok(ProofKvp(key: rowKey))
+    return ok(ProofKvp(key: rowTag))
 
   var
     # Inut data
@@ -365,7 +375,7 @@ proc parse(pv: ProofDBRef; rlpData: Blob): Result[ProofKvp,ProofError]
 
     # Result data
     blobs = newSeq[Blob](2)         # temporary, cache
-    row = ProofrowRef(kind: Branch) # part of output, default type
+    row = ProofRowRef(kind: Branch) # part of output, default type
     top = 0                         # count entries
 
   # Collect lists of either 2 or 17 blob entries.
@@ -378,10 +388,8 @@ proc parse(pv: ProofDBRef; rlpData: Blob): Result[ProofKvp,ProofError]
         return err(RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
-      var tag: NodeTag
-      if not tag.init(rlp.read(Blob)):
+      if not row.vertex[top].init(rlp.read(Blob)):
         return err(RlpBranchLinkExpected)
-      row.vertex[top] = pv.getKey(tag)
     of 16:
       if not w.isBlob:
         return err(RlpBlobExpected)
@@ -401,10 +409,8 @@ proc parse(pv: ProofDBRef; rlpData: Blob): Result[ProofKvp,ProofError]
     case blobs[0][0] shr 4:
     of 0, 1:
       row.kind = Extension
-      var tag: NodeTag
-      if not (row.extend.init(blobs[0]) and tag.init(blobs[1])):
+      if not (row.extend.init(blobs[0]) and row.follow.init(blobs[1])):
         return err(RlpExtPathEncoding)
-      row.follow = pv.getKey(tag)
     of 2, 3:
       row.kind = Leaf
       if not row.path.init(blobs[0]):
@@ -415,14 +421,12 @@ proc parse(pv: ProofDBRef; rlpData: Blob): Result[ProofKvp,ProofError]
   of 17:
     # Branch entry, complete the first two vertices
     for n,blob in blobs:
-      var tag: NodeTag
-      if not tag.init(blob):
+      if not row.vertex[n].init(blob):
         return err(RlpBranchLinkExpected)
-      row.vertex[n] = pv.getKey(tag)
   else:
     return err(Rlp2Or17ListEntries)
 
-  ok(ProofKvp(key: rowKey, data: row))
+  ok(ProofKvp(key: rowTag, data: row))
 
 
 proc parse(pv: ProofDBRef; proof: SnapAccountProof): Result[void,ProofError] =
@@ -435,24 +439,11 @@ proc parse(pv: ProofDBRef; proof: SnapAccountProof): Result[void,ProofError] =
       if rc.isErr:
         return err(rc.error)
 
-      # Queue in `unwind` list unless seen, already
-      var row: ProofRowRef
-      if rc.value.data.isNil:
-        row = pv.proofs[rc.value.key]
+      let row = rc.value.data
+      if row.isNil: # avoid dups
+        pv.collectRefs(rc.value.key)
       else:
-        row = rc.value.data
-        pv.proofs[rc.value.key] = row
-        pv.newRows.add rc.value.key
-
-      # Add references to pool
-      case row.kind:
-      of Branch:
-        for v in row.vertex:
-          pv.refPool.incl v
-      of Extension:
-        pv.refPool.incl row.follow
-      of Leaf:
-        discard
+        pv.addProofsRow(rc.value.key, row)
   except RlpError:
     return err(RlpEncoding)
   except KeyError:
@@ -460,60 +451,61 @@ proc parse(pv: ProofDBRef; proof: SnapAccountProof): Result[void,ProofError] =
 
   ok()
 
-
-proc follow(pv: ProofDBRef; tag: NodeTag): (int, Blob) =
+proc follow(pv: ProofDBRef; path: NodeTag): (int, Blob) =
   ## Returns the number of matching digits/nibbles from the argument `tag`
   ## found in the proofs trie.
   var
     inTop = 0
-    inPath = tag.UInt256.toBytesBE
-    rowKey = pv.rootKey
+    inPath = path.UInt256.toBytesBE
+    rowTag = pv.rootTag
     leafBlob: Blob
 
   when NibbleFollowDump:
-    trace "follow", root=pv.rootKey, tag
+    trace "follow", root=pv.rootTag, path
 
-  noKeyError("follow"):
+  noRlpError("follow"):
     block loop:
-      while pv.proofs.hasKey(rowKey):
-        let
-          row = pv.proofs[rowKey]
-          rowType = row.kind
-
+      while true:
+        let row = pv.getProofsRow(rowTag)
+        if row.isNil:
+          break
+        let rowType = row.kind
         case rowType:
         of Branch:
           let
             nibble = inPath.nibble(inTop)
-            newKey = row.vertex[nibble]
+            newTag = row.vertex[nibble]
           when NibbleFollowDump:
-            trace "follow branch", rowType, rowKey, inTop, nibble, newKey
-          rowKey = newKey
+            trace "follow branch", rowType, rowTag, inTop, nibble, newTag
+          rowTag = newTag
 
         of Leaf:
           for n in 0 ..< row.path.len:
             if row.path[n] != inPath.nibble(inTop + n):
               inTop += n
               when NibbleFollowDump:
-                trace "follow leaf failed", rowType, rowKey, tail=row.path
+                let tail = row.path
+                trace "follow leaf failed", rowType, rowTag, tail
               break loop
           inTop += row.path.len
           leafBlob = row.payload
           when NibbleFollowDump:
-            trace "follow leaf", rowType, rowKey, inTop, done=true
+            trace "follow leaf", rowType, rowTag, inTop, done=true
           break loop
 
         of Extension:
           for n in 0 ..< row.extend.len:
             if row.extend[n] != inPath.nibble(inTop + n):
               inTop += n
-              #when NibbleFollowDump:
-              trace "follow extension failed", rowType, rowKey, tail=row.path
+              when NibbleFollowDump:
+                let tail = row.extend
+                trace "follow extension failed", rowType, rowTag, tail
               break loop
-          inTop += row.path.len
-          let newKey = row.follow
-          #when NibbleFollowDump:
-          trace "follow extension", rowType, rowKey, inTop, newKey
-          rowKey = newKey
+          inTop += row.extend.len
+          let newTag = row.follow
+          when NibbleFollowDump:
+            trace "follow extension", rowType, rowTag, inTop, newTag
+          rowTag = newTag
 
         # end case
         inTop.inc
@@ -531,16 +523,19 @@ proc follow(pv: ProofDBRef; tag: NodeTag): (int, Blob) =
 # ------------------------------------------------------------------------------
 
 proc init*(T: type ProofDBRef; root: TrieHash): T =
-  T(rootTag: root.Hash256.to(NodeTag))
+  result = T(
+    rootTag: root.Hash256.to(NodeTag),
+    proofs: newMemoryDB(),
+    accounts: newMemoryDB())
+  result.proofBias = result.proofs.totalRecordsInMemoryDB
 
 proc clear*(pv: ProofDBRef) =
   ## Resets everything except state root.
-  pv.rootKey.reset
-  pv.keys.clear
-  pv.proofs.clear
-  pv.newKeys.setLen(0)
-  pv.newRows.setLen(0)
   pv.refPool.clear
+  pv.newRows.setLen(0)
+  pv.accounts = newMemoryDB()
+  pv.proofs = newMemoryDB()
+  pv.proofTx = nil
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -553,6 +548,10 @@ proc merge*(
   ## Merge account proofs (as received with the snap message `AccountRange`)
   ## into the database. A rollback journal is maintained so that this operation
   ## can be reverted.
+  if pv.proofTx.isNil:
+    pv.proofCount = pv.proofs.totalRecordsInMemoryDB
+    pv.refPool.incl pv.rootTag
+    pv.proofTx = pv.proofs.beginTransaction
   let rc = pv.parse(proofs)
   if rc.isErr:
     trace "Merge() proof failed", proofs=proofs.len, error=rc.error
@@ -572,23 +571,24 @@ proc merge*(
     pv.newAccs.add (base,acc)
   ok()
 
+
 proc commit*(pv: ProofDBRef) =
   ## Clear rollback journal.
-  for (_,subLst) in pv.newAccs:
-    for sa in subLst:
-      pv.accounts[sa.accHash] = sa.accBody
-  pv.clearJournal()
+  if not pv.proofTx.isNil:
+    for (_,subLst) in pv.newAccs:
+      for sa in subLst:
+        pv.accounts.put(sa.accHash.toAccKey, rlp.encode(sa.accBody))
+    pv.clearJournal()
+    pv.proofTx.commit
+    pv.proofTx = nil
 
 proc rollback*(pv: ProofDBRef) =
   ## Rewind and clear rollback journal.
-  # noKeyError("rollback"):
-  for tag in pv.newKeys:
-    pv.keys.del(tag)
-  for key in pv.newRows:
-    pv.proofs.del(key)
-  pv.clearJournal()
-  if pv.keys.len == 0:
-    pv.rootKey.reset
+  if not pv.proofTx.isNil:
+    pv.clearJournal()
+    pv.proofTx.rollback
+    pv.proofTx = nil
+
 
 proc validate*(pv: ProofDBRef): Result[void,ProofError] =
   ## Verify non-commited accounts and proofs:
@@ -598,12 +598,16 @@ proc validate*(pv: ProofDBRef): Result[void,ProofError] =
   ##   proof database with a partial path of length ???
   ## * The last entry in a group of accounts must habe the `accBody` in the
   ##   proof database
-  noKeyError("verify"):
-    for key in pv.newRows:
-      let tag = pv.proofs[key].nodeTag
-      if pv.keys[tag] notin pv.refPool:
+
+  # Make sure that all rows are referenced
+  if 0 < pv.newRows.len:
+    #debug "Reference check",refPool=pv.refPool.pp(pv),newRows=pv.newRows.pp(pv)
+    for tag in pv.newRows:
+      if tag notin pv.refPool:
+        # debug "Unreferenced proofs row", tag, tag=tag.pp(pv)
         return err(RowUnreferenced)
 
+  ## verify accounts
   for (base,accList) in pv.newAccs:
 
     # Validate increasing accounts
@@ -623,16 +627,16 @@ proc validate*(pv: ProofDBRef): Result[void,ProofError] =
 
     # Verify last account
     if nAccDgts == 64:
-     let rc = accData.decode(Account)
+     let rc = accData.snapDecode(Account)
      if rc.isOk:
        if rc.value == accList[^1].accBody:
-         trace "validate accounts", nBaseDgts, nAccList=accList.len
          continue
 
     # This account list did not verify
     return err(LastAccountProofFailed)
 
   ok()
+
 
 proc mergeProved*(
     pv: ProofDBRef;
@@ -671,33 +675,21 @@ proc mergeProved*(
 
 proc proofsLen*(pv: ProofDBRef): int =
   ## Number of entries in the proofs table
-  pv.proofs.len
+  if pv.proofTx.isNil:
+    pv.proofs.totalRecordsInMemoryDB - pv.proofBias
+  else:
+    pv.proofCount - pv.proofBias
 
 proc accountsLen*(pv: ProofDBRef): int =
   ## Number of entries in the accounts table
-  pv.accounts.len
+  pv.accounts.totalRecordsInMemoryDB
 
-proc journalLen*(pv: ProofDBRef): (int,int,int,int) =
+proc journalLen*(pv: ProofDBRef): (int,int,int) =
   ## Size of the roolback journal:
-  ## * number of added keys
   ## * number of added rows
-  ## * number of added row traversal references
-  (pv.newKeys.len, pv.newRows.len, pv.refPool.len, pv.newAccs.len)
-
-
-proc dump*(pv: ProofDBRef): string =
-  ## Debugging only -- function will go away
-  noKeyError("dump"):
-    let
-      proofsPp = pv.dumpProofs.replace("|","\n  ")
-      newKeysPp = pv.newKeys.mapIt(pv.keys[it]).sorted.mapIt(it.pp).join(",")
-      newRowsPp = pv.newRows.sorted.mapIt(it.pp).join(",")
-      refPoolPp = toSeq(pv.refPool.items).sorted.mapIt(it.pp).join(",")
-    result =
-      "proofs:\n  " & proofsPp & "\n" &
-      "newKeys:\n  " & newKeysPp & "\n" &
-      "newRows:\n  " & newRowsPp & "\n" &
-      "refPool:\n  " & refPoolPp & "\n"
+  ## * number of added references implied by rows
+  ## * number of added accounts
+  (pv.newRows.len, pv.refPool.len, pv.newAccs.len)
 
 # ------------------------------------------------------------------------------
 # End

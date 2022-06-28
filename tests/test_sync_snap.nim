@@ -106,21 +106,23 @@ proc accountsRunner(noisy = true; root: TrieHash; data: seq[TestSample]) =
     test "Rollback full database":
       desc.rollback()
       check desc.proofsLen == 0
+      check desc.journalLen == (0,0,0)
 
     test "Merging and committing all except the last":
       for n,proofs in lst.mapIt(it.proofs):
         check desc.merge(proofs) == OkProof
+        check nRows[n] == desc.proofsLen
         check desc.validate == OkProof
         if n < nRows.len - 1:
           desc.commit
         check nRows[n] == desc.proofsLen
       desc.rollback
-      check nRows[^2] == desc.proofsLen
+      check 1 < nRows.len and nRows[^2] == desc.proofsLen
 
     test &"Merging/committing {lst.len} proofs, transposed rows":
       desc.clear
       check desc.proofsLen == 0
-      check desc.journalLen == (0,0,0,0)
+      check desc.journalLen == (0,0,0)
       var r = initRand(42)
       for n,proofs in lst.mapIt(it.proofs):
         let permProof = r.permute(proofs.len).mapIt(proofs[it])
@@ -129,18 +131,17 @@ proc accountsRunner(noisy = true; root: TrieHash; data: seq[TestSample]) =
         desc.commit
         check nRows[n] == desc.proofsLen
 
-    block:
-      let desc = ProofDBRef.init(root)
-      var nRows: seq[int]
-
-      test &"Merging {lst.len} proofs for state root ..{root.pp}":
-        for w in lst:
-          check desc.mergeProved(w.base, w.accounts, w.proofs) == OkProof
-          check desc.validate == OkProof
-          nRows.add desc.proofsLen
-          check desc.journalLen == (0,0,0,0)
-        check 1 < nRows.len # otherwise test makes no sense
-        check 0 < nRows[^1]
+    test &"Merging {lst.len} prooved account groups"&
+        &" for state root ..{root.pp}":
+      desc.clear
+      for n,w in lst:
+        check desc.mergeProved(w.base, w.accounts, w.proofs) == OkProof
+        check desc.journalLen == (0,0,0)
+        check desc.validate == OkProof
+        check nRows[n] == desc.proofsLen
+        check desc.journalLen == (0,0,0)
+      check 1 < nRows.len # otherwise test makes no sense
+      check 0 < nRows[^1]
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -152,7 +153,7 @@ proc syncSnapMain*(noisy = defined(debug)) =
 when isMainModule:
   const noisy = defined(debug) or true
 
-  when false:
+  when true: # false:
     # Import additional data from test data repo
     import ../../nimbus-eth1-blobs/replay/accounts_and_proofs_ex
   else:
@@ -165,7 +166,8 @@ when isMainModule:
   # Verify sample state roots
   doAssert testRoot == testRootEx
 
-  noisy.accountsRunner(testRoot.TrieHash, testSamples & testSamplesEx)
+  let samplesList = (testSamples & testSamplesEx)
+  noisy.accountsRunner(testRoot.TrieHash, samplesList)
 
 # ------------------------------------------------------------------------------
 # End
