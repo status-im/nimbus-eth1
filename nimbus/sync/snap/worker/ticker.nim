@@ -10,6 +10,7 @@
 # except according to those terms.
 
 import
+  std/[strformat, strutils],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
@@ -24,21 +25,17 @@ logScope:
 
 type
   TickerStats* = object
-    activeQueues*: uint
-    totalQueues*: uint64
-    avFillFactor*: float
+    accounts*: (float,float)   ## mean and standard deviation
+    fillFactor*: (float,float) ## mean and standard deviation
+    activeQueues*: int
+    flushedQueues*: int64
 
   TickerStatsUpdater* =
     proc(ns: Worker): TickerStats {.gcsafe, raises: [Defect].}
 
-  AccountsStats = object
-    counted: int64
-    bytes: int64
-
   TickerEx = ref object of WorkerTickerBase
     ## Account fetching state that is shared among all peers.
     ns:           Worker
-    accounts:     AccountsStats
     peersActive:  int
     statsCb:      TickerStatsUpdater
     logTicker:    TimerCallback
@@ -52,21 +49,33 @@ const
 # Private functions: ticking log messages
 # ------------------------------------------------------------------------------
 
+template noFmtError(info: static[string]; code: untyped) =
+  try:
+    code
+  except ValueError as e:
+    raiseAssert "Inconveivable (" & info & "): " & e.msg
+
 proc setLogTicker(sf: TickerEx; at: Moment) {.gcsafe.}
 
 proc runLogTicker(sf: TickerEx) {.gcsafe.} =
+  var
+    avAccounts = ""
+    avUtilisation = ""
   let
-    y = sf.statsCb(sf.ns)
-    fill = if 0 < y.activeQueues: y.avFillFactor/y.activeQueues.float else: 0.0
-    utilisation = fill.toPC(rounding = 0)
+    tick = sf.tick.toSI
+    peers = sf.peersActive
 
-  info "Sync accounts progress",
-    tick = sf.tick.toSI,
-    peers = sf.peersActive,
-    accounts = sf.accounts.counted,
-    states = y.totalQueues,
-    queues = y.activeQueues,
-    utilisation
+    y = sf.statsCb(sf.ns)
+    queues = y.activeQueues
+    flushed = y.flushedQueues
+    mem = getTotalMem().uint.toSI
+
+  noFmtError("runLogTicker"):
+    avAccounts = (&"{(y.accounts[0]+0.5).int64}({(y.accounts[1]+0.5).int64})")
+    avUtilisation = &"{y.fillFactor[0]*100.0:.2f}%({y.fillFactor[1]*100.0:.2f}%)"
+
+  info "Sync queue average statistics",
+    tick, peers, queues, avAccounts, avUtilisation, flushed, mem
 
   sf.tick.inc
   sf.setLogTicker(Moment.fromNow(tickerLogInterval))
@@ -120,10 +129,6 @@ proc tickerStop*(ns: Worker) =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc tickerCountAccounts*(sp: WorkerBuddy; bytes: SomeInteger; nAcc = 1) =
-  sp.ns.tickerEx.accounts.counted += nAcc
-  sp.ns.tickerEx.accounts.bytes += bytes
 
 proc tickerStartPeer*(sp: WorkerBuddy) =
   if sp.ns.tickerEx.peersActive <= 0:

@@ -10,6 +10,7 @@
 # except according to those terms.
 
 import
+  std/math,
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
@@ -175,17 +176,30 @@ proc putAccRange(atb: AccTabEntryRef; iv: LeafRange) =
 proc putAccRange(atb: AccTabEntryRef; a, b: NodeTag) =
   discard atb.avail.merge(a, b)
 
-
 proc haveAccRange(atb: AccTabEntryRef): bool =
   0 < atb.avail.chunks
 
 
+proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
+  if 0 < length:
+    result[0] = sum / length.float
+    result[1] = sqrt(sqSum / length.float - result[0] * result[0])
+  
 proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
-  result.totalQueues = ns.fetchEx.quCount
-  for it in ns.fetchEx.accTab.nextValues:
-    if 0 < it.avail.chunks:
-      result.avFillFactor += it.avail.freeFactor
-      result.activeQueues.inc
+  var aSum, aSqSum, uSum, uSqSum: float 
+  for tab in ns.fetchEx.accTab.nextValues:
+    # Accounts mean & variance
+    let aLen = tab.proof.accountsLen.float
+    aSum += aLen
+    aSqSum += aLen * aLen
+    # Fill utilisation mean & variance
+    let fill = tab.avail.freeFactor
+    uSum += fill
+    uSqSum += fill * fill
+  result.activeQueues = ns.fetchEx.accTab.len
+  result.flushedQueues = ns.fetchEx.quCount.int64 - result.activeQueues
+  result.accounts = meanStdDev(aSum, aSqSum, result.activeQueues)
+  result.fillFactor = meanStdDev(uSum, uSqSum, result.activeQueues)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -305,9 +319,6 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
     if dd.consumed < iv.len:
       # return some unused range
       accTab.putAccRange(iv.minPt + dd.consumed.u256, iv.maxPt)
-
-    # Statistics
-    sp.tickerCountAccounts(0, dd.data.accounts.len)
 
     # Process data
     block:

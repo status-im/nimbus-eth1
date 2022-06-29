@@ -382,7 +382,7 @@ proc leafRangePp*(a, b: NodeTag): string =
   ## Needed for macro generated DSL files like `snap.nim` because the
   ## `distinct` flavour of `NodeTag` is discarded there.
   result = "[" & $a
-  if a < b:
+  if a != b:
     result &= ',' & $b
   result &= "]"
 
