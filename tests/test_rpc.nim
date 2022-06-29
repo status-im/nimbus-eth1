@@ -6,19 +6,19 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  asynctest, json, strformat, strutils, options, tables, os,
-  nimcrypto, stew/byteutils, times,
+  asynctest, json, strformat, strutils, options, tables, os, typetraits, nimcrypto,
+  nimcrypto/hash, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, rpc_utils],
   ../nimbus/[constants, config, genesis, utils, transaction,
              vm_state, vm_types, version],
-  ../nimbus/db/[accounts_cache, db_chain],
+  ../nimbus/db/[accounts_cache, db_chain, storage_types],
   ../nimbus/sync/protocol,
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/utils/[difficulty, tx_pool],
   ../nimbus/[context, chain_config],
-   ./test_helpers, ./macro_assembler, ./rpcclient/eth_api
+   ./test_helpers, ./macro_assembler, ./rpcclient/eth_api, ./test_block_fixture
 
 const
   zeroAddress = block:
@@ -29,6 +29,14 @@ type
   TestEnv = object
     txHash: Hash256
     blockHash: Hash256
+
+proc persistFixtureBlock(chainDB: BaseChainDB) =
+  let header = getBlockHeader4514995()
+  # Manually inserting header to avoid any parent checks
+  chainDB.db.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  chainDB.addBlockNumberToHashLookup(header)
+  discard chainDB.persistTransactions(header.blockNumber, getBlockBody4514995().transactions)
+  discard chainDB.persistReceipts(getReceipts4514995())
 
 proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
@@ -116,6 +124,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
   header.ommersHash = chainDB.persistUncles(uncles)
 
   discard chainDB.persistHeaderToDb(header)
+  chainDB.persistFixtureBlock()
   result = TestEnv(
     txHash: signedTx1.rlpHash,
     blockHash: header.hash
@@ -414,6 +423,91 @@ proc rpcMain*() =
 
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", encodeQuantity(1))
       check res2.isNone
+
+    test "eth_getLogs by blockhash, no filters":
+      let testHeader = getBlockHeader4514995()
+      let testHash = testHeader.blockHash
+      let filterOptions = FilterOptions(
+        blockHash: some(testHash),
+        topics: @[]
+      )
+      let logs = await client.eth_getLogs(filterOptions)
+
+      check:
+        len(logs) == 54
+
+      var i = 0
+      for l in logs:
+        check:
+          l.blockHash.isSome()
+          l.blockHash.unsafeGet() == testHash
+          fromHex[int](distinctBase(l.logIndex.unsafeGet())) == i
+        inc i
+
+    test "eth_getLogs by blockNumber, no filters":
+      let testHeader = getBlockHeader4514995()
+      let testHash = testHeader.blockHash
+      let fBlock: string = distinctBase(encodeQuantity(testHeader.blockNumber))
+      let tBlock: string = distinctBase(encodeQuantity(testHeader.blockNumber))
+      let filterOptions = FilterOptions(
+        fromBlock: some(fBlock),
+        toBlock: some(tBlock)
+      )
+      let logs = await client.eth_getLogs(filterOptions)
+
+      check:
+        len(logs) == 54
+
+      var i = 0
+      for l in logs:
+        check:
+          l.blockHash.isSome()
+          l.blockHash.unsafeGet() == testHash
+          fromHex[int](distinctBase(l.logIndex.unsafeGet())) == i
+        inc i
+
+    test "eth_getLogs by blockhash, filter logs at specific postions":
+      let testHeader = getBlockHeader4514995()
+      let testHash = testHeader.blockHash
+
+      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 = hash.fromHex(MDigest[256], "0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
+
+      let filterOptions = FilterOptions(
+        blockHash: some(testHash),
+        topics: @[some(@[topic]), none[seq[Hash256]](), some(@[topic1])]
+      )
+
+      let logs = await client.eth_getLogs(filterOptions)
+
+      check:
+        len(logs) == 1
+
+
+    test "eth_getLogs by blockhash, filter logs at specific postions with or options":
+      let testHeader = getBlockHeader4514995()
+      let testHash = testHeader.blockHash
+
+      let topic = hash.fromHex(MDigest[256], "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 = hash.fromHex(MDigest[256], "0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
+
+      let topic2 = hash.fromHex(MDigest[256], "0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
+      let topic3 = hash.fromHex(MDigest[256], "0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
+
+
+
+      let filterOptions = FilterOptions(
+        blockHash: some(testHash),
+        topics: @[
+          some(@[topic, topic1]),
+          some(@[topic2, topic3])
+        ]
+      )
+
+      let logs = await client.eth_getLogs(filterOptions)
+
+      check:
+        len(logs) == 2
 
     rpcServer.stop()
     rpcServer.close()

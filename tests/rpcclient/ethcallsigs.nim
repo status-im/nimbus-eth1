@@ -48,6 +48,7 @@ proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: HexQ
 proc eth_getTransactionReceipt(data: Hash256): Option[ReceiptObject]
 proc eth_getUncleByBlockHashAndIndex(data: Hash256, quantity: HexQuantityStr): Option[BlockObject]
 proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: HexQuantityStr): Option[BlockObject]
+proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog]
 
 #[
 proc eth_getCompilers(): seq[string]

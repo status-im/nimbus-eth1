@@ -152,6 +152,22 @@ proc validateHashStr*(value: string) {.inline.} =
   if unlikely(not value.isValidEthHash):
     raise newException(ValueError, SInvalidHash & ": " & value)
 
+proc getEthAddress*(value: string): Option[EthAddress] =
+  if value.isValidEthAddress:
+    var ethAddress: EthAddress
+    hexToByteArray(value, ethAddress)
+    return some(ethAddress)
+  else:
+    return none[EthAddress]()
+
+proc getHash256*(value: string): Option[Hash256] =
+  if value.isValidHash256:
+    var hash: Hash256
+    hexToByteArray(value, hash.data)
+    return some(hash)
+  else:
+    return none[Hash256]()
+
 # Initialisation
 
 proc hexQuantityStr*(value: string): HexQuantityStr {.inline.} =

@@ -24,6 +24,7 @@ cliBuilder:
           ./test_tracer_json,
           ./test_persistblock_json,
           ./test_rpc,
+          ./test_filters,
           ./test_op_arith,
           ./test_op_bit,
           ./test_op_env,

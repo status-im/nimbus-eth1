@@ -132,6 +132,22 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber, output: var BlockHeader)
   if self.getBlockHash(n, blockHash):
     result = self.getBlockHeader(blockHash, output)
 
+proc getBlockHeaderWithHash*(self: BaseChainDB; n: BlockNumber): Option[(BlockHeader, Hash256)] =
+  ## Returns the block header and its hash, with the given number in the canonical chain.
+  ## Hash is returned to avoid recomputing it
+  var hash: Hash256
+  if self.getBlockHash(n, hash):
+    # Note: this will throw if header is not present.
+    var header: BlockHeader
+    if self.getBlockHeader(hash, header):
+      return some((header, hash))
+    else:
+      # this should not happen, but if it happen lets fail laudly as this means
+      # something is super wrong
+      raiseAssert("Corrupted database. Mapping number->hash present, without header in database")
+  else:
+    return none[(BlockHeader, Hash256)]()
+
 proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
   ## Returns the block header with the given number in the canonical chain.
   ## Raises BlockNotFound error if the block is not in the DB.
@@ -372,6 +388,12 @@ iterator getReceipts*(self: BaseChainDB; receiptRoot: Hash256): Receipt =
     else:
       break
     inc receiptIdx
+
+proc getReceipts*(self: BaseChainDB; receiptRoot: Hash256): seq[Receipt] =
+  var receipts = newSeq[Receipt]()
+  for r in self.getReceipts(receiptRoot):
+    receipts.add(r)
+  return receipts
 
 proc readTerminalHash*(self: BaseChainDB; h: var Hash256): bool =
   let bytes = self.db.get(terminalHashKey().toOpenArray)

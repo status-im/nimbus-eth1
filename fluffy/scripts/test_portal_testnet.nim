@@ -192,7 +192,7 @@ procSuite "Portal testnet tests":
     # because the data needs to propagate over the nodes. What one could do is
     # add a json-rpc debug proc that returns whether the offer queue is empty or
     # not. And then poll every node until all nodes have an empty queue.
-    await sleepAsync(20.seconds)
+    await sleepAsync(60.seconds)
 
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
@@ -211,6 +211,16 @@ procSuite "Portal testnet tests":
           var txObj: TransactionObject
           tx.fromJson("tx", txObj)
           check txObj.blockHash.get() == hash
+
+        let filterOptions = FilterOptions(
+          blockHash: some(hash)
+        )
+
+        let logs = await client.eth_getLogs(filterOptions)
+
+        for l in logs:
+          check:
+            l.blockHash == some(hash)
 
         # TODO: Check ommersHash, need the headers and not just the hashes
         # for uncle in blockObj.uncles:
