@@ -32,21 +32,22 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
 
   for i, receipt in receipts:
     for log in receipt.logs:
-      var filterLog = FilterLog()
-      # TODO investigate how to handle this field
-      # - in nimbus info about log removel would need to be kept at synchronization
-      # level, to keep track about potential re-orgs
-      # - in fluffy there is no concept of re-org
-      filterLog.removed = false
-      filterLog.logIndex = some(encodeQuantity(uint32(logIndex)))
-      filterLog.transactionIndex = some(encodeQuantity(uint32(i)))
-      filterLog.transactionHash = some(transactions[i].rlpHash)
-      filterLog.blockHash = some(header.blockHash)
-      filterLog.blockNumber = some(encodeQuantity(header.blockNumber))
-      filterLog.address = log.address
-      filterLog.data = log.data
-      #  TODO topics should probably be kept as Hash256 in receipts
-      filterLog.topics = topicToDigest(log.topics)
+      let filterLog = FilterLog(
+         # TODO investigate how to handle this field
+        # - in nimbus info about log removel would need to be kept at synchronization
+        # level, to keep track about potential re-orgs
+        # - in fluffy there is no concept of re-org
+        removed: false,
+        logIndex: some(encodeQuantity(uint32(logIndex))),
+        transactionIndex: some(encodeQuantity(uint32(i))),
+        transactionHash: some(transactions[i].rlpHash),
+        blockHash: some(header.blockHash),
+        blockNumber: some(encodeQuantity(header.blockNumber)),
+        address: log.address,
+        data: log.data,
+        #  TODO topics should probably be kept as Hash256 in receipts
+        topics: topicToDigest(log.topics)
+      )
 
       inc logIndex
       resLogs.add(filterLog)

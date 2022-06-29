@@ -438,7 +438,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       let blockBody = chain.getBlockBody(hash)
       let receipts = chain.getReceipts(header.receiptRoot)
       # Note: this will hit assertion error if number of block transactions
-      # do not match block receitps.
+      # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
       let logs = deriveLogs(header, blockBody.transactions, receipts)
@@ -470,7 +470,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
     ## filterOptions: settings for this filter.
     ## Returns a list of all logs matching a given filter object.
     ## TODO: Current implementation is pretty naive and not efficient
-    ## as it requires to fetch all transactions and all receitps from database.
+    ## as it requires to fetch all transactions and all receipts from database.
     ## Other clients (Geth):
     ## - Store logs related data in receipts.
     ## - Have separate indexes for Logs in given block

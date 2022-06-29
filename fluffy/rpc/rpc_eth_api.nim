@@ -239,7 +239,7 @@ proc installEthApiHandlers*(
     if filterOptions.blockhash.isNone():
       # currently only queries with provided blockhash are supported. To support
       # range queries it would require Indicies network.
-      raise newException(ValueError, "Usupported query. Field `blockhash` need to be provided")
+      raise newException(ValueError, "Unsupported query. Field `blockhash` needs to be provided")
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 
@@ -251,8 +251,8 @@ proc installEthApiHandlers*(
       let header = maybeHeader.unsafeGet()
 
       if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
-        # TODO: This queries could be done concurrently, investigate if there
-        # are no assumptions about usage of concurrent quiereies on portal
+        # TODO: These queries could be done concurrently, investigate if there
+        # are no assumptions about usage of concurrent queries on portal
         # wire protocol level
         let maybeBody = await historyNetwork.getBlockBody(1'u16, hash, header)
         let maybeReceipts = await historyNetwork.getReceipts(1'u16, hash, header)
