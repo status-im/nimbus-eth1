@@ -25,6 +25,7 @@ logScope:
 
 type
   SnapSyncCtx* = ref object of Worker
+    chain: AbstractChainDB
     buddies: KeyedQueue[Peer,WorkerBuddy] ## LRU cache with worker descriptors
     pool: PeerPool                        ## for starting the system
 
@@ -127,6 +128,7 @@ proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
   ## Constructor
   new result
   let size = max(1,maxPeers)
+  result.chain = ethNode.chain
   result.buddies.init(size)
   result.buddiesMax = size
   result.pool = ethNode.peerPool
@@ -142,7 +144,7 @@ proc start*(ctx: SnapSyncCtx) =
         ctx.onPeerDisconnected(p))
 
   # Initialise sub-systems
-  ctx.workerSetup()
+  ctx.workerSetup(ctx.chain)
   po.setProtocol eth
   ctx.pool.addObserver(ctx, po)
 

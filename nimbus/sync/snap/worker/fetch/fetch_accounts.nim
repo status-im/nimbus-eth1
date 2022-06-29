@@ -41,8 +41,8 @@ type
     NetworkProblem
 
   FetchAccounts* = object
-    consumed*: UInt256     ## Leftmost accounts used from argument range
-    data*: accountRangeObj ## reply data
+    consumed*: UInt256        ## Leftmost accounts used from argument range
+    data*: WorkerAccountRange ## reply data
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -52,7 +52,7 @@ proc getAccountRange(
     sp: WorkerBuddy;
     root: TrieHash;
     iv: LeafRange
-      ): Future[Result[Option[accountRangeObj],void]] {.async.} =
+      ): Future[Result[Option[WorkerAccountRange],void]] {.async.} =
   try:
     let reply = await sp.peer.getAccountRange(
       root.to(Hash256), iv.minPt, iv.maxPt, snapRequestBytesLimit)

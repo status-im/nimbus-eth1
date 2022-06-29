@@ -142,6 +142,10 @@ proc flushDbDir(s: string) =
     if (dataDir / "data").dirExists:
       # Typically under Windows: there might be stale file locks.
       try: dataDir.removeDir except: discard
+    block dontClearUnlessEmpty:
+      for w in s.walkDir:
+        break dontClearUnlessEmpty
+      try: s.removeDir except: discard
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:

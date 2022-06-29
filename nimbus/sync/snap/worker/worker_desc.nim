@@ -15,7 +15,7 @@ import
   nimcrypto/hash,
   stew/[byteutils, keyed_queue],
   ../../../constants,
-  ../../types
+  "../.."/[protocol/snap1, types]
 
 {.push raises: [Defect].}
 
@@ -93,6 +93,11 @@ type
 
     fetchBase*: WorkerFetchBase      ## Opaque object reference
     tickerBase*: WorkerTickerBase    ## Opaque object reference
+
+  # -------
+
+  WorkerAccountRange* = accountRangeObj
+    ## Syntactic sugar, type defined in `snap1`
 
 # ------------------------------------------------------------------------------
 # Public Constructor

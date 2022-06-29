@@ -545,9 +545,9 @@ proc peerSyncChainNonEmptyReply(
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc workerSetup*(ns: Worker) =
+proc workerSetup*(ns: Worker; chainDb: AbstractChainDB) =
   ## Global set up
-  ns.fetchSetup()
+  ns.fetchSetup(chainDb)
 
 proc workerRelease*(ns: Worker) =
   ## Global clean up

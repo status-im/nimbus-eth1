@@ -29,12 +29,12 @@ type
     quCount: uint64          ## Count visited roots
     lastPivot: NodeTag       ## Used for calculating pivots
     accRangeMaxLen: UInt256  ## Maximap interval length, high(u256)/#peers
+    pdb: ProofDb             ## Proof processing
 
   AccTabEntryRef = ref object
     ## Global worker table
     avail: LeafRangeSet      ## Accounts to visit (organised as ranges)
     pivot: NodeTag           ## Where to to start fetching from
-    proof: ProofDbRef        ## Proof processing, TODO: find a better name
     base: WorkerFetchBase    ## Back reference (`FetchEx` not working, here)
 
   AccLruCache =
@@ -84,7 +84,7 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
   ## Fetch LRU table item, create a new one if missing.
   # fetch existing table (if any)
   block:
-    let rc = sp.ns.fetchEx.accTab.lruFetch(key)
+    let rc = sp.fetchEx.accTab.lruFetch(key)
     if rc.isOk:
       # Item was moved to the end of queue
       return rc.value
@@ -92,48 +92,47 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
   # Calculate some new start address for the range fetcher
   while true:
     # Derive pivot from last interval set in table
-    let rc = sp.ns.fetchEx.accTab.last
+    let rc = sp.fetchEx.accTab.last
     if rc.isErr:
       break # no more => stop
     # Check last interval
     let blkRc = rc.value.data.avail.le() # rightmost interval
     if blkRc.isErr:
       # Delete useless interval set, repeat
-      sp.ns.fetchEx.accTab.del(rc.value.key)
+      sp.fetchEx.accTab.del(rc.value.key)
       continue
     # use increasing `pivot` values
-    if sp.ns.fetchEx.lastPivot < blkRc.value.minPt:
+    if sp.fetchEx.lastPivot < blkRc.value.minPt:
       sp.ns.fetchEx.lastPivot = blkRc.value.minPt
       break
-    if sp.ns.fetchEx.lastPivot < high(NodeTag) - pivotAccIncrement:
-      sp.ns.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
+    if sp.fetchEx.lastPivot < high(NodeTag) - pivotAccIncrement:
+      sp.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
       break
     # Otherwise start at 0
-    sp.ns.fetchEx.lastPivot = 0.to(NodeTag)
+    sp.fetchEx.lastPivot = 0.to(NodeTag)
     break
 
   let accRange = AccTabEntryRef(
-    pivot: sp.ns.fetchEx.lastPivot,
+    pivot: sp.fetchEx.lastPivot,
     avail: LeafRangeSet.init(),
-    proof: ProofDBRef.init(key),
     base: sp.fetchEx)
 
   trace "New accounts list for syncing",
-    peer=sp, stateRoot=key, pivot=sp.ns.fetchEx.lastPivot
+    peer=sp, stateRoot=key, pivot=sp.fetchEx.lastPivot
 
   # Statistics
-  sp.ns.fetchEx.quCount.inc
+  sp.fetchEx.quCount.inc
 
   # Pre-filled with the largest possible interval
   discard accRange.avail.merge(low(NodeTag),high(NodeTag))
 
   # Append and curb LRU table as needed
-  return sp.ns.fetchEx.accTab.lruAppend(key, accRange, sp.ns.buddiesMax)
+  return sp.fetchEx.accTab.lruAppend(key, accRange, sp.ns.buddiesMax)
 
 
 proc sameAccTab(sp: WorkerBuddy; key: TrieHash; accTab: AccTabEntryRef): bool =
   ## Verify that account list entry has not changed.
-  let rc = sp.ns.fetchEx.accTab.eq(key)
+  let rc = sp.fetchEx.accTab.eq(key)
   if rc.isErr:
     return accTab.isNil
   if not accTab.isNil:
@@ -187,15 +186,18 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
   
 proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
   var aSum, aSqSum, uSum, uSqSum: float 
-  for tab in ns.fetchEx.accTab.nextValues:
+  for kvp in ns.fetchEx.accTab.nextPairs:
+
     # Accounts mean & variance
-    let aLen = tab.proof.accountsLen.float
+    let aLen = ns.fetchEx.pdb.accountsLen(kvp.key).float
     aSum += aLen
     aSqSum += aLen * aLen
+
     # Fill utilisation mean & variance
-    let fill = tab.avail.freeFactor
+    let fill = kvp.data.avail.freeFactor
     uSum += fill
     uSqSum += fill * fill
+
   result.activeQueues = ns.fetchEx.accTab.len
   result.flushedQueues = ns.fetchEx.quCount.int64 - result.activeQueues
   result.accounts = meanStdDev(aSum, aSqSum, result.activeQueues)
@@ -205,11 +207,12 @@ proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc fetchSetup*(ns: Worker) =
+proc fetchSetup*(ns: Worker; chainDb: AbstractChainDB) =
   ## Global set up
   ns.fetchBase = FetchEx()
   ns.fetchEx.accTab.init(ns.buddiesMax)
   ns.fetchEx.accRangeMaxLen = high(UInt256) div ns.buddiesMax.u256
+  ns.fetchEx.pdb.init(chainDb.getTrieDB)
   ns.tickerSetup(cb = tickerStats)
 
 proc fetchRelease*(ns: Worker) =
@@ -322,8 +325,7 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
 
     # Process data
     block:
-      let rc = accTab.proof.mergeProved(
-        iv.minPt, dd.data.accounts, dd.data.proof)
+      let rc = sp.ns.fetchEx.pdb.mergeProved(stateRoot, iv.minPt, dd.data)
       if rc.isErr:
         discard # ??
 
