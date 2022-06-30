@@ -13,6 +13,7 @@ cliBuilder:
   import  ./test_code_stream,
           ./test_accounts_cache,
           ./test_custom_network,
+          ./test_sync_snap,
           ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,

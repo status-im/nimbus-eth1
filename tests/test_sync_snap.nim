@@ -166,7 +166,7 @@ proc accountsRunner(
     if db.persistent:
       tmpDir.flushDbDir
 
-  suite &"SyncSnap: accounts and proofs {info}":
+  suite &"SyncSnap: accounts and proofs for {info}":
     var
       desc: ProofDb
       nRows: seq[int]
