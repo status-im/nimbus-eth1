@@ -105,6 +105,12 @@ proc invalidStatus*(validHash: Hash256 = Hash256()): PayloadStatusV1 =
     latestValidHash: some(BlockHash validHash.data)
   )
 
+proc acceptedStatus*(validHash: Hash256): PayloadStatusV1 =
+  PayloadStatusV1(
+    status: PayloadExecutionStatus.accepted,
+    latestValidHash: some(BlockHash validHash.data)
+  )
+
 proc toBlockBody*(payload: ExecutionPayloadV1): BlockBody =
   result.transactions.setLen(payload.transactions.len)
   for i, tx in payload.transactions:

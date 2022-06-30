@@ -478,3 +478,10 @@ proc safeHeader*(self: BaseChainDB): BlockHeader =
 
 proc finalizedHeader*(self: BaseChainDB): BlockHeader =
   self.getBlockHeader(self.finalizedHeaderHash)
+
+proc haveBlockAndState*(self: BaseChainDB, headerHash: Hash256): bool =
+  var header: BlockHeader
+  if not self.getBlockHeader(headerHash, header):
+    return false
+  # see if stateRoot exists
+  self.exists(header.stateRoot)

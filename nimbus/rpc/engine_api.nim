@@ -20,6 +20,15 @@ import
 
 import eth/common/eth_types except BlockHeader
 
+proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
+  let ptd = db.getScore(parent.parentHash)
+  if ptd >= ttd:
+    db.getHeadBlockHash()
+  else:
+    # If the most recent valid ancestor is a PoW block,
+    # latestValidHash MUST be set to ZERO
+    Hash256()
+
 proc setupEngineAPI*(
     sealingEngine: SealingEngineRef,
     server: RpcServer) =
@@ -91,18 +100,20 @@ proc setupEngineAPI*(
         parent = header.timestamp, header = header.timestamp
       return invalidStatus(db.getHeadBlockHash(), "Invalid timestamp")
 
+    if not db.haveBlockAndState(header.parentHash):
+      api.put(blockHash, header)
+      warn "State not available, ignoring new payload",
+        hash = blockHash.data.toHex,
+        number = header.blockNumber
+      let blockHash = latestValidHash(db, parent, ttd)
+      return acceptedStatus(blockHash)
+
     trace "Inserting block without sethead",
       hash = blockHash.data.toHex, number = header.blockNumber
     let body = toBlockBody(payload)
     let vres = sealingEngine.chain.insertBlockWithoutSetHead(header, body)
     if vres != ValidationResult.OK:
-      let ptd = db.getScore(parent.parentHash)
-      let blockHash = if ptd >= ttd:
-                        db.getHeadBlockHash()
-                      else:
-                        # If the most recent valid ancestor is a PoW block,
-                        # latestValidHash MUST be set to ZERO
-                        Hash256()
+      let blockHash = latestValidHash(db, parent, ttd)
       return invalidStatus(blockHash, "Failed to insert block")
 
     # We've accepted a valid payload from the beacon client. Mark the local
