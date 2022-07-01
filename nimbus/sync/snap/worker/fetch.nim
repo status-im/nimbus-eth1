@@ -185,7 +185,7 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
     result[1] = sqrt(sqSum / length.float - result[0] * result[0])
   
 proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
-  var aSum, aSqSum, uSum, uSqSum: float 
+  var aSum, aSqSum, uSum, uSqSum: float
   for kvp in ns.fetchEx.accTab.nextPairs:
 
     # Accounts mean & variance

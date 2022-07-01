@@ -758,14 +758,14 @@ proc proofsLen*(pv: ProofDb; root: TrieHash): int =
   if pv.rootHash == root:
     pv.stat.nProofs
   else:
-    pv.useStatusRec(pv.rootHash).nProofs
+    pv.useStatusRec(root).nProofs
 
 proc accountsLen*(pv: ProofDb; root: TrieHash): int =
   ## Number of entries in the accounts table for the argument state root `root`.
   if pv.rootHash == root:
     pv.stat.nAccounts
   else:
-    pv.useStatusRec(pv.rootHash).nAccounts
+    pv.useStatusRec(root).nAccounts
 
 proc journalLen*(pv: ProofDb): (bool,int,int,int) =
   ## Size of the current rollback journal:
