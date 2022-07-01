@@ -9,13 +9,13 @@
 
 import
   std/options,
-  stew/results, chronos, chronicles,
-  eth/[common/eth_types, rlp],
+  stew/results, chronos, chronicles, nimcrypto/[keccak, hash],
+  eth/[common/eth_types, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../../../nimbus/[utils, constants],
+  ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ./history_content
+  "."/[history_content, accumulator]
 
 logScope:
   topics = "portal_hist"
@@ -23,7 +23,6 @@ logScope:
 const
   historyProtocolId* = [byte 0x50, 0x0B]
 
-# TODO: Extract common parts from the different networks
 type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
@@ -34,7 +33,7 @@ type
 func setStreamTransport*(n: HistoryNetwork, transport: UtpDiscv5Protocol) =
   setTransport(n.portalProtocol.stream, transport)
 
-proc toContentIdHandler(contentKey: ByteList): Option[ContentId] =
+func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   some(toContentId(contentKey))
 
 func encodeKey(k: ContentKey): (ByteList, ContentId) =
@@ -61,115 +60,230 @@ func getEncodedKeyForContent(
 
   return encodeKey(contentKey)
 
-proc getContentFromBytes(bytes: openArray[byte], T: type): Result[T, string] =
-  var rlp = rlpFromBytes(bytes)
+func decodeRlp*(bytes: openArray[byte], T: type): Result[T, string] =
   try:
-    let content = rlp.read(T)
-    ok[T](content)
+    ok(rlp.decode(bytes, T))
   except RlpError as e:
     err(e.msg)
 
-proc validateHeaderBytes*(
-    bytes: openArray[byte], hash: BlockHash): Option[BlockHeader] =
+## Calls to go from SSZ decoded types to RLP fully decoded types
 
-  let headerResult = getContentFromBytes(bytes, BlockHeader)
+func fromPortalBlockBody(
+    T: type BlockBody, body: BlockBodySSZ): Result[T, string] =
+  ## Get the full decoded BlockBody from the SSZ-decoded `PortalBlockBody`.
+  try:
+    var transactions: seq[Transaction]
+    for tx in body.transactions:
+      transactions.add(rlp.decode(tx.asSeq(), Transaction))
 
-  if headerResult.isErr():
-    error "Failed to decode header ", msg = headerResult.error()
-    return none(BlockHeader)
+    let uncles = rlp.decode(body.uncles.asSeq(), seq[BlockHeader])
 
-  let header = headerResult.unsafeGet()
+    ok(BlockBody(transactions: transactions, uncles: uncles))
+  except RlpError as e:
+    err("RLP decoding failed: " & e.msg)
+
+func fromReceipts(
+    T: type seq[Receipt], receipts: ReceiptsSSZ): Result[T, string] =
+  ## Get the full decoded seq[Receipt] from the SSZ-decoded `Receipts`.
+  try:
+    var res: seq[Receipt]
+    for receipt in receipts:
+      res.add(rlp.decode(receipt.asSeq(), Receipt))
+
+    ok(res)
+  except RlpError as e:
+    err("RLP decoding failed: " & e.msg)
+
+## Calls to encode Block types to the SSZ types.
+
+func fromBlockBody(T: type BlockBodySSZ, body: BlockBody): T =
+  var transactions: Transactions
+  for tx in body.transactions:
+    discard transactions.add(TransactionByteList(rlp.encode(tx)))
+
+  let uncles = Uncles(rlp.encode(body.uncles))
+
+  BlockBodySSZ(transactions: transactions, uncles: uncles)
+
+func fromReceipts(T: type ReceiptsSSZ, receipts: seq[Receipt]): T =
+  var receiptsSSZ: ReceiptsSSZ
+  for receipt in receipts:
+    discard receiptsSSZ.add(ReceiptByteList(rlp.encode(receipt)))
+
+  receiptsSSZ
+
+func encode*(blockBody: BlockBody): seq[byte] =
+  let portalBlockBody = BlockBodySSZ.fromBlockBody(blockBody)
+
+  SSZ.encode(portalBlockBody)
+
+func encode*(receipts: seq[Receipt]): seq[byte] =
+  let portalReceipts = ReceiptsSSZ.fromReceipts(receipts)
+
+  SSZ.encode(portalReceipts)
+
+## Calls and helper calls to do validation of block header, body and receipts
+# TODO: Failures on validation and perhaps deserialisation should be punished
+# for if/when peer scoring/banning is added.
+
+proc calcRootHash(items: Transactions | ReceiptsSSZ): Hash256 =
+  var tr = initHexaryTrie(newMemoryDB())
+  for i, t in items:
+    try:
+      tr.put(rlp.encode(i), t.asSeq())
+    except RlpError as e:
+      # TODO: Investigate this RlpError as it doesn't sound like this is
+      # something that can actually occur.
+      raiseAssert(e.msg)
+
+  return tr.rootHash
+
+template calcTxsRoot*(transactions: Transactions): Hash256 =
+  calcRootHash(transactions)
+
+template calcReceiptsRoot*(receipts: ReceiptsSSZ): Hash256 =
+  calcRootHash(receipts)
+
+func validateBlockHeaderBytes*(
+    bytes: openArray[byte], hash: BlockHash): Result[BlockHeader, string] =
+
+  let header = ? decodeRlp(bytes, BlockHeader)
 
   if not (header.blockHash() == hash):
-    # TODO: Header with different hash than expected, maybe we should punish
-    # peer which sent us this ?
-    return none(BlockHeader)
+    err("Block header hash does not match")
+  else:
+    ok(header)
 
-  return some(header)
+proc validateBlockBody(
+    body: BlockBodySSZ, txsRoot, ommersHash: KeccakHash):
+    Result[void, string] =
+  ## Validate the block body against the txRoot amd ommersHash from the header.
+  let calculatedOmmersHash = keccak256.digest(body.uncles.asSeq())
+  if calculatedOmmersHash != ommersHash:
+    return err("Invalid ommers hash")
 
-proc validateExpectedBody(
-    bb: BlockBody,
-    txRoot: KeccakHash,
-    ommersHash: KeccakHash): Result[void, string] =
-  try:
-    let calculatedTxRoot = calcTxRoot(bb.transactions)
-    let calculatedOmmersHash = rlpHash(bb.uncles)
+  let calculatedTxsRoot = calcTxsRoot(body.transactions)
+  if calculatedTxsRoot != txsRoot:
+    return err("Invalid transactions root")
 
-    if calculatedTxRoot != txRoot:
-      return err("Unexpected transaction root")
-    elif calculatedOmmersHash != ommersHash:
-      return err("Unexpected ommers hash")
-    else:
-      return ok()
-  except RlpError as e:
-    return err(e.msg)
+  ok()
 
-proc validateBodyBytes*(
+proc validateBlockBodyBytes*(
+    bytes: openArray[byte], txRoot, ommersHash: KeccakHash):
+    Result[BlockBody, string] =
+  ## Fully decode the SSZ Block Body and validate it against the header.
+  let body =
+    try:
+      SSZ.decode(bytes, BlockBodySSZ)
+    except SszError as e:
+      return err("Failed to decode block body" & e.msg)
+
+  ? validateBlockBody(body, txRoot, ommersHash)
+
+  BlockBody.fromPortalBlockBody(body)
+
+proc validateReceipts(
+    receipts: ReceiptsSSZ, receiptsRoot: KeccakHash): Result[void, string] =
+  let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
+
+  if calculatedReceiptsRoot != receiptsRoot:
+    return err("Unexpected receipt root")
+  else:
+    return ok()
+
+proc validateReceiptsBytes*(
     bytes: openArray[byte],
-    txRoot: KeccakHash,
-    ommersHash: KeccakHash):Option[BlockBody] =
+    receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
+  ## Fully decode the SSZ Block Body and validate it against the header.
+  let receipts =
+    try:
+      SSZ.decode(bytes, ReceiptsSSZ)
+    except SszError as e:
+      return err("Failed to decode receipts" & e.msg)
 
-  let bodyResult = getContentFromBytes(bytes, BlockBody)
+  ? validateReceipts(receipts, receiptsRoot)
 
-  if bodyResult.isErr():
-    error "Failed to decode block body", msg = bodyResult.error()
-    return none(BlockBody)
+  seq[Receipt].fromReceipts(receipts)
 
-  let blockBody = bodyResult.unsafeGet()
+## ContentDB getters for specific history network types
 
-  let expectedResult = validateExpectedBody(blockBody, txRoot, ommersHash)
+proc getSszDecoded(
+    db: ContentDB, contentId: ContentID,
+    T: type auto): Option[T] =
+  let res = db.get(contentId)
+  if res.isSome():
+    try:
+      some(SSZ.decode(res.get(), T))
+    except SszError as e:
+      raiseAssert("Stored data should always be serialized correctly: " & e.msg)
+  else:
+    none(T)
 
-  if expectedResult.isErr():
-    error "Failed to validate if block body matches header",
-      msg = expectedResult.error()
+proc get(db: ContentDB, T: type BlockHeader, contentId: ContentID): Option[T] =
+  let contentFromDB = db.get(contentId)
+  if contentFromDB.isSome():
+    let res = decodeRlp(contentFromDB.get(), T)
+    if res.isErr():
+      raiseAssert(res.error)
+    else:
+      some(res.get())
+  else:
+    none(T)
 
-    # we got block body (bundle of transactions and uncles) which do not match
-    # header. For now just ignore it, but maybe we should penalize peer
-    # sending us such data?
-    return none(BlockBody)
+proc get(db: ContentDB, T: type BlockBody, contentId: ContentID): Option[T] =
+  let contentFromDB = db.getSszDecoded(contentId, BlockBodySSZ)
+  if contentFromDB.isSome():
+    let res = T.fromPortalBlockBody(contentFromDB.get())
+    if res.isErr():
+      raiseAssert(res.error)
+    else:
+      some(res.get())
+  else:
+    none(T)
 
-  return some(blockBody)
+proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentID): Option[T] =
+  let contentFromDB = db.getSszDecoded(contentId, ReceiptsSSZ)
+  if contentFromDB.isSome():
+    let res = T.fromReceipts(contentFromDB.get())
+    if res.isErr():
+      raiseAssert(res.error)
+    else:
+      some(res.get())
+  else:
+    none(T)
 
 proc getContentFromDb(
     h: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
   if h.portalProtocol.inRange(contentId):
-    let contentFromDB = h.contentDB.get(contentId)
-    if contentFromDB.isSome():
-      var rlp = rlpFromBytes(contentFromDB.unsafeGet())
-      try:
-        let content = rlp.read(T)
-        return some(content)
-      except CatchableError as e:
-        # Content in db should always have valid formatting, so this should not
-        # happen
-        raiseAssert(e.msg)
-    else:
-      return none(T)
+    h.contentDB.get(T, contentId)
   else:
-    return none(T)
+    none(T)
+
+## Public API to get the history network specific types, either from database
+## or through a lookup on the Portal Network
 
 proc getBlockHeader*(
     h: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
-  let (keyEncoded, contentId) = getEncodedKeyForContent(blockHeader, chainId, hash)
+  let (keyEncoded, contentId) =
+    getEncodedKeyForContent(blockHeader, chainId, hash)
 
-  let maybeHeaderFromDb = h.getContentFromDb(BlockHeader, contentId)
-
-  if maybeHeaderFromDb.isSome():
+  let headerFromDb = h.getContentFromDb(BlockHeader, contentId)
+  if headerFromDb.isSome():
     info "Fetched block header from database", hash
-    return maybeHeaderFromDb
+    return headerFromDb
 
-  let maybeHeaderContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if maybeHeaderContent.isNone():
+  let headerContentLookup =
+    await h.portalProtocol.contentLookup(keyEncoded, contentId)
+  if headerContentLookup.isNone():
     warn "Failed fetching block header from the network", hash
     return none(BlockHeader)
 
-  let headerContent = maybeHeaderContent.unsafeGet()
+  let headerContent = headerContentLookup.unsafeGet()
 
-  let maybeHeader = validateHeaderBytes(headerContent.content, hash)
-
-  if maybeHeader.isSome():
+  let res = validateBlockHeaderBytes(headerContent.content, hash)
+  # TODO: If the validation fails, a new request could be done.
+  if res.isOk():
     info "Fetched block header from the network", hash
     # Content is valid we can propagate it to interested peers
     h.portalProtocol.triggerPoke(
@@ -180,38 +294,39 @@ proc getBlockHeader*(
 
     h.portalProtocol.storeContent(contentId, headerContent.content)
 
-  return maybeHeader
+    return some(res.get())
+  else:
+    return none(BlockHeader)
 
 proc getBlockBody*(
     h: HistoryNetwork,
     chainId: uint16,
     hash: BlockHash,
     header: BlockHeader):Future[Option[BlockBody]] {.async.} =
+  let
+    (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
+    bodyFromDb = h.getContentFromDb(BlockBody, contentId)
 
-  let (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
-
-  let maybeBodyFromDb = h.getContentFromDb(BlockBody, contentId)
-
-  if maybeBodyFromDb.isSome():
+  if bodyFromDb.isSome():
     info "Fetched block body from database", hash
-    return some[BlockBody](maybeBodyFromDb.unsafeGet())
+    return some(bodyFromDb.unsafeGet())
 
-  let maybeBodyContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if maybeBodyContent.isNone():
+  let bodyContentLookup =
+    await h.portalProtocol.contentLookup(keyEncoded, contentId)
+  if bodyContentLookup.isNone():
     warn "Failed fetching block body from the network", hash
     return none(BlockBody)
 
-  let bodyContent = maybeBodyContent.unsafeGet()
+  let bodyContent = bodyContentLookup.unsafeGet()
 
-  let maybeBody = validateBodyBytes(bodyContent.content, header.txRoot, header.ommersHash)
-
-  if maybeBody.isNone():
+  let res = validateBlockBodyBytes(
+    bodyContent.content, header.txRoot, header.ommersHash)
+  if res.isErr():
     return none(BlockBody)
 
   info "Fetched block body from the network", hash
 
-  let blockBody = maybeBody.unsafeGet()
+  let blockBody = res.get()
 
   # body is valid, propagate it to interested peers
   h.portalProtocol.triggerPoke(
@@ -227,96 +342,54 @@ proc getBlockBody*(
 proc getBlock*(
     h: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[Block]] {.async.} =
-  let maybeHeader = await h.getBlockHeader(chainId, hash)
-
-  if maybeHeader.isNone():
-    # we do not have header for given hash,so we would not be able to validate
-    # that received body really belong to it
+  let headerOpt = await h.getBlockHeader(chainId, hash)
+  if headerOpt.isNone():
+    # Cannot validate block without header.
     return none(Block)
 
-  let header = maybeHeader.unsafeGet()
+  let header = headerOpt.unsafeGet()
 
-  let maybeBody = await h.getBlockBody(chainId, hash, header)
+  let bodyOpt = await h.getBlockBody(chainId, hash, header)
 
-  if maybeBody.isNone():
+  if bodyOpt.isNone():
     return none(Block)
 
-  let body = maybeBody.unsafeGet()
+  let body = bodyOpt.unsafeGet()
 
   return some[Block]((header, body))
-
-proc validateExpectedReceipts(
-    receipts: seq[Receipt],
-    receiptRoot: KeccakHash): Result[void, string] =
-  try:
-    let calculatedReceiptRoot = calcReceiptRoot(receipts)
-
-    if calculatedReceiptRoot != receiptRoot:
-      return err("Unexpected receipt root")
-    else:
-      return ok()
-  except RlpError as e:
-    return err(e.msg)
-
-proc validateReceiptsBytes*(
-    bytes: openArray[byte],
-    receiptRoot: KeccakHash): Option[seq[Receipt]] =
-
-  let receiptResult = getContentFromBytes(bytes, seq[Receipt])
-
-  if receiptResult.isErr():
-    error "Failed to decode receipts", msg = receiptResult.error()
-    return none(seq[Receipt])
-
-  let receipts = receiptResult.unsafeGet()
-
-  let expectedReceiptsResult = validateExpectedReceipts(receipts, receiptRoot)
-
-  if expectedReceiptsResult.isErr():
-    error "Failed to validate if receipts matches header",
-      msg = expectedReceiptsResult.error()
-
-    # we got receipts which do not match
-    # header. For now just ignore it, but maybe we should penalize peer
-    # sending us such data?
-    return none(seq[Receipt])
-
-  return some(receipts)
 
 proc getReceipts*(
     h: HistoryNetwork,
     chainId: uint16,
     hash: BlockHash,
     header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
-  # header does not have any receipts, return early and do not save empty bytes
-  # into the database
   if header.receiptRoot == BLANK_ROOT_HASH:
+    # The header has no receipts, return early with empty receipts
     return some(newSeq[Receipt]())
 
   let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
 
-  let maybeReceiptsFromDb = h.getContentFromDb(seq[Receipt], contentId)
+  let receiptsFromDb = h.getContentFromDb(seq[Receipt], contentId)
 
-  if maybeReceiptsFromDb.isSome():
+  if receiptsFromDb.isSome():
     info "Fetched receipts from database", hash
-    return some(maybeReceiptsFromDb.unsafeGet())
+    return some(receiptsFromDb.unsafeGet())
 
-  let maybeReceiptsContent = await h.portalProtocol.contentLookup(keyEncoded, contentId)
-
-  if maybeReceiptsContent.isNone():
+  let receiptsContentLookup =
+    await h.portalProtocol.contentLookup(keyEncoded, contentId)
+  if receiptsContentLookup.isNone():
     warn "Failed fetching receipts from the network", hash
     return none[seq[Receipt]]()
 
-  let receiptsContent = maybeReceiptsContent.unsafeGet()
+  let receiptsContent = receiptsContentLookup.unsafeGet()
 
-  let maybeReceipts = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
-
-  if maybeReceipts.isNone():
+  let res = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
+  if res.isErr():
     return none[seq[Receipt]]()
 
   info "Fetched receipts from the network", hash
 
-  let receipts = maybeReceipts.unsafeGet()
+  let receipts = res.get()
 
   # receips are valid, propagate it to interested peers
   h.portalProtocol.triggerPoke(
@@ -329,6 +402,22 @@ proc getReceipts*(
 
   return some(receipts)
 
+func validateEpochAccumulator(bytes: openArray[byte]): bool =
+  # For now just validate by checking if de-serialization works
+  try:
+    discard SSZ.decode(bytes, EpochAccumulator)
+    true
+  except SszError:
+    false
+
+func validateMasterAccumulator(bytes: openArray[byte]): bool =
+  # For now just validate by checking if de-serialization works
+  try:
+    discard SSZ.decode(bytes, Accumulator)
+    true
+  except SszError:
+    false
+
 proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   let keyOpt = contentKey.decode()
 
@@ -339,7 +428,7 @@ proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
 
   case key.contentType:
   of blockHeader:
-    validateHeaderBytes(content, key.blockHeaderKey.blockHash).isSome()
+    validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash).isOk()
   of blockBody:
     true
     # TODO: Need to get the header from the db or the network for this. Or how
@@ -347,9 +436,9 @@ proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   of receipts:
     true
   of epochAccumulator:
-    true
+    validateEpochAccumulator(content)
   of masterAccumulator:
-    true
+    validateMasterAccumulator(content)
 
 proc new*(
     T: type HistoryNetwork,
