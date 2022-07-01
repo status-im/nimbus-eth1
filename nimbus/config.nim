@@ -36,6 +36,16 @@ const
     GitRevision
   ]
 
+  # This entry can savely be deleted if the latest `p2p/bootnodes` version for
+  # the `master` branch is available in which case `nim` will moan about
+  # duplicate names.
+  #
+  # As of 01/07/2022, the latest `master` branch did not cleanly compile
+  # after the `bearssl` split api update.
+  SepoliaBootnodes* = [
+    "enode://9246d00bc8fd1742e5ad2428b80fc4dc45d786283e05ef6edbd9002cbc335d40998444732fbe921cb88e1d2c73d1b1de53bae6a2237996e9bfe14f871baf7066@18.168.182.86:30303",
+    "enode://ec66ddcf1a974950bd4c782789a7e04f8aa7110a72569b6e65fcd51e937e74eed303b1ea734e4d19cfaec9fbff9b6ee65bf31dcb50ba79acce9dd63a6aca61c7@52.14.151.177:30303"]
+
 let
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusCopyright* = "Copyright (c) 2018-" &
@@ -182,13 +192,14 @@ type
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), other=custom)"
+      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), sepolia(11155111), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
         "- ropsten: Test network (proof-of-work, the one most like Ethereum mainnet)\n" &
         "- rinkeby: Test network (proof-of-authority, for those running Geth clients)\n" &
-        "- görli  : Test network (proof-of-authority, works across all clients)\n" &
-        "- kovan  : Test network (proof-of-authority, for those running OpenEthereum clients)"
+        "- goerli:  Test network (proof-of-authority, works across all clients)\n" &
+        "- kovan:   Test network (proof-of-authority, for those running OpenEthereum clients)\n" &
+        "- sepolia: Test network (proof-of-work)"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
@@ -569,6 +580,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "rinkeby": return some RinkebyNet
   of "goerli" : return some GoerliNet
   of "kovan"  : return some KovanNet
+  of "sepolia": return some SepoliaNet
   else:
     try:
       some parseInt(network).NetworkId
@@ -620,6 +632,8 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
       result.setBootnodes(GoerliBootnodes)
     of KovanNet:
       result.setBootnodes(KovanBootnodes)
+    of SepoliaNet:
+      result.setBootnodes(SepoliaBootnodes)
     else:
       # custom network id
       discard
