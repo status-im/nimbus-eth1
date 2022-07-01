@@ -14,7 +14,7 @@
 
 import
   std/[base64, json, options, os, strutils, times],
-  bearssl,
+  bearssl/rand,
   chronicles,
   chronos,
   chronos/apps/http/httptable,
@@ -54,7 +54,7 @@ type
   JwtGenSecret* = ##\
     ## Random generator function producing a shared key. Typically, this\
     ## will be a wrapper around a random generator type, such as\
-    ## `BrHmacDrbgContext`.
+    ## `HmacDrbgContext`.
     proc(): JwtSharedKey {.gcsafe.}
 
   JwtExcept* = object of CatchableError
@@ -183,7 +183,7 @@ proc fromHex*(key: var JwtSharedKey, src: string): Result[void,JwtError] =
   except ValueError:
     err(jwtKeyInvalidHexString)
 
-proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
+proc jwtGenSecret*(rng: ref HmacDrbgContext): JwtGenSecret =
   ## Standard shared key random generator. If a fixed key is needed, a
   ## function like
   ## ::
@@ -195,7 +195,7 @@ proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
   ## only.
   result = proc: JwtSharedKey =
     var data: array[jwtMinSecretLen,byte]
-    rng[].brHmacDrbgGenerate(data)
+    rng[].generate(data)
     data.JwtSharedKey
 
 proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
@@ -255,7 +255,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
   except ValueError:
     return err(jwtKeyInvalidHexString)
 
-proc jwtSharedSecret*(rng: ref BrHmacDrbgContext; config: NimbusConf):
+proc jwtSharedSecret*(rng: ref HmacDrbgContext; config: NimbusConf):
                     Result[JwtSharedKey, JwtError]
     {.gcsafe, raises: [Defect,JwtExcept].} =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.

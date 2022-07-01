@@ -12,20 +12,15 @@ import
   eth/keys,
   ./utp_test_client
 
-proc generateByteSeq(rng: var BrHmacDrbgContext, length: int): seq[byte] =
-  var bytes = newSeq[byte](length)
-  brHmacDrbgGenerate(rng, bytes)
-  return bytes
-
-proc generateByteSeqHex(rng: var BrHmacDrbgContext, length: int): string =
-  generateByteSeq(rng, length).toHex()
+proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =
+  rng.generateBytes(length).toHex()
 
 # Before running the suit, there need to be two instances of utp_test_app running
 # under provided ports (9042, 9041).
 # Those could be launched locally by running either
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
-# or 
+# or
 # 1. running in docker dir: docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
 # 2. running in docker dir: SCENARIO="scenario name and params " docker-compose up
 procSuite "Utp integration tests":
@@ -35,10 +30,10 @@ procSuite "Utp integration tests":
 
   let serverContainerAddress = "127.0.0.1"
   let serverContainerPort = Port(9041)
-  
-  type 
+
+  type
     FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
-  # combinator which repeatadly calls passed closure until returned future is 
+  # combinator which repeatedly calls passed closure until returned future is
   # successfull
   # TODO: currently works only for non void types
   proc repeatTillSuccess[A](f: FutureCallback[A], maxTries: int = 20): Future[A] {.async.} =
@@ -61,8 +56,8 @@ procSuite "Utp integration tests":
   proc findServerConnection(
     connections: openArray[SKey],
     clientId: NodeId,
-    clientConnectionId: uint16): Option[Skey] = 
-    let conns: seq[SKey] = 
+    clientConnectionId: uint16): Option[Skey] =
+    let conns: seq[SKey] =
       connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId)
     if len(conns) == 0:
       none[Skey]()
@@ -83,13 +78,13 @@ procSuite "Utp integration tests":
 
     # nodes need to have established session before the utp try
     discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.nodeEnr))
-    
+
     return (client, clientInfo, server, serverInfo)
 
   asyncTest "Transfer 100k bytes of data over utp stream from client to server":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
-    let 
+    let
       clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
@@ -100,7 +95,7 @@ procSuite "Utp integration tests":
     let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
     let
-      bytesToWrite = generateByteSeqHex(rng[], numOfBytes)
+      bytesToWrite = generateBytesHex(rng[], numOfBytes)
       writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
       readData = await server.utp_read(serverConnectionKey, numOfBytes)
 
@@ -109,12 +104,12 @@ procSuite "Utp integration tests":
       readData == bytesToWrite
 
   asyncTest "Transfer 100k bytes of data over utp stream from server to client":
-    # In classic uTP this would not be possible, as when uTP works over udp 
+    # In classic uTP this would not be possible, as when uTP works over udp
     # client needs to transfer first, but when working over discv5 it should be possible
     # to transfer data from server to client from the start
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
-    let 
+    let
       clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
@@ -125,7 +120,7 @@ procSuite "Utp integration tests":
     let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
     let
-      bytesToWrite = generateByteSeqHex(rng[], numOfBytes)
+      bytesToWrite = generateBytesHex(rng[], numOfBytes)
       writeRes = await server.utp_write(serverConnectionKey, bytesToWrite)
       readData = await client.utp_read(clientConnectionKey, numOfBytes)
 
@@ -136,7 +131,7 @@ procSuite "Utp integration tests":
   asyncTest "Multiple 10k bytes transfers over utp stream":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
-    let 
+    let
       clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
@@ -147,9 +142,9 @@ procSuite "Utp integration tests":
     let serverConnectionKey = maybeServerConnectionKey.unsafeGet()
 
     let
-      bytesToWrite = generateByteSeqHex(rng[], numOfBytes)
-      bytesToWrite1 = generateByteSeqHex(rng[], numOfBytes)
-      bytesToWrite2 = generateByteSeqHex(rng[], numOfBytes)
+      bytesToWrite = generateBytesHex(rng[], numOfBytes)
+      bytesToWrite1 = generateBytesHex(rng[], numOfBytes)
+      bytesToWrite2 = generateBytesHex(rng[], numOfBytes)
       writeRes = await client.utp_write(clientConnectionKey, bytesToWrite)
       writeRes1 = await client.utp_write(clientConnectionKey, bytesToWrite1)
       writeRes2 = await client.utp_write(clientConnectionKey, bytesToWrite2)
@@ -166,12 +161,12 @@ procSuite "Utp integration tests":
   asyncTest "Handle mulitplie sockets over one utp server instance ":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
-    let 
+    let
       clientConnectionKey1 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       clientConnectionKey2 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       clientConnectionKey3 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
-      
+
       maybeServerConnectionKey1 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey1.id)
       maybeServerConnectionKey2 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey2.id)
       maybeServerConnectionKey3 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey3.id)
@@ -186,9 +181,9 @@ procSuite "Utp integration tests":
     let serverConnectionKey3 = maybeServerConnectionKey3.unsafeGet()
 
     let
-      bytesToWrite1 = generateByteSeqHex(rng[], numOfBytes)
-      bytesToWrite2 = generateByteSeqHex(rng[], numOfBytes)
-      bytesToWrite3 = generateByteSeqHex(rng[], numOfBytes)
+      bytesToWrite1 = generateBytesHex(rng[], numOfBytes)
+      bytesToWrite2 = generateBytesHex(rng[], numOfBytes)
+      bytesToWrite3 = generateBytesHex(rng[], numOfBytes)
 
       writeRes1 = await client.utp_write(clientConnectionKey1, bytesToWrite1)
       writeRes2 = await client.utp_write(clientConnectionKey2, bytesToWrite2)

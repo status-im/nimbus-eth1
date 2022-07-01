@@ -15,12 +15,11 @@ import
   ../content_db,
   ./test_helpers
 
-proc generateNRandomU256(rng: var BrHmacDrbgContext, n: int): seq[UInt256] =
+proc generateNRandomU256(rng: var HmacDrbgContext, n: int): seq[UInt256] =
   var i = 0
   var res = newSeq[Uint256]()
   while i < n:
-    var bytes = newSeq[byte](32)
-    brHmacDrbgGenerate(rng, bytes)
+    let bytes = rng.generateBytes(32)
     let num = Uint256.fromBytesBE(bytes)
     res.add(num)
     inc i

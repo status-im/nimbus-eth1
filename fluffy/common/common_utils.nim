@@ -50,7 +50,7 @@ proc loadBootstrapFile*(bootstrapFile: string,
 # However that would require the pull the keystore.nim and parts of
 # keystore_management.nim out of nimbus-eth2.
 proc getPersistentNetKey*(
-    rng: var BrHmacDrbgContext, keyFilePath: string, dataDir: string):
+    rng: var HmacDrbgContext, keyFilePath: string, dataDir: string):
     PrivateKey =
   logScope:
     key_file = keyFilePath

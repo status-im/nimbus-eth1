@@ -268,11 +268,8 @@ proc run(config: PortalCliConf) =
     else:
       echo nodes.error
   of findcontent:
-    proc random(T: type UInt256, rng: var BrHmacDrbgContext): T =
-      var key: UInt256
-      brHmacDrbgGenerate(addr rng, addr key, csize_t(sizeof(key)))
-
-      key
+    proc random(T: type UInt256, rng: var HmacDrbgContext): T =
+      rng.generate(T)
 
     # For now just some random bytes
     let contentKey = ByteList.init(@[1'u8])

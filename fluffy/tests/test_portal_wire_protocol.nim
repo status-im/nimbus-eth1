@@ -29,7 +29,7 @@ proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   true
 
 proc initPortalProtocol(
-    rng: ref BrHmacDrbgContext,
+    rng: ref HmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
     bootstrapRecords: openArray[Record] = []): PortalProtocol =
@@ -57,7 +57,7 @@ proc stopPortalProtocol(proto: PortalProtocol) {.async.} =
   proto.stop()
   await proto.baseProtocol.closeWait()
 
-proc defaultTestSetup(rng: ref BrHmacDrbgContext):
+proc defaultTestSetup(rng: ref HmacDrbgContext):
     (PortalProtocol, PortalProtocol) =
   let
     proto1 =
