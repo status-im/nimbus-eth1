@@ -27,11 +27,13 @@ export results, tables
 
 type
   BlockData* = object
-    rlp: string
+    header*: string
+    body*: string
+    receipts*: string
     # TODO:
     # uint64, but then it expects a string for some reason.
     # Fix in nim-json-serialization or should I overload something here?
-    number: int
+    number*: int
 
   BlockDataTable* = Table[string, BlockData]
 
@@ -64,62 +66,47 @@ func readBlockData(
     Result[seq[(ContentKey, seq[byte])], string] =
   var res: seq[(ContentKey, seq[byte])]
 
-  var rlp =
-    try:
-      rlpFromHex(blockData.rlp)
-    except ValueError as e:
-      return err("Invalid hex for rlp block data, number " &
-        $blockData.number & ": " & e.msg)
+  var blockHash: BlockHash
+  try:
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+  except ValueError as e:
+    return err("Invalid hex for blockhash, number " &
+      $blockData.number & ": " & e.msg)
 
-  # Data is formatted as it gets stored and send over the
-  # network. I.e. [header, [txs, uncles], receipts]
-  if rlp.enterList():
-    var blockHash: BlockHash
-    try:
-      blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
-    except ValueError as e:
-      return err("Invalid hex for blockhash, number " &
-        $blockData.number & ": " & e.msg)
+  let contentKeyType =
+    BlockKey(chainId: 1'u16, blockHash: blockHash)
 
-    let contentKeyType =
-      BlockKey(chainId: 1'u16, blockHash: blockHash)
+  try:
+    # If wanted the hash for the corresponding header can be verified
+    if verify:
+      if keccak256.digest(blockData.header.hexToSeqByte()) != blockHash:
+        return err("Data is not matching hash, number " & $blockData.number)
 
-    try:
-      # If wanted the hash for the corresponding header can be verified
-      if verify:
-        if keccak256.digest(rlp.rawData()) != blockHash:
-          return err("Data is not matching hash, number " & $blockData.number)
+    block:
+      let contentKey = ContentKey(
+        contentType: blockHeader,
+        blockHeaderKey: contentKeyType)
 
-      block:
-        let contentKey = ContentKey(
-          contentType: blockHeader,
-          blockHeaderKey: contentKeyType)
+      res.add((contentKey, blockData.header.hexToSeqByte()))
 
-        res.add((contentKey, @(rlp.rawData())))
-        rlp.skipElem()
+    block:
+      let contentKey = ContentKey(
+        contentType: blockBody,
+        blockBodyKey: contentKeyType)
 
-      block:
-        let contentKey = ContentKey(
-          contentType: blockBody,
-          blockBodyKey: contentKeyType)
+      res.add((contentKey, blockData.body.hexToSeqByte()))
 
-        res.add((contentKey, @(rlp.rawData())))
-        rlp.skipElem()
+    block:
+      let contentKey = ContentKey(
+        contentType: receipts,
+        receiptsKey: contentKeyType)
 
-      block:
-        let contentKey = ContentKey(
-          contentType: receipts,
-          receiptsKey: contentKeyType)
+      res.add((contentKey, blockData.receipts.hexToSeqByte()))
 
-        res.add((contentKey, @(rlp.rawData())))
-        rlp.skipElem()
+  except ValueError as e:
+    return err("Invalid hex data, number " & $blockData.number & ": " & e.msg)
 
-    except RlpError as e:
-      return err("Invalid rlp data, number " & $blockData.number & ": " & e.msg)
-
-    ok(res)
-  else:
-    err("Item is not a valid rlp list, number " & $blockData.number)
+  ok(res)
 
 iterator blocks*(
     blockData: BlockDataTable, verify = false): seq[(ContentKey, seq[byte])] =
@@ -134,18 +121,15 @@ iterator blocks*(
 func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   var rlp =
     try:
-      rlpFromHex(blockData.rlp)
+      rlpFromHex(blockData.header)
     except ValueError as e:
       return err("Invalid hex for rlp block data, number " &
         $blockData.number & ": " & e.msg)
 
-  if rlp.enterList():
-    try:
-      return ok(rlp.read(BlockHeader))
-    except RlpError as e:
-      return err("Invalid header, number " & $blockData.number & ": " & e.msg)
-  else:
-    return err("Item is not a valid rlp list, number " & $blockData.number)
+  try:
+    return ok(rlp.read(BlockHeader))
+  except RlpError as e:
+    return err("Invalid header, number " & $blockData.number & ": " & e.msg)
 
 proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   let params =

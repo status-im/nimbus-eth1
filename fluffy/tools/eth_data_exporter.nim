@@ -8,14 +8,17 @@
 # Tool to download chain history data from local node, and save it to the json
 # file or sqlite database.
 # In case of json:
-# Data of each block is rlp encoded list of:
-# [blockHeader, [block_transactions, block_uncles], block_receipts]
+# Block data is stored as it gets transmitted over the wire and as defined here:
+#  https://github.com/ethereum/portal-network-specs/blob/master/history-network.md#content-keys-and-values
+#
 # Json file has following format:
 # {
 #   "hexEncodedBlockHash: {
-#      "rlp": "hex of rlp encoded list [blockHeader, [block_transactions, block_uncles], block_receipts]",
-#      "number": "block number"
-#    },
+#     "header": "the rlp encoded block header as a hex string"
+#     "body": "the SSZ encoded container of transactions and uncles as a hex string"
+#     "receipts: "The SSZ encoded list of the receipts as a hex string"
+#     "number": "block number"
+#   },
 #   ...,
 #   ...,
 # }
@@ -24,6 +27,11 @@
 # columns: contentid, contentkey, content.
 # Such format enables queries to quickly find content in range of some node
 # which makes it possible to offer content to nodes in bulk.
+#
+# When using geth as client to download receipts from, be aware that you will
+# have to set the number of blocks to maintain the transaction index for to
+# unlimited if you want access to all transactions/receipts.
+# e.g: `./build/bin/geth --ws --txlookuplimit=0`
 #
 
 {.push raises: [Defect].}
@@ -40,6 +48,9 @@ import
   ../seed_db,
   ../../premix/downloader,
   ../network/history/history_content
+
+# Need to be selective due to the `Block` type conflict from downloader
+from ../network/history/history_network import encode
 
 proc defaultDataDir*(): string =
   let dataDir = when defined(windows):
@@ -89,7 +100,9 @@ type
       name: "storage-mode" .}: StorageMode
 
   DataRecord = object
-    rlp: string
+    header: string
+    body: string
+    receipts: string
     number: uint64
 
 proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
@@ -105,11 +118,15 @@ proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
 proc completeCmdArg*(T: type StorageMode, val: TaintedString): seq[string] =
   return @[]
 
-proc writeBlock(writer: var JsonWriter, blck: Block) {.raises: [IOError, Defect].} =
+proc writeBlock(writer: var JsonWriter, blck: Block)
+    {.raises: [IOError, Defect].} =
   let
-    enc = rlp.encodeList(blck.header, blck.body, blck.receipts)
-    asHex = to0xHex(enc)
-    dataRecord = DataRecord(rlp: asHex, number: cast[uint64](blck.header.blockNumber))
+    dataRecord = DataRecord(
+      header: rlp.encode(blck.header).to0xHex(),
+      body: encode(blck.body).to0xHex(),
+      receipts: encode(blck.receipts).to0xHex(),
+      number: blck.header.blockNumber.truncate(uint64))
+
     headerHash = to0xHex(rlpHash(blck.header).data)
 
   writer.writeField(headerHash, dataRecord)
@@ -157,7 +174,7 @@ proc writeToJson(config: ExporterConf, client: RpcClient) =
   let fh = createAndOpenFile(config)
 
   try:
-    var writer = JsonWriter[DefaultFlavor].init(fh.s)
+    var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
     writer.beginRecord()
     for i in config.initialBlock..config.endBlock:
       let blck = downloadBlock(i, client)
@@ -185,18 +202,23 @@ proc writeToDb(config: ExporterConf, client: RpcClient) =
       blck = downloadBlock(i, client)
       blockHash = blck.header.blockHash()
       contentKeyType = BlockKey(chainId: 1, blockHash: blockHash)
-      headerKey = encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
-      bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
-      receiptsKey = encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
+      headerKey = encode(ContentKey(
+        contentType: blockHeader, blockHeaderKey: contentKeyType))
+      bodyKey = encode(ContentKey(
+        contentType: blockBody, blockBodyKey: contentKeyType))
+      receiptsKey = encode(
+        ContentKey(contentType: receipts, receiptsKey: contentKeyType))
 
-    db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode[BlockHeader](blck.header))
+    db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode(blck.header))
 
-    # No need to seed empty stuff into database
+    # No need to seed empty lists into database
     if len(blck.body.transactions) > 0 or len(blck.body.uncles) > 0:
-      db.put(bodyKey.toContentId(), bodyKey.asSeq(), rlp.encode[BlockBody](blck.body))
+      let body = encode(blck.body)
+      db.put(bodyKey.toContentId(), bodyKey.asSeq(), body)
 
     if len(blck.receipts) > 0:
-      db.put(receiptsKey.toContentId(), receiptsKey.asSeq(), rlp.encode[seq[Receipt]](blck.receipts))
+      let receipts = encode(blck.receipts)
+      db.put(receiptsKey.toContentId(), receiptsKey.asSeq(), receipts)
 
   info "Data successfuly written to db"
 
