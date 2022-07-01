@@ -136,6 +136,7 @@ const
   RinkebyNet* = 4.NetworkId
   GoerliNet*  = 5.NetworkId
   KovanNet*   = 42.NetworkId
+  SepoliaNet* = 11155111.NetworkId
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
     {.gcsafe, raises: [Defect,RlpError].} =
@@ -453,6 +454,13 @@ proc chainConfigForNetwork(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
       mergeForkBlock:      none(BlockNumber),
     )
+  of SepoliaNet:
+    ChainConfig(
+      poaEngine:           false,
+      chainId:             SepoliaNet.ChainId,
+      arrowGlacierBlock:   high(BlockNumber),        # No current plan
+      mergeForkBlock:      none(BlockNumber),
+    )
   else:
     ChainConfig()
 
@@ -492,6 +500,15 @@ proc genesisBlockForNetwork(id: NetworkId): Genesis
       gasLimit: 0xa00000,
       difficulty: 1.u256,
       alloc: decodePrealloc(goerliAllocData)
+    )
+  of SepoliaNet:
+    Genesis(
+      nonce: 0.toBlockNonce,
+      timestamp: initTime(0x6159af19, 0),
+      extraData: hexToSeqByte("0x5365706f6c69612c20417468656e732c204174746963612c2047726565636521"),
+      gasLimit: 0x1c9c380,
+      difficulty: 0x20000.u256,
+      alloc: decodePrealloc(sepoliaAllocData)
     )
   else:
     Genesis()

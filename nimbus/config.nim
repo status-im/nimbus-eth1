@@ -182,13 +182,14 @@ type
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), other=custom)"
+      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), sepolia(11155111), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
         "- ropsten: Test network (proof-of-work, the one most like Ethereum mainnet)\n" &
         "- rinkeby: Test network (proof-of-authority, for those running Geth clients)\n" &
-        "- görli  : Test network (proof-of-authority, works across all clients)\n" &
-        "- kovan  : Test network (proof-of-authority, for those running OpenEthereum clients)"
+        "- goerli:  Test network (proof-of-authority, works across all clients)\n" &
+        "- kovan:   Test network (proof-of-authority, for those running OpenEthereum clients)\n" &
+        "- sepolia: Test network (proof-of-work)"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
@@ -569,6 +570,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "rinkeby": return some RinkebyNet
   of "goerli" : return some GoerliNet
   of "kovan"  : return some KovanNet
+  of "sepolia": return some SepoliaNet
   else:
     try:
       some parseInt(network).NetworkId
@@ -620,6 +622,8 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
       result.setBootnodes(GoerliBootnodes)
     of KovanNet:
       result.setBootnodes(KovanBootnodes)
+    of SepoliaNet:
+      result.setBootnodes(SepoliaBootnodes)
     else:
       # custom network id
       discard

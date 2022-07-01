@@ -33,6 +33,10 @@ proc genesisTest() =
       let b = networkParams(GoerliNet).toGenesisHeader
       check(b.blockHash == "bf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a".toDigest)
 
+    test "Correct sepolia hash":
+      let b = networkParams(SepoliaNet).toGenesisHeader
+      check b.blockHash == "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9".toDigest
+
 proc customGenesisTest() =
   suite "Custom Genesis":
     test "loadCustomGenesis":
