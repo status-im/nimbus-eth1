@@ -12,27 +12,8 @@
 ## This module implements `snap/1`, the `Ethereum Snapshot Protocol (SNAP)
 ## <https://github.com/ethereum/devp2p/blob/master/caps/snap.md>`_.
 ##
-## Modifications for *Geth* compatibility
-## --------------------------------------
-##
-## `GetAccountRange` and `GetStorageRanges` take parameters `origin` and
-## `limit`, instead of a single `startingHash` parameter in the
-## specification. The parameters `origin` and `limit` are 256-bit paths
-## representing the starting hash and ending trie path, both inclusive.
-##
-## The `snap/1` specification doesn't match reality. If the specification is
-## strictly followed omitting `limit`, *Geth 1.10* disconnects immediately so
-## this implementation strives to meet the *Geth* behaviour.
-##
-## Results from either call may include one item with path `>= limit`. *Geth*
-## fetches data from its internal database until it reaches this condition or
-## the bytes threshold, then replies with what it fetched.  Usually there is
-## no item at the exact path `limit`, so there is one after.
-##
-##
 ## Modified `GetStorageRanges` (0x02) message syntax
-## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##
+## -------------------------------------------------
 ## As implementes here, the request message is encoded as
 ##
 ## `[reqID, rootHash, accountHashes, origin, limit, responseBytes]`
@@ -53,7 +34,6 @@
 ##
 ## Discussion of *Geth* `GetStorageRanges` behaviour
 ## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##
 ## - Parameters `origin` and `limit` may each be empty blobs, which mean "all
 ##   zeros" (0x00000...) or "no limit" (0xfffff...)  respectively.
 ##
@@ -95,8 +75,7 @@
 ##
 ##   * Avoid the condition by using `origin >= 1` when using `limit`.
 ##
-##   * Use trie node traversal (`snap` `GetTrieNodes` or `eth` `GetNodeData`)
-##     to obtain the omitted proof.
+##   * Use trie node traversal (`snap` `GetTrieNodes`) to obtain the omitted proof.
 ##
 ## - When multiple accounts are requested with `origin > 0`, only one account's
 ##   storage is returned.  There is no point requesting multiple accounts with
@@ -113,36 +92,12 @@
 ##   treated `origin` as applying to only the first account and `limit` to only
 ##   the last account, but it doesn't.)
 ##
-## Modified `GetAccountRange` (0x00) packet syntax
-## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##
-## As implementes here, the request message is encoded as
-##
-## `[reqID, rootHash, origin, limit, responseBytes]`
-##
-## It requests an unknown number of accounts from a given account trie, starting
-## at the specified account hash and capped by the maximum allowed response
-## size in bytes. The intended purpose of this message is to fetch a large
-## number of subsequent accounts from a remote node and reconstruct a state
-## subtrie locally.
-##
-## The `GetAccountRange` parameters `origin` and `limit` must be 32 byte
-## blobs. There is no reason why empty limit is not allowed here when it is
-## allowed for `GetStorageRanges`, it just isn't.
-##
-## * `reqID`: Request ID to match up responses with
-## * `rootHash`: Root hash of the account trie to serve
-## * `origin`: 32 byte storage slot hash of the first to retrieve
-## * `limit`: 32 byte storage slot hash fragment after which to stop serving
-## * `responseBytes`: 64 bit number soft limit at which to stop returning data
-##
 ##
 ## Performance benefits
 ## --------------------
-##
 ## `snap` is used for much higher performance transfer of the entire Ethereum
 ## execution state (accounts, storage, bytecode) compared with hexary trie
-## traversal using `eth` `GetNodeData`.
+## traversal using the now obsolete `eth/66` `GetNodeData`.
 ##
 ## It improves both network and local storage performance.  The benefits are
 ## substantial, and summarised here:
@@ -160,32 +115,14 @@
 ## whichever network protocol is used.  Nimbus uses `snap` protocol because it
 ## is a more efficient network protocol.
 ##
-## Remote state and Beam sync benefits
-## -----------------------------------
-##
-## `snap` was not intended for Beam sync, or "remote state on demand", used by
-## transactions executing locally that fetch state from the network instead of
-## local storage.
-##
-## Even so, as a lucky accident `snap` allows individual states to be fetched
-## in fewer network round trips than `eth`.  Often a single round trip,
-## compared with about 10 round trips per account query over `eth`.  This is
-## because `eth` `GetNodeData` requires a trie traversal chasing hashes
-## sequentially, while `snap` `GetTrieNode` trie traversal can be done with
-## predictable paths.
-##
-## Therefore `snap` can be used to accelerate remote states and Beam sync.
-##
 ## Distributed hash table (DHT) building block
 ## -------------------------------------------
-##
 ## Although `snap` was designed for bootstrapping clients with the entire
 ## Ethereum state, it is well suited to fetching only a subset of path ranges.
 ## This may be useful for bootstrapping distributed hash tables (DHTs).
 ##
 ## Path range metadata benefits
 ## ----------------------------
-##
 ## Because data is handled in path ranges, this allows a compact metadata
 ## representation of what data is stored locally and what isn't, compared with
 ## the size of a representation of partially completed trie traversal with
@@ -212,13 +149,13 @@ logScope:
 
 type
   SnapAccount* = object
-    accHash*: LeafItem
+    accHash*: NodeTag
     accBody* {.rlpCustomSerialization.}: Account
 
   SnapAccountProof* = seq[Blob]
 
   SnapStorage* = object
-    slotHash*: LeafItem
+    slotHash*: NodeTag
     slotData*: Blob
 
   SnapStorageProof* = seq[Blob]
@@ -249,50 +186,13 @@ const
 # avoids transmitting these hashes in about 90% of accounts.  We need to
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
-proc read(rlp: var Rlp, t: var SnapAccount, _: type Account): Account =
-  ## RLP decoding for `SnapAccount`, which contains a path and account.
-  ## The snap representation of the account differs from `Account` RLP.
-  ## Empty storage hash and empty code hash are each represented by an
-  ## RLP zero-length string instead of the full hash.
-  rlp.tryEnterList()
-  result.nonce = rlp.read(typeof(result.nonce))
-  result.balance = rlp.read(typeof(result.balance))
-
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.storageRoot = rlp.read(typeof(result.storageRoot))
-    if result.storageRoot == BLANK_ROOT_HASH:
-      raise newException(RlpTypeMismatch,
-        "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.storageRoot = BLANK_ROOT_HASH
-
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.codeHash = rlp.read(typeof(result.codeHash))
-    if result.codeHash == EMPTY_SHA3:
-      raise newException(RlpTypeMismatch,
-        "EMPTY_SHA3 not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.codeHash = EMPTY_SHA3
+proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
+  ## RLP Mixin: decoding for `SnapAccount`.
+  result = rlp.snapRead(T)
 
 proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
-  ## RLP encoding for `SnapAccount`, which contains a path and account.
-  ## The snap representation of the account differs from `Account` RLP.
-  ## Empty storage hash and empty code hash are each represented by an
-  ## RLP zero-length string instead of the full hash.
-  rlpWriter.append(account.nonce)
-  rlpWriter.append(account.balance)
-
-  if account.storageRoot == BLANK_ROOT_HASH:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(account.storageRoot)
-
-  if account.codeHash == EMPTY_SHA3:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(account.codeHash)
+  ##  RLP Mixin: encoding for `SnapAccount`.
+  rlpWriter.snapAppend(account)
 
 
 p2pProtocol snap1(version = 1,
@@ -303,8 +203,7 @@ p2pProtocol snap1(version = 1,
     # User message 0x00: GetAccountRange.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getAccountRange(peer: Peer, rootHash: Hash256,
-                         # Next line differs from spec to match Geth.
-                         origin: LeafItem, limit: LeafItem,
+                         origin: NodeTag, limit: NodeTag,
                          responseBytes: uint64) =
       trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
         accountRange=leafRangePp(origin, limit),
@@ -321,8 +220,7 @@ p2pProtocol snap1(version = 1,
     # User message 0x02: GetStorageRanges.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getStorageRanges(peer: Peer, rootHash: Hash256,
-                          accounts: openArray[LeafItem],
-                          # Next line differs from spec to match Geth.
+                          accounts: openArray[NodeTag],
                           origin: openArray[byte], limit: openArray[byte],
                           responseBytes: uint64) =
       when trSnapTracePacketsOk:
@@ -388,7 +286,7 @@ p2pProtocol snap1(version = 1,
   # User message 0x06: GetTrieNodes.
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: Hash256,
-                      paths: openArray[InteriorPath], responseBytes: uint64) =
+                      paths: openArray[PathSegment], responseBytes: uint64) =
       trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 

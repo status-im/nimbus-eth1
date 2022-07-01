@@ -25,6 +25,7 @@ logScope:
 
 type
   SnapSyncCtx* = ref object of Worker
+    chain: AbstractChainDB
     buddies: KeyedQueue[Peer,WorkerBuddy] ## LRU cache with worker descriptors
     pool: PeerPool                        ## for starting the system
 
@@ -62,7 +63,7 @@ proc workerLoop(sp: WorkerBuddy) {.async.} =
     # Do something, work a bit
     await sp.workerExec
 
-  trace "Peer worker done", peer=sp,
+  trace "Peer worker done", peer=sp, ctrlState=sp.ctrl.state,
     peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
 
 
@@ -79,17 +80,22 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   if not sp.workerStart():
     trace "Ignoring useless peer", peer,
       peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    asyncSpawn peer.disconnect(UselessPeer)
+    sp.ctrl.zombie = true
     return
 
   # Check for table overflow. An overflow should not happen if the table is
   # as large as the peer connection table.
   if ns.buddiesMax <= ns.buddies.len:
     let leastPeer = ns.buddies.shift.value.data
-    trace "Peer overflow! Deleting least used entry", leastPeer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    leastPeer.workerStop()
-    asyncSpawn leastPeer.peer.disconnect(UselessPeer)
+    if leastPeer.ctrl.zombie:
+      trace "Dequeuing zombie peer", leastPeer,
+        peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+      discard
+    else:
+      trace "Peer table full! Dequeuing least used entry", leastPeer,
+        peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+      leastPeer.workerStop()
+      leastPeer.ctrl.zombie = true
 
   # Add peer entry
   discard ns.buddies.lruAppend(sp.peer, sp, ns.buddiesMax)
@@ -99,15 +105,20 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
 
 
 proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
-  let rc = ns.buddies.delete(peer)
-  if rc.isOk:
-    rc.value.data.workerStop()
-    trace "Disconnected peer", peer,
-     peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-  else:
+  let rc = ns.buddies.eq(peer)
+  if rc.isErr:
     debug "Disconnected from unregistered peer", peer,
       peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    discard
+    return
+  let sp = rc.value
+  if sp.ctrl.zombie:
+    trace "Disconnected zombie peer", peer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+  else:
+    sp.workerStop()
+    ns.buddies.del(peer)
+    trace "Disconnected peer", peer,
+      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -117,6 +128,7 @@ proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
   ## Constructor
   new result
   let size = max(1,maxPeers)
+  result.chain = ethNode.chain
   result.buddies.init(size)
   result.buddiesMax = size
   result.pool = ethNode.peerPool
@@ -132,7 +144,7 @@ proc start*(ctx: SnapSyncCtx) =
         ctx.onPeerDisconnected(p))
 
   # Initialise sub-systems
-  ctx.workerSetup()
+  ctx.workerSetup(ctx.chain)
   po.setProtocol eth
   ctx.pool.addObserver(ctx, po)
 
