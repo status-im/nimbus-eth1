@@ -18,12 +18,10 @@ import
   ".."/[sealer, constants],
   ".."/merge/[mergetypes, mergeutils]
 
-import eth/common/eth_types except BlockHeader
-
 proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:
-    db.getHeadBlockHash()
+    parent.blockHash
   else:
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO
@@ -33,20 +31,20 @@ proc setupEngineAPI*(
     sealingEngine: SealingEngineRef,
     server: RpcServer) =
 
-  # TODO: put it somewhere else singleton
+  # TODO: put this singleton somewhere else
   let api = EngineAPI.new(sealingEngine.chain.db)
 
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.7/src/engine/specification.md#engine_newpayloadv1
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
     trace "Engine API request received",
-      meth = "newPayloadV1", number = $(distinctBase payload.blockNumber), hash = payload.blockHash.toHex
+      meth = "newPayloadV1", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
 
     var header = toBlockHeader(payload)
     let blockHash = payload.blockHash.asEthHash
-    var res = header.validate(blockHash)
+    var res = header.validateBlockHash(blockHash)
     if res.isErr:
-      return PayloadStatusV1(status: PayloadExecutionStatus.invalid_block_hash, validationError: some(res.error))
+      return res.error
 
     let db = sealingEngine.chain.db
 
@@ -54,8 +52,8 @@ proc setupEngineAPI*(
     # return a fake success.
     if db.getBlockHeader(blockHash, header):
       warn "Ignoring already known beacon payload",
-        number = header.blockNumber, hash = blockHash.data.toHex
-      return PayloadStatusV1(status: PayloadExecutionStatus.valid, latestValidHash: validHash(blockHash))
+        number = header.blockNumber, hash = blockHash
+      return validStatus(blockHash)
 
     # If the parent is missing, we - in theory - could trigger a sync, but that
     # would also entail a reorg. That is problematic if multiple sibling blocks
@@ -63,7 +61,7 @@ proc setupEngineAPI*(
     # our live chain. As such, payload execution will not permit reorgs and thus
     # will not trigger a sync cycle. That is fine though, if we get a fork choice
     # update after legit payload executions.
-    var parent: eth_types.BlockHeader
+    var parent: EthBlockHeader
     if not db.getBlockHeader(header.parentHash, parent):
       # Stash the block away for a potential forced forckchoice update to it
       # at a later time.
@@ -81,8 +79,10 @@ proc setupEngineAPI*(
       # have to rely on the beacon client to forcefully update the head with
       # a forkchoice update request.
       warn "Ignoring payload with missing parent",
-        number = header.blockNumber, hash = blockHash.data.toHex, parent = header.parentHash.data.toHex
-      return PayloadStatusV1(status: PayloadExecutionStatus.accepted)
+        number = header.blockNumber,
+        hash = blockHash,
+        parent = header.parentHash
+      return acceptedStatus()
 
     # We have an existing parent, do some sanity checks to avoid the beacon client
     # triggering too early
@@ -92,7 +92,7 @@ proc setupEngineAPI*(
 
     if td < ttd:
       warn "Ignoring pre-merge payload",
-        number = header.blockNumber, hash = blockHash.data.toHex, td, ttd
+        number = header.blockNumber, hash = blockHash, td, ttd
       return invalidStatus()
 
     if header.timestamp <= parent.timestamp:
@@ -103,13 +103,13 @@ proc setupEngineAPI*(
     if not db.haveBlockAndState(header.parentHash):
       api.put(blockHash, header)
       warn "State not available, ignoring new payload",
-        hash = blockHash.data.toHex,
+        hash = blockHash,
         number = header.blockNumber
       let blockHash = latestValidHash(db, parent, ttd)
       return acceptedStatus(blockHash)
 
     trace "Inserting block without sethead",
-      hash = blockHash.data.toHex, number = header.blockNumber
+      hash = blockHash, number = header.blockNumber
     let body = toBlockBody(payload)
     let vres = sealingEngine.chain.insertBlockWithoutSetHead(header, body)
     if vres != ValidationResult.OK:
@@ -123,25 +123,25 @@ proc setupEngineAPI*(
       api.merger.reachTTD()
       # TODO: cancel downloader
 
-    return PayloadStatusV1(status: PayloadExecutionStatus.valid, latestValidHash: validHash(blockHash))
+    return validStatus(blockHash)
 
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.7/src/engine/specification.md#engine_getpayloadv1
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_getpayloadv1
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     trace "Engine API request received",
       meth = "GetPayload", id = payloadId.toHex
 
     var payload: ExecutionPayloadV1
     if not api.get(payloadId, payload):
-      raise (ref InvalidRequest)(code: engineApiUnknownPayload, msg: "Unknown payload")
+      raise unknownPayload("Unknown payload")
     return payload
 
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.7/src/engine/specification.md#engine_exchangeTransitionConfigurationV1
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_exchangetransitionconfigurationv1
   server.rpc("engine_exchangeTransitionConfigurationV1") do(conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
     trace "Engine API request received",
       meth = "exchangeTransitionConfigurationV1",
       ttd = conf.terminalTotalDifficulty,
       number = uint64(conf.terminalBlockNumber),
-      blockHash = conf.terminalBlockHash.toHex
+      blockHash = conf.terminalBlockHash
 
     let db = sealingEngine.chain.db
     let ttd = db.ttd()
@@ -159,7 +159,7 @@ proc setupEngineAPI*(
         raise newException(ValueError, "invalid terminal block number, got $1 want $2" % [$terminalBlockNumber, $header.blockNumber])
 
       if terminalBlockHash != Hash256() and terminalBlockHash != headerHash:
-        raise newException(ValueError, "invalid terminal block hash, got $1 want $2" % [terminalBlockHash.toHex, headerHash.data.toHex])
+        raise newException(ValueError, "invalid terminal block hash, got $1 want $2" % [$terminalBlockHash, $headerHash])
 
       return TransitionConfigurationV1(
         terminalTotalDifficulty: ttd,
@@ -185,7 +185,7 @@ proc setupEngineAPI*(
   # We try to set our blockchain to the headBlock
   # If there are payloadAttributes:
   #     we try to assemble a block with the payloadAttributes and return its payloadID
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-alpha.7/src/engine/specification.md#engine_forkchoiceupdatedv1
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_forkchoiceupdatedv1
   server.rpc("engine_forkchoiceUpdatedV1") do(
       update: ForkchoiceStateV1,
       payloadAttributes: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
@@ -208,7 +208,7 @@ proc setupEngineAPI*(
       # that should be fixed, not papered over.
       if not api.get(blockHash, header):
         warn "Forkchoice requested unknown head",
-          hash = blockHash.data.toHex
+          hash = blockHash
         return simpleFCU(PayloadExecutionStatus.syncing)
 
       # Header advertised via a past newPayload request. Start syncing to it.
@@ -220,7 +220,7 @@ proc setupEngineAPI*(
 
       info "Forkchoice requested sync to new head",
         number = header.blockNumber,
-        hash = blockHash.data.toHex
+        hash = blockHash
 
       return simpleFCU(PayloadExecutionStatus.syncing)
 
@@ -235,16 +235,16 @@ proc setupEngineAPI*(
       if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
         error "TDs unavailable for TTD check",
           number = blockNumber,
-          hash = blockHash.data.toHex,
+          hash = blockHash,
           td = td,
-          parent = header.parentHash.data.toHex,
+          parent = header.parentHash,
           ptd = ptd
         return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
 
       if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
         error "Refusing beacon update to pre-merge",
           number = blockNumber,
-          hash = blockHash.data.toHex,
+          hash = blockHash,
           diff = header.difficulty,
           ptd = ptd,
           ttd = ttd
@@ -274,20 +274,20 @@ proc setupEngineAPI*(
       var finalBlock: EthBlockHeader
       if not db.getBlockHeader(finalizedBlockHash, finalBlock):
         warn "Final block not available in database",
-          hash=finalizedBlockHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalized block header not available")
+          hash=finalizedBlockHash
+        raise invalidParams("finalized block header not available")
       var finalHash: Hash256
       if not db.getBlockHash(finalBlock.blockNumber, finalHash):
         warn "Final block not in canonical chain",
           number=finalBlock.blockNumber,
-          hash=finalizedBlockHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalized block hash not available")
+          hash=finalizedBlockHash
+        raise invalidParams("finalized block hash not available")
       if finalHash != finalizedBlockHash:
         warn "Final block not in canonical chain",
           number=finalBlock.blockNumber,
-          finalHash=finalHash.data.toHex,
-          finalizedBlockHash=finalizedBlockHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "finalilized block not canonical")
+          expect=finalizedBlockHash,
+          get=finalHash
+        raise invalidParams("finalilized block not canonical")
       db.finalizedHeaderHash(finalizedBlockHash)
 
     let safeBlockHash = update.safeBlockHash.asEthHash
@@ -295,32 +295,32 @@ proc setupEngineAPI*(
       var safeBlock: EthBlockHeader
       if not db.getBlockHeader(safeBlockHash, safeBlock):
         warn "Safe block not available in database",
-          hash = safeBlockHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe head not available")
+          hash = safeBlockHash
+        raise invalidParams("safe head not available")
       var safeHash: Hash256
       if not db.getBlockHash(safeBlock.blockNumber, safeHash):
         warn "Safe block hash not available in database",
-          hash = safeHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe block hash not available")
+          hash = safeHash
+        raise invalidParams("safe block hash not available")
       if safeHash != safeBlockHash:
         warn "Safe block not in canonical chain",
-          safeHash=safeHash.data.toHex,
-          safeBlockHash=safeBlockHash.data.toHex
-        raise (ref InvalidRequest)(code: engineApiInvalidParams, msg: "safe head not canonical")
+          blockNumber=safeBlock.blockNumber,
+          expect=safeBlockHash,
+          get=safeHash
+        raise invalidParams("safe head not canonical")
       db.safeHeaderHash(safeBlockHash)
 
     # If payload generation was requested, create a new block to be potentially
     # sealed by the beacon client. The payload will be requested later, and we
     # might replace it arbitrarilly many times in between.
     if payloadAttributes.isSome:
-      info "Creating new payload for sealing"
       let payloadAttrs = payloadAttributes.get()
       var payload: ExecutionPayloadV1
       let res = sealingEngine.generateExecutionPayload(payloadAttrs, payload)
 
       if res.isErr:
         error "Failed to create sealing payload", err = res.error
-        raise (ref InvalidRequest)(code: engineApiInvalidPayloadAttributes, msg: res.error)
+        raise invalidAttr(res.error)
 
       let id = computePayloadId(blockHash, payloadAttrs)
       api.put(id, payload)

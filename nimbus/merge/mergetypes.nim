@@ -5,7 +5,7 @@ import
 
 import eth/common/eth_types except BlockHeader
 
-export merger
+export merger, eth_types
 
 type
   EthBlockHeader* = eth_types.BlockHeader
