@@ -42,13 +42,13 @@ proc `$`(x: Option[Hash256]): string =
   if x.isNone:
     "none"
   else:
-    x.get().data.toHex
+    $x.get()
 
 proc `$`(x: Option[BlockHash]): string =
   if x.isNone:
     "none"
   else:
-    x.get().toHex
+    $x.get()
 
 proc `$`(x: Option[PayloadID]): string =
   if x.isNone:
@@ -57,9 +57,10 @@ proc `$`(x: Option[PayloadID]): string =
     x.get().toHex
 
 proc `==`(a: Option[BlockHash], b: Option[Hash256]): bool =
-  if a.isNone or b.isNone:
-    return false
-  a.get() == b.get().data.BlockHash
+  if a.isNone and b.isNone:
+    return true
+  if a.isSome and b.isSome:
+    return a.get() == b.get().data.BlockHash
 
 template testFCU(res, cond: untyped, validHash: Option[Hash256], id = none(PayloadID)) =
   testCond res.isOk
@@ -103,8 +104,8 @@ template testLatestHeader(client: untyped, expectedHash: BlockHash) =
   # Latest block header available via Eth RPC should not have changed at this point
   testCond lastHash == expectedHash:
     error "latest block header incorrect",
-      expect = expectedHash.toHex,
-      get = lastHash.toHex
+      expect = expectedHash,
+      get = lastHash
 
 proc sendTx(t: TestEnv, recipient: EthAddress, val: UInt256, data: openArray[byte] = []): bool =
   t.tx = t.makeNextTransaction(recipient, val, data)
@@ -741,7 +742,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
           let latestValidHash = s.latestValidHash.get
           if latestValidHash != alteredPayload.parentHash:
             error "latestValidHash is not the same with parentHash",
-              expected = alteredPayload.parentHash.toHex, get = latestValidHash.toHex
+              expected = alteredPayload.parentHash, get = latestValidHash
             return false
 
         # Send the forkchoiceUpdated with a reference to the invalid payload.
@@ -787,7 +788,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
         ))
 
         info "Sending customized NewPayload: ParentHash",
-          fromHash=clMock.latestPayloadBuilt.parentHash.toHex, toHash=invalidPayload.hash.toHex
+          fromHash=clMock.latestPayloadBuilt.parentHash, toHash=invalidPayload.hash
         # Response status can be ACCEPTED (since parent payload could have been thrown out by the client)
         # or SYNCING (parent payload is thrown out and also client assumes that the parent is part of canonical chain)
         # or INVALID (client still has the payload and can verify that this payload is incorrectly building on top of it),
@@ -955,9 +956,9 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
             payloadValidStr = "VALID with INVALID ancestor"
 
           info "Invalid chain payload",
-            i,
-            payloadValidStr,
-            hash = shadow.altChainPayloads[i].blockHash.toHex
+            i = i,
+            payloadValidStr = payloadValidStr,
+            hash = shadow.altChainPayloads[i].blockHash
 
           let rr = client.newPayloadV1(shadow.altChainPayloads[i])
           testCond rr.isOk
@@ -976,16 +977,18 @@ template invalidMissingAncestorReOrgGen(procName: untyped,
             # In reality the CL will not get to this point because it will have already received the `INVALID`
             # response from the previous payload.
             let cond = {PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing, PayloadExecutionStatus.invalid}
-            testNPEither(rr, cond, some(Hash256()))
+            testNPEither(rr, cond)
           else:
             # This is one of the payloads before the invalid one, therefore is valid.
-            testNP(rr, valid)
-            testFCU(rs, valid, some(shadow.altChainPayloads[i].blockHash.hash256))
+            let latestValidHash = some(shadow.altChainPayloads[i].blockHash.hash256)
+            testNP(rr, valid, latestValidHash)
+            testFCU(rs, valid, latestValidHash)
 
 
         # Resend the latest correct fcU
         let rx = client.forkchoiceUpdatedV1(clMock.latestForkchoice)
-        testCond rx.isOk
+        testCond rx.isOk:
+          error "Unexpected error ", msg=rx.error
 
         # After this point, the CL Mock will send the next payload of the canonical chain
         return true
@@ -1126,7 +1129,7 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
       if currHash != clMock.latestForkchoice.headBlockHash or
          currHash == clMock.latestForkchoice.safeBlockHash or
          currHash == clMock.latestForkchoice.finalizedBlockHash:
-        error "latest block header doesn't match HeadBlock hash", hash=currHash.toHex
+        error "latest block header doesn't match HeadBlock hash", hash=currHash
         return false
 
       # Reorg back to the previous block (FinalizedBlock)
@@ -1153,8 +1156,8 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
       var latestValidHash = s.payloadStatus.latestValidHash.get
       if latestValidHash != reorgForkchoice.headBlockHash:
         error "Incorrect latestValidHash returned after a HeadBlockHash reorg",
-          expected=reorgForkchoice.headBlockHash.toHex,
-          get=latestValidHash.toHex
+          expected=reorgForkchoice.headBlockHash,
+          get=latestValidHash
         return false
 
       # testCond that we reorg to the previous block
@@ -1179,8 +1182,8 @@ proc blockStatusReorg(t: TestEnv): TestStatus =
       latestValidHash = s.payloadStatus.latestValidHash.get
       if latestValidHash != clMock.latestForkchoice.headBlockHash:
         error "Incorrect latestValidHash returned after a HeadBlockHash reorg",
-          expected=clMock.latestForkchoice.headBlockHash.toHex,
-          get=latestValidHash.toHex
+          expected=clMock.latestForkchoice.headBlockHash,
+          get=latestValidHash
         return false
       return true
   ))
@@ -1492,14 +1495,14 @@ proc transactionReorg(t: TestEnv): TestStatus =
 
         if shadow.noTxnPayload.parentHash != clMock.latestPayloadBuilt.parentHash:
           error "Incorrect parent hash for payloads",
-            get = shadow.noTxnPayload.parentHash.toHex,
-            expect = clMock.latestPayloadBuilt.parentHash.toHex
+            get = shadow.noTxnPayload.parentHash,
+            expect = clMock.latestPayloadBuilt.parentHash
           return false
 
         if shadow.noTxnPayload.blockHash == clMock.latestPayloadBuilt.blockHash:
           error "Incorrect hash for payloads",
-            get = shadow.noTxnPayload.blockHash.toHex,
-            expect = clMock.latestPayloadBuilt.blockHash.toHex
+            get = shadow.noTxnPayload.blockHash,
+            expect = clMock.latestPayloadBuilt.blockHash
           return false
 
         let rz = client.newPayloadV1(shadow.noTxnPayload)
@@ -1538,8 +1541,8 @@ proc testCondPrevRandaoValue(t: TestEnv, expectedPrevRandao: Hash256, blockNumbe
   let opcodeValueAtBlock = Hash256(data: res.get().toBytesBE)
   if opcodeValueAtBlock != expectedPrevRandao:
     error "Storage does not match prevRandao",
-      expected=expectedPrevRandao.data.toHex,
-      get=opcodeValueAtBlock.data.toHex
+      expected=expectedPrevRandao.data,
+      get=opcodeValueAtBlock
     return false
   true
 
@@ -1674,8 +1677,8 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
 
   testCond blockIncluded.header.coinbase == feeRecipient:
     error "feeRecipient was not set as coinbase",
-      expected=feeRecipient.toHex,
-      get=blockIncluded.header.coinbase.toHex
+      expected=feeRecipient,
+      get=blockIncluded.header.coinbase
 
   var feeRecipientFees = 0.u256
   for tx in blockIncluded.txs:
@@ -1797,7 +1800,7 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
 
     let storage = rz.get()
     testCond storage == expectedPrevRandao:
-      error "Unexpected storage", expected=expectedPrevRandao.toHex, get=storage.toHex
+      error "Unexpected storage", expected=expectedPrevRandao, get=storage
 
 proc postMergeSync(t: TestEnv): TestStatus =
   result = TestStatus.SKIPPED

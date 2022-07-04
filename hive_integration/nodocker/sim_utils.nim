@@ -32,9 +32,11 @@ proc inc*(stat: var SimStat, name: string, status: TestStatus) =
     stat.failingCases.add name
 
 proc `$`*(stat: SimStat): string =
-  result.add "Failing Cases:\n"
-  for c in stat.failingCases:
-    result.add "- $1 \n" % [c]
+  if stat.failingCases.len > 0:
+    result.add "  - Failing Cases:\n"
+    for c in stat.failingCases:
+      result.add "    - $1 \n" % [c]
+
   result.add "ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
 
 proc print*(stat: SimStat, dur: Duration, name: string) =
