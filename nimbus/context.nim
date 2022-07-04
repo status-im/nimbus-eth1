@@ -19,7 +19,7 @@ type
     am*: AccountsManager
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
-    rng*: ref BrHmacDrbgContext
+    rng*: ref HmacDrbgContext
 
 proc newEthContext*(): EthContext =
   result = new(EthContext)

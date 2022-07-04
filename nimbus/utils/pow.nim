@@ -16,7 +16,6 @@ import
   std/[options, strutils],
   ../utils,
   ./pow/[pow_cache, pow_dataset],
-  bearssl,
   eth/[common, keys, p2p, rlp],
   ethash,
   nimcrypto,
@@ -63,7 +62,7 @@ type
 
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
-    rng: ref BrHmacDrbgContext
+    rng: ref HmacDrbgContext
 
 # ------------------------------------------------------------------------------
 # Private functions: RLP support
@@ -161,7 +160,7 @@ proc mineFull(tm: PowRef; blockNumber: BlockNumber; powHeaderDigest: Hash256,
 # ---------------
 
 proc init(tm: PowRef;
-          rng: Option[ref BrHmacDrbgContext];
+          rng: Option[ref HmacDrbgContext];
           light: Option[PowCacheRef];
           full: Option[PowDatasetRef]) =
   ## Constructor
@@ -185,7 +184,7 @@ proc init(tm: PowRef;
 # ------------------------------------------------------------------------------
 
 proc new*(T: type PowRef;
-          rng: ref BrHmacDrbgContext;
+          rng: ref HmacDrbgContext;
           cache: PowCacheRef;
           dataset: PowDatasetRef): T =
   ## Constructor
@@ -197,9 +196,9 @@ proc new*(T: type PowRef; cache: PowCacheRef; dataset: PowDatasetRef): T =
   ## Constructor
   new result
   result.init(
-    none(ref BrHmacDrbgContext), some(cache), some(dataset))
+    none(ref HmacDrbgContext), some(cache), some(dataset))
 
-proc new*(T: type PowRef; rng: ref BrHmacDrbgContext): T =
+proc new*(T: type PowRef; rng: ref HmacDrbgContext): T =
   ## Constructor
   new result
   result.init(
@@ -209,7 +208,7 @@ proc new*(T: type PowRef): T =
   ## Constructor
   new result
   result.init(
-    none(ref BrHmacDrbgContext), none(PowCacheRef), none(PowDatasetRef))
+    none(ref HmacDrbgContext), none(PowCacheRef), none(PowDatasetRef))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -298,7 +297,7 @@ proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Variant of `getNonce()`
   var startNonce: array[8,byte]
-  tm.rng[].brHmacDrbgGenerate(startNonce)
+  tm.rng[].generate(startNonce)
   tm.getNonce(number, powHeaderDigest, difficulty, startNonce)
 
 proc getNonce*(tm: PowRef; header: BlockHeader): BlockNonce

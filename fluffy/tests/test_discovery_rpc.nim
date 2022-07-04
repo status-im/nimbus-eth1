@@ -20,7 +20,7 @@ type TestCase = ref object
   server: RpcProxy
   client: RpcHttpClient
 
-proc setupTest(rng: ref BrHmacDrbgContext): Future[TestCase] {.async.} =
+proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
   let
     localSrvAddress = "127.0.0.1"
     localSrvPort = 8545

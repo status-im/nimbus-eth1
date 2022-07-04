@@ -15,7 +15,7 @@ proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode*(
-    rng: ref BrHmacDrbgContext,
+    rng: ref HmacDrbgContext,
     privKey: PrivateKey,
     address: Address,
     bootstrapRecords: openArray[Record] = [],
@@ -36,7 +36,7 @@ proc initDiscoveryNode*(
 
   result.open()
 
-proc genByteSeq*(length: int): seq[byte] = 
+proc genByteSeq*(length: int): seq[byte] =
   var i = 0
   var resultSeq = newSeq[byte](length)
   while i < length:

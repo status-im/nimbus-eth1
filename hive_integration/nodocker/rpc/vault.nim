@@ -40,7 +40,7 @@ type
     # Created accounts are tracked in this map.
     accounts: Table[EthAddress, PrivateKey]
 
-    rng: ref BrHmacDrbgContext
+    rng: ref HmacDrbgContext
     chainID: ChainID
     gasPrice: GasInt
     vaultKey: PrivateKey

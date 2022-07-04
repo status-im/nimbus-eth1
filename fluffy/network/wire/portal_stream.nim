@@ -78,7 +78,7 @@ type
     contentOffers: seq[ContentOffer]
     connectionTimeout: Duration
     contentReadTimeout*: Duration
-    rng: ref BrHmacDrbgContext
+    rng: ref HmacDrbgContext
     udata: pointer
     contentHandler: ContentHandlerCallback
 
@@ -102,7 +102,7 @@ proc addContentOffer*(
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
-  brHmacDrbgGenerate(stream.rng[], connectionId)
+  stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
   let id = uint16.fromBytesBE(connectionId)
@@ -122,7 +122,7 @@ proc addContentRequest*(
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
-  brHmacDrbgGenerate(stream.rng[], connectionId)
+  stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
   let id = uint16.fromBytesBE(connectionId)
