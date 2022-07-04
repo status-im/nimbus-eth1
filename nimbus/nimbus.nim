@@ -247,7 +247,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   # always create sealing engine instanca but not always run it
   # e.g. engine api need sealing engine without it running
   var initialState = EngineStopped
-  if chainDB.totalDifficulty > chainDB.ttd:
+  if chainDB.headTotalDifficulty() > chainDB.ttd:
      initialState = EnginePostMerge
   nimbus.sealingEngine = SealingEngineRef.new(
     nimbus.chainRef, nimbus.ctx, conf.engineSigner,

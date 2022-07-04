@@ -267,18 +267,9 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   blk.header.prevRandao = prevRandao
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
-  let res = engine.chain.persistBlocks([blk.header], [
-    BlockBody(transactions: blk.txs, uncles: blk.uncles)
-  ])
-
   let blockHash = rlpHash(blk.header)
-  if res != ValidationResult.OK:
-    return err("Error when validating generated block. hash=" & blockHash.data.toHex)
-
   if blk.header.extraData.len > 32:
     return err "extraData length should not exceed 32 bytes"
-
-  discard engine.txPool.smartHead(blk.header) # add transactions update jobs
 
   payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
   payloadRes.feeRecipient = Web3Address blk.header.coinbase

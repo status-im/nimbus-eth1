@@ -84,17 +84,19 @@ func toNextFork(n: Option[BlockNumber]): uint64 =
   else:
     0'u64
 
-func isBlockAfterTtd*(c: Chain, blockHeader: BlockHeader): bool =
+proc isBlockAfterTtd*(c: Chain, header: BlockHeader): bool
+                      {.gcsafe, raises: [Defect,CatchableError].} =
   let
     ttd = c.db.ttd
-    totalDifficulty = c.db.totalDifficulty + blockHeader.difficulty
+    ptd = c.db.getScore(header.parentHash)
+    td  = ptd + header.difficulty
 
   # c.db.totalDifficulty is parent.totalDifficulty
   # TerminalBlock is defined as header.totalDifficulty >= TTD
   #    and parent.totalDifficulty < TTD
   # So blockAfterTTD must be both header.totalDifficulty >= TTD
   #    and parent.totalDifficulty >= TTD
-  c.db.totalDifficulty >= ttd and totalDifficulty >= ttd
+  ptd >= ttd and td >= ttd
 
 func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
   let next: array[ChainFork, uint64] = [

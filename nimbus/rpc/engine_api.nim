@@ -16,7 +16,8 @@ import
   ".."/db/db_chain,
   ".."/p2p/chain/[chain_desc, persist_blocks],
   ".."/[sealer, constants],
-  ".."/merge/[mergetypes, mergeutils]
+  ".."/merge/[mergetypes, mergeutils],
+  ".."/utils/tx_pool
 
 proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
   let ptd = db.getScore(parent.parentHash)
@@ -26,6 +27,14 @@ proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO
     Hash256()
+
+proc invalidFCU(db: BaseChainDB, header: EthBlockHeader): ForkchoiceUpdatedResponse =
+  var parent: EthBlockHeader
+  if not db.getBlockHeader(header.parentHash, parent):
+    return invalidFCU(Hash256())
+
+  let blockHash = latestValidHash(db, parent, db.ttd())
+  invalidFCU(blockHash)
 
 proc setupEngineAPI*(
     sealingEngine: SealingEngineRef,
@@ -190,7 +199,8 @@ proc setupEngineAPI*(
       update: ForkchoiceStateV1,
       payloadAttributes: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
     let
-      db = sealingEngine.chain.db
+      chain = sealingEngine.chain
+      db = chain.db
       blockHash = update.headBlockHash.asEthHash
 
     if blockHash == Hash256():
@@ -258,10 +268,10 @@ proc setupEngineAPI*(
       # TODO should this be possible?
       # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
       warn "Reorg to previous block"
-      if not db.setHead(blockHash):
-        return simpleFCU(PayloadExecutionStatus.invalid)
-    elif not db.setHead(blockHash):
-      return simpleFCU(PayloadExecutionStatus.invalid)
+      if chain.setCanonical(header) != ValidationResult.OK:
+        return invalidFCU(db, header)
+    elif chain.setCanonical(header) != ValidationResult.OK:
+      return invalidFCU(db, header)
 
     # If the beacon client also advertised a finalized block, mark the local
     # chain final and completely in PoS mode.
@@ -326,7 +336,9 @@ proc setupEngineAPI*(
       api.put(id, payload)
 
       info "Created payload for sealing",
-        id = id.toHex
+        id = id.toHex,
+        hash = payload.blockHash,
+        number = payload.blockNumber.uint64
 
       return validFCU(some(id), blockHash)
 

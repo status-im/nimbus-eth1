@@ -80,13 +80,14 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
 
   let res = cl.client.forkchoiceUpdatedV1(cl.latestForkchoice)
   if res.isErr:
-    error "forkchoiceUpdated error", msg=res.error
+    error "waitForTTD: forkchoiceUpdated error", msg=res.error
     return false
 
   let s = res.get()
   if s.payloadStatus.status != PayloadExecutionStatus.valid:
-    error "forkchoiceUpdated response",
-      status=s.payloadStatus.status
+    error "waitForTTD: forkchoiceUpdated response unexpected",
+      expect = PayloadExecutionStatus.valid,
+      get = s.payloadStatus.status
     return false
 
   return true

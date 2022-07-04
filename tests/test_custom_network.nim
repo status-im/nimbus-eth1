@@ -183,7 +183,7 @@ proc isOk(rc: ValidationResult): bool =
 
 proc ttdReached(db: BaseChainDB): bool =
   if db.config.terminalTotalDifficulty.isSome:
-    return db.config.terminalTotalDifficulty.get <= db.totalDifficulty
+    return db.config.terminalTotalDifficulty.get <= db.headTotalDifficulty()
 
 proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
                   noisy = false): bool =

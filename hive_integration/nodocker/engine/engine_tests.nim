@@ -417,15 +417,11 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
         when syncingCond:
           # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
           let r = client.forkchoiceUpdatedV1(fcu, some(attr))
-          let s = r.get()
-          if s.payloadStatus.status != PayloadExecutionStatus.syncing:
-            return false
-          if s.payloadId.isSome:
-            return false
+          testFCU(r, syncing)
         else:
           let r = client.forkchoiceUpdatedV1(fcu, some(attr))
-          if r.isOk:
-            return false
+          testCond r.isOk:
+            error "Unexpected error", msg = r.error
 
           # Check that the forkchoice was applied, regardless of the error
           testLatestHeader(client, BlockHash blockHash.data)
@@ -1326,8 +1322,7 @@ proc reorgBack(t: TestEnv): TestStatus =
   let clMock = t.clMock
   let client = t.rpcClient
 
-  let r1 = clMock.produceSingleBlock(BlockProcessCallbacks())
-  testCond r1
+  testCond clMock.produceSingleBlock(BlockProcessCallbacks())
 
   # We are going to reorg back to this previous hash several times
   let previousHash = clMock.latestForkchoice.headBlockHash
@@ -1344,9 +1339,8 @@ proc reorgBack(t: TestEnv): TestStatus =
 
       # It is only expected that the client does not produce an error and the CL Mocker is able to progress after the re-org
       let r = client.forkchoiceUpdatedV1(forkchoiceUpdatedBack)
-      if r.isErr:
+      testCond r.isOk:
         error "failed to reorg back", msg = r.error
-        return false
       return true
   ))
   testCond r2
@@ -1966,11 +1960,11 @@ const engineTestList* = [
   ),
 
   # Eth RPC Status on ForkchoiceUpdated Events
-  TestSpec( # TODO: fix/debug
+  TestSpec(
     name: "Latest Block after NewPayload",
     run:  blockStatusExecPayload1,
   ),
-  TestSpec( # TODO: fix/debug
+  TestSpec(
     name: "Latest Block after NewPayload (Transition Block)",
     run:  blockStatusExecPayload2,
     ttd:  5,

@@ -19,7 +19,6 @@ type
     networkId*: NetworkId
     config*   : ChainConfig
     genesis*  : Genesis
-    totalDifficulty*: DifficultyInt
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -30,16 +29,6 @@ type
   TransactionKey = tuple
     blockNumber: BlockNumber
     index: int
-
-proc getTotalDifficulty*(self: BaseChainDB): UInt256 =
-  # this is actually a combination of `getHash` and `getScore`
-  const key = canonicalHeadHashKey()
-  let data = self.db.get(key.toOpenArray)
-  if data.len == 0:
-    return 0.u256
-
-  let blockHash = rlp.decode(data, Hash256)
-  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
 
 proc newBaseChainDB*(
        db: TrieDatabaseRef,
@@ -53,7 +42,6 @@ proc newBaseChainDB*(
   result.networkId = id
   result.config    = params.config
   result.genesis   = params.genesis
-  result.totalDifficulty = result.getTotalDifficulty()
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
@@ -165,6 +153,16 @@ proc getTd*(self: BaseChainDB; blockHash: Hash256, td: var UInt256): bool =
     return false
   return true
 
+proc headTotalDifficulty*(self: BaseChainDB): UInt256 =
+  # this is actually a combination of `getHash` and `getScore`
+  const key = canonicalHeadHashKey()
+  let data = self.db.get(key.toOpenArray)
+  if data.len == 0:
+    return 0.u256
+
+  let blockHash = rlp.decode(data, Hash256)
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
+  
 proc getAncestorsHashes*(self: BaseChainDB, limit: UInt256, header: BlockHeader): seq[Hash256] =
   var ancestorCount = min(header.blockNumber, limit).truncate(int)
   var h = header
@@ -258,21 +256,24 @@ proc getUncles*(self: BaseChainDB, ommersHash: Hash256): seq[BlockHeader] =
     if encodedUncles.len != 0:
       result = rlp.decode(encodedUncles, seq[BlockHeader])
 
+proc getBlockBody*(self: BaseChainDB, header: BlockHeader, output: var BlockBody): bool =
+  result = true
+  output.transactions = @[]
+  output.uncles = @[]
+  for encodedTx in self.getBlockTransactionData(header.txRoot):
+    output.transactions.add(rlp.decode(encodedTx, Transaction))
+
+  if header.ommersHash != EMPTY_UNCLE_HASH:
+    let encodedUncles = self.db.get(genericHashKey(header.ommersHash).toOpenArray)
+    if encodedUncles.len != 0:
+      output.uncles = rlp.decode(encodedUncles, seq[BlockHeader])
+    else:
+      result = false
+
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader
   if self.getBlockHeader(blockHash, header):
-    result = true
-    output.transactions = @[]
-    output.uncles = @[]
-    for encodedTx in self.getBlockTransactionData(header.txRoot):
-      output.transactions.add(rlp.decode(encodedTx, Transaction))
-
-    if header.ommersHash != EMPTY_UNCLE_HASH:
-      let encodedUncles = self.db.get(genericHashKey(header.ommersHash).toOpenArray)
-      if encodedUncles.len != 0:
-        output.uncles = rlp.decode(encodedUncles, seq[BlockHeader])
-      else:
-        result = false
+    return self.getBlockBody(header, output)
 
 proc getBlockBody*(self: BaseChainDB, hash: Hash256): BlockBody =
   if not self.getBlockBody(hash, result):
@@ -465,7 +466,6 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
     self.writeTerminalHash(headerHash)
 
   if score > headScore:
-    self.totalDifficulty = score
     result = self.setAsCanonicalChainHead(headerHash)
 
 proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =

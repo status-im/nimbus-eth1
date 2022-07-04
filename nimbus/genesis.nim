@@ -113,7 +113,6 @@ proc initializeEmptyDb*(cdb: BaseChainDB)
   let header = cdb.toGenesisHeader(sdb)
   doAssert(header.blockNumber.isZero, "can't commit genesis block with number > 0")
   # faster lookup of curent total difficulty
-  cdb.totalDifficulty = header.difficulty
   discard cdb.persistHeaderToDb(header)
 
 # ------------------------------------------------------------------------------

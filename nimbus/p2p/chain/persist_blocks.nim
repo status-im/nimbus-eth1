@@ -27,6 +27,14 @@ when not defined(release):
     ../../tracer,
     ../../utils
 
+type
+  PersistBlockFlag = enum
+    NoPersistHeader
+    NoSaveTxs
+    NoSaveReceipts
+
+  PersistBlockFlags = set[PersistBlockFlag]
+
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
@@ -34,7 +42,8 @@ when not defined(release):
 # ------------------------------------------------------------------------------
 
 proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
-                       bodies: openArray[BlockBody], setHead: bool = true): ValidationResult
+                       bodies: openArray[BlockBody],
+                       flags: PersistBlockFlags = {}): ValidationResult
                           # wildcard exception, wrapped below in public section
                           {.inline, raises: [Exception].} =
   c.db.highestBlock = headers[^1].blockNumber
@@ -98,13 +107,14 @@ proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
             msg = res.error
           return ValidationResult.Error
 
-    if setHead:
+    if NoPersistHeader notin flags:
       discard c.db.persistHeaderToDb(header)
-    else:
-      c.db.persistHeaderToDbWithoutSetHead(header)
 
-    discard c.db.persistTransactions(header.blockNumber, body.transactions)
-    discard c.db.persistReceipts(vmState.receipts)
+    if NoSaveTxs notin flags:
+      discard c.db.persistTransactions(header.blockNumber, body.transactions)
+
+    if NoSaveReceipts notin flags:
+      discard c.db.persistReceipts(vmState.receipts)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
@@ -122,7 +132,37 @@ proc insertBlockWithoutSetHead*(c: Chain, header: BlockHeader,
                                 {.gcsafe, raises: [Defect,CatchableError].} =
 
   safeP2PChain("persistBlocks"):
-    result = c.persistBlocksImpl([header], [body], setHead = false)
+    result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveReceipts})
+    if result == ValidationResult.OK:
+      c.db.persistHeaderToDbWithoutSetHead(header)
+
+proc setCanonical*(c: Chain, header: BlockHeader): ValidationResult
+                                {.gcsafe, raises: [Defect,CatchableError].} =
+
+  if header.parentHash == Hash256():
+    discard c.db.setHead(header.blockHash)
+    return ValidationResult.OK
+
+  var body: BlockBody
+  if not c.db.getBlockBody(header, body):
+    debug "Failed to get BlockBody",
+      hash = header.blockHash
+    return ValidationResult.Error
+
+  safeP2PChain("persistBlocks"):
+    result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
+    if result == ValidationResult.OK:
+      discard c.db.setHead(header.blockHash)
+
+proc setCanonical*(c: Chain, blockHash: Hash256): ValidationResult
+                                {.gcsafe, raises: [Defect,CatchableError].} =
+  var header: BlockHeader
+  if not c.db.getBlockHeader(blockHash, header):
+    debug "Failed to get BlockHeader",
+      hash = blockHash
+    return ValidationResult.Error
+
+  setCanonical(c, header)
 
 # ------------------------------------------------------------------------------
 # Public `AbstractChainDB` overload method
