@@ -34,7 +34,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     headers = @[header]
     bodies = @[blockBody]
 
-  chainDB.setHead(parent, true)
+  # it's ok if setHead fails here because of missing ancestors
+  discard chainDB.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
   check validationResult == ValidationResult.OK
 

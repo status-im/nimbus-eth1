@@ -47,7 +47,7 @@ proc main() {.used.} =
   # move head to block number ...
   if conf.head != 0.u256:
     var parentBlock = requestBlock(conf.head)
-    chainDB.setHead(parentBlock.header)
+    discard chainDB.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):

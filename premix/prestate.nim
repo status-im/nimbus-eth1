@@ -12,7 +12,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, hea
     memoryDB = newMemoryDB()
     chainDB = newBaseChainDB(memoryDB, false)
 
-  chainDB.setHead(parent, true)
+  discard chainDB.setHead(parent, true)
   discard chainDB.persistTransactions(blockNumber, body.transactions)
   discard chainDB.persistUncles(body.uncles)
 

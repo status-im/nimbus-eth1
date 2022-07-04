@@ -332,12 +332,25 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
-proc markCanonicalChain(self: BaseChainDB, header: BlockHeader, headerHash: Hash256) =
+proc markCanonicalChain(self: BaseChainDB, header: BlockHeader, headerHash: Hash256): bool =
   ## mark this chain as canonical by adding block number to hash lookup
   ## down to forking point
   var
     currHash = headerHash
     currHeader = header
+
+  # mark current header as canonical
+  let key = blockNumberToHashKey(currHeader.blockNumber)
+  self.db.put(key.toOpenArray, rlp.encode(currHash))
+
+  # it is a genesis block, done
+  if currHeader.parentHash == Hash256():
+    return true
+
+  # mark ancestor blocks as canonical too
+  currHash = currHeader.parentHash
+  if not self.getBlockHeader(currHeader.parentHash, currHeader):
+    return false
 
   while currHash != Hash256():
     let key = blockNumberToHashKey(currHeader.blockNumber)
@@ -352,24 +365,34 @@ proc markCanonicalChain(self: BaseChainDB, header: BlockHeader, headerHash: Hash
       # forking point, done
       break
 
+    if currHeader.parentHash == Hash256():
+      break
+
     currHash = currHeader.parentHash
-    currHeader = self.getBlockHeader(currHeader.parentHash)
+    if not self.getBlockHeader(currHeader.parentHash, currHeader):
+      return false
+
+  return true
 
 proc setHead*(self: BaseChainDB, blockHash: Hash256): bool =
   var header: BlockHeader
   if not self.getBlockHeader(blockHash, header):
     return false
 
-  self.markCanonicalChain(header, blockHash)
+  if not self.markCanonicalChain(header, blockHash):
+    return false
+
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(blockHash))
   return true
 
-proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
+proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false): bool =
   var headerHash = rlpHash(header)
   if writeHeader:
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
-  self.markCanonicalChain(header, headerHash)
+  if not self.markCanonicalChain(header, headerHash):
+    return false
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
+  return true
 
 proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)

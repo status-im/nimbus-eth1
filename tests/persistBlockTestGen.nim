@@ -24,7 +24,7 @@ proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
     headers = @[header]
     bodies = @[blockBody]
 
-  captureChainDB.setHead(parent, true)
+  discard captureChainDB.setHead(parent, true)
   discard chain.persistBlocks(headers, bodies)
 
   var metaData = %{

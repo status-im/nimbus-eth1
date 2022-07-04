@@ -95,7 +95,7 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
     # try to execute current block
     chainDB = newBaseChainDB(memoryDB, false)
 
-  chainDB.setHead(parentBlock.header, true)
+  discard chainDB.setHead(parentBlock.header, true)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()

@@ -114,10 +114,10 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
 
     result = traceBlock(chainDB, header, body, flags)
 
-  rpcsrv.rpc("debug_setHead") do(quantityTag: string):
+  rpcsrv.rpc("debug_setHead") do(quantityTag: string) -> bool:
     ## Sets the current head of the local chain by block number.
     ## Note, this is a destructive action and may severely damage your chain.
     ## Use with extreme caution.
     let
       header = chainDB.headerFromTag(quantityTag)
-    chainDB.setHead(header)
+    result = chainDB.setHead(header)
