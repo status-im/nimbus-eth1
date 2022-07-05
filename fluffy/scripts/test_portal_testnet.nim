@@ -182,7 +182,7 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataFile = "./fluffy/scripts/test_data/mainnet_blocks_selected.json"
+    const dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
     check (await clients[0].portal_history_propagate(dataFile))
