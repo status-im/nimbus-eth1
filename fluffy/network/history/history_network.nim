@@ -176,7 +176,7 @@ proc validateBlockBodyBytes*(
     try:
       SSZ.decode(bytes, BlockBodySSZ)
     except SszError as e:
-      return err("Failed to decode block body" & e.msg)
+      return err("Failed to decode block body: " & e.msg)
 
   ? validateBlockBody(body, txRoot, ommersHash)
 
@@ -199,7 +199,7 @@ proc validateReceiptsBytes*(
     try:
       SSZ.decode(bytes, ReceiptsSSZ)
     except SszError as e:
-      return err("Failed to decode receipts" & e.msg)
+      return err("Failed to decode receipts: " & e.msg)
 
   ? validateReceipts(receipts, receiptsRoot)
 
@@ -262,6 +262,15 @@ proc getContentFromDb(
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
 
+const requestRetries = 4
+# TODO: Currently doing 4 retries on lookups but only when the validation fails.
+# This is to avoid nodes that provide garbage from blocking us with getting the
+# requested data. Might want to also do that on a failed lookup, as perhaps this
+# could occur when being really unlucky with nodes timing out on requests.
+# Additionally, more improvements could be done with the lookup, as currently
+# ongoing requests are cancelled after the receival of the first response,
+# however that response is not yet validated at that moment.
+
 proc getBlockHeader*(
     h: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
@@ -273,71 +282,72 @@ proc getBlockHeader*(
     info "Fetched block header from database", hash
     return headerFromDb
 
-  let headerContentLookup =
-    await h.portalProtocol.contentLookup(keyEncoded, contentId)
-  if headerContentLookup.isNone():
-    warn "Failed fetching block header from the network", hash
-    return none(BlockHeader)
+  for i in 0..<requestRetries:
+    let headerContentLookup =
+      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+    if headerContentLookup.isNone():
+      warn "Failed fetching block header from the network", hash
+      return none(BlockHeader)
 
-  let headerContent = headerContentLookup.unsafeGet()
+    let headerContent = headerContentLookup.unsafeGet()
 
-  let res = validateBlockHeaderBytes(headerContent.content, hash)
-  # TODO: If the validation fails, a new request could be done.
-  if res.isOk():
-    info "Fetched block header from the network", hash
-    # Content is valid we can propagate it to interested peers
-    h.portalProtocol.triggerPoke(
-      headerContent.nodesInterestedInContent,
-      keyEncoded,
-      headerContent.content
-    )
+    let res = validateBlockHeaderBytes(headerContent.content, hash)
+    if res.isOk():
+      info "Fetched block header from the network", hash
+      # Content is valid we can propagate it to interested peers
+      h.portalProtocol.triggerPoke(
+        headerContent.nodesInterestedInContent,
+        keyEncoded,
+        headerContent.content
+      )
 
-    h.portalProtocol.storeContent(contentId, headerContent.content)
+      h.portalProtocol.storeContent(contentId, headerContent.content)
 
-    return some(res.get())
-  else:
-    return none(BlockHeader)
+      return some(res.get())
+    else:
+      warn "Validation of block header failed", err = res.error, hash
+
+  # Headers were requested `requestRetries` times and all failed on validation
+  return none(BlockHeader)
 
 proc getBlockBody*(
-    h: HistoryNetwork,
-    chainId: uint16,
-    hash: BlockHash,
-    header: BlockHeader):Future[Option[BlockBody]] {.async.} =
+    h: HistoryNetwork, chainId: uint16, hash: BlockHash, header: BlockHeader):
+    Future[Option[BlockBody]] {.async.} =
   let
     (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
     bodyFromDb = h.getContentFromDb(BlockBody, contentId)
 
   if bodyFromDb.isSome():
     info "Fetched block body from database", hash
-    return some(bodyFromDb.unsafeGet())
+    return bodyFromDb
 
-  let bodyContentLookup =
-    await h.portalProtocol.contentLookup(keyEncoded, contentId)
-  if bodyContentLookup.isNone():
-    warn "Failed fetching block body from the network", hash
-    return none(BlockBody)
+  for i in 0..<requestRetries:
+    let bodyContentLookup =
+      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+    if bodyContentLookup.isNone():
+      warn "Failed fetching block body from the network", hash
 
-  let bodyContent = bodyContentLookup.unsafeGet()
+    let bodyContent = bodyContentLookup.unsafeGet()
 
-  let res = validateBlockBodyBytes(
-    bodyContent.content, header.txRoot, header.ommersHash)
-  if res.isErr():
-    return none(BlockBody)
+    let res = validateBlockBodyBytes(
+      bodyContent.content, header.txRoot, header.ommersHash)
+    if res.isOk():
+      info "Fetched block body from the network", hash
 
-  info "Fetched block body from the network", hash
+      # body is valid, propagate it to interested peers
+      h.portalProtocol.triggerPoke(
+        bodyContent.nodesInterestedInContent,
+        keyEncoded,
+        bodyContent.content
+      )
 
-  let blockBody = res.get()
+      h.portalProtocol.storeContent(contentId, bodyContent.content)
 
-  # body is valid, propagate it to interested peers
-  h.portalProtocol.triggerPoke(
-    bodyContent.nodesInterestedInContent,
-    keyEncoded,
-    bodyContent.content
-  )
+      return some(res.get())
+    else:
+      warn "Validation of block body failed", err = res.error, hash
 
-  h.portalProtocol.storeContent(contentId, bodyContent.content)
-
-  return some(blockBody)
+  return none(BlockBody)
 
 proc getBlock*(
     h: HistoryNetwork, chainId: uint16, hash: BlockHash):
@@ -356,7 +366,7 @@ proc getBlock*(
 
   let body = bodyOpt.unsafeGet()
 
-  return some[Block]((header, body))
+  return some((header, body))
 
 proc getReceipts*(
     h: HistoryNetwork,
@@ -364,7 +374,7 @@ proc getReceipts*(
     hash: BlockHash,
     header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
   if header.receiptRoot == BLANK_ROOT_HASH:
-    # The header has no receipts, return early with empty receipts
+    # Short path for empty receipts indicated by receipts root
     return some(newSeq[Receipt]())
 
   let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
@@ -373,34 +383,37 @@ proc getReceipts*(
 
   if receiptsFromDb.isSome():
     info "Fetched receipts from database", hash
-    return some(receiptsFromDb.unsafeGet())
+    return receiptsFromDb
 
-  let receiptsContentLookup =
-    await h.portalProtocol.contentLookup(keyEncoded, contentId)
-  if receiptsContentLookup.isNone():
-    warn "Failed fetching receipts from the network", hash
-    return none[seq[Receipt]]()
+  for i in 0..<requestRetries:
+    let receiptsContentLookup =
+      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+    if receiptsContentLookup.isNone():
+      warn "Failed fetching receipts from the network", hash
+      return none(seq[Receipt])
 
-  let receiptsContent = receiptsContentLookup.unsafeGet()
+    let receiptsContent = receiptsContentLookup.unsafeGet()
 
-  let res = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
-  if res.isErr():
-    return none[seq[Receipt]]()
+    let res = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
+    if res.isOk():
+      info "Fetched receipts from the network", hash
 
-  info "Fetched receipts from the network", hash
+      let receipts = res.get()
 
-  let receipts = res.get()
+      # receipts are valid, propagate it to interested peers
+      h.portalProtocol.triggerPoke(
+        receiptsContent.nodesInterestedInContent,
+        keyEncoded,
+        receiptsContent.content
+      )
 
-  # receips are valid, propagate it to interested peers
-  h.portalProtocol.triggerPoke(
-    receiptsContent.nodesInterestedInContent,
-    keyEncoded,
-    receiptsContent.content
-  )
+      h.portalProtocol.storeContent(contentId, receiptsContent.content)
 
-  h.portalProtocol.storeContent(contentId, receiptsContent.content)
+      return some(res.get())
+    else:
+      warn "Validation of receipts failed", err = res.error, hash
 
-  return some(receipts)
+  return none(seq[Receipt])
 
 func validateEpochAccumulator(bytes: openArray[byte]): bool =
   # For now just validate by checking if de-serialization works
