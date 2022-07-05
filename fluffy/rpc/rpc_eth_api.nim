@@ -235,40 +235,48 @@ proc installEthApiHandlers*(
   # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
   #     data: EthHashStr) -> Option[ReceiptObject]:
 
-  rpcServerWithProxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
+  rpcServerWithProxy.rpc("eth_getLogs") do(
+      filterOptions: FilterOptions) -> seq[FilterLog]:
     if filterOptions.blockhash.isNone():
-      # currently only queries with provided blockhash are supported. To support
-      # range queries it would require Indicies network.
-      raise newException(ValueError, "Unsupported query. Field `blockhash` needs to be provided")
+      # Currently only queries by blockhash are supported.
+      # To support range queries the Indicies network is required.
+      raise newException(ValueError,
+        "Unsupported query: Only `blockhash` queries are currently supported")
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 
-      let maybeHeader = await historyNetwork.getBlockHeader(1'u16, hash)
+      let headerOpt = await historyNetwork.getBlockHeader(1'u16, hash)
+      if headerOpt.isNone():
+        raise newException(ValueError,
+          "Could not find header with requested hash")
 
-      if maybeHeader.isNone():
-        raise newException(ValueError, "Could not find header with requested hash")
-
-      let header = maybeHeader.unsafeGet()
+      let header = headerOpt.unsafeGet()
 
       if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
         # TODO: These queries could be done concurrently, investigate if there
         # are no assumptions about usage of concurrent queries on portal
         # wire protocol level
-        let maybeBody = await historyNetwork.getBlockBody(1'u16, hash, header)
-        let maybeReceipts = await historyNetwork.getReceipts(1'u16, hash, header)
+        let
+          bodyOpt = await historyNetwork.getBlockBody(1'u16, hash, header)
+          receiptsOpt = await historyNetwork.getReceipts(1'u16, hash, header)
 
-        if maybeBody.isSome() and maybeReceipts.isSome():
-          let body = maybeBody.unsafeGet()
-          let receipts = maybeReceipts.unsafeGet()
-          let logs = deriveLogs(header, body.transactions, receipts)
-          let filteredLogs = filterLogs(logs, filterOptions.address, filterOptions.topics)
+        if bodyOpt.isSome() and receiptsOpt.isSome():
+          let
+            body = bodyOpt.unsafeGet()
+            receipts = receiptsOpt.unsafeGet()
+            logs = deriveLogs(header, body.transactions, receipts)
+            filteredLogs = filterLogs(
+              logs, filterOptions.address, filterOptions.topics)
+
           return filteredLogs
         else:
-          if maybeBody.isNone():
-            raise newException(ValueError, "Could not find body for requested hash")
+          if bodyOpt.isNone():
+            raise newException(ValueError,
+              "Could not find block body for requested hash")
           else:
-            raise newException(ValueError, "Could not find receipts for requested hash")
+            raise newException(ValueError,
+              "Could not find receipts for requested hash")
       else:
-        # bloomfilter returned false, we do known that there is no logs matching
-        # given criteria
+        # bloomfilter returned false, we do known that there are no logs
+        # matching the given criteria
         return @[]

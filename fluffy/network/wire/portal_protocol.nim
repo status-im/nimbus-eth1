@@ -433,7 +433,7 @@ proc fromLogRadius(T: type UInt256, logRadius: uint16): T =
   # Get the max value of the logRadius range
   pow((2).stuint(256), logRadius) - 1
 
-proc getInitialRadius(rc: RadiusConfig): UInt256 = 
+proc getInitialRadius(rc: RadiusConfig): UInt256 =
   case rc.kind
   of Static:
     return UInt256.fromLogRadius(rc.logRadius)
@@ -946,8 +946,11 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE,
-    seenOnly = false)
+  var closestNodes = p.routingTable.neighbours(
+    targetId, BUCKET_SIZE, seenOnly = false)
+  # Shuffling the order of the nodes in order to not always hit the same node
+  # first for the same request.
+  p.baseProtocol.rng[].shuffle(closestNodes)
 
   var asked, seen = initHashSet[NodeId]()
   asked.incl(p.baseProtocol.localNode.id) # No need to ask our own node
