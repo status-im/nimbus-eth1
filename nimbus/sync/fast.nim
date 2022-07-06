@@ -57,17 +57,6 @@ type
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
 
-template catchException(info: string; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raise (ref CatchableError)(msg: e.msg)
-  except Defect as e:
-    raise (ref Defect)(msg: e.msg)
-  except Exception as e:
-    raise newException(
-      BlockchainSyncDefect, info & "(): " & $e.name & " -- " & e.msg)
-
 proc hash*(p: Peer): Hash = hash(cast[pointer](p))
 
 proc endIndex(b: WantedBlocks): BlockNumber =
@@ -120,8 +109,19 @@ proc availableWorkItem(ctx: FastSyncCtx): int =
 
 proc persistWorkItem(ctx: FastSyncCtx, wi: var WantedBlocks): ValidationResult
     {.gcsafe, raises:[Defect,CatchableError].} =
-  catchException("persistBlocks"):
+  try:
     result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
+  except CatchableError as e:
+    error "storing persistent blocks failed",
+      error = $e.name, msg = e.msg
+    result = ValidationResult.Error
+  except Defect as e:
+    # Pass through
+    raise (ref Defect)(msg: e.msg)
+  except Exception as e:
+    error "exception while storing persistent blocks",
+      error = $e.name, msg = e.msg
+    result = ValidationResult.Error
   case result
   of ValidationResult.OK:
     ctx.finalizedBlock = wi.endIndex
