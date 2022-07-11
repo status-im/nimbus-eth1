@@ -27,7 +27,7 @@ const
   # 100mb seems a bit smallish we may consider increasing defaults after some
   # network measurements
   defaultStorageSize* = uint32(1000 * 1000 * 100)
-  
+
 type
   PortalCmd* = enum
     noCommand
@@ -198,9 +198,6 @@ proc testHandler(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest("test")
   some(readUintBE[256](idHash.data))
 
-proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
-  true
-
 proc run(config: PortalCliConf) =
   let
     rng = newRng()
@@ -227,7 +224,7 @@ proc run(config: PortalCliConf) =
   let
     db = ContentDB.new("", config.storageSize, inMemory = true)
     portal = PortalProtocol.new(d, config.protocolId, db,
-      testHandler, validateContent,
+      testHandler,
       bootstrapRecords = bootstrapRecords)
     socketConfig = SocketConfig.init(
       incomingSocketReceiveTimeout = none(Duration))

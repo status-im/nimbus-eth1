@@ -55,10 +55,6 @@ type
     contentKeys: ContentKeysList
     timeout: Moment
 
-  ContentHandlerCallback* = proc(
-    stream: PortalStream, contentKeys: ContentKeysList,
-    content: seq[seq[byte]]) {.gcsafe, raises: [Defect].}
-
   PortalStream* = ref object
     transport: UtpDiscv5Protocol
     # TODO:
@@ -80,7 +76,7 @@ type
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
     udata: pointer
-    contentHandler: ContentHandlerCallback
+    contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
@@ -235,7 +231,6 @@ proc readContentOffer(
   # security PoV), e.g. other options such as reading all content from socket at
   # once, then processing the individual content items. Or reading and
   # validating one per time.
-
   let amount = offer.contentKeys.len()
 
   var contentItems: seq[seq[byte]]
@@ -268,12 +263,14 @@ proc readContentOffer(
     # Not waiting here for its ACK however, so no `closeWait`
     socket.close()
 
-  if not stream.contentHandler.isNil():
-    stream.contentHandler(stream, offer.contentKeys, contentItems)
+  # TODO: This could currently create a backlog of content items to be validated
+  # as `AcceptConnectionCallback` is `asyncSpawn`'ed and there are no limits
+  # on the `contentOffers`. Might move the queue to before the reading of the
+  # socket, and let the specific networks handle that.
+  await stream.contentQueue.put((offer.contentKeys, contentItems))
 
 proc new*(
     T: type PortalStream,
-    contentHandler: ContentHandlerCallback,
     udata: ref,
     connectionTimeout = defaultConnectionTimeout,
     contentReadTimeout = defaultContentReadTimeout,
@@ -281,10 +278,10 @@ proc new*(
   GC_ref(udata)
   let
     stream = PortalStream(
-      contentHandler: contentHandler,
       udata: cast[pointer](udata),
       connectionTimeout: connectionTimeout,
       contentReadTimeout: contentReadTimeout,
+      contentQueue: newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50),
       rng: rng)
 
   stream

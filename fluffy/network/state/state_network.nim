@@ -23,6 +23,7 @@ const
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
+  processContentLoop: Future[void]
 
 func setStreamTransport*(n: StateNetwork, transport: UtpDiscv5Protocol) =
   setTransport(n.portalProtocol.stream, transport)
@@ -72,15 +73,29 @@ proc new*(
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, contentDB,
-    toContentIdHandler, validateContent,
-    bootstrapRecords, stateDistanceCalculator, config = portalConfig)
+    toContentIdHandler,
+    bootstrapRecords, stateDistanceCalculator,
+    config = portalConfig)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
+
+proc processContentLoop(n: StateNetwork) {.async.} =
+  try:
+    while true:
+      # Just dropping state date for now
+      discard await n.portalProtocol.stream.contentQueue.popFirst()
+  except CancelledError:
+    trace "processContentLoop canceled"
 
 proc start*(n: StateNetwork) =
   info "Starting Portal execution state network",
     protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
+  n.processContentLoop = processContentLoop(n)
+
 proc stop*(n: StateNetwork) =
   n.portalProtocol.stop()
+
+  if not n.processContentLoop.isNil:
+    n.processContentLoop.cancel()

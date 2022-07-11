@@ -158,7 +158,6 @@ proc historyStore*(
 proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false):
     Future[Result[void, string]] {.async.} =
-
   const concurrentGossips = 20
 
   var gossipQueue =
@@ -175,17 +174,20 @@ proc historyPropagate*(
     gossipWorkers.add(gossipWorker(p))
 
   let blockData = readBlockDataTable(dataFile)
-
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
       for value in b:
-        info "Seeding block content into the network", contentKey = value[0]
-        # Note: This is the slowest part due to the hashing that takes place.
-        let contentId = history_content.toContentId(value[0])
-        p.storeContent(contentId, value[1])
+        # Only sending non empty data, e.g. empty receipts are not send
+        # TODO: Could do a similar thing for a combination of empty
+        # txs and empty uncles, as then the serialization is always the same.
+        if value[1].len() > 0:
+          info "Seeding block content into the network", contentKey = value[0]
+          # Note: This is the slowest part due to the hashing that takes place.
+          let contentId = history_content.toContentId(value[0])
+          p.storeContent(contentId, value[1])
 
-        await gossipQueue.addLast(
-          (ContentKeysList(@[encode(value[0])]), value[1]))
+          await gossipQueue.addLast(
+            (ContentKeysList(@[encode(value[0])]), value[1]))
 
     return ok()
   else:

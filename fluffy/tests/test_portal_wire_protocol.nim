@@ -25,9 +25,6 @@ proc toContentId(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest(contentKey.asSeq())
   some(readUintBE[256](idHash.data))
 
-proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
-  true
-
 proc initPortalProtocol(
     rng: ref HmacDrbgContext,
     privKey: PrivateKey,
@@ -37,7 +34,7 @@ proc initPortalProtocol(
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new("", uint32.high, inMemory = true)
     proto = PortalProtocol.new(
-      d, protocolId, db, toContentId, validateContent,
+      d, protocolId, db, toContentId,
       bootstrapRecords = bootstrapRecords)
 
     socketConfig = SocketConfig.init(
@@ -180,15 +177,18 @@ procSuite "Portal Wire Protocol Tests":
 
     let res = await proto1.offer(proto2.baseProtocol.localNode, content)
 
-    check:
-      res.isOk()
+    check res.isOk()
 
-    for contentInfo in content:
-      let receivedContent = proto2.contentDB.get(
-        toContentId(contentInfo.contentKey).get())
+    let (contentKeys, contentItems) =
+        await proto2.stream.contentQueue.popFirst()
+
+    check contentItems.len() == content.len()
+
+    for i, contentItem in contentItems:
+      let contentInfo = content[i]
       check:
-        receivedContent.isSome()
-        receivedContent.get() == contentInfo.content
+        contentItem == contentInfo.content
+        contentKeys[i] == contentInfo.contentKey
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -338,8 +338,7 @@ procSuite "Portal Wire Protocol Tests":
 
       dbLimit = 100_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
-      proto1 = PortalProtocol.new(node1, protocolId, db, toContentId,
-        validateContent)
+      proto1 = PortalProtocol.new(node1, protocolId, db, toContentId)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
