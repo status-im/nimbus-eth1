@@ -27,6 +27,7 @@ type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
+    processContentLoop: Future[void]
 
   Block* = (BlockHeader, BlockBody)
 
@@ -253,9 +254,9 @@ proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentID): Option[T] =
     none(T)
 
 proc getContentFromDb(
-    h: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
-  if h.portalProtocol.inRange(contentId):
-    h.contentDB.get(T, contentId)
+    n: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
+  if n.portalProtocol.inRange(contentId):
+    n.contentDB.get(T, contentId)
   else:
     none(T)
 
@@ -272,19 +273,19 @@ const requestRetries = 4
 # however that response is not yet validated at that moment.
 
 proc getBlockHeader*(
-    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    n: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
   let (keyEncoded, contentId) =
     getEncodedKeyForContent(blockHeader, chainId, hash)
 
-  let headerFromDb = h.getContentFromDb(BlockHeader, contentId)
+  let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
   if headerFromDb.isSome():
     info "Fetched block header from database", hash
     return headerFromDb
 
   for i in 0..<requestRetries:
     let headerContentLookup =
-      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
     if headerContentLookup.isNone():
       warn "Failed fetching block header from the network", hash
       return none(BlockHeader)
@@ -295,13 +296,13 @@ proc getBlockHeader*(
     if res.isOk():
       info "Fetched block header from the network", hash
       # Content is valid we can propagate it to interested peers
-      h.portalProtocol.triggerPoke(
+      n.portalProtocol.triggerPoke(
         headerContent.nodesInterestedInContent,
         keyEncoded,
         headerContent.content
       )
 
-      h.portalProtocol.storeContent(contentId, headerContent.content)
+      n.portalProtocol.storeContent(contentId, headerContent.content)
 
       return some(res.get())
     else:
@@ -311,11 +312,11 @@ proc getBlockHeader*(
   return none(BlockHeader)
 
 proc getBlockBody*(
-    h: HistoryNetwork, chainId: uint16, hash: BlockHash, header: BlockHeader):
+    n: HistoryNetwork, chainId: uint16, hash: BlockHash, header: BlockHeader):
     Future[Option[BlockBody]] {.async.} =
   let
     (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
-    bodyFromDb = h.getContentFromDb(BlockBody, contentId)
+    bodyFromDb = n.getContentFromDb(BlockBody, contentId)
 
   if bodyFromDb.isSome():
     info "Fetched block body from database", hash
@@ -323,7 +324,7 @@ proc getBlockBody*(
 
   for i in 0..<requestRetries:
     let bodyContentLookup =
-      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
     if bodyContentLookup.isNone():
       warn "Failed fetching block body from the network", hash
 
@@ -335,13 +336,13 @@ proc getBlockBody*(
       info "Fetched block body from the network", hash
 
       # body is valid, propagate it to interested peers
-      h.portalProtocol.triggerPoke(
+      n.portalProtocol.triggerPoke(
         bodyContent.nodesInterestedInContent,
         keyEncoded,
         bodyContent.content
       )
 
-      h.portalProtocol.storeContent(contentId, bodyContent.content)
+      n.portalProtocol.storeContent(contentId, bodyContent.content)
 
       return some(res.get())
     else:
@@ -350,16 +351,16 @@ proc getBlockBody*(
   return none(BlockBody)
 
 proc getBlock*(
-    h: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    n: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[Block]] {.async.} =
-  let headerOpt = await h.getBlockHeader(chainId, hash)
+  let headerOpt = await n.getBlockHeader(chainId, hash)
   if headerOpt.isNone():
     # Cannot validate block without header.
     return none(Block)
 
   let header = headerOpt.unsafeGet()
 
-  let bodyOpt = await h.getBlockBody(chainId, hash, header)
+  let bodyOpt = await n.getBlockBody(chainId, hash, header)
 
   if bodyOpt.isNone():
     return none(Block)
@@ -369,7 +370,7 @@ proc getBlock*(
   return some((header, body))
 
 proc getReceipts*(
-    h: HistoryNetwork,
+    n: HistoryNetwork,
     chainId: uint16,
     hash: BlockHash,
     header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
@@ -379,7 +380,7 @@ proc getReceipts*(
 
   let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
 
-  let receiptsFromDb = h.getContentFromDb(seq[Receipt], contentId)
+  let receiptsFromDb = n.getContentFromDb(seq[Receipt], contentId)
 
   if receiptsFromDb.isSome():
     info "Fetched receipts from database", hash
@@ -387,7 +388,7 @@ proc getReceipts*(
 
   for i in 0..<requestRetries:
     let receiptsContentLookup =
-      await h.portalProtocol.contentLookup(keyEncoded, contentId)
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
     if receiptsContentLookup.isNone():
       warn "Failed fetching receipts from the network", hash
       return none(seq[Receipt])
@@ -401,13 +402,13 @@ proc getReceipts*(
       let receipts = res.get()
 
       # receipts are valid, propagate it to interested peers
-      h.portalProtocol.triggerPoke(
+      n.portalProtocol.triggerPoke(
         receiptsContent.nodesInterestedInContent,
         keyEncoded,
         receiptsContent.content
       )
 
-      h.portalProtocol.storeContent(contentId, receiptsContent.content)
+      n.portalProtocol.storeContent(contentId, receiptsContent.content)
 
       return some(res.get())
     else:
@@ -431,7 +432,9 @@ func validateMasterAccumulator(bytes: openArray[byte]): bool =
   except SszError:
     false
 
-proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
+proc validateContent(
+    n: HistoryNetwork, content: seq[byte], contentKey: ByteList):
+    Future[bool] {.async.} =
   let keyOpt = contentKey.decode()
 
   if keyOpt.isNone():
@@ -441,17 +444,33 @@ proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
 
   case key.contentType:
   of blockHeader:
-    validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash).isOk()
+    # TODO: Add validation based on accumulator data.
+    return validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash).isOk()
   of blockBody:
-    true
-    # TODO: Need to get the header from the db or the network for this. Or how
-    # to deal with this?
+    let headerOpt = await n.getBlockHeader(
+      key.blockBodyKey.chainId, key.blockBodyKey.blockHash)
+
+    if headerOpt.isSome():
+      let header = headerOpt.get()
+      return validateBlockBodyBytes(content, header.txRoot, header.ommersHash).isOk()
+    else:
+      # Can't find the header, no way to validate the block body
+      return false
   of receipts:
-    true
+    let headerOpt = await n.getBlockHeader(
+      key.receiptsKey.chainId, key.receiptsKey.blockHash)
+
+    if headerOpt.isSome():
+      let header = headerOpt.get()
+      return validateReceiptsBytes(content, header.receiptRoot).isOk()
+    else:
+      # Can't find the header, no way to validate the receipts
+      return false
   of epochAccumulator:
-    validateEpochAccumulator(content)
+    # TODO: Add validation based on MasterAccumulator
+    return validateEpochAccumulator(content)
   of masterAccumulator:
-    validateMasterAccumulator(content)
+    return validateMasterAccumulator(content)
 
 proc new*(
     T: type HistoryNetwork,
@@ -461,15 +480,50 @@ proc new*(
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, contentDB,
-    toContentIdHandler, validateContent, bootstrapRecords,
+    toContentIdHandler, bootstrapRecords,
     config = portalConfig)
 
   return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
-proc start*(p: HistoryNetwork) =
-  info "Starting Portal execution history network",
-    protocolId = p.portalProtocol.protocolId
-  p.portalProtocol.start()
+proc processContentLoop(n: HistoryNetwork) {.async.} =
+  try:
+    while true:
+      let (contentKeys, contentItems) =
+        await n.portalProtocol.stream.contentQueue.popFirst()
 
-proc stop*(p: HistoryNetwork) =
-  p.portalProtocol.stop()
+      # content passed here can have less items then contentKeys, but not more.
+      for i, contentItem in contentItems:
+        echo contentItem.len()
+        let contentKey = contentKeys[i]
+        if await n.validateContent(contentItem, contentKey):
+          let contentIdOpt = n.portalProtocol.toContentId(contentKey)
+          if contentIdOpt.isNone():
+            continue
+
+          let contentId = contentIdOpt.get()
+
+          n.portalProtocol.storeContent(contentId, contentItem)
+
+          info "Received valid offered content", contentKey
+        else:
+          error "Received invalid offered content", contentKey
+          # On one invalid piece of content we drop all and don't forward any of it
+          # TODO: Could also filter it out and still gossip the rest.
+          continue
+
+      asyncSpawn n.portalProtocol.neighborhoodGossip(contentKeys, contentItems)
+  except CancelledError:
+    trace "processContentLoop canceled"
+
+proc start*(n: HistoryNetwork) =
+  info "Starting Portal execution history network",
+    protocolId = n.portalProtocol.protocolId
+  n.portalProtocol.start()
+
+  n.processContentLoop = processContentLoop(n)
+
+proc stop*(n: HistoryNetwork) =
+  n.portalProtocol.stop()
+
+  if not n.processContentLoop.isNil:
+    n.processContentLoop.cancel()

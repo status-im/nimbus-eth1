@@ -131,10 +131,6 @@ type
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
-  ContentValidationHandler* =
-    proc(content: openArray[byte], contentKey: ByteList):
-      bool {.raises: [Defect], gcsafe.}
-
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
@@ -160,7 +156,6 @@ type
     baseProtocol*: protocol.Protocol
     contentDB*: ContentDB
     toContentId*: ToContentIdHandler
-    validateContent: ContentValidationHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -425,10 +420,6 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
-proc processContent(
-    stream: PortalStream, contentKeys: ContentKeysList,
-    content: seq[seq[byte]]) {.gcsafe, raises: [Defect].}
-
 proc fromLogRadius(T: type UInt256, logRadius: uint16): T =
   # Get the max value of the logRadius range
   pow((2).stuint(256), logRadius) - 1
@@ -450,7 +441,6 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
-    validateContent: ContentValidationHandler,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig
@@ -467,7 +457,6 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
-    validateContent: validateContent,
     radiusConfig: config.radiusConfig,
     dataRadius: initialRadius,
     bootstrapRecords: @bootstrapRecords,
@@ -477,8 +466,7 @@ proc new*(T: type PortalProtocol,
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
 
-  let stream = PortalStream.new(
-    processContent, udata = proto, rng = proto.baseProtocol.rng)
+  let stream = PortalStream.new(udata = proto, rng = proto.baseProtocol.rng)
 
   proto.stream = stream
 
@@ -1210,32 +1198,6 @@ proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) 
       # constant thorugh node life time, also database max size is disabled
       # so we will effectivly store fraction of the network
       p.contentDB.put(key, content)
-
-proc processContent(
-    stream: PortalStream, contentKeys: ContentKeysList,
-    content: seq[seq[byte]]) {.gcsafe, raises: [Defect].} =
-  let p = getUserData[PortalProtocol](stream)
-
-  # content passed here can have less items then contentKeys, but not more.
-  for i, contentItem in content:
-    let contentKey = contentKeys[i]
-    if p.validateContent(contentItem, contentKey):
-      let contentIdOpt = p.toContentId(contentKey)
-      if contentIdOpt.isNone():
-        return
-
-      let contentId = contentIdOpt.get()
-
-      p.storeContent(contentId, contentItem)
-
-      info "Received valid offered content", contentKey
-    else:
-      error "Received invalid offered content", contentKey
-      # On one invalid piece of content we drop all and don't forward any of it
-      # TODO: Could also filter it out and still gossip the rest.
-      return
-
-  asyncSpawn neighborhoodGossip(p, contentKeys, content)
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
