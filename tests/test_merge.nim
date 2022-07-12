@@ -8,14 +8,14 @@
 # those terms.
 
 import
-  std/[json, os, sets, strformat, strutils, typetraits],
-  unittest2, nimcrypto, eth/common as eth_common,
-  json_rpc/[rpcserver, rpcclient], web3/[conversions, engine_api_types],
+  std/[json, os, sets, strutils, typetraits],
+  unittest2, eth/common as eth_common,
+  json_rpc/[rpcserver, rpcclient], web3/[engine_api_types],
   eth/[trie/db, p2p/private/p2p_types],
   ../nimbus/sync/protocol,
-  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils, engine_api],
+  ../nimbus/rpc/[p2p, engine_api],
   ../nimbus/db/[db_chain],
-  ../nimbus/[chain_config, config, context, genesis, sealer],
+  ../nimbus/[config, context, genesis, sealer],
   ../nimbus/utils/[tx_pool],
   ../nimbus/p2p/chain,
   ../nimbus/merge/mergetypes,
@@ -138,7 +138,6 @@ proc `==`(a, b: Quantity): bool =
   uint64(a) == uint64(b)
 
 proc testEngineApiSupport() =
-  var db = newBaseChainDB(newMemoryDB())
   var api = EngineAPI.new()
   let
     id1 = toId(1)

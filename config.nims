@@ -119,3 +119,10 @@ switch("warning", "ObservableStores:off")
 # Too many false positives for "Warning: method has lock level <unknown>, but another method has 0 [LockLevel]"
 switch("warning", "LockLevel:off")
 
+# nimbus-eth1 doesn't use 'news' nor ws client, only websock server. set the backend package to websock.
+switch("define", "json_rpc_websocket_package:websock")
+
+if defined(windows) and defined(i386):
+  # avoid undefined reference to 'sqrx_mont_384x' when compiling in 32 bit mode
+  # without actually using __BLST_PORTABLE__ or __BLST_NO_ASM__
+  switch("define", "BLS_FORCE_BACKEND:miracl")

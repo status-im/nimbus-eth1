@@ -12,7 +12,6 @@ import
   std/[times, tables, typetraits, options],
   pkg/[chronos,
     stew/results,
-    stew/byteutils,
     chronicles,
     eth/common,
     eth/keys,
@@ -52,9 +51,6 @@ type
     ctx: EthContext
     signer: EthAddress
     txPool: TxPoolRef
-
-template asEthHash(hash: Web3BlockHash): Hash256 =
-  Hash256(data: distinctBase(hash))
 
 proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[void, string] =
   if conf.engineSigner == ZERO_ADDRESS:
@@ -121,7 +117,7 @@ proc prepareBlock(engine: SealingEngineRef,
   ok(blk)
 
 proc generateBlock(engine: SealingEngineRef,
-                   parentBlockHeader: BlockHeader,
+                   parentHeader: BlockHeader,
                    outBlock: var EthBlock,
                    timestamp = getTime(),
                    prevRandao = Hash256()): Result[void, string] =
@@ -129,7 +125,7 @@ proc generateBlock(engine: SealingEngineRef,
   # - no DAO hard fork
   # - no local and remote uncles inclusion
 
-  let res = prepareBlock(engine, parentBlockHeader, timestamp, prevRandao)
+  let res = prepareBlock(engine, parentHeader, timestamp, prevRandao)
   if res.isErr:
     return err("error prepare header")
 
@@ -145,24 +141,6 @@ proc generateBlock(engine: SealingEngineRef,
         blockHash = blockHash(outBlock.header)
 
   ok()
-
-proc generateBlock(engine: SealingEngineRef,
-                   parentHash: Hash256,
-                   outBlock: var EthBlock,
-                   timestamp = getTime(),
-                   prevRandao = Hash256()): Result[void, string] =
-  var parentBlockHeader: BlockHeader
-  if engine.chain.db.getBlockHeader(parentHash, parentBlockHeader):
-    generateBlock(engine, parentBlockHeader, outBlock, timestamp, prevRandao)
-  else:
-    # TODO:
-    # This hack shouldn't be necessary if the database can find
-    # the genesis block hash in `getBlockHeader`.
-    let maybeGenesisBlock = engine.chain.currentBlock()
-    if parentHash == maybeGenesisBlock.blockHash:
-      generateBlock(engine, maybeGenesisBlock, outBlock, timestamp, prevRandao)
-    else:
-      return err "parent block not found"
 
 proc generateBlock(engine: SealingEngineRef,
                    outBlock: var EthBlock,

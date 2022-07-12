@@ -22,7 +22,7 @@ import
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],
   ethash,
-  secp256k1_abi,
+  secp256k1/abi,
   stew/objects
 
 export
