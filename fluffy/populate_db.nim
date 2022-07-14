@@ -222,10 +222,14 @@ proc historyPropagateBlock*(
   else:
     return err(blockDataTable.error)
 
-proc historyGetHashesInRange*(db: SeedDb, nodeId: UInt256, radius: UInt256): seq[BlockHash] =
+proc historyGetHashesInRange*(
+  db: SeedDb,
+  nodeId: UInt256,
+  radius: UInt256,
+  max: int64): seq[BlockHash] =
   var hashes: seq[BlockHash]
-  # specifing `max` as int64.high means all conttent in range will be returned
-  let contentsInRange = db.getContentInRange(nodeId, radius, int64.high, int64(0))
+  # specifing `max` as int.high means all content in range will be returned
+  let contentsInRange = db.getContentInRange(nodeId, radius, max, int64(0))
 
   for c in contentsInRange:
     let keyBytes = ByteList.init(c.contentKey)

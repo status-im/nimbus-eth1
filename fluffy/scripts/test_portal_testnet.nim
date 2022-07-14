@@ -260,14 +260,14 @@ procSuite "Portal testnet tests":
 
     # using UInt256.high as radius means we will get all hashes which are stored
     # in seed db. This is necessary as we do not have canoncial indicies network
-    # and need to now upfront what blockhashes to request
-    let hashes = historyGetHashesInRange(db, UInt256.zero(), UInt256.high)
+    # and need to now upfront what blockhashes to request.
+    # setting max as 100 as this is enough to get all things from db (there
+    # are 81 pieces of content in seed db)
+    let hashes = historyGetHashesInRange(db, UInt256.zero(), UInt256.high, 100)
 
     db.close()
 
     for client in clients:
-      check:
-        1 == 1
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in hashes:
@@ -283,4 +283,4 @@ procSuite "Portal testnet tests":
           tx.fromJson("tx", txObj)
           check txObj.blockHash.get() == hash
 
-        await client.close()
+      await client.close()
