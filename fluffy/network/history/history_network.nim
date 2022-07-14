@@ -333,8 +333,7 @@ proc getBlockBody*(
 
     if bodyContentLookup.isNone():
       warn "Failed fetching block body from the network", hash
-      # move to next loop iteration for next retry
-      continue
+      return none(BlockBody)
 
     let bodyContent = bodyContentLookup.unsafeGet()
 

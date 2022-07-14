@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/sequtils,
+  std/[sequtils, sugar],
   unittest2, testutils, confutils, chronos,
   eth/p2p/discoveryv5/random2, eth/keys,
   ../../nimbus/rpc/[hexstrings, rpc_types],
@@ -15,6 +15,10 @@ import
   ".."/[populate_db, seed_db]
 
 type
+  FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
+
+  CheckCallback[A] = proc (a: A): bool {.gcsafe, raises: [Defect].}
+
   PortalTestnetConf* = object
     nodeCount* {.
       defaultValue: 17
@@ -41,6 +45,42 @@ proc connectToRpcServers(config: PortalTestnetConf):
     clients.add(client)
 
   return clients
+
+proc withRetries[A](
+  f: FutureCallback[A],
+  check: CheckCallback[A],
+  numRetries: int,
+  initialWait: Duration): Future[A] {.async.} =
+  ## Retries given future callback until either:
+  ## it returns successfuly and given check is true
+  ## or
+  ## function reaches max specified retries
+
+  var tries = 0
+  var currentDuration = initialWait
+
+  while true:
+    try:
+      let res = await f()
+
+      if check(res):
+        return res
+    except CatchableError as exc:
+      inc tries
+      if tries > numRetries:
+        # if we reached max number of retries fail
+        raise exc
+
+    # wait before new retry
+    await sleepAsync(currentDuration)
+    currentDuration = currentDuration * 2
+
+# Sometimes we need to wait till data will be propagated over the network.
+# To avoid long sleeps, this combinator can be used to retry some calls until
+# success or until some condition hold (or both)
+proc retryUntilDataPropagated[A](f: FutureCallback[A], c: CheckCallback[A]): Future[A] =
+  # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16 seconds
+  return withRetries(f, c, 5, seconds(1))
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
@@ -188,12 +228,6 @@ procSuite "Portal testnet tests":
     check (await clients[0].portal_history_propagate(dataFile))
     await clients[0].close()
 
-    # Note: Sleeping to make a test work is never great. Here it is needed
-    # because the data needs to propagate over the nodes. What one could do is
-    # add a json-rpc debug proc that returns whether the offer queue is empty or
-    # not. And then poll every node until all nodes have an empty queue.
-    await sleepAsync(60.seconds)
-
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
 
@@ -201,8 +235,15 @@ procSuite "Portal testnet tests":
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in blockData.get().blockHashes():
-        let content = await client.eth_getBlockByHash(
-          hash.ethHashStr(), false)
+
+        # Note: More flexible approach instead of generic retries could be to
+        # add a json-rpc debug proc that returns whether the offer queue is empty or
+        # not. And then poll every node until all nodes have an empty queue.
+
+        let content = await retryUntilDataPropagated(
+          () => client.eth_getBlockByHash(hash.ethHashStr(), false),
+          proc (mc: Option[BlockObject]): bool = return mc.isSome()
+        )
         check content.isSome()
         let blockObj = content.get()
         check blockObj.hash.get() == hash
@@ -216,7 +257,10 @@ procSuite "Portal testnet tests":
           blockHash: some(hash)
         )
 
-        let logs = await client.eth_getLogs(filterOptions)
+        let logs = await retryUntilDataPropagated(
+          () => client.eth_getLogs(filterOptions),
+          proc (mc: seq[FilterLog]): bool = return true
+        )
 
         for l in logs:
           check:
@@ -251,11 +295,6 @@ procSuite "Portal testnet tests":
       check (await clients[0].portal_history_offerContentInNodeRange(dbFile, dbName, receipientId, 64, 0))
       await clients[0].close()
 
-    # each node processes acceppted items asynchronously in queue, give all nodes
-    # some time to process all items
-    # it could be improved by polling on content queue size.
-    await sleepAsync(60.seconds)
-
     let db = SeedDb.new(path = dbFile, name = dbName)
 
     # using UInt256.high as radius means we will get all hashes which are stored
@@ -271,8 +310,10 @@ procSuite "Portal testnet tests":
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in hashes:
-        let content = await client.eth_getBlockByHash(
-          hash.ethHashStr(), false)
+        let content = await retryUntilDataPropagated(
+          () => client.eth_getBlockByHash(hash.ethHashStr(), false),
+          proc (mc: Option[BlockObject]): bool = return mc.isSome()
+        )
         check content.isSome()
 
         let blockObj = content.get()
