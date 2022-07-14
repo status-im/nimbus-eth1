@@ -314,6 +314,11 @@ proc getBlockHeader*(
 proc getBlockBody*(
     n: HistoryNetwork, chainId: uint16, hash: BlockHash, header: BlockHeader):
     Future[Option[BlockBody]] {.async.} =
+
+  # Got header with empty body, no need to make any db calls or network requests
+  if header.txRoot == BLANK_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
+    return some(BlockBody(transactions: @[], uncles: @[]))
+
   let
     (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
     bodyFromDb = n.getContentFromDb(BlockBody, contentId)
@@ -325,8 +330,11 @@ proc getBlockBody*(
   for i in 0..<requestRetries:
     let bodyContentLookup =
       await n.portalProtocol.contentLookup(keyEncoded, contentId)
+
     if bodyContentLookup.isNone():
       warn "Failed fetching block body from the network", hash
+      # move to next loop iteration for next retry
+      continue
 
     let bodyContent = bodyContentLookup.unsafeGet()
 
@@ -493,7 +501,6 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
 
       # content passed here can have less items then contentKeys, but not more.
       for i, contentItem in contentItems:
-        echo contentItem.len()
         let contentKey = contentKeys[i]
         if await n.validateContent(contentItem, contentKey):
           let contentIdOpt = n.portalProtocol.toContentId(contentKey)

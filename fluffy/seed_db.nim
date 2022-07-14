@@ -31,7 +31,7 @@ type
     store: SqStoreRef
     putStmt: SqliteStmt[(array[32, byte], seq[byte], seq[byte]), void]
     getStmt: SqliteStmt[array[32, byte], ContentData]
-    getInRangeStmt: SqliteStmt[(array[32, byte], array[32, byte], int64), ContentDataDist]
+    getInRangeStmt: SqliteStmt[(array[32, byte], array[32, byte], int64, int64), ContentDataDist]
 
 func xorDistance(
   a: openArray[byte],
@@ -94,9 +94,10 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
         SELECT contentid, contentkey, content, xorDistance(?, contentid) as distance
         FROM seed_data
         WHERE distance <= ?
-        LIMIT ?;
+        LIMIT ?
+        OFFSET ?;
       """,
-      (array[32, byte], array[32, byte], int64),
+      (array[32, byte], array[32, byte], int64, int64),
       ContentDataDist
     ).get()
 
@@ -125,13 +126,23 @@ proc getContentInRange*(
     db: SeedDb,
     nodeId: UInt256,
     nodeRadius: UInt256,
-    max: int64): seq[ContentDataDist] =
+    max: int64,
+    offset: int64): seq[ContentDataDist] =
+  ## Return `max` amout of content in `nodeId` range, starting from `offset` postion
 
   var res: seq[ContentDataDist] = @[]
   var cd: ContentDataDist
-  for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max), cd):
+  for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max, offset), cd):
     res.add(cd)
   return res
+
+proc getContentInRange*(
+    db: SeedDb,
+    nodeId: UInt256,
+    nodeRadius: UInt256,
+    max: int64): seq[ContentDataDist] =
+  ## Return `max` amout of content in `nodeId` range, starting from closest content
+  return db.getContentInRange(nodeId, nodeRadius, max, 0)
 
 proc close*(db: SeedDb) =
   db.store.close()

@@ -1329,3 +1329,37 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
         return some(n)
 
   return node
+
+proc resolveWithRadius*(p: PortalProtocol, id: NodeId): Future[Option[(Node, UInt256)]] {.async.} =
+  ## Resolve a `Node` based on provided `NodeId`, also try to establish what
+  ## is known radius of found node.
+  ##
+  ## This will first look in the own routing table. If the node is known, it
+  ## will try to contact if for newer information. If node is not known or it
+  ## does not reply, a lookup is done to see if it can find a (newer) record of
+  ## the node on the network.
+  ##
+  ## If node is found, radius will be first checked in radius cache, it radius
+  ## is not known node will be pinged to establish what is its current radius
+  ##
+
+  let n = await p.resolve(id)
+
+  if n.isNone():
+    return none((Node, UInt256))
+
+  let node = n.unsafeGet()
+
+  let r = p.radiusCache.get(id)
+
+  if r.isSome():
+    return some((node, r.unsafeGet()))
+
+  let pongResult = await p.ping(node)
+
+  if pongResult.isOk():
+    # If pong is successful, radius of the node should definitly be in local
+    # radius cache
+    return some((node, p.radiusCache.get(id).unsafeGet()))
+  else:
+    return none((Node, UInt256))

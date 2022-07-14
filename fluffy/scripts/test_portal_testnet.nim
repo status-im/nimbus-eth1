@@ -12,7 +12,7 @@ import
   ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
-  ../populate_db
+  ".."/[populate_db, seed_db]
 
 type
   PortalTestnetConf* = object
@@ -227,3 +227,60 @@ procSuite "Portal testnet tests":
         #   discard
 
       await client.close()
+
+  asyncTest "Portal History - Propagate content from seed db":
+    let clients = await connectToRpcServers(config)
+
+    var nodeInfos: seq[NodeInfo]
+    for client in clients:
+      let nodeInfo = await client.portal_history_nodeInfo()
+      await client.close()
+      nodeInfos.add(nodeInfo)
+
+    const dbFile = "./fluffy/tests/blocks/"
+    const dbName = "mainnet_blocks_1000000_1000030"
+    let lastNodeIdx = len(nodeInfos) - 1
+
+    # store content in node0 database
+    check (await clients[0].portal_history_storeContentInNodeRange(dbFile, dbName, 64, 0))
+    await clients[0].close()
+
+    # offer content to node 1..63
+    for i in 1..lastNodeIdx:
+      let receipientId = nodeInfos[i].nodeId
+      check (await clients[0].portal_history_offerContentInNodeRange(dbFile, dbName, receipientId, 64, 0))
+      await clients[0].close()
+
+    # each node processes acceppted items asynchronously in queue, give all nodes
+    # some time to process all items
+    # it could be improved by polling on content queue size.
+    await sleepAsync(60.seconds)
+
+    let db = SeedDb.new(path = dbFile, name = dbName)
+
+    # using UInt256.high as radius means we will get all hashes which are stored
+    # in seed db. This is necessary as we do not have canoncial indicies network
+    # and need to now upfront what blockhashes to request
+    let hashes = historyGetHashesInRange(db, UInt256.zero(), UInt256.high)
+
+    db.close()
+
+    for client in clients:
+      check:
+        1 == 1
+      # Note: Once there is the Canonical Indices Network, we don't need to
+      # access this file anymore here for the block hashes.
+      for hash in hashes:
+        let content = await client.eth_getBlockByHash(
+          hash.ethHashStr(), false)
+        check content.isSome()
+
+        let blockObj = content.get()
+        check blockObj.hash.get() == hash
+
+        for tx in blockObj.transactions:
+          var txObj: TransactionObject
+          tx.fromJson("tx", txObj)
+          check txObj.blockHash.get() == hash
+
+        await client.close()

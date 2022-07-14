@@ -14,7 +14,7 @@ import
   # TODO: `NetworkId` should not be in these private types
   eth/p2p/private/p2p_types,
   ../nimbus/[chain_config, genesis],
-  ./content_db,
+  "."/[content_db, seed_db],
   ./network/wire/portal_protocol,
   ./network/history/history_content
 
@@ -221,3 +221,22 @@ proc historyPropagateBlock*(
     return ok()
   else:
     return err(blockDataTable.error)
+
+proc historyGetHashesInRange*(db: SeedDb, nodeId: UInt256, radius: UInt256): seq[BlockHash] =
+  var hashes: seq[BlockHash]
+  # specifing `max` as int64.high means all conttent in range will be returned
+  let contentsInRange = db.getContentInRange(nodeId, radius, int64.high, int64(0))
+
+  for c in contentsInRange:
+    let keyBytes = ByteList.init(c.contentKey)
+    # if this fails, it means it is not valid seed_db for history content, it good
+    # fails fast as either it is db with different content type or for some reason
+    # history seed db has bad keys in it.
+    let keyDecoded = decode(keyBytes).unsafeGet()
+
+    # this silently assumes that we have full headers, bodies, receipts, for given
+    # hashes in SeedDb
+    if keyDecoded.contentType == blockheader:
+      hashes.add(keyDecoded.blockHeaderKey.blockHash)
+
+  return hashes
