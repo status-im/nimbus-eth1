@@ -241,7 +241,15 @@ procSuite "Portal testnet tests":
         # not. And then poll every node until all nodes have an empty queue.
 
         let content = await retryUntilDataPropagated(
-          () => client.eth_getBlockByHash(hash.ethHashStr(), false),
+          proc (): Future[Option[BlockObject]] {.async.} =
+            try:
+              let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+              await client.close()
+              return res
+            except CatchableError as exc:
+              await client.close()
+              raise exc
+          ,
           proc (mc: Option[BlockObject]): bool = return mc.isSome()
         )
         check content.isSome()
@@ -258,7 +266,15 @@ procSuite "Portal testnet tests":
         )
 
         let logs = await retryUntilDataPropagated(
-          () => client.eth_getLogs(filterOptions),
+          proc (): Future[seq[FilterLog]] {.async.} =
+            try:
+              let res = await client.eth_getLogs(filterOptions)
+              await client.close()
+              return res
+            except CatchableError as exc:
+              await client.close()
+              raise exc
+          ,
           proc (mc: seq[FilterLog]): bool = return true
         )
 
@@ -311,7 +327,15 @@ procSuite "Portal testnet tests":
       # access this file anymore here for the block hashes.
       for hash in hashes:
         let content = await retryUntilDataPropagated(
-          () => client.eth_getBlockByHash(hash.ethHashStr(), false),
+          proc (): Future[Option[BlockObject]] {.async.} =
+            try:
+              let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+              await client.close()
+              return res
+            except CatchableError as exc:
+              await client.close()
+              raise exc
+          ,
           proc (mc: Option[BlockObject]): bool = return mc.isSome()
         )
         check content.isSome()
