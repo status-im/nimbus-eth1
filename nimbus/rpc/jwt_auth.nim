@@ -17,10 +17,10 @@ import
   bearssl/rand,
   chronicles,
   chronos,
-  chronos/apps/http/httptable,
-  json_rpc/servers/websocketserver,
+  chronos/apps/http/[httptable, httpserver],
+  json_rpc/rpcserver,
   httputils,
-  websock/types as ws,
+  websock/websock as ws,
   nimcrypto/[hmac, utils],
   stew/[byteutils, objects, results],
   ../config
@@ -40,10 +40,6 @@ const
     32
 
 type
-  JwtAuthHandler* = ##\
-    ## Generic authentication handler, also provided by the web-socket server.
-    RpcWebSocketServerAuth
-
   JwtSharedKey* = ##\
     ## Convenience type, needed quite often
     distinct array[jwtMinSecretLen,byte]
@@ -183,7 +179,7 @@ proc fromHex*(key: var JwtSharedKey, src: string): Result[void,JwtError] =
   except ValueError:
     err(jwtKeyInvalidHexString)
 
-proc jwtGenSecret*(rng: ref HmacDrbgContext): JwtGenSecret =
+proc jwtGenSecret*(rng: ref rand.HmacDrbgContext): JwtGenSecret =
   ## Standard shared key random generator. If a fixed key is needed, a
   ## function like
   ## ::
@@ -255,37 +251,57 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
   except ValueError:
     return err(jwtKeyInvalidHexString)
 
-proc jwtSharedSecret*(rng: ref HmacDrbgContext; config: NimbusConf):
+proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
                     Result[JwtSharedKey, JwtError]
     {.gcsafe, raises: [Defect,JwtExcept].} =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
   safeExecutor("jwtSharedSecret"):
     result = rng.jwtGenSecret.jwtSharedSecret(config)
 
-
-proc jwtAuthHandler*(key: JwtSharedKey): JwtAuthHandler =
-  ## Returns a JWT authentication handler that can be used with an HTTP header
-  ## based call back system as the web socket server.
-  ##
-  ## The argument `key` is captured by the session handler for JWT
-  ## authentication. The function `jwtSharedSecret()` provides such a key.
-  result = proc(req: HttpTable): Result[void,(HttpCode,string)] {.gcsafe.} =
-    let auth = req.getString("Authorization","?")
+proc httpJwtAuth*(key: JwtSharedKey): HttpAuthHook =
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async.} =
+    let auth = req.headers.getString("Authorization", "?")
     if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
-      return err((Http403, "Missing Token"))
+      return await req.respond(Http403, "Missing authorization token")
 
     let rc = auth[7..^1].strip.verifyTokenHS256(key)
     if rc.isOk:
-      return ok()
+      return HttpResponseRef(nil)
 
     debug "Could not authenticate",
-       error = rc.error
+      error = rc.error
 
     case rc.error:
     of jwtTokenValidationError, jwtMethodUnsupported:
-      return err((Http401, "Unauthorized"))
+      return await req.respond(Http401, "Unauthorized access")
     else:
-      return err((Http403, "Malformed Token"))
+      return await req.respond(Http403, "Malformed token")
+
+  result = HttpAuthHook(handler)
+
+proc wsJwtAuth*(key: JwtSharedKey): WsAuthHook =
+  proc handler(req: ws.HttpRequest): Future[bool] {.async.} =
+    let auth = req.headers.getString("Authorization", "?")
+    if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
+      await req.sendResponse(code = Http403, data = "Missing authorization token")
+      return false
+
+    let rc = auth[7..^1].strip.verifyTokenHS256(key)
+    if rc.isOk:
+      return true
+
+    debug "Could not authenticate",
+      error = rc.error
+
+    case rc.error:
+    of jwtTokenValidationError, jwtMethodUnsupported:
+      await req.sendResponse(code = Http403, data = "Unauthorized access")
+    else:
+      await req.sendResponse(code = Http403, data = "Malformed token")
+
+    return false
+
+  result = WsAuthHook(handler)
 
 # ------------------------------------------------------------------------------
 # End

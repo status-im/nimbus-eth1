@@ -168,9 +168,34 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       info "metrics", registry
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
+
+  # Provide JWT authentication handler for websockets
+  let jwtKey = block:
+    # Create or load shared secret
+    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
+    if rc.isErr:
+      error "Failed create or load shared secret",
+        msg = $(rc.unsafeError) # avoid side effects
+      quit(QuitFailure)
+    rc.value
+
+  # Provide JWT authentication handler for rpcHttpServer
+  let httpJwtAuthHook = httpJwtAuth(jwtKey)
+
   # Creating RPC Server
   if conf.rpcEnabled:
-    nimbus.rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
+    let enableAuthHook = conf.engineApiEnabled and
+                         conf.engineApiPort == conf.rpcPort
+
+    let hooks = if enableAuthHook:
+                  @[httpJwtAuthHook]
+                else:
+                  @[]
+
+    nimbus.rpcServer = newRpcHttpServer(
+      [initTAddress(conf.rpcAddress, conf.rpcPort)],
+      authHooks = hooks
+    )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
 
     # Enable RPC APIs based on RPC flags and protocol flags
@@ -188,23 +213,24 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     nimbus.rpcServer.start()
 
-  # Provide JWT authentication handler for websockets
-  let jwtHook = block:
-    # Create or load shared secret
-    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
-    if rc.isErr:
-      error "Failed create or load shared secret",
-        msg = $(rc.unsafeError) # avoid side effects
-      quit(QuitFailure)
-    # Authentcation handler constructor
-    some(rc.value.jwtAuthHandler)
+  # Provide JWT authentication handler for rpcWebsocketServer
+  let wsJwtAuthHook = wsJwtAuth(jwtKey)
 
   # Creating Websocket RPC Server
   if conf.wsEnabled:
+    let enableAuthHook = conf.engineApiWsEnabled and
+                         conf.engineApiWsPort == conf.wsPort
+
+    let hooks = if enableAuthHook:
+                  @[wsJwtAuthHook]
+                else:
+                  @[]
+
     # Construct server object
     nimbus.wsRpcServer = newRpcWebSocketServer(
       initTAddress(conf.wsAddress, conf.wsPort),
-      authHandler = jwtHook)
+      authHooks = hooks
+    )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
     # Enable Websocket RPC APIs based on RPC flags and protocol flags
@@ -260,9 +286,10 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
   if conf.engineApiEnabled:
     if conf.engineApiPort != conf.rpcPort:
-      nimbus.engineApiServer = newRpcHttpServer([
-        initTAddress(conf.engineApiAddress, conf.engineApiPort)
-      ])
+      nimbus.engineApiServer = newRpcHttpServer(
+        [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
+        authHooks = @[httpJwtAuthHook]
+      )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
@@ -275,7 +302,8 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if conf.engineApiWsPort != conf.wsPort:
       nimbus.engineApiWsServer = newRpcWebSocketServer(
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
-        authHandler = jwtHook)
+        authHooks = @[wsJwtAuthHook]
+      )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()

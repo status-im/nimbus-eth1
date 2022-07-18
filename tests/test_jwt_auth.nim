@@ -18,13 +18,16 @@ import
   ./replay/pp,
   confutils/defs,
   chronicles,
-  chronos/apps/http/httpserver,
+  chronos/apps/http/httpclient as chronoshttpclient,
+  chronos/apps/http/httptable,
   eth/[common, keys, p2p],
   json_rpc/rpcserver,
   nimcrypto/[hmac, utils],
   stew/results,
   stint,
-  unittest2
+  unittest2,
+  graphql,
+  graphql/[httpserver, httpclient]
 
 type
   UnGuardedKey =
@@ -112,6 +115,32 @@ proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
 proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
+
+proc createServer(serverAddress: TransportAddress, authHooks: seq[HttpAuthHook] = @[]): GraphqlHttpServerRef =
+  let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
+  var ctx = GraphqlRef.new()
+
+  const schema = """type Query {name: String}"""
+  let r = ctx.parseSchema(schema)
+  if r.isErr:
+    debugEcho r.error
+    return
+
+  let res = GraphqlHttpServerRef.new(
+    graphql = ctx,
+    address = serverAddress,
+    socketFlags = socketFlags,
+    authHooks = authHooks
+  )
+
+  if res.isErr():
+    debugEcho res.error
+    return
+
+  res.get()
+
+proc setupClient(address: TransportAddress): GraphqlHttpClientRef =
+  GraphqlHttpClientRef.new(address, secure = false).get()
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -224,9 +253,15 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
 
     # The wrapper contains the handler function with the captured shared key
-    handler = secret.value.jwtAuthHandler
+    authHook = secret.value.httpJwtAuth
+
+  const
+    serverAddress = initTAddress("127.0.0.1:8547")
+    query = """{ __type(name: "ID") { kind }}"""
 
   suite "EngineAuth: Http/rpc authentication mechanics":
+    let server = createServer(serverAddress, @[authHook])
+    server.start()
 
     test &"JSW/HS256 authentication using shared secret file {fileInfo}":
       # Just to make sure that we made a proper choice. Typically, all
@@ -249,11 +284,18 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let htCode = req.handler
-      noisy.say "***", "result",
-        " htCode=", htCode
+      let client = setupClient(serverAddress)
+      let res = waitFor client.sendRequest(query, req.toList)
+      check res.isOk
+      if res.isErr:
+        noisy.say "***", res.error
+        return
 
-      check htCode.isOk
+      let resp = res.get()
+      check resp.status == 200
+      check resp.reason == "OK"
+      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
+
       setErrorLevel()
 
     test &"JSW/HS256, ditto with protected header variant":
@@ -268,12 +310,21 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       setTraceLevel()
 
       # Run http authorisation request
-      let htCode = req.handler
-      noisy.say "***", "result",
-        " htCode=", htCode
+      let client = setupClient(serverAddress)
+      let res = waitFor client.sendRequest(query, req.toList)
+      check res.isOk
+      if res.isErr:
+        noisy.say "***", res.error
+        return
 
-      check htCode.isOk
+      let resp = res.get()
+      check resp.status == 200
+      check resp.reason == "OK"
+      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
+
       setErrorLevel()
+
+    waitFor server.closeWait()
 
 # ------------------------------------------------------------------------------
 # Main function(s)
