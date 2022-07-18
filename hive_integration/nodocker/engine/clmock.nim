@@ -7,7 +7,7 @@ import
   web3/engine_api_types,
   json_rpc/rpcclient,
   ../../../nimbus/merge/mergeutils,
-  ../../../nimbus/[debug, constants],
+  ../../../nimbus/[constants],
   ./engine_client
 
 # Consensus Layer Client Mock used to sync the Execution Clients once the TTD has been reached

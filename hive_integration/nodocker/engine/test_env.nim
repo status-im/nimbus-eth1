@@ -20,6 +20,7 @@ import
     rpc/p2p,
     rpc/engine_api,
     rpc/debug,
+    rpc/jwt_auth,
     sync/protocol,
     utils/tx_pool
   ],
@@ -38,14 +39,14 @@ type
   EthBlockHeader* = common.BlockHeader
 
   TestEnv* = ref object
-    conf: NimbusConf
+    conf*: NimbusConf
     ctx: EthContext
     ethNode: EthereumNode
     chainDB: BaseChainDB
     chainRef: Chain
-    rpcServer: RpcSocketServer
+    rpcServer: RpcHttpServer
     sealingEngine: SealingEngineRef
-    rpcClient*: RpcSocketClient
+    rpcClient*: RpcHttpClient
     gHeader*: EthBlockHeader
     ttd*: DifficultyInt
     clMock*: CLMocker
@@ -69,8 +70,9 @@ const
   # This is the account that sends vault funding transactions.
   vaultAccountAddr* = hexToByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
   vaultKeyHex = "63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376"
+  jwtSecret = "0x7365637265747365637265747365637265747365637265747365637265747365"
 
-proc setupELClient*(t: TestEnv, chainFile: string) =
+proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
   if chainFile.len > 0:
     # disable clique if we are using PoW chain
     t.conf.networkParams.config.poaEngine = false
@@ -93,7 +95,18 @@ proc setupELClient*(t: TestEnv, chainFile: string) =
   initializeEmptyDb(t.chainDB)
   let txPool = TxPoolRef.new(t.chainDB, t.conf.engineSigner)
 
-  t.rpcServer = newRpcSocketServer(["localhost:" & $t.conf.rpcPort])
+  var key: JwtSharedKey
+  let kr = key.fromHex(jwtSecret)
+  if kr.isErr:
+    echo "JWT SECRET ERROR: ", kr.error
+    quit(QuitFailure)
+
+  let hooks = if enableAuth:
+                @[httpJwtAuth(key)]
+              else:
+                @[]
+
+  t.rpcServer = newRpcHttpServer(["localhost:" & $t.conf.rpcPort], hooks)
   t.sealingEngine = SealingEngineRef.new(
     t.chainRef, t.ctx, t.conf.engineSigner,
     txPool, EngineStopped
@@ -107,13 +120,13 @@ proc setupELClient*(t: TestEnv, chainFile: string) =
   if chainFile.len > 0:
     if not importRlpBlock(chainFolder / chainFile, t.chainDB):
       quit(QuitFailure)
-  else:
+  elif not enableAuth:
     t.sealingEngine.start()
 
   t.rpcServer.start()
 
-  t.rpcClient = newRpcSocketClient()
-  waitFor t.rpcClient.connect("localhost", t.conf.rpcPort)
+  t.rpcClient = newRpcHttpClient()
+  waitFor t.rpcClient.connect("localhost", t.conf.rpcPort, false)
   t.gHeader = toGenesisHeader(t.conf.networkParams)
 
   let kRes = PrivateKey.fromHex(vaultKeyHex)
@@ -123,16 +136,16 @@ proc setupELClient*(t: TestEnv, chainFile: string) =
 
   t.vaultKey = kRes.get
 
-proc setupELClient*(chainFile: string): TestEnv =
+proc setupELClient*(chainFile: string, enableAuth: bool): TestEnv =
   result = TestEnv(
     conf: makeConfig(@["--engine-signer:658bdf435d810c91414ec09147daa6db62406379", "--custom-network:" & genesisFile])
   )
-  setupELClient(result, chainFile)
+  setupELClient(result, chainFile, enableAuth)
 
 proc stopELClient*(t: TestEnv) =
   waitFor t.rpcClient.close()
   waitFor t.sealingEngine.stop()
-  t.rpcServer.stop()
+  #waitFor t.rpcServer.stop()
   waitFor t.rpcServer.closeWait()
 
 # TTD is the value specified in the TestSpec + Genesis.Difficulty

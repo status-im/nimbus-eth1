@@ -1,15 +1,20 @@
 import
-  test_env,
-  engine_tests,
+  "."/[types, test_env, engine_tests, auths_tests],
   unittest2,
   ../sim_utils
+
+proc combineTests(): seq[TestSpec] =
+  result = @engineTestList
+  result.add @authTestList
+
+const testList = combineTests()
 
 proc main() =
   var stat: SimStat
   let start = getTime()
 
-  for x in engineTestList:
-    var t = setupELClient(x.chainFile)
+  for x in testList:
+    var t = setupELClient(x.chainFile, x.enableAuth)
     t.setRealTTD(x.ttd)
     if x.slotsToFinalized != 0:
       t.slotsToFinalized(x.slotsToFinalized)

@@ -1,60 +1,17 @@
 import
   std/tables,
-  test_env,
   stew/byteutils,
   chronicles,
   unittest2,
   nimcrypto,
   chronos,
-  ./helper,
+  "."/[test_env, helper, types],
   ../../../nimbus/transaction,
   ../../../nimbus/rpc/rpc_types,
   ../../../nimbus/merge/mergeutils
 
-type
-  TestSpec* = object
-    name*: string
-    run*: proc(t: TestEnv): TestStatus
-    ttd*: int64
-    chainFile*: string
-    slotsToFinalized*: int
-    slotsToSafe*: int
-
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
-
-template testCond(expr: untyped) =
-  if not (expr):
-    when result is bool:
-      return false
-    else:
-      return TestStatus.Failed
-
-template testCond(expr, body: untyped) =
-  if not (expr):
-    body
-    when result is bool:
-      return false
-    else:
-      return TestStatus.Failed
-
-proc `$`(x: Option[Hash256]): string =
-  if x.isNone:
-    "none"
-  else:
-    $x.get()
-
-proc `$`(x: Option[BlockHash]): string =
-  if x.isNone:
-    "none"
-  else:
-    $x.get()
-
-proc `$`(x: Option[PayloadID]): string =
-  if x.isNone:
-    "none"
-  else:
-    x.get().toHex
 
 proc `==`(a: Option[BlockHash], b: Option[Hash256]): bool =
   if a.isNone and b.isNone:
