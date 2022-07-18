@@ -8,7 +8,8 @@
 {.push raises: [Defect].}
 
 import
-  std/options,
+  std/[options, os],
+  strutils,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint
@@ -53,6 +54,13 @@ template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
+
+proc getDbBasePathAndName*(path: string): Option[(string, string)] =
+  let (basePath, name) = splitPath(path)
+  if len(basePath) > 0 and len(name) > 0 and name.endsWith(".sqlite3"):
+    return some((basePath, name))
+  else:
+    return none((string, string))
 
 proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb =
   let db =
@@ -128,7 +136,9 @@ proc getContentInRange*(
     nodeRadius: UInt256,
     max: int64,
     offset: int64): seq[ContentDataDist] =
-  ## Return `max` amout of content in `nodeId` range, starting from `offset` postion
+  ## Return `max` amount of content in `nodeId` range, starting from `offset` position
+  ## i.e using `offset` 0 will return `max` closest items, using `offset` `10` will
+  ## will retrun `max` closest items except first 10
 
   var res: seq[ContentDataDist] = @[]
   var cd: ContentDataDist
@@ -141,7 +151,7 @@ proc getContentInRange*(
     nodeId: UInt256,
     nodeRadius: UInt256,
     max: int64): seq[ContentDataDist] =
-  ## Return `max` amout of content in `nodeId` range, starting from closest content
+  ## Return `max` amount of content in `nodeId` range, starting from closest content
   return db.getContentInRange(nodeId, nodeRadius, max, 0)
 
 proc close*(db: SeedDb) =

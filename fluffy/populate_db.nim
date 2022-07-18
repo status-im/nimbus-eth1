@@ -228,8 +228,8 @@ proc historyGetHashesInRange*(
   radius: UInt256,
   max: int64): seq[BlockHash] =
   var hashes: seq[BlockHash]
-  # specifing `max` as int.high means all content in range will be returned
-  let contentsInRange = db.getContentInRange(nodeId, radius, max, int64(0))
+
+  let contentsInRange = db.getContentInRange(nodeId, radius, max)
 
   for c in contentsInRange:
     let keyBytes = ByteList.init(c.contentKey)

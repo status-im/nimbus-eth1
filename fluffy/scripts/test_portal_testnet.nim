@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[sequtils, sugar],
+  os,
+  std/sequtils,
   unittest2, testutils, confutils, chronos,
   eth/p2p/discoveryv5/random2, eth/keys,
   ../../nimbus/rpc/[hexstrings, rpc_types],
@@ -297,18 +298,19 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dbFile = "./fluffy/tests/blocks/"
-    const dbName = "mainnet_blocks_1000000_1000030"
+    const dbPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000030.sqlite3"
+    let (dbFile, dbName) = splitPath(dbPath)
+
     let lastNodeIdx = len(nodeInfos) - 1
 
     # store content in node0 database
-    check (await clients[0].portal_history_storeContentInNodeRange(dbFile, dbName, 64, 0))
+    check (await clients[0].portal_history_storeContentInNodeRange(dbPath, 64, 0))
     await clients[0].close()
 
     # offer content to node 1..63
     for i in 1..lastNodeIdx:
       let receipientId = nodeInfos[i].nodeId
-      check (await clients[0].portal_history_offerContentInNodeRange(dbFile, dbName, receipientId, 64, 0))
+      check (await clients[0].portal_history_offerContentInNodeRange(dbPath, receipientId, 64, 0))
       await clients[0].close()
 
     let db = SeedDb.new(path = dbFile, name = dbName)

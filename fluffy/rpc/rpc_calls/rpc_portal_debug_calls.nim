@@ -5,13 +5,11 @@ proc portal_history_propagate(dataFile: string): bool
 proc portal_history_propagateBlock(dataFile: string, blockHash: string): bool
 proc portal_history_storeContentInNodeRange(
   dbPath: string,
-  dbName: string,
   max: uint32,
   starting: uint32): bool
 
 proc portal_history_offerContentInNodeRange(
   dbPath: string,
-  dbName: string,
   nodeId: NodeId,
   max: uint32,
   starting: uint32): bool
