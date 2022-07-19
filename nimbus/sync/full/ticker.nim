@@ -34,6 +34,8 @@ type
 
   Ticker* = ref object
     nBuddies:  int
+    lastStats: TickerStats
+    lastTick:  uint64
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
     tick:      uint64 # more than 5*10^11y before wrap when ticking every sec
@@ -41,6 +43,7 @@ type
 const
   tickerStartDelay = 100.milliseconds
   tickerLogInterval = 1.seconds
+  tickerLogSuppressMax = 100
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -55,21 +58,25 @@ proc pp(n: Option[BlockNumber]): string =
 proc setLogTicker(t: Ticker; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: Ticker) {.gcsafe.} =
-  let
-    data = t.statsCb()
+  let data = t.statsCb()
 
-    persistent = data.topPersistent.pp
-    staged = data.nextStaged.pp
-    unprocessed = data.nextUnprocessed.pp
-    queued = data.nStagedQueue
-    reOrg = if data.reOrg: "t" else: "f"
+  if data != t.lastStats or
+     t.lastTick + tickerLogSuppressMax < t.tick:
+    t.lastStats = data
+    t.lastTick = t.tick
+    let
+      persistent = data.topPersistent.pp
+      staged = data.nextStaged.pp
+      unprocessed = data.nextUnprocessed.pp
+      queued = data.nStagedQueue
+      reOrg = if data.reOrg: "t" else: "f"
 
-    buddies = t.nBuddies
-    tick = t.tick.toSI
-    mem = getTotalMem().uint.toSI
+      buddies = t.nBuddies
+      tick = t.tick.toSI
+      mem = getTotalMem().uint.toSI
 
-  info "Sync statistics", tick, buddies,
-    persistent, unprocessed, staged, queued, reOrg, mem
+    info "Sync statistics", tick, buddies,
+      persistent, unprocessed, staged, queued, reOrg, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

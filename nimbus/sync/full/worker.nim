@@ -45,15 +45,15 @@
 ##
 ## Beware of `<staged>` overflow
 ## -----------------------------
-## When the `<staged>` queue gets too long ini non-backtrack/re-org mode, this
-## can theoretically happen if there is a gap between the least `<unprocessed>`
-## block number and the least `<staged>` block number. Then a mechanism is
-## invoked where `<unprocessed>` block range is updated.
+## When the `<staged>` queue gets too long in non-backtrack/re-org mode, this
+## may be caused by a gap between the least `<unprocessed>` block number and
+## the least `<staged>` block number. Then a mechanism is invoked where
+## `<unprocessed>` block range is updated.
 ##
-## For backtrack/re-org the system runs in single instance mode following back
-## parent hash references. So updating `<unprocessed>` block numbers would have
-## no effect. In that case, the record with the largest block numbers are
-## deleted from the `<unprocessed>` ranges list.
+## For backtrack/re-org the system runs in single instance mode tracing
+## backvards parent hash references. So updating `<unprocessed>` block numbers
+## would have no effect. In that case, the record with the largest block
+## numbers are deleted from the `<staged>` list.
 ##
 
 import
@@ -106,7 +106,7 @@ type
     SortedSetWalkRef[BlockNumber,WorkItemRef]
 
   WorkItemRef* = ref object
-    ## Block worker item wrapping for downloading a block range
+    ## Block worker item wrapper for downloading a block range
     blocks: BlockRange               ## Block numbers to fetch
     topHash: Option[Hash256]         ## Fetch by top hash rather than blocks
     headers: seq[BlockHeader]        ## Block headers received
@@ -118,6 +118,7 @@ type
     bestNumber: Option[BlockNumber]  ## Largest block number reported
 
   CtxDataEx = ref object of CtxDataRef
+    ## Globally shared data extension
     backtrack: Option[Hash256]       ## Find reverse block after re-org
     unprocessed: BlockRangeSetRef    ## Block ranges to fetch
     staged: WorkItemQueue            ## Blocks fetched but not stored yet
@@ -249,7 +250,7 @@ template safeTransport(buddy: BuddyRef; info: static[string]; code: untyped) =
   try:
     code
   except TransportError as e:
-    error info & " => stop", error=($e.name), msg=e.msg
+    error info & ", stop", error=($e.name), msg=e.msg
     buddy.ctrl.stopped = true
 
 
@@ -359,7 +360,7 @@ proc getBestNumber(buddy: BuddyRef): Future[Result[BlockNumber,void]]{.async.} =
 
 
 proc agreesOnChain(buddy: BuddyRef; other: Peer): Future[bool] {.async.} =
-  ## Returns `true` if one of the peers `buddy.peer` or `p` acknowledges
+  ## Returns `true` if one of the peers `buddy.peer` or `other` acknowledges
   ## existence of the best block of the other peer.
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `peersAgreeOnChain()`
@@ -367,6 +368,7 @@ proc agreesOnChain(buddy: BuddyRef; other: Peer): Future[bool] {.async.} =
     peer = buddy.peer
     start = peer
     fetch = other
+  # Make sure that `fetch` has not the smaller difficulty.
   if fetch.state(eth).bestDifficulty < start.state(eth).bestDifficulty:
     swap(fetch, start)
 
@@ -555,7 +557,7 @@ proc fetchHeaders(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
 
   # Verify start block number
   elif hdrResp.get.headers[0].blockNumber != wi.blocks.minPt:
-    trace "Header range starts with wrong block number => zombify", peer,
+    trace "Header range starts with wrong block number", peer,
       startBlock=hdrResp.get.headers[0].blockNumber,
       requestedBlock=wi.blocks.minPt
     buddy.ctrl.zombie = true
@@ -733,7 +735,7 @@ proc processStaged(buddy: BuddyRef): bool =
     if chainDb.getBlockHeader(parentHoN, parent):
       # First block parent is ok, so there might be other problems. Re-fetch
       # the blocks from another peer.
-      trace "Storing persistent blocks failed => zombify", peer,
+      trace "Storing persistent blocks failed", peer,
         range=($wi.blocks)
       discard buddy.pool.unprocessed.merge(wi.blocks)
       buddy.ctrl.zombie = true
@@ -780,7 +782,7 @@ proc workerRelease*(ctx: CtxRef) =
     ctx.pool.ticker.stop()
 
 proc start*(buddy: BuddyRef): bool =
-  ## Initialise `WorkerBuddy` to support `workerBlockHeaders()` calls
+  ## Initialise worker peer
   if buddy.peer.supports(protocol.eth) and
      buddy.peer.state(protocol.eth).initialized:
     buddy.data = BuddyDataEx.new() # `local` extension
@@ -803,11 +805,11 @@ proc runSingle*(buddy: BuddyRef) {.async.} =
   ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
   ## is set `false` which is the default mode. This flag is updated by the
   ## worker when deemed appropriate.
-  ## * For all workers, there can be only one `runSingle()` function activated
-  ##   simultaneously.
-  ## * There will be no `runPool()` function iteration activated simultaneously.
-  ## * There will be no `runMulti()` function activated for the same peer
+  ## * For all workers, there can be only one `runSingle()` function active
+  ##   simultaneously for all worker peers.
+  ## * There will be no `runMulti()` function active for the same worker peer
   ##   simultaneously
+  ## * There will be no `runPool()` iterator active simultaneously.
   ##
   ## Note that this function runs in `async` mode.
   ##
@@ -854,13 +856,12 @@ proc runSingle*(buddy: BuddyRef) {.async.} =
 proc runPool*(buddy: BuddyRef) =
   ## Ocne started, the function `runPool()` is called for all worker peers in
   ## a row (as the body of an iteration.) There will be no other worker peer
-  ## function be activated simultaneously.
+  ## functions activated simultaneously.
   ##
-  ## This instance is activated if the global flag `buddy.ctx.poolMode` is set
+  ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
   ## `true` (default is `false`.) It is the responsibility of the `runPool()`
   ## instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-  ## instance invoked as the number of active instances is unknown to the
-  ## worker peer.
+  ## peer instance as the number of active instances is unknown to `runPool()`.
   ##
   ## Note that this function does not run in `async` mode.
   ##
