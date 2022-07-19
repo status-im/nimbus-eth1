@@ -58,7 +58,12 @@ template expectDb(x: auto): untyped =
 proc getDbBasePathAndName*(path: string): Option[(string, string)] =
   let (basePath, name) = splitPath(path)
   if len(basePath) > 0 and len(name) > 0 and name.endsWith(".sqlite3"):
-    return some((basePath, name))
+    let nameAndExt = rsplit(name, ".", 1)
+
+    if len(nameAndExt) < 2 and len(nameAndExt[0]) == 0:
+      return none((string, string))
+
+    return some((basePath, nameAndExt[0]))
   else:
     return none((string, string))
 

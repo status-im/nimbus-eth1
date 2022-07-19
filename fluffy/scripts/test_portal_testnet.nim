@@ -298,56 +298,66 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dbPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000030.sqlite3"
-    let (dbFile, dbName) = splitPath(dbPath)
+    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000030.json"
 
-    let lastNodeIdx = len(nodeInfos) - 1
+    # path for temporary db, separate dir is used as sqlite usually also creates
+    # wal files, and we do not want for those to linger in filesystem
+    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000000_1000030.sqlite3"
 
-    # store content in node0 database
-    check (await clients[0].portal_history_storeContentInNodeRange(dbPath, 64, 0))
-    await clients[0].close()
+    let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
 
-    # offer content to node 1..63
-    for i in 1..lastNodeIdx:
-      let receipientId = nodeInfos[i].nodeId
-      check (await clients[0].portal_history_offerContentInNodeRange(dbPath, receipientId, 64, 0))
-      await clients[0].close()
+    let blockData = readBlockDataTable(dataPath)
+    check blockData.isOk()
+    let bd = blockData.get()
 
+    createDir(dbFile)
     let db = SeedDb.new(path = dbFile, name = dbName)
 
-    # using UInt256.high as radius means we will get all hashes which are stored
-    # in seed db. This is necessary as we do not have canoncial indicies network
-    # and need to now upfront what blockhashes to request.
-    # setting max as 100 as this is enough to get all things from db (there
-    # are 81 pieces of content in seed db)
-    let hashes = historyGetHashesInRange(db, UInt256.zero(), UInt256.high, 100)
+    try:
+      let lastNodeIdx = len(nodeInfos) - 1
 
-    db.close()
+      # populate temp database from json file
+      for t in blocksContent(bd, false):
+        db.put(t[0], t[1], t[2])
 
-    for client in clients:
-      # Note: Once there is the Canonical Indices Network, we don't need to
-      # access this file anymore here for the block hashes.
-      for hash in hashes:
-        let content = await retryUntilDataPropagated(
-          proc (): Future[Option[BlockObject]] {.async.} =
-            try:
-              let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
-              await client.close()
-              return res
-            except CatchableError as exc:
-              await client.close()
-              raise exc
-          ,
-          proc (mc: Option[BlockObject]): bool = return mc.isSome()
-        )
-        check content.isSome()
 
-        let blockObj = content.get()
-        check blockObj.hash.get() == hash
+      # store content in node0 database
+      check (await clients[0].portal_history_storeContentInNodeRange(tempDbPath, 100, 0))
+      await clients[0].close()
 
-        for tx in blockObj.transactions:
-          var txObj: TransactionObject
-          tx.fromJson("tx", txObj)
-          check txObj.blockHash.get() == hash
+      # offer content to node 1..63
+      for i in 1..lastNodeIdx:
+        let receipientId = nodeInfos[i].nodeId
+        check (await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0))
+        await clients[0].close()
 
-      await client.close()
+      for client in clients:
+        # Note: Once there is the Canonical Indices Network, we don't need to
+        # access this file anymore here for the block hashes.
+        for hash in bd.blockHashes():
+          let content = await retryUntilDataPropagated(
+            proc (): Future[Option[BlockObject]] {.async.} =
+              try:
+                let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+                await client.close()
+                return res
+              except CatchableError as exc:
+                await client.close()
+                raise exc
+            ,
+            proc (mc: Option[BlockObject]): bool = return mc.isSome()
+          )
+          check content.isSome()
+
+          let blockObj = content.get()
+          check blockObj.hash.get() == hash
+
+          for tx in blockObj.transactions:
+            var txObj: TransactionObject
+            tx.fromJson("tx", txObj)
+            check txObj.blockHash.get() == hash
+
+        await client.close()
+    finally:
+      db.close()
+      removeDir(dbFile)

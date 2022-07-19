@@ -118,6 +118,15 @@ iterator blocks*(
     else:
       error "Failed reading block from block data", error = res.error
 
+iterator blocksContent*(
+    blockData: BlockDataTable, verify = false): (ContentId, seq[byte], seq[byte]) =
+  for b in blocks(blockData, verify):
+    for value in b:
+      if len(value[1]) > 0:
+        let ckBytes = history_content.encode(value[0])
+        let contentId = history_content.toContentId(ckBytes)
+        yield (contentId, ckBytes.asSeq(), value[1])
+
 func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   var rlp =
     try:
@@ -221,26 +230,3 @@ proc historyPropagateBlock*(
     return ok()
   else:
     return err(blockDataTable.error)
-
-proc historyGetHashesInRange*(
-  db: SeedDb,
-  nodeId: UInt256,
-  radius: UInt256,
-  max: int64): seq[BlockHash] =
-  var hashes: seq[BlockHash]
-
-  let contentsInRange = db.getContentInRange(nodeId, radius, max)
-
-  for c in contentsInRange:
-    let keyBytes = ByteList.init(c.contentKey)
-    # if this fails, it means it is not valid seed_db for history content, it good
-    # fails fast as either it is db with different content type or for some reason
-    # history seed db has bad keys in it.
-    let keyDecoded = decode(keyBytes).unsafeGet()
-
-    # this silently assumes that we have full headers, bodies, receipts, for given
-    # hashes in SeedDb
-    if keyDecoded.contentType == blockheader:
-      hashes.add(keyDecoded.blockHeaderKey.blockHash)
-
-  return hashes
