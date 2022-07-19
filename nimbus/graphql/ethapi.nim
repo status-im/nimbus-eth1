@@ -1312,11 +1312,17 @@ proc setupGraphqlContext*(chainDB: BaseChainDB,
 proc setupGraphqlHttpServer*(conf: NimbusConf,
                              chainDB: BaseChainDB,
                              ethNode: EthereumNode,
-                             txPool: TxPoolRef): GraphqlHttpServerRef =
+                             txPool: TxPoolRef,
+                             authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
   let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
   let address = initTAddress(conf.graphqlAddress, conf.graphqlPort)
-  let sres = GraphqlHttpServerRef.new(ctx, address, socketFlags = socketFlags)
+  let sres = GraphqlHttpServerRef.new(
+      ctx,
+      address,
+      socketFlags = socketFlags,
+      authHooks = authHooks
+  )
   if sres.isErr():
     echo sres.error
     quit(QuitFailure)

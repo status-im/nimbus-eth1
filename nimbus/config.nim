@@ -7,7 +7,13 @@
 # those terms.
 
 import
-  std/[options, strutils, times, os],
+  std/[
+    options,
+    strutils,
+    times,
+    os,
+    uri
+  ],
   pkg/[
     chronicles,
     confutils,
@@ -300,45 +306,6 @@ type
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
 
-    terminalTotalDifficulty* {.
-      desc: "The terminal total difficulty of the eth2 merge transition block." &
-            " It takes precedence over terminalTotalDifficulty in config file."
-      name: "terminal-total-difficulty" .}: Option[UInt256]
-
-    engineApiEnabled* {.
-      desc: "Enable the Engine API"
-      defaultValue: false
-      name: "engine-api" .}: bool
-
-    engineApiPort* {.
-      desc: "Listening port for the Engine API"
-      defaultValue: defaultEngineApiPort
-      defaultValueDesc: $defaultEngineApiPort
-      name: "engine-api-port" .}: Port
-
-    engineApiAddress* {.
-      desc: "Listening address for the Engine API"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "engine-api-address" .}: ValidIpAddress
-
-    engineApiWsEnabled* {.
-      desc: "Enable the WebSocket Engine API"
-      defaultValue: false
-      name: "engine-api-ws" .}: bool
-
-    engineApiWsPort* {.
-      desc: "Listening port for the WebSocket Engine API"
-      defaultValue: defaultEngineApiWsPort
-      defaultValueDesc: $defaultEngineApiWsPort
-      name: "engine-api-ws-port" .}: Port
-
-    engineApiWsAddress* {.
-      desc: "Listening address for the WebSocket Engine API"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "engine-api-ws-address" .}: ValidIpAddress
-
     nodeKeyHex* {.
       desc: "P2P node private key (as 32 bytes hex string)"
       defaultValue: ""
@@ -408,6 +375,51 @@ type
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
+
+      engineApiEnabled* {.
+        desc: "Enable the Engine API"
+        defaultValue: false
+        name: "engine-api" .}: bool
+
+      engineApiPort* {.
+        desc: "Listening port for the Engine API"
+        defaultValue: defaultEngineApiPort
+        defaultValueDesc: $defaultEngineApiPort
+        name: "engine-api-port" .}: Port
+
+      engineApiAddress* {.
+        desc: "Listening address for the Engine API"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "engine-api-address" .}: ValidIpAddress
+
+      engineApiWsEnabled* {.
+        desc: "Enable the WebSocket Engine API"
+        defaultValue: false
+        name: "engine-api-ws" .}: bool
+
+      engineApiWsPort* {.
+        desc: "Listening port for the WebSocket Engine API"
+        defaultValue: defaultEngineApiWsPort
+        defaultValueDesc: $defaultEngineApiWsPort
+        name: "engine-api-ws-port" .}: Port
+
+      engineApiWsAddress* {.
+        desc: "Listening address for the WebSocket Engine API"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "engine-api-ws-address" .}: ValidIpAddress
+
+      terminalTotalDifficulty* {.
+        desc: "The terminal total difficulty of the eth2 merge transition block." &
+              " It takes precedence over terminalTotalDifficulty in config file."
+        name: "terminal-total-difficulty" .}: Option[UInt256]
+
+      allowedOrigins* {.
+        desc: "Comma separated list of domains from which to accept cross origin requests"
+        defaultValue: @[]
+        defaultValueDesc: "*"
+        name: "allowed-origins" .}: seq[string]
 
       # github.com/ethereum/execution-apis/
       #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
@@ -641,6 +653,10 @@ proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
   result.append(conf.staticPeers)
   loadStaticPeersFile(string conf.staticPeersFile, result)
 
+proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
+  for item in repeatingList(conf.allowedOrigins):
+    result.add parseUri(item)
+
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   {.push warning[ProveInit]: off.}
   result = NimbusConf.load(
@@ -672,12 +688,12 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   if result.customNetwork.isNone:
     result.networkParams = networkParams(result.networkId)
 
-  # ttd from cli takes precedence over ttd from config-file
-  if result.terminalTotalDifficulty.isSome:
-    result.networkParams.config.terminalTotalDifficulty =
-      result.terminalTotalDifficulty
-
   if result.cmd == noCommand:
+    # ttd from cli takes precedence over ttd from config-file
+    if result.terminalTotalDifficulty.isSome:
+      result.networkParams.config.terminalTotalDifficulty =
+        result.terminalTotalDifficulty
+
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort

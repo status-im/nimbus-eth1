@@ -27,7 +27,7 @@ import
   ./db/[storage_types, db_chain, select_backend],
   ./graphql/ethapi,
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
-  ./rpc/[common, debug, engine_api, jwt_auth, p2p],
+  ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
   ./sync/[fast, protocol, snap],
   ./utils/tx_pool
 
@@ -178,9 +178,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         msg = $(rc.unsafeError) # avoid side effects
       quit(QuitFailure)
     rc.value
+  let allowedOrigins = conf.getAllowedOrigins()
 
   # Provide JWT authentication handler for rpcHttpServer
   let httpJwtAuthHook = httpJwtAuth(jwtKey)
+  let httpCorsHook = httpCors(allowedOrigins)
 
   # Creating RPC Server
   if conf.rpcEnabled:
@@ -188,9 +190,9 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                          conf.engineApiPort == conf.rpcPort
 
     let hooks = if enableAuthHook:
-                  @[httpJwtAuthHook]
+                  @[httpJwtAuthHook, httpCorsHook]
                 else:
-                  @[]
+                  @[httpCorsHook]
 
     nimbus.rpcServer = newRpcHttpServer(
       [initTAddress(conf.rpcAddress, conf.rpcPort)],
@@ -215,6 +217,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
   # Provide JWT authentication handler for rpcWebsocketServer
   let wsJwtAuthHook = wsJwtAuth(jwtKey)
+  let wsCorsHook = wsCors(allowedOrigins)
 
   # Creating Websocket RPC Server
   if conf.wsEnabled:
@@ -222,9 +225,9 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                          conf.engineApiWsPort == conf.wsPort
 
     let hooks = if enableAuthHook:
-                  @[wsJwtAuthHook]
+                  @[wsJwtAuthHook, wsCorsHook]
                 else:
-                  @[]
+                  @[wsCorsHook]
 
     # Construct server object
     nimbus.wsRpcServer = newRpcWebSocketServer(
@@ -244,7 +247,13 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.wsRpcServer.start()
 
   if conf.graphqlEnabled:
-    nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode, nimbus.txPool)
+    nimbus.graphqlServer = setupGraphqlHttpServer(
+      conf,
+      chainDB,
+      nimbus.ethNode,
+      nimbus.txPool,
+      @[httpCorsHook]
+    )
     nimbus.graphqlServer.start()
 
   if conf.engineSigner != ZERO_ADDRESS:
@@ -288,7 +297,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if conf.engineApiPort != conf.rpcPort:
       nimbus.engineApiServer = newRpcHttpServer(
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
-        authHooks = @[httpJwtAuthHook]
+        authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
@@ -302,7 +311,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if conf.engineApiWsPort != conf.wsPort:
       nimbus.engineApiWsServer = newRpcWebSocketServer(
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
-        authHooks = @[wsJwtAuthHook]
+        authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
