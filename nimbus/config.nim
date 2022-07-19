@@ -131,6 +131,10 @@ type
     V4
     V5
 
+  SyncMode* {.pure.} = enum
+    Default
+    Snap                          ## Beware, experimental
+
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
 
@@ -156,10 +160,15 @@ type
       abbr : "p"
       name: "prune-mode" }: PruneMode
 
-    snapSync* {.
-      desc: "Enable experimental new sync algorithms"
-      defaultValue: false
-      name: "snap-sync" .}: bool
+    syncMode* {.
+      desc: "Specify particular blockchain sync mode."
+      longDesc:
+        "- default -- legacy sync mode\n" &
+        "- snap    -- experimental snap mode (development only)\n"
+      defaultValue: SyncMode.Default
+      defaultValueDesc: $SyncMode.Default
+      abbr: "y"
+      name: "sync-mode" .}: SyncMode
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"

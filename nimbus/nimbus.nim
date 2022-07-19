@@ -122,8 +122,12 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability protocol.eth
-    if conf.snapSync:
+    case conf.syncMode:
+    of SyncMode.Snap:
       nimbus.ethNode.addCapability protocol.snap
+    of SyncMode.Default:
+      discard
+
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 
@@ -136,8 +140,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.chainRef.verifyFrom = verifyFrom
 
   # Early-initialise "--snap-sync" before starting any network connections.
-  if ProtocolFlag.Eth in protocols and conf.snapSync:
-    SnapSyncCtx.new(nimbus.ethNode, conf.maxPeers).start
+  if ProtocolFlag.Eth in protocols:
+    let tickerOK =
+      conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
+    case conf.syncMode:
+    of SyncMode.Snap:
+      SnapSyncRef.init(nimbus.ethNode, conf.maxPeers).start
+    of SyncMode.Default:
+      discard
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -146,9 +156,15 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
+    var waitForPeers = true
+    case conf.syncMode:
+    of SyncMode.Snap:
+      waitForPeers = false
+    of SyncMode.Default:
+      discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = not conf.snapSync)
+      waitForPeers = waitForPeers)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
@@ -361,8 +377,11 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     localServices(nimbus, conf, chainDB, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
-      if not conf.snapSync:
+      case conf.syncMode:
+      of SyncMode.Default:
         FastSyncCtx.new(nimbus.ethNode).start
+      of SyncMode.Snap:
+        discard
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C
