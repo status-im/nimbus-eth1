@@ -312,7 +312,7 @@ proc init*(
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
-  if chainDB.getBlockHeader(parent.parentHash, parent):
+  if chainDB.getBlockHeader(header.parentHash, parent):
     vmState.init(
       parent      = parent,
       header      = header,
