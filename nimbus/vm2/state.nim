@@ -228,10 +228,12 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ## This is a variant of the `reinit()` function above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
-  self.reinit(
-    parent    = self.chainDB.getBlockHeader(header.parentHash),
-    header    = header,
-    pruneTrie = pruneTrie)
+  var parent: BlockHeader
+  if self.chainDB.getBlockHeader(header.parentHash, parent):
+    return self.reinit(
+      parent    = parent,
+      header    = header,
+      pruneTrie = pruneTrie)
 
 
 proc init*(
@@ -299,6 +301,25 @@ proc new*(
     chainDB     = chainDB,
     tracerFlags = tracerFlags,
     pruneTrie   = pruneTrie)
+
+proc init*(
+      vmState:     BaseVMState;
+      header:      BlockHeader;     ## header with tx environment data fields
+      chainDB:     BaseChainDB;     ## block chain database
+      tracerFlags: set[TracerFlags] = {};
+      pruneTrie:   bool = true): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `new()` which does not throw an exception on a dangling
+  ## `BlockHeader` parent hash reference.
+  var parent: BlockHeader
+  if chainDB.getBlockHeader(parent.parentHash, parent):
+    vmState.init(
+      parent      = parent,
+      header      = header,
+      chainDB     = chainDB,
+      tracerFlags = tracerFlags,
+      pruneTrie   = pruneTrie)
+    return true
 
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
   vmState.minerAddress
