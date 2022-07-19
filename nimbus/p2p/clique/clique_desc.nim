@@ -24,10 +24,10 @@ import
   ../../constants,
   ./clique_cfg,
   ./clique_defs,
-  ./snapshot/[lru_snaps, snapshot_desc],
+  ./snapshot/snapshot_desc,
   chronicles,
   eth/[common, keys, rlp],
-  stew/results
+  stew/[keyed_queue, results]
 
 const
   enableCliqueAsyncLock* = ##\
@@ -51,6 +51,14 @@ type
 
   Proposals = Table[EthAddress,bool]
 
+  CliqueSnapKey* = ##\
+    ## Internal key used for the LRU cache (derived from Hash256).
+    array[32,byte]
+
+  CliqueSnapLru = ##\
+    ## Snapshots cache
+    KeyedQueue[CliqueSnapKey,Snapshot]
+
   CliqueFailed* = ##\
     ## Last failed state: block hash and error result
     (Hash256, CliqueError)
@@ -71,7 +79,7 @@ type
     cfg: CliqueCfg ##\
       ## Common engine parameters to fine tune behaviour
 
-    recents: LruSnaps ##\
+    recents: CliqueSnapLru ##\
       ## Snapshots cache for recent block search
 
     snapshot: Snapshot ##\
@@ -114,7 +122,6 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
   result = Clique(cfg:       cfg,
-                  recents:   cfg.initLruSnaps,
                   snapshot:  cfg.newSnapshot(BlockHeader()),
                   proposals: initTable[EthAddress,bool]())
   when enableCliqueAsyncLock:
@@ -139,7 +146,7 @@ proc `$`*(e: CliqueError): string =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc recents*(c: Clique): var LruSnaps {.inline.} =
+proc recents*(c: Clique): var KeyedQueue[CliqueSnapKey,Snapshot] {.inline.} =
   ## Getter
   c.recents
 
@@ -180,11 +187,10 @@ proc applySnapsMinBacklog*(c: Clique): auto {.inline.} =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
+proc `db=`*(c: Clique; db: BaseChainDB) =
   ## Setter, re-set database
   c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()
-  c.recents = c.cfg.initLruSnaps
 
 proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter
@@ -194,7 +200,7 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
   c.failed = failure
 
-proc `applySnapsMinBacklog=`*(c: Clique; value: bool) {.inline.} =
+proc `applySnapsMinBacklog=`*(c: Clique; value: bool) =
   ## Setter
   c.applySnapsMinBacklog = value
 
