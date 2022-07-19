@@ -298,11 +298,11 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000030.json"
+    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000020.json"
 
     # path for temporary db, separate dir is used as sqlite usually also creates
     # wal files, and we do not want for those to linger in filesystem
-    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000000_1000030.sqlite3"
+    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000000_1000020.sqlite3"
 
     let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
 
@@ -319,7 +319,6 @@ procSuite "Portal testnet tests":
       # populate temp database from json file
       for t in blocksContent(bd, false):
         db.put(t[0], t[1], t[2])
-
 
       # store content in node0 database
       check (await clients[0].portal_history_storeContentInNodeRange(tempDbPath, 100, 0))
