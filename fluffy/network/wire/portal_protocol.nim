@@ -16,7 +16,7 @@ import
   bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
-  ../../content_db,
+  ".."/../[content_db, seed_db],
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
@@ -1329,3 +1329,118 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Option[Node]] {.async.} =
         return some(n)
 
   return node
+
+proc resolveWithRadius*(p: PortalProtocol, id: NodeId): Future[Option[(Node, UInt256)]] {.async.} =
+  ## Resolve a `Node` based on provided `NodeId`, also try to establish what
+  ## is known radius of found node.
+  ##
+  ## This will first look in the own routing table. If the node is known, it
+  ## will try to contact if for newer information. If node is not known or it
+  ## does not reply, a lookup is done to see if it can find a (newer) record of
+  ## the node on the network.
+  ##
+  ## If node is found, radius will be first checked in radius cache, it radius
+  ## is not known node will be pinged to establish what is its current radius
+  ##
+
+  let n = await p.resolve(id)
+
+  if n.isNone():
+    return none((Node, UInt256))
+
+  let node = n.unsafeGet()
+
+  let r = p.radiusCache.get(id)
+
+  if r.isSome():
+    return some((node, r.unsafeGet()))
+
+  let pongResult = await p.ping(node)
+
+  if pongResult.isOk():
+    let maybeRadius = p.radiusCache.get(id)
+
+    # After successful ping radius should already be in cache, but for the unlikely
+    # case that it is not, check it just to be sure.
+    # TODO: rafactor ping to return node radius.
+    if maybeRadius.isNone():
+      return none((Node, UInt256))
+
+    # If pong is successful, radius of the node should definitly be in local
+    # radius cache
+    return some((node, maybeRadius.unsafeGet()))
+  else:
+    return none((Node, UInt256))
+
+proc offerContentInNodeRange*(
+    p: PortalProtocol,
+    seedDbPath: string,
+    nodeId: NodeId,
+    max: uint32,
+    starting: uint32):  Future[PortalResult[void]] {.async.} =
+  ## Offers `max` closest elements starting from `starting` index to peer
+  ## with given `nodeId`.
+  ## Maximum value of `max` is 64 , as this is limit for single offer.
+  ## `starting` argument is needed as seed_db is read only, so if there is
+  ## more content in peer range than max, then to offer 64 closest elements
+  # it needs to be set to 0. To offer next 64 elements it need to be set to
+  # 64 etc.
+
+  let maybePathAndDbName = getDbBasePathAndName(seedDbPath)
+
+  if maybePathAndDbName.isNone():
+    return err("Provided path is not valid sqlite database path")
+
+  let (dbPath, dbName) = maybePathAndDbName.unsafeGet()
+
+  let maybeNodeAndRadius = await p.resolveWithRadius(nodeId)
+
+  if maybeNodeAndRadius.isNone():
+    return err("Could not find node with provided nodeId")
+
+  let
+    db = SeedDb.new(path = dbPath, name = dbName)
+    (node, radius) = maybeNodeAndRadius.unsafeGet()
+    content = db.getContentInRange(node.id, radius, int64(max), int64(starting))
+
+  # We got all we wanted from seed_db, it can be closed now.
+  db.close()
+
+  var ci: seq[ContentInfo]
+
+  for cont in content:
+    let k = ByteList.init(cont.contentKey)
+    let info = ContentInfo(contentKey: k, content: cont.content)
+    ci.add(info)
+
+  let offerResult = await p.offer(node, ci)
+
+  # waiting for offer result, by the end of this call remote node should
+  # have received offered content
+  return offerResult
+
+proc storeContentInNodeRange*(
+    p: PortalProtocol,
+    seedDbPath: string,
+    max: uint32,
+    starting: uint32): PortalResult[void] =
+  let maybePathAndDbName = getDbBasePathAndName(seedDbPath)
+
+  if maybePathAndDbName.isNone():
+    return err("Provided path is not valid sqlite database path")
+
+  let (dbPath, dbName) = maybePathAndDbName.unsafeGet()
+
+  let
+    localRadius = p.dataRadius
+    db = SeedDb.new(path = dbPath, name = dbName)
+    localId = p.localNode.id
+    contentInRange = db.getContentInRange(localId, localRadius, int64(max), int64(starting))
+
+  db.close()
+
+  for contentData in contentInRange:
+    let cid = UInt256.fromBytesBE(contentData.contentId)
+    p.storeContent(cid, contentData.content)
+
+  return ok()

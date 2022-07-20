@@ -14,7 +14,7 @@ import
   # TODO: `NetworkId` should not be in these private types
   eth/p2p/private/p2p_types,
   ../nimbus/[chain_config, genesis],
-  ./content_db,
+  "."/[content_db, seed_db],
   ./network/wire/portal_protocol,
   ./network/history/history_content
 
@@ -117,6 +117,15 @@ iterator blocks*(
       yield res.get()
     else:
       error "Failed reading block from block data", error = res.error
+
+iterator blocksContent*(
+    blockData: BlockDataTable, verify = false): (ContentId, seq[byte], seq[byte]) =
+  for b in blocks(blockData, verify):
+    for value in b:
+      if len(value[1]) > 0:
+        let ckBytes = history_content.encode(value[0])
+        let contentId = history_content.toContentId(ckBytes)
+        yield (contentId, ckBytes.asSeq(), value[1])
 
 func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   var rlp =

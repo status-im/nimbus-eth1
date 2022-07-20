@@ -8,7 +8,8 @@
 {.push raises: [Defect].}
 
 import
-  std/options,
+  std/[options, os],
+  strutils,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint
@@ -31,7 +32,7 @@ type
     store: SqStoreRef
     putStmt: SqliteStmt[(array[32, byte], seq[byte], seq[byte]), void]
     getStmt: SqliteStmt[array[32, byte], ContentData]
-    getInRangeStmt: SqliteStmt[(array[32, byte], array[32, byte], int64), ContentDataDist]
+    getInRangeStmt: SqliteStmt[(array[32, byte], array[32, byte], int64, int64), ContentDataDist]
 
 func xorDistance(
   a: openArray[byte],
@@ -53,6 +54,18 @@ template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
+
+proc getDbBasePathAndName*(path: string): Option[(string, string)] =
+  let (basePath, name) = splitPath(path)
+  if len(basePath) > 0 and len(name) > 0 and name.endsWith(".sqlite3"):
+    let nameAndExt = rsplit(name, ".", 1)
+
+    if len(nameAndExt) < 2 and len(nameAndExt[0]) == 0:
+      return none((string, string))
+
+    return some((basePath, nameAndExt[0]))
+  else:
+    return none((string, string))
 
 proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb =
   let db =
@@ -94,9 +107,10 @@ proc new*(T: type SeedDb, path: string, name: string, inMemory = false): SeedDb 
         SELECT contentid, contentkey, content, xorDistance(?, contentid) as distance
         FROM seed_data
         WHERE distance <= ?
-        LIMIT ?;
+        LIMIT ?
+        OFFSET ?;
       """,
-      (array[32, byte], array[32, byte], int64),
+      (array[32, byte], array[32, byte], int64, int64),
       ContentDataDist
     ).get()
 
@@ -125,13 +139,25 @@ proc getContentInRange*(
     db: SeedDb,
     nodeId: UInt256,
     nodeRadius: UInt256,
-    max: int64): seq[ContentDataDist] =
+    max: int64,
+    offset: int64): seq[ContentDataDist] =
+  ## Return `max` amount of content in `nodeId` range, starting from `offset` position
+  ## i.e using `offset` 0 will return `max` closest items, using `offset` `10` will
+  ## will retrun `max` closest items except first 10
 
   var res: seq[ContentDataDist] = @[]
   var cd: ContentDataDist
-  for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max), cd):
+  for e in db.getInRangeStmt.exec((nodeId.toByteArrayBE(), nodeRadius.toByteArrayBE(), max, offset), cd):
     res.add(cd)
   return res
+
+proc getContentInRange*(
+    db: SeedDb,
+    nodeId: UInt256,
+    nodeRadius: UInt256,
+    max: int64): seq[ContentDataDist] =
+  ## Return `max` amount of content in `nodeId` range, starting from closest content
+  return db.getContentInRange(nodeId, nodeRadius, max, 0)
 
 proc close*(db: SeedDb) =
   db.store.close()

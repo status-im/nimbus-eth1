@@ -6,15 +6,20 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  os,
   std/sequtils,
   unittest2, testutils, confutils, chronos,
   eth/p2p/discoveryv5/random2, eth/keys,
   ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
-  ../populate_db
+  ".."/[populate_db, seed_db]
 
 type
+  FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
+
+  CheckCallback[A] = proc (a: A): bool {.gcsafe, raises: [Defect].}
+
   PortalTestnetConf* = object
     nodeCount* {.
       defaultValue: 17
@@ -41,6 +46,42 @@ proc connectToRpcServers(config: PortalTestnetConf):
     clients.add(client)
 
   return clients
+
+proc withRetries[A](
+  f: FutureCallback[A],
+  check: CheckCallback[A],
+  numRetries: int,
+  initialWait: Duration): Future[A] {.async.} =
+  ## Retries given future callback until either:
+  ## it returns successfuly and given check is true
+  ## or
+  ## function reaches max specified retries
+
+  var tries = 0
+  var currentDuration = initialWait
+
+  while true:
+    try:
+      let res = await f()
+
+      if check(res):
+        return res
+    except CatchableError as exc:
+      inc tries
+      if tries > numRetries:
+        # if we reached max number of retries fail
+        raise exc
+
+    # wait before new retry
+    await sleepAsync(currentDuration)
+    currentDuration = currentDuration * 2
+
+# Sometimes we need to wait till data will be propagated over the network.
+# To avoid long sleeps, this combinator can be used to retry some calls until
+# success or until some condition hold (or both)
+proc retryUntilDataPropagated[A](f: FutureCallback[A], c: CheckCallback[A]): Future[A] =
+  # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16 seconds
+  return withRetries(f, c, 5, seconds(1))
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
@@ -188,12 +229,6 @@ procSuite "Portal testnet tests":
     check (await clients[0].portal_history_propagate(dataFile))
     await clients[0].close()
 
-    # Note: Sleeping to make a test work is never great. Here it is needed
-    # because the data needs to propagate over the nodes. What one could do is
-    # add a json-rpc debug proc that returns whether the offer queue is empty or
-    # not. And then poll every node until all nodes have an empty queue.
-    await sleepAsync(60.seconds)
-
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
 
@@ -201,8 +236,23 @@ procSuite "Portal testnet tests":
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in blockData.get().blockHashes():
-        let content = await client.eth_getBlockByHash(
-          hash.ethHashStr(), false)
+
+        # Note: More flexible approach instead of generic retries could be to
+        # add a json-rpc debug proc that returns whether the offer queue is empty or
+        # not. And then poll every node until all nodes have an empty queue.
+
+        let content = await retryUntilDataPropagated(
+          proc (): Future[Option[BlockObject]] {.async.} =
+            try:
+              let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+              await client.close()
+              return res
+            except CatchableError as exc:
+              await client.close()
+              raise exc
+          ,
+          proc (mc: Option[BlockObject]): bool = return mc.isSome()
+        )
         check content.isSome()
         let blockObj = content.get()
         check blockObj.hash.get() == hash
@@ -216,7 +266,18 @@ procSuite "Portal testnet tests":
           blockHash: some(hash)
         )
 
-        let logs = await client.eth_getLogs(filterOptions)
+        let logs = await retryUntilDataPropagated(
+          proc (): Future[seq[FilterLog]] {.async.} =
+            try:
+              let res = await client.eth_getLogs(filterOptions)
+              await client.close()
+              return res
+            except CatchableError as exc:
+              await client.close()
+              raise exc
+          ,
+          proc (mc: seq[FilterLog]): bool = return true
+        )
 
         for l in logs:
           check:
@@ -227,3 +288,75 @@ procSuite "Portal testnet tests":
         #   discard
 
       await client.close()
+
+  asyncTest "Portal History - Propagate content from seed db":
+    let clients = await connectToRpcServers(config)
+
+    var nodeInfos: seq[NodeInfo]
+    for client in clients:
+      let nodeInfo = await client.portal_history_nodeInfo()
+      await client.close()
+      nodeInfos.add(nodeInfo)
+
+    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000020.json"
+
+    # path for temporary db, separate dir is used as sqlite usually also creates
+    # wal files, and we do not want for those to linger in filesystem
+    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000000_1000020.sqlite3"
+
+    let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
+
+    let blockData = readBlockDataTable(dataPath)
+    check blockData.isOk()
+    let bd = blockData.get()
+
+    createDir(dbFile)
+    let db = SeedDb.new(path = dbFile, name = dbName)
+
+    try:
+      let lastNodeIdx = len(nodeInfos) - 1
+
+      # populate temp database from json file
+      for t in blocksContent(bd, false):
+        db.put(t[0], t[1], t[2])
+
+      # store content in node0 database
+      check (await clients[0].portal_history_storeContentInNodeRange(tempDbPath, 100, 0))
+      await clients[0].close()
+
+      # offer content to node 1..63
+      for i in 1..lastNodeIdx:
+        let receipientId = nodeInfos[i].nodeId
+        check (await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0))
+        await clients[0].close()
+
+      for client in clients:
+        # Note: Once there is the Canonical Indices Network, we don't need to
+        # access this file anymore here for the block hashes.
+        for hash in bd.blockHashes():
+          let content = await retryUntilDataPropagated(
+            proc (): Future[Option[BlockObject]] {.async.} =
+              try:
+                let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+                await client.close()
+                return res
+              except CatchableError as exc:
+                await client.close()
+                raise exc
+            ,
+            proc (mc: Option[BlockObject]): bool = return mc.isSome()
+          )
+          check content.isSome()
+
+          let blockObj = content.get()
+          check blockObj.hash.get() == hash
+
+          for tx in blockObj.transactions:
+            var txObj: TransactionObject
+            tx.fromJson("tx", txObj)
+            check txObj.blockHash.get() == hash
+
+        await client.close()
+    finally:
+      db.close()
+      removeDir(dbFile)

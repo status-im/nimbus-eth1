@@ -10,7 +10,7 @@
 import
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   ../network/wire/portal_protocol,
-  ../content_db
+  ".."/[content_db, seed_db]
 
 export rpcserver
 
@@ -54,3 +54,29 @@ proc installPortalDebugApiHandlers*(
       return true
     else:
       raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_storeContentInNodeRange") do(
+      dbPath: string,
+      max: uint32,
+      starting: uint32) -> bool:
+
+    let storeResult = p.storeContentInNodeRange(dbPath, max, starting)
+
+    if storeResult.isOk():
+      return true
+    else:
+      raise newException(ValueError, $storeResult.error)
+
+  rpcServer.rpc("portal_" & network & "_offerContentInNodeRange") do(
+      dbPath: string,
+      nodeId: NodeId,
+      max: uint32,
+      starting: uint32) -> bool:
+      # waiting for offer result, by the end of this call remote node should
+      # have received offered content
+      let offerResult = await p.offerContentInNodeRange(dbPath, nodeId, max, starting)
+
+      if offerResult.isOk():
+        return true
+      else:
+        raise newException(ValueError, $offerResult.error)
