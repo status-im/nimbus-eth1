@@ -127,28 +127,39 @@ type
     topPersistent: BlockNumber       ## Up to this block number stored OK
     ticker: Ticker                   ## Logger ticker
 
+let
+  highBlockRange =
+    BlockRange.new(high(BlockNumber),high(BlockNumber))
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc getOrHigh(b: Option[BlockNumber]): BlockNumber =
+  ## Syntactic sugar
+  if b.isSome: b.get else: high(BlockNumber)
+
+proc getOrHigh(b: Option[BlockRange]): BlockRange =
+  if b.isSome: b.get else: highBlockRange
 
 proc hash(peer: Peer): Hash =
   ## Mixin `HashSet[Peer]` handler
   hash(cast[pointer](peer))
 
 proc `+`(n: BlockNumber; delta: static[int]): BlockNumber =
-  ## Semantic sugar for expressions like `xxx.toBlockNumber + 1`
+  ## Syntactic sugar for expressions like `xxx.toBlockNumber + 1`
   n + delta.toBlockNumber
 
 proc `-`(n: BlockNumber; delta: static[int]): BlockNumber =
-  ## Semantic sugar for expressions like `xxx.toBlockNumber - 1`
+  ## Syntactic sugar for expressions like `xxx.toBlockNumber - 1`
   n - delta.toBlockNumber
 
 proc merge(ivSet: BlockRangeSetRef; wi: WorkItemRef): Uint256 =
-  ## Semantic sugar
+  ## Syntactic sugar
   ivSet.merge(wi.blocks)
 
 proc reduce(ivSet: BlockRangeSetRef; wi: WorkItemRef): Uint256 =
-  ## Semantic sugar
+  ## Syntactic sugar
   ivSet.reduce(wi.blocks)
 
 
@@ -190,13 +201,13 @@ proc pool(buddy: BuddyRef): CtxDataEx =
   buddy.ctx.data.CtxDataEx
 
 proc nextUnprocessed(pool: CtxDataEx): Option[BlockNumber] =
-  ## Pseudo getter, logging helper
+  ## Pseudo getter
   let rc = pool.unprocessed.ge()
   if rc.isOK:
     result = some(rc.value.minPt)
 
 proc nextStaged(pool: CtxDataEx): Option[BlockRange] =
-  ## Pseudo getter, logging helper
+  ## Pseudo getter
   let rc = pool.staged.ge(low(BlockNumber))
   if rc.isOK:
     result = some(rc.value.data.blocks)
@@ -645,8 +656,9 @@ proc stageItem(buddy: BuddyRef; wi: WorkItemRef) =
 
     # Turn on pool mode if there are too may staged work items queued.
     # This must only be done when the added work item is not backtracking.
-    if not buddy.pool.backtrack.isSome and
-       stagedWorkItemsTrigger < buddy.pool.staged.len:
+    if stagedWorkItemsTrigger < buddy.pool.staged.len and
+       buddy.pool.backtrack.isNone and
+       wi.topHash.isNone:
       buddy.ctx.poolMode = true
 
     # The list size is limited. So cut if necessary and recycle back the block
@@ -819,7 +831,7 @@ proc runSingle*(buddy: BuddyRef) {.async.} =
     trace "Single run mode, re-org backtracking", peer
     let wi = WorkItemRef(
       # This dummy interval can savely merged back without any effect
-      blocks:  BlockRange.new(high(BlockNumber),high(BlockNumber)),
+      blocks:  highBlockRange,
       # Enable backtrack
       topHash: some(buddy.pool.backtrack.get))
 
@@ -866,8 +878,14 @@ proc runPool*(buddy: BuddyRef) =
   ## Note that this function does not run in `async` mode.
   ##
   if buddy.ctx.poolMode:
-    discard buddy.pool.unprocessed.merge(
-      buddy.pool.topPersistent + 1, high(UInt256))
+    # Mind the gap, fill in if necessary
+    let
+      topPersistent = buddy.pool.topPersistent
+      covered = min(
+        buddy.pool.nextUnprocessed.getOrHigh,
+        buddy.pool.nextStaged.getOrHigh.minPt)
+    if topPersistent + 1 < covered:
+      discard buddy.pool.unprocessed.merge(topPersistent + 1, covered - 1)
     buddy.ctx.poolMode = false
 
 
