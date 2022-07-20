@@ -20,17 +20,14 @@
 
 import
   std/[sequtils, strformat, strutils],
-  ../../constants,
-  ../../db/db_chain,
-  ./clique_cfg,
-  ./clique_defs,
-  ./clique_desc,
-  ./snapshot/[lru_snaps, snapshot_apply, snapshot_desc],
   chronicles,
   eth/[common, keys],
   nimcrypto,
   stew/results,
-  stint
+  stint,
+  "../.."/[constants, db/db_chain, utils/prettify],
+  "."/[clique_cfg, clique_defs, clique_desc],
+  ./snapshot/[lru_snaps, snapshot_apply, snapshot_desc]
 
 type
   # Internal sub-descriptor for `LocalSnapsDesc`
@@ -202,12 +199,14 @@ proc findSnapshot(d: var LocalSnaps): bool
     if d.isSnapshotPosition(number):
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
       d.trail.snaps = d.c.cfg.newSnapshot(header)
-      let rc = d.trail.snaps.storeSnapshot
+      let rc = d.c.cfg.storeSnapshot(d.trail.snaps)
       if rc.isOk:
         d.say "findSnapshot <epoch> ", d.trail.pp
         info "Stored voting snapshot to disk",
           blockNumber = number,
-          blockHash = hash
+          blockHash = hash,
+          nSnaps = d.c.cfg.nSnaps,
+          snapsTotal = d.c.cfg.snapsData.toSI
         return true
 
     # No snapshot for this header, get the parent header and move backward
@@ -254,14 +253,16 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
     # If we've generated a new checkpoint snapshot, save to disk
     if d.isCheckPoint(d.trail.snaps.blockNumber):
 
-      var rc = d.trail.snaps.storeSnapshot
+      var rc = d.c.cfg.storeSnapshot(d.trail.snaps)
       if rc.isErr:
         return err(rc.error)
 
       d.say "applyTrail <disk> chechkpoint #", d.trail.snaps.blockNumber
       trace "Stored voting snapshot to disk",
          blockNumber = d.trail.snaps.blockNumber,
-         blockHash = d.trail.snaps.blockHash
+         blockHash = d.trail.snaps.blockHash,
+         nSnaps = d.c.cfg.nSnaps,
+         snapsTotal = d.c.cfg.snapsData.toSI
   ok()
 
 

@@ -52,12 +52,18 @@ type
     db*: BaseChainDB ##\
       ## All purpose (incl. blockchain) database.
 
+    nSnaps*: uint64 ##\
+      ## Number of snapshots stored on disk (for logging troublesshoting)
+
+    snapsData*: uint64 ##\
+      ## Raw payload stored on disk (for logging troublesshoting)
+
     period: Duration ##\
       ## Time between blocks to enforce.
 
     ckpInterval: int ##\
       ## Number of blocks after which to save the vote snapshot to the
-      ## database.
+      ## disk database.
 
     roThreshold: int ##\
       ## Number of blocks after which a chain segment is considered immutable

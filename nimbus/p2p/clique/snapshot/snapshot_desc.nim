@@ -203,7 +203,7 @@ proc `blockHash=`*(s: Snapshot; hash: Hash256) =
 
 # clique/snapshot.go(88): func loadSnapshot(config [..]
 proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
-                   Result[Snapshot,CliqueError] {.gcsafe, raises: [Defect].} =
+                 Result[Snapshot,CliqueError] =
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
@@ -225,13 +225,19 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
   ok(s)
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
-proc storeSnapshot*(s: Snapshot): CliqueOkResult {.gcsafe,raises: [Defect].} =
+proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
   ## Insert the snapshot into the database.
   try:
-    s.cfg.db.db
-       .put(s.data.blockHash.cliqueSnapshotKey.toOpenArray, rlp.encode(s.data))
+    let
+      key = s.data.blockHash.cliqueSnapshotKey
+      val = rlp.encode(s.data)
+    s.cfg.db.db.put(key.toOpenArray, val)
+
+    cfg.nSnaps.inc
+    cfg.snapsData += val.len.uint
   except CatchableError as e:
     return err((errSnapshotStore, $e.name & ": " & e.msg))
+
   ok()
 
 # ------------------------------------------------------------------------------
