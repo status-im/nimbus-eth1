@@ -38,7 +38,7 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func zeroItem[T](t: typedesc[T]): T {.inline.} =
+func zeroItem[T](t: typedesc[T]): T =
   discard
 
 # ------------------------------------------------------------------------------
@@ -67,7 +67,7 @@ proc cliqueResultErr*(w: CliqueError): CliqueOkResult =
 proc extraDataAddresses*(extraData: Blob): seq[EthAddress] =
   ## Extract signer addresses from extraData header field
 
-  proc toEthAddress(a: openArray[byte]; start: int): EthAddress {.inline.} =
+  proc toEthAddress(a: openArray[byte]; start: int): EthAddress =
     toArray(EthAddress.len, a[start ..< start + EthAddress.len])
 
   if EXTRA_VANITY + EXTRA_SEAL < extraData.len and

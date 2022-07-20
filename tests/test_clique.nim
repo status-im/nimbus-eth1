@@ -9,8 +9,11 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat,
-    strutils, times, tables],
+  std/[algorithm, os, sequtils, strformat, strutils, times, tables],
+  chronicles,
+  eth/[common, keys],
+  stint,
+  unittest2,
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain,
     clique,
@@ -21,10 +24,7 @@ import
   ../nimbus/utils/ec_recover,
   ../nimbus/[config, utils, constants, context],
   ./test_clique/pool,
-  ./replay/undump,
-  eth/[common, keys],
-  stint,
-  unittest2
+  ./replay/undump
 
 const
   baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
@@ -62,6 +62,16 @@ proc findFilePath(file: string): string =
       if path.fileExists:
         return path
 
+proc setTraceLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -78,10 +88,12 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
   let postProcessInfo = if postProcessOk: ", Transaction Finaliser Applied"
                         else: ", Without Finaliser"
   suite &"Clique PoA Snapshot{postProcessInfo}":
-    var
-      pool = newVoterPool()
+    var pool = newVoterPool()
 
-    pool.debug = noisy
+    setErrorLevel()
+    if noisy:
+      pool.noisy = true
+      setTraceLevel()
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples.filterIt(it.id in testIds):
@@ -114,7 +126,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
             let
               expected = tt.results.mapIt("@" & it).sorted
               snapResult = pool.pp(pool.cliqueSigners).sorted
-            pool.say "*** snap state=", pool.snapshot.pp(16)
+            pool.say "*** snap state=", pool.pp(pool.snapshot,16)
             pool.say "        result=[", snapResult.join(",") & "]"
             pool.say "      expected=[", expected.join(",") & "]"
 
@@ -138,8 +150,12 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
     fileInfo = captureFile.splitFile.name.split(".")[0]
     filePath = captureFile.findFilePath
 
-  pool.debug = noisy
   pool.verifyFrom = startAtBlock
+
+  setErrorLevel()
+  if noisy:
+    pool.noisy = true
+    setTraceLevel()
 
   let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
                       else: stopAfterBlock.u256
@@ -219,7 +235,10 @@ proc runGoerliBaybySteps(noisy = true;
     pool = newVoterPool()
     stoppedOk = false
 
-  pool.debug = noisy
+  setErrorLevel()
+  if noisy:
+    pool.noisy = true
+    setTraceLevel()
 
   let
     fileInfo = captureFile.splitFile.name.split(".")[0]
@@ -333,7 +352,7 @@ when isMainModule:
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps
-  noisy.runGoerliReplay(startAtBlock = 31100u64)
+  false.runGoerliReplay(startAtBlock = 31100u64)
 
   #noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)

@@ -19,43 +19,17 @@
 ##
 
 import
-  std/[algorithm, sequtils, strutils, tables, times],
-  ../clique_cfg,
-  ../clique_defs,
-  ./ballot,
-  ./snapshot_desc,
+  std/[strutils, times],
   chronicles,
   eth/[common, rlp],
-  stew/results
+  stew/results,
+  ".."/[clique_cfg, clique_defs],
+  "."/[ballot, snapshot_desc]
 
 {.push raises: [Defect].}
 
 logScope:
   topics = "clique PoA snapshot-apply"
-
-# ------------------------------------------------------------------------------
-# Private helpers, pretty printing
-# ------------------------------------------------------------------------------
-
-proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
-  discard
-  # uncomment body to enable
-  #s.cfg.say v
-
-proc pp(a: openArray[BlockHeader]; first, last: int): string {.inline.} =
-  result = "["
-  var
-    n = last - first
-    q = toSeq(a)
-  if last < first:
-    q = a.reversed(last, first)
-    n = q.len
-  if 5 < n:
-    result &= toSeq(q[0 .. 2]).mapIt("#" & $it.blockNumber).join(", ")
-    result &= " .." & $n &  ".. #" & $q[n-1].blockNumber
-  else:
-    result &= toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ")
-  result &= "]"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -96,8 +70,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
-  s.say "applySnapshot begin #", s.blockNumber, " + ", headers.pp(first, last)
-
   # Sanity check that the headers can be applied
   if headers[first].blockNumber != s.blockNumber + 1:
     return err((errInvalidVotingChain,""))
@@ -120,8 +92,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
       header = headers[headersIndex]
       number = header.blockNumber
 
-    s.say "applySnapshot processing #", number
-
     # Remove any votes on checkpoint blocks
     if (number mod s.cfg.epoch) == 0:
       # Note that the correctness of the authorised accounts list is verified in
@@ -132,7 +102,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
       #
       # clique/snapshot.go(210): snap.Votes = nil
       s.ballot.flushVotes
-      s.say "applySnapshot epoch => reset, state=", s.pp(41)
 
     # Delete the oldest signer from the recent list to allow it signing again
     block:
@@ -144,16 +113,12 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
     let signer = s.cfg.ecRecover(header)
     if signer.isErr:
       return err((errEcRecover,$signer.error))
-    #s.say "applySnapshot signer=", s.pp(signer)
 
     if not s.ballot.isAuthSigner(signer.value):
-      s.say "applySnapshot signer not authorised => fail ", s.pp(29)
       return err((errUnauthorizedSigner,""))
 
     for recent in s.recents.values:
       if recent == signer.value:
-        s.say "applySnapshot signer recently seen ", s.pp(signer.value)
-        echo "+++ applySnapshot #", header.blockNumber, " err=errRecentlySigned"
         return err((errRecentlySigned,""))
     s.recents[number] = signer.value
 
@@ -172,7 +137,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
                     signer:      signer.value,
                     blockNumber: number,
                     authorize:   authOk)
-    #s.say "applySnapshot calling addVote ", s.pp(vote)
     # clique/snapshot.go(253): if snap.cast(header.Coinbase, authorize) {
     s.ballot.addVote(vote)
 
@@ -183,11 +147,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
       if limit <= number:
         # Pop off least block number from the list
         let item = number - limit
-        s.say "will delete recent item #", item, " (", number, "-", limit,
-          ") from recents={", s.pp(s.recents), "}"
         s.recents.del(item)
-
-    #s.say "applySnapshot state=", s.pp(25)
 
     # If we're taking too much time (ecrecover), notify the user once a while
     if s.cfg.logInterval < getTime() - logged:
@@ -208,7 +168,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   s.blockNumber = headers[last].blockNumber
   s.blockHash = headers[last].blockHash
 
-  s.say "applySnapshot ok"
   ok()
 
 

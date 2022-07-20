@@ -20,14 +20,13 @@
 
 import
   std/[sequtils, tables],
-  # std/[strutils],
-  ../clique_cfg,
   ../clique_helpers,
   eth/common
 
 type
-  Vote* = object ## Vote represent single votes that an authorized
-                 ## signer made to modify the list of authorizations.
+  Vote* = object
+    ## Vote represent single votes that an authorized signer made to modify
+    ## the list of authorizations.
     signer*: EthAddress       ## authorized signer that cast this vote
     address*: EthAddress      ## account being voted on to change its
                               ## authorization type (`true` or `false`)
@@ -45,19 +44,8 @@ type
     authSig: Table[EthAddress,bool] ## currently authorised signers
     authRemoved: bool               ## last `addVote()` action was removing an
                                     ## authorised signer from the `authSig` list
-    debug: bool                     ## debug mode
 
 {.push raises: [Defect].}
-
-# ------------------------------------------------------------------------------
-# Private
-# ------------------------------------------------------------------------------
-
-proc say(t: var Ballot; v: varargs[string,`$`]) {.inline.} =
-  ## Debugging output
-  ppExceptionWrap:
-    # if t.debug: stderr.write "*** " & v.join & "\n"
-    discard
 
 # ------------------------------------------------------------------------------
 # Public debugging/pretty-printer support
@@ -82,14 +70,6 @@ proc initBallot*(t: var Ballot; signers: openArray[EthAddress]) =
   t.initBallot
   for a in signers:
     t.authSig[a] = true
-
-# ------------------------------------------------------------------------------
-# Public setters
-# ------------------------------------------------------------------------------
-
-proc `debug=`*(t: var Ballot; debug: bool) =
-  ## Set debugging mode on/off
-  t.debug = debug
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -186,7 +166,6 @@ proc addVote*(t: var Ballot; vote: Vote) {.
       let refVote =  t.votes[vote.address]
       numVotes = refVote.signers.len
       authOk = refVote.authorize
-      t.say "addVote touch votes (corner case)"
 
   elif not t.votes.hasKey(vote.address):
     # Collect inital vote
@@ -194,33 +173,26 @@ proc addVote*(t: var Ballot; vote: Vote) {.
       authorize: vote.authorize,
       signers: {vote.signer: vote}.toTable)
     numVotes = 1
-    t.say "addVote accepted, first vote, authorize=", vote.authorize
 
   elif t.votes[vote.address].authorize == vote.authorize:
     # Collect additional vote
     t.votes[vote.address].signers[vote.signer] = vote
     numVotes = t.votes[vote.address].signers.len
-    t.say "addVote accepted, ", numVotes, " votes, authorize=", vote.authorize
 
   else:
-    t.say "addVote not applicable!"
     return
 
   # clique/snapshot.go(262): if tally := snap.Tally[header.Coinbase]; [..]
 
   # Vote passed, update the list of authorised signers if enough votes
   if numVotes < t.authSignersThreshold:
-    t.say "addVote not enough votes for address yet, have ", numVotes,
-      " need ", t.authSignersThreshold
     return
 
   var obsolete = @[vote.address]
   if authOk:
     # Has minimum votes, so add it
     t.authSig[vote.address] = true
-    t.say "addVote authorise address .."
   else:
-    t.say "addVote de-authorise address .."
     # clique/snapshot.go(266): delete(snap.Signers, [..]
     t.authSig.del(vote.address)
     t.authRemoved = true
@@ -235,8 +207,6 @@ proc addVote*(t: var Ballot; vote: Vote) {.
 
   for key in obsolete:
     t.votes.del(key)
-
-  t.say "addVote done"
 
 # ------------------------------------------------------------------------------
 # End

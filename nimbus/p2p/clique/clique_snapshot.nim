@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[sequtils, strformat, strutils],
+  std/[sequtils, strutils],
   chronicles,
   eth/[common, keys],
   nimcrypto,
