@@ -19,14 +19,14 @@
 ##
 
 import
-  std/[random, sequtils, strutils, times],
-  ../../db/db_chain,
-  ../../utils/ec_recover,
-  ./clique_defs,
+  std/[random, times],
   eth/common,
   ethash,
   stew/results,
-  stint
+  stint,
+  ../../db/db_chain,
+  ../../utils/ec_recover,
+  ./clique_defs
 
 const
   prngSeed = 42
@@ -35,29 +35,22 @@ type
   SimpleTypePP = BlockNonce|EthAddress|Blob|BlockHeader
   SeqTypePP = EthAddress|BlockHeader
 
-  PrettyPrintDefect* = object of Defect
-    ## Defect raised with `pp()` problems, should be used for debugging only
-
-  PrettyPrinters* = object ## Set of pretty printers for debugging
-    nonce*: proc(v: BlockNonce):
-                 string {.gcsafe,raises: [Defect,CatchableError].}
-    address*: proc(v: EthAddress):
-                 string {.gcsafe,raises: [Defect,CatchableError].}
-    extraData*: proc(v: Blob):
-                 string {.gcsafe,raises: [Defect,CatchableError].}
-    blockHeader*: proc(v: BlockHeader; delim: string):
-                 string {.gcsafe,raises: [Defect,CatchableError].}
-
   CliqueCfg* = ref object of RootRef
     db*: BaseChainDB ##\
       ## All purpose (incl. blockchain) database.
+
+    nSnaps*: uint64 ##\
+      ## Number of snapshots stored on disk (for logging troublesshoting)
+
+    snapsData*: uint64 ##\
+      ## Raw payload stored on disk (for logging troublesshoting)
 
     period: Duration ##\
       ## Time between blocks to enforce.
 
     ckpInterval: int ##\
       ## Number of blocks after which to save the vote snapshot to the
-      ## database.
+      ## disk database.
 
     roThreshold: int ##\
       ## Number of blocks after which a chain segment is considered immutable
@@ -82,12 +75,6 @@ type
       ## Time interval after which the `snapshotApply()` function main loop
       ## produces logging entries.
 
-    debug*: bool ##\
-      ## Debug mode flag
-
-    prettyPrint*: PrettyPrinters ##\
-      ## debugging support
-
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
@@ -103,12 +90,7 @@ proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
     roThreshold: FULL_IMMUTABILITY_THRESHOLD,
     logInterval: SNAPS_LOG_INTERVAL_MICSECS,
     signatures:  EcRecover.init(),
-    prng:        initRand(prngSeed),
-    prettyPrint: PrettyPrinters(
-                   nonce:       proc(v:BlockNonce):                string = $v,
-                   address:     proc(v:EthAddress):                string = $v,
-                   extraData:   proc(v:Blob):                      string = $v,
-                   blockHeader: proc(v:BlockHeader; delim:string): string = $v))
+    prng:        initRand(prngSeed))
 
 # ------------------------------------------------------------------------------
 # Public helper funcion
@@ -123,27 +105,27 @@ proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `epoch=`*(cfg: CliqueCfg; epoch: SomeInteger) {.inline.} =
+proc `epoch=`*(cfg: CliqueCfg; epoch: SomeInteger) =
   ## Setter
   cfg.epoch = if 0 < epoch: epoch
               else: EPOCH_LENGTH
 
-proc `period=`*(cfg: CliqueCfg; period: Duration)  {.inline.} =
+proc `period=`*(cfg: CliqueCfg; period: Duration) =
   ## Setter
   cfg.period = if period != Duration(): period
                else: BLOCK_PERIOD
 
-proc `ckpInterval=`*(cfg: CliqueCfg; numBlocks: SomeInteger) {.inline.} =
+proc `ckpInterval=`*(cfg: CliqueCfg; numBlocks: SomeInteger) =
   ## Setter
   cfg.ckpInterval = if 0 < numBlocks: numBlocks
                     else: CHECKPOINT_INTERVAL
 
-proc `roThreshold=`*(cfg: CliqueCfg; numBlocks: SomeInteger) {.inline.} =
+proc `roThreshold=`*(cfg: CliqueCfg; numBlocks: SomeInteger) =
   ## Setter
   cfg.roThreshold = if 0 < numBlocks: numBlocks
                     else: FULL_IMMUTABILITY_THRESHOLD
 
-proc `logInterval=`*(cfg: CliqueCfg; duration: Duration)  {.inline.} =
+proc `logInterval=`*(cfg: CliqueCfg; duration: Duration) =
   ## Setter
   cfg.logInterval = if duration != Duration(): duration
                     else: SNAPS_LOG_INTERVAL_MICSECS
@@ -163,137 +145,25 @@ method rand*(cfg: CliqueCfg; max: Natural): int {.gcsafe,base.} =
 # Public getter
 # ------------------------------------------------------------------------------
 
-proc epoch*(cfg: CliqueCfg): auto {.inline.} =
+proc epoch*(cfg: CliqueCfg): BlockNumber =
   ## Getter
   cfg.epoch.u256
 
-proc period*(cfg: CliqueCfg): auto {.inline.} =
+proc period*(cfg: CliqueCfg): Duration =
   ## Getter
   cfg.period
 
-proc ckpInterval*(cfg: CliqueCfg): auto {.inline.} =
+proc ckpInterval*(cfg: CliqueCfg): BlockNumber =
   ## Getter
   cfg.ckpInterval.u256
 
-proc roThreshold*(cfg: CliqueCfg): auto {.inline.} =
+proc roThreshold*(cfg: CliqueCfg): int =
   ## Getter
   cfg.roThreshold
 
-proc logInterval*(cfg: CliqueCfg): auto {.inline.} =
+proc logInterval*(cfg: CliqueCfg): Duration =
   ## Getter
   cfg.logInterval
-
-# ------------------------------------------------------------------------------
-# Debugging
-# ------------------------------------------------------------------------------
-
-template ppExceptionWrap*(body: untyped) =
-  ## Exception relay to `PrettyPrintDefect`, intended to be used with `pp()`
-  ## related functions.
-  try:
-    body
-  except:
-    raise (ref PrettyPrintDefect)(msg: getCurrentException().msg)
-
-proc say*(cfg: CliqueCfg; v: varargs[string,`$`]) {.inline.} =
-  ## Debugging output
-  ppExceptionWrap:
-    if cfg.debug: stderr.write "*** " & v.join & "\n"
-
-
-proc pp*(v: CliqueError): string =
-  ## Pretty print error
-  result = $v[0]
-  if v[1] != "":
-    result &=  " => " & v[1]
-
-proc pp*(v: CliqueOkResult): string =
-  ## Pretty print result
-  if v.isOk:
-    "OK"
-  else:
-    v.error.pp
-
-
-proc pp*(p: var PrettyPrinters; v: BlockNonce): string =
-  ## Pretty print nonce (for debugging)
-  ppExceptionWrap: p.nonce(v)
-
-proc pp*(p: var PrettyPrinters; v: EthAddress): string =
-  ## Pretty print address (for debugging)
-  ppExceptionWrap: p.address(v)
-
-proc pp*(p: var PrettyPrinters; v: openArray[EthAddress]): seq[string] =
-  ## Pretty print address list
-  toSeq(v).mapIt(p.pp(it))
-
-proc pp*(p: var PrettyPrinters; v: Blob): string =
-  ## Visualise `extraData` field
-  ppExceptionWrap: p.extraData(v)
-
-proc pp*(p: var PrettyPrinters; v: BlockHeader; delim: string): string =
-  ## Pretty print block header
-  ppExceptionWrap: p.blockHeader(v, delim)
-
-proc pp*(p: var PrettyPrinters; v: BlockHeader; indent = 3): string =
-  ## Pretty print block header, NL delimited, indented fields
-  let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
-  p.pp(v,delim)
-
-proc pp*(p: var PrettyPrinters; v: openArray[BlockHeader]): seq[string] =
-  ## Pretty print list of block headers
-  toSeq(v).mapIt(p.pp(it,","))
-
-
-proc pp*[T;V: SimpleTypePP](t: T; v: V): string =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v)
-
-proc pp*[T;V: var SimpleTypePP](t: var T; v: V): string =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v)
-
-
-proc pp*[T;V: SeqTypePP](t: T; v: openArray[V]): seq[string] =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v)
-
-proc pp*[T;V: SeqTypePP](t: var T; v: openArray[V]): seq[string] =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v)
-
-
-proc pp*[T;X: int|string](t: T; v: BlockHeader; sep: X): string =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v,sep)
-
-proc pp*[T;X: int|string](t: var T; v: BlockHeader; sep: X): string =
-  ## Generic pretty printer, requires `getPrettyPrinters()` function:
-  ## ::
-  ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
-  ##
-  mixin getPrettyPrinters
-  ppExceptionWrap: t.getPrettyPrinters.pp(v,sep)
 
 # ------------------------------------------------------------------------------
 # End

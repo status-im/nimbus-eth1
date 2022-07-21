@@ -21,7 +21,7 @@
 ##
 
 import
-  std/[sequtils, strformat, strutils, tables, times],
+  std/[strformat, times],
   ../../chain_config,
   ../../constants,
   ../../db/db_chain,
@@ -43,25 +43,12 @@ logScope:
   topics = "clique PoA verify header"
 
 # ------------------------------------------------------------------------------
-# Private helpers, pretty printing
-# ------------------------------------------------------------------------------
-
-proc say(c: Clique; v: varargs[string,`$`]) {.inline.} =
-  discard
-  # uncomment body to enable
-  #c.cfg.say v
-
-proc pp(c: Clique; a: AddressHistory): string
-         {.inline, raises: [Defect,CatchableError].} =
-  "(" & toSeq(a.pairs).mapIt(&"#{it[0]}:{c.pp(it[1])}").join(" ") & ")"
-
-# ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
 proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
-                        {.inline, raises: [Defect,ValueError].} =
+                        {.gcsafe, raises: [Defect,ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 
@@ -81,13 +68,12 @@ proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
        &"Homestead gas reprice fork: have {eip150}, want {hash}"))
 
 
-proc signersThreshold*(s: Snapshot): int {.inline.} =
+proc signersThreshold*(s: Snapshot): int =
   ## Minimum number of authorised signers needed.
   s.ballot.authSignersThreshold
 
 
-proc recentBlockNumber*(s: Snapshot;
-                        a: EthAddress): Result[BlockNumber,void] {.inline.} =
+proc recentBlockNumber*(s: Snapshot; a: EthAddress): Result[BlockNumber,void] =
   ## Return `BlockNumber` for `address` argument (if any)
   for (number,recent) in s.recents.pairs:
     if recent == a:
@@ -95,7 +81,7 @@ proc recentBlockNumber*(s: Snapshot;
   return err()
 
 
-proc isSigner*(s: Snapshot; address: EthAddress): bool {.inline.} =
+proc isSigner*(s: Snapshot; address: EthAddress): bool =
   ## Checks whether argukment ``address` is in signers list
   s.ballot.isAuthSigner(address)
 
@@ -114,7 +100,7 @@ proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
 proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
-                     {.inline, raises: [Defect,CatchableError].} =
+                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether the signature contained in the header satisfies the
   ## consensus protocol requirements. The method accepts an optional list of
   ## parent headers that aren't yet part of the local blockchain to generate
@@ -138,12 +124,8 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  c.say "verifySeal signer=", c.pp(signer.value), " ", c.pp(snapshot.recents)
   let seen = snapshot.recentBlockNumber(signer.value)
   if seen.isOk:
-    c.say "verifySeal signer=#", seen.value,
-      " header=#", header.blockNumber,
-      " threshold=#", snapshot.signersThreshold.u256
     # Signer is among recents, only fail if the current block does not
     # shift it out
     # clique/clique.go(486): if limit := uint64(len(snap.Signers)/2 + 1); [..]
@@ -164,7 +146,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
 proc verifyCascadingFields(c: Clique; header: BlockHeader;
                            parents: var seq[BlockHeader]): CliqueOkResult
-                                {.inline, raises: [Defect,CatchableError].} =
+                                {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
   ## batch of previous headers. The caller may optionally pass in a batch of
   ## parents (ascending order) to avoid looking those up from the database.
@@ -225,7 +207,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
 
 proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
-                            {.inline, raises: [Defect,CatchableError].} =
+                            {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check header fields, the ones that do not depend on a parent block.
   # clique/clique.go(250): number := header.Number.Uint64()
 

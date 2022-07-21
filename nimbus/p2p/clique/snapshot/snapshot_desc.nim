@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[algorithm, sequtils, strformat, strutils, tables],
+  std/[tables],
   ../../../db/storage_types,
   ../clique_cfg,
   ../clique_defs,
@@ -56,27 +56,6 @@ logScope:
   topics = "clique PoA snapshot"
 
 # ------------------------------------------------------------------------------
-# Pretty printers for debugging
-# ------------------------------------------------------------------------------
-
-proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters {.gcsafe.}
-proc pp*(s: Snapshot; v: Vote): string {.gcsafe.}
-
-proc votesList(s: Snapshot; sep: string): string =
-  proc s3Cmp(a, b: (string,string,Vote)): int =
-    result = cmp(a[0], b[0])
-    if result == 0:
-      result = cmp(a[1], b[1])
-  s.data.ballot.votesInternal
-    .mapIt((s.pp(it[0]),s.pp(it[1]),it[2]))
-    .sorted(cmp = s3Cmp)
-    .mapIt(s.pp(it[2]))
-    .join(sep)
-
-proc signersList(s: Snapshot): string =
-  s.pp(s.data.ballot.authSigners).sorted.join(",")
-
-# ------------------------------------------------------------------------------
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
 
@@ -104,50 +83,6 @@ proc initSnapshot(s: Snapshot; cfg: CliqueCfg;
   s.data.blockHash = hash
   s.data.recents = initTable[BlockNumber,EthAddress]()
   s.data.ballot.initBallot(signers)
-  s.data.ballot.debug = s.cfg.debug
-
-# ------------------------------------------------------------------------------
-# Public pretty printers
-# ------------------------------------------------------------------------------
-
-proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters =
-  ## Mixin for pretty printers
-  s.cfg.prettyPrint
-
-
-proc pp*(s: Snapshot; h: var AddressHistory): string {.gcsafe.} =
-  ppExceptionWrap:
-    toSeq(h.keys)
-      .sorted
-      .mapIt("#" & $it & ":" & s.pp(h[it.u256]))
-      .join(",")
-
-proc pp*(s: Snapshot; v: Vote): string =
-  proc authorized(b: bool): string =
-    if b: "authorise" else: "de-authorise"
-  ppExceptionWrap:
-    "(" & &"address={s.pp(v.address)}" &
-          &",signer={s.pp(v.signer)}" &
-          &",blockNumber={v.blockNumber}" &
-          &",{authorized(v.authorize)}" & ")"
-
-proc pp*(s: Snapshot; delim: string): string {.gcsafe.} =
-  ## Pretty print descriptor
-  let
-    sep1 = if 0 < delim.len: delim
-           else: ";"
-    sep2 = if 0 < delim.len and delim[0] == '\n': delim & ' '.repeat(7)
-           else: ";"
-  ppExceptionWrap:
-    &"(blockNumber=#{s.data.blockNumber}" &
-      &"{sep1}recents=" & "{" & s.pp(s.data.recents) & "}" &
-      &"{sep1}signers=" & "{" & s.signersList & "}" &
-      &"{sep1}votes=[" & s.votesList(sep2) & "])"
-
-proc pp*(s: Snapshot; indent = 0): string {.gcsafe.} =
-  ## Pretty print descriptor
-  let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
-  s.pp(delim)
 
 # ------------------------------------------------------------------------------
 # Public Constructor
@@ -203,7 +138,7 @@ proc `blockHash=`*(s: Snapshot; hash: Hash256) =
 
 # clique/snapshot.go(88): func loadSnapshot(config [..]
 proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
-                   Result[Snapshot,CliqueError] {.gcsafe, raises: [Defect].} =
+                 Result[Snapshot,CliqueError] =
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
@@ -219,19 +154,24 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
       return err((errSnapshotLoad,""))
 
     s.data = rlpData.decode(SnapshotData)
-    s.data.ballot.debug = s.cfg.debug
   except CatchableError as e:
     return err((errSnapshotLoad, $e.name & ": " & e.msg))
   ok(s)
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
-proc storeSnapshot*(s: Snapshot): CliqueOkResult {.gcsafe,raises: [Defect].} =
+proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
   ## Insert the snapshot into the database.
   try:
-    s.cfg.db.db
-       .put(s.data.blockHash.cliqueSnapshotKey.toOpenArray, rlp.encode(s.data))
+    let
+      key = s.data.blockHash.cliqueSnapshotKey
+      val = rlp.encode(s.data)
+    s.cfg.db.db.put(key.toOpenArray, val)
+
+    cfg.nSnaps.inc
+    cfg.snapsData += val.len.uint
   except CatchableError as e:
     return err((errSnapshotStore, $e.name & ": " & e.msg))
+
   ok()
 
 # ------------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 
 ##
 ## Mining Support for Clique PoA Consensus Protocol
-## ================================================
+## ===================!=============================
 ##
 ## For details see
 ## `EIP-225 <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
@@ -19,19 +19,18 @@
 ##
 
 import
-  std/[sequtils, tables, times],
-  ../../constants,
-  ../../utils/ec_recover,
+  std/[sequtils, times],
+  chronicles,
+  chronos,
+  eth/[common, keys, rlp],
+  "../.."/[constants, utils/ec_recover],
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
   ./clique_helpers,
   ./clique_snapshot,
   ./clique_verify,
-  ./snapshot/[ballot, snapshot_desc],
-  chronicles,
-  chronos,
-  eth/[common, keys, rlp]
+  ./snapshot/[ballot, snapshot_desc]
 
 {.push raises: [Defect].}
 
@@ -68,7 +67,7 @@ proc verifyHeader(c: Clique; header: BlockHeader;
   c.cliqueVerifySeq(header, list)
 
 
-proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool  {.inline.}=
+proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool =
   s.ballot.isValidVote(a, authorize)
 
 proc isSigner*(s: Snapshot; address: EthAddress): bool =
@@ -95,7 +94,7 @@ proc calcDifficulty(s: Snapshot; signer: EthAddress): DifficultyInt =
     DIFF_NOTURN
 
 proc recentBlockNumber*(s: Snapshot;
-                        a: EthAddress): Result[BlockNumber,void] {.inline.} =
+                        a: EthAddress): Result[BlockNumber,void] =
   ## Return `BlockNumber` for `address` argument (if any)
   for (number,recent) in s.recents.pairs:
     if recent == a:
@@ -167,8 +166,7 @@ proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueOkResult =
 proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOkResult
                     {.gcsafe, raises: [Defect, CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
-  ## of a block header according to the rules of a particular engine. The
-  ## changes are executed inline.
+  ## of a block header according to the rules of a particular engine.
   ##
   ## This implementation prepares all the consensus fields of the header for
   ## running the transactions on top.

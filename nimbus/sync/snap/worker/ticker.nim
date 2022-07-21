@@ -15,7 +15,8 @@ import
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
-  "../.."/[timer_helper, types],
+  ../../../utils/prettify,
+  ../../timer_helper,
   ./worker_desc
 
 {.push raises: [Defect].}

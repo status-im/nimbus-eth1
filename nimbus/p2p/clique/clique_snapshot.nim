@@ -19,18 +19,15 @@
 ##
 
 import
-  std/[sequtils, strformat, strutils],
-  ../../constants,
-  ../../db/db_chain,
-  ./clique_cfg,
-  ./clique_defs,
-  ./clique_desc,
-  ./snapshot/[lru_snaps, snapshot_apply, snapshot_desc],
+  std/[sequtils, strutils],
   chronicles,
   eth/[common, keys],
   nimcrypto,
-  stew/results,
-  stint
+  stew/[keyed_queue, results],
+  stint,
+  "../.."/[constants, db/db_chain, utils/prettify],
+  "."/[clique_cfg, clique_defs, clique_desc],
+  ./snapshot/[snapshot_apply, snapshot_desc]
 
 type
   # Internal sub-descriptor for `LocalSnapsDesc`
@@ -173,11 +170,9 @@ proc findSnapshot(d: var LocalSnaps): bool
     let number = header.blockNumber
 
     # Check whether the snapshot was recently visited and cached
-    if d.c.recents.hasLruSnaps(hash):
-      let rc = d.c.recents.getLruSnaps(hash)
+    block:
+      let rc = d.c.recents.lruFetch(hash.data)
       if rc.isOk:
-        # we made sure that this is not a blind entry (currently no reason
-        # why there should be any, though)
         d.trail.snaps = rc.value.cloneSnapshot
         # d.say "findSnapshot cached ", d.trail.pp
         trace "Found recently cached voting snapshot",
@@ -202,12 +197,14 @@ proc findSnapshot(d: var LocalSnaps): bool
     if d.isSnapshotPosition(number):
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
       d.trail.snaps = d.c.cfg.newSnapshot(header)
-      let rc = d.trail.snaps.storeSnapshot
+      let rc = d.c.cfg.storeSnapshot(d.trail.snaps)
       if rc.isOk:
         d.say "findSnapshot <epoch> ", d.trail.pp
-        info "Stored voting snapshot to disk",
+        trace "Stored voting snapshot to disk",
           blockNumber = number,
-          blockHash = hash
+          blockHash = hash,
+          nSnaps = d.c.cfg.nSnaps,
+          snapsTotal = d.c.cfg.snapsData.toSI
         return true
 
     # No snapshot for this header, get the parent header and move backward
@@ -254,14 +251,16 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
     # If we've generated a new checkpoint snapshot, save to disk
     if d.isCheckPoint(d.trail.snaps.blockNumber):
 
-      var rc = d.trail.snaps.storeSnapshot
+      var rc = d.c.cfg.storeSnapshot(d.trail.snaps)
       if rc.isErr:
         return err(rc.error)
 
       d.say "applyTrail <disk> chechkpoint #", d.trail.snaps.blockNumber
       trace "Stored voting snapshot to disk",
          blockNumber = d.trail.snaps.blockNumber,
-         blockHash = d.trail.snaps.blockHash
+         blockHash = d.trail.snaps.blockHash,
+         nSnaps = d.c.cfg.nSnaps,
+         snapsTotal = d.c.cfg.snapsData.toSI
   ok()
 
 
@@ -311,10 +310,8 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
     return err(rc.error)
 
   # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
-  if not d.c.recents.setLruSnaps(d.trail.snaps):
-    # Someting went seriously wrong, most probably this function was called
-    # before checking the LRU cache first -- lol
-    return err((errSetLruSnaps, &"block #{d.trail.snaps.blockNumber}"))
+  discard d.c.recents.lruAppend(
+    d.trail.snaps.blockHash.data, d.trail.snaps, INMEMORY_SNAPSHOTS)
 
   if 1 < d.trail.chain.len:
     d.say "updateSnapshot ok #", d.trail.snaps.blockNumber,
@@ -339,10 +336,11 @@ proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
   ## If this function is successful, the compiled `Snapshot` will also be
   ## stored in the `Clique` descriptor which can be retrieved later
   ## via `c.snapshot`.
-  let rc1 = c.recents.getLruSnaps(header.blockHash)
-  if rc1.isOk:
-    c.snapshot = rc1.value
-    return ok(rc1.value)
+  block:
+    let rc = c.recents.lruFetch(header.blockHash.data)
+    if rc.isOk:
+      c.snapshot = rc.value
+      return ok(rc.value)
 
   # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
   parents.shallow
@@ -354,11 +352,11 @@ proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
       header:  header,
       hash:    header.blockHash))
 
-  let rc2 = snaps.updateSnapshot
-  if rc2.isOk:
-    c.snapshot = rc2.value
+  let rc = snaps.updateSnapshot
+  if rc.isOk:
+    c.snapshot = rc.value
 
-  rc2
+  rc
 
 
 proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
@@ -374,10 +372,11 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
   ## If this function is successful, the compiled `Snapshot` will also be
   ## stored in the `Clique` descriptor which can be retrieved later
   ## via `c.snapshot`.
-  let rc1 = c.recents.getLruSnaps(hash)
-  if rc1.isOk:
-    c.snapshot = rc1.value
-    return ok(rc1.value)
+  block:
+    let rc = c.recents.lruFetch(hash.data)
+    if rc.isOk:
+      c.snapshot = rc.value
+      return ok(rc.value)
 
   var header: BlockHeader
   if not c.cfg.db.getBlockHeader(hash, header):
@@ -393,11 +392,11 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
       header:  header,
       hash:    hash))
 
-  let rc2 = snaps.updateSnapshot
-  if rc2.isOk:
-    c.snapshot = rc2.value
+  let rc = snaps.updateSnapshot
+  if rc.isOk:
+    c.snapshot = rc.value
 
-  rc2
+  rc
 
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]

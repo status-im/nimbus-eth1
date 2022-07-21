@@ -34,7 +34,7 @@ const
   # clique/clique.go(48): const ( [..]
   CHECKPOINT_INTERVAL* = ##\
     ## Number of blocks after which to save the vote snapshot to the database
-    1024
+    4 * 1024
 
   INMEMORY_SNAPSHOTS* = ##\
     ## Number of recent vote snapshots to keep in memory.

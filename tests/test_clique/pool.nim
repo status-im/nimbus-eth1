@@ -9,7 +9,11 @@
 # according to those terms.
 
 import
-  std/[random, sequtils, strformat, strutils, tables, times],
+  std/[algorithm, random, sequtils, strformat, strutils, tables, times],
+  eth/[common, keys, p2p, rlp, trie/db],
+  ethash,
+  secp256k1/abi,
+  stew/objects,
   ../../nimbus/[config, chain_config, constants, genesis],
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/[chain,
@@ -18,12 +22,9 @@ import
                     clique/clique_genvote,
                     clique/clique_helpers,
                     clique/clique_snapshot,
+                    clique/snapshot/ballot,
                     clique/snapshot/snapshot_desc],
-  ./voter_samples as vs,
-  eth/[common, keys, p2p, rlp, trie/db],
-  ethash,
-  secp256k1/abi,
-  stew/objects
+  ./voter_samples as vs
 
 export
   vs, snapshot_desc
@@ -50,6 +51,7 @@ type
 
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
+    noisy*: bool
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -113,7 +115,7 @@ proc findSignature(ap: TesterPool; sig: openArray[byte]): XSealValue =
     if key in ap.xSeals:
       result = ap.xSeals[key]
 
-proc ppNonce(ap: TesterPool; v: BlockNonce): string =
+proc pp(ap: TesterPool; v: BlockNonce): string =
   ## Pretty print nonce
   if v == NONCE_AUTH:
     "AUTH"
@@ -122,7 +124,7 @@ proc ppNonce(ap: TesterPool; v: BlockNonce): string =
   else:
     &"0x{v.toHex}"
 
-proc ppAddress(ap: TesterPool; v: EthAddress): string =
+proc pp(ap: TesterPool; v: EthAddress): string =
   ## Pretty print address
   if v.isZero:
     result = "@0"
@@ -133,7 +135,11 @@ proc ppAddress(ap: TesterPool; v: EthAddress): string =
     else:
       result = &"@{a}"
 
-proc ppExtraData(ap: TesterPool; v: Blob): string =
+proc pp*(ap: TesterPool; v: openArray[EthAddress]): seq[string] =
+  ## Pretty print address list
+  toSeq(v).mapIt(ap.pp(it))
+
+proc pp(ap: TesterPool; v: Blob): string =
   ## Visualise `extraData` field
 
   if v.len < EXTRA_VANITY + EXTRA_SEAL or
@@ -153,7 +159,7 @@ proc ppExtraData(ap: TesterPool; v: Blob): string =
       while EthAddress.len + EXTRA_SEAL <= data.len:
         let address = toArray(EthAddress.len,data[0 ..< EthAddress.len])
         data = data[EthAddress.len ..< data.len]
-        result &= &"{glue}{ap.ppAddress(address)}"
+        result &= &"{glue}{ap.pp(address)}"
         glue = ","
       result &= "]+"
     #
@@ -170,26 +176,70 @@ proc ppExtraData(ap: TesterPool; v: Blob): string =
       else:
         result &= &"0x{data.toHex}[{data.len}]"
 
-proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
+proc pp(ap: TesterPool; v: Vote): string =
+  proc authorized(b: bool): string =
+    if b: "authorise" else: "de-authorise"
+  "(" &
+    &"address={ap.pp(v.address)}" &
+    &",signer={ap.pp(v.signer)}" &
+    &",blockNumber=#{v.blockNumber}" &
+    &",{authorized(v.authorize)}" & ")"
+
+proc pp(ap: TesterPool; h: AddressHistory): string =
+  toSeq(h.keys)
+    .sorted
+    .mapIt("#" & $it & ":" & ap.pp(h[it.u256]))
+    .join(",")
+
+proc votesList(ap: TesterPool; s: Snapshot; sep: string): string =
+  proc s3Cmp(a, b: (string,string,Vote)): int =
+    result = cmp(a[0], b[0])
+    if result == 0:
+      result = cmp(a[1], b[1])
+  let votes = s.ballot.votesInternal
+  votes.mapIt((ap.pp(it[0]),ap.pp(it[1]),it[2]))
+    .sorted(cmp = s3Cmp)
+    .mapIt(ap.pp(it[2]))
+    .join(sep)
+
+proc signersList(ap: TesterPool; s: Snapshot): string =
+  ap.pp(s.ballot.authSigners).sorted.join(",")
+
+proc pp*(ap: TesterPool; s: Snapshot; delim: string): string =
+  ## Pretty print descriptor
+  let
+    p1 = if 0 < delim.len: delim else: ";"
+    p2 = if 0 < delim.len and delim[0] == '\n': delim & ' '.repeat(7) else: ";"
+  "(" &
+    &"blockNumber=#{s.blockNumber}" &
+    &"{p1}recents=" & "{" & ap.pp(s.recents) & "}" &
+    &"{p1}signers=" & "{" & ap.signersList(s) & "}" &
+    &"{p1}votes=[" & ap.votesList(s,p2) & "])"
+
+proc pp*(ap: TesterPool; s: Snapshot; indent = 0): string =
+  ## Pretty print descriptor
+  let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
+  ap.pp(s, delim)
+
+proc pp(ap: TesterPool; v: BlockHeader; delim: string): string =
   ## Pretty print block header
   let sep = if 0 < delim.len: delim else: ";"
-  &"(blockNumber=#{v.blockNumber.truncate(uint64)}" &
+  &"(blockNumber=#{v.blockNumber}" &
     &"{sep}parentHash={v.parentHash}" &
     &"{sep}selfHash={v.blockHash}" &
     &"{sep}stateRoot={v.stateRoot}" &
-    &"{sep}coinbase={ap.ppAddress(v.coinbase)}" &
-    &"{sep}nonce={ap.ppNonce(v.nonce)}" &
-    &"{sep}extraData={ap.ppExtraData(v.extraData)})"
+    &"{sep}coinbase={ap.pp(v.coinbase)}" &
+    &"{sep}nonce={ap.pp(v.nonce)}" &
+    &"{sep}extraData={ap.pp(v.extraData)})"
+
+proc pp(ap: TesterPool; v: BlockHeader; indent = 3): string =
+  ## Pretty print block header, NL delimited, indented fields
+  let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
+  ap.pp(v, delim)
 
 # ------------------------------------------------------------------------------
 # Private: Constructor helpers
 # ------------------------------------------------------------------------------
-
-proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
-  pp.nonce =       proc(v:BlockNonce):            string = ap.ppNonce(v)
-  pp.address =     proc(v:EthAddress):            string = ap.ppAddress(v)
-  pp.extraData =   proc(v:Blob):                  string = ap.ppExtraData(v)
-  pp.blockHeader = proc(v:BlockHeader; d:string): string = ap.ppBlockHeader(v,d)
 
 proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
@@ -204,9 +254,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   if 0 < extraData.len:
     chainDB.genesis.extraData = extraData
   initializeEmptyDB(chainDB)
-  # fine tune Clique descriptor
-  ap.chain.clique.cfg.debug = debug
-  ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
+  ap.noisy = debug
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result = ap
@@ -221,12 +269,8 @@ proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
 # Public: pretty printer support
 # ------------------------------------------------------------------------------
 
-proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
-  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
-  t.chain.clique.cfg.prettyPrint
-
 proc say*(t: TesterPool; v: varargs[string,`$`]) =
-  if t.chain.clique.cfg.debug:
+  if t.noisy:
     stderr.write v.join & "\n"
 
 proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
@@ -253,35 +297,31 @@ proc newVoterPool*(networkId = GoerliNet): TesterPool =
 # Public: getter
 # ------------------------------------------------------------------------------
 
-proc chain*(ap: TesterPool): auto {.inline.} =
+proc chain*(ap: TesterPool): Chain =
   ## Getter
   ap.chain
 
-proc clique*(ap: TesterPool): auto {.inline.} =
+proc clique*(ap: TesterPool): Clique =
   ## Getter
   ap.chain.clique
 
-proc db*(ap: TesterPool): auto {.inline.} =
+proc db*(ap: TesterPool): BaseChainDB =
   ## Getter
   ap.clique.db
 
-proc debug*(ap: TesterPool): auto {.inline.} =
-  ## Getter
-  ap.clique.cfg.debug
-
-proc cliqueSigners*(ap: TesterPool): auto {.inline.} =
+proc cliqueSigners*(ap: TesterPool): seq[EthAddress] =
   ## Getter
   ap.clique.cliqueSigners
 
-proc cliqueSignersLen*(ap: TesterPool): auto {.inline.} =
+proc cliqueSignersLen*(ap: TesterPool): int =
   ## Getter
   ap.clique.cliqueSignersLen
 
-proc snapshot*(ap: TesterPool): auto {.inline.} =
+proc snapshot*(ap: TesterPool): Snapshot =
   ## Getter
   ap.clique.snapshot
 
-proc failed*(ap: TesterPool): CliqueFailed {.inline.} =
+proc failed*(ap: TesterPool): CliqueFailed =
   ## Getter
   ap.clique.failed
 
@@ -289,11 +329,7 @@ proc failed*(ap: TesterPool): CliqueFailed {.inline.} =
 # Public: setter
 # ------------------------------------------------------------------------------
 
-proc `debug=`*(ap: TesterPool; debug: bool) {.inline,} =
-  ## Set debugging mode on/off
-  ap.clique.cfg.debug = debug
-
-proc `verifyFrom=`*(ap: TesterPool; verifyFrom: uint64) {.inline.} =
+proc `verifyFrom=`*(ap: TesterPool; verifyFrom: uint64) =
   ## Setter, block number where `Clique` should start
   ap.chain.verifyFrom = verifyFrom
 
@@ -332,7 +368,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
   extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # store modified genesis block and epoch
-  ap.resetChainDb(extraData, ap.debug )
+  ap.resetChainDb(extraData, ap.noisy)
   ap.clique.cfg.epoch = epoch
   ap.clique.applySnapsMinBacklog = runBack
 
@@ -436,7 +472,7 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
         doAssert headers.len < prevLen
         reChainOk = true
 
-      if ap.debug:
+      if ap.noisy:
         ap.say "*** snapshot argument: #", headers[^1].blockNumber
         ap.sayHeaderChain(8)
         when false: # all addresses are typically pp-mappable

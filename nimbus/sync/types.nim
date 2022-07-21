@@ -119,37 +119,6 @@ proc toPC*(
   result.insert(".", result.len - minDigits)
 
 
-proc toSI*(num: SomeUnsignedInt): string =
-  ## Prints `num` argument value greater than 99 as rounded SI unit.
-  const
-    siUnits = [
-      #                   <limit>                 <multiplier>   <symbol>
-      (                   100_000u64,                     1000f64, 'k'),
-      (               100_000_000u64,                 1000_000f64, 'm'),
-      (           100_000_000_000u64,             1000_000_000f64, 'g'),
-      (       100_000_000_000_000u64,         1000_000_000_000f64, 't'),
-      (   100_000_000_000_000_000u64,     1000_000_000_000_000f64, 'p'),
-      (10_000_000_000_000_000_000u64, 1000_000_000_000_000_000f64, 'e')]
-
-    lastUnit =
-      #           <no-limit-here>                 <multiplier>   <symbol>
-      (                           1000_000_000_000_000_000_000f64, 'z')
-
-  if num < 1000:
-    return $num
-
-  block checkRange:
-    let
-      uNum = num.uint64
-      fRnd = (num.to(float) + 5) * 100
-    for (top, base, sig) in siUnits:
-      if uNum < top:
-        result = (fRnd / base).int.intToStr(3) & $sig
-        break checkRange
-    result = (fRnd / lastUnit[0]).int.intToStr(3) & $lastUnit[1]
-
-  result.insert(".", result.len - 3)
-
 func toHex*(hash: Hash256): string =
   ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex

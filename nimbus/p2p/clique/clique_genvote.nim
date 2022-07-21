@@ -20,13 +20,13 @@
 
 import
   std/[sequtils, times],
+  eth/[common, keys],
   ../../constants,
   ../../db/db_chain,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
-  ./clique_helpers,
-  eth/[common, keys]
+  ./clique_helpers
 
 {.push raises: [Defect].}
 
@@ -43,7 +43,7 @@ proc extraCheckPoint(header: var BlockHeader; signers: openArray[EthAddress]) =
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
 # clique/snapshot_test.go(77): func (ap *testerAccountPool) sign(header n[..]
-proc sign(header: var BlockHeader; signer: PrivateKey) {.inline.} =
+proc sign(header: var BlockHeader; signer: PrivateKey) =
   ## sign calculates a Clique digital signature for the given block and embeds
   ## it back into the header.
   #

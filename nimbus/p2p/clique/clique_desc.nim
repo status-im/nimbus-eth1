@@ -19,15 +19,15 @@
 ##
 
 import
-  std/[tables],
+  std/tables,
   ../../db/db_chain,
   ../../constants,
   ./clique_cfg,
   ./clique_defs,
-  ./snapshot/[lru_snaps, snapshot_desc],
+  ./snapshot/snapshot_desc,
   chronicles,
   eth/[common, keys, rlp],
-  stew/results
+  stew/[keyed_queue, results]
 
 const
   enableCliqueAsyncLock* = ##\
@@ -51,6 +51,14 @@ type
 
   Proposals = Table[EthAddress,bool]
 
+  CliqueSnapKey* = ##\
+    ## Internal key used for the LRU cache (derived from Hash256).
+    array[32,byte]
+
+  CliqueSnapLru = ##\
+    ## Snapshots cache
+    KeyedQueue[CliqueSnapKey,Snapshot]
+
   CliqueFailed* = ##\
     ## Last failed state: block hash and error result
     (Hash256, CliqueError)
@@ -71,7 +79,7 @@ type
     cfg: CliqueCfg ##\
       ## Common engine parameters to fine tune behaviour
 
-    recents: LruSnaps ##\
+    recents: CliqueSnapLru ##\
       ## Snapshots cache for recent block search
 
     snapshot: Snapshot ##\
@@ -88,7 +96,7 @@ type
       ## header contains the full list of currently authorised signers.
       ##
       ## If this flag is set `true`, then the `cliqueSnapshot()` function will
-      ## walk back to the `epoch` header with at least `cfg.roThreshold` blocks
+      ## walk back to the1 `epoch` header with at least `cfg.roThreshold` blocks
       ## apart from the current header. This is how it is done in the reference
       ## implementation.
       ##
@@ -114,20 +122,14 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
   result = Clique(cfg:       cfg,
-                  recents:   cfg.initLruSnaps,
                   snapshot:  cfg.newSnapshot(BlockHeader()),
                   proposals: initTable[EthAddress,bool]())
   when enableCliqueAsyncLock:
     result.asyncLock = newAsyncLock()
 
 # ------------------------------------------------------------------------------
-# Public /pretty print
+# Public debug/pretty print
 # ------------------------------------------------------------------------------
-
-# Debugging only
-proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
-  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
-  c.cfg.prettyPrint
 
 proc `$`*(e: CliqueError): string =
   ## Join text fragments
@@ -139,31 +141,31 @@ proc `$`*(e: CliqueError): string =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc recents*(c: Clique): var LruSnaps {.inline.} =
+proc recents*(c: Clique): var KeyedQueue[CliqueSnapKey,Snapshot] =
   ## Getter
   c.recents
 
-proc proposals*(c: Clique): var Proposals {.inline.} =
+proc proposals*(c: Clique): var Proposals =
   ## Getter
   c.proposals
 
-proc snapshot*(c: Clique): auto {.inline.} =
+proc snapshot*(c: Clique): Snapshot =
   ## Getter, last successfully processed snapshot.
   c.snapshot
 
-proc failed*(c: Clique): auto {.inline.} =
+proc failed*(c: Clique): CliqueFailed =
   ## Getter, last snapshot error.
   c.failed
 
-proc cfg*(c: Clique): auto {.inline.} =
+proc cfg*(c: Clique): CliqueCfg =
   ## Getter
   c.cfg
 
-proc db*(c: Clique): auto {.inline.} =
+proc db*(c: Clique): BaseChainDB =
   ## Getter
   c.cfg.db
 
-proc applySnapsMinBacklog*(c: Clique): auto {.inline.} =
+proc applySnapsMinBacklog*(c: Clique): bool =
   ## Getter.
   ##
   ## If this flag is set `true`, then the `cliqueSnapshot()` function will
@@ -180,11 +182,10 @@ proc applySnapsMinBacklog*(c: Clique): auto {.inline.} =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
+proc `db=`*(c: Clique; db: BaseChainDB) =
   ## Setter, re-set database
   c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()
-  c.recents = c.cfg.initLruSnaps
 
 proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter
@@ -194,7 +195,7 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
   c.failed = failure
 
-proc `applySnapsMinBacklog=`*(c: Clique; value: bool) {.inline.} =
+proc `applySnapsMinBacklog=`*(c: Clique; value: bool) =
   ## Setter
   c.applySnapsMinBacklog = value
 
@@ -203,11 +204,11 @@ proc `applySnapsMinBacklog=`*(c: Clique; value: bool) {.inline.} =
 # ------------------------------------------------------------------------------
 
 when enableCliqueAsyncLock:
-  proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
+  proc lock*(c: Clique) {.gcsafe, raises: [Defect,CatchableError].} =
     ## Lock descriptor
     waitFor c.asyncLock.acquire
 
-  proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
+  proc unLock*(c: Clique) {.gcsafe, raises: [Defect,AsyncLockError].} =
     ## Unlock descriptor
     c.asyncLock.release
 
