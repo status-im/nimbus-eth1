@@ -66,12 +66,15 @@ proc withRetries[A](
 
       if check(res):
         return res
+      else:
+        raise newException(ValueError, "check failed")
+
     except CatchableError as exc:
-      inc tries
       if tries > numRetries:
         # if we reached max number of retries fail
         raise exc
 
+    inc tries
     # wait before new retry
     await sleepAsync(currentDuration)
     currentDuration = currentDuration * 2
@@ -329,6 +332,71 @@ procSuite "Portal testnet tests":
         let receipientId = nodeInfos[i].nodeId
         check (await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0))
         await clients[0].close()
+
+      for client in clients:
+        # Note: Once there is the Canonical Indices Network, we don't need to
+        # access this file anymore here for the block hashes.
+        for hash in bd.blockHashes():
+          let content = await retryUntilDataPropagated(
+            proc (): Future[Option[BlockObject]] {.async.} =
+              try:
+                let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
+                await client.close()
+                return res
+              except CatchableError as exc:
+                await client.close()
+                raise exc
+            ,
+            proc (mc: Option[BlockObject]): bool = return mc.isSome()
+          )
+          check content.isSome()
+
+          let blockObj = content.get()
+          check blockObj.hash.get() == hash
+
+          for tx in blockObj.transactions:
+            var txObj: TransactionObject
+            tx.fromJson("tx", txObj)
+            check txObj.blockHash.get() == hash
+
+        await client.close()
+    finally:
+      db.close()
+      removeDir(dbFile)
+
+  asyncTest "Portal History - Propagate content from seed db in depth first fashion":
+    let clients = await connectToRpcServers(config)
+
+    var nodeInfos: seq[NodeInfo]
+    for client in clients:
+      let nodeInfo = await client.portal_history_nodeInfo()
+      await client.close()
+      nodeInfos.add(nodeInfo)
+
+    # different set of data for each test as tests are statefull so previously propageted
+    # block are already in the network
+    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000040_1000050.json"
+
+    # path for temporary db, separate dir is used as sqlite usually also creates
+    # wal files, and we do not want for those to linger in filesystem
+    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000040_100050.sqlite3"
+
+    let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
+
+    let blockData = readBlockDataTable(dataPath)
+    check blockData.isOk()
+    let bd = blockData.get()
+
+    createDir(dbFile)
+    let db = SeedDb.new(path = dbFile, name = dbName)
+
+    try:
+      # populate temp database from json file
+      for t in blocksContent(bd, false):
+        db.put(t[0], t[1], t[2])
+
+      check (await clients[0].portal_history_depthBulkPropagate(tempDbPath, 64))
+      await clients[0].close()
 
       for client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to

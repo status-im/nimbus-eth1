@@ -13,6 +13,7 @@ import
   eth/[rlp, common/eth_types],
   # TODO: `NetworkId` should not be in these private types
   eth/p2p/private/p2p_types,
+  eth/p2p/discoveryv5/node,
   ../nimbus/[chain_config, genesis],
   "."/[content_db, seed_db],
   ./network/wire/portal_protocol,
@@ -201,6 +202,79 @@ proc historyPropagate*(
     return ok()
   else:
     return err(blockData.error)
+
+proc historyDepthBulkPropagate*(
+    p: PortalProtocol, seedDbPath: string, maxClosestNodes: uint32):
+    Future[Result[void, string]] {.async.} =
+
+  ## Choses `maxClosestNodes` closest known nodes with known radius and tries to
+  ## offer as much content as possible in their range from seed db. Offers are made conccurently
+  ## with at most one offer per peer at the time
+  ##
+  const batchSize = 64
+
+  var gossipWorkers: seq[Future[void]]
+
+  let closestWithRadius = p.getNClosestNodesWithRadius(maxClosestNodes)
+
+  proc worker(p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256): Future[void] {.async.} =
+    var offset = 0
+    while true:
+      let content = db.getContentInRange(node.id, radius, batchSize, offset)
+
+      if len(content) == 0:
+        break
+
+      var contentInfo: seq[ContentInfo]
+      for e in content:
+        let info = ContentInfo(contentKey: ByteList.init(e.contentKey), content: e.content)
+        contentInfo.add(info)
+
+      let offerResult = await p.offer(node, contentInfo)
+
+      if offerResult.isErr() or len(content) < batchSize:
+        # peer failed or we reached end of database stop offering more content
+        break
+
+      offset = offset + batchSize
+
+  proc localNodeWorker(p: PortalProtocol, db: SeedDb): Future[void] {.async.}=
+    var offset = 0
+    while true:
+      let content = db.getContentInRange(p.localNode.id, p.dataRadius, batchSize, offset)
+
+      if len(content) == 0:
+        break
+
+      for e in content:
+        p.storeContent(UInt256.fromBytesBE(e.contentId), e.content)
+
+      if len(content) < batchSize:
+        # got to the end of db.
+        break
+
+      offset = offset + batchSize
+
+  let maybePathAndDbName = getDbBasePathAndName(seedDbPath)
+
+  if maybePathAndDbName.isNone():
+    return err("Provided path is not valid sqlite database path")
+
+  let
+    (dbPath, dbName) = maybePathAndDbName.unsafeGet()
+    db = SeedDb.new(path = dbPath, name = dbName)
+    target = p.localNode.id
+
+  for n in closestWithRadius:
+    gossipWorkers.add(p.worker(db, n[0], n[1]))
+
+  gossipWorkers.add(p.localNodeWorker(db))
+
+  await allFutures(gossipWorkers)
+
+  db.close()
+
+  return ok()
 
 proc historyPropagateBlock*(
     p: PortalProtocol, dataFile: string, blockHash: string, verify = false):

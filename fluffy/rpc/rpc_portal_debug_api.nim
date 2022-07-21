@@ -80,3 +80,16 @@ proc installPortalDebugApiHandlers*(
         return true
       else:
         raise newException(ValueError, $offerResult.error)
+
+  rpcServer.rpc("portal_" & network & "_depthBulkPropagate") do(
+      dbPath: string,
+      max: uint32) -> bool:
+
+    # TODO Consider making this call asynchronously without waiting for result
+    # as for big seed db size it could take a loot of time.
+    let propagateResult = await p.historyDepthBulkPropagate(dbPath, max)
+
+    if propagateResult.isOk():
+      return true
+    else:
+      raise newException(ValueError, $propagateResult.error)
