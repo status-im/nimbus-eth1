@@ -28,7 +28,7 @@ import
   ./graphql/ethapi,
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
-  ./sync/[fast, protocol, snap],
+  ./sync/[fast, full, protocol, snap],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
@@ -125,7 +125,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     of SyncMode.Snap:
       nimbus.ethNode.addCapability protocol.snap
-    of SyncMode.Default:
+    of SyncMode.Full, SyncMode.Default:
       discard
 
   if ProtocolFlag.Les in protocols:
@@ -144,6 +144,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     let tickerOK =
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
+    of SyncMode.Full:
+      FullSyncRef.init(nimbus.ethNode, conf.maxPeers, tickerOK).start
     of SyncMode.Snap:
       SnapSyncRef.init(nimbus.ethNode, conf.maxPeers).start
     of SyncMode.Default:
@@ -160,7 +162,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     of SyncMode.Snap:
       waitForPeers = false
-    of SyncMode.Default:
+    of SyncMode.Full, SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
@@ -380,7 +382,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       case conf.syncMode:
       of SyncMode.Default:
         FastSyncCtx.new(nimbus.ethNode).start
-      of SyncMode.Snap:
+      of SyncMode.Full, SyncMode.Snap:
         discard
 
     if nimbus.state == Starting:
