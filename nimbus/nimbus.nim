@@ -148,7 +148,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     of SyncMode.Full:
       FullSyncRef.init(nimbus.ethNode, conf.maxPeers, tickerOK).start
     of SyncMode.Snap:
-      SnapSyncRef.init(nimbus.ethNode, conf.maxPeers).start
+      SnapSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, conf.maxPeers, tickerOK).start
     of SyncMode.Default:
       discard
 

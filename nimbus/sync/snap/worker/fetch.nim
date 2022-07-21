@@ -10,16 +10,16 @@
 # except according to those terms.
 
 import
-  std/math,
+  std/[hashes, math],
   chronos,
   eth/[common/eth_types, p2p],
   nimcrypto/keccak,
   stew/[interval_set, keyed_queue],
   stint,
-  ../../types,
-  ../path_desc,
+  "../.."/[sync_desc, types],
+  ".."/[path_desc, worker_desc],
   ./fetch/[fetch_accounts, proof_db],
-  "."/[ticker, worker_desc]
+  ./ticker
 
 {.push raises: [Defect].}
 
@@ -38,7 +38,7 @@ type
     base: WorkerFetchBase    ## Back reference (`FetchEx` not working, here)
 
   AccLruCache =
-    KeyedQueue[TrieHash,AccTabEntryRef]
+    KeyedQueue[Hash256,AccTabEntryRef]
 
 logScope:
   topics = "snap-fetch"
@@ -56,17 +56,17 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc hash(h: Hash256): Hash =
+  ## Mixin for `Table` or `keyedQueue`
+  h.data.hash
+
 proc `==`(a, b: AccTabEntryRef): bool =
   ## Just to make things clear, should be default action anyway
   cast[pointer](a) == cast[pointer](b)
 
-proc fetchEx(ns: Worker): FetchEx =
+proc fetchEx(ctx: SnapCtxRef): FetchEx =
   ## Getter
-  ns.fetchBase.FetchEx
-
-proc fetchEx(sp: WorkerBuddy): FetchEx =
-  ## Getter
-  sp.ns.fetchEx
+  ctx.data.fetchBase.FetchEx
 
 proc withMaxLen(atb: AccTabEntryRef; iv: LeafRange): LeafRange =
   ## Reduce accounts interval to maximal size
@@ -80,11 +80,15 @@ proc withMaxLen(atb: AccTabEntryRef; iv: LeafRange): LeafRange =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
+proc getAccTab(buddy: SnapBuddyRef; key: Hash256): AccTabEntryRef =
   ## Fetch LRU table item, create a new one if missing.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+  
   # fetch existing table (if any)
   block:
-    let rc = sp.fetchEx.accTab.lruFetch(key)
+    let rc = ctx.fetchEx.accTab.lruFetch(key)
     if rc.isOk:
       # Item was moved to the end of queue
       return rc.value
@@ -92,47 +96,53 @@ proc getAccTab(sp: WorkerBuddy; key: TrieHash): AccTabEntryRef =
   # Calculate some new start address for the range fetcher
   while true:
     # Derive pivot from last interval set in table
-    let rc = sp.fetchEx.accTab.last
+    let rc = ctx.fetchEx.accTab.last
     if rc.isErr:
       break # no more => stop
     # Check last interval
     let blkRc = rc.value.data.avail.le() # rightmost interval
     if blkRc.isErr:
       # Delete useless interval set, repeat
-      sp.fetchEx.accTab.del(rc.value.key)
+      ctx.fetchEx.accTab.del(rc.value.key)
       continue
     # use increasing `pivot` values
-    if sp.fetchEx.lastPivot < blkRc.value.minPt:
-      sp.ns.fetchEx.lastPivot = blkRc.value.minPt
+    if ctx.fetchEx.lastPivot < blkRc.value.minPt:
+      ctx.fetchEx.lastPivot = blkRc.value.minPt
       break
-    if sp.fetchEx.lastPivot < high(NodeTag) - pivotAccIncrement:
-      sp.fetchEx.lastPivot = sp.ns.fetchEx.lastPivot + pivotAccIncrement
+    if ctx.fetchEx.lastPivot < high(NodeTag) - pivotAccIncrement:
+      ctx.fetchEx.lastPivot = ctx.fetchEx.lastPivot + pivotAccIncrement
       break
     # Otherwise start at 0
-    sp.fetchEx.lastPivot = 0.to(NodeTag)
+    ctx.fetchEx.lastPivot = 0.to(NodeTag)
     break
 
   let accRange = AccTabEntryRef(
-    pivot: sp.fetchEx.lastPivot,
+    pivot: ctx.fetchEx.lastPivot,
     avail: LeafRangeSet.init(),
-    base: sp.fetchEx)
+    base: ctx.fetchEx)
 
   trace "New accounts list for syncing",
-    peer=sp, stateRoot=key, pivot=sp.fetchEx.lastPivot
+    peer, stateRoot=key, pivot=ctx.fetchEx.lastPivot
 
   # Statistics
-  sp.fetchEx.quCount.inc
+  ctx.fetchEx.quCount.inc
 
   # Pre-filled with the largest possible interval
   discard accRange.avail.merge(low(NodeTag),high(NodeTag))
 
   # Append and curb LRU table as needed
-  return sp.fetchEx.accTab.lruAppend(key, accRange, sp.ns.buddiesMax)
+  return ctx.fetchEx.accTab.lruAppend(key, accRange, ctx.buddiesMax)
 
 
-proc sameAccTab(sp: WorkerBuddy; key: TrieHash; accTab: AccTabEntryRef): bool =
+proc sameAccTab(
+    buddy: SnapBuddyRef;
+    key: Hash256;
+    accTab: AccTabEntryRef
+     ): bool =
   ## Verify that account list entry has not changed.
-  let rc = sp.fetchEx.accTab.eq(key)
+  let
+    ctx = buddy.ctx
+    rc = ctx.fetchEx.accTab.eq(key)
   if rc.isErr:
     return accTab.isNil
   if not accTab.isNil:
@@ -183,66 +193,77 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
   if 0 < length:
     result[0] = sum / length.float
     result[1] = sqrt(sqSum / length.float - result[0] * result[0])
-  
-proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
-  var aSum, aSqSum, uSum, uSqSum: float
-  for kvp in ns.fetchEx.accTab.nextPairs:
-
-    # Accounts mean & variance
-    let aLen = ns.fetchEx.pdb.nAccounts(kvp.key).float
-    aSum += aLen
-    aSqSum += aLen * aLen
-
-    # Fill utilisation mean & variance
-    let fill = kvp.data.avail.freeFactor
-    uSum += fill
-    uSqSum += fill * fill
-
-  result.activeQueues = ns.fetchEx.accTab.len
-  result.flushedQueues = ns.fetchEx.quCount.int64 - result.activeQueues
-  result.accounts = meanStdDev(aSum, aSqSum, result.activeQueues)
-  result.fillFactor = meanStdDev(uSum, uSqSum, result.activeQueues)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc fetchSetup*(ns: Worker; chainDb: AbstractChainDB) =
+proc fetchSetup*(ctx: SnapCtxRef) =
   ## Global set up
-  ns.fetchBase = FetchEx()
-  ns.fetchEx.accTab.init(ns.buddiesMax)
-  ns.fetchEx.accRangeMaxLen = high(UInt256) div ns.buddiesMax.u256
-  ns.fetchEx.pdb.init(chainDb.getTrieDB)
-  ns.tickerSetup(cb = tickerStats)
+  ctx.data.fetchBase = FetchEx()
+  ctx.fetchEx.accTab.init(ctx.buddiesMax)
+  ctx.fetchEx.accRangeMaxLen = high(UInt256) div ctx.buddiesMax.u256
+  ctx.fetchEx.pdb.init(ctx.chain.getTrieDB)
 
-proc fetchRelease*(ns: Worker) =
+proc fetchRelease*(ctx: SnapCtxRef) =
   ## Global clean up
-  ns.tickerRelease()
-  ns.fetchBase = nil
+  ctx.data.fetchBase = nil
 
-proc fetchStart*(sp: WorkerBuddy) =
+proc fetchStart*(buddy: SnapBuddyRef) =
   ## Initialise fetching for particular peer
-  discard
+  let ctx = buddy.ctx
 
-proc fetchStop*(sp: WorkerBuddy) =
+proc fetchStop*(buddy: SnapBuddyRef) =
   ## Clean up for this peer
-  discard
+  let ctx = buddy.ctx
+
+proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
+  result = proc: TickerStats =
+    var
+      aSum, aSqSum, uSum, uSqSum: float
+      count = 0
+    for kvp in ctx.fetchEx.accTab.nextPairs:
+
+      # Accounts mean & variance
+      let aLen = ctx.fetchEx.pdb.nAccounts(kvp.key.TrieHash).float
+      if 0 < aLen:
+        count.inc
+        aSum += aLen
+        aSqSum += aLen * aLen
+
+        # Fill utilisation mean & variance
+        let fill = kvp.data.avail.freeFactor
+        uSum += fill
+        uSqSum += fill * fill
+
+    let
+      tabLen = ctx.fetchEx.accTab.len
+      pivotBlock =
+        if ctx.data.stateHeader.isSome:
+          some(ctx.data.stateHeader.get.blockNumber)
+        else: none(BlockNumber)
+    TickerStats(
+      pivotBlock:    pivotBlock,
+      activeQueues:  tabLen,
+      flushedQueues: ctx.fetchEx.quCount.int64 - tabLen,
+      accounts:      meanStdDev(aSum, aSqSum, count),
+      fillFactor:    meanStdDev(uSum, uSqSum, count))
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetch*(sp: WorkerBuddy) {.async.} =
-  ## Concurrently fetch account data. The data are fetched from `sp.peer` where
-  ## `sp` is the argument descriptor. Currently, accounts data are fetched but
-  ## not further processed (i.e. discarded.)
+proc fetchExec*(buddy: SnapBuddyRef) {.async.} =
+  ## Concurrently fetch account data. The data are fetched from `buddy.peer`
+  ## where `buddy` is the argument descriptor. Currently, accounts data are
+  ## fetched but not further processed (i.e. discarded.)
   ##
   ## The accounts requested depend on
-  ## * the currrent state root `sp.ctrl.stateRoot`,
+  ## * the currrent state root `buddy.data.stateRoot`,
   ## * an account list `accTab(stateRoot)` depending on the current state root.
   ##
   ## The account list keeps track of account ranges already requested. It is
-  ## shared among  all instances of `fetch()` (sharing the same `ds`
+  ## shared among  all instances of `fetch()` (sharing the same `buddy`
   ## descriptor.) So the accounts requested for a shared accounts list are
   ## mutually exclusive.
   ##
@@ -256,84 +277,66 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
   ##   when the highest values are exhausted. This `pivot` value is increased
   ##   with each new accounts list (derived from the last used accounts list.)
   ## * Accounts list are kept in a LRU table and automatically cleared. The
-  ##   size of the  LRU table is set to `sp.ns.buddiesMax`, the maximal number
-  ##   of workers or peers.
+  ##   size of the  LRU table is set to `buddy.ctx.buddiesMax`, the maximal
+  ##   number of workers or peers.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
 
-  trace "Fetching from peer", peer=sp, ctrlState=sp.ctrl.state
-  sp.tickerStartPeer()
+  # We need a state root and an access range list (depending on state root)
+  if ctx.data.stateHeader.isNone:
+    trace "Currently no state root", peer
+    return
 
-  while not sp.ctrl.stopped:
+  # Ok, here is the `stateRoot`, tentatively try the access range list
+  let
+    stateRoot = ctx.data.stateHeader.unsafeGet.stateRoot
+    accTab = buddy.getAccTab(stateRoot)
 
-    # We need a state root and an access range list (depending on state root)
-    if sp.ctrl.stateRoot.isNone:
-      trace "Currently no state root", peer=sp
-      # Wait for a new state root
-      while not sp.ctrl.stopped and
-            sp.ctrl.stateRoot.isNone:
+  if not accTab.haveAccRange():
+    trace "Currently no account ranges", peer
+    return
+
+  # Get a range of accounts to fetch from
+  let iv = block:
+    let rc = accTab.fetchAccRange()
+    if rc.isErr:
+      return
+    rc.value
+
+  # Fetch data for this range delegated to `fetchAccounts()`
+  let dd = block:
+    let rc = await buddy.fetchAccounts(stateRoot.TrieHash, iv)
+    if rc.isErr:
+      accTab.putAccRange(iv) # fail => interval back to pool
+      case rc.error:
+      of NetworkProblem, MissingProof, AccountsMinTooSmall,
+         AccountsMaxTooLarge:
+        # Mark this peer dead, i.e. avoid fetching from this peer for a while
+        buddy.data.stats.major.networkErrors.inc()
+        buddy.ctrl.zombie = true
+      of NothingSerious:
+        discard
+      of NoAccountsForStateRoot:
+        # One could wait for a new state root but this may result in a
+        # temporary standstill if all `fetch()` instances do the same. So
+        # waiting for a while here might be preferable in the hope that the
+        # situation changes at the peer.
         await sleepAsync(5.seconds)
-      continue
+      return
+    rc.value
 
-    # Ok, here is the `stateRoot`, tentatively try the access range list
-    let
-      stateRoot = sp.ctrl.stateRoot.get
-      accTab = sp.getAccTab(stateRoot)
+  # Register consumed accounts range
+  if dd.consumed < iv.len:
+    # return some unused range
+    accTab.putAccRange(iv.minPt + dd.consumed.u256, iv.maxPt)
 
-    if not accTab.haveAccRange():
-      trace "Currently no account ranges", peer=sp
-      # Account ranges exhausted, wait for a new state root
-      while not sp.ctrl.stopped and
-            sp.ctrl.stateRoot.isSome and
-            stateRoot == sp.ctrl.stateRoot.get and
-            sp.sameAccTab(stateRoot, accTab) and
-            not accTab.haveAccRange():
-        await sleepAsync(5.seconds)
-      continue
-
-    # Get a range of accounts to fetch from
-    let iv = block:
-      let rc = accTab.fetchAccRange()
-      if rc.isErr:
-        continue
-      rc.value
-
-    # Fetch data for this range delegated to `fetchAccounts()`
-    let dd = block:
-      let rc = await sp.fetchAccounts(stateRoot, iv)
-      if rc.isErr:
-        accTab.putAccRange(iv) # fail => interval back to pool
-        case rc.error:
-        of NetworkProblem, MissingProof, AccountsMinTooSmall,
-           AccountsMaxTooLarge:
-          # Mark this peer dead, i.e. avoid fetching from this peer for a while
-          sp.stats.major.networkErrors.inc()
-          sp.ctrl.zombie = true
-        of NothingSerious:
-          discard
-        of NoAccountsForStateRoot:
-          # One could wait for a new state root but this may result in a
-          # temporary standstill if all `fetch()` instances do the same. So
-          # waiting for a while here might be preferable in the hope that the
-          # situation changes at the peer.
-          await sleepAsync(5.seconds)
-        continue
-      rc.value
-
-    # Register consumed accounts range
-    if dd.consumed < iv.len:
-      # return some unused range
-      accTab.putAccRange(iv.minPt + dd.consumed.u256, iv.maxPt)
-
-    # Process data
-    block:
-      let rc = sp.ns.fetchEx.pdb.mergeProved(
-        sp.peer, stateRoot, iv.minPt, dd.data)
-      if rc.isErr:
-        discard # ??
-
-  # while end
-
-  trace "Done syncing for this peer", peer=sp, ctrlState=sp.ctrl.state
-  sp.tickerStopPeer()
+  # Process data
+  block:
+    let rc = ctx.fetchEx.pdb.mergeProved(
+      buddy.peer, stateRoot.TrieHash, iv.minPt, dd.data)
+    if rc.isErr:
+      discard # ??
 
 # ------------------------------------------------------------------------------
 # End

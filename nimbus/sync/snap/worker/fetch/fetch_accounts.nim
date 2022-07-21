@@ -19,8 +19,7 @@ import
   nimcrypto/keccak,
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config, types],
-  ../../path_desc,
-  ../worker_desc
+  "../.."/[path_desc, worker_desc]
 
 {.push raises: [Defect].}
 
@@ -49,17 +48,18 @@ type
 # ------------------------------------------------------------------------------
 
 proc getAccountRange(
-    sp: WorkerBuddy;
+    buddy: SnapBuddyRef;
     root: TrieHash;
     iv: LeafRange
       ): Future[Result[Option[WorkerAccountRange],void]] {.async.} =
+  let
+    peer = buddy.peer
   try:
-    let reply = await sp.peer.getAccountRange(
+    let reply = await peer.getAccountRange(
       root.to(Hash256), iv.minPt, iv.maxPt, snapRequestBytesLimit)
     return ok(reply)
-
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for reply to GetAccountRange", peer=sp,
+    trace trSnapRecvError & "waiting for reply to GetAccountRange", peer,
       error=e.msg
     return err()
 
@@ -68,17 +68,19 @@ proc getAccountRange(
 # ------------------------------------------------------------------------------
 
 proc fetchAccounts*(
-    peer: WorkerBuddy;
+    buddy: SnapBuddyRef;
     stateRoot: TrieHash;
     iv: LeafRange
       ): Future[Result[FetchAccounts,FetchError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
+  let
+    peer = buddy.peer
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer,
       accRange=iv, stateRoot, bytesLimit=snapRequestBytesLimit
 
   var dd = block:
-    let rc = await peer.getAccountRange(stateRoot, iv)
+    let rc = await buddy.getAccountRange(stateRoot, iv)
     if rc.isErr:
       return err(NetworkProblem)
     if rc.value.isNone:

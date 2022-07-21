@@ -19,8 +19,7 @@ import
   stint,
   "../../../.."/[db/storage_types, constants],
   "../../.."/[protocol, types],
-  ../../path_desc,
-  ../worker_desc
+  "../.."/[path_desc, worker_desc]
 
 {.push raises: [Defect].}
 
