@@ -24,7 +24,7 @@ logScope:
   topics = "snap-sync"
 
 type
-  SnapSyncCtx* = ref object of Worker
+  SnapSyncRef* = ref object of Worker
     chain: AbstractChainDB
     buddies: KeyedQueue[Peer,WorkerBuddy] ## LRU cache with worker descriptors
     pool: PeerPool                        ## for starting the system
@@ -33,8 +33,8 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nsCtx(sp: WorkerBuddy): SnapSyncCtx =
-  sp.ns.SnapSyncCtx
+proc nsCtx(sp: WorkerBuddy): SnapSyncRef =
+  sp.ns.SnapSyncRef
 
 proc hash(peer: Peer): Hash =
   ## Needed for `buddies` table key comparison
@@ -67,7 +67,7 @@ proc workerLoop(sp: WorkerBuddy) {.async.} =
     peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
 
 
-proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
+proc onPeerConnected(ns: SnapSyncRef, peer: Peer) =
   let sp = WorkerBuddy.new(ns, peer)
 
   # Check for known entry (which should not exist.)
@@ -104,7 +104,7 @@ proc onPeerConnected(ns: SnapSyncCtx, peer: Peer) =
   asyncSpawn sp.workerLoop()
 
 
-proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
+proc onPeerDisconnected(ns: SnapSyncRef, peer: Peer) =
   let rc = ns.buddies.eq(peer)
   if rc.isErr:
     debug "Disconnected from unregistered peer", peer,
@@ -124,7 +124,7 @@ proc onPeerDisconnected(ns: SnapSyncCtx, peer: Peer) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
+proc init*(T: type SnapSyncRef; ethNode: EthereumNode; maxPeers: int): T =
   ## Constructor
   new result
   let size = max(1,maxPeers)
@@ -133,7 +133,7 @@ proc new*(T: type SnapSyncCtx; ethNode: EthereumNode; maxPeers: int): T =
   result.buddiesMax = size
   result.pool = ethNode.peerPool
 
-proc start*(ctx: SnapSyncCtx) =
+proc start*(ctx: SnapSyncRef) =
   ## Set up syncing. This call should come early.
   var po = PeerObserver(
     onPeerConnected:
@@ -148,7 +148,7 @@ proc start*(ctx: SnapSyncCtx) =
   po.setProtocol eth
   ctx.pool.addObserver(ctx, po)
 
-proc stop*(ctx: SnapSyncCtx) =
+proc stop*(ctx: SnapSyncRef) =
   ## Stop syncing
   ctx.pool.delObserver(ctx)
   ctx.workerRelease()

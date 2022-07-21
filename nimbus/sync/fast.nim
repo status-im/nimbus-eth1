@@ -117,11 +117,14 @@ proc persistWorkItem(ctx: FastSyncCtx, wi: var WantedBlocks): ValidationResult
     result = ValidationResult.Error
   except Defect as e:
     # Pass through
-    raise (ref Defect)(msg: e.msg)
+    raise e
   except Exception as e:
+    # Notorious case where the `Chain` reference applied to `persistBlocks()`
+    # has the compiler traced a possible `Exception` (i.e. `ctx.chain` could
+    # be uninitialised.)
     error "exception while storing persistent blocks",
       error = $e.name, msg = e.msg
-    result = ValidationResult.Error
+    raise (ref Defect)(msg: $e.name & ": " & e.msg)
   case result
   of ValidationResult.OK:
     ctx.finalizedBlock = wi.endIndex
@@ -429,20 +432,6 @@ proc onPeerConnected(ctx: FastSyncCtx, peer: Peer) =
 proc onPeerDisconnected(ctx: FastSyncCtx, p: Peer) =
   trace "peer disconnected ", peer = p
   ctx.trustedPeers.excl(p)
-
-proc findBestPeer(node: EthereumNode): (Peer, DifficultyInt) =
-  var
-    bestBlockDifficulty: DifficultyInt = 0.stuint(256)
-    bestPeer: Peer = nil
-
-  for peer in node.peers(eth):
-    let peerEthState = peer.state(eth)
-    if peerEthState.initialized:
-      if peerEthState.bestDifficulty > bestBlockDifficulty:
-        bestBlockDifficulty = peerEthState.bestDifficulty
-        bestPeer = peer
-
-  result = (bestPeer, bestBlockDifficulty)
 
 proc new*(T: type FastSyncCtx; ethNode: EthereumNode): T
     {.gcsafe, raises:[Defect,CatchableError].} =

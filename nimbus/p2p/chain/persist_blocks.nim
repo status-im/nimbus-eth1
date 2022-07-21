@@ -50,15 +50,20 @@ proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  trace "Persisting blocks",
-    fromBlock = headers[0].blockNumber,
-    toBlock = headers[^1].blockNumber
-
   var cliqueState = c.clique.cliqueSave
   defer: c.clique.cliqueRestore(cliqueState)
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  var vmState = BaseVMState.new(headers[0], c.db)
+  let vmState = BaseVMState()
+  if not vmState.init(headers[0], c.db):
+    debug "Cannot initialise VmState",
+      fromBlock = headers[0].blockNumber,
+      toBlock = headers[^1].blockNumber
+    return ValidationResult.Error
+
+  trace "Persisting blocks",
+    fromBlock = headers[0].blockNumber,
+    toBlock = headers[^1].blockNumber
 
   for i in 0 ..< headers.len:
     let
@@ -72,7 +77,6 @@ proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
 
     let
       validationResult = vmState.processBlock(c.clique, header, body)
-
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
