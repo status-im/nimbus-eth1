@@ -19,7 +19,11 @@ requires "nim >= 1.2.0",
   "nimcrypto",
   "stew",
   "stint",
-  "rocksdb"
+  "rocksdb",
+  "ethash",
+  "blscurve",
+  "evmc",
+  "web3"
 
 binDir = "build"
 
