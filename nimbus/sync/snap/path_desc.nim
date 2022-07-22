@@ -50,19 +50,28 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
+proc to*(w: TrieHash; T: type NodeTag): T =
+  ## Syntactic sugar
+  w.Hash256.to(T)
+
 proc to*(nid: NodeTag; T: type Hash256): T =
+  ## Convert to serialised equivalent
   result.data = nid.UInt256.toBytesBE
 
 proc to*(nid: NodeTag; T: type NodeHash): T =
+  ## Syntactic sugar
   nid.to(Hash256).T
 
 proc to*(h: Hash256; T: type NodeTag): T =
+  ## Convert from serialised equivalent
   UInt256.fromBytesBE(h.data).T
 
 proc to*(nh: NodeHash; T: type NodeTag): T =
+  ## Syntactic sugar
   nh.Hash256.to(T)
 
 proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
+  ## Syntactic sugar
   n.u256.T
 
 # ------------------------------------------------------------------------------

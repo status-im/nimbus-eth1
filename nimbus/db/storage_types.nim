@@ -17,7 +17,6 @@ type
     finalizedHash
     snapSyncStatus
     snapSyncAccount
-    snapSyncProof
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -96,11 +95,6 @@ proc snapSyncAccountKey*(h, b: Hash256): DbXKey =
   result.data[1 .. 32] = h.data
   result.data[33 .. 64] = b.data
   result.dataEndPos = uint8 64
-
-proc snapSyncProofKey*(h: Hash256): DbKey =
-  result.data[0] = byte ord(snapSyncProof)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
 
 template toOpenArray*(k: DbKey|DbXKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

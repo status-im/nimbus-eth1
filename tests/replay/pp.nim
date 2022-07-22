@@ -78,6 +78,9 @@ proc pp*(h: BlockHeader; indent: int): string =
 proc pp*(g: Genesis; indent: int): string =
   g.pp("\n" & " ".repeat(max(1,indent)))
 
+proc pp*(a: Account): string =
+  &"({a.nonce},{a.balance},{a.storageRoot.pp},{a.codeHash.pp})"
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

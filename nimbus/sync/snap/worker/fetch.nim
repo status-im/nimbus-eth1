@@ -189,7 +189,7 @@ proc tickerStats(ns: Worker): TickerStats {.gcsafe.} =
   for kvp in ns.fetchEx.accTab.nextPairs:
 
     # Accounts mean & variance
-    let aLen = ns.fetchEx.pdb.accountsLen(kvp.key).float
+    let aLen = ns.fetchEx.pdb.nAccounts(kvp.key).float
     aSum += aLen
     aSqSum += aLen * aLen
 
@@ -325,7 +325,8 @@ proc fetch*(sp: WorkerBuddy) {.async.} =
 
     # Process data
     block:
-      let rc = sp.ns.fetchEx.pdb.mergeProved(stateRoot, iv.minPt, dd.data)
+      let rc = sp.ns.fetchEx.pdb.mergeProved(
+        sp.peer, stateRoot, iv.minPt, dd.data)
       if rc.isErr:
         discard # ??
 

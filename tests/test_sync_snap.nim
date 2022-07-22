@@ -14,7 +14,7 @@
 import
   std/[distros, os, random, sequtils, strformat, strutils],
   chronicles,
-  eth/[common/eth_types, trie/db],
+  eth/[common/eth_types, p2p, rlp, trie/db, trie/hexary],
   stint,
   stew/results,
   unittest2,
@@ -56,7 +56,7 @@ else:
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkProof = Result[void,ProofError].ok()
+  OkPmt = Result[void,PmtError].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -76,7 +76,10 @@ proc findFilePath(file: string): Result[string,void] =
   err()
 
 proc pp(w: TrieHash): string =
-  pp.pp(w.Hash256) # `pp()` also available from `worker-desc`
+  pp.pp(w.Hash256) # `pp()` also available from `worker_desc`
+
+proc pp(w: NodeTag; collapse = true): string =
+  pp.pp(w.to(Hash256),collapse)
 
 proc setTraceLevel =
   discard
@@ -155,6 +158,7 @@ proc lastTwo(a: openArray[string]): seq[string] =
 proc accountsRunner(
     noisy = true;  persistent: bool; root: TrieHash; data: seq[TestSample]) =
   let
+    peer = Peer.new
     lst = data.to(seq[TestItem])
     tmpDir = "accounts_and_proofs.nim".findFilePath.value.splitFile.dir
     db = if persistent: tmpDir.testDbs() else: testDbs()
@@ -173,55 +177,84 @@ proc accountsRunner(
 
     test &"Merging {lst.len} proofs for state root ..{root.pp}":
       desc.init(db.inst[0])
-      check desc.mergeBegin(root)
+      check desc.mergeBegin(peer, root)
       for proofs in lst.mapIt(it.data.proof):
-        check desc.merge(proofs) == OkProof
-        check desc.mergeValidate == OkProof
-        nRows.add desc.proofsLen(root)
+        check desc.merge(proofs) == OkPmt
+        check desc.mergeValidate == OkPmt
+        nRows.add desc.nPmts(root)
       check 1 < nRows.len # otherwise test makes no sense
       check 0 < nRows[^1]
 
     test "Rollback full database":
       check desc.mergeRollback()
-      check desc.proofsLen(root) == 0
-      check desc.accountsLen(root) == 0
-      check desc.journalLen == (false,0,0,0)
+      check desc.nPmts(root) == 0
+      check desc.nAccounts(root) == 0
+      check desc.journalSize == (false,0,0,0)
 
     test "Merging and committing all except the last":
       for n,proofs in lst.mapIt(it.data.proof):
-        check desc.mergeBegin(root)
-        check desc.merge(proofs) == OkProof
-        check nRows[n] == desc.proofsLen(root)
-        check desc.mergeValidate == OkProof
+        check desc.mergeBegin(peer, root)
+        check desc.merge(proofs) == OkPmt
+        check nRows[n] == desc.nPmts(root)
+        check desc.mergeValidate == OkPmt
         if n < nRows.len - 1:
           check desc.mergeCommit
-        check nRows[n] == desc.proofsLen(root)
+        check nRows[n] == desc.nPmts(root)
       check desc.mergeRollback
-      check 1 < nRows.len and nRows[^2] == desc.proofsLen(root)
+      check 1 < nRows.len and nRows[^2] == desc.nPmts(root)
 
     test &"Merging/committing {lst.len} proofs, transposed rows":
       desc.init(db.inst[1])
-      check desc.proofsLen(root) == 0
-      check desc.journalLen == (false,0,0,0)
+      check desc.nPmts(root) == 0
+      check desc.journalSize == (false,0,0,0)
       var r = initRand(42)
       for n,proofs in lst.mapIt(it.data.proof):
-        let permProof = r.permute(proofs.len).mapIt(proofs[it])
-        check desc.mergeBegin(root)
-        check desc.merge(permProof) == OkProof
-        check desc.mergeValidate == OkProof
+        let permPmt = r.permute(proofs.len).mapIt(proofs[it])
+        check desc.mergeBegin(peer, root)
+        check desc.merge(permPmt) == OkPmt
+        check desc.mergeValidate == OkPmt
         check desc.mergeCommit
-        check nRows[n] == desc.proofsLen(root)
+        check nRows[n] == desc.nPmts(root)
 
-    test &"Merging {lst.len} proved account groups"&
-        &" for state root ..{root.pp}":
+    test &"Merging {lst.len} account groups for state root ..{root.pp}":
       desc.init(db.inst[2])
       for n,w in lst:
-        check desc.mergeProved(root, w.base, w.data) == OkProof
-        check desc.journalLen == (false,0,0,0)
-        check nRows[n] == desc.proofsLen(root)
-        check desc.journalLen == (false,0,0,0)
+        check desc.mergeProved(peer, root, w.base, w.data) == OkPmt
+        check desc.journalSize == (false,0,0,0)
+        check nRows[n] == desc.nPmts(root)
+        check desc.journalSize == (false,0,0,0)
       check 1 < nRows.len # otherwise test makes no sense
       check 0 < nRows[^1]
+
+    test &"Visiting {desc.nAccounts(root)} accounts":
+      var
+        nItems = desc.nAccounts(root)
+        nProved = 0
+        htr = db.inst[2].initHexaryTrie(root.Hash256)
+
+      check 1 < nItems
+      for (n, key, accData) in desc.accounts(root):
+        check nItems == n
+        nItems.dec
+        if accData.proved:
+          nProved.inc
+
+          # Fetch/verify data from hexary trie
+          let blob = htr.get(key.to(Hash256).data)
+          check 0 < blob.len
+          check accData.account == blob.decode(Account)
+
+      check nItems == 0
+      # each group has exactly one proved account
+      check nProved == lst.len
+
+    test "Visiting single root":
+      var nItems = desc.nStateRoots
+      check 0 < nItems
+      for (n,tag) in desc.stateRoots:
+        check nItems == n
+        nItems.dec
+      check nItems == 0
 
 # ------------------------------------------------------------------------------
 # Main function(s)

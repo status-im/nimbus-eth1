@@ -41,38 +41,39 @@ type
     ## Note that the `snapXX` protocol driver always uses the underlying
     ## `Hash256` type which needs to be converted to `TrieHash`.
 
+  SomeDistinctHash256 =
+    TxHash | NodeHash | BlockHash | TrieHash
+
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxHash): T = Hash256().T
-proc new*(T: type NodeHash): T = Hash256().T
-proc new*(T: type BlockHash): T = Hash256().T
-proc new*(T: type TrieHash): T = Hash256().T
+proc new*(T: type SomeDistinctHash256): T =
+  Hash256().T
 
 # ------------------------------------------------------------------------------
 # Public (probably non-trivial) type conversions
 # ------------------------------------------------------------------------------
 
-proc to*(num: UInt256; T: type float): T =
-  ## Convert to float
-  let mantissaLen = 256 - num.leadingZeros
-  if mantissaLen <= 64:
-    num.truncate(uint64).T
-  else:
-    let exp = mantissaLen - 64
-    (num shr exp).truncate(uint64).T * (2.0 ^ exp)
-
 proc to*(num: SomeInteger; T: type float): T =
-  ## Convert to float
+  ## Convert to float. Result an d argument are not strictly equivalent. Though
+  ## sort of `(num.to(float) + 0.5).int == num` might hold in many cases.
   num.T
 
-proc to*(w: TrieHash|NodeHash|BlockHash|TxHash; T: type Hash256): T =
-  ## Get rid of `distinct` harness (needed for `snap1` and `eth1` protocol
-  ## driver access.)
+proc to*(longNum: UInt256; T: type float): T =
+  ## Convert to float (see also comment at `num.to(float)`, above.)
+  let mantissaLen = 256 - longNum.leadingZeros
+  if mantissaLen <= 64:
+    longNum.truncate(uint64).T
+  else:
+    let exp = mantissaLen - 64
+    (longNum shr exp).truncate(uint64).T * (2.0 ^ exp)
+
+proc to*(w: SomeDistinctHash256; T: type Hash256): T =
+  ## Syntactic sugar
   w.Hash256
 
-proc to*(w: seq[TrieHash|NodeHash|BlockHash|TxHash]; T: type seq[Hash256]): T =
+proc to*(w: seq[SomeDistinctHash256]; T: type seq[Hash256]): T =
   ## Ditto
   cast[seq[Hash256]](w)
 
@@ -84,17 +85,22 @@ proc to*(bh: BlockHash; T: type HashOrNum): T =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc read*(rlp: var Rlp, T: type TrieHash): T
+proc read*(rlp: var Rlp, T: type SomeDistinctHash256): T
     {.gcsafe, raises: [Defect,RlpError]} =
   ## RLP mixin reader
   rlp.read(Hash256).T
 
-proc `==`*(a: NodeHash; b: TrieHash): bool = a.Hash256 == b.Hash256
-proc `==`*(a,b: TrieHash): bool {.borrow.}
-proc `==`*(a,b: NodeHash): bool {.borrow.}
-proc `==`*(a,b: BlockHash): bool {.borrow.}
+proc append*(writer: var RlpWriter; h: SomeDistinctHash256) =
+  ## RLP mixin
+  append(writer, h.Hash256)
 
-proc hash*(root: TrieHash|NodeHash|BlockHash): Hash =
+proc `==`*(a: NodeHash; b: TrieHash): bool =
+  a.Hash256 == b.Hash256
+
+proc `==`*[T: SomeDistinctHash256](a,b: T): bool =
+  a.Hash256 == b.Hash256
+
+proc hash*(root: SomeDistinctHash256): Hash =
   ## Mixin for `Table` or `keyedQueue`
   root.Hash256.data.hash
 
@@ -122,7 +128,7 @@ func toHex*(hash: Hash256): string =
   ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
 
-func `$`*(h: TrieHash|NodeHash|BlockHash|TxHash): string =
+func `$`*(h: SomeDistinctHash256): string =
   $h.Hash256.data.toHex
 
 func `$`*(blob: Blob): string =

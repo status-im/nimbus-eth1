@@ -12,11 +12,12 @@
 import
   std/[algorithm, hashes, options, sequtils, sets, strutils, strformat, tables],
   chronos,
-  eth/[common/eth_types, p2p, rlp, trie/db],
+  eth/[common/eth_types, p2p, rlp],
+  eth/trie/[db, nibbles, trie_defs],
   nimcrypto/keccak,
-  stew/[byteutils, interval_set],
+  stew/[byteutils, interval_set, objects],
   stint,
-  ../../../../db/storage_types,
+  "../../../.."/[db/storage_types, constants],
   "../../.."/[protocol, types],
   ../../path_desc,
   ../worker_desc
@@ -28,10 +29,10 @@ logScope:
 
 const
   RowColumnParserDump = false
-  NibbleFollowDump = false # true
+  NibbleFollowDump = false # or true
 
 type
-  ProofError* = enum
+  PmtError* = enum
     RlpEncoding
     RlpBlobExpected
     RlpNonEmptyBlobExpected
@@ -45,127 +46,117 @@ type
     RowUnreferenced
     AccountSmallerThanBase
     AccountsNotSrictlyIncreasing
+    AccountBaseProofFailed
     LastAccountProofFailed
     MissingMergeBeginDirective
     StateRootDiffers
+    ExceptioninMergeProof
 
-  ProofRecType = enum
-    Branch,
-    Extension,
-    Leaf
+  ByteArray32 =
+    array[32,byte]
+
+  NodeKey =               ## Internal DB record reference type
+    distinct ByteArray32
 
   StatusRec = object
-    nAccounts: int
-    nProofs: int
+    nPmts: int            ## Number of records in the trie table for root key
 
-  AccountRec = ##\
-    ## Account entry record
-    distinct Account
+    accTop: NodeKey       ## Accounts linked list latest
+    nAccounts: int        ## Number of accounts records
 
-  ProofRec = object
-    ## Proofs entry record
-    case kind: ProofRecType
-    of Branch:
-      vertex: array[16,NodeTag]
-      value: Blob                 # name starts with a `v` as in vertex
-    of Extension:
-      extend: PathSegment
-      follow: NodeTag
-    of Leaf:
-      path: PathSegment
-      payload: Blob               # name starts with a `p` as in path
+    backLink: NodeKey     ## Keep in a simple linked list
+    nStatus: int          ## Number of items in linked list
 
-  ProofKvp = object
-    key: NodeTag
-    data: Option[ProofRec]
+  AccountData* = object
+    ## Account + meta data
+    account*: Account     ## Account data, ie. `nonce`, `balance`, etc.
+    proved*: bool         ## Account has a verified path in the proof table
+
+  AccountRec = object ##\
+    ## Database records for accounts
+    data: AccountData     ## Account + meta data
+    backLink: NodeKey     ## Keep in a simple linked list
+    nAccounts: int        ## Number of items in remaining linked list
+
+
+  ProofDbJournal = object
+    dbTx: DbTransaction              ## Rollback state capture
+    rootKey: NodeKey                 ## Current root node
+    newAccs: seq[(NodeKey,NodeKey)]  ## New accounts group: (base,last)
+    newPmts: seq[NodeKey]            ## Newly added proofs records
+    refPool: HashSet[NodeKey]        ## New proofs references recs
+    peer: Peer                       ## For log messages
 
   ProofDb* = object
-    keyMap: Table[NodeTag,uint]              ## For debugging only
+    keyMap: TableRef[NodeKey,uint]   ## For debugging only (will go away)
+    db: TrieDatabaseRef              ## General database
+    jrn: ProofDbJournal              ## Transaction journal
 
-    rootTag: NodeTag                         ## Current root node
-    rootHash: TrieHash                       ## Root node as hash
-    stat: StatusRec                          ## table statistics
-
-    db: TrieDatabaseRef                      ## general database
-    dbTx: DbTransaction                      ## Rollback state capture
-
-    newAccs: seq[(NodeTag,NodeTag)]          ## New accounts group: (base,last)
-    newProofs: seq[NodeTag]                  ## Newly added proofs records
-    refPool: HashSet[NodeTag]                ## New proofs references recs
+const
+  ValidBasePathMin = 6 # official docu missing, constant deducted from log data
+  ZeroNodeKey = NodeKey.default
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template noRlpError(info: static[string]; code: untyped) =
-  try:
-    code
-  except RlpError as e:
-    raiseAssert "Inconveivable (" & info & "): " & e.msg
+proc to(tag: NodeTag; T: type NodeKey): T =
+  tag.UInt256.toBytesBE.T
 
-proc read(rlp: var Rlp; T: type ProofRec): T =
-  ## RLP mixin
-  noRlpError("read(ProofRec)"):
-    result.kind = rlp.read(typeof result.kind)
-    rlp.tryEnterList()
-    case result.kind:
-    of Branch:
-      result.vertex = rlp.read(typeof result.vertex)
-      result.value = rlp.read(typeof result.value)
-    of Extension:
-      result.extend = rlp.dbRead(typeof result.extend)
-      result.follow = rlp.read(typeof result.follow)
-    of Leaf:
-      result.path = rlp.dbRead(typeof result.path)
-      result.payload = rlp.read(typeof result.payload)
+proc to(key: NodeKey; T: type NodeTag): T =
+  UInt256.fromBytesBE(key.ByteArray32).T
 
-proc append(writer: var RlpWriter; rec: ProofRec) =
-  ## RLP mixin
-  append(writer, rec.kind)
-  startList(writer, 2)
-  case rec.kind:
-  of Branch:
-    append(writer, rec.vertex)
-    append(writer, rec.value)
-  of Extension:
-    dbAppend(writer, rec.extend)
-    append(writer, rec.follow)
-  of Leaf:
-    dbAppend(writer, rec.path)
-    append(writer, rec.payload)
+proc to[W: TrieHash|Hash256](key: NodeKey; T: type W): T =
+  result.Hash256.data = key.ByteArray32
 
-proc to(w: TrieHash; T: type NodeTag): T =
-  ## Syntactic sugar
-  w.Hash256.to(T)
-
-proc to(w: AccountRec; T: type Account): T =
-  ## Syntactic sugar
-  w.T
-
-proc to(w: Account; T: type AccountRec): T =
-  ## Syntactic sugar
-  w.T
+proc to[W: TrieHash|Hash256](h: W; T: type NodeKey): T =
+  h.Hash256.data.T
 
 
-func nibble(a: array[32,byte]; inx: int): int =
-  let byteInx = inx shr 1
-  if byteInx < 32:
-    if (inx and 1) == 0:
-      result = (a[byteInx] shr 4).int
-    else:
-      result = (a[byteInx] and 15).int
+proc `==`(a, b: NodeKey): bool =
+  a.ByteArray32 == b.ByteArray32
 
-proc clearJournal(pv: var ProofDb) =
-  pv.newAccs.setLen(0)
-  pv.newProofs.setLen(0)
-  pv.refPool.clear
+proc `<`(a, b: NodeKey): bool =
+  a.ByteArray32 == b.ByteArray32
+
+proc `$`(key: NodeKey): string =
+  $key.to(NodeTag)
+
+proc hash(a: NodeKey): Hash =
+  a.ByteArray32.hash
+
+proc digestTo(data: Blob; T: type NodeKey): T =
+  keccak256.digest(data).data.T
+
+
+proc init(key: var NodeKey; data: openArray[byte]): bool =
+  if data.len == 32:
+    key = toArray(32,data).NodeKey
+    return true
+  elif data.len == 0:
+    key.reset
+    return true
+  elif data.len < 32:
+    let offset = 32 - data.len
+    for n in 0 ..< data.len:
+      key.ByteArray32[offset + n] = data[n]
+    return true
+
+proc convertTo(data: openArray[byte]; T: type NodeKey): T =
+  let withinRangeOk = result.init(data)
+  doAssert withinRangeOk
+
+
+proc read(rlp: var Rlp, T: type NodeKey): T
+    {.gcsafe, raises: [Defect,RlpError]} =
+  rlp.read(Hash256).data.T
+
+proc append(writer: var RlpWriter, key: NodeKey) =
+  writer.append(key.to(Hash256))
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
-
-import
-  ../../../../constants
 
 template noPpError(info: static[string]; code: untyped) =
   try:
@@ -189,33 +180,24 @@ proc pp(s: string; hex = false): string =
 proc pp(a: Hash256; collapse = true): string =
   if not collapse:
     a.data.mapIt(it.toHex(2)).join.toLowerAscii
-  elif a == ZERO_HASH256:
-    "ZERO_HASH256"
-  elif a == BLANK_ROOT_HASH:
-    "BLANK_ROOT_HASH"
-  elif a == EMPTY_UNCLE_HASH:
-    "EMPTY_UNCLE_HASH"
-  elif a == EMPTY_SHA3:
-    "EMPTY_SHA3"
-  elif a == ZERO_HASH256:
-    "ZERO_HASH256"
+  elif a == emptyRlpHash:
+    "emptyRlpHash"
+  elif a == blankStringHash:
+    "blankStringHash"
   else:
     a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
-proc pp(a: NodeHash|TrieHash; collapse = true): string =
-  a.Hash256.pp(collapse)
-
-proc pp(a: NodeTag; collapse = true): string =
+proc pp(a: NodeKey; collapse = true): string =
   a.to(Hash256).pp(collapse)
 
-proc toKey(a: NodeTag; pv: var ProofDb): uint =
-  noPpError("pp(NodeTag)"):
+proc toKey(a: NodeKey; pv: ProofDb): uint =
+  noPpError("pp(NodeKey)"):
     if not pv.keyMap.hasKey(a):
       pv.keyMap[a] = pv.keyMap.len.uint + 1
     result = pv.keyMap[a]
 
-proc pp(a: NodeTag; pv: var ProofDb): string =
-  $a.toKey(pv)
+proc pp(a: NodeKey; pv: ProofDb): string =
+  "$" & $a.toKey(pv)
 
 proc pp(q: openArray[byte]; noHash = false): string =
   if q.len == 32 and not noHash:
@@ -255,122 +237,147 @@ proc pp(blobs: seq[Blob]): string =
   else:
     result &= "]"
 
-proc pp(hs: seq[NodeTag]; pv: var ProofDb): string =
+proc pp(branch: array[17,Blob]; pv: ProofDb): string =
+  result = "["
+  noPpError("pp(array[17,Blob])"):
+    for a in 0 .. 15:
+      result &= branch[a].convertTo(NodeKey).pp(pv) & ","
+  result &= branch[16].pp & "]"
+
+proc pp(branch: array[16,NodeKey]; pv: ProofDb): string =
+  result = "["
+  noPpError("pp(array[17,Blob])"):
+    for a in 0 .. 15:
+      result &= branch[a].pp(pv) & ","
+  result[^1] = ']'
+
+proc pp(hs: seq[NodeKey]; pv: ProofDb): string =
  "<" & hs.mapIt(it.pp(pv)).join(",") & ">"
 
-proc pp(hs: HashSet[NodeTag]; pv: var ProofDb): string =
-  "{" & toSeq(hs.items).mapIt(it.toKey(pv)).sorted.mapIt($it).join(",") & "}"
-
-proc pp(rec: ProofRec; pv: var ProofDb): string =
-  noPpError("pp(ProofRec)"):
-    case rec.kind:
-    of Branch: result &=
-      "b(" & rec.vertex.mapIt(it.pp(pv)).join(",") & "," &
-        rec.value.pp.pp(true) & ")"
-    of Leaf: result &=
-      "l(" & ($rec.path).pp(true) & "," & rec.payload.pp.pp(true) & ")"
-    of Extension: result &=
-      "x(" & ($rec.extend).pp(true) & "," & rec.follow.pp(pv) & ")"
-
-proc pp(rec: Option[ProofRec]; pv: var ProofDb): string =
-  if rec.isSome:
-    rec.get.pp(pv)
-  else:
-    "n/a"
-
-proc pp(q: seq[ProofKvp]; pv: var ProofDb): string =
-  result="@["
-  for kvp in q:
-    result &= "(" & kvp.key.pp(pv) & "," & kvp.data.pp(pv) & "),"
-  if q.len == 0:
-    result &= "]"
-  else:
-    result[^1] = ']'
+proc pp(hs: HashSet[NodeKey]; pv: ProofDb): string =
+  "{" &
+    toSeq(hs.items).mapIt(it.toKey(pv)).sorted.mapIt("$" & $it).join(",") & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-template mkProofKey(pv: ProofDb; tag: NodeTag): openArray[byte] =
-  tag.to(Hash256).snapSyncProofKey.toOpenArray
+template mkStatusKey(root: NodeKey): openArray[byte] =
+  snapSyncStatusKey(root.to(Hash256)).toOpenArray
 
-proc getProofsRec(pv: ProofDb; tag: NodeTag): Result[ProofRec,void] =
-  let recData = pv.db.get(pv.mkProofKey(tag))
+proc useStatusRec(pv: ProofDb; root: NodeKey): StatusRec
+    {.gcsafe, raises: [Defect,RlpError]} =
+  let rec = pv.db.get(root.mkStatusKey())
+  if 0 < rec.len:
+    return rec.decode(StatusRec)
+
+proc putStatusRec(pv: ProofDb; root: NodeKey; rec: var StatusRec)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  # Update linked list
+    if rec.nStatus == 0:
+      doAssert rec.backLink == ZeroNodeKey
+      #
+      # Linked list:
+      #
+      #   +-- zeroRec <-- [] <-- [] ... <-- []
+      #   |                                 ^
+      #   |                                 |
+      #   +---------------------------------+
+      #
+      var zeroRec = pv.useStatusRec(ZeroNodeKey)
+      rec.backLink = zeroRec.backLink
+      zeroRec.backLink = root
+      #
+      # Update size of linked list
+      rec.nStatus = zeroRec.nStatus + 1
+      zeroRec.nStatus = rec.nStatus
+      #
+      # Store head record
+      pv.db.put(ZeroNodeKey.mkStatusKey(), rlp.encode(zeroRec))
+    pv.db.put(root.mkStatusKey(), rlp.encode(rec))
+
+# -----------
+
+proc getPmtRec(pv: ProofDb; key: Blob): Result[Blob,void] =
+  let recData = pv.db.get(key)
   if 0 < recData.len:
-    return ok(recData.decode(ProofRec))
+    return ok(recData)
   err()
 
-proc hasProofsRec(pv: ProofDb; tag: NodeTag): bool =
-  pv.db.contains(pv.mkProofKey(tag))
-
-proc collectRefs(pv: var ProofDb; rec: ProofRec) =
-  case rec.kind:
-  of Branch:
-    for v in rec.vertex:
-      pv.refPool.incl v
-  of Extension:
-    pv.refPool.incl rec.follow
-  of Leaf:
-    discard
-
-proc collectRefs(pv: var ProofDb; tag: NodeTag) =
-  let rc = pv.getProofsRec(tag)
-  if rc.isOk:
-    pv.collectRefs(rc.value)
-
-proc addProofsRec(pv: var ProofDb; tag: NodeTag; rec: ProofRec) =
-  #debug "addProofsRec", size=pv.nProofs, tag=tag.pp(pv), rec=rec.pp(pv)
-  if not pv.hasProofsRec(tag):
-    pv.db.put(pv.mkProofKey(tag), rlp.encode(rec))
-    pv.stat.nProofs.inc
-    pv.newProofs.add tag # to be committed
-  # Always add references, the rec might have been added earlier outside
-  # the current transaction.
-  pv.collectRefs(rec)
+proc addPmtRec(pv: var ProofDb; recData: Blob)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  let key = (keccak recData).data
+  if not pv.db.contains(key):
+    #
+    # Update status record
+    var statRec = pv.useStatusRec(pv.jrn.rootKey)
+    statRec.nPmts.inc
+    #
+    # Store status record
+    pv.db.put(pv.jrn.rootKey.mkStatusKey(), rlp.encode(statRec))
+    #
+    # Store proof table record
+    pv.db.put(key, recData)
+    #
+    # Add to update journal
+    pv.jrn.newPmts.add key.NodeKey
+    #
+    #debug "addPmtRec", size=statRec.nPmts, key=key.pp(pv), rec=recData.pp
 
 # -----------
 
-template mkAccKey(pv: ProofDb; tag: NodeTag): openArray[byte] =
-  snapSyncAccountKey(tag.to(Hash256), pv.rootHash.Hash256).toOpenArray
+template mkAccountKey(key, root: NodeKey): openArray[byte] =
+  snapSyncAccountKey(key.to(Hash256), root.to(Hash256)).toOpenArray
 
-proc hasAccountRec(pv: ProofDb; tag: NodeTag): bool =
-  pv.db.contains(pv.mkAccKey(tag))
-
-proc getAccountRec(pv: ProofDb; tag: NodeTag): Result[AccountRec,void] =
-  let rec = pv.db.get(pv.mkAccKey(tag))
+proc getAccountData(pv: ProofDb; key: NodeKey): Result[AccountData,void]
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Get account, returns error on failure
+  let rec = pv.db.get(key.mkAccountKey(pv.jrn.rootKey))
   if 0 < rec.len:
-    noRlpError("read(AccountRec)"):
-      return ok(rec.decode(Account).to(AccountRec))
+    return ok(rec.decode(AccountRec).data)
   err()
 
-proc addAccountRec(pv: var ProofDb; tag: NodeTag; rec: AccountRec) =
-  if not pv.hasAccountRec(tag):
-    pv.db.put(pv.mkAccKey(tag), rlp.encode(rec.to(Account)))
-    pv.stat.nAccounts.inc
-
-# -----------
-
-template mkStatusKey(pv: ProofDb; root: TrieHash): openArray[byte] =
-  snapSyncStatusKey(root.Hash256).toOpenArray
-
-proc hasStatusRec(pv: ProofDb; root: TrieHash): bool =
-  pv.db.contains(pv.mkStatusKey(root))
-
-proc getStatusRec(pv: ProofDb; root: TrieHash): Result[StatusRec,void] =
-  let rec = pv.db.get(pv.mkStatusKey(root))
+proc useAccountRec(pv: ProofDb; key, root: NodeKey): AccountRec
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Get account, returns empty account on failure
+  let rec = pv.db.get(key.mkAccountKey(root))
   if 0 < rec.len:
-    noRlpError("getStatusRec"):
-      return ok(rec.decode(StatusRec))
-  err()
+    return rec.decode(AccountRec)
 
-proc useStatusRec(pv: ProofDb; root: TrieHash): StatusRec =
-  let rec = pv.db.get(pv.mkStatusKey(root))
-  if 0 < rec.len:
-    noRlpError("findStatusRec"):
-      return rec.decode(StatusRec)
+proc putAccountData(pv: var ProofDb; key: NodeKey; accData: AccountData)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Update account data record
+  var accRec = pv.useAccountRec(key, pv.jrn.rootKey)
+  accRec.data = accData
 
-proc putStatusRec(pv: ProofDb; root: TrieHash; rec: StatusRec) =
-  pv.db.put(pv.mkStatusKey(root), rlp.encode(rec))
+  if accRec.nAccounts == 0:
+    var statRec = pv.useStatusRec(pv.jrn.rootKey)
+    #
+    # Linked list:
+    #
+    #   [] <-- [] <-- [] ... <-- accRec
+    #                              ^
+    #                              |
+    #   statRec.accTop ------------+
+    #
+    accRec.backLink = statRec.accTop
+    statRec.accTop = key
+    #
+    # Update size of linked list
+    accRec.nAccounts = statRec.nAccounts + 1
+    statRec.nAccounts = accRec.nAccounts
+    #
+    # Store status record
+    pv.putStatusRec(pv.jrn.rootKey, statRec)
+
+  # Store/update account record
+  pv.db.put(key.mkAccountKey(pv.jrn.rootKey), rlp.encode(accRec))
+
+proc putAccount(pv: var ProofDb; key: NodeKey; acc: Account)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Add/apdate account, no explicit meta data
+  pv.putAccountData(key, AccountData(account: acc))
+
 
 # Example trie from https://eth.wiki/en/fundamentals/patricia-tree
 #
@@ -402,25 +409,18 @@ proc putStatusRec(pv: ProofDb; root: TrieHash; rec: StatusRec) =
 #        "horse":  6 8 6 f 7 2 7 3 6 5
 #
 
-proc parse(pv: ProofDb; rlpData: Blob): Result[ProofKvp,ProofError]
+proc parse(pv: var ProofDb; recData: Blob): Result[void,PmtError]
     {.gcsafe, raises: [Defect, RlpError].} =
-  ## Decode a single trie item for adding to the table
+  ## Decode a single trie item for adding to the table and add it to the
+  ## database. Branch and exrension record links are collected.
 
-  let recTag = rlpData.digestTo(NodeTag)
   when RowColumnParserDump:
-    debug "Rlp column parser", recTag
-  if pv.hasProofsRec(recTag):
-    # No need to do this rec again
-    return ok(ProofKvp(key: recTag, data: none(ProofRec)))
+    debug "Rlp column parser", key=recData.digestTo(NodeKey).pp(pv)
 
   var
-    # Inut data
-    rlp = rlpData.rlpFromBytes
-
-    # Result data
-    blobs = newSeq[Blob](2)      # temporary, cache
-    rec = ProofRec(kind: Branch) # part of output, default type
-    top = 0                      # count entries
+    rlp = recData.rlpFromBytes
+    blobs = newSeq[Blob](2)         # temporary, cache
+    top = 0                         # count entries
 
   # Collect lists of either 2 or 17 blob entries.
   for w in rlp.items:
@@ -432,12 +432,14 @@ proc parse(pv: ProofDb; rlpData: Blob): Result[ProofKvp,ProofError]
         return err(RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
-      if not rec.vertex[top].init(rlp.read(Blob)):
+      var nodeKey: NodeKey
+      if not nodeKey.init(rlp.read(Blob)):
         return err(RlpBranchLinkExpected)
+      # Update ref pool
+      pv.jrn.refPool.incl nodeKey
     of 16:
       if not w.isBlob:
         return err(RlpBlobExpected)
-      rec.value = rlp.read(Blob)
     else:
       return err(Rlp2Or17ListEntries)
     top.inc
@@ -445,51 +447,43 @@ proc parse(pv: ProofDb; rlpData: Blob): Result[ProofKvp,ProofError]
   when RowColumnParserDump:
     debug "Rlp column parser done collecting columns", col=top
 
-  # Assemble collected data
-  case top:
+  # Verify extension data
+  case top
   of 2:
     if blobs[0].len == 0:
       return err(RlpNonEmptyBlobExpected)
-    case blobs[0][0] shr 4:
-    of 0, 1:
-      rec.kind = Extension
-      if not (rec.extend.init(blobs[0]) and rec.follow.init(blobs[1])):
+    let isLeaf = (hexPrefixDecode blobs[0])[0]
+    if not isLeaf:
+      var nodeKey: NodeKey
+      if not nodeKey.init(blobs[1]):
         return err(RlpExtPathEncoding)
-    of 2, 3:
-      rec.kind = Leaf
-      if not rec.path.init(blobs[0]):
-        return err(RlpLeafPathEncoding)
-      rec.payload = blobs[1]
-    else:
-      return err(RlpRecTypeError)
+      # Update ref pool
+      pv.jrn.refPool.incl nodeKey
   of 17:
-    # Branch entry, complete the first two vertices
-    for n,blob in blobs:
-      if not rec.vertex[n].init(blob):
+    for blob in blobs:
+      var nodeKey: NodeKey
+      if not nodeKey.init(blob):
         return err(RlpBranchLinkExpected)
+      # Update ref pool
+      pv.jrn.refPool.incl nodeKey
   else:
-    return err(Rlp2Or17ListEntries)
+    discard
 
-  ok(ProofKvp(key: recTag, data: some(rec)))
+  # Add to database
+  pv.addPmtRec(recData)
+
+  ok()
 
 
-proc parse(pv: var ProofDb; proof: SnapAccountProof): Result[void,ProofError] =
-  ## Decode a list of RLP encoded trie entries and add it to the rec pool
+proc parse(pv: var ProofDb; proof: SnapAccountProof): Result[void,PmtError] =
+  ## Decode a list of RLP encoded trie entries and add it to the database
   try:
     for n,rlpRec in proof:
       when RowColumnParserDump:
-        debug "Rlp rec parser", rec=n, data=rec.pp
-
-      let kvp = block:
-        let rc = pv.parse(rlpRec)
-        if rc.isErr:
-          return err(rc.error)
-        rc.value
-
-      if kvp.data.isNone: # avoids dups, stoll collects references
-        pv.collectRefs(kvp.key)
-      else:
-        pv.addProofsRec(kvp.key, kvp.data.get)
+        debug "Rlp rec parser", rec=n, data=rlpRec.pp
+      let rc = pv.parse(rlpRec)
+      if rc.isErr:
+        return err(rc.error)
   except RlpError:
     return err(RlpEncoding)
   except KeyError:
@@ -497,83 +491,118 @@ proc parse(pv: var ProofDb; proof: SnapAccountProof): Result[void,ProofError] =
 
   ok()
 
-proc follow(pv: ProofDb; path: NodeTag): (int, Blob) =
-  ## Returns the number of matching digits/nibbles from the argument `tag`
+# ------------------------------------------------------------------------------
+# Private walk along hexary trie records
+# ------------------------------------------------------------------------------
+
+proc follow(pv: ProofDb; root: NodeKey; path: NibblesSeq): (int, bool, Blob)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Returns the number of matching digits/nibbles from the argument `path`
   ## found in the proofs trie.
+  let
+    nNibbles = path.len
   var
-    inTop = 0
-    inPath = path.UInt256.toBytesBE
-    recTag = pv.rootTag
+    inPath = path
+    recKey = root.ByteArray32.toSeq
     leafBlob: Blob
+    emptyRef = false
 
   when NibbleFollowDump:
-    trace "follow", root=pv.rootTag, path
+    trace "follow", rootKey=root.pp(pv), path
 
-  noRlpError("follow"):
-    block loop:
-      while true:
+  while true:
+    let rc = pv.getPmtRec(recKey)
+    if rc.isErr:
+      break
 
-        let rec = block:
-          let rc = pv.getProofsRec(recTag)
-          if rc.isErr:
-            break loop
-          rc.value
+    var nodeRlp = rlpFromBytes rc.value
+    case nodeRlp.listLen:
+    of 2:
+      let
+        (isLeaf, pathSegment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
+        sharedNibbles = sharedPrefixLen(inPath, pathSegment)
+        fullPath = sharedNibbles == pathSegment.len
+        inPathLen = inPath.len
+      inPath = inPath.slice(sharedNibbles)
 
-        let recType = rec.kind
-        case recType:
-        of Branch:
-          let
-            nibble = inPath.nibble(inTop)
-            newTag = rec.vertex[nibble]
+      # Leaf node
+      if isLeaf:
+        let leafMode = sharedNibbles == inPathLen
+        if fullPath and leafMode:
+          leafBlob = nodeRlp.listElem(1).toBytes
+        when NibbleFollowDump:
+          let nibblesLeft = inPathLen - sharedNibbles
+          trace "follow leaf",
+            fullPath, leafMode, sharedNibbles, nibblesLeft,
+            pathSegment, newPath=inPath
+        break
+
+      # Extension node
+      if fullPath:
+        let branch = nodeRlp.listElem(1)
+        if branch.isEmpty:
           when NibbleFollowDump:
-            trace "follow branch", recType, recTag, inTop, nibble, newTag
-          recTag = newTag
+            trace "follow extension", newKey="n/a"
+          emptyRef = true
+          break
+        recKey = branch.toBytes
+        when NibbleFollowDump:
+          trace "follow extension",
+            newKey=recKey.convertTo(NodeKey).pp(pv), newPath=inPath
+      else:
+        when NibbleFollowDump:
+          trace "follow extension",
+            fullPath, sharedNibbles, pathSegment,
+            inPathLen, newPath=inPath
+        break
 
-        of Leaf:
-          for n in 0 ..< rec.path.len:
-            if rec.path[n] != inPath.nibble(inTop + n):
-              inTop += n
-              when NibbleFollowDump:
-                let tail = rec.path
-                trace "follow leaf failed", recType, recTag, tail
-              break loop
-          inTop += rec.path.len
-          leafBlob = rec.payload
-          when NibbleFollowDump:
-            trace "follow leaf", recType, recTag, inTop, done=true
-          break loop
+    of 17:
+      # Branch node
+      if inPath.len == 0:
+        leafBlob = nodeRlp.listElem(1).toBytes
+        break
+      let
+        inx = inPath[0].int
+        branch = nodeRlp.listElem(inx)
+      if branch.isEmpty:
+        when NibbleFollowDump:
+          trace "follow branch", newKey="n/a"
+        emptyRef = true
+        break
+      inPath = inPath.slice(1)
+      recKey = branch.toBytes
+      when NibbleFollowDump:
+        trace "follow branch",
+          newKey=recKey.convertTo(NodeKey).pp(pv), inx, newPath=inPath
 
-        of Extension:
-          for n in 0 ..< rec.extend.len:
-            if rec.extend[n] != inPath.nibble(inTop + n):
-              inTop += n
-              when NibbleFollowDump:
-                let tail = rec.extend
-                trace "follow extension failed", recType, recTag, tail
-              break loop
-          inTop += rec.extend.len
-          let newTag = rec.follow
-          when NibbleFollowDump:
-            trace "follow extension", recType, recTag, inTop, newTag
-          recTag = newTag
+    else:
+      when NibbleFollowDump:
+        trace "follow oops",
+          nColumns = nodeRlp.listLen
+      break
 
-        # end case
-        inTop.inc
+  # end while
 
-      # end while
-      inTop.dec
+  let pathLen = nNibbles - inPath.len
 
   when NibbleFollowDump:
-    trace "follow done", tag, inTop
+    trace "follow done",
+      recKey, emptyRef, pathLen, leafSize=leafBlob.len
 
-  (inTop, leafBlob)
+  (pathLen, emptyRef, leafBlob)
+
+
+proc follow(pv: ProofDb; root, path: NodeKey): (int, bool, Blob)
+    {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `follow()`
+  pv.follow(root, path.ByteArray32.initNibbleRange)
 
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
 proc init*(pv: var ProofDb; db: TrieDatabaseRef) =
-  pv = ProofDb(db: db)
+  pv = ProofDb(db: db, keyMap: newTable[NodeKey,uint]())
 
 # ------------------------------------------------------------------------------
 # Public functions, transaction frame
@@ -582,61 +611,84 @@ proc init*(pv: var ProofDb; db: TrieDatabaseRef) =
 proc isMergeTx*(pv: ProofDb): bool =
   ## The function returns `true` exactly if a merge transaction was initialised
   ## with `mergeBegin()`.
-  not pv.dbTx.isNil
+  not pv.jrn.dbTx.isNil
 
-proc mergeBegin*(pv: var ProofDb; root: TrieHash): bool =
+proc mergeBegin*(pv: var ProofDb; peer: Peer, root: TrieHash): bool =
   ## Prepare the system for accepting data input unless there is an open
   ## transaction, already. The function returns `true` if
   ## * There was no transaction initialised, yet
   ## * There is an open transaction for the same state root argument `root`
   ## In all other cases, `false` is returned.
-  if pv.dbTx.isNil:
-    # Update state root
-    pv.rootTag = root.to(NodeTag)
-    pv.rootHash = root
-    # Fetch status record for this `root`
-    pv.stat = pv.useStatusRec(root)
+  ##
+  ## Note that the `peer` argument is for log messages, only.
+  ##
+  ## This function is save but needs to be handled in concert similat to
+  ## ::
+  ##        mergeBegin()
+  ##        merge()
+  ##        ..
+  ##        mergeVerify()
+  ##        mergeCommit()
+  ##
+  ## so it probably wise to use `mergeProved()` rather than the command above.
+  ## The main reason for exposing the detailed function is debugging and
+  ## verification.
+  if pv.jrn.dbTx.isNil:
+    #
+    # Update state root and peer
+    pv.jrn.rootKey = root.to(NodeKey)
+    pv.jrn.peer = peer
+    #
     # New DB transaction
-    pv.dbTx = pv.db.beginTransaction
+    pv.jrn.dbTx = pv.db.beginTransaction
     return true
-  # Make sure that the state roots are the same
-  pv.rootHash == root
+
+  # Otherwise make sure that the state roots are the same
+  pv.jrn.rootKey == root.to(NodeKey)
 
 proc mergeCommit*(pv: var ProofDb): bool =
   ## Accept merges and clear rollback journal if there was a transaction
   ## initialised with `mergeBegin()`. If successful, `true` is returned, and
   ## `false` otherwise.
-  if not pv.dbTx.isNil:
-    pv.dbTx.commit
-    pv.dbTx = nil
-    pv.clearJournal()
-    pv.putStatusRec(pv.rootHash, pv.stat) # persistent new status for this root
+  ##
+  ## See also comment on `mergeBegin()` regarding the use of this function.
+  if not pv.jrn.dbTx.isNil:
+    pv.jrn.dbTx.commit
+    pv.jrn.reset
     return true
 
 proc mergeRollback*(pv: var ProofDb): bool =
   ## Rewind discaring merges and clear rollback journal if there was a
   ## transaction initialised with `mergeBegin()`. If successful, `true` is
   ## returned, and `false` otherwise.
-  if not pv.dbTx.isNil:
-    pv.dbTx.rollback
-    pv.dbTx = nil
-    # restore previous status for this root
-    pv.stat = pv.useStatusRec(pv.rootHash)
-    pv.clearJournal()
+  ##
+  ## See also comment on `mergeBegin()` regarding the use of this function.
+  if not pv.jrn.dbTx.isNil:
+    pv.jrn.dbTx.rollback
+    pv.jrn.reset
     return true
 
 proc merge*(
     pv: var ProofDb;
-    proofs: SnapAccountProof
-      ): Result[void,ProofError] =
+    proof: SnapAccountProof
+      ): Result[void,PmtError] =
   ## Merge account proofs (as received with the snap message `AccountRange`)
   ## into the database. A rollback journal is maintained so that this operation
   ## can be reverted.
-  if pv.dbTx.isNil:
+  ##
+  ## See also comment on `mergeBegin()` regarding the use of this function.
+  if pv.jrn.dbTx.isNil:
+    debug "Stash SnapAccountProof"
     return err(MissingMergeBeginDirective)
-  let rc = pv.parse(proofs)
+
+  # Initialise for logging
+  let (peer, proofs, accounts) = (
+    pv.jrn.peer, pv.jrn.newPmts.len, pv.jrn.newAccs.len)
+
+  let rc = pv.parse(proof)
   if rc.isErr:
-    trace "Merge() proof failed", proofs=proofs.len, error=rc.error
+    trace "Stash SnapAccountProof",
+      peer, proofs, accounts, error=rc.error
     return err(rc.error)
   ok()
 
@@ -644,69 +696,116 @@ proc merge*(
     pv: var ProofDb;
     base: NodeTag;
     acc: seq[SnapAccount]
-      ): Result[void,ProofError] =
+      ): Result[void,PmtError]
+    {.gcsafe, raises: [Defect, RlpError].} =
   ## Merge accounts (as received with the snap message `AccountRange`) into
   ## the database. A rollback journal is maintained so that this operation
   ## can be reverted.
-  if pv.dbTx.isNil:
+  ##
+  ## See also comment on `mergeBegin()` regarding the use of this function.
+  if pv.jrn.dbTx.isNil:
+    debug "Stash seq[SnapAccount]"
     return err(MissingMergeBeginDirective)
+
+  # Initialise for logging
+  let (peer, proofs, accounts) = (
+    pv.jrn.peer, pv.jrn.newPmts.len, pv.jrn.newAccs.len)
+
   if acc.len != 0:
     # Verify lower bound
     if acc[0].accHash < base:
-      return err(AccountSmallerThanBase)
+      let error = AccountSmallerThanBase
+      trace "Stash seq[SnapAccount]",
+        peer, proofs, accounts, base, accounts=acc.len, error
+      return err(error)
+
     # Verify strictly increasing account hashes
     for n in 1 ..< acc.len:
       if acc[n].accHash <= acc[n-1].accHash:
-        return err(AccountsNotSrictlyIncreasing)
+        let error = AccountsNotSrictlyIncreasing
+        trace "Stash seq[SnapAccount]",
+           peer, proofs, accounts, base, accounts=acc.len, error
+        return err(error)
+
     # Add to database
     for sa in acc:
-      pv.addAccountRec(sa.accHash, sa.accBody.to(AccountRec))
+      pv.putAccount(sa.accHash.to(NodeKey), sa.accBody)
+
     # Stash boundary values, needed for later boundary proof
-    pv.newAccs.add (base, acc[^1].accHash)
+    pv.jrn.newAccs.add (base.to(NodeKey), acc[^1].accHash.to(NodeKey))
+
   ok()
 
-proc mergeValidate*(pv: ProofDb): Result[void,ProofError] =
+proc mergeValidate*(pv: var ProofDb): Result[void,PmtError]
+    {.gcsafe, raises: [Defect, RlpError].} =
   ## Verify non-commited accounts and proofs:
   ## * The prosfs entries must all be referenced from within the rollback
   ##   journal
-  ## * For each group of accounts, the base `NodeTag` must be found in the
+  ## * For each group of accounts, the base `NodeKey` must be found in the
   ##   proof database with a partial path of length ???
   ## * The last entry in a group of accounts must habe the `accBody` in the
   ##   proof database
-  if pv.dbTx.isNil:
+  ## The last entry which was validated will be marked as such.
+  ##
+  ## See also comment on `mergeBegin()` regarding the use of this function.
+  if pv.jrn.dbTx.isNil:
+    debug "Validate missing begin directive"
     return err(MissingMergeBeginDirective)
 
+  # Initialise for logging
+  let (peer, proofs, accounts) = (
+    pv.jrn.peer, pv.jrn.newPmts.len, pv.jrn.newAccs.len)
+
   # Make sure that all recs are referenced
-  if 0 < pv.newProofs.len:
-    #debug "Ref check",refPool=pv.refPool.pp(pv),newProofs=pv.newProofs.pp(pv)
-    for tag in pv.newProofs:
-      if tag notin pv.refPool and tag != pv.rootTag:
-        #debug "Unreferenced proofs rec", tag, tag=tag.pp(pv)
-        return err(RowUnreferenced)
+  if 0 < pv.jrn.newPmts.len:
+    #debug "Ref check",
+    #  refPool=pv.jrn.refPool.pp(pv), newPmts=pv.jrn.newPmts.pp(pv)
+    for key in pv.jrn.newPmts:
+      if key notin pv.jrn.refPool and key != pv.jrn.rootKey:
+        let error = RowUnreferenced
+        trace "Validate proof entry refs",
+          peer, proofs, accounts, unrefKey=key, error
+        return err(error)
 
-  ## verify accounts
-  for (baseTag,accTag) in pv.newAccs:
-
-    # Validate increasing accounts
-
+  ## Verify accounts (increasing was validated with merge(), already)
+  for (baseKey,accKey) in pv.jrn.newAccs:
     # Base and last account must be in database
-    let
-      nBaseDgts = pv.follow(baseTag)[0]
-      (nAccDgts, accData) = pv.follow(accTag)
 
     # Verify account base
-    # ...
+    let (nBaseDgts, emptyBaseRef, _) = pv.follow(pv.jrn.rootKey, baseKey)
+    block:
+      let error = AccountBaseProofFailed
+      if nBaseDgts < ValidBasePathMin:
+        trace "Validate: accounts list lower bound",
+          peer, proofs, accounts, baseKey, nBaseDgts,
+          nBaseDgtsMin=ValidBasePathMin, error
+        return err(error)
 
     # Verify last account
-    if nAccDgts == 64:
-      let rc = pv.getAccountRec(accTag)
-      if rc.isOk:
-        noRlpError("validate(Account)"):
-          if accData.decode(Account) == rc.value.to(Account):
-            continue
+    let (nAccDgts, emptyAccRef, leafData) = pv.follow(pv.jrn.rootKey, accKey)
+    block:
+      let error = LastAccountProofFailed # if any
 
-    # This account list did not verify
-    return err(LastAccountProofFailed)
+      if nAccDgts < 64:
+        trace "Validate: accounts list",
+          peer, proofs, accounts, accKey, nAccDgts, nAccDgtsMin=64, error
+        return err(error)
+
+      let rc = pv.getAccountData(accKey)
+      if rc.isOk:
+        var accData = rc.value
+        let accLeaf = leafData.decode(Account)
+
+        if accLeaf == accData.account:
+          accData.proved = true
+          pv.putAccountData(accKey, accData)
+          continue
+
+        trace "Validate accounts list",
+          peer, proofs, accounts, accLeaf, acc=accData.account, error
+
+      # This account list did not verify
+      return err(error)
 
   ok()
 
@@ -716,64 +815,105 @@ proc mergeValidate*(pv: ProofDb): Result[void,ProofError] =
 
 proc mergeProved*(
     pv: var ProofDb;
-    root: TrieHash;
-    base: NodeTag;
+    peer: Peer,      ## for log messages
+    root: TrieHash;  ## state root
+    base: NodeTag;   ## before or at first account entry in `data`
     data: WorkerAccountRange
-      ): Result[void,ProofError] =
+      ): Result[void,PmtError] =
   ## Validate and merge accounts and proofs (as received with the snap message
   ## `AccountRange`) into the database. Any open transaction initialised with
   ## `mergeBegin()` is continued ans finished.
-  if not pv.mergeBegin(root):
+  ##
+  ## Note that the `peer` argument is for log messages, only.
+  if not pv.mergeBegin(peer, root):
     return err(StateRootDiffers)
 
-  block:
-    let rc = pv.merge(data.proof)
-    if rc.isErr:
-      trace "Merge proofs failed",
-        proof=data.proof.len, error=rc.error
-      discard pv.mergeRollback()
-      return err(rc.error)
-  block:
-    let rc = pv.merge(base, data.accounts)
-    if rc.isErr:
-      trace "Merge accounts failed",
-        accounts=data.accounts.len, error=rc.error
-      discard pv.mergeRollback()
-      return err(rc.error)
-  block:
-    let rc = pv.mergeValidate()
-    if rc.isErr:
-      trace "Proofs or accounts do not valdate",
-        accounts=data.accounts.len, error=rc.error
-      discard pv.mergeRollback()
-      return err(rc.error)
+  try:
+    block:
+      let rc = pv.merge(data.proof)
+      if rc.isErr:
+        discard pv.mergeRollback()
+        return err(rc.error)
+    block:
+      let rc = pv.merge(base, data.accounts)
+      if rc.isErr:
+        discard pv.mergeRollback()
+        return err(rc.error)
+    block:
+      let rc = pv.mergeValidate()
+      if rc.isErr:
+        discard pv.mergeRollback()
+        return err(rc.error)
+  except CatchableError as e:
+    error "mergeProved crashed", error = $e.name, msg = e.msg
+    discard pv.mergeRollback()
+    return err(ExceptioninMergeProof)
 
-  #trace "Merge accounts and proofs ok",
-  #  root=pv.rootTag,  base=base, accounts=data.accounts.pp, proof=data.proof.pp
+    #trace "Merge accounts and proofs ok", peer=pv.jrn.peer, rootKey=pv.rootKey,
+  #  base=base, accounts=data.accounts.pp, proof=data.proof.pp
   discard pv.mergeCommit()
   ok()
 
-proc proofsLen*(pv: ProofDb; root: TrieHash): int =
-  ## Number of entries in the proofs table for the argument state root `root`.
-  if pv.rootHash == root:
-    pv.stat.nProofs
-  else:
-    pv.useStatusRec(root).nProofs
+proc nPmts*(pv: ProofDb; root: TrieHash): int  =
+  ## Number of entries in the Patricia Merkle Trie proofs table for the state
+  ## root argument  `root`.
+  try:
+    return pv.useStatusRec(root.to(NodeKey)).nPmts
+  except RlpError as e:
+    error "nPmts crashed", error = $e.name, msg = e.msg
 
-proc accountsLen*(pv: ProofDb; root: TrieHash): int =
+proc nAccounts*(pv: ProofDb; root: TrieHash): int =
   ## Number of entries in the accounts table for the argument state root `root`.
-  if pv.rootHash == root:
-    pv.stat.nAccounts
-  else:
-    pv.useStatusRec(root).nAccounts
+  try:
+    return pv.useStatusRec(root.to(NodeKey)).nAccounts
+  except RlpError as e:
+    error "nAccounts crashed", error = $e.name, msg = e.msg
 
-proc journalLen*(pv: ProofDb): (bool,int,int,int) =
+proc nStateRoots*(pv: ProofDb): int =
+  ## Print the number of known state roots
+  try:
+    return pv.useStatusRec(ZeroNodeKey).nStatus
+  except RlpError as e:
+    error "nStateRoots crashed", error = $e.name, msg = e.msg
+
+proc journalSize*(pv: ProofDb): (bool,int,int,int) =
   ## Size of the current rollback journal:
-  ## * oepn transaction, see `mergeBegin()`
+  ## * transaction is open or not, see `mergeBegin()`
   ## * number of added recs
   ## * number of added references implied by recs
   ## * number of added accounts
-  (not pv.dbTx.isNil, pv.newProofs.len, pv.refPool.len, pv.newAccs.len)
+  (not pv.jrn.dbTx.isNil,
+   pv.jrn.newPmts.len,
+   pv.jrn.refPool.len,
+   pv.jrn.newAccs.len)
+
+# ------------------------------------------------------------------------------
+# Iterators
+# ------------------------------------------------------------------------------
+
+iterator accounts*(pv: ProofDb; root: TrieHash): (int,NodeTag,AccountData) =
+  ## Walk accounts for the argument `root` in reverse storage order. The first
+  ## entry of the last triple is always `1`.
+  try:
+    var nodeKey = pv.useStatusRec(root.to(NodeKey)).accTop
+    while nodeKey != ZeroNodeKey:
+      let rec = pv.useAccountRec(nodeKey,root.to(NodeKey))
+      yield (rec.nAccounts, nodeKey.to(NodeTag), rec.data)
+      nodeKey = rec.backLink
+  except RlpError as e:
+    error "accounts iterator crashed", error = $e.name, msg = e.msg
+
+iterator stateRoots*(pv: ProofDb): (int,TrieHash) =
+  ## Walk state root entries in reverse storage order. The first entry
+  ## of the last tuple is always `1`.
+  try:
+    var nodeKey = pv.useStatusRec(ZeroNodeKey).backLink
+    while nodeKey != ZeroNodeKey:
+      let rec = pv.useStatusRec(nodeKey)
+      yield (rec.nStatus, nodeKey.to(TrieHash))
+      nodeKey = rec.backLink
+  except RlpError as e:
+    error "stateRoots iterator crashed", error = $e.name, msg = e.msg
 
 # ------------------------------------------------------------------------------
 # End
