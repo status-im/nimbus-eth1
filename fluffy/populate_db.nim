@@ -238,10 +238,12 @@ proc historyDepthBulkPropagate*(
 
       offset = offset + batchSize
 
-  proc localNodeWorker(p: PortalProtocol, db: SeedDb): Future[void] {.async.}=
+  proc localNodeWorker(p: PortalProtocol, db: SeedDb): Future[void] {.async.} =
+    let localBatchSize = 10000
+
     var offset = 0
     while true:
-      let content = db.getContentInRange(p.localNode.id, p.dataRadius, batchSize, offset)
+      let content = db.getContentInRange(p.localNode.id, p.dataRadius, localBatchSize, offset)
 
       if len(content) == 0:
         break
@@ -249,11 +251,11 @@ proc historyDepthBulkPropagate*(
       for e in content:
         p.storeContent(UInt256.fromBytesBE(e.contentId), e.content)
 
-      if len(content) < batchSize:
+      if len(content) < localBatchSize:
         # got to the end of db.
         break
 
-      offset = offset + batchSize
+      offset = offset + localBatchSize
 
   let maybePathAndDbName = getDbBasePathAndName(seedDbPath)
 
