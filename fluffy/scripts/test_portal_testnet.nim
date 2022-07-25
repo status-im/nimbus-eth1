@@ -395,7 +395,7 @@ procSuite "Portal testnet tests":
       for t in blocksContent(bd, false):
         db.put(t[0], t[1], t[2])
 
-      check (await clients[0].portal_history_depthBulkPropagate(tempDbPath, 64))
+      check (await clients[0].portal_history_depthContentPropagate(tempDbPath, 64))
       await clients[0].close()
 
       for client in clients:

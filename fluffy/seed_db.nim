@@ -22,7 +22,7 @@ type
     contentKey: seq[byte]
     content: seq[byte]
 
-  ContentDataDist = tuple
+  ContentDataDist* = tuple
     contentId: array[32, byte]
     contentKey: seq[byte]
     content: seq[byte]
