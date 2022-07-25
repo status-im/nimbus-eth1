@@ -13,7 +13,6 @@ import
   eth/[rlp, common/eth_types],
   # TODO: `NetworkId` should not be in these private types
   eth/p2p/private/p2p_types,
-  eth/p2p/discoveryv5/node,
   ../nimbus/[chain_config, genesis],
   "."/[content_db, seed_db],
   ./network/wire/portal_protocol,

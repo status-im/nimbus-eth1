@@ -14,12 +14,12 @@ import
   ../seed_db
 
 # Experimental module which implements different content seeding strategies.
-# Modulue is oblivious to content stored in seed database as all content related
-# parameters should be avaialble in seed db i.e (contentId, contentKey, content)
-# One thing which could need to parameterized per network basis in the future is
-# distance function.
-# TODO At this point all calls are one shot calls but we can also experiment with
-# approaches which start some process which contiously seeds data
+# Module is oblivious to content stored in seed database as all content related
+# parameters should be available in seed db i.e (contentId, contentKey, content)
+# One thing which might need to be parameterized per network basis in the future is
+# the distance function.
+# TODO: At this point all calls are one shot calls but we can also experiment with
+# approaches which start some process which continuously seeds data.
 # This would require creation of separate object which would manage started task
 # like:
 # type NetworkSeedingManager = ref object
@@ -42,7 +42,11 @@ proc depthContentPropagate*(
   # TODO improve peer selection strategy, to be sure more network is covered, although
   # it still does not need to be perfect as nodes which receive content will still
   # propagate it further by neighbour gossip
-  let closestWithRadius = p.getNClosestNodesWithRadius(maxClosestNodes)
+  let closestWithRadius = p.getNClosestNodesWithRadius(
+    p.localNode.id,
+    int(maxClosestNodes),
+    seenOnly = true
+  )
 
   proc worker(p: PortalProtocol, db: SeedDb, node: Node, radius: UInt256): Future[void] {.async.} =
     var offset = 0
@@ -65,7 +69,7 @@ proc depthContentPropagate*(
 
       offset = offset + batchSize
 
-  proc localNodeWorker(p: PortalProtocol, db: SeedDb): Future[void] {.async.} =
+  proc saveDataToLocalDb(p: PortalProtocol, db: SeedDb) =
     let localBatchSize = 10000
 
     var offset = 0
@@ -96,7 +100,7 @@ proc depthContentPropagate*(
   for n in closestWithRadius:
     gossipWorkers.add(p.worker(db, n[0], n[1]))
 
-  gossipWorkers.add(p.localNodeWorker(db))
+  p.saveDataToLocalDb(db)
 
   await allFutures(gossipWorkers)
 
@@ -161,8 +165,8 @@ proc breadthContentPropagate*(
     for cd in contentData:
       p.storeContent(UInt256.fromBytesBE(cd.contentId), cd.content)
 
-    # TODO this a bit hacky way to make sure we will engage different peers for
-    # each batch of data. This maybe removed after improving neighborhoodGossip
+    # TODO this a bit hacky way to make sure we will engage more valid peers for each
+    # batch of data. This maybe removed after improving neighborhoodGossip
     # to better chose peers based on propagated content
     for i in 0 ..< gossipsPerBatch:
       p.baseProtocol.rng[].shuffle(contentData)

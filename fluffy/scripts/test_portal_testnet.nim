@@ -51,7 +51,8 @@ proc withRetries[A](
   f: FutureCallback[A],
   check: CheckCallback[A],
   numRetries: int,
-  initialWait: Duration): Future[A] {.async.} =
+  initialWait: Duration,
+  checkFailMessage: string): Future[A] {.async.} =
   ## Retries given future callback until either:
   ## it returns successfuly and given check is true
   ## or
@@ -63,12 +64,10 @@ proc withRetries[A](
   while true:
     try:
       let res = await f()
-
       if check(res):
         return res
       else:
-        raise newException(ValueError, "check failed")
-
+        raise newException(ValueError, checkFailMessage)
     except CatchableError as exc:
       if tries > numRetries:
         # if we reached max number of retries fail
@@ -82,9 +81,12 @@ proc withRetries[A](
 # Sometimes we need to wait till data will be propagated over the network.
 # To avoid long sleeps, this combinator can be used to retry some calls until
 # success or until some condition hold (or both)
-proc retryUntilDataPropagated[A](f: FutureCallback[A], c: CheckCallback[A]): Future[A] =
+proc retryUntilDataPropagated[A](
+  f: FutureCallback[A],
+  c: CheckCallback[A],
+  checkFailMessage: string): Future[A] =
   # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16 seconds
-  return withRetries(f, c, 5, seconds(1))
+  return withRetries(f, c, 5, seconds(1), checkFailMessage)
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
@@ -254,7 +256,8 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc (mc: Option[BlockObject]): bool = return mc.isSome()
+          proc (mc: Option[BlockObject]): bool = return mc.isSome(),
+          "Did not receive expected Block with hash " & $hash
         )
         check content.isSome()
         let blockObj = content.get()
@@ -279,7 +282,8 @@ procSuite "Portal testnet tests":
               await client.close()
               raise exc
           ,
-          proc (mc: seq[FilterLog]): bool = return true
+          proc (mc: seq[FilterLog]): bool = return true,
+          ""
         )
 
         for l in logs:
@@ -347,7 +351,8 @@ procSuite "Portal testnet tests":
                 await client.close()
                 raise exc
             ,
-            proc (mc: Option[BlockObject]): bool = return mc.isSome()
+            proc (mc: Option[BlockObject]): bool = return mc.isSome(),
+            "Did not receive expected Block with hash " & $hash
           )
           check content.isSome()
 
@@ -373,7 +378,7 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    # different set of data for each test as tests are statefull so previously propageted
+    # different set of data for each test as tests are statefull so previously propagated
     # block are already in the network
     const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000040_1000050.json"
 
@@ -412,7 +417,8 @@ procSuite "Portal testnet tests":
                 await client.close()
                 raise exc
             ,
-            proc (mc: Option[BlockObject]): bool = return mc.isSome()
+            proc (mc: Option[BlockObject]): bool = return mc.isSome(),
+            "Did not receive expected Block with hash " & $hash
           )
           check content.isSome()
 

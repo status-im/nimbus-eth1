@@ -1071,9 +1071,13 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc getNClosestNodesWithRadius*(p: PortalProtocol, n: uint32): seq[(Node, UInt256)] =
+proc getNClosestNodesWithRadius*(
+  p: PortalProtocol,
+  targetId: NodeId,
+  n: int,
+  seenOnly: bool = false): seq[(Node, UInt256)] =
   let closestLocalNodes = p.routingTable.neighbours(
-    p.localNode.id, k = int(n), seenOnly = true)
+    targetId, k = n, seenOnly = seenOnly)
 
   var nodesWithRadiuses: seq[(Node, UInt256)]
   for node in closestLocalNodes:
