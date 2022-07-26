@@ -13,3 +13,10 @@ proc portal_history_offerContentInNodeRange(
   nodeId: NodeId,
   max: uint32,
   starting: uint32): bool
+
+proc portal_history_depthContentPropagate(
+  dbPath: string,
+  max: uint32): bool
+
+proc portal_history_breadthContentPropagate(
+  dbPath: string): bool

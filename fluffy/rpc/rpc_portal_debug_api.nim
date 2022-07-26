@@ -10,6 +10,7 @@
 import
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   ../network/wire/portal_protocol,
+  ../network/network_seed,
   ".."/[content_db, seed_db]
 
 export rpcserver
@@ -80,3 +81,28 @@ proc installPortalDebugApiHandlers*(
         return true
       else:
         raise newException(ValueError, $offerResult.error)
+
+  rpcServer.rpc("portal_" & network & "_depthContentPropagate") do(
+      dbPath: string,
+      max: uint32) -> bool:
+
+    # TODO Consider making this call asynchronously without waiting for result
+    # as for big seed db size it could take a loot of time.
+    let propagateResult = await p.depthContentPropagate(dbPath, max)
+
+    if propagateResult.isOk():
+      return true
+    else:
+      raise newException(ValueError, $propagateResult.error)
+
+  rpcServer.rpc("portal_" & network & "_breadthContentPropagate") do(
+      dbPath: string) -> bool:
+
+    # TODO Consider making this call asynchronously without waiting for result
+    # as for big seed db size it could take a loot of time.
+    let propagateResult = await p.breadthContentPropagate(dbPath)
+
+    if propagateResult.isOk():
+      return true
+    else:
+      raise newException(ValueError, $propagateResult.error)
