@@ -24,7 +24,7 @@ logScope:
 const
   utpProtocolId* = "utp".toBytes()
   defaultConnectionTimeout = 5.seconds
-  defaultContentReadTimeout = 2.seconds
+  defaultContentReadTimeout = 15.seconds
 
   # TalkReq message is used as transport for uTP. It is assumed here that Portal
   # protocol messages were exchanged before sending uTP over discv5 data. This
@@ -102,6 +102,9 @@ proc addContentOffer*(
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
   let id = uint16.fromBytesBE(connectionId)
+
+  debug "Register new incoming offer", contentKeys
+
   let contentOffer = ContentOffer(
     connectionId: id,
     nodeId: nodeId,
@@ -244,12 +247,12 @@ proc readContentOffer(
       else:
         # Invalid data, stop reading content, but still process data received
         # so far.
-        debug "Reading content item failed, content offer failed"
+        debug "Reading content item failed, content offer failed", contentKeys = offer.contentKeys
         break
     else:
       # Read timed out, stop further reading, but still process data received
       # so far.
-      debug "Reading data from socket timed out, content offer failed"
+      debug "Reading data from socket timed out, content offer failed", contentKeys = offer.contentKeys
       break
 
   if socket.atEof():
@@ -304,6 +307,8 @@ proc registerIncomingSocketCallback*(
             let fut = socket.writeContentRequest(stream, request)
             stream.contentRequests.del(i)
             return fut
+          else:
+            debug "Received unknown content connection"
 
         for i, offer in stream.contentOffers:
           if offer.connectionId == socket.connectionId and
@@ -311,6 +316,8 @@ proc registerIncomingSocketCallback*(
             let fut = socket.readContentOffer(stream, offer)
             stream.contentOffers.del(i)
             return fut
+          else:
+            debug "Received unknown offer connection"
 
       # TODO: Is there a scenario where this can happen,
       # considering `allowRegisteredIdCallback`? If not, doAssert?

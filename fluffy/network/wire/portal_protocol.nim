@@ -588,6 +588,7 @@ proc findNodes*(
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[FoundContent]] {.async.} =
+
   let contentMessageResponse = await p.findContentImpl(dst, contentKey)
 
   if contentMessageResponse.isOk():
@@ -672,6 +673,10 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
       else:
         return err("Content message returned invalid ENRs")
+  else:
+    warn "FindContent failed due to find content request failure ", error = contentMessageResponse.error, contentKey = contentKey
+
+    return err("No content response")
 
 proc getContentKeys(o: OfferRequest): ContentKeysList =
   case o.kind
@@ -703,6 +708,9 @@ proc offer(p: PortalProtocol, o: OfferRequest):
   ## by the cleanup process before it will be transferred, so this way does not
   ## guarantee content transfer.
   let contentKeys = getContentKeys(o)
+
+  debug "Offering content", contentKeys = contentKeys
+
   portal_content_keys_offered.observe(contentKeys.len().int64)
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
@@ -726,6 +734,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     let acceptedKeysAmount = m.contentKeys.countOnes()
     portal_content_keys_accepted.observe(acceptedKeysAmount.int64)
     if acceptedKeysAmount == 0:
+      debug "No content acceppted", contentKeys = contentKeys
       # Don't open an uTP stream if no content was requested
       return ok()
 
@@ -745,7 +754,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
     if connectionResult.isErr():
       debug "Utp connection error while trying to offer content",
-        error = connectionResult.error
+        error = connectionResult.error, contentKeys = contentKeys
       return err("Error connecting uTP socket")
 
     let socket = connectionResult.get()
@@ -765,7 +774,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
           let dataWritten = await socket.write(output.getOutput)
           if dataWritten.isErr:
-            debug "Error writing requested data", error = dataWritten.error
+            debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
             # No point in trying to continue writing data
             socket.close()
             return err("Error writing requested data")
@@ -790,14 +799,17 @@ proc offer(p: PortalProtocol, o: OfferRequest):
 
             let dataWritten = await socket.write(output.getOutput)
             if dataWritten.isErr:
-              debug "Error writing requested data", error = dataWritten.error
+              debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
               # No point in trying to continue writing data
               socket.close()
               return err("Error writing requested data")
 
+    debug "Content successfully offered", contentKeys = contentKeys
+
     await socket.closeWait()
     return ok()
   else:
+    warn "Offer failed due to accept request failure ", error = acceptMessageResponse.error, contentKeys = contentKeys
     return err("No accept response")
 
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
@@ -1096,7 +1108,7 @@ proc neighborhoodGossip*(
   for i, contentItem in content:
     let contentInfo =
       ContentInfo(contentKey: contentKeys[i], content: contentItem)
-
+    debug "Scheduling content for gossip", contentKey = contentInfo.contentKey
     discard contentList.add(contentInfo)
 
   # Just taking the first content item as target id.
@@ -1136,12 +1148,17 @@ proc neighborhoodGossip*(
 
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
+    let lenGossip = min(gossipNodes.len, maxGossipNodes)
+    debug "Scheduling gossip to len local found nodes", len = lenGossip
+
     for node in gossipNodes[0..<min(gossipNodes.len, maxGossipNodes)]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
+    let lenGossip = min(closestNodes.len, maxGossipNodes)
+    debug "Scheduling gossip to len closest found nodes", len = lenGossip
 
     for node in closestNodes[0..<min(closestNodes.len, maxGossipNodes)]:
       # Note: opportunistically not checking if the radius of the node is known
