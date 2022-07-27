@@ -190,13 +190,21 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-proc testHandler(contentKey: ByteList): Option[ContentId] =
+proc testContentIdHandler(contentKey: ByteList): Option[ContentId] =
   # Note: Returning a static content id here, as in practice this depends
   # on the content key to content id derivation, which is different for the
   # different content networks. And we want these tests to be independent from
   # that.
   let idHash = sha256.digest("test")
   some(readUintBE[256](idHash.data))
+
+proc dbGetHandler(db: ContentDB, contentKey: ByteList):
+    (Option[ContentId], Option[seq[byte]]) =
+  let contentIdOpt = contentKey.toContentId()
+  if contentIdOpt.isSome():
+    (contentIdOpt, db.get(contentIdOpt.get()))
+  else:
+    (contentIdOpt, none(seq[byte]))
 
 proc run(config: PortalCliConf) =
   let
@@ -224,7 +232,7 @@ proc run(config: PortalCliConf) =
   let
     db = ContentDB.new("", config.storageSize, inMemory = true)
     portal = PortalProtocol.new(d, config.protocolId, db,
-      testHandler,
+      testContentIdHandler, dbGetHandler,
       bootstrapRecords = bootstrapRecords)
     socketConfig = SocketConfig.init(
       incomingSocketReceiveTimeout = none(Duration))

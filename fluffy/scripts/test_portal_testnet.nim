@@ -232,13 +232,18 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
+    # const dataFileEpoch = "./fluffy/scripts/eth-epoch-accumulator.json"
+    # check (await clients[0].portal_history_propagateEpochAccumulator(dataFileEpoch))
+    # await clients[0].close()
+    # await sleepAsync(60.seconds)
+
+    const dataFile = "./fluffy/tests/blocks/mainnet_blocks_1000001_1000010.json"
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
     check (await clients[0].portal_history_propagate(dataFile))
     await clients[0].close()
 
-    let blockData = readBlockDataTable(dataFile)
+    let blockData = readJsonType(dataFile, BlockDataTable)
     check blockData.isOk()
 
     for i, client in clients:
@@ -311,15 +316,15 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000000_1000020.json"
+    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000011_1000030.json"
 
     # path for temporary db, separate dir is used as sqlite usually also creates
     # wal files, and we do not want for those to linger in filesystem
-    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000000_1000020.sqlite3"
+    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000011_1000030.sqlite3"
 
     let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
 
-    let blockData = readBlockDataTable(dataPath)
+    let blockData = readJsonType(dataPath, BlockDataTable)
     check blockData.isOk()
     let bd = blockData.get()
 
@@ -408,7 +413,7 @@ procSuite "Portal testnet tests":
 
     let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
 
-    let blockData = readBlockDataTable(dataPath)
+    let blockData = readJsonType(dataPath, BlockDataTable)
     check blockData.isOk()
     let bd = blockData.get()
 

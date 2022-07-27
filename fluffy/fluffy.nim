@@ -161,8 +161,20 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
   d.start()
-  stateNetwork.start()
   historyNetwork.start()
+
+  let accumulator =
+    if config.accumulatorDataFile.isSome():
+      some(buildAccumulator(string config.accumulatorDataFile.get()).expect(
+        "Need a valid data file to build the master accumulator locally"))
+    elif config.accumulatorFile.isSome():
+      some(readAccumulator(string config.accumulatorFile.get()).expect(
+        "Need a valid accumulator file to store the master accumulator locally"))
+    else:
+      none(Accumulator)
+
+  waitFor historyNetwork.initMasterAccumulator(accumulator)
+  stateNetwork.start()
 
   runForever()
 

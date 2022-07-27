@@ -23,8 +23,8 @@ logScope:
 
 const
   utpProtocolId* = "utp".toBytes()
-  defaultConnectionTimeout = 5.seconds
-  defaultContentReadTimeout = 15.seconds
+  defaultConnectionTimeout = 15.seconds
+  defaultContentReadTimeout = 60.seconds
 
   # TalkReq message is used as transport for uTP. It is assumed here that Portal
   # protocol messages were exchanged before sending uTP over discv5 data. This

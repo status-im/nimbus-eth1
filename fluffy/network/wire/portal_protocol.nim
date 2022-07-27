@@ -131,6 +131,10 @@ type
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
+  DbGetHandler* =
+    proc(contentDB: ContentDB, contentKey: ByteList):
+      (Option[ContentId], Option[seq[byte]]) {.raises: [Defect], gcsafe.}
+
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
@@ -156,6 +160,7 @@ type
     baseProtocol*: protocol.Protocol
     contentDB*: ContentDB
     toContentId*: ToContentIdHandler
+    dbGet*: DbGetHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -303,41 +308,38 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
 
 proc handleFindContent(
     p: PortalProtocol, fc: FindContentMessage, srcId: NodeId): seq[byte] =
-  let contentIdOpt = p.toContentId(fc.contentKey)
-  if contentIdOpt.isSome():
-    const
-      contentOverhead = 1 + 1 # msg id + SSZ Union selector
-      maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
-      enrOverhead = 4 # per added ENR, 4 bytes offset overhead
+  const
+    contentOverhead = 1 + 1 # msg id + SSZ Union selector
+    maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
+    enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-    let
-      contentId = contentIdOpt.get()
-      # TODO: Should we first do a simple check on ContentId versus Radius
-      # before accessing the database?
-      maybeContent = p.contentDB.get(contentId)
-    if maybeContent.isSome():
-      let content = maybeContent.get()
-      if content.len <= maxPayloadSize:
-        encodeMessage(ContentMessage(
-          contentMessageType: contentType, content: ByteList(content)))
-      else:
-        let connectionId = p.stream.addContentRequest(srcId, content)
-
-        encodeMessage(ContentMessage(
-          contentMessageType: connectionIdType, connectionId: connectionId))
+  let (contentIdOpt, contentOpt) = p.dbGet(p.contentDb, fc.contentKey)
+  if contentOpt.isSome():
+    let content = contentOpt.get()
+    if content.len <= maxPayloadSize:
+      encodeMessage(ContentMessage(
+        contentMessageType: contentType, content: ByteList(content)))
     else:
-      # Don't have the content, send closest neighbours to content id.
-      let
-        closestNodes = p.routingTable.neighbours(
-          NodeId(contentId), seenOnly = true)
-        enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
-      portal_content_enrs_packed.observe(enrs.len().int64)
+      let connectionId = p.stream.addContentRequest(srcId, content)
 
-      encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
+      encodeMessage(ContentMessage(
+        contentMessageType: connectionIdType, connectionId: connectionId))
+  elif contentIdOpt.isSome():
+    # Don't have the content, send closest neighbours to content id.
+    let
+      closestNodes = p.routingTable.neighbours(
+        NodeId(contentIdOpt.get()), seenOnly = true)
+      enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+    portal_content_enrs_packed.observe(enrs.len().int64)
+
+    encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
   else:
-    # Return empty response when content key validation fails
-    # TODO: Better would be to return no message at all, needs changes on
+    # Return empty response when:
+    # a. content key validation fails
+    # b. it is a special case such as "latest accumulator"
+    # TODO: Better would be to return no message at all for a, needs changes on
     # discv5 layer.
+    # TODO: Better would be to have a specific protocol message for b.
     @[]
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
@@ -441,6 +443,7 @@ proc new*(T: type PortalProtocol,
     protocolId: PortalProtocolId,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
+    dbGet: DbGetHandler,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig
@@ -457,6 +460,7 @@ proc new*(T: type PortalProtocol,
     baseProtocol: baseProtocol,
     contentDB: contentDB,
     toContentId: toContentId,
+    dbGet: dbGet,
     radiusConfig: config.radiusConfig,
     dataRadius: initialRadius,
     bootstrapRecords: @bootstrapRecords,
