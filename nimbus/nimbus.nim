@@ -22,7 +22,7 @@ import
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
-  websock/types as ws,
+  websock/websock as ws,
   "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
   ./db/[storage_types, db_chain, select_backend],
   ./graphql/ethapi,
@@ -69,21 +69,21 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
     let res = nimbus.ctx.am.loadKeystores(string conf.keyStore)
     if res.isErr:
-      echo res.error()
+      fatal "Load keystore error", msg = res.error()
       quit(QuitFailure)
 
   if string(conf.importKey).len > 0:
     let res = nimbus.ctx.am.importPrivateKey(string conf.importKey)
     if res.isErr:
-      echo res.error()
+      fatal "Import private key error", msg = res.error()
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
               chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
   ## Creating P2P Server
-  let kpres = nimbus.ctx.hexToKeyPair(conf.nodeKeyHex)
+  let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
-    echo kpres.error()
+    fatal "Get network keys error", msg = kpres.error
     quit(QuitFailure)
 
   let keypair = kpres.get()
@@ -117,7 +117,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     addAllCapabilities = false, minPeers = conf.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
-    bindIp = conf.listenAddress)
+    bindIp = conf.listenAddress,
+    rng = nimbus.ctx.rng)
 
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
@@ -187,12 +188,12 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
 
-  # Provide JWT authentication handler for websockets
+  # Provide JWT authentication handler for rpcHttpServer
   let jwtKey = block:
     # Create or load shared secret
     let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
     if rc.isErr:
-      error "Failed create or load shared secret",
+      fatal "Failed create or load shared secret",
         msg = $(rc.unsafeError) # avoid side effects
       quit(QuitFailure)
     rc.value
@@ -250,7 +251,10 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     # Construct server object
     nimbus.wsRpcServer = newRpcWebSocketServer(
       initTAddress(conf.wsAddress, conf.wsPort),
-      authHooks = hooks
+      authHooks = hooks,
+      # yuck, we should remove this ugly cast when
+      # we fix nim-websock
+      rng = cast[ws.Rng](nimbus.ctx.rng)
     )
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
@@ -284,7 +288,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     let rs = validateSealer(conf, nimbus.ctx, nimbus.chainRef)
     if rs.isErr:
-      echo rs.error
+      fatal "Engine signer validation error", msg = rs.error
       quit(QuitFailure)
 
     proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
@@ -297,7 +301,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
 
     nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
 
-  # always create sealing engine instanca but not always run it
+  # always create sealing engine instance but not always run it
   # e.g. engine api need sealing engine without it running
   var initialState = EngineStopped
   if chainDB.headTotalDifficulty() > chainDB.ttd:

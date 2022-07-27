@@ -278,7 +278,7 @@ proc hashLogEntries*(logs: seq[Log]): string =
 proc setupEthNode*(
     conf: NimbusConf, ctx: EthContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = ctx.hexToKeyPair(conf.nodeKeyHex).tryGet()
+  let keypair = ctx.getNetKeys(conf.netKey, conf.dataDir.string).tryGet()
   let srvAddress = Address(
     ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 

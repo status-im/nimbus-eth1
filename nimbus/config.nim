@@ -317,11 +317,14 @@ type
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
 
-    nodeKeyHex* {.
-      desc: "P2P node private key (as 32 bytes hex string)"
-      defaultValue: ""
-      defaultValueDesc: "random"
-      name: "node-key" .}: string
+    netKey* {.
+      desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
+      longDesc:
+        "- random: generate random network key for this node instance\n" &
+        "- path  : path to where the private key will be loaded or auto generated\n" &
+        "- hex   : 32 bytes hex of network private key"
+      defaultValue: "random"
+      name: "net-key" .}: string
 
     agentString* {.
       desc: "Node agent string which is used as identifier in network"

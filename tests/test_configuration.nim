@@ -1,8 +1,9 @@
 import
   std/[os],
   pkg/[unittest2, confutils],
-  eth/[p2p, common],
-  ../nimbus/[config, chain_config],
+  eth/[p2p, common, keys],
+  stew/byteutils,
+  ../nimbus/[config, chain_config, context],
   ./test_helpers
 
 proc `==`(a, b: ChainId): bool =
@@ -207,6 +208,40 @@ proc configurationMain*() =
       check conf.wsEnabled
       check conf.engineApiEnabled == false
       check conf.rpcEnabled == false
+
+    let ctx = newEthContext()
+    test "net-key random":
+      let conf = makeConfig(@["--net-key:random"])
+      check conf.netKey == "random"
+      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      check rc.isOk
+
+    test "net-key hex without 0x prefix":
+      let conf = makeConfig(@["--net-key:9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
+      check conf.netKey == "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      check rc.isOk
+      let pkhex = rc.get.seckey.toRaw.to0xHex
+      check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+
+    test "net-key hex with 0x prefix":
+      let conf = makeConfig(@["--net-key:0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
+      check conf.netKey == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      check rc.isOk
+      let pkhex = rc.get.seckey.toRaw.to0xHex
+      check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+
+    test "net-key path":
+      let conf = makeConfig(@["--net-key:nimcache/key.txt"])
+      check conf.netKey == "nimcache/key.txt"
+      let rc1 = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      check rc1.isOk
+      let pkhex1 = rc1.get.seckey.toRaw.to0xHex
+      let rc2 = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      check rc2.isOk
+      let pkhex2 = rc2.get.seckey.toRaw.to0xHex
+      check pkhex1 == pkhex2
 
 when isMainModule:
   configurationMain()
