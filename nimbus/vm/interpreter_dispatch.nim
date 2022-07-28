@@ -308,7 +308,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
       `c`.prepareTracer()
     while true:
       `instr` = `c`.code.next()
-      #{.computedGoto.}
+      {.computedGoto.}
       # computed goto causing stack overflow, it consumes a lot of space
       # we could use manual jump table instead
       # TODO lots of macro magic here to unravel, with chronicles...
@@ -377,6 +377,7 @@ proc londonVM(c: Computation) {.gcsafe.} =
 
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
+  {.computedGoto.}
   case fork
   of FkFrontier:
     c.frontierVM()

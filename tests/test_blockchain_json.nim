@@ -371,6 +371,10 @@ proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtu
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
 
+# using only one networkParams will reduce execution
+# time ~87.5% instead of create it for every test
+let chainParams = networkParams(MainNet)
+
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false) =
   # 1 - mine the genesis block
   # 2 - loop over blocks:
@@ -391,7 +395,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     let
       pruneTrie = test_config.getConfiguration().pruning
-      chainDB = newBaseChainDB(newMemoryDb(), pruneTrie)
+      chainDB = newBaseChainDB(newMemoryDb(), pruneTrie, params = chainParams)
       stateDB = AccountsCache.init(chainDB.db, emptyRlpHash, chainDB.pruneTrie)
 
     setupStateDB(fixture["pre"], stateDB)

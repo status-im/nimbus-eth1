@@ -10,7 +10,7 @@ import
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/p2p/executor, test_config,
   ../nimbus/transaction,
-  ../nimbus/[vm_state, vm_types, utils],
+  ../nimbus/[vm_state, vm_types, utils, chain_config],
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/forks,
   chronicles,
@@ -83,9 +83,13 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
 
+# using only one networkParams will reduce execution
+# time ~90% instead of create it for every test
+let chainParams = networkParams(MainNet)
+
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   let
-    chainDB = newBaseChainDB(newMemoryDB(), getConfiguration().pruning)
+    chainDB = newBaseChainDB(newMemoryDB(), getConfiguration().pruning, params = chainParams)
     vmState = BaseVMState.new(
       parent      = BlockHeader(stateRoot: emptyRlpHash),
       header      = tester.header,

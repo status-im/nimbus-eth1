@@ -5,6 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+import std/times
 import ./nimbus/vm_compile_info
 import macros, strutils, os, unittest2, osproc
 import threadpool
@@ -16,11 +17,22 @@ setMinPoolSize(2)
 
 proc executeMyself(numModules: int, names: openArray[string]): int =
   let appName = getAppFilename()
+  var elpdList = newSeq[Duration](numModules)
   for i in 0..<numModules:
+    let start = getTime()
     let execResult = execCmd(appName & " " & $i)
+    let elpd = getTime() - start
+    elpdList[i] = elpd
     if execResult != 0:
       stderr.writeLine("subtest no: " & $i & " failed: " & names[i])
     result = result or execResult
+
+  var f = open("all_test.md", fmWrite)
+  for i in 0..<numModules:
+    f.write("* " & names[i])
+    f.write("  - " & $elpdList[i])
+    f.write("\n")
+  f.close()
 
 proc getImportStmt(stmtList: NimNode): NimNode =
   result = stmtList[0]

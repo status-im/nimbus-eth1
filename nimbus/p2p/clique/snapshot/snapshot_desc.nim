@@ -29,6 +29,8 @@ import
   eth/[common, rlp, trie/db],
   stew/results
 
+export tables
+
 type
   SnapshotResult* = ##\
     ## Snapshot/error result type

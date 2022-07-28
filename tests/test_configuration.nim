@@ -63,7 +63,8 @@ proc configurationMain*() =
     test "network-id set, no custom-network":
       let conf = makeConfig(@["--network:678"])
       check conf.networkId == 678.NetworkId
-      check conf.networkParams == NetworkParams()
+      check conf.networkParams.genesis == Genesis()
+      check conf.networkParams.config == ChainConfig()
 
     test "network-id not set, copy from chainId of custom network":
       let conf = makeConfig(@["--custom-network:" & genesisFile])

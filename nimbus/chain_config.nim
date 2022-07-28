@@ -50,7 +50,7 @@ type
     clique             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
 
-  ChainConfig* = object
+  ChainConfig* = ref object
     chainId*            : ChainId
     homesteadBlock*     : BlockNumber
     daoForkBlock*       : BlockNumber
@@ -79,7 +79,7 @@ type
 
     terminalTotalDifficulty*: Option[UInt256]
 
-  Genesis* = object
+  Genesis* = ref object
     nonce*      : BlockNonce
     timestamp*  : EthTime
     extraData*  : seq[byte]
@@ -246,6 +246,7 @@ template to(a: string, b: type UInt256): UInt256 =
 
 proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
   cg.genesis               = cc.genesis
+  cg.config                = ChainConfig()
   cg.config.chainId        = cc.config.chainId
   cg.config.daoForkSupport = cc.config.daoForkSupport
   cg.config.eip150Hash     = cc.config.eip150Hash
@@ -517,3 +518,18 @@ proc networkParams*(id: NetworkId): NetworkParams
     {.gcsafe, raises: [Defect, ValueError, RlpError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
+
+proc `==`*(a, b: ChainId): bool =
+  a.uint64 == b.uint64
+
+proc `==`*(a, b: Genesis): bool =
+  if a.isNil and b.isNil: return true
+  if a.isNil and not b.isNil: return false
+  if not a.isNil and b.isNil: return false
+  a[] == b[]
+
+proc `==`*(a, b: ChainConfig): bool =
+  if a.isNil and b.isNil: return true
+  if a.isNil and not b.isNil: return false
+  if not a.isNil and b.isNil: return false
+  a[] == b[]
