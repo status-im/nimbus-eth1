@@ -9,6 +9,7 @@ import
   os,
   std/sequtils,
   unittest2, testutils, confutils, chronos,
+  stew/byteutils,
   eth/p2p/discoveryv5/random2, eth/keys,
   ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
@@ -52,7 +53,8 @@ proc withRetries[A](
   check: CheckCallback[A],
   numRetries: int,
   initialWait: Duration,
-  checkFailMessage: string): Future[A] {.async.} =
+  checkFailMessage: string,
+  nodeIdx: int): Future[A] {.async.} =
   ## Retries given future callback until either:
   ## it returns successfuly and given check is true
   ## or
@@ -71,7 +73,8 @@ proc withRetries[A](
     except CatchableError as exc:
       if tries > numRetries:
         # if we reached max number of retries fail
-        raise exc
+        let msg = "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx
+        raise newException(ValueError, msg)
 
     inc tries
     # wait before new retry
@@ -81,12 +84,13 @@ proc withRetries[A](
 # Sometimes we need to wait till data will be propagated over the network.
 # To avoid long sleeps, this combinator can be used to retry some calls until
 # success or until some condition hold (or both)
-proc retryUntilDataPropagated[A](
+proc retryUntil[A](
   f: FutureCallback[A],
   c: CheckCallback[A],
-  checkFailMessage: string): Future[A] =
-  # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16 seconds
-  return withRetries(f, c, 5, seconds(1), checkFailMessage)
+  checkFailMessage: string,
+  nodeIdx: int): Future[A] =
+  # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16, 32 seconds
+  return withRetries(f, c, 6, seconds(1), checkFailMessage, nodeIdx)
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
@@ -237,7 +241,7 @@ procSuite "Portal testnet tests":
     let blockData = readBlockDataTable(dataFile)
     check blockData.isOk()
 
-    for client in clients:
+    for i, client in clients:
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in blockData.get().blockHashes():
@@ -246,7 +250,7 @@ procSuite "Portal testnet tests":
         # add a json-rpc debug proc that returns whether the offer queue is empty or
         # not. And then poll every node until all nodes have an empty queue.
 
-        let content = await retryUntilDataPropagated(
+        let content = await retryUntil(
           proc (): Future[Option[BlockObject]] {.async.} =
             try:
               let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
@@ -257,7 +261,8 @@ procSuite "Portal testnet tests":
               raise exc
           ,
           proc (mc: Option[BlockObject]): bool = return mc.isSome(),
-          "Did not receive expected Block with hash " & $hash
+          "Did not receive expected Block with hash " & hash.data.toHex(),
+          i
         )
         check content.isSome()
         let blockObj = content.get()
@@ -272,7 +277,7 @@ procSuite "Portal testnet tests":
           blockHash: some(hash)
         )
 
-        let logs = await retryUntilDataPropagated(
+        let logs = await retryUntil(
           proc (): Future[seq[FilterLog]] {.async.} =
             try:
               let res = await client.eth_getLogs(filterOptions)
@@ -283,7 +288,8 @@ procSuite "Portal testnet tests":
               raise exc
           ,
           proc (mc: seq[FilterLog]): bool = return true,
-          ""
+          "",
+          i
         )
 
         for l in logs:
@@ -334,14 +340,27 @@ procSuite "Portal testnet tests":
       # offer content to node 1..63
       for i in 1..lastNodeIdx:
         let receipientId = nodeInfos[i].nodeId
-        check (await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0))
-        await clients[0].close()
+        let offerResponse = await retryUntil(
+          proc (): Future[bool] {.async.} =
+            try:
+              let res = await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0)
+              await clients[0].close()
+              return res
+            except CatchableError as exc:
+              await clients[0].close()
+              raise exc
+          ,
+          proc (os: bool): bool = return os,
+          "Offer failed",
+          i
+        )
+        check offerResponse
 
-      for client in clients:
+      for i, client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to
         # access this file anymore here for the block hashes.
         for hash in bd.blockHashes():
-          let content = await retryUntilDataPropagated(
+          let content = await retryUntil(
             proc (): Future[Option[BlockObject]] {.async.} =
               try:
                 let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
@@ -352,7 +371,8 @@ procSuite "Portal testnet tests":
                 raise exc
             ,
             proc (mc: Option[BlockObject]): bool = return mc.isSome(),
-            "Did not receive expected Block with hash " & $hash
+            "Did not receive expected Block with hash " & hash.data.toHex(),
+            i
           )
           check content.isSome()
 
@@ -403,11 +423,11 @@ procSuite "Portal testnet tests":
       check (await clients[0].portal_history_depthContentPropagate(tempDbPath, 64))
       await clients[0].close()
 
-      for client in clients:
+      for i, client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to
         # access this file anymore here for the block hashes.
         for hash in bd.blockHashes():
-          let content = await retryUntilDataPropagated(
+          let content = await retryUntil(
             proc (): Future[Option[BlockObject]] {.async.} =
               try:
                 let res = await client.eth_getBlockByHash(hash.ethHashStr(), false)
@@ -418,7 +438,8 @@ procSuite "Portal testnet tests":
                 raise exc
             ,
             proc (mc: Option[BlockObject]): bool = return mc.isSome(),
-            "Did not receive expected Block with hash " & $hash
+            "Did not receive expected Block with hash " & hash.data.toHex(),
+            i
           )
           check content.isSome()
 

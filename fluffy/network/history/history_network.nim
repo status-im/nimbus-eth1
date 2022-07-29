@@ -280,21 +280,21 @@ proc getBlockHeader*(
 
   let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
   if headerFromDb.isSome():
-    info "Fetched block header from database", hash
+    info "Fetched block header from database", hash, contentKey = keyEncoded
     return headerFromDb
 
   for i in 0..<requestRetries:
     let headerContentLookup =
       await n.portalProtocol.contentLookup(keyEncoded, contentId)
     if headerContentLookup.isNone():
-      warn "Failed fetching block header from the network", hash
+      warn "Failed fetching block header from the network", hash, contentKey = keyEncoded
       return none(BlockHeader)
 
     let headerContent = headerContentLookup.unsafeGet()
 
     let res = validateBlockHeaderBytes(headerContent.content, hash)
     if res.isOk():
-      info "Fetched block header from the network", hash
+      info "Fetched block header from the network", hash, contentKey = keyEncoded
       # Content is valid we can propagate it to interested peers
       n.portalProtocol.triggerPoke(
         headerContent.nodesInterestedInContent,
@@ -306,7 +306,7 @@ proc getBlockHeader*(
 
       return some(res.get())
     else:
-      warn "Validation of block header failed", err = res.error, hash
+      warn "Validation of block header failed", err = res.error, hash, contentKey = keyEncoded
 
   # Headers were requested `requestRetries` times and all failed on validation
   return none(BlockHeader)
@@ -324,7 +324,7 @@ proc getBlockBody*(
     bodyFromDb = n.getContentFromDb(BlockBody, contentId)
 
   if bodyFromDb.isSome():
-    info "Fetched block body from database", hash
+    info "Fetched block body from database", hash, contentKey = keyEncoded
     return bodyFromDb
 
   for i in 0..<requestRetries:
@@ -332,7 +332,7 @@ proc getBlockBody*(
       await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
     if bodyContentLookup.isNone():
-      warn "Failed fetching block body from the network", hash
+      warn "Failed fetching block body from the network", hash, contentKey = keyEncoded
       return none(BlockBody)
 
     let bodyContent = bodyContentLookup.unsafeGet()
@@ -340,7 +340,7 @@ proc getBlockBody*(
     let res = validateBlockBodyBytes(
       bodyContent.content, header.txRoot, header.ommersHash)
     if res.isOk():
-      info "Fetched block body from the network", hash
+      info "Fetched block body from the network", hash, contentKey = keyEncoded
 
       # body is valid, propagate it to interested peers
       n.portalProtocol.triggerPoke(
@@ -353,15 +353,18 @@ proc getBlockBody*(
 
       return some(res.get())
     else:
-      warn "Validation of block body failed", err = res.error, hash
+      warn "Validation of block body failed", err = res.error, hash, contentKey = keyEncoded
 
   return none(BlockBody)
 
 proc getBlock*(
     n: HistoryNetwork, chainId: uint16, hash: BlockHash):
     Future[Option[Block]] {.async.} =
+  debug "Trying to retrieve block with hash", hash
+
   let headerOpt = await n.getBlockHeader(chainId, hash)
   if headerOpt.isNone():
+    warn "Failed to get header when getting block with hash", hash
     # Cannot validate block without header.
     return none(Block)
 
@@ -370,6 +373,7 @@ proc getBlock*(
   let bodyOpt = await n.getBlockBody(chainId, hash, header)
 
   if bodyOpt.isNone():
+    warn "Failed to get body when gettin block with hash", hash
     return none(Block)
 
   let body = bodyOpt.unsafeGet()
@@ -397,14 +401,14 @@ proc getReceipts*(
     let receiptsContentLookup =
       await n.portalProtocol.contentLookup(keyEncoded, contentId)
     if receiptsContentLookup.isNone():
-      warn "Failed fetching receipts from the network", hash
+      warn "Failed fetching receipts from the network", hash, contentKey = keyEncoded
       return none(seq[Receipt])
 
     let receiptsContent = receiptsContentLookup.unsafeGet()
 
     let res = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
     if res.isOk():
-      info "Fetched receipts from the network", hash
+      info "Fetched receipts from the network", hash, contentKey = keyEncoded
 
       let receipts = res.get()
 
@@ -419,7 +423,7 @@ proc getReceipts*(
 
       return some(res.get())
     else:
-      warn "Validation of receipts failed", err = res.error, hash
+      warn "Validation of receipts failed", err = res.error, hash, contentKey = keyEncoded
 
   return none(seq[Receipt])
 
