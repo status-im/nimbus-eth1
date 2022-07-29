@@ -307,8 +307,6 @@ proc registerIncomingSocketCallback*(
             let fut = socket.writeContentRequest(stream, request)
             stream.contentRequests.del(i)
             return fut
-          else:
-            debug "Received unknown content connection"
 
         for i, offer in stream.contentOffers:
           if offer.connectionId == socket.connectionId and
@@ -316,8 +314,6 @@ proc registerIncomingSocketCallback*(
             let fut = socket.readContentOffer(stream, offer)
             stream.contentOffers.del(i)
             return fut
-          else:
-            debug "Received unknown offer connection"
 
       # TODO: Is there a scenario where this can happen,
       # considering `allowRegisteredIdCallback`? If not, doAssert?

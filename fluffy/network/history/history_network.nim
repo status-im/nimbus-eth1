@@ -502,10 +502,6 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
       let (contentKeys, contentItems) =
         await n.portalProtocol.stream.contentQueue.popFirst()
 
-      let lenReceived = len(contentItems)
-
-      debug "Receied inoming offered content", contentKeys, len = lenReceived
-
       # content passed here can have less items then contentKeys, but not more.
       for i, contentItem in contentItems:
         let contentKey = contentKeys[i]

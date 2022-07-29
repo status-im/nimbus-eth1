@@ -1108,7 +1108,6 @@ proc neighborhoodGossip*(
   for i, contentItem in content:
     let contentInfo =
       ContentInfo(contentKey: contentKeys[i], content: contentItem)
-    debug "Scheduling content for gossip", contentKey = contentInfo.contentKey
     discard contentList.add(contentInfo)
 
   # Just taking the first content item as target id.
@@ -1148,18 +1147,12 @@ proc neighborhoodGossip*(
 
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let lenGossip = min(gossipNodes.len, maxGossipNodes)
-    debug "Scheduling gossip to len local found nodes", len = lenGossip
-
     for node in gossipNodes[0..<min(gossipNodes.len, maxGossipNodes)]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    let lenGossip = min(closestNodes.len, maxGossipNodes)
-    debug "Scheduling gossip to len closest found nodes", len = lenGossip
-
     for node in closestNodes[0..<min(closestNodes.len, maxGossipNodes)]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
