@@ -4,7 +4,7 @@ import
   test_env,
   eth/[common,  rlp, keys],
   stew/byteutils,
-  json_rpc/rpcclient,
+  json_rpc/[rpcclient, errors],
   ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/transaction
 
@@ -220,6 +220,10 @@ proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPre
     ok()
   except ValueError as e:
     err(e.msg)
+  except JsonRpcError as ex:
+    # occasionally for unknown reason this proc will fail in CI
+    # let's see what actually trigger it
+    err(ex.msg)
 
 proc customizeTx(baseTx: Transaction, vaultKey: PrivateKey, customTx: CustomTx): Transaction =
   # Create a modified transaction base, from the base transaction and customData mix
