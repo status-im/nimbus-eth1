@@ -233,6 +233,10 @@ dump_logs() {
 BOOTSTRAP_NODE=0
 BOOTSTRAP_TIMEOUT=5 # in seconds
 BOOTSTRAP_ENR_FILE="${DATA_DIR}/node${BOOTSTRAP_NODE}/fluffy_node.enr"
+# Amount of nodes in the testnet that will build their master accumulator
+# locally from a block data file.
+# TODO: Currently not enabled
+LOCAL_ACCUMULATOR_NODES=$((NUM_NODES / 4))
 
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
@@ -242,6 +246,10 @@ done
 
 echo "Starting ${NUM_NODES} nodes."
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
+  # Reset arguments
+  BOOTSTRAP_ARG=""
+  ACCUMULATOR_ARG=""
+
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
 
   if [[ ${NUM_NODE} != ${BOOTSTRAP_NODE} ]]; then
@@ -263,6 +271,10 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     done
   fi
 
+  # if [[ ${NUM_NODE} -lt ${LOCAL_ACCUMULATOR_NODES} ]]; then
+  #   ACCUMULATOR_ARG="--accumulator-file=./fluffy/scripts/eth-accumulator.json"
+  # fi
+
   # Running with bits-per-hop of 1 to make the lookups more likely requiring
   # to request to nodes over the network instead of having most of them in the
   # own routing table.
@@ -283,6 +295,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --bucket-ip-limit=24 \
     --bits-per-hop=1 \
     ${RADIUS_ARG} \
+    ${ACCUMULATOR_ARG} \
     ${EXTRA_ARGS} \
     > "${DATA_DIR}/log${NUM_NODE}.txt" 2>&1 &
 

@@ -56,11 +56,27 @@ proc installPortalDebugApiHandlers*(
     else:
       raise newException(ValueError, $res.error)
 
+  rpcServer.rpc("portal_" & network & "_propagateAccumulatorData") do(
+      dataFile: string) -> bool:
+    let res = await p.propagateAccumulatorData(dataFile)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulator") do(
+      dataFile: string) -> bool:
+    let res = await p.propagateEpochAccumulator(dataFile)
+    if res.isOk():
+      return true
+    else:
+      echo $res.error
+      raise newException(ValueError, $res.error)
+
   rpcServer.rpc("portal_" & network & "_storeContentInNodeRange") do(
       dbPath: string,
       max: uint32,
       starting: uint32) -> bool:
-
     let storeResult = p.storeContentInNodeRange(dbPath, max, starting)
 
     if storeResult.isOk():
@@ -73,19 +89,18 @@ proc installPortalDebugApiHandlers*(
       nodeId: NodeId,
       max: uint32,
       starting: uint32) -> bool:
-      # waiting for offer result, by the end of this call remote node should
-      # have received offered content
-      let offerResult = await p.offerContentInNodeRange(dbPath, nodeId, max, starting)
+    # waiting for offer result, by the end of this call remote node should
+    # have received offered content
+    let offerResult = await p.offerContentInNodeRange(dbPath, nodeId, max, starting)
 
-      if offerResult.isOk():
-        return true
-      else:
-        raise newException(ValueError, $offerResult.error)
+    if offerResult.isOk():
+      return true
+    else:
+      raise newException(ValueError, $offerResult.error)
 
   rpcServer.rpc("portal_" & network & "_depthContentPropagate") do(
       dbPath: string,
       max: uint32) -> bool:
-
     # TODO Consider making this call asynchronously without waiting for result
     # as for big seed db size it could take a loot of time.
     let propagateResult = await p.depthContentPropagate(dbPath, max)
@@ -97,7 +112,6 @@ proc installPortalDebugApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "_breadthContentPropagate") do(
       dbPath: string) -> bool:
-
     # TODO Consider making this call asynchronously without waiting for result
     # as for big seed db size it could take a loot of time.
     let propagateResult = await p.breadthContentPropagate(dbPath)

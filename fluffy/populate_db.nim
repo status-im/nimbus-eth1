@@ -16,7 +16,7 @@ import
   ../nimbus/[chain_config, genesis],
   "."/[content_db, seed_db],
   ./network/wire/portal_protocol,
-  ./network/history/history_content
+  ./network/history/[history_content, accumulator]
 
 export results, tables
 
@@ -35,17 +35,28 @@ type
     # Fix in nim-json-serialization or should I overload something here?
     number*: int
 
+  AccumulatorData = object
+    accumulatorHash: string
+    maxBlockNumber: int
+    accumulator: string
+
+  AccumulatorObject = object
+    accumulator: AccumulatorData
+
+  EpochAccumulatorObject = object
+    epochAccumulator: string
+
   BlockDataTable* = Table[string, BlockData]
 
-proc readBlockDataTable*(dataFile: string): Result[BlockDataTable, string] =
-  let blockData = readAllFile(dataFile)
-  if blockData.isErr(): # TODO: map errors
+proc readJsonType*(dataFile: string, T: type): Result[T, string] =
+  let data = readAllFile(dataFile)
+  if data.isErr(): # TODO: map errors
     return err("Failed reading data-file")
 
   let decoded =
     try:
-      Json.decode(blockData.get(), BlockDataTable)
-    except CatchableError as e:
+      Json.decode(data.get(), T)
+    except SerializationError as e:
       return err("Failed decoding json data-file: " & e.msg)
 
   ok(decoded)
@@ -152,10 +163,70 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
+proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
+  let blockData = ? readJsonType(dataFile, BlockDataTable)
+
+  var headers: seq[BlockHeader]
+  # Len of headers from blockdata + genesis header
+  headers.setLen(blockData.len() + 1)
+
+  headers[0] = getGenesisHeader()
+
+  for k, v in blockData.pairs:
+    let header = ? v.readBlockHeader()
+    headers[header.blockNumber.truncate(int)] = header
+
+  ok(buildAccumulator(headers))
+
+proc buildAccumulatorData*(
+    dataFile: string):
+    Result[seq[(ContentKey, EpochAccumulator)], string] =
+  let blockData = ? readJsonType(dataFile, BlockDataTable)
+
+  var headers: seq[BlockHeader]
+  # Len of headers from blockdata + genesis header
+  headers.setLen(blockData.len() + 1)
+
+  headers[0] = getGenesisHeader()
+
+  for k, v in blockData.pairs:
+    let header = ? v.readBlockHeader()
+    headers[header.blockNumber.truncate(int)] = header
+
+  ok(buildAccumulatorData(headers))
+
+proc readAccumulator*(dataFile: string): Result[Accumulator, string] =
+  let res = ? readJsonType(dataFile, AccumulatorObject)
+
+  let encodedAccumulator =
+    try:
+      res.accumulator.accumulator.hexToSeqByte()
+    except ValueError as e:
+      return err("Invalid hex data for accumulator: " & e.msg)
+
+  try:
+    ok(SSZ.decode(encodedAccumulator, Accumulator))
+  except SszError as e:
+    err("Decoding accumulator failed: " & e.msg)
+
+proc readEpochAccumulator*(dataFile: string): Result[EpochAccumulator, string] =
+  let res = ? readJsonType(dataFile, EpochAccumulatorObject)
+
+  let encodedAccumulator =
+    try:
+      res.epochAccumulator.hexToSeqByte()
+    except ValueError as e:
+      return err("Invalid hex data for accumulator: " & e.msg)
+
+  try:
+    ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
+  except SszError as e:
+    err("Decoding epoch accumulator failed: " & e.msg)
+
 proc historyStore*(
     p: PortalProtocol, dataFile: string, verify = false):
     Result[void, string] =
-  let blockData = ? readBlockDataTable(dataFile)
+  let blockData = ? readJsonType(dataFile, BlockDataTable)
 
   for b in blocks(blockData, verify):
     for value in b:
@@ -163,6 +234,50 @@ proc historyStore*(
       p.storeContent(history_content.toContentId(value[0]), value[1])
 
   ok()
+
+proc propagateAccumulatorData*(
+    p: PortalProtocol, dataFile: string):
+    Future[Result[void, string]] {.async.} =
+  ## Propagate all epoch accumulators created when building the accumulator
+  ## from the block headers.
+  ## dataFile holds block data
+  let epochAccumulators = buildAccumulatorData(dataFile)
+  if epochAccumulators.isErr():
+    return err(epochAccumulators.error)
+  else:
+    for (key, epochAccumulator) in epochAccumulators.get():
+      let content = SSZ.encode(epochAccumulator)
+
+      p.storeContent(
+        history_content.toContentId(key), content)
+      await p.neighborhoodGossip(
+        ContentKeysList(@[encode(key)]), @[content])
+
+    return ok()
+
+proc propagateEpochAccumulator*(
+    p: PortalProtocol, dataFile: string):
+    Future[Result[void, string]] {.async.} =
+  ## Propagate a specific epoch accumulator into the network.
+  ## dataFile holds the SSZ serialized epoch accumulator
+  let epochAccumulatorRes = readEpochAccumulator(dataFile)
+  if epochAccumulatorRes.isErr():
+    return err(epochAccumulatorRes.error)
+  else:
+    let
+      accumulator = epochAccumulatorRes.get()
+      rootHash = accumulator.hash_tree_root()
+      key = ContentKey(
+        contentType: epochAccumulator,
+        epochAccumulatorKey: EpochAccumulatorKey(
+          epochHash: rootHash))
+
+    p.storeContent(
+      history_content.toContentId(key), SSZ.encode(accumulator))
+    await p.neighborhoodGossip(
+      ContentKeysList(@[encode(key)]), @[SSZ.encode(accumulator)])
+
+    return ok()
 
 proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false):
@@ -182,7 +297,7 @@ proc historyPropagate*(
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))
 
-  let blockData = readBlockDataTable(dataFile)
+  let blockData = readJsonType(dataFile, BlockDataTable)
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
       for value in b:
@@ -205,7 +320,7 @@ proc historyPropagate*(
 proc historyPropagateBlock*(
     p: PortalProtocol, dataFile: string, blockHash: string, verify = false):
     Future[Result[void, string]] {.async.} =
-  let blockDataTable = readBlockDataTable(dataFile)
+  let blockDataTable = readJsonType(dataFile, BlockDataTable)
 
   if blockDataTable.isOk():
     let b =

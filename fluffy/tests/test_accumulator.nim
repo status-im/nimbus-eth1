@@ -13,7 +13,7 @@ import
   unittest2, stint, stew/byteutils,
   eth/common/eth_types,
   ../populate_db,
-  ../network/history/accumulator
+  ../network/history/[accumulator, accumulator_db]
 
 suite "Header Accumulator":
   test "Header Accumulator Update":
@@ -25,7 +25,7 @@ suite "Header Accumulator":
 
       dataFile = "./fluffy/tests/blocks/mainnet_blocks_1-2.json"
 
-    let blockDataRes = readBlockDataTable(dataFile)
+    let blockDataRes = readJsonType(dataFile, BlockDataTable)
 
     check blockDataRes.isOk()
     let blockData = blockDataRes.get()

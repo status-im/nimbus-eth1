@@ -24,7 +24,7 @@ const
     "0xce8f770a56203e10afe19c7dd7e2deafc356e6cce0a560a30a85add03da56137"
 
 suite "History Network Content Validation":
-  let blockDataTable = readBlockDataTable(dataFile).expect(
+  let blockDataTable = readJsonType(dataFile, BlockDataTable).expect(
     "Valid data file should parse")
 
   let blockData =

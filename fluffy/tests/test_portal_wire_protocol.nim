@@ -25,6 +25,14 @@ proc toContentId(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest(contentKey.asSeq())
   some(readUintBE[256](idHash.data))
 
+proc dbGetHandler(db: ContentDB, contentKey: ByteList):
+    (Option[ContentId], Option[seq[byte]]) =
+  let contentIdOpt = contentKey.toContentId()
+  if contentIdOpt.isSome():
+    (contentIdOpt, db.get(contentIdOpt.get()))
+  else:
+    (contentIdOpt, none(seq[byte]))
+
 proc initPortalProtocol(
     rng: ref HmacDrbgContext,
     privKey: PrivateKey,
@@ -34,7 +42,7 @@ proc initPortalProtocol(
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new("", uint32.high, inMemory = true)
     proto = PortalProtocol.new(
-      d, protocolId, db, toContentId,
+      d, protocolId, db, toContentId, dbGetHandler,
       bootstrapRecords = bootstrapRecords)
 
     socketConfig = SocketConfig.init(
@@ -338,7 +346,8 @@ procSuite "Portal Wire Protocol Tests":
 
       dbLimit = 100_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
-      proto1 = PortalProtocol.new(node1, protocolId, db, toContentId)
+      proto1 = PortalProtocol.new(
+        node1, protocolId, db, toContentId, dbGetHandler)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]

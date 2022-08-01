@@ -80,7 +80,7 @@ task utp_test, "Run uTP integration tests":
   test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR -d:chronosStrictException"
 
 task test_portal_testnet, "Build test_portal_testnet":
-  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering"
+  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering -d:PREFER_BLST_SHA256=false"
 
 task testfluffy, "Run fluffy tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
