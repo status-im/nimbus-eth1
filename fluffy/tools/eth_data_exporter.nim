@@ -247,7 +247,7 @@ proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
     for i in config.initialBlock..config.endBlock:
       let blck = client.downloadHeader(i)
       writer.writeHeaderRecord(blck)
-      if (i mod 8192) == 0 and i != config.initialBlock:
+      if ((i - config.initialBlock) mod 8192) == 0 and i != config.initialBlock:
         info "Downloaded 8192 new block headers", currentHeader = i
     writer.endRecord()
     info "File successfully written", path = config.dataDir / config.fileName
@@ -270,7 +270,7 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
     for i in config.initialBlock..config.endBlock:
       let blck = downloadBlock(i, client)
       writer.writeBlockRecord(blck)
-      if (i mod 8192) == 0 and i != config.initialBlock:
+      if ((i - config.initialBlock) mod 8192) == 0 and i != config.initialBlock:
         info "Downloaded 8192 new blocks", currentBlock = i
     writer.endRecord()
     info "File successfully written", path = config.dataDir / config.fileName
@@ -285,7 +285,7 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
       quit 1
 
 proc writeBlocksToDb(config: ExporterConf, client: RpcClient) =
-  let db = SeedDb.new(distinctBase(config.dataDir), defaultBlockFileName)
+  let db = SeedDb.new(distinctBase(config.dataDir), config.filename)
 
   defer:
     db.close()
@@ -406,7 +406,7 @@ when isMainModule:
     for i in config.initialBlock..config.endBlock:
       let header = client.downloadHeader(i)
       headers.add(header)
-      if (i mod 8192) == 0 and i != config.initialBlock:
+      if ((i - config.initialBlock) mod 8192) == 0 and i != config.initialBlock:
         info "Downloaded 8192 new block headers", currentBlock = i
 
     waitFor client.close()
