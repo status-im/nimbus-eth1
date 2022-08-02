@@ -1,6 +1,6 @@
 import
   std/[os],
-  pkg/[unittest2, confutils],
+  pkg/[unittest2],
   eth/[p2p, common, keys],
   stew/byteutils,
   ../nimbus/[config, chain_config, context],
@@ -12,7 +12,10 @@ proc `==`(a, b: ChainId): bool =
 proc configurationMain*() =
   suite "configuration test suite":
     const
-      genesisFile = "tests" / "customgenesis" / "calaveras.json"
+      jsonDir = "tests" / "customgenesis"
+      genesisFile = jsonDir / "calaveras.json"
+      noGenesis = jsonDir / "nogenesis.json"
+      noConfig = jsonDir / "noconfig.json"
       bootNode = "enode://a24ac7c5484ef4ed0c5eb2d36620ba4e4aa13b8c84684e1b4aab0cebea2ae45cb4d375b77eab56516d34bfbd3c1a833fc51296ff084b770b94fb9028c4d25ccf@52.169.42.101:30303"
 
     test "data-dir and key-store":
@@ -48,6 +51,14 @@ proc configurationMain*() =
       let bb = makeConfig(@["import", genesisFile])
       check bb.cmd == NimbusCmd.`import`
       check bb.blocksFile.string == genesisFile
+
+    test "custom-network loading config file with no genesis data":
+      let conf = makeConfig(@["--custom-network:" & noGenesis])
+      check conf.networkParams.genesis.isNil == false
+
+    test "custom-network loading config file with no 'config'":
+      let conf = makeConfig(@["--custom-network:" & noConfig])
+      check conf.networkParams.config.isNil == false
 
     test "network-id":
       let aa = makeTestConfig()

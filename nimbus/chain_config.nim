@@ -245,7 +245,12 @@ template to(a: string, b: type UInt256): UInt256 =
   UInt256.fromHex(a)
 
 proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
-  cg.genesis               = cc.genesis
+  if cc.genesis.isNil:
+    cg.genesis = Genesis()
+    warn "Loaded custom network configuration contains no 'genesis' data"
+  else:
+    cg.genesis = cc.genesis
+
   cg.config                = ChainConfig()
   cg.config.chainId        = cc.config.chainId
   cg.config.daoForkSupport = cc.config.daoForkSupport
