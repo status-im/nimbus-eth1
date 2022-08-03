@@ -37,6 +37,26 @@ type
     historicalEpochs*: List[Bytes32, maxHistoricalEpochs]
     currentEpoch*: EpochAccumulator
 
+  BlockHashResultType* = enum
+    BHash, HEpoch, UnknownBlockNumber
+
+  BlockHashResult* = object
+    case kind*: BlockHashResultType
+    of BHash:
+      blockHash*: BlockHash
+    of HEpoch:
+      epochHash*: Bytes32
+      epochIndex*: uint64
+      blockRelativeIndex*: uint64
+    of UnknownBlockNumber:
+      discard
+
+proc newEmptyAccumulator*(): Accumulator =
+  return Accumulator(
+    historicalEpochs:  List[Bytes32, maxHistoricalEpochs].init(@[]),
+    currentEpoch: List[HeaderRecord, epochSize].init(@[])
+  )
+
 func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
   let lastTotalDifficulty =
     if a.currentEpoch.len() == 0:
@@ -91,18 +111,28 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 ## Calls and helper calls for building header proofs and verifying headers
 ## against the Accumulator and the header proofs.
 
+func inCurrentEpoch*(bn: uint64, a: Accumulator): bool =
+  bn > uint64(a.historicalEpochs.len() * epochSize) - 1
+
 func inCurrentEpoch*(header: BlockHeader, a: Accumulator): bool =
   let blockNumber = header.blockNumber.truncate(uint64)
+  return inCurrentEpoch(blockNumber, a)
 
-  blockNumber > uint64(a.historicalEpochs.len() * epochSize) - 1
+func getEpochIndex*(bn: uint64): uint64 =
+  bn div epochSize
 
 func getEpochIndex*(header: BlockHeader): uint64 =
+  let blockNumber = header.blockNumber.truncate(uint64)
   ## Get the index for the historical epochs
-  header.blockNumber.truncate(uint64) div epochSize
+  return getEpochIndex(blockNumber)
+
+func getHeaderRecordIndex(bn: uint64, epochIndex: uint64): uint64 =
+  ## Get the relative header index for the epoch accumulator
+  uint64(bn - epochIndex * epochSize)
 
 func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
-  uint64(header.blockNumber.truncate(uint64) - epochIndex * epochSize)
+  return getHeaderRecordIndex(header.blockNumber.truncate(uint64), epochIndex)
 
 func verifyProof*(
     a: Accumulator, proof: openArray[Digest], header: BlockHeader): bool =
@@ -140,3 +170,21 @@ proc verifyHeader*(
         err("Proof verification failed")
     else:
       err("Need proof to verify header")
+
+func getHeaderHashForBlockNumber*(a: Accumulator, bn: UInt256): BlockHashResult=
+  let blockNumber = bn.truncate(uint64)
+  if inCurrentEpoch(blockNumber, a):
+    let relIndex = blockNumber - uint64(a.historicalEpochs.len()) * epochSize
+
+    if relIndex > uint64(a.currentEpoch.len() - 1):
+      return BlockHashResult(kind: UnknownBlockNumber)
+
+    return BlockHashResult(kind: BHash, blockHash: a.currentEpoch[relIndex].blockHash)
+  else:
+    let epochIndex = getEpochIndex(blockNumber)
+    return BlockHashResult(
+      kind: HEpoch,
+      epochHash: a.historicalEpochs[epochIndex],
+      epochIndex: epochIndex,
+      blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex)
+    )

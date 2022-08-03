@@ -106,3 +106,57 @@ suite "Header Accumulator":
           blockNumber: i.stuint(256), difficulty: 2.stuint(256))
 
         check db.verifyHeader(header, none(seq[Digest])).isErr()
+
+  test "Header Accumulator header hash for blocknumber":
+    var acc = newEmptyAccumulator()
+
+    let numEpochs = 2
+    let numHeadersInCurrentEpoch = 5
+    let numHeaders = numEpochs * epochSize + numHeadersInCurrentEpoch
+
+    var headerHashes: seq[Hash256] = @[]
+
+    for i in 0..numHeaders:
+      var bh = BlockHeader()
+      bh.blockNumber = u256(i)
+      bh.difficulty = u256(1)
+      headerHashes.add(bh.blockHash())
+      acc.updateAccumulator(bh)
+
+    # get valid response for epoch 0
+    block:
+      for i in 0..epochSize-1:
+        let res = acc.getHeaderHashForBlockNumber(u256(i))
+        check:
+          res.kind == HEpoch
+          res.epochIndex == 0
+
+    # get valid response for epoch 1
+    block:
+      for i in epochSize..(2 * epochSize)-1:
+        let res = acc.getHeaderHashForBlockNumber(u256(i))
+        check:
+          res.kind == HEpoch
+          res.epochIndex == 1
+
+    # get valid response from current epoch (epoch 3)
+    block:
+      for i in (2 * epochSize)..(2 * epochSize) + numHeadersInCurrentEpoch:
+        let res = acc.getHeaderHashForBlockNumber(u256(i))
+        check:
+          res.kind == BHash
+          res.blockHash == headerHashes[i]
+
+    # get valid response when getting unknown hash
+    block:
+      let firstUknownBlockNumber = (2 * epochSize) + numHeadersInCurrentEpoch + 1
+      let res = acc.getHeaderHashForBlockNumber(u256(firstUknownBlockNumber))
+
+      check:
+        res.kind == UnknownBlockNumber
+
+      let res1 = acc.getHeaderHashForBlockNumber(u256(3 * epochSize))
+      check:
+        res1.kind == UnknownBlockNumber
+
+

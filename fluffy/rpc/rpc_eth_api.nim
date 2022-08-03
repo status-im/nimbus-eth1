@@ -126,7 +126,7 @@ proc installEthApiHandlers*(
 
   # rpcServerWithProxy.registerProxyMethod("eth_getBlockByHash")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber")
+  # rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber")
 
   # rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
 
@@ -206,6 +206,29 @@ proc installEthApiHandlers*(
     else:
       let (header, body) = blockRes.unsafeGet()
       return some(BlockObject.init(header, body))
+
+  # TODO add test to local testnet, it requires addin proper handling accumulators
+  # in testnet
+  rpcServerWithProxy.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
+    # TODO for now support only numeric queries, as it is not obvious how to retrieve
+    # pending or even latest block.
+    if not isValidHexQuantity(quantityTag):
+      raise newException(ValueError, "Provided tag should be valid hex number")
+
+    let blockNum = fromHex(UInt256, quantityTag)
+
+    let blockResult = await historyNetwork.getBlock(1'u16, blockNum)
+
+    if blockResult.isOk():
+      let maybeBlock = blockResult.get()
+
+      if maybeBlock.isNone():
+        return none(BlockObject)
+      else:
+        let (header, body) = maybeBlock.unsafeGet()
+        return some(BlockObject.init(header, body))
+    else:
+       raise newException(ValueError, blockResult.error)
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: EthHashStr) -> HexQuantityStr:
