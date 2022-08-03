@@ -10,34 +10,118 @@
 # except according to those terms.
 
 import
-  std/[options, sets, strutils],
+  std/[hashes, math, options, sets],
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
+  stew/[interval_set, keyed_queue],
   ".."/[protocol, sync_desc],
-  ./worker/[fetch, pivot, ticker],
-  ./worker_desc
+  ./worker/[accounts_db, fetch_accounts, pivot, ticker],
+  "."/[range_desc, worker_desc]
 
 logScope:
   topics = "snap-sync"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc hash(h: Hash256): Hash =
+  ## Mixin for `Table` or `keyedQueue`
+  h.data.hash
+
+proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
+  if 0 < length:
+    result[0] = sum / length.float
+    result[1] = sqrt(sqSum / length.float - result[0] * result[0])
+
+# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateStateRoot(buddy: SnapBuddyRef): bool =
-  ## Update global state root header `stateHeader` from worker peer
-  ## `pivotHeader`. Choose the latest block number. Returns `true` if the
-  ## `stateHeader` was changed.
+proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
+  ## Create random node tag
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+  var data: array[32,byte]
+  ctx.data.rng[].generate(data)
+  UInt256.fromBytesBE(data).NodeTag
+
+
+proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
+  ## Activate environment for state root implied by `header` argument
+  let
+    ctx = buddy.ctx
+    key = header.stateRoot
+    rc = ctx.data.pivotTable.lruFetch(key)
+  if rc.isOk:
+    ctx.data.pivotEnv = rc.value
+    return
+
+  let env = SnapPivotRef(
+    stateHeader:   header,
+    pivotAccount:  buddy.rndNodeTag,
+    availAccounts: LeafRangeSet.init())
+  # Pre-filled with the largest possible interval
+  discard env.availAccounts.merge(low(NodeTag),high(NodeTag))
+
+  # Statistics
+  ctx.data.pivotCount.inc
+
+  ctx.data.pivotEnv = ctx.data.pivotTable.lruAppend(key, env, ctx.buddiesMax)
+  # -----
+  if ctx.data.proofDumpOk:
+    let peer = buddy.peer
+    trace "Snap proofs dump enabled", peer
+    ctx.data.proofDumpOk = false
+    env.proofDumpOk = true
+    #env.pivotAccount = 0.to(NodeTag)
+
+
+proc updatePivotEnv(buddy: SnapBuddyRef): bool =
+  ## Update global state root environment from local `pivotHeader`. Choose the
+  ## latest block number. Returns `true` if the environment was changed
   if buddy.data.pivotHeader.isSome:
     let
       ctx = buddy.ctx
-      pivotNumber = buddy.data.pivotHeader.unsafeGet.blockNumber
-      stateNumber = if ctx.data.stateHeader.isNone: 0.toBlockNumber
-                    else: ctx.data.stateHeader.unsafeGet.blockNumber
-    if stateNumber < pivotNumber:
-      ctx.data.stateHeader = buddy.data.pivotHeader
+      newStateNumber = buddy.data.pivotHeader.unsafeGet.blockNumber
+      stateNumber = if ctx.data.pivotEnv.isNil: 0.toBlockNumber
+                    else: ctx.data.pivotEnv.stateHeader.blockNumber
+    if stateNumber + maxPivotBlockWindow < newStateNumber:
+      buddy.setPivotEnv(buddy.data.pivotHeader.get)
       return true
+
+
+proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
+  result = proc: TickerStats =
+    var
+      aSum, aSqSum, uSum, uSqSum: float
+      count = 0
+    for kvp in ctx.data.pivotTable.nextPairs:
+
+      # Accounts mean & variance
+      let aLen = kvp.data.nAccounts.float
+      if 0 < aLen:
+        count.inc
+        aSum += aLen
+        aSqSum += aLen * aLen
+
+        # Fill utilisation mean & variance
+        let fill = kvp.data.availAccounts.freeFactor
+        uSum += fill
+        uSqSum += fill * fill
+
+    let
+      tabLen = ctx.data.pivotTable.len
+      pivotBlock = if ctx.data.pivotEnv.isNil: none(BlockNumber)
+                   else: some(ctx.data.pivotEnv.stateHeader.blockNumber)
+    TickerStats(
+      pivotBlock:    pivotBlock,
+      activeQueues:  tabLen,
+      flushedQueues: ctx.data.pivotCount.int64 - tabLen,
+      accounts:      meanStdDev(aSum, aSqSum, count),
+      fillFactor:    meanStdDev(uSum, uSqSum, count))
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -45,16 +129,21 @@ proc updateStateRoot(buddy: SnapBuddyRef): bool =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.fetchSetup()
+  ctx.data.accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
+  ctx.data.accountsDb = AccountsDbRef.init(ctx.chain.getTrieDB)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
     trace "Ticker is disabled"
+  # ----
+  if snapAccountsDumpEnable:
+    doAssert ctx.data.proofDumpFile.open("./dump-stream.out", fmWrite)
+    ctx.data.proofDumpOk = true
+  # ----
   true
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
-  ctx.fetchRelease()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stop()
     ctx.data.ticker = nil
@@ -68,7 +157,6 @@ proc start*(buddy: SnapBuddyRef): bool =
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
     buddy.pivotStart()
-    buddy.fetchStart()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
     return true
@@ -79,7 +167,6 @@ proc stop*(buddy: SnapBuddyRef) =
     ctx = buddy.ctx
     peer = buddy.peer
   buddy.ctrl.stopped = true
-  buddy.fetchStop()
   buddy.pivotStop()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stopBuddy()
@@ -100,16 +187,8 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-  trace "Worker runSingle()", peer
-  await buddy.pivotExec()
-  if buddy.updateStateRoot():
-    buddy.ctrl.multiOk = true
-  elif buddy.data.pivotHeader.isSome:
-    # OK, for now
-    buddy.ctrl.multiOk = true
+  buddy.ctrl.multiOk = true
+
 
 proc runPool*(buddy: SnapBuddyRef) =
   ## Ocne started, the function `runPool()` is called for all worker peers in
@@ -125,15 +204,26 @@ proc runPool*(buddy: SnapBuddyRef) =
   ##
   discard
 
+
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
   ## `true` which is typically done after finishing `runSingle()`. This
   ## instance can be simultaneously active for all peer workers.
   ##
-  let peer = buddy.peer
-  trace "Starting worker runMulti()", peer
-  await buddy.fetchExec()
-  trace "Done worker runMulti()", peer
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+
+  if buddy.data.pivotHeader.isNone:
+
+    await buddy.pivotExec()
+
+    if not buddy.updatePivotEnv():
+      return
+
+  if await buddy.fetchAccounts():
+    buddy.ctrl.multiOk = false
+    buddy.data.pivotHeader = none(BlockHeader)
 
 # ------------------------------------------------------------------------------
 # End

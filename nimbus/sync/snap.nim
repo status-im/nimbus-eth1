@@ -56,12 +56,14 @@ proc runMulti(buddy: SnapBuddyRef) {.async.} =
 proc init*(
     T: type SnapSyncRef;
     ethNode: EthereumNode;
-    chain: Chain,
+    chain: Chain;
+    rng: ref HmacDrbgContext;
     maxPeers: int;
     enableTicker = false): T =
   new result
   result.initSync(ethNode, maxPeers, enableTicker)
   result.ctx.chain = chain # explicitely override
+  result.ctx.data.rng = rng
 
 proc start*(ctx: SnapSyncRef) =
   doAssert ctx.startSync()

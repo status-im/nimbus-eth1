@@ -27,4 +27,10 @@ type
   #eth* = eth67
   snap* = snap1
 
+  SnapAccountRange* = accountRangeObj
+    ## Syntactic sugar, type defined in `snap1`
+
+  SnapTrieNodes* = trieNodesObj
+    ## Ditto
+
 # End

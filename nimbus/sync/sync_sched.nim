@@ -119,12 +119,8 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
   # Continue until stopped
   while not worker.ctrl.stopped:
     if dsc.monitorLock:
-      await sleepAsync(500.milliseconds)
+      await sleepAsync(50.milliseconds)
       continue
-
-    # Rotate connection table so the most used entry is at the top/right
-    # end. So zombies will implicitely be pushed left.
-    discard dsc.buddies.lruFetch(peer.hash)
 
     # Invoke `runPool()` over all buddies if requested
     if ctx.poolMode:
@@ -132,14 +128,19 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       # to run as the only activated instance.
       dsc.monitorLock = true
       while 0 < dsc.activeMulti:
-        await sleepAsync(500.milliseconds)
+        await sleepAsync(50.milliseconds)
       while dsc.singleRunLock:
-        await sleepAsync(500.milliseconds)
+        await sleepAsync(50.milliseconds)
       for w in dsc.buddies.nextValues:
         worker.runPool()
       dsc.monitorLock = false
       continue
 
+    # Rotate connection table so the most used entry is at the top/right
+    # end. So zombies will end up leftish.
+    discard dsc.buddies.lruFetch(peer.hash)
+
+    # Allow task switch
     await sleepAsync(50.milliseconds)
 
     # Multi mode
@@ -157,7 +158,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       # Lock single instance mode and wait for other workers to finish
       dsc.singleRunLock = true
       while 0 < dsc.activeMulti:
-        await sleepAsync(500.milliseconds)
+        await sleepAsync(50.milliseconds)
       # Run single instance and release afterwards
       await worker.runSingle()
       dsc.singleRunLock = false

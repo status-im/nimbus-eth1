@@ -86,7 +86,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       avUtilisation =
         &"{data.fillFactor[0]*100.0:.2f}%({data.fillFactor[1]*100.0:.2f}%)"
 
-    info "Sync queue average statistics",
+    info "Snap sync statistics",
       tick, buddies, pivot, avAccounts, avUtilisation, flushed, mem
 
   t.tick.inc

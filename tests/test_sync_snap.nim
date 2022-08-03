@@ -12,18 +12,19 @@
 ## Snap sync components tester
 
 import
-  std/[distros, os, random, sequtils, strformat, strutils],
+  std/[distros, os, sequtils, strformat, strutils],
   chronicles,
-  eth/[common/eth_types, p2p, rlp, trie/db, trie/hexary],
+  eth/[common/eth_types, p2p, rlp, trie/db],
   stint,
   stew/results,
   unittest2,
   ../nimbus/db/select_backend,
-  ../nimbus/sync/[types, protocol/snap1],
-  ../nimbus/sync/snap/path_desc,
-  ../nimbus/sync/snap/worker/[fetch/proof_db, worker_desc],
+  ../nimbus/sync/[types, protocol],
+  ../nimbus/sync/snap/range_desc,
+  ../nimbus/sync/snap/worker/accounts_db,
   ./replay/pp,
-  ./test_sync_snap/accounts_and_proofs
+  #./test_sync_snap/sample1,
+  ./test_sync_snap/sample0
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -37,7 +38,7 @@ type
 
   TestItem = object ## palatable input format for tests
     base: NodeTag
-    data: WorkerAccountRange
+    data: SnapAccountRange
 
   TestDbInstances =
     array[3,TrieDatabaseRef]
@@ -56,7 +57,7 @@ else:
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkPmt = Result[void,PmtError].ok()
+  OkAccDb = Result[void,AccountsDbError].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -75,11 +76,14 @@ proc findFilePath(file: string): Result[string,void] =
         return ok(path)
   err()
 
-proc pp(w: TrieHash): string =
-  pp.pp(w.Hash256) # `pp()` also available from `worker_desc`
+proc pp(w: Hash256): string =
+  pp.pp(w) # `pp()` also available from `worker_desc`
 
 proc pp(w: NodeTag; collapse = true): string =
   pp.pp(w.to(Hash256),collapse)
+
+proc pp(w: seq[(string,string)]; indent = 4): string =
+  w.mapIt(&"({it[0]},{it[1]})").join("\n" & " ".repeat(indent))
 
 proc setTraceLevel =
   discard
@@ -100,25 +104,25 @@ proc to(data: seq[TestSample]; T: type seq[TestItem]): T =
   for r in  data:
     result.add TestItem(
       base:       r.base.to(NodeTag),
-      data:       WorkerAccountRange(
+      data:       SnapAccountRange(
         proof:    r.proofs,
         accounts: r.accounts.mapIt(
           SnapAccount(
-            accHash:       it[0].to(NodeTag),
+            accHash:       it[0],
             accBody: Account(
               nonce:       it[1],
               balance:     it[2],
               storageRoot: it[3],
               codeHash:    it[4])))))
 
-proc permute(r: var Rand; qLen: int): seq[int]  =
-  result = (0 ..< qLen).toSeq
-  let
-    halfLen = result.len shr 1
-    randMax = result.len - halfLen - 1
-  for left in 0 ..< halfLen:
-    let right = halfLen + r.rand(randMax)
-    result[left].swap(result[right])
+#proc permute(r: var Rand; qLen: int): seq[int]  =
+#  result = (0 ..< qLen).toSeq
+#  let
+#    halfLen = result.len shr 1
+#    randMax = result.len - halfLen - 1
+#  for left in 0 ..< halfLen:
+#    let right = halfLen + r.rand(randMax)
+#    result[left].swap(result[right])
 
 proc flushDbDir(s: string) =
   if s != "":
@@ -156,11 +160,11 @@ proc lastTwo(a: openArray[string]): seq[string] =
 # ------------------------------------------------------------------------------
 
 proc accountsRunner(
-    noisy = true;  persistent: bool; root: TrieHash; data: seq[TestSample]) =
+    noisy = true;  persistent: bool; root: Hash256; data: seq[TestSample]) =
   let
     peer = Peer.new
-    lst = data.to(seq[TestItem])
-    tmpDir = "accounts_and_proofs.nim".findFilePath.value.splitFile.dir
+    testItemLst = data.to(seq[TestItem])
+    tmpDir = "sample0.nim".findFilePath.value.splitFile.dir
     db = if persistent: tmpDir.testDbs() else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
     info = if db.persistent: &"persistent db on \"{dbDir}\""
@@ -172,115 +176,48 @@ proc accountsRunner(
 
   suite &"SyncSnap: accounts and proofs for {info}":
     var
-      desc: ProofDb
-      nRows: seq[int]
+      base: AccountsDbRef
+      desc: AccountsDbSessionRef
 
-    test &"Merging {lst.len} proofs for state root ..{root.pp}":
-      desc.init(db.inst[0])
-      check desc.mergeBegin(peer, root)
-      for proofs in lst.mapIt(it.data.proof):
-        check desc.merge(proofs) == OkPmt
-        check desc.mergeValidate == OkPmt
-        nRows.add desc.nPmts(root)
-      check 1 < nRows.len # otherwise test makes no sense
-      check 0 < nRows[^1]
+    test &"Verifying {testItemLst.len} snap items for state root ..{root.pp}":
+      base = AccountsDbRef.init(db.inst[0])
+      for n,w in testItemLst:
+        check base.importAccounts(peer, root, w.base, w.data) == OkAccDb
 
-    test "Rollback full database":
-      check desc.mergeRollback()
-      check desc.nPmts(root) == 0
-      check desc.nAccounts(root) == 0
-      check desc.journalSize == (false,0,0,0)
+    test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
+      base = AccountsDbRef.init(db.inst[1])
+      desc = AccountsDbSessionRef.init(base, root, peer)
+      for n,w in testItemLst:
+        check desc.merge(w.data.proof) == OkAccDb
+        check desc.merge(w.base, w.data.accounts) == OkAccDb
+        desc.assignPrettyKeys() # for debugging (if any)
+        check desc.interpolate() == OkAccDb
 
-    test "Merging and committing all except the last":
-      for n,proofs in lst.mapIt(it.data.proof):
-        check desc.mergeBegin(peer, root)
-        check desc.merge(proofs) == OkPmt
-        check nRows[n] == desc.nPmts(root)
-        check desc.mergeValidate == OkPmt
-        if n < nRows.len - 1:
-          check desc.mergeCommit
-        check nRows[n] == desc.nPmts(root)
-      check desc.mergeRollback
-      check 1 < nRows.len and nRows[^2] == desc.nPmts(root)
-
-    test &"Merging/committing {lst.len} proofs, transposed rows":
-      desc.init(db.inst[1])
-      check desc.nPmts(root) == 0
-      check desc.journalSize == (false,0,0,0)
-      var r = initRand(42)
-      for n,proofs in lst.mapIt(it.data.proof):
-        let permPmt = r.permute(proofs.len).mapIt(proofs[it])
-        check desc.mergeBegin(peer, root)
-        check desc.merge(permPmt) == OkPmt
-        check desc.mergeValidate == OkPmt
-        check desc.mergeCommit
-        check nRows[n] == desc.nPmts(root)
-
-    test &"Merging {lst.len} account groups for state root ..{root.pp}":
-      desc.init(db.inst[2])
-      for n,w in lst:
-        check desc.mergeProved(peer, root, w.base, w.data) == OkPmt
-        check desc.journalSize == (false,0,0,0)
-        check nRows[n] == desc.nPmts(root)
-        check desc.journalSize == (false,0,0,0)
-      check 1 < nRows.len # otherwise test makes no sense
-      check 0 < nRows[^1]
-
-    test &"Visiting {desc.nAccounts(root)} accounts":
-      var
-        nItems = desc.nAccounts(root)
-        nProved = 0
-        htr = db.inst[2].initHexaryTrie(root.Hash256)
-
-      check 1 < nItems
-      for (n, key, accData) in desc.accounts(root):
-        check nItems == n
-        nItems.dec
-        if accData.proved:
-          nProved.inc
-
-          # Fetch/verify data from hexary trie
-          let blob = htr.get(key.to(Hash256).data)
-          check 0 < blob.len
-          check accData.account == blob.decode(Account)
-
-      check nItems == 0
-      # each group has exactly one proved account
-      check nProved == lst.len
-
-    test "Visiting single root":
-      var nItems = desc.nStateRoots
-      check 0 < nItems
-      for (n,tag) in desc.stateRoots:
-        check nItems == n
-        nItems.dec
-      check nItems == 0
+      # echo ">>> ", desc.dumpProofsDB.join("\n    ")
 
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc syncSnapMain*(noisy = defined(debug)) =
-  noisy.accountsRunner(persistent = true, testRoot.TrieHash, testSamples)
+  noisy.accountsRunner(
+    persistent = false, sample0.snapRoot, sample0.snapProofData)
 
 when isMainModule:
-  const noisy = defined(debug) or true
-
-  when true: # false:
-    # Import additional data from test data repo
-    import ../../nimbus-eth1-blobs/replay/accounts_and_proofs_ex
-  else:
-    const
-      testRootEx = testRoot
-      testSamplesEx = newSeq[TestSample]()
+  const
+    noisy = defined(debug) or true
+    test00 = (sample0.snapRoot, @[sample0.snapProofData0])
+    test01 = (sample0.snapRoot, sample0.snapProofData)
+    #test10 = (sample1.snapRoot, @[sample1.snapProofData1])
+    #test11 = (sample1.snapRoot, sample1.snapProofData)
 
   setTraceLevel()
+  setErrorLevel()
 
-  # Verify sample state roots
-  doAssert testRoot == testRootEx
-
-  let samplesList = (testSamples & testSamplesEx)
-  noisy.accountsRunner(persistent = true, testRoot.TrieHash, samplesList)
+  noisy.accountsRunner(persistent=false, test00[0], test00[1])
+  noisy.accountsRunner(persistent=false, test01[0], test01[1])
+  #noisy.accountsRunner(persistent=false, test10[0], test10[1])
+  #noisy.accountsRunner(persistent=false, test11[0], test11[1])
 
 # ------------------------------------------------------------------------------
 # End

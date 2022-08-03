@@ -141,7 +141,6 @@ import
   nimcrypto/hash,
   stew/byteutils,
   ../../constants,
-  ../snap/path_desc,
   ./trace_config
 
 logScope:
@@ -149,13 +148,13 @@ logScope:
 
 type
   SnapAccount* = object
-    accHash*: NodeTag
+    accHash*: Hash256
     accBody* {.rlpCustomSerialization.}: Account
 
   SnapAccountProof* = seq[Blob]
 
   SnapStorage* = object
-    slotHash*: NodeTag
+    slotHash*: Hash256
     slotData*: Blob
 
   SnapStorageProof* = seq[Blob]
@@ -186,6 +185,55 @@ const
 # avoids transmitting these hashes in about 90% of accounts.  We need to
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
+proc snapRead*(rlp: var Rlp; T: type Account; strict: static[bool] = false): T
+    {.gcsafe, raises: [Defect, RlpError]} =
+  ## RLP decoding for `Account`. The `snap` RLP representation of the account
+  ## differs from standard `Account` RLP. Empty storage hash and empty code
+  ## hash are each represented by an RLP zero-length string instead of the
+  ## full hash.
+  ##
+  ## Normally, this read function will silently handle standard encodinig and
+  ## `snap` enciding. Setting the argument strict as `false` the function will
+  ## throw an exception if `snap` encoding is violated.
+  rlp.tryEnterList()
+  result.nonce = rlp.read(typeof(result.nonce))
+  result.balance = rlp.read(typeof(result.balance))
+  if rlp.blobLen != 0 or not rlp.isBlob:
+    result.storageRoot = rlp.read(typeof(result.storageRoot))
+    when strict:
+      if result.storageRoot == BLANK_ROOT_HASH:
+        raise newException(RlpTypeMismatch,
+          "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
+  else:
+    rlp.skipElem()
+    result.storageRoot = BLANK_ROOT_HASH
+  if rlp.blobLen != 0 or not rlp.isBlob:
+    result.codeHash = rlp.read(typeof(result.codeHash))
+    when strict:
+      if result.codeHash == EMPTY_SHA3:
+        raise newException(RlpTypeMismatch,
+          "EMPTY_SHA3 not encoded as empty string in Snap protocol")
+  else:
+    rlp.skipElem()
+    result.codeHash = EMPTY_SHA3
+
+proc snapAppend*(writer: var RlpWriter; account: Account) =
+  ## RLP encoding for `Account`. The snap RLP representation of the account
+  ## differs from standard `Account` RLP. Empty storage hash and empty code
+  ## hash are each represented by an RLP zero-length string instead of the
+  ## full hash.
+  writer.startList(4)
+  writer.append(account.nonce)
+  writer.append(account.balance)
+  if account.storageRoot == BLANK_ROOT_HASH:
+    writer.append("")
+  else:
+    writer.append(account.storageRoot)
+  if account.codeHash == EMPTY_SHA3:
+    writer.append("")
+  else:
+    writer.append(account.codeHash)
+
 proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
   ## RLP Mixin: decoding for `SnapAccount`.
   result = rlp.snapRead(T)
@@ -202,12 +250,10 @@ p2pProtocol snap1(version = 1,
   requestResponse:
     # User message 0x00: GetAccountRange.
     # Note: `origin` and `limit` differs from the specification to match Geth.
-    proc getAccountRange(peer: Peer, rootHash: Hash256,
-                         origin: NodeTag, limit: NodeTag,
-                         responseBytes: uint64) =
+    proc getAccountRange(peer: Peer, rootHash: Hash256, origin: Hash256,
+                         limit: Hash256, responseBytes: uint64) =
       trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
-        accountRange=leafRangePp(origin, limit),
-        stateRoot=($rootHash), responseBytes
+        accountRange=(origin,limit), stateRoot=($rootHash), responseBytes
 
       trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
@@ -220,9 +266,8 @@ p2pProtocol snap1(version = 1,
     # User message 0x02: GetStorageRanges.
     # Note: `origin` and `limit` differs from the specification to match Geth.
     proc getStorageRanges(peer: Peer, rootHash: Hash256,
-                          accounts: openArray[NodeTag],
-                          origin: openArray[byte], limit: openArray[byte],
-                          responseBytes: uint64) =
+                          accounts: openArray[Hash256], origin: openArray[byte],
+                          limit: openArray[byte], responseBytes: uint64) =
       when trSnapTracePacketsOk:
         var definiteFullRange = ((origin.len == 32 or origin.len == 0) and
                                  (limit.len == 32 or limit.len == 0))
@@ -286,7 +331,7 @@ p2pProtocol snap1(version = 1,
   # User message 0x06: GetTrieNodes.
   requestResponse:
     proc getTrieNodes(peer: Peer, rootHash: Hash256,
-                      paths: openArray[PathSegment], responseBytes: uint64) =
+                      paths: openArray[seq[Blob]], responseBytes: uint64) =
       trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer,
         nodePaths=paths.len, stateRoot=($rootHash), responseBytes
 

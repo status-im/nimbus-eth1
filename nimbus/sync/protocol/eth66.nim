@@ -40,7 +40,6 @@ import
   chronos,
   eth/[common/eth_types, p2p, p2p/private/p2p_types, p2p/blockchain_utils],
   stew/byteutils,
-  ../types,
   ./trace_config
 
 logScope:
@@ -111,6 +110,16 @@ const
 
   trEthSendDelaying* =
     ">> " & prettyEthProtoName & " Delaying "
+
+func toHex(hash: Hash256): string =
+  ## Shortcut for `byteutils.toHex(hash.data)`
+  hash.data.toHex
+
+func traceStep(request: BlocksRequest): string =
+  var str = if request.reverse: "-" else: "+"
+  if request.skip < high(typeof(request.skip)):
+    return str & $(request.skip + 1)
+  return static($(high(typeof(request.skip)).u256 + 1))
 
 p2pProtocol eth66(version = ethVersion,
                   rlpxName = "eth",

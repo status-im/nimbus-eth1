@@ -16,12 +16,6 @@ import
 {.push raises: [Defect].}
 
 type
-  TxHash* = distinct Hash256
-    ## Hash of a transaction.
-    ##
-    ## Note that the `ethXX` protocol driver always uses the
-    ## underlying `Hash256` type which needs to be converted to `TxHash`.
-
   NodeHash* = distinct Hash256
     ## Hash of a trie node or other blob carried over `NodeData` account trie
     ## nodes, storage trie nodes, contract code.
@@ -33,16 +27,10 @@ type
     ## Hash of a block, goes with `BlockNumber`.
     ##
     ## Note that the `ethXX` protocol driver always uses the
-    ## underlying `Hash256` type which needs to be converted to `TxHash`.
-
-  TrieHash* = distinct Hash256
-    ## Hash of a trie root: accounts, storage, receipts or transactions.
-    ##
-    ## Note that the `snapXX` protocol driver always uses the underlying
-    ## `Hash256` type which needs to be converted to `TrieHash`.
+    ## underlying `Hash256` type which needs to be converted to `BlockHash`.
 
   SomeDistinctHash256 =
-    TxHash | NodeHash | BlockHash | TrieHash
+    NodeHash | BlockHash
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -94,8 +82,8 @@ proc append*(writer: var RlpWriter; h: SomeDistinctHash256) =
   ## RLP mixin
   append(writer, h.Hash256)
 
-proc `==`*(a: NodeHash; b: TrieHash): bool =
-  a.Hash256 == b.Hash256
+proc `==`*(a: SomeDistinctHash256; b: Hash256): bool =
+  a.Hash256 == b
 
 proc `==`*[T: SomeDistinctHash256](a,b: T): bool =
   a.Hash256 == b.Hash256
