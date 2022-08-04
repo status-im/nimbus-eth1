@@ -15,6 +15,7 @@ import
   ./test_state_network,
   ./test_history_content,
   ./test_history_validation,
+  ./test_history_network,
   ./test_header_content,
   ./test_accumulator,
   ./test_content_db,

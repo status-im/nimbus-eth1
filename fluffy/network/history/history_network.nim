@@ -505,6 +505,44 @@ proc getEpochAccumulator(
 
   return none(EpochAccumulator)
 
+proc getBlock*(
+    n: HistoryNetwork, chainId: uint16, bn: Uint256):
+    Future[Result[Option[Block], string]] {.async.} =
+
+  # TODO for now checking accumulator only in db, we could also ask our
+  # peers for it.
+  let accumulatorOpt = n.contentDB.getAccumulator()
+
+  if accumulatorOpt.isNone():
+    return err("Master accumulator not found in database")
+
+  let accumulator = accumulatorOpt.unsafeGet()
+
+  let hashResponse = accumulator.getHeaderHashForBlockNumber(bn)
+
+  case hashResponse.kind
+  of BHash:
+    # we got header hash in current epoch accumulator, try to retrieve it from network
+    let blockResponse = await n.getBlock(chainId, hashResponse.blockHash)
+    return ok(blockResponse)
+  of HEpoch:
+    let digest = Digest(data: hashResponse.epochHash)
+
+    let epochOpt = await n.getEpochAccumulator(digest)
+
+    if epochOpt.isNone():
+      return err("Cannot retrieve epoch accumulator for given block number")
+
+    let
+      epoch = epochOpt.unsafeGet()
+      blockHash = epoch[hashResponse.blockRelativeIndex].blockHash
+
+    let maybeBlock = await n.getBlock(chainId, blockHash)
+
+    return ok(maybeBlock)
+  of UnknownBlockNumber:
+    return err("Block number not included in master accumulator")
+
 proc getInitialMasterAccumulator*(
     n: HistoryNetwork):
     Future[bool] {.async.} =
