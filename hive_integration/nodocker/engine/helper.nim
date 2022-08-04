@@ -1,10 +1,10 @@
 import
-  std/[typetraits, json, strutils],
+  std/[typetraits, json],
   nimcrypto,
   test_env,
   eth/[common,  rlp, keys],
   stew/byteutils,
-  json_rpc/[rpcclient, errors],
+  json_rpc/[rpcclient],
   ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/transaction
 
@@ -182,48 +182,6 @@ proc toExecutableData*(payload: ExecutionPayloadV1): ExecutableData =
 
 proc customizePayload*(basePayload: ExecutionPayloadV1, customData: CustomPayload): ExecutionPayloadV1 =
   customizePayload(basePayload.toExecutableData, customData)
-
-proc debugPrevRandaoTransaction*(client: RpcClient, tx: Transaction, expectedPrevRandao: Hash256): Result[void, string] =
-  try:
-    let hash = tx.rlpHash
-    # we only interested in stack, disable all other elems
-    let opts = %* {
-      "disableStorage": true,
-      "disableMemory": true,
-      "disableState": true,
-      "disableStateDiff": true
-    }
-
-    let res = waitFor client.call("debug_traceTransaction", %[%hash, opts])
-    let structLogs = res["structLogs"]
-
-    var prevRandaoFound = false
-    for i, x in structLogs.elems:
-      let op = x["op"].getStr
-      if op != "DIFFICULTY": continue
-
-      if i+1 >= structLogs.len:
-        return err("No information after PREVRANDAO operation")
-
-      prevRandaoFound = true
-      let stack = structLogs[i+1]["stack"]
-      if stack.len < 1:
-        return err("Invalid stack after PREVRANDAO operation")
-
-      let stackHash = Hash256(data: hextoByteArray[32](stack[0].getStr))
-      if stackHash != expectedPrevRandao:
-        return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
-
-    if not prevRandaoFound:
-      return err("PREVRANDAO opcode not found")
-
-    ok()
-  except ValueError as e:
-    err(e.msg)
-  except JsonRpcError as ex:
-    # occasionally for unknown reason this proc will fail in CI
-    # let's see what actually trigger it
-    err(ex.msg)
 
 proc customizeTx(baseTx: Transaction, vaultKey: PrivateKey, customTx: CustomTx): Transaction =
   # Create a modified transaction base, from the base transaction and customData mix

@@ -11,13 +11,18 @@ import
   std/[typetraits, times, strutils],
   stew/[objects, results, byteutils],
   json_rpc/[rpcserver, errors],
-  web3/[conversions, engine_api_types], chronicles,
+  web3/[conversions, engine_api_types],
   eth/[rlp, common],
   ".."/db/db_chain,
   ".."/p2p/chain/[chain_desc, persist_blocks],
   ".."/[sealer, constants],
   ".."/merge/[mergetypes, mergeutils],
-  ".."/utils/tx_pool
+  ".."/utils/tx_pool,
+  # put chronicles import last because Nim
+  # compiler resolve `$` for logging
+  # arguments differently on Windows vs posix
+  # if chronicles import is in the middle
+  chronicles
 
 proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
   let ptd = db.getScore(parent.parentHash)

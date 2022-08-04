@@ -1736,6 +1736,8 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
       return true
   ))
 
+  testCond produceBlockRes
+  
   let rr = client.blockNumber()
   testCond rr.isOk:
     error "Unable to get latest block number"
