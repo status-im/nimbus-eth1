@@ -1,5 +1,4 @@
-# Nimbus - Fetch account and storage states from peers efficiently
-#
+# Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -15,7 +14,7 @@ import
   eth/[common/eth_types, p2p],
   stint,
   ../../utils/prettify,
-  ".."/[timer_helper, types]
+  ../timer_helper
 
 {.push raises: [Defect].}
 
@@ -33,7 +32,7 @@ type
   TickerStatsUpdater* =
     proc: TickerStats {.gcsafe, raises: [Defect].}
 
-  Ticker* = ref object
+  TickerRef* = ref object
     nBuddies:  int
     lastStats: TickerStats
     lastTick:  uint64
@@ -56,9 +55,9 @@ proc pp(n: BlockNumber): string =
 proc pp(n: Option[BlockNumber]): string =
   if n.isNone: "n/a" else: n.get.pp
 
-proc setLogTicker(t: Ticker; at: Moment) {.gcsafe.}
+proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
-proc runLogTicker(t: Ticker) {.gcsafe.} =
+proc runLogTicker(t: TickerRef) {.gcsafe.} =
   let data = t.statsCb()
 
   if data != t.lastStats or
@@ -83,7 +82,7 @@ proc runLogTicker(t: Ticker) {.gcsafe.} =
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 
-proc setLogTicker(t: Ticker; at: Moment) =
+proc setLogTicker(t: TickerRef; at: Moment) =
   if not t.logTicker.isNil:
     t.logTicker = safeSetTimer(at, runLogTicker, t)
 
@@ -91,16 +90,16 @@ proc setLogTicker(t: Ticker; at: Moment) =
 # Public constructor and start/stop functions
 # ------------------------------------------------------------------------------
 
-proc init*(T: type Ticker; cb: TickerStatsUpdater): T =
+proc init*(T: type TickerRef; cb: TickerStatsUpdater): T =
   ## Constructor
   T(statsCb: cb)
 
-proc start*(t: Ticker) =
+proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
   #debug "Started ticker"
   t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay), runLogTicker, t)
 
-proc stop*(t: Ticker) =
+proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally
   t.logTicker = nil
   #debug "Stopped ticker"
@@ -109,7 +108,7 @@ proc stop*(t: Ticker) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc startBuddy*(t: Ticker) =
+proc startBuddy*(t: TickerRef) =
   ## Increment buddies counter and start ticker unless running.
   if t.nBuddies <= 0:
     t.nBuddies = 1
@@ -117,7 +116,7 @@ proc startBuddy*(t: Ticker) =
   else:
     t.nBuddies.inc
 
-proc stopBuddy*(t: Ticker) =
+proc stopBuddy*(t: TickerRef) =
   ## Decrement buddies counter and stop ticker if there are no more registered
   ## buddies.
   t.nBuddies.dec

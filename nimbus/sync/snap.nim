@@ -1,5 +1,4 @@
-# Nimbus - New sync approach - A fusion of snap, trie, beam and other methods
-#
+# Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -10,13 +9,12 @@
 # except according to those terms.
 
 import
-  std/hashes,
+  eth/[common/eth_types, p2p],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
-  stew/keyed_queue,
-  "."/[protocol, types],
-  ./snap/worker
+  ../p2p/chain,
+  ./snap/[worker, worker_desc],
+  "."/[sync_desc, sync_sched, protocol]
 
 {.push raises: [Defect].}
 
@@ -24,134 +22,54 @@ logScope:
   topics = "snap-sync"
 
 type
-  SnapSyncRef* = ref object of Worker
-    chain: AbstractChainDB
-    buddies: KeyedQueue[Peer,WorkerBuddy] ## LRU cache with worker descriptors
-    pool: PeerPool                        ## for starting the system
+  SnapSyncRef* = RunnerSyncRef[CtxData,BuddyData]
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
-proc nsCtx(sp: WorkerBuddy): SnapSyncRef =
-  sp.ns.SnapSyncRef
+proc runSetup(ctx: SnapCtxRef; ticker: bool): bool =
+  worker.setup(ctx,ticker)
 
-proc hash(peer: Peer): Hash =
-  ## Needed for `buddies` table key comparison
-  hash(peer.remote.id)
+proc runRelease(ctx: SnapCtxRef) =
+  worker.release(ctx)
 
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
+proc runStart(buddy: SnapBuddyRef): bool =
+  worker.start(buddy)
 
-proc workerLoop(sp: WorkerBuddy) {.async.} =
-  let ns = sp.nsCtx
-  trace "Starting peer worker", peer=sp,
-    peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+proc runStop(buddy: SnapBuddyRef) =
+  worker.stop(buddy)
 
-  # Do something, work a bit
-  await sp.workerExec
+proc runPool(buddy: SnapBuddyRef) =
+  worker.runPool(buddy)
 
-  # Continue until stopped
-  while not sp.ctrl.stopped:
-    # Rotate connection table so the most used entry is at the end
-    discard sp.nsCtx.buddies.lruFetch(sp.peer)
+proc runSingle(buddy: SnapBuddyRef) {.async.} =
+  await worker.runSingle(buddy)
 
-    let delayMs = if sp.workerLockedOk: 1000 else: 50
-    await sleepAsync(chronos.milliseconds(delayMs))
-
-    # Do something, work a bit
-    await sp.workerExec
-
-  trace "Peer worker done", peer=sp, ctrlState=sp.ctrl.state,
-    peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-
-
-proc onPeerConnected(ns: SnapSyncRef, peer: Peer) =
-  let sp = WorkerBuddy.new(ns, peer)
-
-  # Check for known entry (which should not exist.)
-  if ns.buddies.hasKey(peer):
-    trace "Ignoring already registered peer!", peer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    return
-
-  # Initialise worker for this peer
-  if not sp.workerStart():
-    trace "Ignoring useless peer", peer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    sp.ctrl.zombie = true
-    return
-
-  # Check for table overflow. An overflow should not happen if the table is
-  # as large as the peer connection table.
-  if ns.buddiesMax <= ns.buddies.len:
-    let leastPeer = ns.buddies.shift.value.data
-    if leastPeer.ctrl.zombie:
-      trace "Dequeuing zombie peer", leastPeer,
-        peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-      discard
-    else:
-      trace "Peer table full! Dequeuing least used entry", leastPeer,
-        peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-      leastPeer.workerStop()
-      leastPeer.ctrl.zombie = true
-
-  # Add peer entry
-  discard ns.buddies.lruAppend(sp.peer, sp, ns.buddiesMax)
-
-  # Run worker
-  asyncSpawn sp.workerLoop()
-
-
-proc onPeerDisconnected(ns: SnapSyncRef, peer: Peer) =
-  let rc = ns.buddies.eq(peer)
-  if rc.isErr:
-    debug "Disconnected from unregistered peer", peer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-    return
-  let sp = rc.value
-  if sp.ctrl.zombie:
-    trace "Disconnected zombie peer", peer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
-  else:
-    sp.workerStop()
-    ns.buddies.del(peer)
-    trace "Disconnected peer", peer,
-      peers=ns.pool.len, workers=ns.buddies.len, maxWorkers=ns.buddiesMax
+proc runMulti(buddy: SnapBuddyRef) {.async.} =
+  await worker.runMulti(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc init*(T: type SnapSyncRef; ethNode: EthereumNode; maxPeers: int): T =
-  ## Constructor
+proc init*(
+    T: type SnapSyncRef;
+    ethNode: EthereumNode;
+    chain: Chain;
+    rng: ref HmacDrbgContext;
+    maxPeers: int;
+    enableTicker = false): T =
   new result
-  let size = max(1,maxPeers)
-  result.chain = ethNode.chain
-  result.buddies.init(size)
-  result.buddiesMax = size
-  result.pool = ethNode.peerPool
+  result.initSync(ethNode, maxPeers, enableTicker)
+  result.ctx.chain = chain # explicitely override
+  result.ctx.data.rng = rng
 
 proc start*(ctx: SnapSyncRef) =
-  ## Set up syncing. This call should come early.
-  var po = PeerObserver(
-    onPeerConnected:
-      proc(p: Peer) {.gcsafe.} =
-        ctx.onPeerConnected(p),
-    onPeerDisconnected:
-      proc(p: Peer) {.gcsafe.} =
-        ctx.onPeerDisconnected(p))
-
-  # Initialise sub-systems
-  ctx.workerSetup(ctx.chain)
-  po.setProtocol eth
-  ctx.pool.addObserver(ctx, po)
+  doAssert ctx.startSync()
 
 proc stop*(ctx: SnapSyncRef) =
-  ## Stop syncing
-  ctx.pool.delObserver(ctx)
-  ctx.workerRelease()
+  ctx.stopSync()
 
 # ------------------------------------------------------------------------------
 # End

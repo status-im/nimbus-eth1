@@ -1,4 +1,4 @@
-# nim-eth
+# Nimbus
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
@@ -62,9 +62,9 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/[byteutils, interval_set, sorted_set],
-  ../../utils,
-  ../protocol,
-  "."/[full_desc, ticker]
+  "../.."/[db/db_chain, utils],
+  ".."/[protocol, sync_desc],
+  ./ticker
 
 {.push raises:[Defect].}
 
@@ -85,62 +85,63 @@ const
     ## staged.
     50
 
-static:
-  doAssert stagedWorkItemsTrigger < maxStagedWorkItems
-
 type
-  BlockRangeSetRef* = ##\
+  BlockRangeSetRef = ##\
     ## Disjunct sets of block number intervals
     IntervalSetRef[BlockNumber,UInt256]
 
-  BlockRange* = ##\
+  BlockRange = ##\
     ## Block number interval
     Interval[BlockNumber,UInt256]
 
-  WorkItemQueue* = ##\
+  WorkItemQueue = ##\
     ## Block intervals sorted by least block number
     SortedSet[BlockNumber,WorkItemRef]
 
-  WorkItemWalkRef* = ##\
+  WorkItemWalkRef = ##\
     ## Fast traversal descriptor for `WorkItemQueue`
     SortedSetWalkRef[BlockNumber,WorkItemRef]
 
-  WorkItemRef* = ref object
+  WorkItemRef = ref object
     ## Block worker item wrapper for downloading a block range
-    blocks: BlockRange               ## Block numbers to fetch
-    topHash: Option[Hash256]         ## Fetch by top hash rather than blocks
-    headers: seq[BlockHeader]        ## Block headers received
-    hashes: seq[Hash256]             ## Hashed from `headers[]` for convenience
-    bodies: seq[BlockBody]           ## Block bodies received
+    blocks: BlockRange              ## Block numbers to fetch
+    topHash: Option[Hash256]        ## Fetch by top hash rather than blocks
+    headers: seq[BlockHeader]       ## Block headers received
+    hashes: seq[Hash256]            ## Hashed from `headers[]` for convenience
+    bodies: seq[BlockBody]          ## Block bodies received
 
-  BuddyDataEx = ref object of BuddyDataRef
+  BuddyData* = object
     ## Local descriptor data extension
-    bestNumber: Option[BlockNumber]  ## Largest block number reported
+    bestNumber: Option[BlockNumber] ## Largest block number reported
 
-  CtxDataEx = ref object of CtxDataRef
+  CtxData* = object
     ## Globally shared data extension
-    backtrack: Option[Hash256]       ## Find reverse block after re-org
-    unprocessed: BlockRangeSetRef    ## Block ranges to fetch
-    staged: WorkItemQueue            ## Blocks fetched but not stored yet
-    untrusted: seq[Peer]             ## Clean up list
-    trusted: HashSet[Peer]           ## Peers ready for delivery
-    topPersistent: BlockNumber       ## Up to this block number stored OK
-    ticker: Ticker                   ## Logger ticker
+    backtrack: Option[Hash256]      ## Find reverse block after re-org
+    unprocessed: BlockRangeSetRef   ## Block ranges to fetch
+    staged: WorkItemQueue           ## Blocks fetched but not stored yet
+    untrusted: seq[Peer]            ## Clean up list
+    trusted: HashSet[Peer]          ## Peers ready for delivery
+    topPersistent: BlockNumber      ## Up to this block number stored OK
+    ticker: TickerRef               ## Logger ticker
+
+  FullBuddyRef* = ##\
+    ## Extended worker peer descriptor
+    BuddyRef[CtxData,BuddyData]
+
+  FullCtxRef* = ##\
+    ## Extended global descriptor
+    CtxRef[CtxData]
 
 let
-  highBlockRange =
-    BlockRange.new(high(BlockNumber),high(BlockNumber))
+  highBlockNumber = high(BlockNumber)
+  highBlockRange = BlockRange.new(highBlockNumber,highBlockNumber)
+
+static:
+  doAssert stagedWorkItemsTrigger < maxStagedWorkItems
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc getOrHigh(b: Option[BlockNumber]): BlockNumber =
-  ## Syntactic sugar
-  if b.isSome: b.get else: high(BlockNumber)
-
-proc getOrHigh(b: Option[BlockRange]): BlockRange =
-  if b.isSome: b.get else: highBlockRange
 
 proc hash(peer: Peer): Hash =
   ## Mixin `HashSet[Peer]` handler
@@ -165,7 +166,7 @@ proc reduce(ivSet: BlockRangeSetRef; wi: WorkItemRef): Uint256 =
 
 proc pp(n: BlockNumber): string =
   ## Dedicated pretty printer (`$` is defined elsewhere using `UInt256`)
-  if n == high(BlockNumber): "high" else:"#" & $n
+  if n == highBlockNumber: "high" else:"#" & $n
 
 proc `$`(iv: BlockRange): string =
   ## Needed for macro generated DSL files like `snap.nim` because the
@@ -188,27 +189,15 @@ proc `$`(brs: BlockRangeSetRef): string =
 # Private getters
 # ------------------------------------------------------------------------------
 
-proc local(buddy: BuddyRef): BuddyDataEx =
-  ## Parameters local to this peer worker
-  buddy.data.BuddyDataEx
-
-proc pool(ctx: CtxRef): CtxDataEx =
-  ## Parameters shared between all peer workers
-  ctx.data.CtxDataEx
-
-proc pool(buddy: BuddyRef): CtxDataEx =
-  ## Ditto
-  buddy.ctx.data.CtxDataEx
-
-proc nextUnprocessed(pool: CtxDataEx): Option[BlockNumber] =
+proc nextUnprocessed(desc: var CtxData): Option[BlockNumber] =
   ## Pseudo getter
-  let rc = pool.unprocessed.ge()
+  let rc = desc.unprocessed.ge()
   if rc.isOK:
     result = some(rc.value.minPt)
 
-proc nextStaged(pool: CtxDataEx): Option[BlockRange] =
+proc nextStaged(desc: var CtxData): Option[BlockRange] =
   ## Pseudo getter
-  let rc = pool.staged.ge(low(BlockNumber))
+  let rc = desc.staged.ge(low(BlockNumber))
   if rc.isOK:
     result = some(rc.value.data.blocks)
 
@@ -216,7 +205,7 @@ proc nextStaged(pool: CtxDataEx): Option[BlockRange] =
 # Private functions affecting all shared data
 # ------------------------------------------------------------------------------
 
-proc globalReset(ctx: CtxRef; backBlocks = maxHeadersFetch): bool =
+proc globalReset(ctx: FullCtxRef; backBlocks = maxHeadersFetch): bool =
   ## Globally flush `pending` and `staged` items and update `unprocessed`
   ## ranges and set the `unprocessed` back before the best block number/
   var topPersistent: BlockNumber
@@ -232,32 +221,35 @@ proc globalReset(ctx: CtxRef; backBlocks = maxHeadersFetch): bool =
     error "Best block header problem", backBlocks, error=($e.name), msg=e.msg
     return false
 
-  ctx.pool.unprocessed.clear()
-  ctx.pool.staged.clear()
-  ctx.pool.trusted.clear()
-  ctx.pool.topPersistent = topPersistent
-  discard ctx.pool.unprocessed.merge(topPersistent + 1, high(BlockNumber))
+  ctx.data.unprocessed.clear()
+  ctx.data.staged.clear()
+  ctx.data.trusted.clear()
+  ctx.data.topPersistent = topPersistent
+  discard ctx.data.unprocessed.merge(topPersistent + 1, highBlockNumber)
 
   true
 
-proc tickerUpdater(ctx: CtxRef): TickerStatsUpdater =
+proc tickerUpdater(ctx: FullCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     let
-      stagedRange = ctx.pool.nextStaged
+      stagedRange = ctx.data.nextStaged
       nextStaged = if stagedRange.isSome: some(stagedRange.get.minPt)
                    else: none(BlockNumber)
     TickerStats(
-      topPersistent:   ctx.pool.topPersistent,
+      topPersistent:   ctx.data.topPersistent,
       nextStaged:      nextStaged,
-      nextUnprocessed: ctx.pool.nextUnprocessed,
-      nStagedQueue:    ctx.pool.staged.len,
-      reOrg:           ctx.pool.backtrack.isSome)
+      nextUnprocessed: ctx.data.nextUnprocessed,
+      nStagedQueue:    ctx.data.staged.len,
+      reOrg:           ctx.data.backtrack.isSome)
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-template safeTransport(buddy: BuddyRef; info: static[string]; code: untyped) =
+template safeTransport(
+    buddy: FullBuddyRef;
+    info: static[string];
+    code: untyped) =
   try:
     code
   except TransportError as e:
@@ -265,17 +257,18 @@ template safeTransport(buddy: BuddyRef; info: static[string]; code: untyped) =
     buddy.ctrl.stopped = true
 
 
-proc getRandomTrustedPeer(buddy: BuddyRef): Result[Peer,void] =
+proc getRandomTrustedPeer(buddy: FullBuddyRef): Result[Peer,void] =
   ## Return random entry from `trusted` peer different from this peer set if
   ## there are enough
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `randomTrustedPeer()`
   let
-    nPeers = buddy.pool.trusted.len
-    offInx = if buddy.peer in buddy.pool.trusted: 2 else: 1
+    ctx = buddy.ctx
+    nPeers = ctx.data.trusted.len
+    offInx = if buddy.peer in ctx.data.trusted: 2 else: 1
   if 0 < nPeers:
     var (walkInx, stopInx) = (0, rand(nPeers - offInx))
-    for p in buddy.pool.trusted:
+    for p in ctx.data.trusted:
       if p == buddy.peer:
         continue
       if walkInx == stopInx:
@@ -284,21 +277,22 @@ proc getRandomTrustedPeer(buddy: BuddyRef): Result[Peer,void] =
   err()
 
 
-proc newWorkItem(buddy: BuddyRef): Result[WorkItemRef,void] =
+proc newWorkItem(buddy: FullBuddyRef): Result[WorkItemRef,void] =
   ## Fetch the next unprocessed block range and register it as work item.
   ##
   ## This function will grab a block range from the `unprocessed` range set,
   ## ove it and return it as a `WorkItemRef`. The returned range is registered
   ## in the `pending` list.
   let
+    ctx = buddy.ctx
     peer = buddy.peer
-    rc = buddy.pool.unprocessed.ge()
+    rc = ctx.data.unprocessed.ge()
   if rc.isErr:
       return err() # no more data for this peer
 
   # Check whether there is somthing to do at all
-  if buddy.local.bestNumber.isNone or
-     buddy.local.bestNumber.get < rc.value.minPt:
+  if buddy.data.bestNumber.isNone or
+     buddy.data.bestNumber.get < rc.value.minPt:
     return err() # no more data for this peer
 
   # Compute interval
@@ -306,32 +300,37 @@ proc newWorkItem(buddy: BuddyRef): Result[WorkItemRef,void] =
     rc.value.minPt,
     min(rc.value.maxPt,
         min(rc.value.minPt + maxHeadersFetch - 1,
-            buddy.local.bestNumber.get)))
+            buddy.data.bestNumber.get)))
 
-  discard buddy.pool.unprocessed.reduce(iv)
+  discard ctx.data.unprocessed.reduce(iv)
   return ok(WorkItemRef(blocks: iv))
 
 
-proc recycleStaged(buddy: BuddyRef) =
+proc recycleStaged(buddy: FullBuddyRef) =
   ## Flush list of staged items and store the block ranges
   ## back to the `unprocessed` ranges set
   ##
   # using fast traversal
-  let walk = WorkItemWalkRef.init(buddy.pool.staged)
-  var rc = walk.first()
+  let
+    ctx = buddy.ctx
+    walk = WorkItemWalkRef.init(ctx.data.staged)
+  var
+    rc = walk.first()
   while rc.isOk:
     # Store back into `unprocessed` ranges set
-    discard buddy.pool.unprocessed.merge(rc.value.data)
+    discard ctx.data.unprocessed.merge(rc.value.data)
     rc = walk.next()
   # optional clean up, see comments on the destroy() directive
   walk.destroy()
-  buddy.pool.staged.clear()
+  ctx.data.staged.clear()
 
 # ------------------------------------------------------------------------------
 # Private `Future` helpers
 # ------------------------------------------------------------------------------
 
-proc getBestNumber(buddy: BuddyRef): Future[Result[BlockNumber,void]]{.async.} =
+proc getBestNumber(
+    buddy: FullBuddyRef
+     ): Future[Result[BlockNumber,void]] {.async.} =
   ## Get best block number from best block hash.
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `getBestBlockNumber()`
@@ -370,7 +369,7 @@ proc getBestNumber(buddy: BuddyRef): Future[Result[BlockNumber,void]]{.async.} =
   return err()
 
 
-proc agreesOnChain(buddy: BuddyRef; other: Peer): Future[bool] {.async.} =
+proc agreesOnChain(buddy: FullBuddyRef; other: Peer): Future[bool] {.async.} =
   ## Returns `true` if one of the peers `buddy.peer` or `other` acknowledges
   ## existence of the best block of the other peer.
   ##
@@ -417,49 +416,51 @@ proc agreesOnChain(buddy: BuddyRef; other: Peer): Future[bool] {.async.} =
 # Private functions, worker sub-tasks
 # ------------------------------------------------------------------------------
 
-proc initaliseWorker(buddy: BuddyRef): Future[bool] {.async.} =
+proc initaliseWorker(buddy: FullBuddyRef): Future[bool] {.async.} =
   ## Initalise worker. This function must be run in single mode at the
   ## beginning of running worker peer.
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `startSyncWithPeer()`
   ##
-  let peer = buddy.peer
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
 
   # Delayed clean up batch list
-  if 0 < buddy.pool.untrusted.len:
-    trace "Removing untrused peers", peer, count=buddy.pool.untrusted.len
-    for p in buddy.pool.untrusted:
-      buddy.pool.trusted.excl p
-    buddy.pool.untrusted.setLen(0)
+  if 0 < ctx.data.untrusted.len:
+    trace "Removing untrused peers", peer, count=ctx.data.untrusted.len
+    for p in ctx.data.untrusted:
+      ctx.data.trusted.excl p
+    ctx.data.untrusted.setLen(0)
 
-  if buddy.local.bestNumber.isNone:
+  if buddy.data.bestNumber.isNone:
     let rc = await buddy.getBestNumber()
     # Beware of peer terminating the session right after communicating
     if rc.isErr or buddy.ctrl.stopped:
       return false
-    if rc.value <= buddy.pool.topPersistent:
+    if rc.value <= ctx.data.topPersistent:
       buddy.ctrl.zombie = true
       trace "Useless peer, best number too low", peer,
-        topPersistent=buddy.pool.topPersistent, bestNumber=rc.value
-    buddy.local.bestNumber = some(rc.value)
+        topPersistent=ctx.data.topPersistent, bestNumber=rc.value
+    buddy.data.bestNumber = some(rc.value)
 
-  if minPeersToStartSync <= buddy.pool.trusted.len:
+  if minPeersToStartSync <= ctx.data.trusted.len:
     # We have enough trusted peers. Validate new peer against trusted
     let rc = buddy.getRandomTrustedPeer()
     if rc.isOK:
       if await buddy.agreesOnChain(rc.value):
         # Beware of peer terminating the session
         if not buddy.ctrl.stopped:
-          buddy.pool.trusted.incl peer
+          ctx.data.trusted.incl peer
           return true
 
   # If there are no trusted peers yet, assume this very peer is trusted,
   # but do not finish initialisation until there are more peers.
-  elif buddy.pool.trusted.len == 0:
+  elif ctx.data.trusted.len == 0:
     trace "Assume initial trusted peer", peer
-    buddy.pool.trusted.incl peer
+    ctx.data.trusted.incl peer
 
-  elif buddy.pool.trusted.len == 1 and buddy.peer in buddy.pool.trusted:
+  elif ctx.data.trusted.len == 1 and buddy.peer in ctx.data.trusted:
     # Ignore degenerate case, note that `trusted.len < minPeersToStartSync`
     discard
 
@@ -472,7 +473,7 @@ proc initaliseWorker(buddy: BuddyRef): Future[bool] {.async.} =
     var
       agreeScore = 0
       otherPeer: Peer
-    for p in buddy.pool.trusted:
+    for p in ctx.data.trusted:
       if peer == p:
         inc agreeScore
       else:
@@ -486,29 +487,34 @@ proc initaliseWorker(buddy: BuddyRef): Future[bool] {.async.} =
           otherPeer = p
 
     # Check for the number of peers that disagree
-    case buddy.pool.trusted.len - agreeScore
+    case ctx.data.trusted.len - agreeScore
     of 0:
       trace "Peer trusted by score", peer,
-        trusted=buddy.pool.trusted.len
-      buddy.pool.trusted.incl peer # best possible outcome
+        trusted=ctx.data.trusted.len
+      ctx.data.trusted.incl peer # best possible outcome
     of 1:
       trace "Other peer no longer trusted", peer,
-        otherPeer, trusted=buddy.pool.trusted.len
-      buddy.pool.trusted.excl otherPeer
-      buddy.pool.trusted.incl peer
+        otherPeer, trusted=ctx.data.trusted.len
+      ctx.data.trusted.excl otherPeer
+      ctx.data.trusted.incl peer
     else:
       trace "Peer not trusted", peer,
-        trusted=buddy.pool.trusted.len
+        trusted=ctx.data.trusted.len
       discard
 
-    if minPeersToStartSync <= buddy.pool.trusted.len:
+    if minPeersToStartSync <= ctx.data.trusted.len:
       return true
 
 
-proc fetchHeaders(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
+proc fetchHeaders(
+    buddy: FullBuddyRef;
+    wi: WorkItemRef
+     ): Future[bool] {.async.} =
   ## Get the work item with the least interval and complete it. The function
   ## returns `true` if bodies were fetched and there were no inconsistencies.
-  let peer = buddy.peer
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
 
   if 0 < wi.hashes.len:
     return true
@@ -563,7 +569,7 @@ proc fetchHeaders(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
     wi.headers = hdrResp.get.headers.reversed
     wi.blocks = BlockRange.new(
       wi.headers[0].blockNumber, wi.headers[^1].blockNumber)
-    discard buddy.pool.unprocessed.reduce(wi)
+    discard ctx.data.unprocessed.reduce(wi)
     trace "Updated reverse header range", peer, range=($wi.blocks)
 
   # Verify start block number
@@ -600,13 +606,13 @@ proc fetchHeaders(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
     let redRng = BlockRange.new(
       wi.headers[0].blockNumber, wi.headers[^1].blockNumber)
     trace "Adjusting block range", peer, range=($wi.blocks), reduced=($redRng)
-    discard buddy.pool.unprocessed.merge(redRng.maxPt + 1, wi.blocks.maxPt)
+    discard ctx.data.unprocessed.merge(redRng.maxPt + 1, wi.blocks.maxPt)
     wi.blocks = redRng
 
   return true
 
 
-proc fetchBodies(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
+proc fetchBodies(buddy: FullBuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
   ## Get the work item with the least interval and complete it. The function
   ## returns `true` if bodies were fetched and there were no inconsistencies.
   let peer = buddy.peer
@@ -646,33 +652,34 @@ proc fetchBodies(buddy: BuddyRef; wi: WorkItemRef): Future[bool] {.async.} =
     return true
 
 
-proc stageItem(buddy: BuddyRef; wi: WorkItemRef) =
+proc stageItem(buddy: FullBuddyRef; wi: WorkItemRef) =
   ## Add work item to the list of staged items
-  let peer = buddy.peer
-
-  let rc = buddy.pool.staged.insert(wi.blocks.minPt)
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    rc = ctx.data.staged.insert(wi.blocks.minPt)
   if rc.isOk:
     rc.value.data = wi
 
     # Turn on pool mode if there are too may staged work items queued.
     # This must only be done when the added work item is not backtracking.
-    if stagedWorkItemsTrigger < buddy.pool.staged.len and
-       buddy.pool.backtrack.isNone and
+    if stagedWorkItemsTrigger < ctx.data.staged.len and
+       ctx.data.backtrack.isNone and
        wi.topHash.isNone:
       buddy.ctx.poolMode = true
 
     # The list size is limited. So cut if necessary and recycle back the block
     # range of the discarded item (tough luck if the current work item is the
     # one removed from top.)
-    while maxStagedWorkItems < buddy.pool.staged.len:
-      let topValue = buddy.pool.staged.le(high(BlockNumber)).value
-      discard buddy.pool.unprocessed.merge(topValue.data)
-      discard buddy.pool.staged.delete(topValue.key)
+    while maxStagedWorkItems < ctx.data.staged.len:
+      let topValue = ctx.data.staged.le(highBlockNumber).value
+      discard ctx.data.unprocessed.merge(topValue.data)
+      discard ctx.data.staged.delete(topValue.key)
     return
 
   # Ooops, duplicates should not exist (but anyway ...)
   let wj = block:
-    let rc = buddy.pool.staged.eq(wi.blocks.minPt)
+    let rc = ctx.data.staged.eq(wi.blocks.minPt)
     doAssert rc.isOk
     # Store `wi` and return offending entry
     let rcData = rc.value.data
@@ -685,26 +692,27 @@ proc stageItem(buddy: BuddyRef; wi: WorkItemRef) =
   block:
     let rc = wi.blocks - wj.blocks
     if rc.isOk:
-      discard buddy.pool.unprocessed.merge(rc.value)
+      discard ctx.data.unprocessed.merge(rc.value)
 
 
-proc processStaged(buddy: BuddyRef): bool =
+proc processStaged(buddy: FullBuddyRef): bool =
   ## Fetch a work item from the `staged` queue an process it to be
   ## stored on the persistent block chain.
-
   let
+    ctx = buddy.ctx
     peer = buddy.peer
     chainDb = buddy.ctx.chain
-    rc = buddy.pool.staged.ge(low(BlockNumber))
+    rc = ctx.data.staged.ge(low(BlockNumber))
+
   if rc.isErr:
     # No more items in the database
     return false
 
   let
     wi = rc.value.data
-    topPersistent = buddy.pool.topPersistent
+    topPersistent = ctx.data.topPersistent
     startNumber = wi.headers[0].blockNumber
-    stagedRecords = buddy.pool.staged.len
+    stagedRecords = ctx.data.staged.len
 
   # Check whether this record of blocks can be stored, at all
   if topPersistent + 1 < startNumber:
@@ -717,11 +725,11 @@ proc processStaged(buddy: BuddyRef): bool =
     topPersistent, range=($wi.blocks)
 
   # remove from staged DB
-  discard buddy.pool.staged.delete(wi.blocks.minPt)
+  discard ctx.data.staged.delete(wi.blocks.minPt)
 
   try:
     if chainDb.persistBlocks(wi.headers, wi.bodies) == ValidationResult.OK:
-      buddy.pool.topPersistent = wi.blocks.maxPt
+      ctx.data.topPersistent = wi.blocks.maxPt
       return true
   except CatchableError as e:
     error "Storing persistent blocks failed", peer, range=($wi.blocks),
@@ -749,7 +757,7 @@ proc processStaged(buddy: BuddyRef): bool =
       # the blocks from another peer.
       trace "Storing persistent blocks failed", peer,
         range=($wi.blocks)
-      discard buddy.pool.unprocessed.merge(wi.blocks)
+      discard ctx.data.unprocessed.merge(wi.blocks)
       buddy.ctrl.zombie = true
       return false
   except CatchableError as e:
@@ -758,7 +766,7 @@ proc processStaged(buddy: BuddyRef): bool =
 
   # Parent block header problem, so we might be in the middle of a re-org.
   # Set single mode backtrack following the offending parent hash.
-  buddy.pool.backtrack = some(parentHash)
+  ctx.data.backtrack = some(parentHash)
   buddy.ctrl.multiOk = false
 
   if wi.topHash.isNone:
@@ -778,42 +786,43 @@ proc processStaged(buddy: BuddyRef): bool =
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc workerSetup*(ctx: CtxRef; tickerOK: bool): bool =
+proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.data = CtxDataEx(unprocessed: BlockRangeSetRef.init()) # `pool` extension
-  ctx.pool.staged.init()
+  ctx.data.unprocessed = BlockRangeSetRef.init()
+  ctx.data.staged.init()
   if tickerOK:
-    ctx.pool.ticker = Ticker.init(ctx.tickerUpdater)
+    ctx.data.ticker = TickerRef.init(ctx.tickerUpdater)
   else:
     debug "Ticker is disabled"
   return ctx.globalReset(0)
 
-proc workerRelease*(ctx: CtxRef) =
+proc release*(ctx: FullCtxRef) =
   ## Global clean up
-  if not ctx.pool.ticker.isNil:
-    ctx.pool.ticker.stop()
+  if not ctx.data.ticker.isNil:
+    ctx.data.ticker.stop()
 
-proc start*(buddy: BuddyRef): bool =
+proc start*(buddy: FullBuddyRef): bool =
   ## Initialise worker peer
+  let ctx = buddy.ctx
   if buddy.peer.supports(protocol.eth) and
      buddy.peer.state(protocol.eth).initialized:
-    buddy.data = BuddyDataEx.new() # `local` extension
-    if not buddy.pool.ticker.isNil:
-      buddy.pool.ticker.startBuddy()
+    if not ctx.data.ticker.isNil:
+      ctx.data.ticker.startBuddy()
     return true
 
-proc stop*(buddy: BuddyRef) =
+proc stop*(buddy: FullBuddyRef) =
   ## Clean up this peer
+  let ctx = buddy.ctx
   buddy.ctrl.stopped = true
-  buddy.pool.untrusted.add buddy.peer
-  if not buddy.pool.ticker.isNil:
-     buddy.pool.ticker.stopBuddy()
+  ctx.data.untrusted.add buddy.peer
+  if not ctx.data.ticker.isNil:
+     ctx.data.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc runSingle*(buddy: BuddyRef) {.async.} =
+proc runSingle*(buddy: FullBuddyRef) {.async.} =
   ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
   ## is set `false` which is the default mode. This flag is updated by the
   ## worker when deemed appropriate.
@@ -825,37 +834,40 @@ proc runSingle*(buddy: BuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  let peer = buddy.peer
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
 
-  if buddy.pool.backtrack.isSome:
+  if ctx.data.backtrack.isSome:
     trace "Single run mode, re-org backtracking", peer
     let wi = WorkItemRef(
       # This dummy interval can savely merged back without any effect
       blocks:  highBlockRange,
       # Enable backtrack
-      topHash: some(buddy.pool.backtrack.get))
+      topHash: some(ctx.data.backtrack.get))
 
     # Fetch headers and bodies for the current work item
     if await buddy.fetchHeaders(wi):
       if await buddy.fetchBodies(wi):
-        buddy.pool.backtrack = none(Hash256)
+        ctx.data.backtrack = none(Hash256)
         buddy.stageItem(wi)
 
-        # Update pool and persistent database (may reset `multiOk`)
+        # Update persistent database (may reset `multiOk`)
         buddy.ctrl.multiOk = true
-        while buddy.processStaged():
-          discard
+        while buddy.processStaged() and not buddy.ctrl.stopped:
+          # Allow thread switch as `persistBlocks()` might be slow
+          await sleepAsync(10.milliseconds)
         return
 
     # This work item failed, nothing to do anymore.
-    discard buddy.pool.unprocessed.merge(wi)
+    discard ctx.data.unprocessed.merge(wi)
     buddy.ctrl.zombie = true
 
   else:
-    if buddy.local.bestNumber.isNone:
+    if buddy.data.bestNumber.isNone:
       # Only log for the first time, or so
       trace "Single run mode, initialisation", peer,
-        trusted=buddy.pool.trusted.len
+        trusted=ctx.data.trusted.len
       discard
 
     # Initialise/re-initialise this worker
@@ -865,7 +877,7 @@ proc runSingle*(buddy: BuddyRef) {.async.} =
       await sleepAsync(2.seconds)
 
 
-proc runPool*(buddy: BuddyRef) =
+proc runPool*(buddy: FullBuddyRef) =
   ## Ocne started, the function `runPool()` is called for all worker peers in
   ## a row (as the body of an iteration.) There will be no other worker peer
   ## functions activated simultaneously.
@@ -877,29 +889,32 @@ proc runPool*(buddy: BuddyRef) =
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  if buddy.ctx.poolMode:
+  let ctx = buddy.ctx
+  if ctx.poolMode:
     # Mind the gap, fill in if necessary
     let
-      topPersistent = buddy.pool.topPersistent
+      topPersistent = ctx.data.topPersistent
       covered = min(
-        buddy.pool.nextUnprocessed.getOrHigh,
-        buddy.pool.nextStaged.getOrHigh.minPt)
+        ctx.data.nextUnprocessed.get(highBlockNumber),
+        ctx.data.nextStaged.get(highBlockRange).minPt)
     if topPersistent + 1 < covered:
-      discard buddy.pool.unprocessed.merge(topPersistent + 1, covered - 1)
-    buddy.ctx.poolMode = false
+      discard ctx.data.unprocessed.merge(topPersistent + 1, covered - 1)
+    ctx.poolMode = false
 
 
-proc runMulti*(buddy: BuddyRef) {.async.} =
+proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
   ## `true` which is typically done after finishing `runSingle()`. This
   ## instance can be simultaneously active for all peer workers.
   ##
   # Fetch work item
-  let rc = buddy.newWorkItem()
+  let
+    ctx = buddy.ctx
+    rc = buddy.newWorkItem()
   if rc.isErr:
     # No way, end of capacity for this peer => re-calibrate
     buddy.ctrl.multiOk = false
-    buddy.local.bestNumber = none(BlockNumber)
+    buddy.data.bestNumber = none(BlockNumber)
     return
   let wi = rc.value
 
@@ -908,13 +923,14 @@ proc runMulti*(buddy: BuddyRef) {.async.} =
     if await buddy.fetchBodies(wi):
       buddy.stageItem(wi)
 
-      # Update pool and persistent database
-      while buddy.processStaged():
-        discard
+      # Update persistent database
+      while buddy.processStaged() and not buddy.ctrl.stopped:
+        # Allow thread switch as `persistBlocks()` might be slow
+        await sleepAsync(10.milliseconds)
       return
 
   # This work item failed
-  discard buddy.pool.unprocessed.merge(wi)
+  discard ctx.data.unprocessed.merge(wi)
 
 # ------------------------------------------------------------------------------
 # End

@@ -15,25 +15,11 @@
 
 import
   std/[sequtils, strformat, strutils, tables, times],
-  nimcrypto/hash
+  nimcrypto/hash,
+  ../../nimbus/constants
 
 export
   sequtils, strformat, strutils
-
-const
-  ZeroHash256 =    MDigest[256].default
-
-  EmptyUncleHash = ( "1dcc4de8dec75d7aab85b567b6ccd41a" &
-                     "d312451b948a7413f0a142fd40d49347" ).toDigest
-
-  BlankRootHash =  ( "56e81f171bcc55a6ff8345e692c0f86e" &
-                     "5b48e01b996cadc001622fb5e363b421" ).toDigest
-
-  EmptySha3 =      ( "c5d2460186f7233c927e7db2dcc703c0" &
-                     "e500b653ca82273b7bfad8045d85a470" ).toDigest
-
-  EmptyRlpHash =   ( "56e81f171bcc55a6ff8345e692c0f86e" &
-                     "5b48e01b996cadc001622fb5e363b421" ).toDigest
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -103,14 +89,16 @@ proc pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
     a.data.mapIt(it.toHex(2)).join.toLowerAscii
-  elif a == EmptyRlpHash:
-    "emptyRlpHash"
-  elif a == EmptyUncleHash:
-    "emptyUncleHash"
-  elif a == EmptySha3:
-    "EmptySha3"
-  elif a == ZeroHash256:
-    "zeroHash256"
+  elif a == ZERO_HASH256:
+    "ZERO_HASH256"
+  elif a == BLANK_ROOT_HASH:
+    "BLANK_ROOT_HASH"
+  elif a == EMPTY_UNCLE_HASH:
+    "EMPTY_UNCLE_HASH"
+  elif a == EMPTY_SHA3:
+    "EMPTY_SHA3"
+  elif a == ZERO_HASH256:
+    "ZERO_HASH256"
   else:
     a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 

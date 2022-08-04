@@ -15,17 +15,10 @@ type
     terminalHash
     safeHash
     finalizedHash
-    snapSyncStatus
-    snapSyncAccount
-    snapSyncProof
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
     data*: array[33, byte]
-    dataEndPos*: uint8 # the last populated position in the data
-
-  DbXKey* = object
-    data*: array[65, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
 proc genericHashKey*(h: Hash256): DbKey {.inline.} =
@@ -86,27 +79,8 @@ proc finalizedHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
 
-proc snapSyncStatusKey*(h: Hash256): DbKey =
-  result.data[0] = byte ord(snapSyncStatus)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
-proc snapSyncAccountKey*(h, b: Hash256): DbXKey =
-  result.data[0] = byte ord(snapSyncAccount)
-  result.data[1 .. 32] = h.data
-  result.data[33 .. 64] = b.data
-  result.dataEndPos = uint8 64
-
-proc snapSyncProofKey*(h: Hash256): DbKey =
-  result.data[0] = byte ord(snapSyncProof)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
-template toOpenArray*(k: DbKey|DbXKey): openArray[byte] =
+template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
-
-proc hash*(k: DbKey|DbXKey): Hash =
-  result = hash(k.toOpenArray)
 
 proc `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
