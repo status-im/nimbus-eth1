@@ -63,9 +63,6 @@ procSuite "History Content Network":
       historyNode1 = newHistoryNode(rng, 20302)
       historyNode2 = newHistoryNode(rng, 20303)
 
-    historyNode1.start()
-    historyNode2.start()
-
     # enough headers so there will be at least two epochs
     let numHeaders = 9000
     var headers: seq[BlockHeader]
@@ -105,7 +102,6 @@ procSuite "History Content Network":
 
     check (await historyNode1.portalWireProtocol().ping(historyNode2.localNodeInfo())).isOk()
     check (await historyNode2.portalWireProtocol().ping(historyNode1.localNodeInfo())).isOk()
-
 
     for i in 0..numHeaders:
       let blockResponse = await historyNode1.historyNetwork.getBlock(1'u16, u256(i))
