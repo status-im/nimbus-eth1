@@ -699,7 +699,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   ## half of this can be too much to fit into discv5 limits.
 
   let maxTalkReqPayload = maxDiscv5PacketSize - getTalkReqOverhead(int(protocolIdLen))
-  # To calculate how much bytes `n` content keys of size `maxKeySize` will take
+  # To calculate how much bytes, `n` content keys of size `maxKeySize` will take
   # we can use following equation:
   # bytes = (n * (maxKeySize + perContentKeyOverhead)) + offerMessageOverhead
   # to calculate maximal number of keys which will will given space this can be
