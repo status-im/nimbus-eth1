@@ -30,15 +30,7 @@ const
   # protocol messages were exchanged before sending uTP over discv5 data. This
   # means that a session is established and that the discv5 messages send are
   # discv5 ordinary message packets, for which below calculation applies.
-  talkReqOverhead =
-    16 + # IV size
-    55 + # header size
-    1 + # talkReq msg id
-    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
-    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
-    len(utpProtocolId) + 1 + # + 1 is necessary due to rlp encoding of byte string
-    3 + # rlp encoding response byte string, max length in 2 bytes
-    16 # HMAC
+  talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
   maxUtpPayloadSize* = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
 

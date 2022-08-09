@@ -8,9 +8,11 @@
 {.push raises: [Defect].}
 
 import
+  std/math,
   chronos,
   eth/p2p/discoveryv5/[node, random2],
   ./wire/portal_protocol,
+  ./history/[history_content, history_network],
   ../seed_db
 
 # Experimental module which implements different content seeding strategies.
@@ -27,6 +29,19 @@ import
 # and creating few procs which would start/stop given seedTask or even few
 # seed tasks
 
+const
+  #TODO currently we are using value for history network, but this should be
+  #caluculated per netowork basis
+  maxItemsPerOfferBySize = getMaxOfferedContentKeys(
+    uint32(len(history_network.historyProtocolId)),
+    uint32(history_content.maxContentKeySize)
+  )
+
+  # Offering is restricted to max 64 items
+  maxItemPerOfferByLen = 64
+
+  maxItemsPerOffer = min(maxItemsPerOfferBySize, maxItemPerOfferByLen)
+
 proc depthContentPropagate*(
     p: PortalProtocol, seedDbPath: string, maxClosestNodes: uint32):
     Future[Result[void, string]] {.async.} =
@@ -35,7 +50,7 @@ proc depthContentPropagate*(
   ## offer as much content as possible in their range from seed db. Offers are made conccurently
   ## with at most one offer per peer at the time.
 
-  const batchSize = 64
+  const batchSize = maxItemsPerOffer
 
   var gossipWorkers: seq[Future[void]]
 
@@ -148,7 +163,7 @@ proc breadthContentPropagate*(
 
   let
     (dbPath, dbName) = maybePathAndDbName.unsafeGet()
-    batchSize = 64
+    batchSize = maxItemsPerOffer
     db = SeedDb.new(path = dbPath, name = dbName)
     target = p.localNode.id
 
@@ -156,7 +171,7 @@ proc breadthContentPropagate*(
 
   while true:
     # Setting radius to `UInt256.high` and using batchSize and offset, means
-    # we will iterate over whole database in batches of 64 items
+    # we will iterate over whole database in batches of `maxItemsPerOffer` items
     var contentData = db.getContentInRange(target, UInt256.high, batchSize, offset)
 
     if len(contentData) == 0:

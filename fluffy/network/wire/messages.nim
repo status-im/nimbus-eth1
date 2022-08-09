@@ -20,6 +20,13 @@ export ssz_serialization, stint, common_types
 
 const
   contentKeysLimit* = 64
+  # overhead of content message is a result of 1byte for kind enum, and
+  # 4 bytes for offset in ssz serialization
+  offerMessageOverhead* = 5
+
+  # each key in ContentKeysList has uint32 offset which results in 4 bytes per
+  # key overhead when serialized
+  perContentKeyOverhead* = 4
 
 type
   ContentKeysList* = List[ByteList, contentKeysLimit]
@@ -166,3 +173,18 @@ func optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
 
 func getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
   optToResult(getInnnerMessage[T](m), errMessage)
+
+func getTalkReqOverhead*(protocolIdLen: int): int =
+  return (
+    16 + # IV size
+    55 + # header size
+    1 + # talkReq msg id
+    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
+    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
+    protocolIdLen + 1 + # + 1 is necessary due to rlp encoding of byte string
+    3 + # rlp encoding response byte string, max length in 2 bytes
+    16 # HMAC
+  )
+
+func getTalkReqOverhead*(protocolId: openArray[byte]): int =
+  return getTalkReqOverhead(len(protocolId))

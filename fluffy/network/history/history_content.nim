@@ -18,6 +18,12 @@ import
 export ssz_serialization, common_types, hash
 
 ## Types and calls for history network content keys
+const
+  # Maximum content key size comes from:
+  # 34 bytes for ssz serialized BlockKey
+  # 1 byte for contentType
+  # TODO it would be nice to caluclate it somehow from the object definition (macro?)
+  maxContentKeySize* = 35
 
 type
   ContentType* = enum
