@@ -17,7 +17,6 @@ import
   ../content_db,
   ./test_helpers
 
-
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork
@@ -56,6 +55,32 @@ proc stop(hn: HistoryNode) {.async.} =
   hn.historyNetwork.stop()
   await hn.discoveryProtocol.closeWait()
 
+proc containsId(hn: HistoryNode, contentId: ContentId): bool =
+  return hn.historyNetwork.contentDb.get(contentId).isSome()
+
+proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
+  var headers: seq[BlockHeader]
+  for i in fromNum..toNum:
+    var bh = BlockHeader()
+    bh.blockNumber = u256(i)
+    bh.difficulty = u256(i)
+    # empty so that we won't care about creating fake block bodies
+    bh.ommersHash = EMPTY_UNCLE_HASH
+    bh.txRoot = BLANK_ROOT_HASH
+    headers.add(bh)
+  return headers
+
+proc headersToContentInfo(headers: seq[BlockHeader]): seq[ContentInfo] =
+  var contentInfos: seq[ContentInfo]
+  for h in headers:
+    let headerHash = h.blockHash()
+    let bk = BlockKey(chainId: 1'u16, blockHash: headerHash)
+    let ck = encode(ContentKey(contentType: blockHeader, blockHeaderKey: bk))
+    let headerEncoded = rlp.encode(h)
+    let ci = ContentInfo(contentKey: ck, content: headerEncoded)
+    contentInfos.add(ci)
+  return contentInfos
+
 procSuite "History Content Network":
   let rng = newRng()
   asyncTest "Get block by block number":
@@ -65,15 +90,7 @@ procSuite "History Content Network":
 
     # enough headers so there will be at least two epochs
     let numHeaders = 9000
-    var headers: seq[BlockHeader]
-    for i in 0..numHeaders:
-      var bh = BlockHeader()
-      bh.blockNumber = u256(i)
-      bh.difficulty = u256(i)
-      # empty so that we won't care about creating fake block bodies
-      bh.ommersHash = EMPTY_UNCLE_HASH
-      bh.txRoot = BLANK_ROOT_HASH
-      headers.add(bh)
+    var headers: seq[BlockHeader] = createEmptyHeaders(0, numHeaders)
 
     let masterAccumulator = buildAccumulator(headers)
     let epochAccumulators = buildAccumulatorData(headers)
@@ -118,6 +135,63 @@ procSuite "History Content Network":
 
       check:
         blockHeader == headers[i]
+
+    await historyNode1.stop()
+    await historyNode2.stop()
+
+  asyncTest "Offer maximum amout of content in one offer message":
+    let
+      historyNode1 = newHistoryNode(rng, 20302)
+      historyNode2 = newHistoryNode(rng, 20303)
+
+    check historyNode1.portalWireProtocol().addNode(historyNode2.localNodeInfo()) == Added
+    check historyNode2.portalWireProtocol().addNode(historyNode1.localNodeInfo()) == Added
+
+    check (await historyNode1.portalWireProtocol().ping(historyNode2.localNodeInfo())).isOk()
+    check (await historyNode2.portalWireProtocol().ping(historyNode1.localNodeInfo())).isOk()
+
+    let maxOfferedHistoryContent = getMaxOfferedContentKeys(
+        uint32(len(historyProtocolId)), maxContentKeySize)
+
+    # one header too many to fit offer message, talkReq with this amout of header will fail
+    let headers = createEmptyHeaders(0, maxOfferedHistoryContent)
+    let masterAccumulator = buildAccumulator(headers)
+
+    await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
+    await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
+
+    let contentInfos = headersToContentInfo(headers)
+
+    # node 1 will offer content so it need to have it in its database
+    for ci in contentInfos:
+      let id = toContentId(ci.contentKey)
+      historyNode1.portalWireProtocol.storeContent(id, ci.content)
+
+
+    let offerResultTooMany = await historyNode1.portalWireProtocol.offer(
+      historyNode2.localNodeInfo(),
+      contentInfos
+    )
+
+    check:
+      # failing due timeout, as remote side won't respond to large discv5 packets
+      offerResultTooMany.isErr()
+
+    for ci in contentInfos:
+      let id = toContentId(ci.contentKey)
+      check:
+        historyNode2.containsId(id) == false
+
+    # one contentkey less should make offer go through
+    let correctInfos = contentInfos[0..<len(contentInfos)-1]
+
+    let offerResultCorrect = await historyNode1.portalWireProtocol.offer(
+      historyNode2.localNodeInfo(),
+      correctInfos
+    )
+
+    check:
+      offerResultCorrect.isOk()
 
     await historyNode1.stop()
     await historyNode2.stop()

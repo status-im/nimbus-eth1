@@ -10,7 +10,7 @@ proc portal_history_propagateEpochAccumulator(
 proc portal_history_storeContentInNodeRange(
     dbPath: string, max: uint32, starting: uint32): bool
 proc portal_history_offerContentInNodeRange(
-    dbPath: string, nodeId: NodeId, max: uint32, starting: uint32): bool
+    dbPath: string, nodeId: NodeId, max: uint32, starting: uint32): int
 proc portal_history_depthContentPropagate(
   dbPath: string, max: uint32): bool
 proc portal_history_breadthContentPropagate(

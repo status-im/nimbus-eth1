@@ -346,7 +346,7 @@ procSuite "Portal testnet tests":
       for i in 1..lastNodeIdx:
         let receipientId = nodeInfos[i].nodeId
         let offerResponse = await retryUntil(
-          proc (): Future[bool] {.async.} =
+          proc (): Future[int] {.async.} =
             try:
               let res = await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0)
               await clients[0].close()
@@ -355,11 +355,12 @@ procSuite "Portal testnet tests":
               await clients[0].close()
               raise exc
           ,
-          proc (os: bool): bool = return os,
+          proc (os: int): bool = return true,
           "Offer failed",
           i
         )
-        check offerResponse
+        check:
+          offerResponse > 0
 
       for i, client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to
