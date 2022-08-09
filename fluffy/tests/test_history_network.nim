@@ -17,7 +17,6 @@ import
   ../content_db,
   ./test_helpers
 
-
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork

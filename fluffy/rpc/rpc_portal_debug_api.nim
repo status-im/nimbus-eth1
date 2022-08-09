@@ -88,13 +88,13 @@ proc installPortalDebugApiHandlers*(
       dbPath: string,
       nodeId: NodeId,
       max: uint32,
-      starting: uint32) -> bool:
+      starting: uint32) -> int:
     # waiting for offer result, by the end of this call remote node should
     # have received offered content
     let offerResult = await p.offerContentInNodeRange(dbPath, nodeId, max, starting)
 
     if offerResult.isOk():
-      return true
+      return offerResult.get()
     else:
       raise newException(ValueError, $offerResult.error)
 
