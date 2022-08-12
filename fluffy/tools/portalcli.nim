@@ -240,6 +240,7 @@ proc run(config: PortalCliConf) =
       d,
       utpProtocolId,
       registerIncomingSocketCallback(@[portal.stream]),
+      nil,
       allowRegisteredIdCallback(@[portal.stream]), socketConfig)
 
   setTransport(portal.stream, streamTransport)

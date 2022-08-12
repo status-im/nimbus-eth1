@@ -64,7 +64,7 @@ proc defaultDataDir*(): string =
 
 const
   defaultDataDirDesc = defaultDataDir()
-  defaultBlockFileName = "eth-block-data.json"
+  defaultBlockFileName = "eth-block-data"
   defaultAccumulatorFileName = "eth-accumulator.json"
 
 type
