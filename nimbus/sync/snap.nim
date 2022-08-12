@@ -12,6 +12,7 @@ import
   eth/[common/eth_types, p2p],
   chronicles,
   chronos,
+  ../db/select_backend,
   ../p2p/chain,
   ./snap/[worker, worker_desc],
   "."/[sync_desc, sync_sched, protocol]
@@ -59,11 +60,13 @@ proc init*(
     chain: Chain;
     rng: ref HmacDrbgContext;
     maxPeers: int;
+    dbBackend: ChainDb,
     enableTicker = false): T =
   new result
   result.initSync(ethNode, maxPeers, enableTicker)
   result.ctx.chain = chain # explicitely override
   result.ctx.data.rng = rng
+  result.ctx.data.dbBackend = dbBackend
 
 proc start*(ctx: SnapSyncRef) =
   doAssert ctx.startSync()

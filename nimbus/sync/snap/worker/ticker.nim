@@ -10,13 +10,14 @@
 # except according to those terms.
 
 import
-  std/[strformat, strutils],
+  std/[sequtils, strformat, strutils, times],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
   ../../../utils/prettify,
-  ../../timer_helper
+  ../../timer_helper,
+  ./accounts_db
 
 {.push raises: [Defect].}
 
@@ -30,6 +31,7 @@ type
     fillFactor*: (float,float) ## mean and standard deviation
     activeQueues*: int
     flushedQueues*: int64
+    bulkStore*: AccountLoadStats
 
   TickerStatsUpdater* =
     proc: TickerStats {.gcsafe, raises: [Defect].}
@@ -44,9 +46,52 @@ type
     tick:      uint64 # more than 5*10^11y before wrap when ticking every sec
 
 const
-  tickerStartDelay = 100.milliseconds
-  tickerLogInterval = 1.seconds
+  tickerStartDelay = chronos.milliseconds(100)
+  tickerLogInterval = chronos.seconds(1)
   tickerLogSuppressMax = 100
+
+# ------------------------------------------------------------------------------
+# Private functions: pretty printing
+# ------------------------------------------------------------------------------
+
+proc ppMs*(elapsed: times.Duration): string
+    {.gcsafe, raises: [Defect, ValueError]} =
+  result = $elapsed.inMilliseconds
+  let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
+  if ns != 0:
+    # to rounded deca milli seconds
+    let dm = (ns + 5_000i64) div 10_000i64
+    result &= &".{dm:02}"
+  result &= "ms"
+
+proc ppSecs*(elapsed: times.Duration): string
+    {.gcsafe, raises: [Defect, ValueError]} =
+  result = $elapsed.inSeconds
+  let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
+  if ns != 0:
+    # round up
+    let ds = (ns + 5_000_000i64) div 10_000_000i64
+    result &= &".{ds:02}"
+  result &= "s"
+
+proc ppMins*(elapsed: times.Duration): string
+    {.gcsafe, raises: [Defect, ValueError]} =
+  result = $elapsed.inMinutes
+  let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
+  if ns != 0:
+    # round up
+    let dm = (ns + 500_000_000i64) div 1_000_000_000i64
+    result &= &":{dm:02}"
+  result &= "m"
+
+proc pp(d: times.Duration): string
+    {.gcsafe, raises: [Defect, ValueError]} =
+  if 40 < d.inSeconds:
+    d.ppMins
+  elif 200 < d.inMilliseconds:
+    d.ppSecs
+  else:
+    d.ppMs
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -71,6 +116,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       avAccounts = ""
       avUtilisation = ""
       pivot = "n/a"
+      bulker = ""
     let
       flushed = data.flushedQueues
 
@@ -85,9 +131,12 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
         &"{(data.accounts[0]+0.5).int64}({(data.accounts[1]+0.5).int64})"
       avUtilisation =
         &"{data.fillFactor[0]*100.0:.2f}%({data.fillFactor[1]*100.0:.2f}%)"
+      bulker =
+        "[" & data.bulkStore.size.toSeq.mapIt(it.toSI).join(",") & "," &
+              data.bulkStore.dura.toSeq.mapIt(it.pp).join(",") & "]"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, avAccounts, avUtilisation, flushed, mem
+      tick, buddies, pivot, avAccounts, avUtilisation, flushed, bulker, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

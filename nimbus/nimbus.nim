@@ -56,6 +56,7 @@ type
     chainRef: Chain
     txPool: TxPoolRef
     networkLoop: Future[void]
+    dbBackend: ChainDB
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -149,7 +150,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       FullSyncRef.init(nimbus.ethNode, conf.maxPeers, tickerOK).start
     of SyncMode.Snap:
       SnapSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
-                       conf.maxPeers, tickerOK).start
+                       conf.maxPeers, nimbus.dbBackend, tickerOK).start
     of SyncMode.Default:
       discard
 
@@ -361,7 +362,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     evmcSetLibraryPath(conf.evm)
 
   createDir(string conf.dataDir)
-  let trieDB = trieDB newChainDB(string conf.dataDir)
+  nimbus.dbBackend = newChainDB(string conf.dataDir)
+  let trieDB = trieDB nimbus.dbBackend
   var chainDB = newBaseChainDB(trieDB,
     conf.pruneMode == PruneMode.Full,
     conf.networkId,

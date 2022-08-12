@@ -9,16 +9,20 @@
 # except according to those terms.
 
 import
-  std/[algorithm, hashes, options, sequtils, sets, strutils, strformat, tables],
+  std/[algorithm, hashes, options, sequtils, sets, strutils, strformat,
+       tables, times],
   chronos,
   eth/[common/eth_types, p2p, rlp],
   eth/trie/[db, nibbles, trie_defs],
   nimcrypto/keccak,
   stew/byteutils,
   stint,
-  "../../.."/[db/storage_types, constants],
+  rocksdb,
+  ../../../constants,
+  ../../../db/[kvstore_rocksdb, select_backend, storage_types],
   "../.."/[protocol, types],
-  ../range_desc
+  ../range_desc,
+  ./rocky_bulk_load
 
 {.push raises: [Defect].}
 
@@ -26,30 +30,53 @@ logScope:
   topics = "snap-proof"
 
 const
-  BasicChainTrieEnabled = false # proof-of-concept code, currently unused
   BasicChainTrieDebugging = false
-
   RepairTreeDebugging = false
-
 
 type
   AccountsDbError* = enum
     NothingSerious = 0
     AccountSmallerThanBase
     AccountsNotSrictlyIncreasing
+    AccountRangesOverlap
     AccountRepairBlocked
+    BoundaryProofFailed
     Rlp2Or17ListEntries
     RlpBlobExpected
     RlpBranchLinkExpected
     RlpEncoding
     RlpExtPathEncoding
     RlpNonEmptyBlobExpected
-    BoundaryProofFailed
+
+    UnresolvedRepairNode
+    NoRocksDbBackend
+    CannotOpenRocksDbBulkSession
+    AddBulkItemFailed
+    CommitBulkItemsFailed
+    AccountNotFound
+
+  HexaryGetFn = proc(key: Blob): Blob {.gcsafe.}
+    ## For testing/debugging
+
+  AccountsDbXKeyKind = enum
+    ## Extends `storage_types.DbDBKeyKind` for testing/debugging
+    ChainDbStateRootPfx = 200 # <state-root> <hash-key> on trie db layer
+    RockyBulkStateRootPfx     # <state-root> <hash-key> for rocksdb bulk load
+    RockyBulkHexary           # <hash-key> for rocksdb bulk load
+
+  AccountsDbXKey = object
+    ## Extends `storage_types.DbDBKey` for testing/debugging
+    data*: array[65, byte]
+    dataEndPos*: uint8 # the last populated position in the data
+
+  AccountLoadStats* = object
+    dura*: array[4,times.Duration]   ## Accumulated time statistics
+    size*: array[2,uint64]           ## Accumulated size statistics
 
   ByteArray32* =
     array[32,byte]
 
-  ByteArray33 =
+  ByteArray33* =
     array[33,byte]
 
   NodeKey =               ## Internal DB record reference type
@@ -101,8 +128,8 @@ type
   RAccount = object
     ## Temporarily stashed account data. Proper account records have non-empty
     ## payload. Records with empty payload are lower boundary records.
-    tag: NodeTag                     ## Equivalent to account hash
-    key: RepairKey                   ## Leaf hash into hexary repair table
+    pathTag: NodeTag                 ## Equivalent to account hash
+    nodeKey: RepairKey               ## Leaf hash into hexary repair table
     payload: Blob                    ## Data payload
 
   RepairTreeDB = object
@@ -112,22 +139,29 @@ type
 
   AccountsDbRef* = ref object
     db: TrieDatabaseRef              ## General database
+    rocky: RocksStoreRef             ## Set if rocksdb is available
+    aStats: AccountLoadStats         ## Accumulated time and statistics
 
   AccountsDbSessionRef* = ref object
-    #dbTx: DbTransaction             ## TBD
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
     base: AccountsDbRef              ## Back reference to common parameters
     rootKey: NodeKey                 ## Current root node
     peer: Peer                       ## For log messages
-    rnDB: RepairTreeDB               ## Repair database
+    rpDB: RepairTreeDB               ## Repair database
+    dStats: AccountLoadStats         ## Time and size statistics
 
 const
   EmptyBlob = seq[byte].default
   EmptyNibbleRange = EmptyBlob.initNibbleRange
 
+  RockyBulkCache = "accounts.sst"
+
 static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
+
+  # Make sure that `DBKeyKind` extension does not overlap
+  doAssert high(DBKeyKind).int < low(AccountsDbXKeyKind).int
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -144,6 +178,9 @@ proc to(key: NodeKey; T: type NodeTag): T =
 
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
+
+proc to(key: NodeKey; T: type Hash256): T =
+  result.Hash256.data = key.ByteArray32
 
 proc to(key: NodeKey; T: type NibblesSeq): T =
   key.ByteArray32.initNibbleRange
@@ -176,8 +213,8 @@ proc isNodeKey(a: RepairKey): bool =
   a.ByteArray33[0] == 0
 
 proc newRepairKey(ps: AccountsDbSessionRef): RepairKey =
-  ps.rnDB.repairKeyGen.inc
-  var src = ps.rnDB.repairKeyGen.toBytesBE
+  ps.rpDB.repairKeyGen.inc
+  var src = ps.rpDB.repairKeyGen.toBytesBE
   (addr result.ByteArray33[25]).copyMem(addr src[0], 8)
   result.ByteArray33[0] = 1
 
@@ -199,6 +236,10 @@ proc convertTo(data: openArray[byte]; T: type NodeKey): T =
 proc convertTo(key: RepairKey; T: type NodeKey): T =
   if key.isNodeKey:
     discard result.init(key.ByteArray33[1 .. 32])
+
+proc convertTo(key: RepairKey; T: type NodeTag): T =
+  if key.isNodeKey:
+    result = UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
 
 proc convertTo(node: RNodeRef; T: type Blob): T =
   var writer = initRlpWriter()
@@ -233,12 +274,18 @@ proc convertTo(node: RNodeRef; T: type Blob): T =
 
   writer.finish()
 
-
 template noKeyError(info: static[string]; code: untyped) =
   try:
     code
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
+
+template elapsed(duration: times.Duration; code: untyped) =
+  block:
+    let start = getTime()
+    block:
+      code
+    duration = getTime() - start
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -291,6 +338,8 @@ template noPpError(info: static[string]; code: untyped) =
     raiseAssert "Inconveivable (" & info & "): " & e.msg
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
+  except OsError as e:
+    raiseAssert "Ooops (" & info & "): " & e.msg
 
 proc pp(s: string; hex = false): string =
   if hex:
@@ -443,6 +492,143 @@ proc pp(w: seq[RPathXStep]; ps: AccountsDbSessionRef; indent = 4): string =
   noPpError("pp(seq[RPathXStep])"):
     result = w.mapIt(it.pp(ps)).join(pfx)
 
+proc pp(a: DbKey|AccountsDbXKey): string =
+  a.data.toSeq.mapIt(it.toHex(2)).join
+
+# ------------------------------------------------------------------------------
+# Private helpers for bulk load testing
+# ------------------------------------------------------------------------------
+
+proc chainDbHexaryKey*(a: RepairKey): ByteArray32 =
+  a.convertTo(NodeKey).ByteArray32
+
+proc chainDbStateRootPfxKey*(a: NodeKey; b: NodeTag): AccountsDbXKey =
+  result.data[0] = byte ord(ChainDbStateRootPfx)
+  result.data[1 .. 32] = a.ByteArray32
+  result.data[33 .. 64] = b.to(NodeKey).ByteArray32
+  result.dataEndPos = uint8 64
+
+proc rockyBulkHexaryKey(a: NodeTag): DbKey =
+  result.data[0] = byte ord(RockyBulkHexary)
+  result.data[1 .. 32] = a.to(NodeKey).ByteArray32
+  result.dataEndPos = uint8 32
+
+proc rockyBulkStateRootPfxKey*(a: NodeKey; b: NodeTag): AccountsDbXKey =
+  result.data[0] = byte ord(RockyBulkStateRootPfx)
+  result.data[1 .. 32] = a.ByteArray32
+  result.data[33 .. 64] = b.to(NodeKey).ByteArray32
+  result.dataEndPos = uint8 64
+
+template toOpenArray*(k: AccountsDbXKey): openArray[byte] =
+   k.data.toOpenArray(0, int(k.dataEndPos))
+
+template toOpenArray*(k: ByteArray32): openArray[byte] =
+  k.toOpenArray(0, 31)
+
+
+proc storeAccountPathsOnChainDb(
+    ps: AccountsDbSessionRef
+      ): Result[void,AccountsDbError] =
+  let dbTx = ps.base.db.beginTransaction
+  defer: dbTx.commit
+
+  for a in ps.rpDB.acc:
+    if a.payload.len != 0:
+      ps.base.db.put(
+        ps.rootKey.chainDbStateRootPfxKey(a.pathTag).toOpenArray, a.payload)
+  ok()
+
+proc storeHexaryNodesOnChainDb(
+    ps: AccountsDbSessionRef
+      ): Result[void,AccountsDbError] =
+  let dbTx = ps.base.db.beginTransaction
+  defer: dbTx.commit
+
+  for (key,value) in ps.rpDB.tab.pairs:
+    if not key.isNodeKey:
+      let error = UnresolvedRepairNode
+      trace "Unresolved node in repair table", error
+      return err(error)
+    ps.base.db.put(key.chainDbHexaryKey.toOpenArray, value.convertTo(Blob))
+  ok()
+
+proc storeAccountPathsOnRockyDb(
+    ps: AccountsDbSessionRef
+      ): Result[void,AccountsDbError]
+      {.gcsafe, raises: [Defect,OSError,ValueError].} =
+  if ps.base.rocky.isNil:
+    return err(NoRocksDbBackend)
+  let bulker = RockyBulkLoadRef.init(ps.base.rocky)
+  defer: bulker.destroy()
+  if not bulker.begin(RockyBulkCache):
+    let error = CannotOpenRocksDbBulkSession
+    trace "Rocky accounts session initiation failed",
+      error, info=bulker.lastError()
+    return err(error)
+
+  for n,a in ps.rpDB.acc:
+    if a.payload.len != 0:
+      let key = ps.rootKey.rockyBulkStateRootPfxKey(a.pathTag)
+      if not bulker.add(key.toOpenArray, a.payload):
+        let error = AddBulkItemFailed
+        trace "Rocky accounts bulk load failure",
+          n, len=ps.rpDB.acc.len, error, info=bulker.lastError()
+        return err(error)
+
+  if bulker.finish().isErr:
+    let error = CommitBulkItemsFailed
+    trace "Rocky accounts commit failure",
+      len=ps.rpDB.acc.len, error, info=bulker.lastError()
+    return err(error)
+  ok()
+
+
+proc storeHexaryNodesOnRockyDb(
+    ps: AccountsDbSessionRef
+      ): Result[void,AccountsDbError]
+      {.gcsafe, raises: [Defect,OSError,KeyError,ValueError].} =
+  if ps.base.rocky.isNil:
+    return err(NoRocksDbBackend)
+  let bulker = RockyBulkLoadRef.init(ps.base.rocky)
+  defer: bulker.destroy()
+  if not bulker.begin(RockyBulkCache):
+    let error = CannotOpenRocksDbBulkSession
+    trace "Rocky hexary session initiation failed",
+      error, info=bulker.lastError()
+    return err(error)
+
+  #let keyList = toSeq(ps.rpDB.tab.keys)
+  #              .filterIt(it.isNodeKey)
+  #              .mapIt(it.convertTo(NodeTag))
+  #              .sorted(cmp)
+  var
+    keyList = newSeq[NodeTag](ps.rpDB.tab.len)
+    inx = 0
+  for repairKey in ps.rpDB.tab.keys:
+    if repairKey.isNodeKey:
+      keyList[inx] = repairKey.convertTo(NodeTag)
+      inx.inc
+  if inx < ps.rpDB.tab.len:
+    return err(UnresolvedRepairNode)
+  keyList.sort(cmp)
+
+  for n,nodeTag in keyList:
+    let
+     key = nodeTag.rockyBulkHexaryKey()
+     data = ps.rpDB.tab[nodeTag.to(RepairKey)].convertTo(Blob)
+    if not bulker.add(key.toOpenArray, data):
+      let error = AddBulkItemFailed
+      trace "Rocky hexary bulk load failure",
+        n, len=ps.rpDB.tab.len, error, info=bulker.lastError()
+      return err(error)
+
+  if bulker.finish().isErr:
+    let error = CommitBulkItemsFailed
+    trace "Rocky hexary commit failure",
+      len=ps.rpDB.acc.len, error, info=bulker.lastError()
+    return err(error)
+  ok()
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -551,7 +737,7 @@ proc hexaryImport(
     discard
 
   # Add to repair database
-  ps.rnDB.tab[repairKey] = rNode
+  ps.rpDB.tab[repairKey] = rNode
 
   # Add to hexary trie database -- disabled, using bulk import later
   #ps.base.db.put(nodeKey.ByteArray32, recData)
@@ -586,7 +772,7 @@ proc rTreeExtendLeaf(
         state: Mutable,
         kind:  Leaf,
         lPfx:  rPath.tail)
-    ps.rnDB.tab[key] = leaf
+    ps.rpDB.tab[key] = leaf
     if not key.isNodeKey:
       rPath.path[^1].node.bLink[nibble] = key
     return RPath(
@@ -645,7 +831,7 @@ proc rTreeSplitNode(
       kind:  Extension,
       ePfx:  result.tail.slice(0,lLen),
       eLink: ps.newRepairKey())
-    ps.rnDB.tab[key] = lNode
+    ps.rpDB.tab[key] = lNode
     result.path.add RPathStep(key: key, node: lNode, nibble: -1)
     result.tail = result.tail.slice(lLen)
     mKey = lNode.eLink
@@ -654,7 +840,7 @@ proc rTreeSplitNode(
   let mNode = RNodeRef(
     state: Mutable,
     kind:  Branch)
-  ps.rnDB.tab[mKey] = mNode
+  ps.rpDB.tab[mKey] = mNode
   result.path.add RPathStep(key: mKey, node: mNode, nibble: -1) # no nibble yet
 
   # Insert node (if any): right(Extension) -- not to be registered in `rPath`
@@ -662,7 +848,7 @@ proc rTreeSplitNode(
     let rKey = ps.newRepairKey()
     # Re-use argument node
     mNode.bLink[mNibble] = rKey
-    ps.rnDB.tab[rKey] = node
+    ps.rpDB.tab[rKey] = node
     node.xPfx = rPfx
   # Otherwise merge argument node
   elif node.kind == Extension:
@@ -680,8 +866,8 @@ proc rTreeFollow(nodeKey: NodeKey; ps: AccountsDbSessionRef): RPath =
   result.tail = nodeKey.to(NibblesSeq)
   noKeyError("rTreeFollow"):
     var key = ps.rootKey.to(RepairKey)
-    while ps.rnDB.tab.hasKey(key) and 0 < result.tail.len:
-      let node = ps.rnDB.tab[key]
+    while ps.rpDB.tab.hasKey(key) and 0 < result.tail.len:
+      let node = ps.rpDB.tab[key]
       case node.kind:
       of Leaf:
         if result.tail.len == result.tail.sharedPrefixLen(node.lPfx):
@@ -729,12 +915,12 @@ proc rTreeInterpolate(rPath: RPath; ps: AccountsDbSessionRef): RPath =
           return # sanitary check failed
 
         # Case: unused slot => add leaf record
-        if not ps.rnDB.tab.hasKey(key):
+        if not ps.rpDB.tab.hasKey(key):
           return ps.rTreeExtendLeaf(rPath, key)
 
         # So a `child` node exits but it is something that could not be used to
         # extend the argument `path` which is assumed the longest possible one.
-        let child = ps.rnDB.tab[key]
+        let child = ps.rpDB.tab[key]
         case child.kind:
         of Branch:
           # So a `Leaf` node can be linked into the `child` branch
@@ -762,8 +948,8 @@ proc rTreeInterpolate(rPath: RPath; ps: AccountsDbSessionRef): RPath =
         let key = step.node.eLink
 
         var child: RNodeRef
-        if ps.rnDB.tab.hasKey(key):
-          child = ps.rnDB.tab[key]
+        if ps.rpDB.tab.hasKey(key):
+          child = ps.rpDB.tab[key]
           # `Extension` can only be followed by a `Branch` node
           if child.kind != Branch:
             return
@@ -772,7 +958,7 @@ proc rTreeInterpolate(rPath: RPath; ps: AccountsDbSessionRef): RPath =
           child = RNodeRef(
             state: Mutable,
             kind:  Branch)
-          ps.rnDB.tab[key] = child
+          ps.rpDB.tab[key] = child
 
         # So a `Leaf` node can be linked into the `child` branch
         return ps.rTreeExtendLeaf(rPath, key, child)
@@ -856,8 +1042,8 @@ proc rTreeUpdateKeys(rPath: RPath; ps: AccountsDbSessionRef): Result[void,int] =
         var lockOk = true
         for n in countDown(stack.len-1,0):
           let item = stack[n]
-          ps.rnDB.tab.del(rPath.path[item.pos].key)
-          ps.rnDB.tab[item.step.key] = item.step.node
+          ps.rpDB.tab.del(rPath.path[item.pos].key)
+          ps.rpDB.tab[item.step.key] = item.step.node
           if lockOk:
             if item.canLock:
               item.step.node.state = Locked
@@ -900,116 +1086,117 @@ proc rTreeUpdateKeys(rPath: RPath; ps: AccountsDbSessionRef): Result[void,int] =
 # Private walk along hexary trie records
 # ------------------------------------------------------------------------------
 
-when BasicChainTrieEnabled:
-  proc hexaryFollow(
-      ps: AccountsDbSessionRef;
-      root: NodeKey;
-      path: NibblesSeq
-        ): (int, bool, Blob)
-        {.gcsafe, raises: [Defect,RlpError]} =
-    ## Returns the number of matching digits/nibbles from the argument `path`
-    ## found in the proofs trie.
-    let
-      nNibbles = path.len
-    var
-      inPath = path
-      recKey = root.ByteArray32.toSeq
-      leafBlob: Blob
-      emptyRef = false
+proc hexaryFollow(
+    ps: AccountsDbSessionRef;
+    root: NodeKey;
+    path: NibblesSeq;
+    getFn: HexaryGetFn
+      ): (int, bool, Blob)
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Returns the number of matching digits/nibbles from the argument `path`
+  ## found in the proofs trie.
+  let
+    nNibbles = path.len
+  var
+    inPath = path
+    recKey = root.ByteArray32.toSeq
+    leafBlob: Blob
+    emptyRef = false
 
-    when BasicChainTrieDebugging:
-      trace "follow", rootKey=root.pp(ps), path
+  when BasicChainTrieDebugging:
+    trace "follow", rootKey=root.pp(ps), path
 
-    while true:
-      let value = ps.base.db.get(recKey)
-      if value.len == 0:
+  while true:
+    let value = getFn(recKey)
+    if value.len == 0:
+      break
+
+    var nodeRlp = rlpFromBytes value
+    case nodeRlp.listLen:
+    of 2:
+      let
+        (isLeaf, pathSegment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
+        sharedNibbles = inPath.sharedPrefixLen(pathSegment)
+        fullPath = sharedNibbles == pathSegment.len
+        inPathLen = inPath.len
+      inPath = inPath.slice(sharedNibbles)
+
+      # Leaf node
+      if isLeaf:
+        let leafMode = sharedNibbles == inPathLen
+        if fullPath and leafMode:
+          leafBlob = nodeRlp.listElem(1).toBytes
+        when BasicChainTrieDebugging:
+          let nibblesLeft = inPathLen - sharedNibbles
+          trace "follow leaf",
+            fullPath, leafMode, sharedNibbles, nibblesLeft,
+            pathSegment, newPath=inPath
         break
 
-      var nodeRlp = rlpFromBytes value
-      case nodeRlp.listLen:
-      of 2:
-        let
-          (isLeaf, pathSegment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-          sharedNibbles = inPath.sharedPrefixLen(pathSegment)
-          fullPath = sharedNibbles == pathSegment.len
-          inPathLen = inPath.len
-        inPath = inPath.slice(sharedNibbles)
-
-        # Leaf node
-        if isLeaf:
-          let leafMode = sharedNibbles == inPathLen
-          if fullPath and leafMode:
-            leafBlob = nodeRlp.listElem(1).toBytes
-          when BasicChainTrieDebugging:
-            let nibblesLeft = inPathLen - sharedNibbles
-            trace "follow leaf",
-              fullPath, leafMode, sharedNibbles, nibblesLeft,
-              pathSegment, newPath=inPath
-          break
-
-        # Extension node
-        if fullPath:
-          let branch = nodeRlp.listElem(1)
-          if branch.isEmpty:
-            when BasicChainTrieDebugging:
-              trace "follow extension", newKey="n/a"
-            emptyRef = true
-            break
-          recKey = branch.toBytes
-          when BasicChainTrieDebugging:
-            trace "follow extension",
-              newKey=recKey.convertTo(NodeKey).pp(ps), newPath=inPath
-        else:
-          when BasicChainTrieDebugging:
-            trace "follow extension",
-              fullPath, sharedNibbles, pathSegment,
-              inPathLen, newPath=inPath
-          break
-
-      of 17:
-        # Branch node
-        if inPath.len == 0:
-          leafBlob = nodeRlp.listElem(1).toBytes
-          break
-        let
-          inx = inPath[0].int
-          branch = nodeRlp.listElem(inx)
+      # Extension node
+      if fullPath:
+        let branch = nodeRlp.listElem(1)
         if branch.isEmpty:
           when BasicChainTrieDebugging:
-            trace "follow branch", newKey="n/a"
+            trace "follow extension", newKey="n/a"
           emptyRef = true
           break
-        inPath = inPath.slice(1)
         recKey = branch.toBytes
         when BasicChainTrieDebugging:
-          trace "follow branch",
-            newKey=recKey.convertTo(NodeKey).pp(ps), inx, newPath=inPath
-
+          trace "follow extension",
+            newKey=recKey.convertTo(NodeKey).pp(ps), newPath=inPath
       else:
         when BasicChainTrieDebugging:
-          trace "follow oops",
-            nColumns = nodeRlp.listLen
+          trace "follow extension",
+            fullPath, sharedNibbles, pathSegment,
+            inPathLen, newPath=inPath
         break
 
-    # end while
+    of 17:
+      # Branch node
+      if inPath.len == 0:
+        leafBlob = nodeRlp.listElem(1).toBytes
+        break
+      let
+        inx = inPath[0].int
+        branch = nodeRlp.listElem(inx)
+      if branch.isEmpty:
+        when BasicChainTrieDebugging:
+          trace "follow branch", newKey="n/a"
+        emptyRef = true
+        break
+      inPath = inPath.slice(1)
+      recKey = branch.toBytes
+      when BasicChainTrieDebugging:
+        trace "follow branch",
+          newKey=recKey.convertTo(NodeKey).pp(ps), inx, newPath=inPath
 
-    let pathLen = nNibbles - inPath.len
+    else:
+      when BasicChainTrieDebugging:
+        trace "follow oops",
+          nColumns = nodeRlp.listLen
+      break
 
-    when BasicChainTrieDebugging:
-      trace "follow done",
-        recKey, emptyRef, pathLen, leafSize=leafBlob.len
+  # end while
 
-    (pathLen, emptyRef, leafBlob)
+  let pathLen = nNibbles - inPath.len
+
+  when BasicChainTrieDebugging:
+    trace "follow done",
+      recKey, emptyRef, pathLen, leafSize=leafBlob.len
+
+  (pathLen, emptyRef, leafBlob)
 
 
-  proc hexaryFollow(
-      ps: AccountsDbSessionRef;
-      root: NodeKey;
-      path: NodeKey
-        ): (int, bool, Blob)
-        {.gcsafe, raises: [Defect,RlpError]} =
-    ## Variant of `hexaryFollow()`
-    ps.hexaryFollow(root, path.to(NibblesSeq))
+proc hexaryFollow(
+    ps: AccountsDbSessionRef;
+    root: NodeKey;
+    path: NodeKey;
+    getFn: HexaryGetFn
+      ): (int, bool, Blob)
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryFollow()`
+  ps.hexaryFollow(root, path.to(NibblesSeq), getFn)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -1021,6 +1208,21 @@ proc init*(
       ): T =
   ## Main object constructor
   T(db: db)
+
+proc init*(
+    T: type AccountsDbRef;
+    db: ChainDb
+      ): T =
+  ## Variant of `init()`
+  result = T(db: db.trieDB, rocky: db.rocksStoreRef)
+  if not result.rocky.isNil:
+    # A cache file might hang about from a previous crash
+    try:
+      discard result.rocky.clearCacheFile(RockyBulkCache)
+    except OSError as e:
+      result.rocky = nil
+      error "Cannot clear rocksdb cache, bulkload disabled",
+        exception=($e.name), msg=e.msg
 
 proc init*(
     T: type AccountsDbSessionRef;
@@ -1049,7 +1251,7 @@ proc merge*(
     let rc = ps.hexaryImport(rlpRec)
     if rc.isErr:
       trace "merge(SnapAccountProof)", peer=ps.peer,
-        proofs=ps.rnDB.tab.len, accounts=ps.rnDB.acc.len, error=rc.error
+        proofs=ps.rpDB.tab.len, accounts=ps.rpDB.acc.len, error=rc.error
       return err(rc.error)
 
   ok()
@@ -1067,66 +1269,72 @@ proc merge*(
   ## the argument account data.
   ##
   if acc.len != 0:
-    #if ps.rnDB.acc.len == 0 or ps.rnDB.acc[^1].tag <= base:
-    # return ps.mergeImpl(base, acc)
-
     let
-      prependOk = 0 < ps.rnDB.acc.len and base < ps.rnDB.acc[^1].tag
-      saveLen = ps.rnDB.acc.len
-      accTag0 = acc[0].accHash.to(NodeTag)
+      pathTag0 = acc[0].accHash.to(NodeTag)
+      pathTagTop = acc[^1].accHash.to(NodeTag)
+      saveLen = ps.rpDB.acc.len
 
       # For error logging
-      (peer, proofs, accounts) = (ps.peer, ps.rnDB.tab.len, ps.rnDB.acc.len)
+      (peer, proofs, accounts) = (ps.peer, ps.rpDB.tab.len, ps.rpDB.acc.len)
 
     var
       error = NothingSerious
       saveQ: seq[RAccount]
-    if prependOk:
-      # Prepend `acc` argument before `ps.rnDB.acc`
-      saveQ = ps.rnDB.acc
+      prependOk = false
+    if 0 < ps.rpDB.acc.len:
+      if pathTagTop <= ps.rpDB.acc[0].pathTag:
+        # Prepend `acc` argument before `ps.rpDB.acc`
+        saveQ = ps.rpDB.acc
+        prependOk = true
+
+      # Append, verify that there is no overlap
+      elif pathTag0 <= ps.rpDB.acc[^1].pathTag:
+        return err(AccountRangesOverlap)
 
     block collectAccounts:
       # Verify lower bound
-      if acc[0].accHash.to(NodeTag) < base:
+      if pathTag0 < base:
         error = AccountSmallerThanBase
         trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
         break collectAccounts
 
       # Add base for the records (no payload). Note that the assumption
-      # holds: `ps.rnDB.acc[^1].tag <= base`
-      if base < accTag0:
-        ps.rnDB.acc.add RAccount(tag: base)
+      # holds: `ps.rpDB.acc[^1].tag <= base`
+      if base < pathTag0:
+        ps.rpDB.acc.add RAccount(pathTag: base)
 
       # Check for the case that accounts are appended
-      elif 0 < ps.rnDB.acc.len and accTag0 <= ps.rnDB.acc[^1].tag:
+      elif 0 < ps.rpDB.acc.len and pathTag0 <= ps.rpDB.acc[^1].pathTag:
         error = AccountsNotSrictlyIncreasing
         trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
         break collectAccounts
 
       # Add first account
-      ps.rnDB.acc.add RAccount(tag: accTag0, payload: acc[0].accBody.encode)
+      ps.rpDB.acc.add RAccount(
+        pathTag: pathTag0, payload: acc[0].accBody.encode)
 
       # Veify & add other accounts
       for n in 1 ..< acc.len:
         let nodeTag = acc[n].accHash.to(NodeTag)
 
-        if nodeTag <= ps.rnDB.acc[^1].tag:
+        if nodeTag <= ps.rpDB.acc[^1].pathTag:
           # Recover accounts list and return error
-          ps.rnDB.acc.setLen(saveLen)
+          ps.rpDB.acc.setLen(saveLen)
 
           error = AccountsNotSrictlyIncreasing
           trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
           break collectAccounts
 
-        ps.rnDB.acc.add RAccount(tag: nodeTag, payload: acc[n].accBody.encode)
+        ps.rpDB.acc.add RAccount(
+          pathTag: nodeTag, payload: acc[n].accBody.encode)
 
       # End block `collectAccounts`
 
     if prependOk:
       if error == NothingSerious:
-        ps.rnDB.acc = ps.rnDB.acc & saveQ
+        ps.rpDB.acc = ps.rpDB.acc & saveQ
       else:
-        ps.rnDB.acc = saveQ
+        ps.rpDB.acc = saveQ
 
     if error != NothingSerious:
       return err(error)
@@ -1145,32 +1353,32 @@ proc interpolate*(ps: AccountsDbSessionRef): Result[void,AccountsDbError] =
   ##   database layer.
   ##
   # Walk top down and insert/complete missing account access nodes
-  for n in countDown(ps.rnDB.acc.len-1,0):
-    let acc = ps.rnDB.acc[n]
+  for n in countDown(ps.rpDB.acc.len-1,0):
+    let acc = ps.rpDB.acc[n]
     if acc.payload.len != 0:
-      let rPath = acc.tag.rTreeFollow(ps)
-      var repairKey = acc.key
+      let rPath = acc.pathTag.rTreeFollow(ps)
+      var repairKey = acc.nodeKey
       if repairKey.isZero and 0 < rPath.path.len and rPath.tail.len == 0:
         repairKey = rPath.path[^1].key
-        ps.rnDB.acc[n].key = repairKey
+        ps.rpDB.acc[n].nodeKey = repairKey
       if repairKey.isZero:
         let
           update = rPath.rTreeInterpolate(ps, acc.payload)
-          final = acc.tag.rTreeFollow(ps)
+          final = acc.pathTag.rTreeFollow(ps)
         if update != final:
           return err(AccountRepairBlocked)
-        ps.rnDB.acc[n].key = rPath.path[^1].key
+        ps.rpDB.acc[n].nodeKey = rPath.path[^1].key
 
   # Replace temporary repair keys by proper hash based node keys.
   var reVisit: seq[NodeTag]
-  for n in countDown(ps.rnDB.acc.len-1,0):
-    let acc = ps.rnDB.acc[n]
-    if not acc.key.isZero:
-      let rPath = acc.tag.rTreeFollow(ps)
+  for n in countDown(ps.rpDB.acc.len-1,0):
+    let acc = ps.rpDB.acc[n]
+    if not acc.nodeKey.isZero:
+      let rPath = acc.pathTag.rTreeFollow(ps)
       if rPath.path[^1].node.state == Mutable:
         let rc = rPath.rTreeUpdateKeys(ps)
         if rc.isErr:
-          reVisit.add acc.tag
+          reVisit.add acc.pathTag
 
   while 0 < reVisit.len:
     var again: seq[NodeTag]
@@ -1184,25 +1392,83 @@ proc interpolate*(ps: AccountsDbSessionRef): Result[void,AccountsDbError] =
 
   ok()
 
+
+proc dbImports*(ps: AccountsDbSessionRef): Result[void,AccountsDbError] =
+  ## Experimental: try several db-import modes and record statistics
+  var als: AccountLoadStats
+  noPpError("dbImports"):
+    als.dura[0].elapsed:
+      let rc = ps.storeAccountPathsOnChainDb()
+      if rc.isErr: return rc
+    als.dura[1].elapsed:
+      let rc = ps.storeHexaryNodesOnChainDb()
+      if rc.isErr: return rc
+    als.dura[2].elapsed:
+      let rc = ps.storeAccountPathsOnRockyDb()
+      if rc.isErr: return rc
+    als.dura[3].elapsed:
+      let rc = ps.storeHexaryNodesOnRockyDb()
+      if rc.isErr: return rc
+
+  for n in 0 ..< 4:
+    ps.dStats.dura[n] += als.dura[n]
+    ps.base.aStats.dura[n] += als.dura[n]
+
+  ps.dStats.size[0] += ps.rpDB.acc.len.uint64
+  ps.base.aStats.size[0] += ps.rpDB.acc.len.uint64
+
+  ps.dStats.size[1] += ps.rpDB.tab.len.uint64
+  ps.base.aStats.size[1] += ps.rpDB.tab.len.uint64
+
+  ok()
+
+
+proc sortMerge*(base: openArray[NodeTag]): NodeTag =
+  ## Helper for merging several `(NodeTag,seq[SnapAccount])` data sets
+  ## so that there are no overlap which would be rejected by `merge()`.
+  ##
+  ## This function selects a `NodeTag` from a list.
+  result = high(NodeTag)
+  for w in base:
+    if w < result:
+      result = w
+
+proc sortMerge*(acc: openArray[seq[SnapAccount]]): seq[SnapAccount] =
+  ## Helper for merging several `(NodeTag,seq[SnapAccount])` data sets
+  ## so that there are no overlap which would be rejected by `merge()`.
+  ##
+  ## This function flattens and sorts the argument account lists.
+  noPpError("sortMergeAccounts"):
+    var accounts: Table[NodeTag,SnapAccount]
+    for accList in acc:
+      for item in accList:
+        accounts[item.accHash.to(NodeTag)] = item
+    result = toSeq(accounts.keys).sorted(cmp).mapIt(accounts[it])
+
 proc nHexaryRecords*(ps: AccountsDbSessionRef): int  =
   ## Number of hexary record entries in the session database.
-  ps.rnDB.tab.len
+  ps.rpDB.tab.len
 
 proc nAccountRecords*(ps: AccountsDbSessionRef): int  =
   ## Number of account records in the session database. This number includes
   ## lower bound entries (which are not accoiunts, strictly speaking.)
-  ps.rnDB.acc.len
+  ps.rpDB.acc.len
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc dbBackendRocksDb*(pv: AccountsDbRef): bool =
+  ## Returns `true` if rocksdb features are available
+  not pv.rocky.isNil
+
 proc importAccounts*(
     pv: AccountsDbRef;
-    peer: Peer,      ## for log messages
-    root: Hash256;  ## state root
-    base: NodeTag;   ## before or at first account entry in `data`
-    data: SnapAccountRange
+    peer: Peer,             ## for log messages
+    root: Hash256;          ## state root
+    base: NodeTag;          ## before or at first account entry in `data`
+    data: SnapAccountRange; ## `snap/1 ` reply data
+    storeData = false
       ): Result[void,AccountsDbError] =
   ## Validate and accounts and proofs (as received with the snap message
   ## `AccountRange`). This function combines the functionality of the `merge()`
@@ -1226,16 +1492,19 @@ proc importAccounts*(
     return err(RlpEncoding)
 
   block:
-    ## Note:
-    ##   `interpolate()` is a temporary proof-of-concept function. For
-    ##   production purposes, it must be replaced by the new facility of
-    ##   the upcoming re-factored database layer.
+    # Note:
+    #   `interpolate()` is a temporary proof-of-concept function. For
+    #   production purposes, it must be replaced by the new facility of
+    #   the upcoming re-factored database layer.
     let rc = ps.interpolate()
     if rc.isErr:
       return err(rc.error)
 
-  # TODO: bulk import
-  # ...
+  if storeData:
+    # Experimental
+    let rc = ps.dbImports()
+    if rc.isErr:
+      return err(rc.error)
 
   trace "Accounts and proofs ok", peer, root=root.data.toHex,
     proof=data.proof.len, base, accounts=data.accounts.len
@@ -1245,18 +1514,72 @@ proc importAccounts*(
 # Debugging
 # ------------------------------------------------------------------------------
 
+proc getChainDbAccount*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+     ): Result[Account,AccountsDbError] =
+  ## Fetch account via `BaseChainDB`
+  try:
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      (_, _, leafBlob) = ps.hexaryFollow(ps.rootKey, accHash.to(NodeKey), getFn)
+    if 0 < leafBlob.len:
+      let acc = rlp.decode(leafBlob,Account)
+      return ok(acc)
+  except RlpError:
+    return err(RlpEncoding)
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
+
+  err(AccountNotFound)
+
+proc getRockyAccount*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+     ): Result[Account,AccountsDbError] =
+  ## Fetch account via rocksdb table (paraellel to `BaseChainDB`)
+  try:
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob =
+        var tag: NodeTag
+        discard tag.init(key)
+        ps.base.db.get(tag.rockyBulkHexaryKey().toOpenArray)
+      (_, _, leafBlob) = ps.hexaryFollow(ps.rootKey, accHash.to(NodeKey), getFn)
+    if 0 < leafBlob.len:
+      let acc = rlp.decode(leafBlob,Account)
+      return ok(acc)
+  except RlpError:
+    return err(RlpEncoding)
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
+
+  err(AccountNotFound)
+
+
+proc dbImportStats*(ps: AccountsDbSessionRef): AccountLoadStats =
+  ## Session data load statistics
+  ps.dStats
+
+proc dbImportStats*(pv: AccountsDbRef): AccountLoadStats =
+  ## Accumulated data load statistics
+  pv.aStats
+
 proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
   ## Prepare foe pretty pringing/debugging. Run early enough this function
   ## sets the root key to `"$"`, for instance.
   noPpError("validate(1)"):
     # Make keys assigned in pretty order for printing
-    var keysList = toSeq(ps.rnDB.tab.keys)
+    var keysList = toSeq(ps.rpDB.tab.keys)
     let rootKey = ps.rootKey.to(RepairKey)
     discard rootKey.toKey(ps)
-    if ps.rnDB.tab.hasKey(rootKey):
+    if ps.rpDB.tab.hasKey(rootKey):
       keysList = @[rootKey] & keysList
     for key in keysList:
-      let node = ps.rnDB.tab[key]
+      let node = ps.rpDB.tab[key]
       discard key.toKey(ps)
       case node.kind:
       of Branch: (for w in node.bLink: discard w.toKey(ps))
@@ -1272,7 +1595,7 @@ proc dumpPath*(ps: AccountsDbSessionRef; key: NodeTag): seq[string] =
 proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
   ## Dump the entries from the repair tree.
   var accu = @[(0u, "($0" & "," & ps.rootKey.pp(ps) & ")")]
-  for key,node in ps.rnDB.tab.pairs:
+  for key,node in ps.rpDB.tab.pairs:
     accu.add (key.toKey(ps), "(" & key.pp(ps) & "," & node.pp(ps) & ")")
   proc cmpIt(x, y: (uint,string)): int =
     cmp(x[0],y[0])

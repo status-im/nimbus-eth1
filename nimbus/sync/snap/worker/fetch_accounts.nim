@@ -146,7 +146,8 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
   # Process accounts data
   let
     nAccounts = dd.data.accounts.len
-    rc = ctx.data.accountsDb.importAccounts(peer, stateRoot, iv.minPt, dd.data)
+    rc = ctx.data.accountsDb.importAccounts(
+      peer, stateRoot, iv.minPt, dd.data, storeData = true)
   if rc.isErr:
     # TODO: Prevent deadlock in case there is a problem with the approval
     #       data which is not in production state, yet.

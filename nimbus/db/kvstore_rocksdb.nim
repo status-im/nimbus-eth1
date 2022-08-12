@@ -11,7 +11,8 @@ const maxOpenFiles = 512
 
 type
   RocksStoreRef* = ref object of RootObj
-    store: RocksDBInstance
+    store*: RocksDBInstance
+    tmpDir*: string
 
 proc get*(db: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc): KvResult[bool] =
   db.store.get(key, onData)
@@ -36,6 +37,7 @@ proc init*(
     readOnly = false): KvResult[T] =
   let
     dataDir = basePath / name / "data"
+    tmpDir = basePath / name / "tmp"
     backupsDir = basePath / name / "backups"
 
   try:
