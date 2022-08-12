@@ -36,9 +36,18 @@ proc reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
 # Public functions, units pretty printer
 # ------------------------------------------------------------------------------
 
+proc ppUs*(elapsed: Duration): string =
+  result = $elapsed.inMicroseconds
+  let ns = elapsed.inNanoseconds mod 1_000 # fraction of a micro second
+  if ns != 0:
+    # to rounded deca milli seconds
+    let du = (ns + 5i64) div 10i64
+    result &= &".{du:02}"
+  result &= "us"
+
 proc ppMs*(elapsed: Duration): string =
   result = $elapsed.inMilliseconds
-  let ns = elapsed.inNanoseconds mod 1_000_000
+  let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
   if ns != 0:
     # to rounded deca milli seconds
     let dm = (ns + 5_000i64) div 10_000i64
@@ -47,12 +56,21 @@ proc ppMs*(elapsed: Duration): string =
 
 proc ppSecs*(elapsed: Duration): string =
   result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000
+  let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
   if ns != 0:
-    # to rounded decs seconds
+    # round up
     let ds = (ns + 5_000_000i64) div 10_000_000i64
     result &= &".{ds:02}"
   result &= "s"
+
+proc ppMins*(elapsed: Duration): string =
+  result = $elapsed.inMinutes
+  let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
+  if ns != 0:
+    # round up
+    let dm = (ns + 500_000_000i64) div 1_000_000_000i64
+    result &= &":{dm:02}"
+  result &= "m"
 
 proc toKMG*[T](s: T): string =
   proc subst(s: var string; tag, new: string): bool =
@@ -123,13 +141,33 @@ proc pp*(q: openArray[byte]; noHash = false): string =
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   block:
     let start = getTime()
-    code
+    block:
+      code
     if noisy:
       let elpd {.inject.} = getTime() - start
       if 0 < times.inSeconds(elpd):
         echo "*** ", info, &": {elpd.ppSecs:>4}"
       else:
         echo "*** ", info, &": {elpd.ppMs:>4}"
+
+template showElapsed*(
+    noisy: bool;
+    info: string;
+    elapsed: Duration;
+    code: untyped) =
+  block:
+    let start = getTime()
+    block:
+      code
+    block:
+      let now = getTime()
+      elapsed = now - start
+      if noisy:
+        let elpd {.inject.} = elapsed
+        if 0 < times.inSeconds(elpd):
+          echo "*** ", info, &": {elpd.ppSecs:>4}"
+        else:
+          echo "*** ", info, &": {elpd.ppMs:>4}"
 
 template catchException*(info: string; trace: bool; code: untyped) =
   block:

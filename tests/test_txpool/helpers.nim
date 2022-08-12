@@ -213,6 +213,7 @@ proc findFilePath*(file: string;
       let path = dir / repo / file
       if path.fileExists:
         return ok(path)
+  err()
 
 # ------------------------------------------------------------------------------
 # End

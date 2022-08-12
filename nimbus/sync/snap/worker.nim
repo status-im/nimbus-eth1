@@ -15,6 +15,7 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
+  ../../db/select_backend,
   ".."/[protocol, sync_desc],
   ./worker/[accounts_db, fetch_accounts, pivot, ticker],
   "."/[range_desc, worker_desc]
@@ -121,7 +122,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
       accounts:      meanStdDev(aSum, aSqSum, count),
-      fillFactor:    meanStdDev(uSum, uSqSum, count))
+      fillFactor:    meanStdDev(uSum, uSqSum, count),
+      bulkStore:     ctx.data.accountsDb.dbImportStats)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -130,7 +132,9 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
-  ctx.data.accountsDb = AccountsDbRef.init(ctx.chain.getTrieDB)
+  ctx.data.accountsDb =
+      if ctx.data.dbBackend.isNil: AccountsDbRef.init(ctx.chain.getTrieDB)
+      else: AccountsDbRef.init(ctx.data.dbBackend)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:

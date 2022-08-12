@@ -89,7 +89,7 @@ proc `==`*[T: SomeDistinctHash256](a,b: T): bool =
   a.Hash256 == b.Hash256
 
 proc hash*(root: SomeDistinctHash256): Hash =
-  ## Mixin for `Table` or `keyedQueue`
+  ## Mixin for `Table` or `KeyedQueue`
   root.Hash256.data.hash
 
 # ------------------------------------------------------------------------------

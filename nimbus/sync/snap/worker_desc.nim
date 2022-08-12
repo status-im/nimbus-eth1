@@ -14,6 +14,7 @@ import
   eth/[common/eth_types, p2p],
   nimcrypto,
   stew/[byteutils, keyed_queue],
+  ../../db/select_backend,
   ../../constants,
   ".."/[sync_desc, types],
   ./worker/[accounts_db, ticker],
@@ -112,6 +113,7 @@ type
     ## Globally shared data extension
     seenBlock: WorkerSeenBlocks       ## Temporary, debugging, pretty logs
     rng*: ref HmacDrbgContext         ## Random generator
+    dbBackend*: ChainDB               ## Low level DB driver access (if any)
     ticker*: TickerRef                ## Ticker, logger
     pivotTable*: SnapPivotTable       ## Per state root environment
     pivotCount*: uint64               ## Total of all created tab entries

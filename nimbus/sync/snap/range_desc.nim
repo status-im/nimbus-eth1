@@ -107,6 +107,8 @@ proc `==`*(a, b: NodeTag): bool = a.u256 == b.u256
 proc `<=`*(a, b: NodeTag): bool = a.u256 <= b.u256
 proc `<`*(a, b: NodeTag): bool = a.u256 < b.u256
 
+proc cmp*(x, y: NodeTag): int = cmp(x.UInt256, y.UInt256)
+
 proc hash*(a: NodeTag): Hash =
   ## Mixin for `Table` or `keyedQueue`
   a.to(Hash256).data.hash
