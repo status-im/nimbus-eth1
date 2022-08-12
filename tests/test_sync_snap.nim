@@ -25,7 +25,7 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/[types, protocol],
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/[accounts_db, rocky_bulk_load],
+  ../nimbus/sync/snap/worker/[accounts_db, db/hexary_desc, db/rocky_bulk_load],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump],
   ./test_sync_snap/sample0
@@ -87,7 +87,7 @@ const
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkAccDb = Result[void,AccountsDbError].ok()
+  OkHexDb = Result[void,HexaryDbError].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -135,7 +135,7 @@ proc pp(d: AccountLoadStats): string =
   "[" & d.size.toSeq.mapIt(it.toSI).join(",") & "," &
         d.dura.toSeq.mapIt(it.pp).join(",") & "]"
 
-proc pp(rc: Result[Account,AccountsDbError]): string =
+proc pp(rc: Result[Account,HexaryDbError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
 
 proc ppKvPc(w: openArray[(string,int)]): string =
@@ -284,7 +284,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       else:
         for n,w in testItemLst:
           check dbBase.importAccounts(
-            peer, root, w.base, w.data, storeData = persistent) == OkAccDb
+            peer, root, w.base, w.data, storeData = persistent) == OkHexDb
         noisy.say "***", "import stats=", dbBase.dbImportStats.pp
 
     test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
@@ -293,16 +293,16 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
                  else: AccountsDbRef.init(newMemoryDB())
         desc = AccountsDbSessionRef.init(dbBase, root, peer)
       for w in testItemLst:
-        check desc.merge(w.data.proof) == OkAccDb
+        check desc.merge(w.data.proof) == OkHexDb
       let
         base = testItemLst.mapIt(it.base).sortMerge
         accounts = testItemLst.mapIt(it.data.accounts).sortMerge
-      check desc.merge(base, accounts) == OkAccDb
+      check desc.merge(base, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging (if any)
-      check desc.interpolate() == OkAccDb
+      check desc.interpolate() == OkHexDb
 
       if dbBase.dbBackendRocksDb():
-        check desc.dbImports() == OkAccDb
+        check desc.dbImports() == OkHexDb
         noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
         for acc in accounts:
@@ -783,14 +783,14 @@ when isMainModule:
       file:      "mainnet332160.txt.gz",
       numBlocks: high(int))
 
-  when false: # or true:
+  when false or true:
     import ../../nimbus-eth1-blobs/replay/sync_sample1 as sample1
     const
-       snapTest2 = AccountsProofSample(
+      snapTest2 = AccountsProofSample(
         name: "test2",
         root: sample1.snapRoot,
         data: sample1.snapProofData)
-       snapTest3 = AccountsProofSample(
+      snapTest3 = AccountsProofSample(
         name: "test3",
         root:  snapTest2.root,
         data:  snapTest2.data[0..0])
@@ -798,22 +798,22 @@ when isMainModule:
   #setTraceLevel()
   setErrorLevel()
 
-  #noisy.accountsRunner(persistent=true,  snapTest0)
+  false.accountsRunner(persistent=true,  snapTest0)
   #noisy.accountsRunner(persistent=true,  snapTest1)
 
-  when defined(snapTest2):
-    discard
-    #noisy.accountsRunner(persistent=true,  snapTest2)
+  when declared(snapTest2):
+    noisy.accountsRunner(persistent=true,  snapTest2)
     #noisy.accountsRunner(persistent=true,  snapTest3)
 
-  # ---- database storage timings -------
+  when true: # and false:
+    # ---- database storage timings -------
 
-  noisy.showElapsed("importRunner()"):
-    noisy.importRunner(capture = bulkTest0)
+    noisy.showElapsed("importRunner()"):
+      noisy.importRunner(capture = bulkTest0)
 
-  noisy.showElapsed("storeRunner()"):
-    true.storeRunner(cleanUp = false)
-    true.storeRunner()
+    noisy.showElapsed("storeRunner()"):
+      true.storeRunner(cleanUp = false)
+      true.storeRunner()
 
 # ------------------------------------------------------------------------------
 # End

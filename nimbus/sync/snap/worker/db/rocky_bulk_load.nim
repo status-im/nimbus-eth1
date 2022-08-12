@@ -1,5 +1,4 @@
-# Nimbus - Types, data structures and shared utilities used in network sync
-#
+# nimbus-eth1
 # Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -15,7 +14,7 @@ import
   std/os, # std/[sequtils, strutils],
   eth/common/eth_types,
   rocksdb,
-  ../../../db/[kvstore_rocksdb, select_backend]
+  ../../../../db/[kvstore_rocksdb, select_backend]
 
 {.push raises: [Defect].}
 
@@ -165,7 +164,7 @@ proc finish*(
   ## `destroy()` if successful. Otherwise `destroy()` must be called
   ## explicitely, e.g. after error analysis.
   ##
-  ## If successful, the  return value is the size of the SST file used if
+  ## If successful, the return value is the size of the SST file used if
   ## that value is available. Otherwise, `0` is returned.
   when select_backend.dbBackend == select_backend.rocksdb:
     var csError: cstring
