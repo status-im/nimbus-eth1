@@ -268,52 +268,52 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
-    info = if db.persistent: &"persistent db on \"{dbDir}\"" else: "in-memory db"
+    info = if db.persistent: &"persistent db on \"{dbDir}\""
+           else: "in-memory db"
 
   defer:
     if db.persistent:
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {sample.name} accounts and proofs for {info}":
+    var
+      desc: AccountsDbSessionRef
+      accounts: seq[SnapAccount]
 
-    test &"Verifying {testItemLst.len} snap items for state root ..{root.pp}":
+    test &"Snap-proofing {testItemLst.len} items for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
                    else: AccountsDbRef.init(newMemoryDB())
-      if not dbBase.dbBackendRocksDb():
-        skip()
-      else:
-        for n,w in testItemLst:
-          check dbBase.importAccounts(
-            peer, root, w.base, w.data, storeData = persistent) == OkHexDb
-        noisy.say "***", "import stats=", dbBase.dbImportStats.pp
+      for n,w in testItemLst:
+        check dbBase.importAccounts(
+          peer, root, w.base, w.data, storeData = persistent) == OkHexDb
+      noisy.say "***", "import stats=", dbBase.dbImportStats.pp
 
     test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
-      let
-        dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
-                 else: AccountsDbRef.init(newMemoryDB())
-        desc = AccountsDbSessionRef.init(dbBase, root, peer)
+      let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
+                   else: AccountsDbRef.init(newMemoryDB())
+      desc = AccountsDbSessionRef.init(dbBase, root, peer)
       for w in testItemLst:
         check desc.merge(w.data.proof) == OkHexDb
-      let
-        base = testItemLst.mapIt(it.base).sortMerge
-        accounts = testItemLst.mapIt(it.data.accounts).sortMerge
+      let base = testItemLst.mapIt(it.base).sortMerge
+      accounts = testItemLst.mapIt(it.data.accounts).sortMerge
       check desc.merge(base, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging (if any)
       check desc.interpolate() == OkHexDb
 
-      if dbBase.dbBackendRocksDb():
-        check desc.dbImports() == OkHexDb
-        noisy.say "***", "import stats=",  desc.dbImportStats.pp
+      check desc.dbImports() == OkHexDb
+      noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
-        for acc in accounts:
-          let
-            byChainDB = desc.getChainDbAccount(acc.accHash)
-            byRockyBulker = desc.getRockyAccount(acc.accHash)
-          noisy.say "*** find",
-            "byChainDb=", byChainDB.pp, " inBulker=", byRockyBulker.pp
-          check byChainDB.isOk
-          check byRockyBulker.isOk
-          check byChainDB == byRockyBulker
+    test &"Revisting {accounts.len} items stored items on BaseChainDb":
+      for acc in accounts:
+        let
+          byChainDB = desc.getChainDbAccount(acc.accHash)
+          byBulker = desc.getBulkDbXAccount(acc.accHash)
+        noisy.say "*** find",
+          "byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
+        check byChainDB.isOk
+        if desc.dbBackendRocksDb():
+          check byBulker.isOk
+          check byChainDB == byBulker
 
       #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
 
@@ -325,7 +325,8 @@ proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
     filePath = capture.file.findFilePath(baseDir,repoDir).value
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(capture.name) else: testDbs()
-    numBlocksInfo = if capture.numBlocks == high(int): "" else: $capture.numBlocks & " "
+    numBlocksInfo = if capture.numBlocks == high(int): ""
+                    else: $capture.numBlocks & " "
     loadNoise = noisy
 
   defer:
@@ -753,7 +754,11 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
 # ------------------------------------------------------------------------------
 
 proc syncSnapMain*(noisy = defined(debug)) =
-  noisy.accountsRunner()
+  # Caveat: running `accountsRunner(persistent=true)` twice will crash as the
+  #         persistent database might not be fully cleared due to some stale
+  #         locks.
+  noisy.accountsRunner(persistent=true)
+  noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
   noisy.storeRunner()
 
@@ -783,7 +788,7 @@ when isMainModule:
       file:      "mainnet332160.txt.gz",
       numBlocks: high(int))
 
-  when false or true:
+  when false: # or true:
     import ../../nimbus-eth1-blobs/replay/sync_sample1 as sample1
     const
       snapTest2 = AccountsProofSample(
@@ -799,10 +804,11 @@ when isMainModule:
   setErrorLevel()
 
   false.accountsRunner(persistent=true,  snapTest0)
+  false.accountsRunner(persistent=false,  snapTest0)
   #noisy.accountsRunner(persistent=true,  snapTest1)
 
   when declared(snapTest2):
-    noisy.accountsRunner(persistent=true,  snapTest2)
+    noisy.accountsRunner(persistent=false,  snapTest2)
     #noisy.accountsRunner(persistent=true,  snapTest3)
 
   when true: # and false:

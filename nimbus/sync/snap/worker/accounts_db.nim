@@ -35,7 +35,7 @@ export
 
 type
   AccountLoadStats* = object
-    dura*: array[4,times.Duration]   ## Accumulated time statistics
+    dura*: array[3,times.Duration]   ## Accumulated time statistics
     size*: array[2,uint64]           ## Accumulated size statistics
 
   AccountsDbRef* = ref object
@@ -316,20 +316,19 @@ proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ## Experimental: try several db-import modes and record statistics
   var als: AccountLoadStats
   noPpError("dbImports"):
-    als.dura[0].elapsed:
-      let rc = ps.rpDB.bulkStorageAccountPathsOnChainDb(ps.base.db)
-      if rc.isErr: return rc
-    als.dura[1].elapsed:
-      let rc = ps.rpDB.bulkStorageHexaryNodesOnChainDb(ps.base.db)
-      if rc.isErr: return rc
-    als.dura[2].elapsed:
-      let rc = ps.rpDB.bulkStorageAccountPathsOnRockyDb(ps.base.rocky)
-      if rc.isErr: return rc
-    als.dura[3].elapsed:
-      let rc = ps.rpDB.bulkStorageHexaryNodesOnRockyDb(ps.base.rocky)
-      if rc.isErr: return rc
+    if  ps.base.rocky.isNil:
+      als.dura[0].elapsed:
+        let rc = ps.rpDB.bulkStorageHexaryNodesOnChainDb(ps.base.db)
+        if rc.isErr: return rc
+    else:
+      als.dura[1].elapsed:
+        let rc = ps.rpDB.bulkStorageHexaryNodesOnXChainDb(ps.base.db)
+        if rc.isErr: return rc
+      als.dura[2].elapsed:
+        let rc = ps.rpDB.bulkStorageHexaryNodesOnRockyDb(ps.base.rocky)
+        if rc.isErr: return rc
 
-  for n in 0 ..< 4:
+  for n in 0 ..< als.dura.len:
     ps.dStats.dura[n] += als.dura[n]
     ps.base.aStats.dura[n] += als.dura[n]
 
@@ -380,6 +379,10 @@ proc nAccountRecords*(ps: AccountsDbSessionRef): int  =
 proc dbBackendRocksDb*(pv: AccountsDbRef): bool =
   ## Returns `true` if rocksdb features are available
   not pv.rocky.isNil
+
+proc dbBackendRocksDb*(ps: AccountsDbSessionRef): bool =
+  ## Returns `true` if rocksdb features are available
+  not ps.base.rocky.isNil
 
 proc importAccounts*(
     pv: AccountsDbRef;
@@ -455,17 +458,19 @@ proc getChainDbAccount*(
 
   err(AccountNotFound)
 
-proc getRockyAccount*(
+proc getBulkDbXAccount*(
     ps: AccountsDbSessionRef;
     accHash: Hash256
      ): Result[Account,HexaryDbError] =
-  ## Fetch account via rocksdb table (paraellel to `BaseChainDB`)
+  ## Fetch account additional sub-table (paraellel to `BaseChainDB`), when
+  ## rocksdb was used to store dicectly, and a paralell table was used to
+  ## store the same via `put()`.
   try:
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob =
         var tag: NodeTag
         discard tag.init(key)
-        ps.base.db.get(tag.bulkStorageRockyHexaryKey().toOpenArray)
+        ps.base.db.get(tag.bulkStorageChainDbHexaryXKey().toOpenArray)
       path = accHash.to(NodeKey)
       (_, _, leafBlob) = ps.rpDB.hexaryFollow(ps.rpDB.rootKey, path, getFn)
     if 0 < leafBlob.len:
