@@ -122,9 +122,18 @@ proc freeFactor*(lrs: LeafRangeSet): float =
   if 0 < lrs.total:
     ((high(NodeTag) - lrs.total).u256 + 1).to(float) / (2.0^256)
   elif lrs.chunks == 0:
-    1.0
+    1.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
     0.0
+
+proc fullFactor*(lrs: LeafRangeSet): float =
+  ## Free factor, ie. `#items-contained / 2^256` to be used in statistics
+  if 0 < lrs.total:
+    lrs.total.u256.to(float) / (2.0^256)
+  elif lrs.chunks == 0:
+    0.0
+  else:
+    1.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
 
 # Printing & pretty printing
 proc `$`*(nt: NodeTag): string =

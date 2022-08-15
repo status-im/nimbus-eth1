@@ -156,7 +156,7 @@ proc getAccountRange*(
           reqRange=iv, stateRoot
         return err(AccountsMaxTooLarge)
 
-  dd.consumed = LeafRange.new(iv.minPt, accMaxPt)
+  dd.consumed = LeafRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
   trace trSnapRecvReceived & "AccountRange", peer,
     nAccounts, nProof, accRange=dd.consumed, reqRange=iv, stateRoot
   return ok(dd)
