@@ -25,7 +25,7 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/[types, protocol],
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/[accounts_db, rocky_bulk_load],
+  ../nimbus/sync/snap/worker/[accounts_db, db/hexary_desc, db/rocky_bulk_load],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump],
   ./test_sync_snap/sample0
@@ -87,7 +87,7 @@ const
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkAccDb = Result[void,AccountsDbError].ok()
+  OkHexDb = Result[void,HexaryDbError].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -135,7 +135,7 @@ proc pp(d: AccountLoadStats): string =
   "[" & d.size.toSeq.mapIt(it.toSI).join(",") & "," &
         d.dura.toSeq.mapIt(it.pp).join(",") & "]"
 
-proc pp(rc: Result[Account,AccountsDbError]): string =
+proc pp(rc: Result[Account,HexaryDbError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
 
 proc ppKvPc(w: openArray[(string,int)]): string =
@@ -268,52 +268,52 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
-    info = if db.persistent: &"persistent db on \"{dbDir}\"" else: "in-memory db"
+    info = if db.persistent: &"persistent db on \"{dbDir}\""
+           else: "in-memory db"
 
   defer:
     if db.persistent:
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {sample.name} accounts and proofs for {info}":
+    var
+      desc: AccountsDbSessionRef
+      accounts: seq[SnapAccount]
 
-    test &"Verifying {testItemLst.len} snap items for state root ..{root.pp}":
+    test &"Snap-proofing {testItemLst.len} items for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
                    else: AccountsDbRef.init(newMemoryDB())
-      if not dbBase.dbBackendRocksDb():
-        skip()
-      else:
-        for n,w in testItemLst:
-          check dbBase.importAccounts(
-            peer, root, w.base, w.data, storeData = persistent) == OkAccDb
-        noisy.say "***", "import stats=", dbBase.dbImportStats.pp
+      for n,w in testItemLst:
+        check dbBase.importAccounts(
+          peer, root, w.base, w.data, storeData = persistent) == OkHexDb
+      noisy.say "***", "import stats=", dbBase.dbImportStats.pp
 
     test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
-      let
-        dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
-                 else: AccountsDbRef.init(newMemoryDB())
-        desc = AccountsDbSessionRef.init(dbBase, root, peer)
+      let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
+                   else: AccountsDbRef.init(newMemoryDB())
+      desc = AccountsDbSessionRef.init(dbBase, root, peer)
       for w in testItemLst:
-        check desc.merge(w.data.proof) == OkAccDb
-      let
-        base = testItemLst.mapIt(it.base).sortMerge
-        accounts = testItemLst.mapIt(it.data.accounts).sortMerge
-      check desc.merge(base, accounts) == OkAccDb
+        check desc.merge(w.data.proof) == OkHexDb
+      let base = testItemLst.mapIt(it.base).sortMerge
+      accounts = testItemLst.mapIt(it.data.accounts).sortMerge
+      check desc.merge(base, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging (if any)
-      check desc.interpolate() == OkAccDb
+      check desc.interpolate() == OkHexDb
 
-      if dbBase.dbBackendRocksDb():
-        check desc.dbImports() == OkAccDb
-        noisy.say "***", "import stats=",  desc.dbImportStats.pp
+      check desc.dbImports() == OkHexDb
+      noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
-        for acc in accounts:
-          let
-            byChainDB = desc.getChainDbAccount(acc.accHash)
-            byRockyBulker = desc.getRockyAccount(acc.accHash)
-          noisy.say "*** find",
-            "byChainDb=", byChainDB.pp, " inBulker=", byRockyBulker.pp
-          check byChainDB.isOk
-          check byRockyBulker.isOk
-          check byChainDB == byRockyBulker
+    test &"Revisting {accounts.len} items stored items on BaseChainDb":
+      for acc in accounts:
+        let
+          byChainDB = desc.getChainDbAccount(acc.accHash)
+          byBulker = desc.getBulkDbXAccount(acc.accHash)
+        noisy.say "*** find",
+          "byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
+        check byChainDB.isOk
+        if desc.dbBackendRocksDb():
+          check byBulker.isOk
+          check byChainDB == byBulker
 
       #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
 
@@ -325,7 +325,8 @@ proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
     filePath = capture.file.findFilePath(baseDir,repoDir).value
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(capture.name) else: testDbs()
-    numBlocksInfo = if capture.numBlocks == high(int): "" else: $capture.numBlocks & " "
+    numBlocksInfo = if capture.numBlocks == high(int): ""
+                    else: $capture.numBlocks & " "
     loadNoise = noisy
 
   defer:
@@ -753,7 +754,11 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
 # ------------------------------------------------------------------------------
 
 proc syncSnapMain*(noisy = defined(debug)) =
-  noisy.accountsRunner()
+  # Caveat: running `accountsRunner(persistent=true)` twice will crash as the
+  #         persistent database might not be fully cleared due to some stale
+  #         locks.
+  noisy.accountsRunner(persistent=true)
+  noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
   noisy.storeRunner()
 
@@ -786,11 +791,11 @@ when isMainModule:
   when false: # or true:
     import ../../nimbus-eth1-blobs/replay/sync_sample1 as sample1
     const
-       snapTest2 = AccountsProofSample(
+      snapTest2 = AccountsProofSample(
         name: "test2",
         root: sample1.snapRoot,
         data: sample1.snapProofData)
-       snapTest3 = AccountsProofSample(
+      snapTest3 = AccountsProofSample(
         name: "test3",
         root:  snapTest2.root,
         data:  snapTest2.data[0..0])
@@ -798,22 +803,23 @@ when isMainModule:
   #setTraceLevel()
   setErrorLevel()
 
-  #noisy.accountsRunner(persistent=true,  snapTest0)
+  false.accountsRunner(persistent=true,  snapTest0)
+  false.accountsRunner(persistent=false,  snapTest0)
   #noisy.accountsRunner(persistent=true,  snapTest1)
 
-  when defined(snapTest2):
-    discard
-    #noisy.accountsRunner(persistent=true,  snapTest2)
+  when declared(snapTest2):
+    noisy.accountsRunner(persistent=false,  snapTest2)
     #noisy.accountsRunner(persistent=true,  snapTest3)
 
-  # ---- database storage timings -------
+  when true: # and false:
+    # ---- database storage timings -------
 
-  noisy.showElapsed("importRunner()"):
-    noisy.importRunner(capture = bulkTest0)
+    noisy.showElapsed("importRunner()"):
+      noisy.importRunner(capture = bulkTest0)
 
-  noisy.showElapsed("storeRunner()"):
-    true.storeRunner(cleanUp = false)
-    true.storeRunner()
+    noisy.showElapsed("storeRunner()"):
+      true.storeRunner(cleanUp = false)
+      true.storeRunner()
 
 # ------------------------------------------------------------------------------
 # End
