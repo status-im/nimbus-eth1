@@ -11,7 +11,7 @@ import
   eth/[keys, trie/db, trie/hexary],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain, db/state_db],
-  ../network/wire/portal_protocol,
+  ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network],
   ../content_db,
   ./test_helpers
@@ -42,11 +42,13 @@ procSuite "State Content Network":
 
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
+      sm1 = StreamManager.new(node1)
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
+      sm2 = StreamManager.new(node2)
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
     check proto2.portalProtocol.addNode(node1.localNode) == Added
 
@@ -96,14 +98,17 @@ procSuite "State Content Network":
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
+      sm1 = StreamManager.new(node1)
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
+      sm2 = StreamManager.new(node2)
       node3 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20304))
+      sm3 = StreamManager.new(node3)
 
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
-      proto3 = StateNetwork.new(node3, ContentDB.new("", uint32.high, inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
+      proto3 = StateNetwork.new(node3, ContentDB.new("", uint32.high, inMemory = true), sm3)
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
     check proto1.portalProtocol.addNode(node2.localNode) == Added
@@ -156,12 +161,13 @@ procSuite "State Content Network":
     let
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
+      sm1 = StreamManager.new(node1)
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
+      sm2 = StreamManager.new(node2)
 
-
-      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true))
-      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true))
+      proto1 = StateNetwork.new(node1, ContentDB.new("", uint32.high, inMemory = true), sm1)
+      proto2 = StateNetwork.new(node2, ContentDB.new("", uint32.high, inMemory = true), sm2)
 
     check (await node1.ping(node2.localNode)).isOk()
     check (await node2.ping(node1.localNode)).isOk()

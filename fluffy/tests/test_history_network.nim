@@ -25,21 +25,8 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
-    socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration),
-      payloadSize = uint32(maxUtpPayloadSize)
-    )
-    hn = HistoryNetwork.new(node, db)
-    streamTransport = UtpDiscv5Protocol.new(
-      node,
-      utpProtocolId,
-      registerIncomingSocketCallback(@[hn.portalProtocol.stream]),
-      nil,
-      allowRegisteredIdCallback(@[hn.portalProtocol.stream]),
-      socketConfig
-    )
-
-  hn.setStreamTransport(streamTransport)
+    streamManager = StreamManager.new(node)
+    hn = HistoryNetwork.new(node, db, streamManager)
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: hn)
 

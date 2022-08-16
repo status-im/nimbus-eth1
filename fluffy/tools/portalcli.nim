@@ -231,19 +231,12 @@ proc run(config: PortalCliConf) =
 
   let
     db = ContentDB.new("", config.storageSize, inMemory = true)
+    sm = StreamManager.new(d)
+    cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    stream = sm.registerNewStream(cq)
     portal = PortalProtocol.new(d, config.protocolId, db,
-      testContentIdHandler, dbGetHandler,
+      testContentIdHandler, dbGetHandler, stream,
       bootstrapRecords = bootstrapRecords)
-    socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration))
-    streamTransport = UtpDiscv5Protocol.new(
-      d,
-      utpProtocolId,
-      registerIncomingSocketCallback(@[portal.stream]),
-      nil,
-      allowRegisteredIdCallback(@[portal.stream]), socketConfig)
-
-  setTransport(portal.stream, streamTransport)
 
   if config.metricsEnabled:
     let

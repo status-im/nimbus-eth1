@@ -444,6 +444,7 @@ proc new*(T: type PortalProtocol,
     contentDB: ContentDB,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
+    stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig
@@ -464,15 +465,12 @@ proc new*(T: type PortalProtocol,
     radiusConfig: config.radiusConfig,
     dataRadius: initialRadius,
     bootstrapRecords: @bootstrapRecords,
+    stream: stream,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers))
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
-
-  let stream = PortalStream.new(udata = proto, rng = proto.baseProtocol.rng)
-
-  proto.stream = stream
 
   proto
 

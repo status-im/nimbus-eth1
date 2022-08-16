@@ -22,7 +22,7 @@ logScope:
   topics = "portal_stream"
 
 const
-  utpProtocolId* = "utp".toBytes()
+  utpProtocolId = "utp".toBytes()
   defaultConnectionTimeout = 15.seconds
   defaultContentReadTimeout = 60.seconds
 
@@ -32,7 +32,7 @@ const
   # discv5 ordinary message packets, for which below calculation applies.
   talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
-  maxUtpPayloadSize* = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
+  maxUtpPayloadSize = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
 
 type
   ContentRequest = object
@@ -67,8 +67,12 @@ type
     connectionTimeout: Duration
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
-    udata: pointer
     contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+
+  StreamManager* = ref object
+    transport: UtpDiscv5Protocol
+    streams: seq[PortalStream]
+    rng: ref HmacDrbgContext
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
@@ -78,10 +82,6 @@ proc pruneAllowedConnections(stream: PortalStream) =
     x.timeout > now)
   stream.contentOffers.keepIf(proc(x: ContentOffer): bool =
     x.timeout > now)
-
-proc getUserData*[T](stream: PortalStream): T =
-  ## Obtain user data stored in ``stream`` object.
-  cast[T](stream.udata)
 
 proc addContentOffer*(
     stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList): Bytes2 =
@@ -264,55 +264,22 @@ proc readContentOffer(
   # socket, and let the specific networks handle that.
   await stream.contentQueue.put((offer.contentKeys, contentItems))
 
-proc new*(
+proc new(
     T: type PortalStream,
-    udata: ref,
-    connectionTimeout = defaultConnectionTimeout,
-    contentReadTimeout = defaultContentReadTimeout,
-    rng = newRng()): T =
-  GC_ref(udata)
-  let
-    stream = PortalStream(
-      udata: cast[pointer](udata),
-      connectionTimeout: connectionTimeout,
-      contentReadTimeout: contentReadTimeout,
-      contentQueue: newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50),
-      rng: rng)
+    transport: UtpDiscv5Protocol,
+    contentQueue: AsyncQueue[(ContentKeysList, seq[seq[byte]])],
+    connectionTimeout: Duration,
+    contentReadTimeout: Duration,
+    rng: ref HmacDrbgContext): T =
+  let stream = PortalStream(
+    transport: transport,
+    connectionTimeout: connectionTimeout,
+    contentReadTimeout: contentReadTimeout,
+    contentQueue: contentQueue,
+    rng: rng
+  )
 
   stream
-
-func setTransport*(stream: PortalStream, transport: UtpDiscv5Protocol) =
-  stream.transport = transport
-
-# TODO: I think I'd like it more if we weren't to capture the stream.
-proc registerIncomingSocketCallback*(
-    streams: seq[PortalStream]): AcceptConnectionCallback[NodeAddress] =
-  return (
-    proc(server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]): Future[void] =
-      for stream in streams:
-        # Note: Connection id of uTP SYN is different from other packets, it is
-        # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
-        # other packets.
-        for i, request in stream.contentRequests:
-          if request.connectionId == socket.connectionId and
-              request.nodeId == socket.remoteAddress.nodeId:
-            let fut = socket.writeContentRequest(stream, request)
-            stream.contentRequests.del(i)
-            return fut
-
-        for i, offer in stream.contentOffers:
-          if offer.connectionId == socket.connectionId and
-              offer.nodeId == socket.remoteAddress.nodeId:
-            let fut = socket.readContentOffer(stream, offer)
-            stream.contentOffers.del(i)
-            return fut
-
-      # TODO: Is there a scenario where this can happen,
-      # considering `allowRegisteredIdCallback`? If not, doAssert?
-      var fut = newFuture[void]("fluffy.AcceptConnectionCallback")
-      fut.complete()
-      return fut
-  )
 
 proc allowedConnection(
     stream: PortalStream, address: NodeAddress, connectionId: uint16): bool =
@@ -324,12 +291,78 @@ proc allowedConnection(
       proc (x: ContentOffer): bool =
         x.connectionId == connectionId and x.nodeId == address.nodeId)
 
-proc allowRegisteredIdCallback*(
-    streams: seq[PortalStream]): AllowConnectionCallback[NodeAddress] =
-  return (
-    proc(r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16): bool =
-      for stream in streams:
-        # stream.pruneAllowedConnections()
-        if allowedConnection(stream, remoteAddress, connectionId):
-          return true
+proc handleIncomingConnection(server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]): Future[void] =
+  let manager = getUserData[NodeAddress, StreamManager](server)
+
+  for stream in manager.streams:
+    # Note: Connection id of uTP SYN is different from other packets, it is
+    # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
+    # other packets.
+    for i, request in stream.contentRequests:
+      if request.connectionId == socket.connectionId and
+          request.nodeId == socket.remoteAddress.nodeId:
+        let fut = socket.writeContentRequest(stream, request)
+        stream.contentRequests.del(i)
+        return fut
+
+    for i, offer in stream.contentOffers:
+      if offer.connectionId == socket.connectionId and
+          offer.nodeId == socket.remoteAddress.nodeId:
+        let fut = socket.readContentOffer(stream, offer)
+        stream.contentOffers.del(i)
+        return fut
+
+  # TODO: Is there a scenario where this can happen,
+  # considering `allowRegisteredIdCallback`? If not, doAssert?
+  var fut = newFuture[void]("fluffy.AcceptConnectionCallback")
+  fut.complete()
+  return fut
+
+proc allowIncomingConnection(r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16): bool =
+  let manager = getUserData[NodeAddress, StreamManager](r)
+  for stream in manager.streams:
+    # stream.pruneAllowedConnections()
+    if allowedConnection(stream, remoteAddress, connectionId):
+      return true
+
+proc new*(T: type StreamManager, d: protocol.Protocol): T =
+  let socketConfig = SocketConfig.init(
+    # Setting to none means that incoming sockets are in Connected state, which
+    # means they can send and receive data.
+    incomingSocketReceiveTimeout = none(Duration),
+    payloadSize = uint32(maxUtpPayloadSize)
   )
+
+  let manager = StreamManager(streams: @[], rng: d.rng)
+
+  let utpOverDiscV5Protocol = UtpDiscv5Protocol.new(
+    d,
+    utpProtocolId,
+    handleIncomingConnection ,
+    manager,
+    allowIncomingConnection,
+    socketConfig
+  )
+
+  manager.transport = utpOverDiscV5Protocol
+
+  return manager
+
+proc registerNewStream*(
+    m : StreamManager,
+    contentQueue: AsyncQueue[(ContentKeysList, seq[seq[byte]])],
+    connectionTimeout = defaultConnectionTimeout,
+    contentReadTimeout = defaultContentReadTimeout): PortalStream =
+
+  let s = PortalStream.new(
+    m.transport,
+    contentQueue,
+    connectionTimeout,
+    contentReadTimeout,
+    m.rng
+  )
+
+  m.streams.add(s)
+
+  return s
+
