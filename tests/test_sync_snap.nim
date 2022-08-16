@@ -28,7 +28,7 @@ import
   ../nimbus/sync/snap/worker/[accounts_db, db/hexary_desc, db/rocky_bulk_load],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump],
-  ./test_sync_snap/sample0
+  ./test_sync_snap/[sample0, sample1]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -292,14 +292,21 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
                    else: AccountsDbRef.init(newMemoryDB())
       desc = AccountsDbSessionRef.init(dbBase, root, peer)
+
+      # Load/accumulate `proofs` data from several samples
       for w in testItemLst:
         check desc.merge(w.data.proof) == OkHexDb
-      let base = testItemLst.mapIt(it.base).sortMerge
+
+      # Load/accumulate accounts (needs some unique sorting)
+      let lowerBound = testItemLst.mapIt(it.base).sortMerge
       accounts = testItemLst.mapIt(it.data.accounts).sortMerge
-      check desc.merge(base, accounts) == OkHexDb
-      desc.assignPrettyKeys() # for debugging (if any)
+      check desc.merge(lowerBound, accounts) == OkHexDb
+      desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
+
+      # Build/complete hexary trie for accounts
       check desc.interpolate() == OkHexDb
 
+      # Save/bulk-store hexary trie on disk
       check desc.dbImports() == OkHexDb
       noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
@@ -315,7 +322,30 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           check byBulker.isOk
           check byChainDB == byBulker
 
-      #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
+      # Hexary trie memory database dump. These are key value pairs for
+      # ::
+      #   Branch:    ($1,b(<$2,$3,..,$17>,))
+      #   Extension: ($18,e(832b5e..06e697,$19))
+      #   Leaf:      ($20,l(cc9b5d..1c3b4,f84401..f9e5129d[#70]))
+      #
+      # where keys are typically represented as `$<id>` or `¶<id>` or `ø`
+      # depending on whether a key is final (`$<id>`), temporary (`¶<id>`)
+      # or unset/missing (`ø`).
+      #
+      # The node types are indicated by a letter after the first key before
+      # the round brackets
+      # ::
+      #   Branch:    'b', 'þ', or 'B'
+      #   Extension: 'e', '€', or 'E'
+      #   Leaf:      'l', 'ł', or 'L'
+      #
+      # Here a small letter indicates a `Static` node which was from the
+      # original `proofs` list, a capital letter indicates a `Mutable` node
+      # added on the fly which might need some change, and the decorated
+      # letters stand for `Locked` nodes which are like `Static` ones but
+      # added later (typically these nodes are update `Mutable` nodes.)
+      #
+      noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
 
 
 proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
@@ -765,11 +795,26 @@ proc syncSnapMain*(noisy = defined(debug)) =
 when isMainModule:
   const
     noisy = defined(debug) or true
-    snapTest0 = accSample0
+
+    # Some 20 `snap/1` reply equivalents
+    snapTest0 =
+      accSample0
+  
+    # Only the the first `snap/1` reply from the sample
     snapTest1 = AccountsProofSample(
       name: "test1",
       root:  snapTest0.root,
       data:  snapTest0.data[0..0])
+
+    # Ditto for sample1
+    snapTest2 = AccountsProofSample(
+      name: "test2",
+      root: sample1.snapRoot,
+      data: sample1.snapProofData)
+    snapTest3 = AccountsProofSample(
+      name: "test3",
+      root:  snapTest2.root,
+      data:  snapTest2.data[0..0])
 
     bulkTest0 = goerliCapture
     bulkTest1: CaptureSpecs = (
@@ -788,30 +833,65 @@ when isMainModule:
       file:      "mainnet332160.txt.gz",
       numBlocks: high(int))
 
-  when false: # or true:
-    import ../../nimbus-eth1-blobs/replay/sync_sample1 as sample1
-    const
-      snapTest2 = AccountsProofSample(
-        name: "test2",
-        root: sample1.snapRoot,
-        data: sample1.snapProofData)
-      snapTest3 = AccountsProofSample(
-        name: "test3",
-        root:  snapTest2.root,
-        data:  snapTest2.data[0..0])
 
   #setTraceLevel()
   setErrorLevel()
 
+  # The `accountsRunner()` tests a snap sync functionality for storing chain
+  # chain data directly rather than derive them by executing the EVM. Here,
+  # only accounts are considered.
+  #
+  # The `snap/1` protocol allows to fetch data for a certain account range. The
+  # following boundary conditions apply to the received data:
+  #
+  # * `State root`: All data are relaive to the same state root.
+  #
+  # * `Accounts`: There is an accounts interval sorted in strictly increasing
+  #   order. The accounts are required consecutive, i.e. without holes in
+  #   between although this cannot be verified immediately.
+  #
+  # * `Lower bound`: There is a start value which might be lower than the first
+  #   account hash. There must be no other account between this start value and
+  #   the first account (not verifyable yet.) For all practicat purposes, this
+  #   value is mostly ignored but carried through.
+  #
+  # * `Proof`: There is a list of hexary nodes which allow to build a partial
+  #   Patricia-Mercle trie starting at the state root with all the account
+  #   leaves. There are enough nodes that show that there is no account before
+  #   the least account (which is currently ignored.)
+  #    
+  # There are test data samples on the sub-directory `test_sync_snap`. These
+  # are complete replies for some (admittedly smapp) test requests from a `kiln`
+  # session.
+  #
+  # The `accountsRunner()` does three tests:
+  #
+  # 1. Run the `importAccounts()` function which is the all-in-one production
+  #    function processoing the data described above. The test applies it
+  #    sequentially to about 20 data sets.
+  #
+  # 2. Test individual functional items which are hidden in test 1. while
+  #    merging the sample data. 
+  #    * Load/accumulate `proofs` data from several samples
+  #    * Load/accumulate accounts (needs some unique sorting)
+  #    * Build/complete hexary trie for accounts
+  #    * Save/bulk-store hexary trie on disk. If rocksdb is available, data
+  #      are bulk stored via sst. An additional data set is stored in a table
+  #      with key prefix 200 using transactional `put()` (for time comparison.)
+  #      If there is no rocksdb, standard transactional `put()` is used, only
+  #      (no key prefix 200 storage.)
+  #
+  # 3. Traverse trie nodes stored earlier. The accounts from test 2 are
+  #    re-visted using the account hash as access path.
+  #
+
   false.accountsRunner(persistent=true,  snapTest0)
   false.accountsRunner(persistent=false,  snapTest0)
-  #noisy.accountsRunner(persistent=true,  snapTest1)
+  noisy.accountsRunner(persistent=true,  snapTest1)
+  false.accountsRunner(persistent=false,  snapTest2)
+  #noisy.accountsRunner(persistent=true,  snapTest3)
 
-  when declared(snapTest2):
-    noisy.accountsRunner(persistent=false,  snapTest2)
-    #noisy.accountsRunner(persistent=true,  snapTest3)
-
-  when true: # and false:
+  when true and false:
     # ---- database storage timings -------
 
     noisy.showElapsed("importRunner()"):
