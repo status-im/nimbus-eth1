@@ -34,6 +34,7 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
       node,
       utpProtocolId,
       registerIncomingSocketCallback(@[hn.portalProtocol.stream]),
+      nil,
       allowRegisteredIdCallback(@[hn.portalProtocol.stream]),
       socketConfig
     )

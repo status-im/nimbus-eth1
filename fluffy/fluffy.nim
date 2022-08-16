@@ -118,6 +118,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       registerIncomingSocketCallback(@[
         stateNetwork.portalProtocol.stream,
         historyNetwork.portalProtocol.stream]),
+      # for now we do not use user data in callbacks
+      nil,
       allowRegisteredIdCallback(@[
         stateNetwork.portalProtocol.stream,
         historyNetwork.portalProtocol.stream]),

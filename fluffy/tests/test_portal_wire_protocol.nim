@@ -51,6 +51,7 @@ proc initPortalProtocol(
     streamTransport = UtpDiscv5Protocol.new(
       d, utpProtocolId,
       registerIncomingSocketCallback(@[proto.stream]),
+      nil,
       allowRegisteredIdCallback(@[proto.stream]),
       socketConfig)
 
