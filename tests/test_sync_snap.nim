@@ -310,7 +310,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       check desc.dbImports() == OkHexDb
       noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
-    test &"Revisting {accounts.len} items stored items on BaseChainDb":
+    test &"Revisiting {accounts.len} items stored items on BaseChainDb":
       for acc in accounts:
         let
           byChainDB = desc.getChainDbAccount(acc.accHash)
