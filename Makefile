@@ -12,6 +12,38 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
 LINK_PCRE := 0
 
+EXCLUDED_NIM_PACKAGES := 	\
+	vendor/nimbus-eth2/vendor/nim-bearssl 					\
+	vendor/nimbus-eth2/vendor/nim-blscurve 					\
+	vendor/nimbus-eth2/vendor/nim-bearssl 					\
+	vendor/nimbus-eth2/vendor/nim-blscurve					\
+	vendor/nimbus-eth2/vendor/nimbus-build-system		\
+	vendor/nimbus-eth2/vendor/nim-chronicles				\
+	vendor/nimbus-eth2/vendor/nim-chronos						\
+	vendor/nimbus-eth2/vendor/nim-confutils					\
+	vendor/nimbus-eth2/vendor/nimcrypto							\
+	vendor/nimbus-eth2/vendor/nim-eth								\
+	vendor/nimbus-eth2/vendor/nim-faststreams				\
+	vendor/nimbus-eth2/vendor/nim-http-utils				\
+	vendor/nimbus-eth2/vendor/nim-json-rpc					\
+	vendor/nimbus-eth2/vendor/nim-json-serialization\
+	vendor/nimbus-eth2/vendor/nim-libbacktrace			\
+	vendor/nimbus-eth2/vendor/nim-metrics						\
+	vendor/nimbus-eth2/vendor/nim-nat-traversal			\
+	vendor/nimbus-eth2/vendor/nim-secp256k1					\
+	vendor/nimbus-eth2/vendor/nim-serialization			\
+	vendor/nimbus-eth2/vendor/nim-snappy						\
+	vendor/nimbus-eth2/vendor/nim-sqlite3-abi				\
+	vendor/nimbus-eth2/vendor/nim-ssz-serialization	\
+	vendor/nimbus-eth2/vendor/nim-stew							\
+	vendor/nimbus-eth2/vendor/nim-stint							\
+	vendor/nimbus-eth2/vendor/nim-testutils					\
+	vendor/nimbus-eth2/vendor/nim-toml-serialization\
+	vendor/nimbus-eth2/vendor/nim-unittest2					\
+	vendor/nimbus-eth2/vendor/nim-web3							\
+	vendor/nimbus-eth2/vendor/nim-websock						\
+	vendor/nimbus-eth2/vendor/nim-zlib
+
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
 
