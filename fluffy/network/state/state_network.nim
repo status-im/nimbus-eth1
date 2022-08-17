@@ -23,10 +23,8 @@ const
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
+  contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
-
-func setStreamTransport*(n: StateNetwork, transport: UtpDiscv5Protocol) =
-  setTransport(n.portalProtocol.stream, transport)
 
 func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   toContentId(contentKey)
@@ -77,15 +75,25 @@ proc new*(
     T: type StateNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
+    streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+
+  let cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+
+  let s = streamManager.registerNewStream(cq)
+
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler,
+    toContentIdHandler, dbGetHandler, s,
     bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
 
-  return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
+  return StateNetwork(
+    portalProtocol: portalProtocol,
+    contentDB: contentDB,
+    contentQueue: cq
+  )
 
 proc processContentLoop(n: StateNetwork) {.async.} =
   try:

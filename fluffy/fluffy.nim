@@ -102,30 +102,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       config.bitsPerHop,
       config.radiusConfig
     )
-    stateNetwork = StateNetwork.new(d, db,
-      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
-    historyNetwork = HistoryNetwork.new(d, db,
+    streamManager = StreamManager.new(d)
+
+    stateNetwork = StateNetwork.new(d, db, streamManager,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
-  # One instance of UtpDiscv5Protocol is shared over all the PortalStreams.
-  let
-    socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration),
-      payloadSize = uint32(maxUtpPayloadSize))
-    streamTransport = UtpDiscv5Protocol.new(
-      d,
-      utpProtocolId,
-      registerIncomingSocketCallback(@[
-        stateNetwork.portalProtocol.stream,
-        historyNetwork.portalProtocol.stream]),
-      # for now we do not use user data in callbacks
-      nil,
-      allowRegisteredIdCallback(@[
-        stateNetwork.portalProtocol.stream,
-        historyNetwork.portalProtocol.stream]),
-      socketConfig)
-  stateNetwork.setStreamTransport(streamTransport)
-  historyNetwork.setStreamTransport(streamTransport)
+    historyNetwork = HistoryNetwork.new(d, db, streamManager,
+      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and

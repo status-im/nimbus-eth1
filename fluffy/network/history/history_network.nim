@@ -40,12 +40,10 @@ type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
+    contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
     processContentLoop: Future[void]
 
   Block* = (BlockHeader, BlockBody)
-
-func setStreamTransport*(n: HistoryNetwork, transport: UtpDiscv5Protocol) =
-  setTransport(n.portalProtocol.stream, transport)
 
 func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   some(toContentId(contentKey))
@@ -740,20 +738,30 @@ proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
+    streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+
+  let cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+
+  let s = streamManager.registerNewStream(cq)
+
   let portalProtocol = PortalProtocol.new(
     baseProtocol, historyProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler, bootstrapRecords,
+    toContentIdHandler, dbGetHandler, s, bootstrapRecords,
     config = portalConfig)
 
-  return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
+  return HistoryNetwork(
+    portalProtocol: portalProtocol,
+    contentDB: contentDB,
+    contentQueue: cq
+  )
 
 proc processContentLoop(n: HistoryNetwork) {.async.} =
   try:
     while true:
       let (contentKeys, contentItems) =
-        await n.portalProtocol.stream.contentQueue.popFirst()
+        await n.contentQueue.popFirst()
 
       # content passed here can have less items then contentKeys, but not more.
       for i, contentItem in contentItems:

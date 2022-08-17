@@ -41,21 +41,13 @@ proc initPortalProtocol(
   let
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new("", uint32.high, inMemory = true)
+    manager = StreamManager.new(d)
+    q = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    stream = manager.registerNewStream(q)
+
     proto = PortalProtocol.new(
-      d, protocolId, db, toContentId, dbGetHandler,
+      d, protocolId, db, toContentId, dbGetHandler, stream,
       bootstrapRecords = bootstrapRecords)
-
-    socketConfig = SocketConfig.init(
-      incomingSocketReceiveTimeout = none(Duration),
-      payloadSize = uint32(maxUtpPayloadSize))
-    streamTransport = UtpDiscv5Protocol.new(
-      d, utpProtocolId,
-      registerIncomingSocketCallback(@[proto.stream]),
-      nil,
-      allowRegisteredIdCallback(@[proto.stream]),
-      socketConfig)
-
-  proto.stream.setTransport(streamTransport)
 
   return proto
 
@@ -347,8 +339,12 @@ procSuite "Portal Wire Protocol Tests":
 
       dbLimit = 100_000'u32
       db = ContentDB.new("", dbLimit, inMemory = true)
+      m = StreamManager.new(node1)
+      q = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+      stream = m.registerNewStream(q)
+
       proto1 = PortalProtocol.new(
-        node1, protocolId, db, toContentId, dbGetHandler)
+        node1, protocolId, db, toContentId, dbGetHandler, stream)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
