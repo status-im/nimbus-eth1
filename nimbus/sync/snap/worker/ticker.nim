@@ -29,6 +29,7 @@ type
     pivotBlock*: Option[BlockNumber]
     accounts*: (float,float)   ## mean and standard deviation
     fillFactor*: (float,float) ## mean and standard deviation
+    accCoverage*: float        ## as factor
     activeQueues*: int
     flushedQueues*: int64
     bulkStore*: AccountLoadStats
@@ -117,6 +118,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       avUtilisation = ""
       pivot = "n/a"
       bulker = ""
+      accCoverage = "n/a"
     let
       flushed = data.flushedQueues
 
@@ -130,13 +132,16 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       avAccounts =
         &"{(data.accounts[0]+0.5).int64}({(data.accounts[1]+0.5).int64})"
       avUtilisation =
-        &"{data.fillFactor[0]*100.0:.2f}%({data.fillFactor[1]*100.0:.2f}%)"
+        &"{data.fillFactor[0]*100.0:.1f}%({data.fillFactor[1]*100.0:.1f}%)"
       bulker =
         "[" & data.bulkStore.size.toSeq.mapIt(it.toSI).join(",") & "," &
               data.bulkStore.dura.toSeq.mapIt(it.pp).join(",") & "]"
+      accCoverage =
+        &"{(data.accCoverage*100.0):.1f}%"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, avAccounts, avUtilisation, flushed, bulker, mem
+      tick, buddies, pivot, avAccounts, avUtilisation, accCoverage,
+      flushed, bulker, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

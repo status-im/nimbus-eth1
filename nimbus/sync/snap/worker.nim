@@ -122,6 +122,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
       accounts:      meanStdDev(aSum, aSqSum, count),
+      accCoverage:   ctx.data.coveredAccounts.fullFactor,
       fillFactor:    meanStdDev(uSum, uSqSum, count),
       bulkStore:     ctx.data.accountsDb.dbImportStats)
 
@@ -132,6 +133,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
+  ctx.data.coveredAccounts = LeafRangeSet.init()
   ctx.data.accountsDb =
       if ctx.data.dbBackend.isNil: AccountsDbRef.init(ctx.chain.getTrieDB)
       else: AccountsDbRef.init(ctx.data.dbBackend)
@@ -218,7 +220,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     ctx = buddy.ctx
     peer = buddy.peer
 
-  if buddy.data.pivotHeader.isNone:
+  if buddy.data.pivotHeader.isNone or
+     buddy.data.pivotHeader.get.blockNumber == 0:
 
     await buddy.pivotExec()
 

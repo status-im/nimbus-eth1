@@ -149,16 +149,21 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
     rc = ctx.data.accountsDb.importAccounts(
       peer, stateRoot, iv.minPt, dd.data, storeData = true)
   if rc.isErr:
+    buddy.putUnprocessed(iv)
+
+    # Just try another peer
+    buddy.ctrl.zombie = true
+
     # TODO: Prevent deadlock in case there is a problem with the approval
     #       data which is not in production state, yet.
     trace "Import failed, restoring unprocessed accounts", peer, stateRoot,
       range=dd.consumed, nAccounts, error=rc.error
-
-    # Just try another peer
-    buddy.ctrl.zombie = true
   else:
     # Statistics
     env.nAccounts.inc(nAccounts)
+
+    # Register consumed intervals on the accumulator over all state roots
+    discard buddy.ctx.data.coveredAccounts.merge(dd.consumed)
 
     # Register consumed and bulk-imported (well, not yet) accounts range
     let rx = iv - dd.consumed

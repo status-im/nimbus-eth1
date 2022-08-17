@@ -78,22 +78,12 @@ type
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  WorkerTickerBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `ticker.nim`
-
-  WorkerFetchBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `fetch.nim`
-
-  WorkerFetchEnvBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `fetch.nim`
-
   SnapPivotRef* = ref object
-    ## Stub object, cache for particular snap data environment
+    ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader         ## Pivot state, containg state root
     pivotAccount*: NodeTag            ## Random account
     availAccounts*: LeafRangeSet      ## Accounts to fetch (organised as ranges)
     nAccounts*: uint64                ## Number of accounts imported
-    # fetchEnv*: WorkerFetchEnvBase     ## Opaque object reference
     # ---
     proofDumpOk*: bool
     proofDumpInx*: int
@@ -103,7 +93,7 @@ type
     KeyedQueue[Hash256,SnapPivotRef]
 
   BuddyData* = object
-    ## Local descriptor data extension
+    ## Per-worker local descriptor data extension
     stats*: SnapBuddyStats            ## Statistics counters
     errors*: SnapBuddyErrors          ## For error handling
     pivotHeader*: Option[BlockHeader] ## For pivot state hunter
@@ -113,6 +103,7 @@ type
     ## Globally shared data extension
     seenBlock: WorkerSeenBlocks       ## Temporary, debugging, pretty logs
     rng*: ref HmacDrbgContext         ## Random generator
+    coveredAccounts*: LeafRangeSet    ## Derived from all available accounts
     dbBackend*: ChainDB               ## Low level DB driver access (if any)
     ticker*: TickerRef                ## Ticker, logger
     pivotTable*: SnapPivotTable       ## Per state root environment
