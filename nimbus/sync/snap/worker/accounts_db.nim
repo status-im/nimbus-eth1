@@ -22,8 +22,8 @@ import
   ../../../db/[kvstore_rocksdb, select_backend, storage_types],
   "../.."/[protocol, types],
   ../range_desc,
-  ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_follow, hexary_import,
-        hexary_interpolate, rocky_bulk_load]
+  ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_import,
+        hexary_interpolate, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
@@ -63,6 +63,12 @@ template elapsed(duration: times.Duration; code: untyped) =
     block:
       code
     duration = getTime() - start
+
+template noKeyError(info: static[string]; code: untyped) =
+  try:
+    code
+  except KeyError as e:
+    raiseAssert "Not possible (" & info & "): " & e.msg
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -310,7 +316,8 @@ proc interpolate*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ##   it must be replaced by the new facility of the upcoming re-factored
   ##   database layer.
   ##
-  ps.rpDB.hexaryInterpolate()
+  noKeyError("interpolate"):
+    result = ps.rpDB.hexaryInterpolate()
 
 proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ## Experimental: try several db-import modes and record statistics
@@ -444,10 +451,9 @@ proc getChainDbAccount*(
   try:
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      path = accHash.to(NodeKey)
-      (_, _, leafBlob) = ps.rpDB.hexaryFollow(ps.rpDB.rootKey, path, getFn)
-    if 0 < leafBlob.len:
-      let acc = rlp.decode(leafBlob,Account)
+      path = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn, ps.rpDB)
+    if 0 < path.leaf.len:
+      let acc = rlp.decode(path.leaf,Account)
       return ok(acc)
   except RlpError:
     return err(RlpEncoding)
@@ -471,10 +477,9 @@ proc getBulkDbXAccount*(
         var tag: NodeTag
         discard tag.init(key)
         ps.base.db.get(tag.bulkStorageChainDbHexaryXKey().toOpenArray)
-      path = accHash.to(NodeKey)
-      (_, _, leafBlob) = ps.rpDB.hexaryFollow(ps.rpDB.rootKey, path, getFn)
-    if 0 < leafBlob.len:
-      let acc = rlp.decode(leafBlob,Account)
+      path = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn, ps.rpDB)
+    if 0 < path.leaf.len:
+      let acc = rlp.decode(path.leaf,Account)
       return ok(acc)
   except RlpError:
     return err(RlpEncoding)
@@ -515,7 +520,9 @@ proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
 proc dumpPath*(ps: AccountsDbSessionRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the
   ## argument `key`.
-  ps.rpDB.dumpPath(key)
+  noKeyError("dumpPath"):
+    let rPath = key.hexaryPath(ps.rpDB)
+    result = rPath.path.mapIt(it.pp(ps.rpDB)) & @["(" & rPath.tail.pp & ")"]
 
 proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
   ## Dump the entries from the repair tree.
