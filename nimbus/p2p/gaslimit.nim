@@ -11,25 +11,15 @@
 import
   std/strformat,
   stew/results,
-  eth/common,
+  eth/[common, eip1559],
   ../db/db_chain,
   ../constants,
   ../chain_config,
   ../forks
 
-const
-  EIP1559_BASE_FEE_CHANGE_DENOMINATOR* = ##\
-    ## Bounds the amount the base fee can change between blocks.
-    8
-
-  EIP1559_ELASTICITY_MULTIPLIER* = ##\
-    ## Bounds the maximum gas limit an EIP-1559 block may have.
-    2
-
-  EIP1559_INITIAL_BASE_FEE* = ##\
-    ## Initial base fee for Eip1559 blocks.
-    1000000000.u256
-
+export
+  eip1559
+ 
 # ------------------------------------------------------------------------------
 # Pre Eip 1559 gas limit validation
 # ------------------------------------------------------------------------------
@@ -75,40 +65,10 @@ proc calcEip1599BaseFee*(c: ChainConfig; parent: BlockHeader): UInt256 =
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if not c.isLondonOrLater(parent.blockNumber):
-    return EIP1559_INITIAL_BASE_FEE
-
-  let parentGasTarget = parent.gasLimit div EIP1559_ELASTICITY_MULTIPLIER
-
-  # If the parent gasUsed is the same as the target, the baseFee remains
-  # unchanged.
-  if parent.gasUsed == parentGasTarget:
-    return parent.baseFee
-
-  let parentGasDenom = parentGasTarget.u256 *
-                         EIP1559_BASE_FEE_CHANGE_DENOMINATOR.u256
-
-  # baseFee is an Option[T]
-  let parentBaseFee  = parent.baseFee
-
-  if parentGasTarget < parent.gasUsed:
-    # If the parent block used more gas than its target, the baseFee should
-    # increase.
-    let
-      gasUsedDelta = (parent.gasUsed - parentGasTarget).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
-
-    return parentBaseFee + max(baseFeeDelta, 1.u256)
-
+  if c.isLondonOrLater(parent.blockNumber):
+    eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFee)
   else:
-    # Otherwise if the parent block used less gas than its target, the
-    # baseFee should decrease.
-    let
-      gasUsedDelta = (parentGasTarget - parent.gasUsed).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
-
-    return max(parentBaseFee - baseFeeDelta, 0.u256)
-
+    EIP1559_INITIAL_BASE_FEE
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(c: ChainConfig;

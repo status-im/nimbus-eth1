@@ -16,6 +16,7 @@
 import
   std/[sequtils, strformat, strutils, tables, times],
   nimcrypto/hash,
+  eth/common,
   ../../nimbus/constants
 
 export

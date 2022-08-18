@@ -28,8 +28,6 @@ const
   MAX_UNCLE_DEPTH* =                        6.u256
   MAX_UNCLES* =                             2
 
-  EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
-
   GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
@@ -42,7 +40,6 @@ const
   GAS_LIMIT_MAXIMUM* =                      high(GasInt)
   DEFAULT_GAS_LIMIT* =                      8_000_000
 
-  BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
