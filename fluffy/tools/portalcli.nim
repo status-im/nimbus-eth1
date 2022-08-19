@@ -16,7 +16,7 @@ import
   ../common/common_utils,
   ../content_db,
   ../network/wire/[portal_protocol, portal_stream],
-  ../network/state/[state_content, state_network]
+  ../network/history/[history_content, history_network]
 
 const
   defaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
@@ -102,7 +102,7 @@ type
       name: "metrics-port" .}: Port
 
     protocolId* {.
-      defaultValue: stateProtocolId
+      defaultValue: historyProtocolId
       desc: "Portal wire protocol id for the network to connect to"
       name: "protocol-id" .}: PortalProtocolId
 
@@ -200,11 +200,9 @@ proc testContentIdHandler(contentKey: ByteList): Option[ContentId] =
 
 proc dbGetHandler(db: ContentDB, contentKey: ByteList):
     (Option[ContentId], Option[seq[byte]]) =
-  let contentIdOpt = contentKey.toContentId()
-  if contentIdOpt.isSome():
-    (contentIdOpt, db.get(contentIdOpt.get()))
-  else:
-    (contentIdOpt, none(seq[byte]))
+  let contentId = contentKey.toContentId()
+
+  (some(contentId), db.get(contentId))
 
 proc run(config: PortalCliConf) =
   let
