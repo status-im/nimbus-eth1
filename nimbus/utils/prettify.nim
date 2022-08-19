@@ -12,7 +12,7 @@
 ## Some logging helper moved here in absence of a known better place.
 
 import
-  std/strutils
+  std/[math, strutils]
 
 proc toSI*(num: SomeUnsignedInt): string =
   ## Prints `num` argument value greater than 99 as rounded SI unit.
@@ -45,3 +45,17 @@ proc toSI*(num: SomeUnsignedInt): string =
 
   result.insert(".", result.len - 3)
 
+proc toPC*(
+    num: float;
+    digitsAfterDot: static[int] = 2;
+    rounding: static[float] = 5.0
+      ): string =
+  ## Convert argument number `num` to percent string with decimal precision
+  ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
+  ## default adjusting the first invisible digit, set `rounding = 0` to disable.
+  const
+    minDigits = digitsAfterDot + 1
+    multiplier = (10 ^ (minDigits + 1)).float
+    roundUp = rounding / 10.0
+  result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
+  result.insert(".", result.len - minDigits)

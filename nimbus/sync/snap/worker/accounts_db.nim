@@ -569,59 +569,6 @@ proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
       cmp(x[0],y[0])
     result = accu.sorted(cmpIt).mapIt(it[1])
 
-# ---------
-
-proc dumpRoot*(root: Hash256; name = "snapRoot*"): string =
-  noPpError("dumpRoot"):
-    result = "import\n"
-    result &= "  nimcrypto/hash,\n"
-    result &= "  stew/byteutils\n\n"
-    result &= "const\n"
-    result &= &"  {name} =\n"
-    result &= &"    \"{root.pp(false)}\".toDigest\n"
-
-proc dumpAccountRange*(
-    base: NodeTag;
-    data: PackedAccountRange;
-    name = "snapData*"
-      ): string =
-
-  # Making sure that no fancy print format is activated :)
-  proc ppStr(blob: Blob): string =
-    blob.mapIt(it.toHex(2)).join.toLowerAscii
-
-  noPpError("dumpAccountRange"):
-    result = &"  {name} = ("
-    result &= &"\n    \"{base.to(Hash256).pp(false)}\".toDigest,"
-    result &= "\n    @["
-    let accPfx = "\n      "
-    for n in 0 ..< data.accounts.len:
-      let
-        hash = data.accounts[n].accHash.pp(false)
-        body = data.accounts[n].accBlob.ppStr
-      if 0 < n:
-        result &= accPfx
-      result &= &"# <{n}>"
-      result &= &"{accPfx}(\"{hash}\".toDigest,"
-      result &= &"{accPfx} \"{body}\".hexToSeqByte),"
-    if result[^1] == ',':
-      result[^1] = ']'
-    else:
-      result &= "]"
-    result &= ",\n    @["
-    let blobPfx = "\n      "
-    for n in 0 ..< data.proof.len:
-      let blob = data.proof[n]
-      if 0 < n:
-        result &= blobPfx
-      result &= &"# <{n}>"
-      result &= &"{blobPfx}\"{blob.ppStr}\".hexToSeqByte,"
-    if result[^1] == ',':
-      result[^1] = ']'
-    else:
-      result &= "]"
-    result &= ")\n\n"
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

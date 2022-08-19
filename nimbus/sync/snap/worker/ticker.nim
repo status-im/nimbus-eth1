@@ -114,34 +114,27 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.lastTick = t.tick
     var
-      avAccounts = ""
-      avUtilisation = ""
+      avAcc = ""
       pivot = "n/a"
-      bulker = ""
-      accCoverage = "n/a"
+      bulk = ""
     let
+      avCov = data.fillFactor[0].toPC(1) & "(" &
+              data.fillFactor[1].toPC(1) & ")"
+      allCov = data.accCoverage.toPC(1)
       flushed = data.flushedQueues
-
       buddies = t.nBuddies
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
-        pivot = &"#{data.pivotBlock.get}({data.activeQueues})"
-      avAccounts =
-        &"{(data.accounts[0]+0.5).int64}({(data.accounts[1]+0.5).int64})"
-      avUtilisation =
-        &"{data.fillFactor[0]*100.0:.1f}%({data.fillFactor[1]*100.0:.1f}%)"
-      bulker =
-        "[" & data.bulkStore.size.toSeq.mapIt(it.toSI).join(",") & "," &
-              data.bulkStore.dura.toSeq.mapIt(it.pp).join(",") & "]"
-      accCoverage =
-        &"{(data.accCoverage*100.0):.1f}%"
+        pivot = &"#{data.pivotBlock.get}/{data.activeQueues}"
+      avAcc = &"{(data.accounts[0]+0.5).int64}({(data.accounts[1]+0.5).int64})"
+      bulk = "[" & data.bulkStore.size.toSeq.mapIt(it.toSI).join(",") & "," &
+                   data.bulkStore.dura.toSeq.mapIt(it.pp).join(",") & "]"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, avAccounts, avUtilisation, accCoverage,
-      flushed, bulker, mem
+      tick, buddies, pivot, avAcc, avCov, allCov, flushed, bulk, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

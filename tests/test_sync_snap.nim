@@ -64,7 +64,7 @@ else:
   const isUbuntu32bit = false
 
 const
-  sampleDirRefFile = "sample0.nim"
+  sampleDirRefFile = "sample0.txt.gz"
 
   goerliCapture: CaptureSpecs = (
     name: "goerli",
@@ -863,6 +863,53 @@ when isMainModule:
       file: snapTest2.file,
       lastItem: 0)
 
+    # Other samples from bulk folder
+    snapOther0a = AccountsSample(
+      name: "Other0a",
+      file: "account0_00_06_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther0b = AccountsSample(
+      name: "Other0b",
+      file: "account0_07_08_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther1a = AccountsSample(
+      name: "Other1a",
+      file: "account1_09_09_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther1b = AccountsSample(
+      name: "Other1b",
+      file: "account1_10_17_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther2 = AccountsSample(
+      name: "Other2",
+      file: "account2_18_25_dump.txt.gz",
+      firstItem: 1,
+      lastItem: high(int))
+    snapOther3 = AccountsSample(
+      name: "Other3",
+      file: "account3_26_33_dump.txt.gz",
+      firstItem: 2,
+      lastItem: high(int))
+    snapOther4 = AccountsSample(
+      name: "Other4",
+      file: "account4_34_41_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther5 = AccountsSample(
+      name: "Other5",
+      file: "account5_42_49_dump.txt.gz",
+      firstItem: 2,
+      lastItem: high(int))
+    snapOther6 = AccountsSample(
+      name: "Other6",
+      file: "account6_50_54_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+
     bulkTest0 = goerliCapture
     bulkTest1: CaptureSpecs = (
       name:      "full-goerli",
@@ -882,18 +929,6 @@ when isMainModule:
 
   #setTraceLevel()
   setErrorLevel()
-
-  #let sample = snapTest2
-  #for it in sample.data.to(seq[TestItem]):
-  #  echo "# >>>\n", sample.root.dumpAccountRange(it.base, it.data)
-  #echo "# <<<"
-
-  #let file = "sample0.txt.gz".findFilePath(baseDir,repoDir).value
-  #echo ">>> ", file
-  #for w in file.undumpNextProof:
-  #  echo "+++ ", w.data.accounts.len, " >> ", w.data.proof.len
-
-  #if true: quit()
 
   # The `accountsRunner()` tests a snap sync functionality for storing chain
   # chain data directly rather than derive them by executing the EVM. Here,
@@ -944,6 +979,16 @@ when isMainModule:
   #
 
   noisy.showElapsed("accountsRunner()"):
+    #false.accountsRunner(persistent=true, snapOther0a)
+    false.accountsRunner(persistent=true, snapOther0b)
+    #false.accountsRunner(persistent=true, snapOther1a)
+    #false.accountsRunner(persistent=true, snapOther1b)
+    #false.accountsRunner(persistent=true, snapOther2)
+    #false.accountsRunner(persistent=true, snapOther3)
+    #false.accountsRunner(persistent=true, snapOther4)
+    #false.accountsRunner(persistent=true, snapOther5)
+    #false.accountsRunner(persistent=true, snapOther6)
+
     false.accountsRunner(persistent=true,  snapTest0)
     #noisy.accountsRunner(persistent=true,  snapTest1)
     false.accountsRunner(persistent=true,  snapTest2)

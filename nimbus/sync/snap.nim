@@ -41,8 +41,8 @@ proc runStart(buddy: SnapBuddyRef): bool =
 proc runStop(buddy: SnapBuddyRef) =
   worker.stop(buddy)
 
-proc runPool(buddy: SnapBuddyRef) =
-  worker.runPool(buddy)
+proc runPool(buddy: SnapBuddyRef; last: bool) =
+  worker.runPool(buddy, last)
 
 proc runSingle(buddy: SnapBuddyRef) {.async.} =
   await worker.runSingle(buddy)

@@ -96,22 +96,6 @@ proc hash*(root: SomeDistinctHash256): Hash =
 # Public printing and pretty printing
 # ------------------------------------------------------------------------------
 
-proc toPC*(
-    num: float;
-    digitsAfterDot: static[int] = 2;
-    rounding: static[float] = 5.0
-      ): string =
-  ## Convert argument number `num` to percent string with decimal precision
-  ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
-  ## default adjusting the first invisible digit, set `rounding = 0` to disable.
-  const
-    minDigits = digitsAfterDot + 1
-    multiplier = (10 ^ (minDigits + 1)).float
-    roundUp = rounding / 10.0
-  result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
-  result.insert(".", result.len - minDigits)
-
-
 func toHex*(hash: Hash256): string =
   ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
