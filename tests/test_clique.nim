@@ -24,7 +24,7 @@ import
   ../nimbus/utils/ec_recover,
   ../nimbus/[config, utils, constants, context],
   ./test_clique/pool,
-  ./replay/undump
+  ./replay/undump_blocks
 
 const
   baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo

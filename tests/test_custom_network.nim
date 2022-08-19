@@ -32,7 +32,7 @@ import
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend],
   ../nimbus/p2p/chain,
-  ./replay/[undump, pp],
+  ./replay/[undump_blocks, pp],
   chronicles,
   eth/[common, p2p, trie/db],
   nimcrypto/hash,

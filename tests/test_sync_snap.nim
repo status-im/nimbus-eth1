@@ -28,8 +28,7 @@ import
   ../nimbus/sync/snap/worker/accounts_db,
   ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../nimbus/utils/prettify,
-  ./replay/[pp, undump],
-  ./test_sync_snap/[sample0, sample1]
+  ./replay/[pp, undump_blocks, undump_proofs]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -45,21 +44,11 @@ type
     file: string   ## name of capture file
     numBlocks: int ## Number of blocks to load
 
-  AccountsProofSample = object
+  AccountsSample = object
     name: string   ## sample name, also used as sub-directory for db separation
-    root: Hash256
-    data: seq[TestSample]
-
-  TestSample = tuple
-    ## Data layout provided by the data dump `sample0.nim`
-    base: Hash256
-    accounts: seq[(Hash256,Blob)]
-    proofs: seq[Blob]
-
-  TestItem = object
-    ## Palatable input format for test function
-    base: NodeTag
-    data: PackedAccountRange
+    file: string
+    firstItem: int
+    lastItem: int
 
   TestDbs = object
     ## Provide enough spare empty databases
@@ -83,10 +72,11 @@ const
     file: "goerli68161.txt.gz",
     numBlocks: 1_000)
 
-  accSample0 = AccountsProofSample(
+  accSample0 = AccountsSample(
     name: "sample0",
-    root: sample0.snapRoot,
-    data: sample0.snapProofData)
+    file: "sample0.txt.gz",
+    firstItem: 0,
+    lastItem: high(int))
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
@@ -170,17 +160,23 @@ proc setErrorLevel =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc to(data: seq[TestSample]; T: type seq[TestItem]): T =
+proc to(sample: AccountsSample; T: type seq[UndumpProof]): T =
   ## Convert test data into usable format
-  for r in  data:
-    result.add TestItem(
-      base:       r.base.to(NodeTag),
-      data:       PackedAccountRange(
-        proof:    r.proofs,
-        accounts: r.accounts.mapIt(
-          PackedAccount(
-            accHash: it[0],
-            accBlob: it[1]))))
+  let file = sample.file.findFilePath(baseDir,repoDir).value
+  var
+    n = -1
+    root: Hash256
+  for w in file.undumpNextProof:
+    n.inc
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
 
 proc to(b: openArray[byte]; T: type ByteArray32): T =
   ## Convert to other representation (or exception)
@@ -265,8 +261,8 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
   let
     peer = Peer.new
-    root = sample.root
-    testItemLst = sample.data.to(seq[TestItem])
+    testItemLst = sample.to(seq[UndumpProof])
+    root = testItemLst[0].root
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
@@ -277,7 +273,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
     if db.persistent:
       tmpDir.flushDbDir(sample.name)
 
-  suite &"SyncSnap: {sample.name} accounts and proofs for {info}":
+  suite &"SyncSnap: {sample.file} accounts and proofs for {info}":
     var
       desc: AccountsDbSessionRef
       accKeys: seq[Hash256]
@@ -849,22 +845,23 @@ when isMainModule:
     # Some 20 `snap/1` reply equivalents
     snapTest0 =
       accSample0
-  
+
     # Only the the first `snap/1` reply from the sample
-    snapTest1 = AccountsProofSample(
+    snapTest1 = AccountsSample(
       name: "test1",
-      root:  snapTest0.root,
-      data:  snapTest0.data[0..0])
+      file: snapTest0.file,
+      lastItem: 0)
 
     # Ditto for sample1
-    snapTest2 = AccountsProofSample(
+    snapTest2 = AccountsSample(
       name: "test2",
-      root: sample1.snapRoot,
-      data: sample1.snapProofData)
-    snapTest3 = AccountsProofSample(
+      file: "sample1.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapTest3 = AccountsSample(
       name: "test3",
-      root:  snapTest2.root,
-      data:  snapTest2.data[0..0])
+      file: snapTest2.file,
+      lastItem: 0)
 
     bulkTest0 = goerliCapture
     bulkTest1: CaptureSpecs = (
@@ -885,6 +882,18 @@ when isMainModule:
 
   #setTraceLevel()
   setErrorLevel()
+
+  #let sample = snapTest2
+  #for it in sample.data.to(seq[TestItem]):
+  #  echo "# >>>\n", sample.root.dumpAccountRange(it.base, it.data)
+  #echo "# <<<"
+
+  #let file = "sample0.txt.gz".findFilePath(baseDir,repoDir).value
+  #echo ">>> ", file
+  #for w in file.undumpNextProof:
+  #  echo "+++ ", w.data.accounts.len, " >> ", w.data.proof.len
+
+  #if true: quit()
 
   # The `accountsRunner()` tests a snap sync functionality for storing chain
   # chain data directly rather than derive them by executing the EVM. Here,
