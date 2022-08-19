@@ -16,6 +16,7 @@ import
   stew/[byteutils, interval_set],
   stint,
   ../../constants,
+  ../protocol,
   ../types
 
 {.push raises: [Defect].}
@@ -33,6 +34,20 @@ type
   LeafRangeSet* = ##\
     ## Managed structure to handle non-adjacent `LeafRange` intervals
     IntervalSetRef[NodeTag,UInt256]
+
+  PackedAccountRange* = object
+    ## Re-packed version of `SnapAccountRange`. The reason why repacking is
+    ## needed is that the `snap/1` protocol uses another RLP encoding than is
+    ## used for storing in the database. So the `PackedAccount` is `BaseDB`
+    ## trie compatible.
+    accounts*: seq[PackedAccount]  ## List of re-packed accounts data
+    proof*: SnapAccountProof       ## Boundary proofs
+
+  PackedAccount* = object
+    ## In fact, the `snap/1` driver returns the `Account` structure which is
+    ## unwanted overhead, gere.
+    accHash*: Hash256
+    accBlob*: Blob
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -84,7 +99,7 @@ proc init*(nt: var NodeTag; data: openArray[byte]): bool =
 # ------------------------------------------------------------------------------
 
 proc read*(rlp: var Rlp, T: type NodeTag): T
-    {.gcsafe, raises: [Defect,RlpError]} =
+    {.gcsafe, raises: [Defect,RlpError].} =
   rlp.read(Hash256).to(T)
 
 proc append*(writer: var RlpWriter, nid: NodeTag) =

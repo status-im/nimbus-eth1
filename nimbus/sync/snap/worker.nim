@@ -70,6 +70,7 @@ proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   # Statistics
   ctx.data.pivotCount.inc
 
+  # Activate per-state root environment
   ctx.data.pivotEnv = ctx.data.pivotTable.lruAppend(key, env, ctx.buddiesMax)
   # -----
   if ctx.data.proofDumpOk:
@@ -86,9 +87,11 @@ proc updatePivotEnv(buddy: SnapBuddyRef): bool =
   if buddy.data.pivotHeader.isSome:
     let
       ctx = buddy.ctx
+      env = ctx.data.pivotEnv
       newStateNumber = buddy.data.pivotHeader.unsafeGet.blockNumber
-      stateNumber = if ctx.data.pivotEnv.isNil: 0.toBlockNumber
-                    else: ctx.data.pivotEnv.stateHeader.blockNumber
+      stateNumber = if env.isNil: 0.toBlockNumber
+                    else: env.stateHeader.blockNumber
+
     if stateNumber + maxPivotBlockWindow < newStateNumber:
       buddy.setPivotEnv(buddy.data.pivotHeader.get)
       return true
@@ -117,12 +120,14 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       tabLen = ctx.data.pivotTable.len
       pivotBlock = if ctx.data.pivotEnv.isNil: none(BlockNumber)
                    else: some(ctx.data.pivotEnv.stateHeader.blockNumber)
+      accCoverage = ctx.data.coveredAccounts.fullFactor
+
     TickerStats(
       pivotBlock:    pivotBlock,
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
       accounts:      meanStdDev(aSum, aSqSum, count),
-      accCoverage:   ctx.data.coveredAccounts.fullFactor,
+      accCoverage:   accCoverage,
       fillFactor:    meanStdDev(uSum, uSqSum, count),
       bulkStore:     ctx.data.accountsDb.dbImportStats)
 

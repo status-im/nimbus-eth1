@@ -14,6 +14,7 @@
 ## using the `snap` protocol.
 
 import
+  std/sequtils,
   chronos,
   eth/[common/eth_types, p2p],
   stew/interval_set,
@@ -36,8 +37,8 @@ type
     ResponseTimeout
 
   GetAccountRange* = object
-    consumed*: LeafRange    ## Real accounts interval covered
-    data*: SnapAccountRange ## reply data
+    consumed*: LeafRange      ## Real accounts interval covered
+    data*: PackedAccountRange ## Re-packed reply data
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -82,10 +83,14 @@ proc getAccountRange*(
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
       return err(ResponseTimeout)
+    let snAccRange = rc.value.get
     GetAccountRange(
-      consumed: iv,
-      data: rc.value.get)
-
+      consumed:   iv,
+      data:       PackedAccountRange(
+        proof:    snAccRange.proof,
+        accounts: snAccRange.accounts.mapIt(PackedAccount(
+          accHash: it.acchash,
+          accBlob: it.accBody.encode))))
   let
     nAccounts = dd.data.accounts.len
     nProof = dd.data.proof.len

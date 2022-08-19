@@ -23,7 +23,7 @@ import
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend, storage_types],
   ../nimbus/p2p/chain,
-  ../nimbus/sync/[types, protocol],
+  ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/accounts_db,
   ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
@@ -53,13 +53,13 @@ type
   TestSample = tuple
     ## Data layout provided by the data dump `sample0.nim`
     base: Hash256
-    accounts: seq[(Hash256,uint64,UInt256,Hash256,Hash256)]
+    accounts: seq[(Hash256,Blob)]
     proofs: seq[Blob]
 
   TestItem = object
     ## Palatable input format for test function
     base: NodeTag
-    data: SnapAccountRange
+    data: PackedAccountRange
 
   TestDbs = object
     ## Provide enough spare empty databases
@@ -175,16 +175,12 @@ proc to(data: seq[TestSample]; T: type seq[TestItem]): T =
   for r in  data:
     result.add TestItem(
       base:       r.base.to(NodeTag),
-      data:       SnapAccountRange(
+      data:       PackedAccountRange(
         proof:    r.proofs,
         accounts: r.accounts.mapIt(
-          SnapAccount(
-            accHash:       it[0],
-            accBody: Account(
-              nonce:       it[1],
-              balance:     it[2],
-              storageRoot: it[3],
-              codeHash:    it[4])))))
+          PackedAccount(
+            accHash: it[0],
+            accBlob: it[1]))))
 
 proc to(b: openArray[byte]; T: type ByteArray32): T =
   ## Convert to other representation (or exception)
@@ -870,6 +866,23 @@ when isMainModule:
       root:  snapTest2.root,
       data:  snapTest2.data[0..0])
 
+    bulkTest0 = goerliCapture
+    bulkTest1: CaptureSpecs = (
+      name:      "full-goerli",
+      network:   goerliCapture.network,
+      file:      goerliCapture.file,
+      numBlocks: high(int))
+    bulkTest2: CaptureSpecs = (
+      name:      "more-goerli",
+      network:   GoerliNet,
+      file:      "goerli482304.txt.gz",
+      numBlocks: high(int))
+    bulkTest3: CaptureSpecs = (
+      name:      "mainnet",
+      network:   MainNet,
+      file:      "mainnet332160.txt.gz",
+      numBlocks: high(int))
+
   #setTraceLevel()
   setErrorLevel()
 
@@ -928,7 +941,7 @@ when isMainModule:
     #noisy.accountsRunner(persistent=true,  snapTest3)
     discard
 
-  when true and false:
+  when true: # and false:
     # ---- database storage timings -------
 
     noisy.showElapsed("importRunner()"):
