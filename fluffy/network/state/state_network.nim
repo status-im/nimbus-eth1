@@ -99,7 +99,7 @@ proc processContentLoop(n: StateNetwork) {.async.} =
   try:
     while true:
       # Just dropping state date for now
-      discard await n.portalProtocol.stream.contentQueue.popFirst()
+      discard await n.contentQueue.popFirst()
   except CancelledError:
     trace "processContentLoop canceled"
 
