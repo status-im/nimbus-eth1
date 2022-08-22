@@ -60,9 +60,6 @@ proc toBlockBody*(payload: ExecutionPayloadV1): BlockBody =
   for i, tx in payload.transactions:
     result.transactions[i] = rlp.decode(distinctBase tx, Transaction)
 
-proc `$`*(x: Hash256): string =
-  toHex(x.data)
-
 proc `$`*(x: BlockHash): string =
   toHex(x)
 

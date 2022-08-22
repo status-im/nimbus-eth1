@@ -161,7 +161,7 @@ proc slotsToSafe*(t: TestEnv, x: int) =
 proc slotsToFinalized*(t: TestEnv, x: int) =
   t.clMock.slotsToFinalized = x
 
-func gwei(n: int): GasInt {.compileTime.} =
+func gwei(n: int64): GasInt {.compileTime.} =
   GasInt(n * (10 ^ 9))
 
 proc makeNextTransaction*(t: TestEnv, recipient: EthAddress, amount: UInt256, payload: openArray[byte] = []): Transaction =
