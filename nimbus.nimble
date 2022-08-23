@@ -69,7 +69,7 @@ task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 
 task fluffy_tools, "Build fluffy tools":
-  buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
+  buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
   buildBinary "blockwalk", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException"
   buildBinary "eth_data_exporter", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 
