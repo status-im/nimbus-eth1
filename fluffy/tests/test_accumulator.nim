@@ -13,7 +13,21 @@ import
   unittest2, stint, stew/byteutils,
   eth/common/eth_types,
   ../populate_db,
-  ../network/history/[accumulator, accumulator_db]
+  ../network/history/[history_content, accumulator]
+
+proc buildProof(
+    accumulator: Accumulator,
+    epochAccumulators: seq[(ContentKey, EpochAccumulator)],
+    header: BlockHeader):
+    Result[seq[Digest], string] =
+  let
+    epochIndex = getEpochIndex(header)
+    epochAccumulator = epochAccumulators[epochIndex][1]
+
+    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+
+  return epochAccumulator.build_proof(gIndex)
 
 suite "Header Accumulator":
   test "Header Accumulator Update":
@@ -73,13 +87,9 @@ suite "Header Accumulator":
       headers.add(BlockHeader(
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
-    let db = AccumulatorDB.new("", inMemory = true)
-
-    db.buildAccumulator(headers)
-
-    let accumulatorOpt = db.getAccumulator()
-    check accumulatorOpt.isSome()
-    let accumulator = accumulatorOpt.get()
+    let
+      accumulator = buildAccumulator(headers)
+      epochAccumulators = buildAccumulatorData(headers)
 
     block: # Test valid headers
       for i in headersToTest:
@@ -88,24 +98,24 @@ suite "Header Accumulator":
           if header.inCurrentEpoch(accumulator):
             none(seq[Digest])
           else:
-            let proof = db.buildProof(header)
+            let proof = buildProof(accumulator, epochAccumulators, header)
             check proof.isOk()
 
             some(proof.get())
 
-        check db.verifyHeader(header, proofOpt).isOk()
+        check verifyHeader(accumulator, header, proofOpt).isOk()
 
     block: # Test some invalid headers
       # Test a header with block number > than latest in accumulator
       let header = BlockHeader(blockNumber: 25000.stuint(256))
-      check db.verifyHeader(header, none(seq[Digest])).isErr()
+      check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
 
       # Test different block headers by altering the difficulty
       for i in headersToTest:
         let header = BlockHeader(
           blockNumber: i.stuint(256), difficulty: 2.stuint(256))
 
-        check db.verifyHeader(header, none(seq[Digest])).isErr()
+        check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
 
   test "Header Accumulator header hash for blocknumber":
     var acc = newEmptyAccumulator()
