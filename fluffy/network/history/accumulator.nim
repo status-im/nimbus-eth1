@@ -16,11 +16,8 @@ import
 
 export ssz_serialization, merkleization, proofs
 
-# Header Accumulator
-# Part from specification
-# https://github.com/ethereum/portal-network-specs/blob/master/header-gossip-network.md#accumulator-snapshot
-# However, applied for the history network instead of the header gossip network
-# as per https://github.com/ethereum/portal-network-specs/issues/153
+# Header Accumulator, as per specification:
+# https://github.com/ethereum/portal-network-specs/blob/master/history-network.md#the-header-accumulator
 
 const
   epochSize* = 8192 # blocks
@@ -51,10 +48,10 @@ type
     of UnknownBlockNumber:
       discard
 
-proc newEmptyAccumulator*(): Accumulator =
-  return Accumulator(
+func init*(T: type Accumulator): T =
+  Accumulator(
     historicalEpochs:  List[Bytes32, maxHistoricalEpochs].init(@[]),
-    currentEpoch: List[HeaderRecord, epochSize].init(@[])
+    currentEpoch: EpochAccumulator.init(@[])
   )
 
 func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
@@ -111,31 +108,31 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 ## Calls and helper calls for building header proofs and verifying headers
 ## against the Accumulator and the header proofs.
 
-func inCurrentEpoch*(bn: uint64, a: Accumulator): bool =
-  bn > uint64(a.historicalEpochs.len() * epochSize) - 1
+func inCurrentEpoch*(blockNumber: uint64, a: Accumulator): bool =
+  blockNumber > uint64(a.historicalEpochs.len() * epochSize) - 1
 
 func inCurrentEpoch*(header: BlockHeader, a: Accumulator): bool =
   let blockNumber = header.blockNumber.truncate(uint64)
-  return inCurrentEpoch(blockNumber, a)
+  blockNumber.inCurrentEpoch(a)
 
-func getEpochIndex*(bn: uint64): uint64 =
-  bn div epochSize
+func getEpochIndex*(blockNumber: uint64): uint64 =
+  blockNumber div epochSize
 
 func getEpochIndex*(header: BlockHeader): uint64 =
   let blockNumber = header.blockNumber.truncate(uint64)
   ## Get the index for the historical epochs
-  return getEpochIndex(blockNumber)
+  getEpochIndex(blockNumber)
 
-func getHeaderRecordIndex(bn: uint64, epochIndex: uint64): uint64 =
+func getHeaderRecordIndex(blockNumber: uint64, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
-  uint64(bn - epochIndex * epochSize)
+  uint64(blockNumber - epochIndex * epochSize)
 
 func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
-  return getHeaderRecordIndex(header.blockNumber.truncate(uint64), epochIndex)
+  getHeaderRecordIndex(header.blockNumber.truncate(uint64), epochIndex)
 
 func verifyProof*(
-    a: Accumulator, proof: openArray[Digest], header: BlockHeader): bool =
+    a: Accumulator, header: BlockHeader, proof: openArray[Digest]): bool =
   let
     epochIndex = getEpochIndex(header)
     epochAccumulatorHash = Digest(data: a.historicalEpochs[epochIndex])
@@ -148,7 +145,7 @@ func verifyProof*(
 
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
-proc verifyHeader*(
+func verifyHeader*(
     accumulator: Accumulator, header: BlockHeader, proof: Option[seq[Digest]]):
     Result[void, string] =
   if header.inCurrentEpoch(accumulator):
@@ -164,7 +161,7 @@ proc verifyHeader*(
       err("Header not part of canonical chain")
   else:
     if proof.isSome():
-      if accumulator.verifyProof(proof.get, header):
+      if accumulator.verifyProof(header, proof.get):
         ok()
       else:
         err("Proof verification failed")
@@ -173,7 +170,7 @@ proc verifyHeader*(
 
 func getHeaderHashForBlockNumber*(a: Accumulator, bn: UInt256): BlockHashResult=
   let blockNumber = bn.truncate(uint64)
-  if inCurrentEpoch(blockNumber, a):
+  if blockNumber.inCurrentEpoch(a):
     let relIndex = blockNumber - uint64(a.historicalEpochs.len()) * epochSize
 
     if relIndex > uint64(a.currentEpoch.len() - 1):

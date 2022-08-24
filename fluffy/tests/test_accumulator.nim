@@ -15,7 +15,7 @@ import
   ../populate_db,
   ../network/history/[history_content, accumulator]
 
-proc buildProof(
+func buildProof(
     accumulator: Accumulator,
     epochAccumulators: seq[(ContentKey, EpochAccumulator)],
     header: BlockHeader):
@@ -118,11 +118,12 @@ suite "Header Accumulator":
         check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
 
   test "Header Accumulator header hash for blocknumber":
-    var acc = newEmptyAccumulator()
+    var acc = Accumulator.init()
 
-    let numEpochs = 2
-    let numHeadersInCurrentEpoch = 5
-    let numHeaders = numEpochs * epochSize + numHeadersInCurrentEpoch
+    let
+      numEpochs = 2
+      numHeadersInCurrentEpoch = 5
+      numHeaders = numEpochs * epochSize + numHeadersInCurrentEpoch
 
     var headerHashes: seq[Hash256] = @[]
 
@@ -168,5 +169,3 @@ suite "Header Accumulator":
       let res1 = acc.getHeaderHashForBlockNumber(u256(3 * epochSize))
       check:
         res1.kind == UnknownBlockNumber
-
-
