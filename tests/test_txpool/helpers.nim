@@ -12,7 +12,7 @@ import
   std/[os, strformat, sequtils, strutils, times],
   ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
   ../../nimbus/utils/tx_pool/tx_tasks/[tx_packer, tx_recover],
-  ../replay/[pp, undump],
+  ../replay/[pp, undump_blocks],
   chronicles,
   eth/[common, keys],
   stew/[keyed_queue, sorted_set],

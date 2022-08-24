@@ -26,29 +26,43 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  maxPivotBlockWindow* = 500
+  maxPivotBlockWindow* = 50
     ## The maximal depth of two block headers. If the pivot block header
     ## (containing the current state root) is more than this many blocks
     ## away from a new pivot block header candidate, then the latter one
     ## replaces the current block header.
+    ##
+    ## This mechanism applies to new worker buddies which start by finding
+    ## a new pivot.
 
-  snapAccountsDumpRangeKiln = (high(UInt256) div 300000)
-    ## Sample size for a single snap dump on `kiln` (for debugging)
+  switchPivotAfterCoverage* = 1.0 # * 0.30
+    ## Stop fetching from the same pivot state root with this much coverage
+    ## and try to find a new one. Setting this value to `1.0`, this feature
+    ## is disabled. Note that settting low coverage levels is primarily for
+    ## testing/debugging (may produce stress conditions.)
+    ##
+    ## If this setting is active, it typically supersedes the pivot update
+    ## mechainsm implied by the `maxPivotBlockWindow`. This for the simple
+    ## reason that the pivot state root is typically near the head of the
+    ## block chain.
+    ##
+    ## This mechanism applies to running worker buddies. When triggered, all
+    ## pivot handlers are reset so they will start from scratch finding a
+    ## better pivot.
 
-  snapAccountsDumpRange* = snapAccountsDumpRangeKiln
-    ## Activated size of a data slice if dump is anabled
+  # ---
 
-  snapAccountsDumpMax* = 20
-    ## Max number of snap proof dumps (for debugging)
-
-  snapAccountsDumpEnable* = false
+  snapAccountsDumpEnable* = false # or true
     ## Enable data dump
+
+  snapAccountsDumpCoverageStop* = 0.99999
+    ## Stop dumping if most accounts are covered
 
   seenBlocksMax = 500
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerBase* = ref object of RootObj
+  WorkerPivotBase* = ref object of RootObj
     ## Stub object, to be inherited in file `worker.nim`
 
   BuddyStat* = distinct uint
@@ -84,9 +98,8 @@ type
     pivotAccount*: NodeTag            ## Random account
     availAccounts*: LeafRangeSet      ## Accounts to fetch (organised as ranges)
     nAccounts*: uint64                ## Number of accounts imported
-    # ---
-    proofDumpOk*: bool
-    proofDumpInx*: int
+    when switchPivotAfterCoverage < 1.0:
+      minCoverageReachedOk*: bool     ## Stop filling this pivot
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -97,7 +110,11 @@ type
     stats*: SnapBuddyStats            ## Statistics counters
     errors*: SnapBuddyErrors          ## For error handling
     pivotHeader*: Option[BlockHeader] ## For pivot state hunter
-    workerBase*: WorkerBase           ## Opaque object reference for sub-module
+    workerPivot*: WorkerPivotBase     ## Opaque object reference for sub-module
+
+  BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
+    ## All buddies call back (the argument type is defined below with
+    ## pretty name `SnapBuddyRef`.)
 
   CtxData* = object
     ## Globally shared data extension
@@ -111,17 +128,18 @@ type
     pivotEnv*: SnapPivotRef           ## Environment containing state root
     accountRangeMax*: UInt256         ## Maximal length, high(u256)/#peers
     accountsDb*: AccountsDbRef        ## Proof processing for accounts
-    # ---
-    proofDumpOk*: bool
-    proofDumpFile*: File
+    runPoolHook*: BuddyPoolHookFn     ## Callback for `runPool()` 
+    # --------
+    when snapAccountsDumpEnable:
+      proofDumpOk*: bool
+      proofDumpFile*: File
+      proofDumpInx*: int
 
-  SnapBuddyRef* = ##\
+  SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
     ## Extended worker peer descriptor
-    BuddyRef[CtxData,BuddyData]
 
-  SnapCtxRef* = ##\
+  SnapCtxRef* = CtxRef[CtxData]
     ## Extended global descriptor
-    CtxRef[CtxData]
 
 # ------------------------------------------------------------------------------
 # Public functions

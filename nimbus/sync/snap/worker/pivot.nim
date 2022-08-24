@@ -121,7 +121,7 @@ type
     HuntRange
     HuntRangeFinal
 
-  WorkerHuntEx = ref object of WorkerBase
+  WorkerHuntEx = ref object of WorkerPivotBase
     ## Peer canonical chain head ("best block") search state.
     syncMode:      WorkerMode    ## Action mode
     lowNumber:     BlockNumber   ## Recent lowest known block number.
@@ -147,10 +147,10 @@ static:
 # ------------------------------------------------------------------------------
 
 proc hunt(buddy: SnapBuddyRef): WorkerHuntEx =
-  buddy.data.workerBase.WorkerHuntEx
+  buddy.data.workerPivot.WorkerHuntEx
 
 proc `hunt=`(buddy: SnapBuddyRef; value: WorkerHuntEx) =
-  buddy.data.workerBase = value
+  buddy.data.workerPivot = value
 
 proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
   T(syncMode:   syncMode,
@@ -529,6 +529,9 @@ proc pivotStop*(buddy: SnapBuddyRef) =
   ## Clean up this peer
   discard
 
+proc pivotRestart*(buddy: SnapBuddyRef) =
+  buddy.pivotStart
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -565,7 +568,8 @@ proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
     trace trEthRecvError & "waiting for GetBlockHeaders reply", peer,
       error=e.msg
     inc buddy.data.stats.major.networkErrors
-    buddy.pivotStop()
+    # Just try another peer
+    buddy.ctrl.zombie = true
     return
 
   if reply.isNone:

@@ -15,59 +15,35 @@
 ## re-factored database layer.
 
 import
-  std/[sequtils, strformat, strutils, tables],
+  std/[sequtils, strutils, tables],
   eth/[common/eth_types, trie/nibbles],
   stew/results,
   ../../range_desc,
-  "."/[hexary_defs, hexary_desc]
+  "."/[hexary_defs, hexary_desc, hexary_paths]
 
 {.push raises: [Defect].}
 
 const
   RepairTreeDebugging = false
 
-  EmptyNibbleRange = EmptyNodeBlob.initNibbleRange
+type
+  RPathXStep = object
+    ## Extended `RPathStep` needed for `NodeKey` assignmant
+    pos*: int                         ## Some position into `seq[RPathStep]`
+    step*: RPathStep                  ## Modified copy of an `RPathStep`
+    canLock*: bool                    ## Can set `Locked` state
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-template noPpError(info: static[string]; code: untyped) =
-  try:
-    code
-  except ValueError as e:
-    raiseAssert "Inconveivable (" & info & "): " & e.msg
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops (" & info & ") " & $e.name & ": " & e.msg
-
-proc pp(w: RPathStep; db: HexaryTreeDB): string =
-  noPpError("pp(RPathStep)])"):
-    let nibble = if 0 <= w.nibble: &"{w.nibble:x}" else: "ø"
-    result = &"({w.key.pp(db)},{nibble},{w.node.pp(db)})"
-
-proc pp(w: openArray[RPathStep]; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  noPpError("pp(seq[RPathStep])"):
-    result = w.toSeq.mapIt(it.pp(db)).join(pfx)
-
-proc pp(w: RPath; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  noPpError("pp(RPath)"):
-    result = w.path.pp(db,indent) & &"{pfx}({w.tail.pp})"
-
 proc pp(w: RPathXStep; db: HexaryTreeDB): string =
-  noPpError("pp(RPathXStep)"):
-    let y = if w.canLock: "lockOk" else: "noLock"
-    result = &"({w.pos},{y},{w.step.pp(db)})"
+  let y = if w.canLock: "lockOk" else: "noLock"
+  "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
 
 proc pp(w: seq[RPathXStep]; db: HexaryTreeDB; indent = 4): string =
   let pfx = "\n" & " ".repeat(indent)
-  noPpError("pp(seq[RPathXStep])"):
-    result = w.mapIt(it.pp(db)).join(pfx)
+  w.mapIt(it.pp(db)).join(pfx)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -76,13 +52,6 @@ proc pp(w: seq[RPathXStep]; db: HexaryTreeDB; indent = 4): string =
 proc dup(node: RNodeRef): RNodeRef =
   new result
   result[] = node[]
-
-
-template noKeyError(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -230,123 +199,85 @@ proc rTreeSplitNode(
 # Private functions, repair tree actions
 # ------------------------------------------------------------------------------
 
-proc rTreeFollow(
-    nodeKey: NodeKey;
-    db: var HexaryTreeDB
-      ): RPath =
-  ## Compute logest possible path matching the `nodeKey` nibbles.
-  result.tail = nodeKey.to(NibblesSeq)
-  noKeyError("rTreeFollow"):
-    var key = db.rootKey.to(RepairKey)
-    while db.tab.hasKey(key) and 0 < result.tail.len:
-      let node = db.tab[key]
-      case node.kind:
-      of Leaf:
-        if result.tail.len == result.tail.sharedPrefixLen(node.lPfx):
-          # Bingo, got full path
-          result.path.add RPathStep(key: key, node: node, nibble: -1)
-          result.tail = EmptyNibbleRange
-        return
-      of Branch:
-        let nibble = result.tail[0].int8
-        if node.bLink[nibble].isZero:
-          return
-        result.path.add RPathStep(key: key, node: node, nibble: nibble)
-        result.tail = result.tail.slice(1)
-        key = node.bLink[nibble]
-      of Extension:
-        if node.ePfx.len != result.tail.sharedPrefixLen(node.ePfx):
-          return
-        result.path.add RPathStep(key: key, node: node, nibble: -1)
-        result.tail = result.tail.slice(node.ePfx.len)
-        key = node.eLink
-
-proc rTreeFollow(
-    nodeTag: NodeTag;
-    db: var HexaryTreeDB
-      ): RPath =
-  ## Variant of `rTreeFollow()`
-  nodeTag.to(NodeKey).rTreeFollow(db)
-
-
 proc rTreeInterpolate(
     rPath: RPath;
     db: var HexaryTreeDB
-      ): RPath =
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError]} =
   ## Extend path, add missing nodes to tree. The last node added will be
   ## a `Leaf` node if this function succeeds.
   ##
   ## The function assumed that the `RPath` argument is the longest possible
   ## as just constructed by `rTreeFollow()`
   if 0 < rPath.path.len and 0 < rPath.tail.len:
-    noKeyError("rTreeExtend"):
-      let step = rPath.path[^1]
-      case step.node.kind:
+    let step = rPath.path[^1]
+    case step.node.kind:
+    of Branch:
+      # Now, the slot must not be empty. An empty slot would lead to a
+      # rejection of this record as last valid step, contrary to the
+      # assumption `path` is the longest one.
+      if step.nibble < 0:
+        return # sanitary check failed
+      let key = step.node.bLink[step.nibble]
+      if key.isZero:
+        return # sanitary check failed
+
+      # Case: unused slot => add leaf record
+      if not db.tab.hasKey(key):
+        return db.rTreeExtendLeaf(rPath, key)
+
+      # So a `child` node exits but it is something that could not be used to
+      # extend the argument `path` which is assumed the longest possible one.
+      let child = db.tab[key]
+      case child.kind:
       of Branch:
-        # Now, the slot must not be empty. An empty slot would lead to a
-        # rejection of this record as last valid step, contrary to the
-        # assumption `path` is the longest one.
-        if step.nibble < 0:
-          return # sanitary check failed
-        let key = step.node.bLink[step.nibble]
-        if key.isZero:
-          return # sanitary check failed
-
-        # Case: unused slot => add leaf record
-        if not db.tab.hasKey(key):
-          return db.rTreeExtendLeaf(rPath, key)
-
-        # So a `child` node exits but it is something that could not be used to
-        # extend the argument `path` which is assumed the longest possible one.
-        let child = db.tab[key]
-        case child.kind:
-        of Branch:
-          # So a `Leaf` node can be linked into the `child` branch
-          return db.rTreeExtendLeaf(rPath, key, child)
-
-        # Need to split the right `grandChild` in `child -> grandChild`
-        # into parts:
-        #
-        #   left(Extension) -> middle(Branch)
-        #                         |   |
-        #                         |   +-----> right(Extension or Leaf) ...
-        #                         +---------> new Leaf record
-        #
-        # where either `left()` or `right()` extensions might be missing
-        of Extension, Leaf:
-          var xPath = db.rTreeSplitNode(rPath, key, child)
-          if 0 < xPath.path.len:
-            # Append `Leaf` node
-            xPath.path[^1].nibble = xPath.tail[0].int8
-            xPath.tail = xPath.tail.slice(1)
-            return db.rTreeExtendLeaf(xPath, db.newRepairKey())
-      of Leaf:
-        return # Oops
-      of Extension:
-        let key = step.node.eLink
-
-        var child: RNodeRef
-        if db.tab.hasKey(key):
-          child = db.tab[key]
-          # `Extension` can only be followed by a `Branch` node
-          if child.kind != Branch:
-            return
-        else:
-          # Case: unused slot => add `Branch` and `Leaf` record
-          child = RNodeRef(
-            state: Mutable,
-            kind:  Branch)
-          db.tab[key] = child
-
         # So a `Leaf` node can be linked into the `child` branch
         return db.rTreeExtendLeaf(rPath, key, child)
+
+      # Need to split the right `grandChild` in `child -> grandChild`
+      # into parts:
+      #
+      #   left(Extension) -> middle(Branch)
+      #                         |   |
+      #                         |   +-----> right(Extension or Leaf) ...
+      #                         +---------> new Leaf record
+      #
+      # where either `left()` or `right()` extensions might be missing
+      of Extension, Leaf:
+        var xPath = db.rTreeSplitNode(rPath, key, child)
+        if 0 < xPath.path.len:
+          # Append `Leaf` node
+          xPath.path[^1].nibble = xPath.tail[0].int8
+          xPath.tail = xPath.tail.slice(1)
+          return db.rTreeExtendLeaf(xPath, db.newRepairKey())
+    of Leaf:
+      return # Oops
+    of Extension:
+      let key = step.node.eLink
+
+      var child: RNodeRef
+      if db.tab.hasKey(key):
+        child = db.tab[key]
+        # `Extension` can only be followed by a `Branch` node
+        if child.kind != Branch:
+          return
+      else:
+        # Case: unused slot => add `Branch` and `Leaf` record
+        child = RNodeRef(
+          state: Mutable,
+          kind:  Branch)
+        db.tab[key] = child
+
+      # So a `Leaf` node can be linked into the `child` branch
+      return db.rTreeExtendLeaf(rPath, key, child)
 
 
 proc rTreeInterpolate(
     rPath: RPath;
     db: var HexaryTreeDB;
     payload: Blob
-      ): RPath =
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError]} =
   ## Variant of `rTreeExtend()` which completes a `Leaf` record.
   result = rPath.rTreeInterpolate(db)
   if 0 < result.path.len and result.tail.len == 0:
@@ -358,7 +289,8 @@ proc rTreeInterpolate(
 proc rTreeUpdateKeys(
     rPath: RPath;
     db: var HexaryTreeDB
-      ): Result[void,int] =
+      ): Result[void,int]
+      {.gcsafe, raises: [Defect,KeyError]} =
   ## The argument `rPath` is assumed to organise database nodes as
   ##
   ##    root -> ... -> () -> () -> ... -> () -> () ...
@@ -468,7 +400,10 @@ proc rTreeUpdateKeys(
 # Public fuctions
 # ------------------------------------------------------------------------------
 
-proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
+proc hexary_interpolate*(
+    db: var HexaryTreeDB
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect,KeyError]} =
   ## Verifiy accounts by interpolating the collected accounts on the hexary
   ## trie of the repair database. If all accounts can be represented in the
   ## hexary trie, they are vonsidered validated.
@@ -477,7 +412,7 @@ proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
   for n in countDown(db.acc.len-1,0):
     let acc = db.acc[n]
     if acc.payload.len != 0:
-      let rPath = acc.pathTag.rTreeFollow(db)
+      let rPath = acc.pathTag.hexaryPath(db)
       var repairKey = acc.nodeKey
       if repairKey.isZero and 0 < rPath.path.len and rPath.tail.len == 0:
         repairKey = rPath.path[^1].key
@@ -485,7 +420,7 @@ proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
       if repairKey.isZero:
         let
           update = rPath.rTreeInterpolate(db, acc.payload)
-          final = acc.pathTag.rTreeFollow(db)
+          final = acc.pathTag.hexaryPath(db)
         if update != final:
           return err(AccountRepairBlocked)
         db.acc[n].nodeKey = rPath.path[^1].key
@@ -495,7 +430,7 @@ proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
   for n in countDown(db.acc.len-1,0):
     let acc = db.acc[n]
     if not acc.nodeKey.isZero:
-      let rPath = acc.pathTag.rTreeFollow(db)
+      let rPath = acc.pathTag.hexaryPath(db)
       if rPath.path[^1].node.state == Mutable:
         let rc = rPath.rTreeUpdateKeys(db)
         if rc.isErr:
@@ -504,7 +439,7 @@ proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
   while 0 < reVisit.len:
     var again: seq[NodeTag]
     for nodeTag in reVisit:
-      let rc = nodeTag.rTreeFollow(db).rTreeUpdateKeys(db)
+      let rc = nodeTag.hexaryPath(db).rTreeUpdateKeys(db)
       if rc.isErr:
         again.add nodeTag
     if reVisit.len <= again.len:
@@ -512,16 +447,6 @@ proc hexary_interpolate*(db: var HexaryTreeDB): Result[void,HexaryDbError] =
     reVisit = again
 
   ok()
-
-# ------------------------------------------------------------------------------
-# Debugging
-# ------------------------------------------------------------------------------
-
-proc dumpPath*(db: var HexaryTreeDB; key: NodeTag): seq[string] =
-  ## Pretty print helper compiling the path into the repair tree for the
-  ## argument `key`.
-  let rPath = key.rTreeFollow(db)
-  rPath.path.mapIt(it.pp(db)) & @["(" & rPath.tail.pp & ")"]
 
 # ------------------------------------------------------------------------------
 # End

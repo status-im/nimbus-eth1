@@ -12,7 +12,7 @@
 ## Snap sync components tester
 
 import
-  std/[algorithm, distros, hashes, math, os,
+  std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
   eth/[common/eth_types, p2p, rlp, trie/db],
@@ -23,12 +23,12 @@ import
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend, storage_types],
   ../nimbus/p2p/chain,
-  ../nimbus/sync/[types, protocol],
+  ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/[accounts_db, db/hexary_desc, db/rocky_bulk_load],
+  ../nimbus/sync/snap/worker/accounts_db,
+  ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../nimbus/utils/prettify,
-  ./replay/[pp, undump],
-  ./test_sync_snap/[sample0, sample1]
+  ./replay/[pp, undump_blocks, undump_proofs]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -44,21 +44,11 @@ type
     file: string   ## name of capture file
     numBlocks: int ## Number of blocks to load
 
-  AccountsProofSample = object
+  AccountsSample = object
     name: string   ## sample name, also used as sub-directory for db separation
-    root: Hash256
-    data: seq[TestSample]
-
-  TestSample = tuple
-    ## Data layout provided by the data dump `sample0.nim`
-    base: Hash256
-    accounts: seq[(Hash256,uint64,UInt256,Hash256,Hash256)]
-    proofs: seq[Blob]
-
-  TestItem = object
-    ## Palatable input format for test function
-    base: NodeTag
-    data: SnapAccountRange
+    file: string
+    firstItem: int
+    lastItem: int
 
   TestDbs = object
     ## Provide enough spare empty databases
@@ -74,16 +64,19 @@ else:
   const isUbuntu32bit = false
 
 const
+  sampleDirRefFile = "sample0.txt.gz"
+
   goerliCapture: CaptureSpecs = (
     name: "goerli",
     network: GoerliNet,
     file: "goerli68161.txt.gz",
     numBlocks: 1_000)
 
-  accSample0 = AccountsProofSample(
+  accSample0 = AccountsSample(
     name: "sample0",
-    root: sample0.snapRoot,
-    data: sample0.snapProofData)
+    file: "sample0.txt.gz",
+    firstItem: 0,
+    lastItem: high(int))
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
@@ -118,7 +111,7 @@ proc findFilePath(file: string;
         return ok(path)
   err()
 
-proc getTmpDir(sampleDir = "sample0.nim"): string =
+proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
 
 proc pp(d: Duration): string =
@@ -137,6 +130,9 @@ proc pp(d: AccountLoadStats): string =
 
 proc pp(rc: Result[Account,HexaryDbError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
+
+proc pp(rc: Result[Hash256,HexaryDbError]): string =
+  if rc.isErr: $rc.error else: $rc.value.to(NodeTag)
 
 proc ppKvPc(w: openArray[(string,int)]): string =
   w.mapIt(&"{it[0]}={it[1]}%").join(", ")
@@ -164,21 +160,23 @@ proc setErrorLevel =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc to(data: seq[TestSample]; T: type seq[TestItem]): T =
+proc to(sample: AccountsSample; T: type seq[UndumpProof]): T =
   ## Convert test data into usable format
-  for r in  data:
-    result.add TestItem(
-      base:       r.base.to(NodeTag),
-      data:       SnapAccountRange(
-        proof:    r.proofs,
-        accounts: r.accounts.mapIt(
-          SnapAccount(
-            accHash:       it[0],
-            accBody: Account(
-              nonce:       it[1],
-              balance:     it[2],
-              storageRoot: it[3],
-              codeHash:    it[4])))))
+  let file = sample.file.findFilePath(baseDir,repoDir).value
+  var
+    n = -1
+    root: Hash256
+  for w in file.undumpNextProof:
+    n.inc
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
 
 proc to(b: openArray[byte]; T: type ByteArray32): T =
   ## Convert to other representation (or exception)
@@ -263,8 +261,8 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
   let
     peer = Peer.new
-    root = sample.root
-    testItemLst = sample.data.to(seq[TestItem])
+    testItemLst = sample.to(seq[UndumpProof])
+    root = testItemLst[0].root
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
@@ -275,10 +273,10 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
     if db.persistent:
       tmpDir.flushDbDir(sample.name)
 
-  suite &"SyncSnap: {sample.name} accounts and proofs for {info}":
+  suite &"SyncSnap: {sample.file} accounts and proofs for {info}":
     var
       desc: AccountsDbSessionRef
-      accounts: seq[SnapAccount]
+      accKeys: seq[Hash256]
 
     test &"Snap-proofing {testItemLst.len} items for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
@@ -299,7 +297,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
 
       # Load/accumulate accounts (needs some unique sorting)
       let lowerBound = testItemLst.mapIt(it.base).sortMerge
-      accounts = testItemLst.mapIt(it.data.accounts).sortMerge
+      var accounts = testItemLst.mapIt(it.data.accounts).sortMerge
       check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
 
@@ -310,14 +308,61 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       check desc.dbImports() == OkHexDb
       noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
-    test &"Revisiting {accounts.len} items stored items on BaseChainDb":
-      for acc in accounts:
+      # Update list of accounts. There might be additional accounts in the set
+      # of proof nodes, typically before the `lowerBound` of each block. As
+      # there is a list of account ranges (that were merged for testing), one
+      # need to check for additional records only on either end of a range.
+      var keySet = accounts.mapIt(it.accHash).toHashSet
+      for w in testItemLst:
+        var key = desc.prevChainDbKey(w.data.accounts[0].accHash)
+        while key.isOk and key.value notin keySet:
+          keySet.incl key.value
+          let newKey = desc.prevChainDbKey(key.value)
+          check newKey != key
+          key = newKey
+        key = desc.nextChainDbKey(w.data.accounts[^1].accHash)
+        while key.isOk and key.value notin keySet:
+          keySet.incl key.value
+          let newKey = desc.nextChainDbKey(key.value)
+          check newKey != key
+          key = newKey
+      accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
+                             .mapIt(it.to(Hash256))
+      check accounts.len <= accKeys.len
+
+    test &"Revisiting {accKeys.len} items stored items on BaseChainDb":
+      var
+        nextAccount = accKeys[0]
+        prevAccount: Hash256
+        count = 0
+      for accHash in accKeys:
+        count.inc
         let
-          byChainDB = desc.getChainDbAccount(acc.accHash)
-          byBulker = desc.getBulkDbXAccount(acc.accHash)
+          pfx = $count & "#"
+          byChainDB = desc.getChainDbAccount(accHash)
+          byNextKey = desc.nextChainDbKey(accHash)
+          byPrevKey = desc.prevChainDbKey(accHash)
+          byBulker = desc.getBulkDbXAccount(accHash)
         noisy.say "*** find",
-          "byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
+          "<", count, "> byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
         check byChainDB.isOk
+
+        # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
+        # `nextAccount` value is still the old one and will be different from
+        # the account in the next for-loop cycle (if any.)
+        check pfx & accHash.pp(false) == pfx & nextAccount.pp(false)
+        if byNextKey.isOk:
+          nextAccount = byNextKey.value
+        else:
+          nextAccount = Hash256.default
+
+        # Check `prev` traversal funcionality
+        if prevAccount != Hash256.default:
+          check byPrevKey.isOk
+          if byPrevKey.isOk:
+            check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
+        prevAccount = accHash
+
         if desc.dbBackendRocksDb():
           check byBulker.isOk
           check byChainDB == byBulker
@@ -345,7 +390,8 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       # letters stand for `Locked` nodes which are like `Static` ones but
       # added later (typically these nodes are update `Mutable` nodes.)
       #
-      noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
+      # Beware: dumping a large database is not recommended
+      #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
 
 
 proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
@@ -799,22 +845,70 @@ when isMainModule:
     # Some 20 `snap/1` reply equivalents
     snapTest0 =
       accSample0
-  
+
     # Only the the first `snap/1` reply from the sample
-    snapTest1 = AccountsProofSample(
+    snapTest1 = AccountsSample(
       name: "test1",
-      root:  snapTest0.root,
-      data:  snapTest0.data[0..0])
+      file: snapTest0.file,
+      lastItem: 0)
 
     # Ditto for sample1
-    snapTest2 = AccountsProofSample(
+    snapTest2 = AccountsSample(
       name: "test2",
-      root: sample1.snapRoot,
-      data: sample1.snapProofData)
-    snapTest3 = AccountsProofSample(
+      file: "sample1.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapTest3 = AccountsSample(
       name: "test3",
-      root:  snapTest2.root,
-      data:  snapTest2.data[0..0])
+      file: snapTest2.file,
+      lastItem: 0)
+
+    # Other samples from bulk folder
+    snapOther0a = AccountsSample(
+      name: "Other0a",
+      file: "account0_00_06_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther0b = AccountsSample(
+      name: "Other0b",
+      file: "account0_07_08_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther1a = AccountsSample(
+      name: "Other1a",
+      file: "account1_09_09_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther1b = AccountsSample(
+      name: "Other1b",
+      file: "account1_10_17_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther2 = AccountsSample(
+      name: "Other2",
+      file: "account2_18_25_dump.txt.gz",
+      firstItem: 1,
+      lastItem: high(int))
+    snapOther3 = AccountsSample(
+      name: "Other3",
+      file: "account3_26_33_dump.txt.gz",
+      firstItem: 2,
+      lastItem: high(int))
+    snapOther4 = AccountsSample(
+      name: "Other4",
+      file: "account4_34_41_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
+    snapOther5 = AccountsSample(
+      name: "Other5",
+      file: "account5_42_49_dump.txt.gz",
+      firstItem: 2,
+      lastItem: high(int))
+    snapOther6 = AccountsSample(
+      name: "Other6",
+      file: "account6_50_54_dump.txt.gz",
+      firstItem: 0,
+      lastItem: high(int))
 
     bulkTest0 = goerliCapture
     bulkTest1: CaptureSpecs = (
@@ -832,7 +926,6 @@ when isMainModule:
       network:   MainNet,
       file:      "mainnet332160.txt.gz",
       numBlocks: high(int))
-
 
   #setTraceLevel()
   setErrorLevel()
@@ -885,13 +978,24 @@ when isMainModule:
   #    re-visted using the account hash as access path.
   #
 
-  false.accountsRunner(persistent=true,  snapTest0)
-  false.accountsRunner(persistent=false,  snapTest0)
-  noisy.accountsRunner(persistent=true,  snapTest1)
-  false.accountsRunner(persistent=false,  snapTest2)
-  #noisy.accountsRunner(persistent=true,  snapTest3)
+  noisy.showElapsed("accountsRunner()"):
+    #false.accountsRunner(persistent=true, snapOther0a)
+    false.accountsRunner(persistent=true, snapOther0b)
+    #false.accountsRunner(persistent=true, snapOther1a)
+    #false.accountsRunner(persistent=true, snapOther1b)
+    #false.accountsRunner(persistent=true, snapOther2)
+    #false.accountsRunner(persistent=true, snapOther3)
+    #false.accountsRunner(persistent=true, snapOther4)
+    #false.accountsRunner(persistent=true, snapOther5)
+    #false.accountsRunner(persistent=true, snapOther6)
 
-  when true and false:
+    false.accountsRunner(persistent=true,  snapTest0)
+    #noisy.accountsRunner(persistent=true,  snapTest1)
+    false.accountsRunner(persistent=true,  snapTest2)
+    #noisy.accountsRunner(persistent=true,  snapTest3)
+    discard
+
+  when true: # and false:
     # ---- database storage timings -------
 
     noisy.showElapsed("importRunner()"):

@@ -22,8 +22,8 @@ import
   ../../../db/[kvstore_rocksdb, select_backend, storage_types],
   "../.."/[protocol, types],
   ../range_desc,
-  ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_follow, hexary_import,
-        hexary_interpolate, rocky_bulk_load]
+  ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_import,
+        hexary_interpolate, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
@@ -57,12 +57,31 @@ type
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
 
+proc convertTo(data: openArray[byte]; T: type Hash256): T =
+  discard result.NodeHash.init(data) # error => zero
+
 template elapsed(duration: times.Duration; code: untyped) =
   block:
     let start = getTime()
     block:
       code
     duration = getTime() - start
+
+template noKeyError(info: static[string]; code: untyped) =
+  try:
+    code
+  except KeyError as e:
+    raiseAssert "Not possible (" & info & "): " & e.msg
+
+template noRlpExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError:
+    return err(RlpEncoding)
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -219,7 +238,7 @@ proc merge*(
 proc merge*(
     ps: AccountsDbSessionRef;
     base: NodeTag;
-    acc: seq[SnapAccount];
+    acc: seq[PackedAccount];
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Import account records (as received with the snap message `AccountRange`)
@@ -254,7 +273,7 @@ proc merge*(
       # Verify lower bound
       if pathTag0 < base:
         error = HexaryDbError.AccountSmallerThanBase
-        trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
+        trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
         break collectAccounts
 
       # Add base for the records (no payload). Note that the assumption
@@ -265,12 +284,11 @@ proc merge*(
       # Check for the case that accounts are appended
       elif 0 < ps.rpDB.acc.len and pathTag0 <= ps.rpDB.acc[^1].pathTag:
         error = HexaryDbError.AccountsNotSrictlyIncreasing
-        trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
+        trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
         break collectAccounts
 
       # Add first account
-      ps.rpDB.acc.add RLeafSpecs(
-        pathTag: pathTag0, payload: acc[0].accBody.encode)
+      ps.rpDB.acc.add RLeafSpecs(pathTag: pathTag0, payload: acc[0].accBlob)
 
       # Veify & add other accounts
       for n in 1 ..< acc.len:
@@ -281,11 +299,10 @@ proc merge*(
           ps.rpDB.acc.setLen(saveLen)
 
           error = AccountsNotSrictlyIncreasing
-          trace "merge(seq[SnapAccount])", peer, proofs, base, accounts, error
+          trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
           break collectAccounts
 
-        ps.rpDB.acc.add RLeafSpecs(
-          pathTag: nodeTag, payload: acc[n].accBody.encode)
+        ps.rpDB.acc.add RLeafSpecs(pathTag: nodeTag, payload: acc[n].accBlob)
 
       # End block `collectAccounts`
 
@@ -310,7 +327,8 @@ proc interpolate*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ##   it must be replaced by the new facility of the upcoming re-factored
   ##   database layer.
   ##
-  ps.rpDB.hexaryInterpolate()
+  noKeyError("interpolate"):
+    result = ps.rpDB.hexaryInterpolate()
 
 proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ## Experimental: try several db-import modes and record statistics
@@ -342,7 +360,7 @@ proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
 
 
 proc sortMerge*(base: openArray[NodeTag]): NodeTag =
-  ## Helper for merging several `(NodeTag,seq[SnapAccount])` data sets
+  ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
   ## so that there are no overlap which would be rejected by `merge()`.
   ##
   ## This function selects a `NodeTag` from a list.
@@ -351,13 +369,13 @@ proc sortMerge*(base: openArray[NodeTag]): NodeTag =
     if w < result:
       result = w
 
-proc sortMerge*(acc: openArray[seq[SnapAccount]]): seq[SnapAccount] =
-  ## Helper for merging several `(NodeTag,seq[SnapAccount])` data sets
+proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
+  ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
   ## so that there are no overlap which would be rejected by `merge()`.
   ##
   ## This function flattens and sorts the argument account lists.
   noPpError("sortMergeAccounts"):
-    var accounts: Table[NodeTag,SnapAccount]
+    var accounts: Table[NodeTag,PackedAccount]
     for accList in acc:
       for item in accList:
         accounts[item.accHash.to(NodeTag)] = item
@@ -386,10 +404,10 @@ proc dbBackendRocksDb*(ps: AccountsDbSessionRef): bool =
 
 proc importAccounts*(
     pv: AccountsDbRef;
-    peer: Peer,             ## for log messages
-    root: Hash256;          ## state root
-    base: NodeTag;          ## before or at first account entry in `data`
-    data: SnapAccountRange; ## `snap/1 ` reply data
+    peer: Peer,               ## for log messages
+    root: Hash256;            ## state root
+    base: NodeTag;            ## before or at first account entry in `data`
+    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
     storeData = false
       ): Result[void,HexaryDbError] =
   ## Validate and accounts and proofs (as received with the snap message
@@ -433,55 +451,77 @@ proc importAccounts*(
   ok()
 
 # ------------------------------------------------------------------------------
-# Debugging
+# Debugging (and playing with the hexary database)
 # ------------------------------------------------------------------------------
 
 proc getChainDbAccount*(
     ps: AccountsDbSessionRef;
     accHash: Hash256
-     ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryDbError] =
   ## Fetch account via `BaseChainDB`
-  try:
+  noRlpExceptionOops("getChainDbAccount()"):
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
+    if 0 < leaf.len:
+      let acc = rlp.decode(leaf,Account)
+      return ok(acc)
+
+  err(AccountNotFound)
+
+proc nextChainDbKey*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+      ): Result[Hash256,HexaryDbError] =
+  ## Fetch the account path on the `BaseChainDB`, the one next to the
+  ## argument account.
+  noRlpExceptionOops("getChainDbAccount()"):
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
       path = accHash.to(NodeKey)
-      (_, _, leafBlob) = ps.rpDB.hexaryFollow(ps.rpDB.rootKey, path, getFn)
-    if 0 < leafBlob.len:
-      let acc = rlp.decode(leafBlob,Account)
-      return ok(acc)
-  except RlpError:
-    return err(RlpEncoding)
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
+                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .next(getFn)
+                    .getNibbles
+    if 64 == path.len:
+      return ok(path.getBytes.convertTo(Hash256))
+
+  err(AccountNotFound)
+
+proc prevChainDbKey*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+      ): Result[Hash256,HexaryDbError] =
+  ## Fetch the account path on the `BaseChainDB`, the one before to the
+  ## argument account.
+  noRlpExceptionOops("getChainDbAccount()"):
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      path = accHash.to(NodeKey)
+                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .prev(getFn)
+                    .getNibbles
+    if 64 == path.len:
+      return ok(path.getBytes.convertTo(Hash256))
 
   err(AccountNotFound)
 
 proc getBulkDbXAccount*(
     ps: AccountsDbSessionRef;
     accHash: Hash256
-     ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryDbError] =
   ## Fetch account additional sub-table (paraellel to `BaseChainDB`), when
   ## rocksdb was used to store dicectly, and a paralell table was used to
   ## store the same via `put()`.
-  try:
+  noRlpExceptionOops("getBulkDbXAccount()"):
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob =
         var tag: NodeTag
         discard tag.init(key)
         ps.base.db.get(tag.bulkStorageChainDbHexaryXKey().toOpenArray)
-      path = accHash.to(NodeKey)
-      (_, _, leafBlob) = ps.rpDB.hexaryFollow(ps.rpDB.rootKey, path, getFn)
-    if 0 < leafBlob.len:
-      let acc = rlp.decode(leafBlob,Account)
+      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
+    if 0 < leaf.len:
+      let acc = rlp.decode(leaf,Account)
       return ok(acc)
-  except RlpError:
-    return err(RlpEncoding)
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
 
   err(AccountNotFound)
 
@@ -515,7 +555,9 @@ proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
 proc dumpPath*(ps: AccountsDbSessionRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the
   ## argument `key`.
-  ps.rpDB.dumpPath(key)
+  noKeyError("dumpPath"):
+    let rPath = key.hexaryPath(ps.rpDB)
+    result = rPath.path.mapIt(it.pp(ps.rpDB)) & @["(" & rPath.tail.pp & ")"]
 
 proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
   ## Dump the entries from the repair tree.
@@ -526,58 +568,6 @@ proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
     proc cmpIt(x, y: (uint,string)): int =
       cmp(x[0],y[0])
     result = accu.sorted(cmpIt).mapIt(it[1])
-
-# ---------
-
-proc dumpRoot*(root: Hash256; name = "snapRoot*"): string =
-  noPpError("dumpRoot"):
-    result = "import\n"
-    result &= "  eth/common/eth_types,\n"
-    result &= "  nimcrypto/hash,\n"
-    result &= "  stew/byteutils\n\n"
-    result &= "const\n"
-    result &= &"  {name} =\n"
-    result &= &"    \"{root.pp(false)}\".toDigest\n"
-
-proc dumpSnapAccountRange*(
-    base: NodeTag;
-    data: SnapAccountRange;
-    name = "snapData*"
-      ): string =
-  noPpError("dumpSnapAccountRange"):
-    result = &"  {name} = ("
-    result &= &"\n    \"{base.to(Hash256).pp(false)}\".toDigest,"
-    result &= "\n    @["
-    let accPfx = "\n      "
-    for n in 0 ..< data.accounts.len:
-      let
-        hash = data.accounts[n].accHash
-        body = data.accounts[n].accBody
-      if 0 < n:
-        result &= accPfx
-      result &= &"# <{n}>"
-      result &= &"{accPfx}(\"{hash.pp(false)}\".toDigest,"
-      result &= &"{accPfx} {body.nonce}u64,"
-      result &= &"{accPfx} \"{body.balance}\".parse(Uint256),"
-      result &= &"{accPfx} \"{body.storageRoot.pp(false)}\".toDigest,"
-      result &= &"{accPfx} \"{body.codehash.pp(false)}\".toDigest),"
-    if result[^1] == ',':
-      result[^1] = ']'
-    else:
-      result &= "]"
-    result &= ",\n    @["
-    let blobPfx = "\n      "
-    for n in 0 ..< data.proof.len:
-      let blob = data.proof[n]
-      if 0 < n:
-        result &= blobPfx
-      result &= &"# <{n}>"
-      result &= &"{blobPfx}\"{blob.pp}\".hexToSeqByte,"
-    if result[^1] == ',':
-      result[^1] = ']'
-    else:
-      result &= "]"
-    result &= ")\n"
 
 # ------------------------------------------------------------------------------
 # End

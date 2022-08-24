@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[hashes, sequtils, strformat, strutils, tables],
+  std/[hashes, sequtils, strutils, tables],
   eth/[common/eth_types, p2p, trie/nibbles],
   nimcrypto/keccak,
   stint,
@@ -32,16 +32,6 @@ type
 
   RepairKey* = distinct ByteArray33
     ## Byte prefixed `NodeKey` for internal DB records
-
-  RNodeKind* = enum
-    Branch
-    Extension
-    Leaf
-
-  RNodeState* = enum
-    Static = 0                        ## Inserted as proof record
-    Locked                            ## Like `Static`, only added on-the-fly
-    Mutable                           ## Open for modification
 
   # Example trie from https://eth.wiki/en/fundamentals/patricia-tree
   #
@@ -72,70 +62,129 @@ type
   #        "dodge":  6 4 6 f 6 7 6 5
   #        "horse":  6 8 6 f 7 2 7 3 6 5
 
+  NodeKind* = enum
+    Branch
+    Extension
+    Leaf
+
+  RNodeState* = enum
+    Static = 0                      ## Inserted as proof record
+    Locked                          ## Like `Static`, only added on-the-fly
+    Mutable                         ## Open for modification
+
   RNodeRef* = ref object
-    ## For building a temporary repair tree
-    state*: RNodeState                 ## `Static` if added as proof data
-    case kind*: RNodeKind
+    ## Node for building a temporary hexary trie coined `repair tree`.
+    state*: RNodeState              ## `Static` if added from proof data set
+    case kind*: NodeKind
     of Leaf:
-      lPfx*: NibblesSeq                ## Portion of path segment
+      lPfx*: NibblesSeq             ## Portion of path segment
       lData*: Blob
     of Extension:
-      ePfx*: NibblesSeq                ## Portion of path segment
-      eLink*: RepairKey                ## Single down link
+      ePfx*: NibblesSeq             ## Portion of path segment
+      eLink*: RepairKey             ## Single down link
     of Branch:
-      bLink*: array[16,RepairKey]      ## Down links
+      bLink*: array[16,RepairKey]   ## Down links
+      #
+      # Paraphrased comment from Andri's `stateless/readme.md` file in chapter
+      # `Deviation from yellow paper`, (also found here
+      #      github.com/status-im/nimbus-eth1
+      #         /tree/master/stateless#deviation-from-yellow-paper)
+      # [..] In the Yellow Paper, the 17th elem of the branch node can contain
+      # a value. But it is always empty in a real Ethereum state trie. The
+      # block witness spec also ignores this 17th elem when encoding or
+      # decoding a branch node. This can happen because in a Ethereum secure
+      # hexary trie, every keys have uniform length of 32 bytes or 64 nibbles.
+      # With the absence of the 17th element, a branch node will never contain
+      # a leaf value.
       bData*: Blob
 
-  RPathStep* = object
-    ## For constructing tree traversal `seq[RPathStep]` path
-    key*: RepairKey                   ## Tree label, node hash
-    node*: RNodeRef                   ## Referes to data record
-    nibble*: int8                     ## Branch node selector (if any)
+  XNodeObj* = object
+    ## Simplified version of `RNodeRef` to be used as a node for `XPathStep`
+    case kind*: NodeKind
+    of Leaf:
+      lPfx*: NibblesSeq             ## Portion of path segment
+      lData*: Blob
+    of Extension:
+      ePfx*: NibblesSeq             ## Portion of path segment
+      eLink*: Blob                  ## Single down link
+    of Branch:
+      bLink*: array[17,Blob]        ## Down links followed by data
 
-  RPathXStep* = object
-    ## Extended `RPathStep` needed for `NodeKey` assignmant
-    pos*: int                         ## Some position into `seq[RPathStep]`
-    step*: RPathStep                  ## Modified copy of an `RPathStep`
-    canLock*: bool                    ## Can set `Locked` state
+  RPathStep* = object
+    ## For constructing a repair tree traversal path `RPath`
+    key*: RepairKey                 ## Tree label, node hash
+    node*: RNodeRef                 ## Referes to data record
+    nibble*: int8                   ## Branch node selector (if any)
 
   RPath* = object
     path*: seq[RPathStep]
-    tail*: NibblesSeq                 ## Stands for non completed leaf path
+    tail*: NibblesSeq               ## Stands for non completed leaf path
+
+  XPathStep* = object
+    ## Similar to `RPathStep` for an arbitrary (sort of transparent) trie
+    key*: Blob                      ## Node hash implied by `node` data
+    node*: XNodeObj
+    nibble*: int8                   ## Branch node selector (if any)
+
+  XPath* = object
+    path*: seq[XPathStep]
+    tail*: NibblesSeq               ## Stands for non completed leaf path
+    depth*: int                     ## May indicate path length (typically 64)
 
   RLeafSpecs* = object
     ## Temporarily stashed leaf data (as for an account.) Proper records
     ## have non-empty payload. Records with empty payload are administrative
     ## items, e.g. lower boundary records.
-    pathTag*: NodeTag                 ## Equivalent to account hash
-    nodeKey*: RepairKey               ## Leaf hash into hexary repair table
-    payload*: Blob                    ## Data payload
+    pathTag*: NodeTag               ## Equivalent to account hash
+    nodeKey*: RepairKey             ## Leaf hash into hexary repair table
+    payload*: Blob                  ## Data payload
 
   HexaryTreeDB* = object
-    rootKey*: NodeKey                 ## Current root node
-    tab*: Table[RepairKey,RNodeRef]   ## Repair table
-    acc*: seq[RLeafSpecs]             ## Accounts to appprove of
-    repairKeyGen*: uint64             ## Unique tmp key generator
-    keyPp*: HexaryPpFn                ## For debugging
+    rootKey*: NodeKey               ## Current root node
+    tab*: Table[RepairKey,RNodeRef] ## Repair table
+    acc*: seq[RLeafSpecs]           ## Accounts to appprove of
+    repairKeyGen*: uint64           ## Unique tmp key generator
+    keyPp*: HexaryPpFn              ## For debugging
 
 const
   EmptyNodeBlob* = seq[byte].default
+  EmptyNibbleRange* = EmptyNodeBlob.initNibbleRange
 
 static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
 
+var
+  disablePrettyKeys* = false        ## Degugging, pint raw keys if `true`
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc pp(key: RepairKey): string =
-  key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
+proc initImpl(key: var RepairKey; data: openArray[byte]): bool =
+  key.reset
+  if data.len <= 33:
+    if 0 < data.len:
+      let trg = addr key.ByteArray33[33 - data.len]
+      trg.copyMem(unsafeAddr data[0], data.len)
+    return true
+
+proc initImpl(key: var NodeKey; data: openArray[byte]): bool =
+  key.reset
+  if data.len <= 32:
+    if 0 < data.len:
+      let trg = addr key.ByteArray32[32 - data.len]
+      trg.copyMem(unsafeAddr data[0], data.len)
+    return true
 
 # ------------------------------------------------------------------------------
-# Public debugging helpers
+# Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp*(s: string; hex = false): string =
+proc toPfx(indent: int): string =
+  "\n" & " ".repeat(indent)
+
+proc ppImpl(s: string; hex = false): string =
   ## For long strings print `begin..end` only
   if hex:
     let n = (s.len + 1) div 2
@@ -147,53 +196,97 @@ proc pp*(s: string; hex = false): string =
     (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
+proc ppImpl(key: RepairKey; db: HexaryTreeDB): string =
+  try:
+    if not disablePrettyKeys and not db.keyPp.isNil:
+      return db.keyPp(key)
+  except:
+    discard
+  key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
+
+proc ppImpl(w: openArray[RepairKey]; db: HexaryTreeDB): string =
+  w.mapIt(it.ppImpl(db)).join(",")
+
+proc ppImpl(w: openArray[Blob]; db: HexaryTreeDB): string =
+  var q: seq[RepairKey]
+  for a in w:
+    var key: RepairKey
+    discard key.initImpl(a)
+    q.add key
+  q.ppImpl(db)
+
+proc ppStr(blob: Blob): string =
+  if blob.len == 0: ""
+  else: blob.mapIt(it.toHex(2)).join.toLowerAscii.ppImpl(hex = true)
+
+proc ppImpl(n: RNodeRef; db: HexaryTreeDB): string =
+  let so = n.state.ord
+  case n.kind:
+  of Leaf:
+    ["l","ł","L"][so] & "(" & $n.lPfx & "," & n.lData.ppStr & ")"
+  of Extension:
+    ["e","€","E"][so] & "(" & $n.ePfx & "," & n.eLink.ppImpl(db) & ")"
+  of Branch:
+    ["b","þ","B"][so] & "(" & n.bLink.ppImpl(db) & "," & n.bData.ppStr & ")"
+
+proc ppImpl(n: XNodeObj; db: HexaryTreeDB): string =
+  case n.kind:
+  of Leaf:
+    "l(" & $n.lPfx & "," & n.lData.ppStr & ")"
+  of Extension:
+    var key: RepairKey
+    discard key.initImpl(n.eLink)
+    "e(" & $n.ePfx & "," & key.ppImpl(db) & ")"
+  of Branch:
+    "b(" & n.bLink[0..15].ppImpl(db) & "," &  n.bLink[16].ppStr & ")"
+
+proc ppImpl(w: RPathStep; db: HexaryTreeDB): string =
+  let
+    nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+    key = w.key.ppImpl(db)
+  "(" & key & "," & nibble & "," & w.node.ppImpl(db) & ")"
+
+proc ppImpl(w: XPathStep; db: HexaryTreeDB): string =
+  let nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+  var key: RepairKey
+  discard key.initImpl(w.key)
+  "(" & key.ppImpl(db) & "," & $nibble & "," & w.node.ppImpl(db) & ")"
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc pp*(s: string; hex = false): string =
+  ## For long strings print `begin..end` only
+  s.ppImpl(hex)
+
 proc pp*(w: NibblesSeq): string =
   $w
 
 proc pp*(key: RepairKey; db: HexaryTreeDB): string =
-  try:
-    if not db.keyPp.isNil:
-      return db.keyPp(key)
-  except:
-    discard
-  key.pp
+  key.ppImpl(db)
 
-proc pp*(w: openArray[RepairKey]; db: HexaryTreeDB): string =
-  "<" & w.mapIt(it.pp(db)).join(",") & ">"
+proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDB): string =
+  w.ppImpl(db)
 
-proc pp*(n: RNodeRef; db: HexaryTreeDB): string
-    {.gcsafe, raises: [Defect, ValueError].} =
-  proc ppStr(blob: Blob): string =
-    if blob.len == 0: ""
-    else: blob.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
-  let so = n.state.ord
-  case n.kind:
-  of Leaf:
-    result = ["l","ł","L"][so] & &"({n.lPfx.pp},{n.lData.ppStr})"
-  of Extension:
-    result = ["e","€","E"][so] & &"({n.ePfx.pp},{n.eLink.pp(db)})"
-  of Branch:
-    result = ["b","þ","B"][so] & &"({n.bLink.pp(db)},{n.bData.ppStr})"
+proc pp*(w:openArray[RPathStep|XPathStep]; db:HexaryTreeDB; indent=4): string =
+  w.toSeq.mapIt(it.ppImpl(db)).join(indent.toPfx)
+
+proc pp*(w: RPath; db: HexaryTreeDB; indent=4): string =
+  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & ")"
+
+proc pp*(w: XPath; db: HexaryTreeDB; indent=4): string =
+  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & "," & $w.depth & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)
 # ------------------------------------------------------------------------------
 
 proc init*(key: var NodeKey; data: openArray[byte]): bool =
-  key.reset
-  if data.len <= 32:
-    if 0 < data.len:
-      let trg = addr key.ByteArray32[32 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
-    return true
+  key.initImpl(data)
 
 proc init*(key: var RepairKey; data: openArray[byte]): bool =
-  key.reset
-  if data.len <= 33:
-    if 0 < data.len:
-      let trg = addr key.ByteArray33[33 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
-    return true
+  key.initImpl(data)
 
 proc newRepairKey*(db: var HexaryTreeDB): RepairKey =
   db.repairKeyGen.inc
@@ -239,7 +332,7 @@ proc isNodeKey*(a: RepairKey): bool =
 proc digestTo*(data: Blob; T: type NodeKey): T =
   keccak256.digest(data).data.T
 
-proc convertTo*[W: NodeKey|RepairKey](data: openArray[byte]; T: type W): T =
+proc convertTo*[W: NodeKey|RepairKey](data: Blob; T: type W): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.init(data)
 

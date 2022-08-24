@@ -20,6 +20,9 @@ import
   ".."/[range_desc, worker_desc],
   "."/[accounts_db, get_account_range]
 
+when snapAccountsDumpEnable:
+  import ../../../tests/replay/undump_proofs
+
 {.push raises: [Defect].}
 
 logScope:
@@ -40,9 +43,7 @@ const
 
 proc withMaxLen(buddy: SnapBuddyRef; iv: LeafRange): LeafRange =
   ## Reduce accounts interval to maximal size
-  let maxlen =
-    if buddy.ctx.data.pivotEnv.proofDumpOk: snapAccountsDumpRange
-    else: buddy.ctx.data.accountRangeMax
+  let maxlen = buddy.ctx.data.accountRangeMax
   if 0 < iv.len and iv.len <= maxLen:
     iv
   else:
@@ -178,21 +179,18 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
         # it was double processed which if ok.
         buddy.delUnprocessed(ry.value)
 
-    # ----
+    # --------------------
     # For dumping data ready to be used in unit tests
-    if env.proofDumpOk:
-      var fd = ctx.data.proofDumpFile
-      if env.proofDumpInx == 0:
-        fd.write dumpRoot(stateRoot)
-      fd.write "\n"
-      if rc.isErr:
-        fd.write "  # Error: base=" & $iv.minPt & " msg=" & $rc.error & "\n"
-      fd.write dumpSnapAccountRange(
-        iv.minPt, dd.data, "snapProofData" & $env.proofDumpInx & "*")
-      fd.flushFile
-      env.proofDumpInx.inc
-      if snapAccountsDumpMax <= env.proofDumpInx:
-        env.proofDumpOk = false
+    when snapAccountsDumpEnable:
+      trace " Snap proofs dump", peer, enabled=ctx.data.proofDumpOk, iv
+      if ctx.data.proofDumpOk:
+        var fd = ctx.data.proofDumpFile
+        if rc.isErr:
+          fd.write "  # Error: base=" & $iv.minPt & " msg=" & $rc.error & "\n"
+        fd.write "# count ", $ctx.data.proofDumpInx & "\n"
+        fd.write stateRoot.dumpAccountProof(iv.minPt, dd.data) & "\n"
+        fd.flushFile
+        ctx.data.proofDumpInx.inc
 
 # ------------------------------------------------------------------------------
 # End

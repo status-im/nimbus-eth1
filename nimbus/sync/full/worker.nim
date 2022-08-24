@@ -877,7 +877,7 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
       await sleepAsync(2.seconds)
 
 
-proc runPool*(buddy: FullBuddyRef) =
+proc runPool*(buddy: FullBuddyRef; last: bool) =
   ## Ocne started, the function `runPool()` is called for all worker peers in
   ## a row (as the body of an iteration.) There will be no other worker peer
   ## functions activated simultaneously.
@@ -885,7 +885,9 @@ proc runPool*(buddy: FullBuddyRef) =
   ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
   ## `true` (default is `false`.) It is the responsibility of the `runPool()`
   ## instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-  ## peer instance as the number of active instances is unknown to `runPool()`.
+  ## peer instance.
+  ##
+  ## The argument `last` is set `true` if the last entry is reached.
   ##
   ## Note that this function does not run in `async` mode.
   ##

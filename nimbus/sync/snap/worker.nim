@@ -16,6 +16,7 @@ import
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
+  ../../utils/prettify,
   ".."/[protocol, sync_desc],
   ./worker/[accounts_db, fetch_accounts, pivot, ticker],
   "."/[range_desc, worker_desc]
@@ -35,6 +36,16 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
   if 0 < length:
     result[0] = sum / length.float
     result[1] = sqrt(sqSum / length.float - result[0] * result[0])
+
+template noExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" & info & ": name=" & $e.name & " msg=" & e.msg
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -70,14 +81,8 @@ proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   # Statistics
   ctx.data.pivotCount.inc
 
+  # Activate per-state root environment
   ctx.data.pivotEnv = ctx.data.pivotTable.lruAppend(key, env, ctx.buddiesMax)
-  # -----
-  if ctx.data.proofDumpOk:
-    let peer = buddy.peer
-    trace "Snap proofs dump enabled", peer
-    ctx.data.proofDumpOk = false
-    env.proofDumpOk = true
-    #env.pivotAccount = 0.to(NodeTag)
 
 
 proc updatePivotEnv(buddy: SnapBuddyRef): bool =
@@ -86,9 +91,17 @@ proc updatePivotEnv(buddy: SnapBuddyRef): bool =
   if buddy.data.pivotHeader.isSome:
     let
       ctx = buddy.ctx
+      env = ctx.data.pivotEnv
       newStateNumber = buddy.data.pivotHeader.unsafeGet.blockNumber
-      stateNumber = if ctx.data.pivotEnv.isNil: 0.toBlockNumber
-                    else: ctx.data.pivotEnv.stateHeader.blockNumber
+      stateNumber = if env.isNil: 0.toBlockNumber
+                    else: env.stateHeader.blockNumber
+
+    when switchPivotAfterCoverage < 1.0:
+      if not env.isNil:
+        if stateNumber < newStateNumber and env.minCoverageReachedOk:
+          buddy.setPivotEnv(buddy.data.pivotHeader.get)
+          return true
+
     if stateNumber + maxPivotBlockWindow < newStateNumber:
       buddy.setPivotEnv(buddy.data.pivotHeader.get)
       return true
@@ -117,12 +130,20 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       tabLen = ctx.data.pivotTable.len
       pivotBlock = if ctx.data.pivotEnv.isNil: none(BlockNumber)
                    else: some(ctx.data.pivotEnv.stateHeader.blockNumber)
+      accCoverage = ctx.data.coveredAccounts.fullFactor
+
+    when snapAccountsDumpEnable:
+      if snapAccountsDumpCoverageStop < accCoverage:
+        trace " Snap proofs dump stop",
+          threshold=snapAccountsDumpCoverageStop, coverage=accCoverage.toPC
+        ctx.data.proofDumpOk = false
+
     TickerStats(
       pivotBlock:    pivotBlock,
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
       accounts:      meanStdDev(aSum, aSqSum, count),
-      accCoverage:   ctx.data.coveredAccounts.fullFactor,
+      accCoverage:   accCoverage,
       fillFactor:    meanStdDev(uSum, uSqSum, count),
       bulkStore:     ctx.data.accountsDb.dbImportStats)
 
@@ -141,12 +162,12 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
     trace "Ticker is disabled"
-  # ----
-  if snapAccountsDumpEnable:
+  result = true
+
+  # -----------------------
+  when snapAccountsDumpEnable:
     doAssert ctx.data.proofDumpFile.open("./dump-stream.out", fmWrite)
     ctx.data.proofDumpOk = true
-  # ----
-  true
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
@@ -196,7 +217,7 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   buddy.ctrl.multiOk = true
 
 
-proc runPool*(buddy: SnapBuddyRef) =
+proc runPool*(buddy: SnapBuddyRef, last: bool) =
   ## Ocne started, the function `runPool()` is called for all worker peers in
   ## a row (as the body of an iteration.) There will be no other worker peer
   ## functions activated simultaneously.
@@ -204,11 +225,20 @@ proc runPool*(buddy: SnapBuddyRef) =
   ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
   ## `true` (default is `false`.) It is the responsibility of the `runPool()`
   ## instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-  ## peer instance as the number of active instances is unknown to `runPool()`.
+  ## peer instance.
+  ##
+  ## The argument `last` is set `true` if the last entry is reached.
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  discard
+  let ctx = buddy.ctx
+  if ctx.poolMode:
+    ctx.poolMode = false
+  if not ctx.data.runPoolHook.isNil:
+    noExceptionOops("runPool"):
+      ctx.data.runPoolHook(buddy)
+    if last:
+      ctx.data.runPoolHook = nil
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
@@ -219,13 +249,39 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
+  var
+    havePivotOk = (buddy.data.pivotHeader.isSome and
+                   buddy.data.pivotHeader.get.blockNumber != 0)
 
-  if buddy.data.pivotHeader.isNone or
-     buddy.data.pivotHeader.get.blockNumber == 0:
+  # Switch pivot state root if this much coverage has been achieved, already
+  when switchPivotAfterCoverage < 1.0:
+    if havePivotOk:
+      # So there is a `ctx.data.pivotEnv`
+      if ctx.data.pivotEnv.minCoverageReachedOk:
+        # Force fetching new pivot if coverage reached
+        havePivotOk = false
+      else:
+        # Not sure yet, so check whether coverage has been reached at all
+        let cov = ctx.data.pivotEnv.availAccounts.freeFactor
+        if switchPivotAfterCoverage <= cov:
+          trace " Snap accounts coverage reached",
+            threshold=switchPivotAfterCoverage, coverage=cov.toPC
+          # Need to reset pivot handlers
+          buddy.ctx.poolMode = true
+          buddy.ctx.data.runPoolHook = proc(b: SnapBuddyRef) =
+            b.ctx.data.pivotEnv.minCoverageReachedOk = true
+            b.pivotRestart
+          return
 
+  if not havePivotOk:
     await buddy.pivotExec()
-
     if not buddy.updatePivotEnv():
+      return
+
+  # Ignore rest if the pivot is still acceptably covered
+  when switchPivotAfterCoverage < 1.0:
+    if ctx.data.pivotEnv.minCoverageReachedOk:
+      await sleepAsync(50.milliseconds)
       return
 
   if await buddy.fetchAccounts():

@@ -28,7 +28,7 @@
 ##   Clean up this worker peer.
 ##
 ##
-## *runPool(buddy: BuddyRef[S,W])*
+## *runPool(buddy: BuddyRef[S,W], last: bool)*
 ##   Once started, the function `runPool()` is called for all worker peers in
 ##   sequence as the body of an iteration. There will be no other worker peer
 ##   functions activated simultaneously.
@@ -36,7 +36,9 @@
 ##   This procedure is started if the global flag `buddy.ctx.poolMode` is set
 ##   `true` (default is `false`.) It is the responsibility of the `runPool()`
 ##   instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-##   peer instance as the number of active instances is unknown to `runPool()`.
+##   peer instance.
+##
+##   The argument `last` is set `true` if the last entry is reached.
 ##
 ##   Note that this function does not run in `async` mode.
 ##
@@ -131,8 +133,10 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         await sleepAsync(50.milliseconds)
       while dsc.singleRunLock:
         await sleepAsync(50.milliseconds)
+      var count = dsc.buddies.len
       for w in dsc.buddies.nextValues:
-        worker.runPool()
+        count.dec
+        worker.runPool(count == 0)
       dsc.monitorLock = false
       continue
 
