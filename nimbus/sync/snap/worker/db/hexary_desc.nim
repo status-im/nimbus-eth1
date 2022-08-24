@@ -98,6 +98,18 @@ type
       # a leaf value.
       bData*: Blob
 
+  XNodeObj* = object
+    ## Simplified version of `RNodeRef` to be used as a node for `XPathStep`
+    case kind*: NodeKind
+    of Leaf:
+      lPfx*: NibblesSeq             ## Portion of path segment
+      lData*: Blob
+    of Extension:
+      ePfx*: NibblesSeq             ## Portion of path segment
+      eLink*: Blob                  ## Single down link
+    of Branch:
+      bLink*: array[17,Blob]        ## Down links followed by data
+
   RPathStep* = object
     ## For constructing a repair tree traversal path `RPath`
     key*: RepairKey                 ## Tree label, node hash
@@ -111,13 +123,13 @@ type
   XPathStep* = object
     ## Similar to `RPathStep` for an arbitrary (sort of transparent) trie
     key*: Blob                      ## Node hash implied by `node` data
-    kind*: NodeKind                 ## Node type implied by `node` data
+    node*: XNodeObj
     nibble*: int8                   ## Branch node selector (if any)
 
   XPath* = object
     path*: seq[XPathStep]
     tail*: NibblesSeq               ## Stands for non completed leaf path
-    leaf*: Blob                     ## Last node if `tail` is empty
+    depth*: int                     ## May indicate path length (typically 64)
 
   RLeafSpecs* = object
     ## Temporarily stashed leaf data (as for an account.) Proper records
@@ -142,38 +154,37 @@ static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
 
+var
+  disablePrettyKeys* = false        ## Degugging, pint raw keys if `true`
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc convertTo*[W: NodeKey|RepairKey](data: Blob; T: type W): T
-proc pp*(w: RPathStep; db: HexaryTreeDB): string
-proc pp*(key: RepairKey; db: HexaryTreeDB): string
+proc initImpl(key: var RepairKey; data: openArray[byte]): bool =
+  key.reset
+  if data.len <= 33:
+    if 0 < data.len:
+      let trg = addr key.ByteArray33[33 - data.len]
+      trg.copyMem(unsafeAddr data[0], data.len)
+    return true
 
-# -------------------
-
-proc pp(key: RepairKey): string =
-  key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
-
-proc pp(w: XPathStep; db: HexaryTreeDB): string =
-  let
-    nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
-    key = w.key.convertTo(RepairKey).pp(db)
-  "(" & key & "," & ["b","e","l"][w.kind.ord] & "," & $nibble & ")"
-
-proc pp(w: openArray[RPathStep]; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  w.toSeq.mapIt(it.pp(db)).join(pfx)
-
-proc pp(w: openArray[XPathStep]; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  w.toSeq.mapIt(it.pp(db)).join(pfx)
+proc initImpl(key: var NodeKey; data: openArray[byte]): bool =
+  key.reset
+  if data.len <= 32:
+    if 0 < data.len:
+      let trg = addr key.ByteArray32[32 - data.len]
+      trg.copyMem(unsafeAddr data[0], data.len)
+    return true
 
 # ------------------------------------------------------------------------------
-# Public debugging helpers
+# Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp*(s: string; hex = false): string =
+proc toPfx(indent: int): string =
+  "\n" & " ".repeat(indent)
+
+proc ppImpl(s: string; hex = false): string =
   ## For long strings print `begin..end` only
   if hex:
     let n = (s.len + 1) div 2
@@ -185,66 +196,97 @@ proc pp*(s: string; hex = false): string =
     (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
+proc ppImpl(key: RepairKey; db: HexaryTreeDB): string =
+  try:
+    if not disablePrettyKeys and not db.keyPp.isNil:
+      return db.keyPp(key)
+  except:
+    discard
+  key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
+
+proc ppImpl(w: openArray[RepairKey]; db: HexaryTreeDB): string =
+  w.mapIt(it.ppImpl(db)).join(",")
+
+proc ppImpl(w: openArray[Blob]; db: HexaryTreeDB): string =
+  var q: seq[RepairKey]
+  for a in w:
+    var key: RepairKey
+    discard key.initImpl(a)
+    q.add key
+  q.ppImpl(db)
+
+proc ppStr(blob: Blob): string =
+  if blob.len == 0: ""
+  else: blob.mapIt(it.toHex(2)).join.toLowerAscii.ppImpl(hex = true)
+
+proc ppImpl(n: RNodeRef; db: HexaryTreeDB): string =
+  let so = n.state.ord
+  case n.kind:
+  of Leaf:
+    ["l","ł","L"][so] & "(" & $n.lPfx & "," & n.lData.ppStr & ")"
+  of Extension:
+    ["e","€","E"][so] & "(" & $n.ePfx & "," & n.eLink.ppImpl(db) & ")"
+  of Branch:
+    ["b","þ","B"][so] & "(" & n.bLink.ppImpl(db) & "," & n.bData.ppStr & ")"
+
+proc ppImpl(n: XNodeObj; db: HexaryTreeDB): string =
+  case n.kind:
+  of Leaf:
+    "l(" & $n.lPfx & "," & n.lData.ppStr & ")"
+  of Extension:
+    var key: RepairKey
+    discard key.initImpl(n.eLink)
+    "e(" & $n.ePfx & "," & key.ppImpl(db) & ")"
+  of Branch:
+    "b(" & n.bLink[0..15].ppImpl(db) & "," &  n.bLink[16].ppStr & ")"
+
+proc ppImpl(w: RPathStep; db: HexaryTreeDB): string =
+  let
+    nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+    key = w.key.ppImpl(db)
+  "(" & key & "," & nibble & "," & w.node.ppImpl(db) & ")"
+
+proc ppImpl(w: XPathStep; db: HexaryTreeDB): string =
+  let nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
+  var key: RepairKey
+  discard key.initImpl(w.key)
+  "(" & key.ppImpl(db) & "," & $nibble & "," & w.node.ppImpl(db) & ")"
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
+
+proc pp*(s: string; hex = false): string =
+  ## For long strings print `begin..end` only
+  s.ppImpl(hex)
+
 proc pp*(w: NibblesSeq): string =
   $w
 
 proc pp*(key: RepairKey; db: HexaryTreeDB): string =
-  try:
-    if not db.keyPp.isNil:
-      return db.keyPp(key)
-  except:
-    discard
-  key.pp
+  key.ppImpl(db)
 
-proc pp*(w: openArray[RepairKey]; db: HexaryTreeDB): string =
-  "<" & w.mapIt(it.pp(db)).join(",") & ">"
+proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDB): string =
+  w.ppImpl(db)
 
-proc pp*(n: RNodeRef; db: HexaryTreeDB): string =
-  proc ppStr(blob: Blob): string =
-    if blob.len == 0: ""
-    else: blob.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
-  let so = n.state.ord
-  case n.kind:
-  of Leaf:
-    ["l","ł","L"][so] & "(" & n.lPfx.pp & "," & n.lData.ppStr & ")"
-  of Extension:
-    ["e","€","E"][so] & "(" & n.ePfx.pp & "," & n.eLink.pp(db) & ")"
-  of Branch:
-    ["b","þ","B"][so] & "(" & n.bLink.pp(db) & "," & n.bData.ppStr & ")"
+proc pp*(w:openArray[RPathStep|XPathStep]; db:HexaryTreeDB; indent=4): string =
+  w.toSeq.mapIt(it.ppImpl(db)).join(indent.toPfx)
 
-proc pp*(w: RPathStep; db: HexaryTreeDB): string =
-  let
-    nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
-    key = w.key.pp(db)
-  "(" & key & "," & w.node.pp(db) & "," & nibble & ")"
+proc pp*(w: RPath; db: HexaryTreeDB; indent=4): string =
+  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & ")"
 
-proc pp*(w: RPath; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  w.path.pp(db,indent) & pfx & "(" & $w.tail & ")"
-
-proc pp*(w: XPath; db: HexaryTreeDB; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  w.path.pp(db,indent) &  pfx & "(" & $w.tail & ",[" & $w.leaf.len & "])"
+proc pp*(w: XPath; db: HexaryTreeDB; indent=4): string =
+  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & "," & $w.depth & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)
 # ------------------------------------------------------------------------------
 
 proc init*(key: var NodeKey; data: openArray[byte]): bool =
-  key.reset
-  if data.len <= 32:
-    if 0 < data.len:
-      let trg = addr key.ByteArray32[32 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
-    return true
+  key.initImpl(data)
 
 proc init*(key: var RepairKey; data: openArray[byte]): bool =
-  key.reset
-  if data.len <= 33:
-    if 0 < data.len:
-      let trg = addr key.ByteArray33[33 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
-    return true
+  key.initImpl(data)
 
 proc newRepairKey*(db: var HexaryTreeDB): RepairKey =
   db.repairKeyGen.inc

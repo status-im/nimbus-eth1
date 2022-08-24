@@ -66,8 +66,7 @@ proc init*(nh: var NodeHash; data: openArray[byte]): bool =
   ## Import argument `data` into `nh` which must have length either `32` or `0`.
   ## The latter case is equivalent to an all zero byte array of size `32`.
   if data.len == 32:
-    for n in 0 ..< 32:
-      nh.Hash256.data[n] = data[n]
+    (addr nh.Hash256.data[0]).copyMem(unsafeAddr data[0], 32)
     return true
   elif data.len == 0:
     nh.reset

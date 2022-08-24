@@ -57,6 +57,9 @@ type
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
 
+proc convertTo(data: openArray[byte]; T: type Hash256): T =
+  discard result.NodeHash.init(data) # error => zero
+
 template elapsed(duration: times.Duration; code: untyped) =
   block:
     let start = getTime()
@@ -69,6 +72,16 @@ template noKeyError(info: static[string]; code: untyped) =
     code
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
+
+template noRlpExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError:
+    return err(RlpEncoding)
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -440,53 +453,77 @@ proc importAccounts*(
   ok()
 
 # ------------------------------------------------------------------------------
-# Debugging
+# Debugging (and playing with the hexary database)
 # ------------------------------------------------------------------------------
 
 proc getChainDbAccount*(
     ps: AccountsDbSessionRef;
     accHash: Hash256
-     ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryDbError] =
   ## Fetch account via `BaseChainDB`
-  try:
+  noRlpExceptionOops("getChainDbAccount()"):
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      path = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn, ps.rpDB)
-    if 0 < path.leaf.len:
-      let acc = rlp.decode(path.leaf,Account)
+      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
+    if 0 < leaf.len:
+      let acc = rlp.decode(leaf,Account)
       return ok(acc)
-  except RlpError:
-    return err(RlpEncoding)
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
+
+  err(AccountNotFound)
+
+proc nextChainDbKey*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+      ): Result[Hash256,HexaryDbError] =
+  ## Fetch the account path on the `BaseChainDB`, the one next to the
+  ## argument account.
+  noRlpExceptionOops("getChainDbAccount()"):
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      path = accHash.to(NodeKey)
+                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .next(getFn)
+                    .getNibbles
+    if 64 == path.len:
+      return ok(path.getBytes.convertTo(Hash256))
+
+  err(AccountNotFound)
+
+proc prevChainDbKey*(
+    ps: AccountsDbSessionRef;
+    accHash: Hash256
+      ): Result[Hash256,HexaryDbError] =
+  ## Fetch the account path on the `BaseChainDB`, the one before to the
+  ## argument account.
+  noRlpExceptionOops("getChainDbAccount()"):
+    let
+      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      path = accHash.to(NodeKey)
+                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .prev(getFn)
+                    .getNibbles
+    if 64 == path.len:
+      return ok(path.getBytes.convertTo(Hash256))
 
   err(AccountNotFound)
 
 proc getBulkDbXAccount*(
     ps: AccountsDbSessionRef;
     accHash: Hash256
-     ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryDbError] =
   ## Fetch account additional sub-table (paraellel to `BaseChainDB`), when
   ## rocksdb was used to store dicectly, and a paralell table was used to
   ## store the same via `put()`.
-  try:
+  noRlpExceptionOops("getBulkDbXAccount()"):
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob =
         var tag: NodeTag
         discard tag.init(key)
         ps.base.db.get(tag.bulkStorageChainDbHexaryXKey().toOpenArray)
-      path = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn, ps.rpDB)
-    if 0 < path.leaf.len:
-      let acc = rlp.decode(path.leaf,Account)
+      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
+    if 0 < leaf.len:
+      let acc = rlp.decode(leaf,Account)
       return ok(acc)
-  except RlpError:
-    return err(RlpEncoding)
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops getChainDbAccount(): name=" & $e.name & " msg=" & e.msg
 
   err(AccountNotFound)
 
