@@ -124,10 +124,6 @@ proc pp(d: Duration): string =
   else:
     d.ppUs
 
-proc pp(d: AccountLoadStats): string =
-  "[" & d.size.toSeq.mapIt(it.toSI).join(",") & "," &
-        d.dura.toSeq.mapIt(it.pp).join(",") & "]"
-
 proc pp(rc: Result[Account,HexaryDbError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
 
@@ -284,7 +280,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       for n,w in testItemLst:
         check dbBase.importAccounts(
           peer, root, w.base, w.data, storeData = persistent) == OkHexDb
-      noisy.say "***", "import stats=", dbBase.dbImportStats.pp
 
     test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
@@ -306,7 +301,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
 
       # Save/bulk-store hexary trie on disk
       check desc.dbImports() == OkHexDb
-      noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
       # Update list of accounts. There might be additional accounts in the set
       # of proof nodes, typically before the `lowerBound` of each block. As
@@ -342,9 +336,8 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           byChainDB = desc.getChainDbAccount(accHash)
           byNextKey = desc.nextChainDbKey(accHash)
           byPrevKey = desc.prevChainDbKey(accHash)
-          byBulker = desc.getBulkDbXAccount(accHash)
         noisy.say "*** find",
-          "<", count, "> byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
+          "<", count, "> byChainDb=", byChainDB.pp
         check byChainDB.isOk
 
         # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
@@ -362,10 +355,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           if byPrevKey.isOk:
             check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
         prevAccount = accHash
-
-        if desc.dbBackendRocksDb():
-          check byBulker.isOk
-          check byChainDB == byBulker
 
       # Hexary trie memory database dump. These are key value pairs for
       # ::

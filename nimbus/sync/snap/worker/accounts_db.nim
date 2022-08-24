@@ -19,7 +19,7 @@ import
   stint,
   rocksdb,
   ../../../constants,
-  ../../../db/[kvstore_rocksdb, select_backend, storage_types],
+  ../../../db/[kvstore_rocksdb, select_backend],
   "../.."/[protocol, types],
   ../range_desc,
   ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_import,
@@ -34,21 +34,15 @@ export
   HexaryDbError
 
 type
-  AccountLoadStats* = object
-    dura*: array[3,times.Duration]   ## Accumulated time statistics
-    size*: array[2,uint64]           ## Accumulated size statistics
-
   AccountsDbRef* = ref object
     db: TrieDatabaseRef              ## General database
     rocky: RocksStoreRef             ## Set if rocksdb is available
-    aStats: AccountLoadStats         ## Accumulated time and statistics
 
   AccountsDbSessionRef* = ref object
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
     base: AccountsDbRef              ## Back reference to common parameters
     peer: Peer                       ## For log messages
     rpDB: HexaryTreeDB               ## Repair database
-    dStats: AccountLoadStats         ## Time and size statistics
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -332,32 +326,15 @@ proc interpolate*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
 
 proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
   ## Experimental: try several db-import modes and record statistics
-  var als: AccountLoadStats
   noPpError("dbImports"):
     if  ps.base.rocky.isNil:
-      als.dura[0].elapsed:
-        let rc = ps.rpDB.bulkStorageHexaryNodesOnChainDb(ps.base.db)
-        if rc.isErr: return rc
+      let rc = ps.rpDB.bulkStorageHexaryNodesOnChainDb(ps.base.db)
+      if rc.isErr: return rc
     else:
-      als.dura[1].elapsed:
-        let rc = ps.rpDB.bulkStorageHexaryNodesOnXChainDb(ps.base.db)
-        if rc.isErr: return rc
-      als.dura[2].elapsed:
-        let rc = ps.rpDB.bulkStorageHexaryNodesOnRockyDb(ps.base.rocky)
-        if rc.isErr: return rc
-
-  for n in 0 ..< als.dura.len:
-    ps.dStats.dura[n] += als.dura[n]
-    ps.base.aStats.dura[n] += als.dura[n]
-
-  ps.dStats.size[0] += ps.rpDB.acc.len.uint64
-  ps.base.aStats.size[0] += ps.rpDB.acc.len.uint64
-
-  ps.dStats.size[1] += ps.rpDB.tab.len.uint64
-  ps.base.aStats.size[1] += ps.rpDB.tab.len.uint64
+      let rc = ps.rpDB.bulkStorageHexaryNodesOnRockyDb(ps.base.rocky)
+      if rc.isErr: return rc
 
   ok()
-
 
 proc sortMerge*(base: openArray[NodeTag]): NodeTag =
   ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
@@ -504,35 +481,6 @@ proc prevChainDbKey*(
       return ok(path.getBytes.convertTo(Hash256))
 
   err(AccountNotFound)
-
-proc getBulkDbXAccount*(
-    ps: AccountsDbSessionRef;
-    accHash: Hash256
-      ): Result[Account,HexaryDbError] =
-  ## Fetch account additional sub-table (paraellel to `BaseChainDB`), when
-  ## rocksdb was used to store dicectly, and a paralell table was used to
-  ## store the same via `put()`.
-  noRlpExceptionOops("getBulkDbXAccount()"):
-    let
-      getFn: HexaryGetFn = proc(key: Blob): Blob =
-        var tag: NodeTag
-        discard tag.init(key)
-        ps.base.db.get(tag.bulkStorageChainDbHexaryXKey().toOpenArray)
-      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
-    if 0 < leaf.len:
-      let acc = rlp.decode(leaf,Account)
-      return ok(acc)
-
-  err(AccountNotFound)
-
-
-proc dbImportStats*(ps: AccountsDbSessionRef): AccountLoadStats =
-  ## Session data load statistics
-  ps.dStats
-
-proc dbImportStats*(pv: AccountsDbRef): AccountLoadStats =
-  ## Accumulated data load statistics
-  pv.aStats
 
 proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
   ## Prepare foe pretty pringing/debugging. Run early enough this function

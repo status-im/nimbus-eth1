@@ -22,17 +22,8 @@ import
 logScope:
   topics = "snap-db"
 
-type
-  BulkStorageDbXKeyKind = enum
-    ## Extends `storage_types.DbDBKeyKind` for testing/debugging
-    ChainDbHexaryPfx = 200     # <hash-key> on trie db layer
-
 const
   RockyBulkCache = "accounts.sst"
-
-static:
-  # Make sure that `DBKeyKind` extension does not overlap
-  doAssert high(DBKeyKind).int < low(BulkStorageDbXKeyKind).int
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -59,22 +50,12 @@ proc chainDbHexaryKey(a: RepairKey): ByteArray32 =
 proc chainDbHexaryKey(a: NodeTag): ByteArray32 =
   a.to(NodeKey).ByteArray32
 
-proc bulkStorageChainDbHexaryXKey*(a: RepairKey): DbKey =
-  result.data[0] = byte ord(ChainDbHexaryPfx)
-  result.data[1 .. 32] = a.convertTo(NodeKey).ByteArray32
-  result.dataEndPos = uint8 32
-
 template toOpenArray*(k: ByteArray32): openArray[byte] =
   k.toOpenArray(0, 31)
 
 # ------------------------------------------------------------------------------
 # Public helperd
 # ------------------------------------------------------------------------------
-
-proc bulkStorageChainDbHexaryXKey*(a: NodeTag): DbKey =
-  result.data[0] = byte ord(ChainDbHexaryPfx)
-  result.data[1 .. 32] = a.to(NodeKey).ByteArray32
-  result.dataEndPos = uint8 32
 
 proc bulkStorageClearRockyCacheFile*(rocky: RocksStoreRef): bool =
   if not rocky.isNil:
@@ -103,23 +84,6 @@ proc bulkStorageHexaryNodesOnChainDb*(
       trace "Unresolved node in repair table", error
       return err(error)
     base.put(key.chainDbHexaryKey.toOpenArray, value.convertTo(Blob))
-  ok()
-
-proc bulkStorageHexaryNodesOnXChainDb*(
-    db: HexaryTreeDB;
-    base: TrieDatabaseRef
-      ): Result[void,HexaryDbError] =
-  ## Bulk load using transactional `put()` on a sub-table
-  let dbTx = base.beginTransaction
-  defer: dbTx.commit
-
-  for (key,value) in db.tab.pairs:
-    if not key.isNodeKey:
-      let error = UnresolvedRepairNode
-      trace "Unresolved node in repair table", error
-      return err(error)
-    base.put(
-      key.bulkStorageChainDbHexaryXKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 

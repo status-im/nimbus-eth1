@@ -16,7 +16,6 @@ import
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ../../utils/prettify,
   ".."/[protocol, sync_desc],
   ./worker/[accounts_db, fetch_accounts, pivot, ticker],
   "."/[range_desc, worker_desc]
@@ -131,6 +130,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       pivotBlock = if ctx.data.pivotEnv.isNil: none(BlockNumber)
                    else: some(ctx.data.pivotEnv.stateHeader.blockNumber)
       accCoverage = ctx.data.coveredAccounts.fullFactor
+      accFill = meanStdDev(uSum, uSqSum, count)
 
     when snapAccountsDumpEnable:
       if snapAccountsDumpCoverageStop < accCoverage:
@@ -142,10 +142,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       pivotBlock:    pivotBlock,
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
-      accounts:      meanStdDev(aSum, aSqSum, count),
-      accCoverage:   accCoverage,
-      fillFactor:    meanStdDev(uSum, uSqSum, count),
-      bulkStore:     ctx.data.accountsDb.dbImportStats)
+      nAccounts:     meanStdDev(aSum, aSqSum, count),
+      accountsFill:  (accFill[0], accFill[1], accCoverage))
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions

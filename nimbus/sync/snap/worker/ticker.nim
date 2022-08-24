@@ -10,14 +10,13 @@
 # except according to those terms.
 
 import
-  std/[sequtils, strformat, strutils, times],
+  std/[strformat, strutils, times],
   chronos,
   chronicles,
   eth/[common/eth_types, p2p],
   stint,
   ../../../utils/prettify,
-  ../../timer_helper,
-  ./accounts_db
+  ../../timer_helper
 
 {.push raises: [Defect].}
 
@@ -27,12 +26,11 @@ logScope:
 type
   TickerStats* = object
     pivotBlock*: Option[BlockNumber]
-    accounts*: (float,float)   ## mean and standard deviation
-    fillFactor*: (float,float) ## mean and standard deviation
-    accCoverage*: float        ## as factor
+    nAccounts*: (float,float)          ## mean and standard deviation
+    accountsFill*: (float,float,float) ## mean, standard deviation, merged total
+    accCoverage*: float                ## as factor
     activeQueues*: int
     flushedQueues*: int64
-    bulkStore*: AccountLoadStats
 
   TickerStatsUpdater* =
     proc: TickerStats {.gcsafe, raises: [Defect].}
@@ -114,13 +112,13 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.lastTick = t.tick
     var
-      avAcc = ""
+      nAcc = ""
       pivot = "n/a"
       bulk = ""
     let
-      avCov = data.fillFactor[0].toPC(1) & "(" &
-              data.fillFactor[1].toPC(1) & ")"
-      allCov = data.accCoverage.toPC(1)
+      accCov = data.accountsFill[0].toPC(1) &
+         "(" & data.accountsFill[1].toPC(1) & ")" &
+         "/" & data.accountsFill[2].toPC(1)
       flushed = data.flushedQueues
       buddies = t.nBuddies
       tick = t.tick.toSI
@@ -129,12 +127,10 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.activeQueues}"
-      avAcc = &"{(data.accounts[0]+0.5).int64}({(data.accounts[1]+0.5).int64})"
-      bulk = "[" & data.bulkStore.size.toSeq.mapIt(it.toSI).join(",") & "," &
-                   data.bulkStore.dura.toSeq.mapIt(it.pp).join(",") & "]"
+      nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, avAcc, avCov, allCov, flushed, bulk, mem
+      tick, buddies, pivot, nAcc, accCov, flushed, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
