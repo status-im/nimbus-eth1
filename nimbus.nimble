@@ -31,6 +31,7 @@ when declared(namedBin):
   namedBin = {
     "nimbus/nimbus": "nimbus",
     "fluffy/fluffy": "fluffy",
+    "lc_proxy/lc_proxy": "lc_proxy",
     "fluffy/tools/portalcli": "portalcli",
   }.toTable()
 
@@ -67,6 +68,9 @@ task test_rocksdb, "Run rocksdb tests":
 
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
+
+task lc_proxy, "Build light client proxy":
+  buildBinary "lc_proxy", "lc_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
 
 task fluffy_tools, "Build fluffy tools":
   buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
