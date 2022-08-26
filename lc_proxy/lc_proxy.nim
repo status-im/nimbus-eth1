@@ -52,8 +52,8 @@ proc run() {.raises: [Exception, Defect].}=
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
-    beaconClock = BeaconClock.init(
-      getStateField(genesisState[], genesis_time))
+    beaconClock = BeaconClock.init(getStateField(genesisState[], genesis_time))
+
     getBeaconTime = beaconClock.getBeaconTimeFn()
 
     genesis_validators_root =
@@ -137,6 +137,7 @@ proc run() {.raises: [Exception, Defect].}=
               # engine_forkchoiceUpdatedV1
               discard await eth1Mon.runForkchoiceUpdated(
                 headBlockRoot = payload.block_hash,
+                safeBlockRoot = payload.block_hash,  # stub value
                 finalizedBlockRoot = ZERO_HASH)
 
             if lcProxy != nil:
@@ -153,24 +154,27 @@ proc run() {.raises: [Exception, Defect].}=
 
   info "Listening to incoming network requests"
   network.initBeaconSync(cfg, forkDigests, genesisBlockRoot, getBeaconTime)
+  network.addValidator(
+    getBeaconBlocksTopic(forkDigests.phase0),
+    proc (signedBlock: phase0.SignedBeaconBlock): ValidationResult =
+      toValidationResult(
+        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+  network.addValidator(
+    getBeaconBlocksTopic(forkDigests.altair),
+    proc (signedBlock: altair.SignedBeaconBlock): ValidationResult =
+      toValidationResult(
+        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+  network.addValidator(
+    getBeaconBlocksTopic(forkDigests.bellatrix),
+    proc (signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
+      toValidationResult(
+        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
   lightClient.installMessageValidators()
   waitFor network.startListening()
   waitFor network.start()
 
   if lcProxy != nil:
     waitFor lcProxy.proxy.start()
-
-  proc shouldSyncOptimistically(slot: Slot): bool =
-    const
-      # Maximum age of light client optimistic header to use optimistic sync
-      maxAge = 2 * SLOTS_PER_EPOCH
-
-    if eth1Mon == nil and lcProxy == nil:
-      false
-    elif getBeaconTime().slotOrZero > slot + maxAge:
-      false
-    else:
-      true
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
@@ -187,6 +191,60 @@ proc run() {.raises: [Exception, Defect].}=
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
+
+  func shouldSyncOptimistically(wallSlot: Slot): bool =
+    # Check whether an EL is connected
+    if eth1Mon == nil and lcProxy == nil:
+      return false
+
+    # Check whether light client is used
+    let optimisticHeader = lightClient.optimisticHeader.valueOr:
+      return false
+
+    # Check whether light client has synced sufficiently close to wall slot
+    const maxAge = 2 * SLOTS_PER_EPOCH
+    if optimisticHeader.slot < max(wallSlot, maxAge.Slot) - maxAge:
+      return false
+
+    true
+
+  var blocksGossipState: GossipState = {}
+  proc updateBlocksGossipStatus(slot: Slot) =
+    let
+      isBehind = not shouldSyncOptimistically(slot)
+
+      targetGossipState = getTargetGossipState(
+        slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH, isBehind)
+
+    template currentGossipState(): auto = blocksGossipState
+    if currentGossipState == targetGossipState:
+      return
+
+    if currentGossipState.card == 0 and targetGossipState.card > 0:
+      debug "Enabling blocks topic subscriptions",
+        wallSlot = slot, targetGossipState
+    elif currentGossipState.card > 0 and targetGossipState.card == 0:
+      debug "Disabling blocks topic subscriptions",
+        wallSlot = slot
+    else:
+      # Individual forks added / removed
+      discard
+
+    let
+      newGossipForks = targetGossipState - currentGossipState
+      oldGossipForks = currentGossipState - targetGossipState
+
+    for gossipFork in oldGossipForks:
+      let forkDigest = forkDigests[].atStateFork(gossipFork)
+      network.unsubscribe(getBeaconBlocksTopic(forkDigest))
+
+    for gossipFork in newGossipForks:
+      let forkDigest = forkDigests[].atStateFork(gossipFork)
+      network.subscribe(
+        getBeaconBlocksTopic(forkDigest), blocksTopicParams,
+        enableTopicMetrics = true)
+
+    blocksGossipState = targetGossipState
 
   var nextExchangeTransitionConfTime: Moment
 
