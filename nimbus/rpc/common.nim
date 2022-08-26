@@ -9,8 +9,9 @@
 
 import
   std/[strutils, tables],
-  nimcrypto, eth/common as eth_common, stint, json_rpc/server, json_rpc/errors,
-  eth/p2p, eth/p2p/enode, eth/p2p/peer_pool,
+  nimcrypto, eth/common as eth_common,
+  stint, json_rpc/server, json_rpc/errors,
+  eth/p2p, eth/p2p/enode,
   ../config, ./hexstrings
 
 type
@@ -37,11 +38,11 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     result = $conf.networkId
 
   server.rpc("net_listening") do() -> bool:
-    let numPeers = node.peerPool.connectedNodes.len
+    let numPeers = node.numPeers
     result = numPeers < conf.maxPeers
 
   server.rpc("net_peerCount") do() -> HexQuantityStr:
-    let peerCount = uint node.peerPool.connectedNodes.len
+    let peerCount = uint node.numPeers
     result = encodeQuantity(peerCount)
 
   server.rpc("net_nodeInfo") do() -> NodeInfo:
@@ -61,6 +62,6 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("nimbus_addPeer") do(enode: string) -> bool:
     var res = ENode.fromString(enode)
     if res.isOk:
-      asyncSpawn node.peerPool.connectToNode(newNode(res.get()))
+      asyncSpawn node.connectToNode(res.get())
       return true
     raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")

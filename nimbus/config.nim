@@ -277,6 +277,17 @@ type
       defaultValue: ""
       name: "static-peers-file" }: InputFile
 
+    reconnectMaxRetry* {.
+      desc: "Specifies max number of retries if static peers disconnected/not connected. " &
+            "0 = infinite."
+      defaultValue: 0
+      name: "reconnect-max-retry" }: int
+
+    reconnectInterval* {.
+      desc: "Interval in seconds before next attempt to reconnect to static peers. Min 5 seconds."
+      defaultValue: 15
+      name: "reconnect-interval" }: int
+
     listenAddress* {.
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress

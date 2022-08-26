@@ -17,13 +17,13 @@ import
   eth/[keys, net/nat, trie/db],
   eth/common as eth_common,
   eth/p2p as eth_p2p,
-  eth/p2p/[peer_pool, rlpx_protocols/les_protocol],
+  eth/p2p/[rlpx_protocols/les_protocol],
   json_rpc/rpcserver,
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
   websock/websock as ws,
-  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version],
+  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version, peers],
   ./db/[storage_types, db_chain, select_backend],
   ./graphql/ethapi,
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
@@ -57,6 +57,7 @@ type
     txPool: TxPoolRef
     networkLoop: Future[void]
     dbBackend: ChainDB
+    peerManager: PeerManagerRef
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -156,8 +157,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
-  for enode in staticPeers:
-    asyncSpawn nimbus.ethNode.peerPool.connectToNode(newNode(enode))
+  if staticPeers.len > 0:
+    nimbus.peerManager = PeerManagerRef.new(
+      nimbus.ethNode.peerPool,
+      conf.reconnectInterval,
+      conf.reconnectMaxRetry,
+      staticPeers
+    )
+    nimbus.peerManager.start()
 
   # Start Eth node
   if conf.maxPeers > 0:
@@ -412,6 +419,10 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.graphqlServer.stop()
   if conf.engineSigner != ZERO_ADDRESS:
     await nimbus.sealingEngine.stop()
+  if conf.maxPeers > 0:
+    await nimbus.networkLoop.cancelAndWait()
+  if nimbus.peerManager.isNil.not:
+    await nimbus.peerManager.stop()
 
 proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop
