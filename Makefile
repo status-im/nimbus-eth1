@@ -62,6 +62,7 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	update \
 	nimbus \
 	fluffy \
+	lc_proxy \
 	test \
 	test-reproducibility \
 	clean \
@@ -191,6 +192,10 @@ test-reproducibility:
 fluffy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
+
+lc-proxy: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim lc_proxy $(NIM_PARAMS) nimbus.nims
 
 # primitive reproducibility test
 fluffy-test-reproducibility:
