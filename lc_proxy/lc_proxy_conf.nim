@@ -141,7 +141,11 @@ type LcProxyConf* = object
     name: "discv5" .}: bool
 
   directPeers* {.
-    desc: "The list of priviledged, secure and known peers to connect and maintain the connection to, this requires a not random netkey-file. In the complete multiaddress format like: /ip4/<address>/tcp/<port>/p2p/<peerId-public-key>. Peering agreements are established out of band and must be reciprocal."
+    desc: "The list of priviledged, secure and known peers to connect and" &
+          "maintain the connection to, this requires a not random netkey-file." &
+          "In the complete multiaddress format like:" &
+          "/ip4/<address>/tcp/<port>/p2p/<peerId-public-key>." &
+          "Peering agreements are established out of band and must be reciprocal."
     name: "direct-peer" .}: seq[string]
 
   # Light client
