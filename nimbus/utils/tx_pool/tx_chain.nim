@@ -128,6 +128,8 @@ proc new*(T: type TxChainRef; db: BaseChainDB; miner: EthAddress): T
   result.miner = miner
   result.lhwm.lwmTrg = TRG_THRESHOLD_PER_CENT
   result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
+  result.lhwm.gasFloor = DEFAULT_GAS_LIMIT
+  result.lhwm.gasCeil  = DEFAULT_GAS_LIMIT
   result.calcDifficulty = proc(timeStamp: EthTime, parent: BlockHeader):
                                DifficultyInt {.gcsafe, raises:[].} =
     try:

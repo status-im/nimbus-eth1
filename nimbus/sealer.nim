@@ -70,9 +70,6 @@ proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[vo
 
   ok()
 
-proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
-  number >= c.londonBlock
-
 proc prepareBlock(engine: SealingEngineRef,
                    parent: BlockHeader,
                    time: Time,
@@ -85,22 +82,6 @@ proc prepareBlock(engine: SealingEngineRef,
   engine.txPool.prevRandao = prevRandao
 
   var blk = engine.txPool.ethBlock()
-
-  # TODO: fix txPool GasLimit to match this GasLimit
-  let conf = engine.chain.db.config
-  if isLondon(conf, blk.header.blockNumber):
-    var parentGasLimit = parent.gasLimit
-    if not isLondon(conf, parent.blockNumber):
-      # Bump by 2x
-      parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
-    # TODO: desiredLimit can be configured by user, gasCeil
-    blk.header.gasLimit = calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
-  else:
-    blk.header.gasLimit = computeGasLimit(
-      parent.gasUsed,
-      parent.gasLimit,
-      gasFloor = DEFAULT_GAS_LIMIT,
-      gasCeil = DEFAULT_GAS_LIMIT)
 
   if engine.chain.isBlockAfterTtd(blk.header):
     blk.header.difficulty = DifficultyInt.zero

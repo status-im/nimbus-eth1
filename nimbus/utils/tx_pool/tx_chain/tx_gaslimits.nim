@@ -17,8 +17,8 @@ import
   ../../../chain_config,
   ../../../db/db_chain,
   ../../../constants,
-  ../../../forks,
-  eth/[common]
+  ../../../utils/header,
+  eth/[common, eip1559]
 
 {.push raises: [Defect].}
 
@@ -30,6 +30,10 @@ type
     hwmMax: int ##\
       ## VM executor may stop if this per centage of `maxLimit` has
       ## been reached.
+    gasFloor: GasInt
+      ## minimum desired gas limit
+    gasCeil: GasInt
+      ## maximum desired gas limit
 
   TxChainGasLimits* = tuple
     gasLimit: GasInt ## Parent gas limit, used as a base for others
@@ -83,6 +87,9 @@ proc setPreLondonLimits(gl: var TxChainGasLimits) =
     gl.minLimit = gl.gasLimit - delta
     gl.trgLimit = gl.gasLimit
 
+proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
+  number >= c.londonBlock
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -92,9 +99,7 @@ proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader; parentLimit: GasInt;
   ## Calculate gas limits for the next block header.
   result.gasLimit = parentLimit
 
-  let nextFork = db.config.toFork(parent.blockNumber + 1)
-
-  if FkLondon <= nextFork:
+  if isLondon(db.config, parent.blockNumber+1):
     result.setPostLondonLimits
   else:
     result.setPreLondonLimits
@@ -106,6 +111,19 @@ proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader; parentLimit: GasInt;
   result.hwmLimit = max(
     result.trgLimit, (result.maxLimit * pc.hwmMax + 50) div 100)
 
+  # override trgLimit, see https://github.com/status-im/nimbus-eth1/issues/1032
+  if isLondon(db.config, parent.blockNumber+1):
+    var parentGasLimit = parent.gasLimit
+    if not isLondon(db.config, parent.blockNumber):
+      # Bump by 2x
+      parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
+    result.trgLimit = calcGasLimit1559(parentGasLimit, desiredLimit = pc.gasCeil)
+  else:
+    result.trgLimit = computeGasLimit(
+      parent.gasUsed,
+      parent.gasLimit,
+      gasFloor = pc.gasFloor,
+      gasCeil = pc.gasCeil)
 
 proc gasLimitsGet*(db: BaseChainDB; parent: BlockHeader;
                    pc: TxChainGasLimitsPc): TxChainGasLimits =

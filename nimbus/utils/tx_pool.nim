@@ -719,7 +719,12 @@ proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
 proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
   if 0 <= val and val <= 100:
-    xp.chain.lhwm = (lwmTrg: val, hwmMax: xp.chain.lhwm.hwmMax)
+    xp.chain.lhwm = (
+      lwmTrg: val,
+      hwmMax: xp.chain.lhwm.hwmMax,
+      gasFloor: xp.chain.lhwm.gasFloor,
+      gasCeil: xp.chain.lhwm.gasCeil
+    )
 
 proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags])
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -729,7 +734,12 @@ proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags])
 proc `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
   ## Setter, `val` arguments outside `0..100` are ignored
   if 0 <= val and val <= 100:
-    xp.chain.lhwm = (lwmTrg: xp.chain.lhwm.lwmTrg, hwmMax: val)
+    xp.chain.lhwm = (
+      lwmTrg: xp.chain.lhwm.lwmTrg,
+      hwmMax: val,
+      gasFloor: xp.chain.lhwm.gasFloor,
+      gasCeil: xp.chain.lhwm.gasCeil
+    )
 
 proc `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
