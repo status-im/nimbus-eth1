@@ -20,27 +20,44 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ./rpc/rpc_eth_lc_api
+  ./rpc/rpc_eth_lc_api,
+  ./lc_proxy_conf
 
 from beacon_chain/consensus_object_pools/consensus_manager import runForkchoiceUpdated
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
+proc initRpcProxy(config: LcProxyConf): RpcProxy {.raises: [CatchableError, Defect].} =
+  let ta = initTAddress(config.rpcAddress, config.rpcPort)
+  let clientConfig =
+    case config.web3ClientConfig.kind
+    of WsClient:
+      getWebSocketClientConfig(config.web3ClientConfig.url)
+    of HttpClient:
+      getHttpClientConfig(config.web3ClientConfig.url)
+
+  return RpcProxy.new([ta], clientConfig)
+
 # TODO Find what can throw exception
-proc run() {.raises: [Exception, Defect].}=
+proc run() {.raises: [Exception, Defect].} =
   {.pop.}
   var config = makeBannerAndConfig(
-    "Nimbus light client " & fullVersionStr, LightClientConf)
+    "Nimbus light client " & fullVersionStr, LcProxyConf)
   {.push raises: [Defect].}
+
+  # Required as both Eth2Node and LightClient requires correct config type
+  var lcConfig = config.asLightClientConf()
 
   setupLogging(config.logLevel, config.logStdout, config.logFile)
 
-  notice "Launching light client",
+  notice "Launching light client proxy",
     version = fullVersionStr, cmdParams = commandLineParams(), config
 
   let metadata = loadEth2Network(config.eth2Network)
+
   for node in metadata.bootstrapNodes:
-    config.bootstrapNodes.add node
+    lcConfig.bootstrapNodes.add node
+
   template cfg(): auto = metadata.cfg
 
   let
@@ -67,56 +84,13 @@ proc run() {.raises: [Exception, Defect].}=
     netKeys = getRandomNetKeys(rng[])
 
     network = createEth2Node(
-      rng, config, netKeys, cfg,
-      forkDigests, getBeaconTime, genesis_validators_root)
+      rng, lcConfig, netKeys, cfg,
+      forkDigests, getBeaconTime, genesis_validators_root
+    )
 
-    eth1Mon =
-      if config.web3Urls.len > 0:
-        let res = Eth1Monitor.init(
-          cfg, db = nil, getBeaconTime, config.web3Urls,
-          none(DepositContractSnapshot), metadata.eth1Network,
-          forcePolling = false,
-          rng[].loadJwtSecret(config, allowCreate = false),
-          true)
-        waitFor res.ensureDataProvider()
-        res
-      else:
-        nil
+    rpcServerWithProxy = initRpcProxy(config)
 
-    rpcServerWithProxy =
-      if config.web3Urls.len > 0:
-        var web3Url = config.web3Urls[0]
-        fixupWeb3Urls web3Url
-
-        let proxyUri = some web3Url
-
-        if proxyUri.isSome:
-          info "Initializing LC eth API proxy", proxyUri = proxyUri.get
-          let
-            ta = initTAddress("127.0.0.1:8545")
-            clientConfig =
-              case parseUri(proxyUri.get).scheme.toLowerAscii():
-              of "http", "https":
-                getHttpClientConfig(proxyUri.get)
-              of "ws", "wss":
-                getWebSocketClientConfig(proxyUri.get)
-              else:
-                fatal "Unsupported scheme", proxyUri = proxyUri.get
-                quit QuitFailure
-          RpcProxy.new([ta], clientConfig)
-        else:
-          warn "Ignoring `rpcEnabled`, no `proxyUri` provided"
-          nil
-      else:
-        nil
-
-    lcProxy =
-      if rpcServerWithProxy != nil:
-        let res = LightClientRpcProxy(proxy: rpcServerWithProxy)
-        res.installEthApiHandlers()
-        res
-      else:
-        nil
+    lcProxy = LightClientRpcProxy(proxy: rpcServerWithProxy)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -127,21 +101,7 @@ proc run() {.raises: [Exception, Defect].}=
         when stateFork >= BeaconStateFork.Bellatrix:
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
-
-            if eth1Mon != nil:
-              await eth1Mon.ensureDataProvider()
-
-              # engine_newPayloadV1
-              discard await eth1Mon.newExecutionPayload(payload)
-
-              # engine_forkchoiceUpdatedV1
-              discard await eth1Mon.runForkchoiceUpdated(
-                headBlockRoot = payload.block_hash,
-                safeBlockRoot = payload.block_hash,  # stub value
-                finalizedBlockRoot = ZERO_HASH)
-
-            if lcProxy != nil:
-              lcProxy.executionPayload.ok payload.asEngineExecutionPayload()
+            lcProxy.executionPayload.ok payload.asEngineExecutionPayload()
         else: discard
       return
 
@@ -149,8 +109,10 @@ proc run() {.raises: [Exception, Defect].}=
       getBeaconTime, optimisticHandler)
 
     lightClient = createLightClient(
-      network, rng, config, cfg, forkDigests, getBeaconTime,
+      network, rng, lcConfig, cfg, forkDigests, getBeaconTime,
       genesis_validators_root, LightClientFinalizationMode.Optimistic)
+
+  lcProxy.installEthApiHandlers()
 
   info "Listening to incoming network requests"
   network.initBeaconSync(cfg, forkDigests, genesisBlockRoot, getBeaconTime)
@@ -170,16 +132,14 @@ proc run() {.raises: [Exception, Defect].}=
       toValidationResult(
         optimisticProcessor.processSignedBeaconBlock(signedBlock)))
   lightClient.installMessageValidators()
+
   waitFor network.startListening()
   waitFor network.start()
-
-  if lcProxy != nil:
-    waitFor lcProxy.proxy.start()
+  waitFor lcProxy.proxy.start()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
-    info "New LC finalized header",
-      finalized_header = shortLog(finalizedHeader)
+    info "New LC finalized header", finalized_header = shortLog(finalizedHeader)
     optimisticProcessor.setFinalizedHeader(finalizedHeader)
 
   proc onOptimisticHeader(
@@ -193,10 +153,6 @@ proc run() {.raises: [Exception, Defect].}=
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
 
   func shouldSyncOptimistically(wallSlot: Slot): bool =
-    # Check whether an EL is connected
-    if eth1Mon == nil and lcProxy == nil:
-      return false
-
     # Check whether light client is used
     let optimisticHeader = lightClient.optimisticHeader.valueOr:
       return false
@@ -249,15 +205,8 @@ proc run() {.raises: [Exception, Defect].}=
   var nextExchangeTransitionConfTime: Moment
 
   proc onSecond(time: Moment) =
-    # engine_exchangeTransitionConfigurationV1
-    if time > nextExchangeTransitionConfTime and eth1Mon != nil:
-      nextExchangeTransitionConfTime = time + chronos.minutes(1)
-      traceAsyncErrors eth1Mon.exchangeTransitionConfiguration()
-
     let wallSlot = getBeaconTime().slotOrZero()
-    if checkIfShouldStopAtEpoch(wallSlot, config.stopAtEpoch):
-      quit(0)
-
+    updateBlocksGossipStatus(wallSlot + 1)
     lightClient.updateGossipStatus(wallSlot + 1)
 
   proc runOnSecondLoop() {.async.} =
