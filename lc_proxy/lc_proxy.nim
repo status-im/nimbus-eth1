@@ -14,6 +14,7 @@ import
   std/[os, strutils],
   chronicles, chronicles/chronos_tools, chronos,
   eth/keys,
+  json_rpc/[rpcserver, rpcclient],
   beacon_chain/eth1/eth1_monitor,
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/topic_params,
@@ -27,16 +28,16 @@ from beacon_chain/consensus_object_pools/consensus_manager import runForkchoiceU
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
-proc initRpcProxy(config: LcProxyConf): RpcProxy {.raises: [CatchableError, Defect].} =
-  let ta = initTAddress(config.rpcAddress, config.rpcPort)
-  let clientConfig =
-    case config.web3ClientConfig.kind
-    of WsClient:
-      getWebSocketClientConfig(config.web3ClientConfig.url)
-    of HttpClient:
-      getHttpClientConfig(config.web3ClientConfig.url)
-
-  return RpcProxy.new([ta], clientConfig)
+proc initRpcClient(config: LcProxyConf): Future[RpcClient] {.async.} =
+  case config.web3ClientConfig.kind
+  of WsClient:
+    let wssClient = newRpcWebSocketClient()
+    await wssClient.connect(config.web3ClientConfig.url)
+    return wssClient
+  of HttpClient:
+    let httpClient = newRpcHttpClient()
+    await httpClient.connect(config.web3ClientConfig.url)
+    return httpClient
 
 # TODO Find what can throw exception
 proc run() {.raises: [Exception, Defect].} =
@@ -88,9 +89,13 @@ proc run() {.raises: [Exception, Defect].} =
       forkDigests, getBeaconTime, genesis_validators_root
     )
 
-    rpcServerWithProxy = initRpcProxy(config)
+    rpcClient = waitFor initRpcClient(config)
 
-    lcProxy = LightClientRpcProxy(proxy: rpcServerWithProxy)
+    rpcHttpServer = newRpcHttpServer(
+      [initTAddress(config.rpcAddress, config.rpcPort)]
+    )
+
+    lcProxy = LightClientRpcProxy(server: rpcHttpServer, client: rpcClient)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -135,7 +140,7 @@ proc run() {.raises: [Exception, Defect].} =
 
   waitFor network.startListening()
   waitFor network.start()
-  waitFor lcProxy.proxy.start()
+  lcProxy.server.start()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
