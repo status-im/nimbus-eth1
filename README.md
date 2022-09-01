@@ -128,6 +128,8 @@ Variables -> Path -> Edit -> New -> C:\mingw-w64\mingw64\bin (it's "C:\mingw-w64
 
 Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell to clone and build Nimbus.
 
+Install [cmake](https://cmake.org/).
+
 If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
 ```bash
 mingw32-make fetch-dlls # this will place the right DLLs for your architecture in the "build/" directory
