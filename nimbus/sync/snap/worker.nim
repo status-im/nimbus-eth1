@@ -16,6 +16,7 @@ import
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
+  ../../utils/prettify,
   ".."/[protocol, sync_desc],
   ./worker/[accounts_db, fetch_accounts, pivot, ticker],
   "."/[range_desc, worker_desc]
@@ -109,7 +110,7 @@ proc updatePivotEnv(buddy: SnapBuddyRef): bool =
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var
-      aSum, aSqSum, uSum, uSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
       count = 0
     for kvp in ctx.data.pivotTable.nextPairs:
 
@@ -124,6 +125,10 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         let fill = kvp.data.availAccounts.freeFactor
         uSum += fill
         uSqSum += fill * fill
+
+        let sLen = kvp.data.nStorage.float
+        sSum += sLen
+        sSqSum += sLen * sLen
 
     let
       tabLen = ctx.data.pivotTable.len
@@ -143,6 +148,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       activeQueues:  tabLen,
       flushedQueues: ctx.data.pivotCount.int64 - tabLen,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
+      nStorage:      meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage))
 
 # ------------------------------------------------------------------------------

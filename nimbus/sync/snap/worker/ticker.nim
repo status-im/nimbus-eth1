@@ -27,6 +27,7 @@ type
   TickerStats* = object
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
+    nStorage*: (float,float)           ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
     accCoverage*: float                ## as factor
     activeQueues*: int
@@ -112,13 +113,12 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.lastTick = t.tick
     var
-      nAcc = ""
+      nAcc, nStore, bulk: string
       pivot = "n/a"
-      bulk = ""
     let
       accCov = data.accountsFill[0].toPC(1) &
          "(" & data.accountsFill[1].toPC(1) & ")" &
-         "/" & data.accountsFill[2].toPC(1)
+         "/" & data.accountsFill[2].toPC(0)
       flushed = data.flushedQueues
       buddies = t.nBuddies
       tick = t.tick.toSI
@@ -128,9 +128,10 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.activeQueues}"
       nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
+      nStore = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, flushed, mem
+      tick, buddies, pivot, nAcc, accCov, nStore, flushed, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

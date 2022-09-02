@@ -94,12 +94,14 @@ type
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
-    stateHeader*: BlockHeader         ## Pivot state, containg state root
-    pivotAccount*: NodeTag            ## Random account
-    availAccounts*: LeafRangeSet      ## Accounts to fetch (organised as ranges)
-    nAccounts*: uint64                ## Number of accounts imported
+    stateHeader*: BlockHeader          ## Pivot state, containg state root
+    pivotAccount*: NodeTag             ## Random account
+    availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
+    nAccounts*: uint64                 ## Number of accounts imported
+    nStorage*: uint64                  ## Number of storage spaces imported
+    leftOver*: seq[AccountSlotsHeader] ## Fetch storage for these accounts
     when switchPivotAfterCoverage < 1.0:
-      minCoverageReachedOk*: bool     ## Stop filling this pivot
+      minCoverageReachedOk*: bool      ## Stop filling this pivot
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -107,10 +109,10 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    stats*: SnapBuddyStats            ## Statistics counters
-    errors*: SnapBuddyErrors          ## For error handling
-    pivotHeader*: Option[BlockHeader] ## For pivot state hunter
-    workerPivot*: WorkerPivotBase     ## Opaque object reference for sub-module
+    stats*: SnapBuddyStats             ## Statistics counters
+    errors*: SnapBuddyErrors           ## For error handling
+    pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
+    workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
     ## All buddies call back (the argument type is defined below with
@@ -118,17 +120,17 @@ type
 
   CtxData* = object
     ## Globally shared data extension
-    seenBlock: WorkerSeenBlocks       ## Temporary, debugging, pretty logs
-    rng*: ref HmacDrbgContext         ## Random generator
-    coveredAccounts*: LeafRangeSet    ## Derived from all available accounts
-    dbBackend*: ChainDB               ## Low level DB driver access (if any)
-    ticker*: TickerRef                ## Ticker, logger
-    pivotTable*: SnapPivotTable       ## Per state root environment
-    pivotCount*: uint64               ## Total of all created tab entries
-    pivotEnv*: SnapPivotRef           ## Environment containing state root
-    accountRangeMax*: UInt256         ## Maximal length, high(u256)/#peers
-    accountsDb*: AccountsDbRef        ## Proof processing for accounts
-    runPoolHook*: BuddyPoolHookFn     ## Callback for `runPool()` 
+    seenBlock: WorkerSeenBlocks        ## Temporary, debugging, pretty logs
+    rng*: ref HmacDrbgContext          ## Random generator
+    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
+    dbBackend*: ChainDB                ## Low level DB driver access (if any)
+    ticker*: TickerRef                 ## Ticker, logger
+    pivotTable*: SnapPivotTable        ## Per state root environment
+    pivotCount*: uint64                ## Total of all created tab entries
+    pivotEnv*: SnapPivotRef            ## Environment containing state root
+    accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
+    accountsDb*: AccountsDbRef         ## Proof processing for accounts
+    runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
     # --------
     when snapAccountsDumpEnable:
       proofDumpOk*: bool

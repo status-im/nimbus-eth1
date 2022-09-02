@@ -49,6 +49,22 @@ type
     accHash*: Hash256
     accBlob*: Blob
 
+  AccountSlotsHeader* = object
+    ## Storage root header
+    accHash*: Hash256
+    storageRoot*: Hash256
+
+  AccountStorageRange* = object
+    ## List of storage descriptors, the last `AccountSlots` storage data might
+    ## be incomplete and tthe `proof` is needed for proving validity.
+    storages*: seq[AccountSlots]   ## List of accounts and storage data
+    proof*: SnapStorageProof       ## Boundary proofs for last entry
+
+  AccountSlots* = object
+    ## Account storage descriptor
+    account*: AccountSlotsHeader
+    data*: seq[SnapStorage]
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------

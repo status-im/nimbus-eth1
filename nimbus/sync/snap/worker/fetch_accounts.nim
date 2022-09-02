@@ -18,10 +18,10 @@ import
   stint,
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
-  "."/[accounts_db, get_account_range]
+  "."/[accounts_db, get_account_range, get_storage_ranges]
 
 when snapAccountsDumpEnable:
-  import ../../../tests/replay/undump_proofs
+  import ../../../tests/replay/[undump_accounts, undump_storages]
 
 {.push raises: [Defect].}
 
@@ -93,6 +93,61 @@ proc putUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
 proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   discard buddy.ctx.data.pivotEnv.availAccounts.reduce(iv)
 
+# -----
+
+proc waitAfterError(buddy: SnapBuddyRef; error: GetAccountRangeError): bool =
+  ## Error handling after `GetAccountRange` failed.
+  case error:
+  of GareResponseTimeout:
+    if maxTimeoutErrors <= buddy.data.errors.nTimeouts:
+      # Mark this peer dead, i.e. avoid fetching from this peer for a while
+      buddy.ctrl.zombie = true
+    else:
+      # Otherwise try again some time later
+      buddy.data.errors.nTimeouts.inc
+      result = true
+
+  of GareNetworkProblem,
+     GareMissingProof,
+     GareAccountsMinTooSmall,
+     GareAccountsMaxTooLarge:
+    # Mark this peer dead, i.e. avoid fetching from this peer for a while
+    buddy.data.stats.major.networkErrors.inc()
+    buddy.ctrl.zombie = true
+
+  of GareNothingSerious:
+    discard
+
+  of GareNoAccountsForStateRoot:
+    # Mark this peer dead, i.e. avoid fetching from this peer for a while
+    buddy.ctrl.zombie = true
+
+
+proc waitAfterError(buddy: SnapBuddyRef; error: GetStorageRangesError): bool =
+  ## Error handling after `GetStorageRanges` failed.
+  case error:
+  of GsreResponseTimeout:
+    if maxTimeoutErrors <= buddy.data.errors.nTimeouts:
+      # Mark this peer dead, i.e. avoid fetching from this peer for a while
+      buddy.ctrl.zombie = true
+    else:
+      # Otherwise try again some time later
+      buddy.data.errors.nTimeouts.inc
+      result = true
+
+  of GsreNetworkProblem,
+     GsreTooManyStorageSlots:
+    # Mark this peer dead, i.e. avoid fetching from this peer for a while
+    buddy.data.stats.major.networkErrors.inc()
+    buddy.ctrl.zombie = true
+
+  of GsreNothingSerious:
+    discard
+
+  of GsreNoStorageForAccounts:
+    # Mark this peer dead, i.e. avoid fetching from this peer for a while
+    buddy.ctrl.zombie = true
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -100,7 +155,6 @@ proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
 proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Fetch accounts data and store them in the database. The function returns
   ## `true` if there are no more unprocessed accounts.
-  ##
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -120,48 +174,31 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
     let rc = await buddy.getAccountRange(stateRoot, iv)
     if rc.isErr:
       buddy.putUnprocessed(iv) # fail => interval back to pool
-      case rc.error:
-      of ResponseTimeout:
-        if maxTimeoutErrors <=  buddy.data.errors.nTimeouts:
-          # Mark this peer dead, i.e. avoid fetching from this peer for a while
-          buddy.ctrl.zombie = true
-        else:
-          buddy.data.errors.nTimeouts.inc
-          await sleepAsync(5.seconds)
-      of NetworkProblem, MissingProof, AccountsMinTooSmall, AccountsMaxTooLarge:
-        # Mark this peer dead, i.e. avoid fetching from this peer for a while
-        buddy.data.stats.major.networkErrors.inc()
-        buddy.ctrl.zombie = true
-      of GetAccountRangeError.NothingSerious:
-        discard
-      of NoAccountsForStateRoot:
-        # Mark this peer dead, i.e. avoid fetching from this peer for a while
-        buddy.ctrl.zombie = true
-      return
+      if buddy.waitAfterError(rc.error):
+        await sleepAsync(5.seconds)
+      return false
     rc.value
 
   # Reset error counts
   buddy.data.errors.nTimeouts = 0
 
-
   # Process accounts data
   let
     nAccounts = dd.data.accounts.len
+    nStorage = dd.withStorage.len
     rc = ctx.data.accountsDb.importAccounts(
       peer, stateRoot, iv.minPt, dd.data, storeData = true)
   if rc.isErr:
+    # Bad data, just try another peer
     buddy.putUnprocessed(iv)
-
-    # Just try another peer
     buddy.ctrl.zombie = true
 
-    # TODO: Prevent deadlock in case there is a problem with the approval
-    #       data which is not in production state, yet.
     trace "Import failed, restoring unprocessed accounts", peer, stateRoot,
-      range=dd.consumed, nAccounts, error=rc.error
+      range=dd.consumed, nAccounts, nStorage, error=rc.error
   else:
     # Statistics
     env.nAccounts.inc(nAccounts)
+    env.nStorage.inc(nStorage)
 
     # Register consumed intervals on the accumulator over all state roots
     discard buddy.ctx.data.coveredAccounts.merge(dd.consumed)
@@ -188,9 +225,47 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
         if rc.isErr:
           fd.write "  # Error: base=" & $iv.minPt & " msg=" & $rc.error & "\n"
         fd.write "# count ", $ctx.data.proofDumpInx & "\n"
-        fd.write stateRoot.dumpAccountProof(iv.minPt, dd.data) & "\n"
+        fd.write stateRoot.dumpAccounts(iv.minPt, dd.data) & "\n"
+        # TBC ...
+    # --------------------
+
+    # Fetch storage data
+    block:
+      var leftOver = env.leftOver & dd.withStorage
+      env.leftOver.setlen(0)
+      while 0 < leftOver.len:
+        # Note that `getStorageRanges()` guarantees that any returned left
+        # over list is smaller than the argument length.
+        let rc = await buddy.getStorageRanges(stateRoot, leftOver)
+        if rc.isOk:
+          let storage = rc.value.data
+          leftOver = rc.value.leftOver
+          # --------------------
+          # For dumping data ready to be used in unit tests
+          when snapAccountsDumpEnable:
+            if ctx.data.proofDumpOk:
+              var fd = ctx.data.proofDumpFile
+              fd.write stateRoot.dumpStorages(storage) & "\n"
+              # TBC ...
+          # --------------------
+
+          # TODO: store in database
+        else:
+          # Save accounts/storage list to be processed later
+          env.leftOver.add leftOver
+          if buddy.waitAfterError(rc.error):
+            await sleepAsync(5.seconds)
+          break
+
+    # --------------------
+    # For dumping data ready to be used in unit tests
+    when snapAccountsDumpEnable:
+      if ctx.data.proofDumpOk:
+        var fd = ctx.data.proofDumpFile
         fd.flushFile
         ctx.data.proofDumpInx.inc
+        # Done this time
+    # --------------------
 
 # ------------------------------------------------------------------------------
 # End

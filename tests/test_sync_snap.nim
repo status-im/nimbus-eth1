@@ -28,28 +28,25 @@ import
   ../nimbus/sync/snap/worker/accounts_db,
   ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../nimbus/utils/prettify,
-  ./replay/[pp, undump_blocks, undump_proofs]
+  ./replay/[pp, undump_blocks, undump_accounts],
+  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests"/"replay", "tests"/"test_sync_snap",
              "nimbus-eth1-blobs"/"replay"]
 
+  # Reference file for finding the database directory
+  sampleDirRefFile = "sample0.txt.gz"
+
+  # Standard test samples
+  bChainCapture = bulkTest0
+  accSample = snapTest0
+
+  # Number of database slots (needed for timing tests)
   nTestDbInstances = 9
 
 type
-  CaptureSpecs = tuple
-    name: string   ## sample name, also used as sub-directory for db separation
-    network: NetworkId
-    file: string   ## name of capture file
-    numBlocks: int ## Number of blocks to load
-
-  AccountsSample = object
-    name: string   ## sample name, also used as sub-directory for db separation
-    file: string
-    firstItem: int
-    lastItem: int
-
   TestDbs = object
     ## Provide enough spare empty databases
     persistent: bool
@@ -62,21 +59,6 @@ when defined(linux):
   let isUbuntu32bit = detectOs(Ubuntu) and int.sizeof == 4
 else:
   const isUbuntu32bit = false
-
-const
-  sampleDirRefFile = "sample0.txt.gz"
-
-  goerliCapture: CaptureSpecs = (
-    name: "goerli",
-    network: GoerliNet,
-    file: "goerli68161.txt.gz",
-    numBlocks: 1_000)
-
-  accSample0 = AccountsSample(
-    name: "sample0",
-    file: "sample0.txt.gz",
-    firstItem: 0,
-    lastItem: high(int))
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
@@ -156,13 +138,13 @@ proc setErrorLevel =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc to(sample: AccountsSample; T: type seq[UndumpProof]): T =
+proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable format
   let file = sample.file.findFilePath(baseDir,repoDir).value
   var
     n = -1
     root: Hash256
-  for w in file.undumpNextProof:
+  for w in file.undumpNextAccount:
     n.inc
     if n < sample.firstItem:
       continue
@@ -254,10 +236,10 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
+proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   let
     peer = Peer.new
-    testItemLst = sample.to(seq[UndumpProof])
+    testItemLst = sample.to(seq[UndumpAccounts])
     root = testItemLst[0].root
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
@@ -383,7 +365,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
 
 
-proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
+proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
 
   let
     fileInfo = capture.file.splitFile.name.split(".")[0]
@@ -828,93 +810,10 @@ proc syncSnapMain*(noisy = defined(debug)) =
   noisy.storeRunner()
 
 when isMainModule:
+  import
+    ./test_sync_snap/snap_other_xx
   const
     noisy = defined(debug) or true
-
-    # Some 20 `snap/1` reply equivalents
-    snapTest0 =
-      accSample0
-
-    # Only the the first `snap/1` reply from the sample
-    snapTest1 = AccountsSample(
-      name: "test1",
-      file: snapTest0.file,
-      lastItem: 0)
-
-    # Ditto for sample1
-    snapTest2 = AccountsSample(
-      name: "test2",
-      file: "sample1.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapTest3 = AccountsSample(
-      name: "test3",
-      file: snapTest2.file,
-      lastItem: 0)
-
-    # Other samples from bulk folder
-    snapOther0a = AccountsSample(
-      name: "Other0a",
-      file: "account0_00_06_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther0b = AccountsSample(
-      name: "Other0b",
-      file: "account0_07_08_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther1a = AccountsSample(
-      name: "Other1a",
-      file: "account1_09_09_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther1b = AccountsSample(
-      name: "Other1b",
-      file: "account1_10_17_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther2 = AccountsSample(
-      name: "Other2",
-      file: "account2_18_25_dump.txt.gz",
-      firstItem: 1,
-      lastItem: high(int))
-    snapOther3 = AccountsSample(
-      name: "Other3",
-      file: "account3_26_33_dump.txt.gz",
-      firstItem: 2,
-      lastItem: high(int))
-    snapOther4 = AccountsSample(
-      name: "Other4",
-      file: "account4_34_41_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther5 = AccountsSample(
-      name: "Other5",
-      file: "account5_42_49_dump.txt.gz",
-      firstItem: 2,
-      lastItem: high(int))
-    snapOther6 = AccountsSample(
-      name: "Other6",
-      file: "account6_50_54_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-
-    bulkTest0 = goerliCapture
-    bulkTest1: CaptureSpecs = (
-      name:      "full-goerli",
-      network:   goerliCapture.network,
-      file:      goerliCapture.file,
-      numBlocks: high(int))
-    bulkTest2: CaptureSpecs = (
-      name:      "more-goerli",
-      network:   GoerliNet,
-      file:      "goerli482304.txt.gz",
-      numBlocks: high(int))
-    bulkTest3: CaptureSpecs = (
-      name:      "mainnet",
-      network:   MainNet,
-      file:      "mainnet332160.txt.gz",
-      numBlocks: high(int))
 
   #setTraceLevel()
   setErrorLevel()
@@ -978,7 +877,7 @@ when isMainModule:
     #false.accountsRunner(persistent=true, snapOther5)
     #false.accountsRunner(persistent=true, snapOther6)
 
-    false.accountsRunner(persistent=true,  snapTest0)
+    #false.accountsRunner(persistent=true,  snapTest0)
     #noisy.accountsRunner(persistent=true,  snapTest1)
     false.accountsRunner(persistent=true,  snapTest2)
     #noisy.accountsRunner(persistent=true,  snapTest3)
