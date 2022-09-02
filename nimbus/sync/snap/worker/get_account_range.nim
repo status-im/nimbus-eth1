@@ -16,7 +16,7 @@
 import
   std/sequtils,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common/eth_types, p2p, trie/trie_defs],
   stew/interval_set,
   "../.."/[protocol, protocol/trace_config],
   ".."/[range_desc, worker_desc]
@@ -28,17 +28,18 @@ logScope:
 
 type
   GetAccountRangeError* = enum
-    NothingSerious
-    MissingProof
-    AccountsMinTooSmall
-    AccountsMaxTooLarge
-    NoAccountsForStateRoot
-    NetworkProblem
-    ResponseTimeout
+    GareNothingSerious
+    GareMissingProof
+    GareAccountsMinTooSmall
+    GareAccountsMaxTooLarge
+    GareNoAccountsForStateRoot
+    GareNetworkProblem
+    GareResponseTimeout
 
   GetAccountRange* = object
-    consumed*: LeafRange      ## Real accounts interval covered
-    data*: PackedAccountRange ## Re-packed reply data
+    consumed*:    LeafRange               ## Real accounts interval covered
+    data*: PackedAccountRange             ## Re-packed reply data
+    withStorage*: seq[AccountSlotsHeader] ## Accounts with non-idle storage root
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -79,18 +80,26 @@ proc getAccountRange*(
   var dd = block:
     let rc = await buddy.getAccountRangeReq(stateRoot, iv)
     if rc.isErr:
-      return err(NetworkProblem)
+      return err(GareNetworkProblem)
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
-      return err(ResponseTimeout)
+      return err(GareResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
       consumed:   iv,
       data:       PackedAccountRange(
         proof:    snAccRange.proof,
-        accounts: snAccRange.accounts.mapIt(PackedAccount(
-          accHash: it.acchash,
-          accBlob: it.accBody.encode))))
+        accounts: snAccRange.accounts
+          # Re-pack accounts data
+          .mapIt(PackedAccount(
+            accHash: it.acchash,
+            accBlob: it.accBody.encode))),
+      withStorage:    snAccRange.accounts
+        # Collect accounts with non-empty storage
+        .filterIt(it.accBody.storageRoot != emptyRlpHash).mapIt(
+          AccountSlotsHeader(
+            accHash:     it.accHash,
+            storageRoot: it.accBody.storageRoot)))
   let
     nAccounts = dd.data.accounts.len
     nProof = dd.data.proof.len
@@ -110,7 +119,7 @@ proc getAccountRange*(
       # Maybe try another peer
       trace trSnapRecvReceived & "empty AccountRange", peer,
         nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
-      return err(NoAccountsForStateRoot)
+      return err(GareNoAccountsForStateRoot)
 
     # So there is no data, otherwise an account beyond the interval end
     # `iv.maxPt` would have been returned.
@@ -135,14 +144,14 @@ proc getAccountRange*(
       trace trSnapRecvProtocolViolation & "proof-less AccountRange", peer,
         nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
         reqRange=iv, stateRoot
-      return err(MissingProof)
+      return err(GareMissingProof)
 
   if accMinPt < iv.minPt:
     # Not allowed
     trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
       nAccounts, nProof, accRange=LeafRange.new(accMinPt, accMaxPt),
       reqRange=iv, stateRoot
-    return err(AccountsMinTooSmall)
+    return err(GareAccountsMinTooSmall)
 
   if iv.maxPt < accMaxPt:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getaccountrange-0x00:
@@ -159,11 +168,12 @@ proc getAccountRange*(
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
           nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
           reqRange=iv, stateRoot
-        return err(AccountsMaxTooLarge)
+        return err(GareAccountsMaxTooLarge)
 
   dd.consumed = LeafRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
   trace trSnapRecvReceived & "AccountRange", peer,
     nAccounts, nProof, accRange=dd.consumed, reqRange=iv, stateRoot
+
   return ok(dd)
 
 # ------------------------------------------------------------------------------

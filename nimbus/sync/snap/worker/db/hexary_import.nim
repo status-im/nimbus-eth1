@@ -9,15 +9,12 @@
 # except according to those terms.
 
 import
-  std/[sequtils, strutils, tables],
+  std/[sequtils, sets, strutils, tables],
   eth/[common/eth_types, trie/nibbles],
   stew/results,
   "."/[hexary_defs, hexary_desc]
 
 {.push raises: [Defect].}
-
-const
-  HexaryImportDebugging = false or true
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -31,10 +28,12 @@ proc pp(q: openArray[byte]): string =
 # ------------------------------------------------------------------------------
 
 proc hexaryImport*(
-    db: var HexaryTreeDB;
-    recData: Blob
+    db: var HexaryTreeDB;               ## Contains node table
+    recData: Blob;                      ## Node to add
+    unrefNodes: var HashSet[RepairKey]; ## Keep track of freestanding nodes
+    nodeRefs: var HashSet[RepairKey];   ## Ditto
       ): Result[void,HexaryDbError]
-      {.gcsafe, raises: [Defect, RlpError].} =
+      {.gcsafe, raises: [Defect, RlpError, KeyError].} =
   ## Decode a single trie item for adding to the table and add it to the
   ## database. Branch and exrension record links are collected.
   let
@@ -61,6 +60,8 @@ proc hexaryImport*(
         return err(RlpBranchLinkExpected)
       # Update ref pool
       links[top] = key.to(RepairKey)
+      unrefNodes.excl links[top] # is referenced, now (if any)
+      nodeRefs.incl links[top]
     of 16:
       if not w.isBlob:
         return err(RlpBlobExpected)
@@ -89,6 +90,8 @@ proc hexaryImport*(
         kind:  Extension,
         ePfx:  pathSegment,
         eLink: key.to(RepairKey))
+      unrefNodes.excl rNode.eLink # is referenced, now (if any)
+      nodeRefs.incl rNode.eLink
   of 17:
     for n in [0,1]:
       var key: NodeKey
@@ -96,6 +99,8 @@ proc hexaryImport*(
         return err(RlpBranchLinkExpected)
       # Update ref pool
       links[n] = key.to(RepairKey)
+      unrefNodes.excl links[n] # is referenced, now (if any)
+      nodeRefs.incl links[n]
     rNode = RNodeRef(
       kind:  Branch,
       bLink: links,
@@ -103,22 +108,16 @@ proc hexaryImport*(
   else:
     discard
 
-  # Add to repair database
-  db.tab[repairKey] = rNode
+  # Add to database
+  if not db.tab.hasKey(repairKey):
+    db.tab[repairKey] = rNode
 
-  # Add to hexary trie database -- disabled, using bulk import later
-  #ps.base.db.put(nodeKey.ByteArray32, recData)
+    # Update  unreferenced nodes list
+    if repairKey notin nodeRefs:
+      unrefNodes.incl repairKey # keep track of stray nodes
 
-  when HexaryImportDebugging:
-    # Rebuild blob from repair record
-    let nodeBlob = rNode.convertTo(Blob)
-    if nodeBlob != recData:
-      echo "*** hexaryImport oops:",
-        " kind=", rNode.kind,
-        " key=", repairKey.pp(db),
-        " nodeBlob=", nodeBlob.pp,
-        " recData=", recData.pp
-    doAssert nodeBlob == recData
+  elif db.tab[repairKey].convertTo(Blob) != recData:
+    return err(DifferentNodeValueExists)
 
   ok()
 

@@ -23,9 +23,6 @@ import
 
 {.push raises: [Defect].}
 
-const
-  RepairTreeDebugging = false
-
 type
   RPathXStep = object
     ## Extended `RPathStep` needed for `NodeKey` assignmant
@@ -37,11 +34,11 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(w: RPathXStep; db: HexaryTreeDB): string =
+proc pp(w: RPathXStep; db: var HexaryTreeDB): string =
   let y = if w.canLock: "lockOk" else: "noLock"
   "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
 
-proc pp(w: seq[RPathXStep]; db: HexaryTreeDB; indent = 4): string =
+proc pp(w: seq[RPathXStep]; db: var HexaryTreeDB; indent = 4): string =
   let pfx = "\n" & " ".repeat(indent)
   w.mapIt(it.pp(db)).join(pfx)
 
@@ -52,6 +49,15 @@ proc pp(w: seq[RPathXStep]; db: HexaryTreeDB; indent = 4): string =
 proc dup(node: RNodeRef): RNodeRef =
   new result
   result[] = node[]
+
+proc hexaryPath(
+    tag: NodeTag;
+    root: NodeKey;
+    db: HexaryTreeDB;
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError].} =
+  ## Shortcut
+  tag.to(NodeKey).hexaryPath(root.to(RepairKey), db)
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -121,11 +127,11 @@ proc rTreeExtendLeaf(
     db: var HexaryTreeDB;
     rPath: RPath;
     key: RepairKey;
-    node: RNodeRef
+    node: RNodeRef;
      ): RPath =
   ## Register `node` and append/link a `Leaf` node to a `Branch` node (see
   ## `rTreeExtend()`.)
-  if 1 < rPath.tail.len and node.state == Mutable:
+  if 1 < rPath.tail.len and node.state in {Mutable,TmpRoot}:
     let
       nibble = rPath.tail[0].int8
       xStep = RPathStep(key: key, node: node, nibble: nibble)
@@ -137,7 +143,7 @@ proc rTreeSplitNode(
     db: var HexaryTreeDB;
     rPath: RPath;
     key: RepairKey;
-    node: RNodeRef
+    node: RNodeRef;
      ): RPath =
   ## Replace `Leaf` or `Extension` node in tuple `(key,node)` by parts (see
   ## `rTreeExtend()`):
@@ -201,14 +207,14 @@ proc rTreeSplitNode(
 
 proc rTreeInterpolate(
     rPath: RPath;
-    db: var HexaryTreeDB
+    db: var HexaryTreeDB;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Extend path, add missing nodes to tree. The last node added will be
   ## a `Leaf` node if this function succeeds.
   ##
   ## The function assumed that the `RPath` argument is the longest possible
-  ## as just constructed by `rTreeFollow()`
+  ## as just constructed by `pathExtend()`
   if 0 < rPath.path.len and 0 < rPath.tail.len:
     let step = rPath.path[^1]
     case step.node.kind:
@@ -271,25 +277,24 @@ proc rTreeInterpolate(
       # So a `Leaf` node can be linked into the `child` branch
       return db.rTreeExtendLeaf(rPath, key, child)
 
-
 proc rTreeInterpolate(
     rPath: RPath;
     db: var HexaryTreeDB;
-    payload: Blob
+    payload: Blob;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Variant of `rTreeExtend()` which completes a `Leaf` record.
   result = rPath.rTreeInterpolate(db)
   if 0 < result.path.len and result.tail.len == 0:
     let node = result.path[^1].node
-    if node.kind != Extension and node.state == Mutable:
+    if node.kind != Extension and node.state in {Mutable,TmpRoot}:
       node.xData = payload
 
 
 proc rTreeUpdateKeys(
     rPath: RPath;
-    db: var HexaryTreeDB
-      ): Result[void,int]
+    db: var HexaryTreeDB;
+      ): Result[void,bool]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## The argument `rPath` is assumed to organise database nodes as
   ##
@@ -304,9 +309,13 @@ proc rTreeUpdateKeys(
   ##
   ## Then update nodes from the right end and set all the mutable nodes
   ## locked if possible.
+  ##
+  ## On error, a boolean value is returned indicating whether there were some
+  ## significant changes made to the database, ie. some nodes could be locked.
   var
     rTop = rPath.path.len
     stack: seq[RPathXStep]
+    changed = false
 
   if 0 < rTop and
      rPath.path[^1].node.state == Mutable and
@@ -322,7 +331,7 @@ proc rTreeUpdateKeys(
         key: leafNode.convertTo(Blob).digestTo(NodeKey).to(RepairKey),
         nibble: -1))
 
-    while true:
+    while 1 < rTop:
       rTop.dec
 
       # Update parent node (note that `2 <= rPath.path.len`)
@@ -332,7 +341,7 @@ proc rTreeUpdateKeys(
         preNibble = preStep.nibble
 
       # End reached
-      if preStep.node.state != Mutable:
+      if preStep.node.state notin {Mutable,TmpRoot}:
 
         # Verify the tail matches
         var key = RepairKey.default
@@ -344,12 +353,7 @@ proc rTreeUpdateKeys(
         of Leaf:
           discard
         if key != thisKey:
-          return err(rTop-1)
-
-        when RepairTreeDebugging:
-          echo "*** rTreeUpdateKeys",
-             " rPath\n    ", rPath.pp(ps),
-             "\n    stack\n    ", stack.pp(ps)
+          return err(false) # no changes were made
 
         # Ok, replace database records by stack entries
         var lockOk = true
@@ -359,12 +363,13 @@ proc rTreeUpdateKeys(
           db.tab[item.step.key] = item.step.node
           if lockOk:
             if item.canLock:
+              changed = true
               item.step.node.state = Locked
             else:
               lockOk = false
         if not lockOk:
-          return err(rTop-1) # repeat
-        break # Done ok()
+          return err(changed)
+        return ok() # Done ok()
 
       stack.add RPathXStep(
         pos: rTop - 1,
@@ -386,65 +391,228 @@ proc rTreeUpdateKeys(
         stack[^1].step.node.eLink = thisKey
         stack[^1].canLock = thisKey.isNodeKey
       of Leaf:
-        return err(rTop-1)
+        return err(false) # no changes were made
 
       # Must not overwrite a non-temprary key
       if stack[^1].canLock:
         stack[^1].step.key =
           stack[^1].step.node.convertTo(Blob).digestTo(NodeKey).to(RepairKey)
 
+      # End while 1 < rTop
+
+    if stack[0].step.node.state != Mutable:
+      # Nothing that can be done, here
+      return err(false) # no changes were made
+
+    # Ok, replace database records by stack entries
+    block:
+      var lockOk = true
+      for n in countDown(stack.len-1,0):
+        let item = stack[n]
+        if item.step.node.state == TmpRoot:
+          db.tab[rPath.path[item.pos].key] = item.step.node
+        else:
+          db.tab.del(rPath.path[item.pos].key)
+          db.tab[item.step.key] = item.step.node
+          if lockOk:
+            if item.canLock:
+              changed = true
+              item.step.node.state = Locked
+            else:
+              lockOk = false
+      if not lockOk:
+        return err(changed)
+    # Done ok()
+
   ok()
 
+# ------------------------------------------------------------------------------
+# Private functions for proof-less (i.e. empty) databases
+# ------------------------------------------------------------------------------
+
+proc rTreeBranchAppendleaf(
+    db: var HexaryTreeDB;
+    bNode: RNodeRef;
+    leaf: RLeafSpecs;
+     ): bool =
+  ## Database prefill helper.
+  let nibbles = leaf.pathTag.to(NodeKey).ByteArray32.initNibbleRange
+  if bNode.bLink[nibbles[0]].isZero:
+    let key = db.newRepairKey()
+    bNode.bLink[nibbles[0]] = key
+    db.tab[key] = RNodeRef(
+      state: Mutable,
+      kind:  Leaf,
+      lPfx:  nibbles.slice(1),
+      lData: leaf.payload)
+    return true
+
+proc rTreePrefill(
+    db: var HexaryTreeDB;
+    rootKey: NodeKey;
+    dbItems: var seq[RLeafSpecs];
+      ) {.gcsafe, raises: [Defect,KeyError].} =
+  ## Fill missing root node.
+  let nibbles = dbItems[^1].pathTag.to(NodeKey).ByteArray32.initNibbleRange
+  if dbItems.len == 1:
+    db.tab[rootKey.to(RepairKey)] = RNodeRef(
+      state: TmpRoot,
+      kind:  Leaf,
+      lPfx:  nibbles,
+      lData: dbItems[^1].payload)
+  else:
+    let key = db.newRepairKey()
+    var node = RNodeRef(
+      state: TmpRoot,
+      kind:  Branch)
+    discard db.rTreeBranchAppendleaf(node, dbItems[^1])
+    db.tab[rootKey.to(RepairKey)] = node
+
+proc rTreeSquashRootNode(
+    db: var HexaryTreeDB;
+    rootKey: NodeKey;
+      ): RNodeRef
+      {.gcsafe, raises: [Defect,KeyError].} =
+  ## Handle fringe case and return root node. This function assumes that the
+  ## root node has been installed, already. This function will check the root
+  ## node for a combination `Branch->Extension/Leaf` for a single child root
+  ## branch node and replace the pair by a single extension or leaf node. In
+  ## a similar fashion, a combination `Branch->Branch` for a single child root
+  ## is replaced by a `Extension->Branch` combination.
+  let
+    rootRKey = rootKey.to(RepairKey)
+    node = db.tab[rootRKey]
+  if node.kind == Branch:
+    # Check whether there is more than one link, only
+    var (nextKey, nibble) = (RepairKey.default, -1)
+    for inx in 0 ..< 16:
+      if not node.bLink[inx].isZero:
+        if 0 <= nibble:
+          return node # Nothing to do here
+        (nextKey, nibble) = (node.bLink[inx], inx)
+    if 0 <= nibble and db.tab.hasKey(nextKey):
+      # Ok, exactly one link
+      let
+        nextNode = db.tab[nextKey]
+        nibblePfx = @[nibble.byte].initNibbleRange.slice(1)
+      if nextNode.kind == Branch:
+        # Replace root node by an extension node
+        let thisNode = RNodeRef(
+          kind:  Extension,
+          ePfx:  nibblePfx,
+          eLink: nextKey)
+        db.tab[rootRKey] = thisNode
+        return thisNode
+      else:
+        # Nodes can be squashed: the child node replaces the root node
+        nextNode.xPfx = nibblePfx & nextNode.xPfx
+        db.tab.del(nextKey)
+        db.tab[rootRKey] = nextNode
+        return nextNode
+
+  return node
 
 # ------------------------------------------------------------------------------
-# Public fuctions
+# Public functions
 # ------------------------------------------------------------------------------
 
-proc hexary_interpolate*(
-    db: var HexaryTreeDB
+proc hexaryInterpolate*(
+    db: var HexaryTreeDB;          ## Database
+    rootKey: NodeKey;              ## root node hash
+    dbItems: var seq[RLeafSpecs];  ## list of path and leaf items
+    bootstrap = false;             ## can create root node on-the-fly
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## Verifiy accounts by interpolating the collected accounts on the hexary
-  ## trie of the repair database. If all accounts can be represented in the
-  ## hexary trie, they are vonsidered validated.
+  ## Verifiy `dbItems` by interpolating the collected `dbItems` on the hexary
+  ## trie of the repair database. If successful, there will be a complete
+  ## hexary trie avaliable with the `payload` fields of the `dbItems` argument
+  ## as leaf node values.
   ##
+  ## The algorithm employed here tries to minimise hashing hexary nodes for
+  ## the price of re-vising the same node again.
+  ##
+  ## When interpolating, a skeleton of the hexary trie is constructed first
+  ## using temorary keys instead of node hashes.
+  ##
+  ## In a second run, all these temporary keys are replaced by proper node
+  ## hashes so that each node will be hashed only once.
+  ##
+  if dbItems.len == 0:
+    return ok() # nothing to do
+
+  # Handle bootstrap, dangling `rootKey`. This mode adds some pseudo
+  # proof-nodes in order to keep the algoritm going.
+  var addedRootNode = false
+  if not db.tab.hasKey(rootKey.to(RepairKey)):
+    if not bootstrap:
+      return err(RootNodeMissing)
+    addedRootNode = true
+    db.rTreePrefill(rootKey, dbItems)
+
+  # ---------------------------------------
+  # Construnct skeleton with temporary keys
+  # ---------------------------------------
+
   # Walk top down and insert/complete missing account access nodes
-  for n in countDown(db.acc.len-1,0):
-    let acc = db.acc[n]
-    if acc.payload.len != 0:
-      let rPath = acc.pathTag.hexaryPath(db)
-      var repairKey = acc.nodeKey
+  for n in (dbItems.len-1).countDown(0):
+    let dbItem = dbItems[n]
+    if dbItem.payload.len != 0:
+      var
+        rPath = dbItem.pathTag.hexaryPath(rootKey, db)
+        repairKey = dbItem.nodeKey
+      if rPath.path.len == 0 and addedRootNode:
+        let node = db.tab[rootKey.to(RepairKey)]
+        if db.rTreeBranchAppendleaf(node, dbItem):
+          rPath = dbItem.pathTag.hexaryPath(rootKey, db)
       if repairKey.isZero and 0 < rPath.path.len and rPath.tail.len == 0:
         repairKey = rPath.path[^1].key
-        db.acc[n].nodeKey = repairKey
+        dbItems[n].nodeKey = repairKey
       if repairKey.isZero:
         let
-          update = rPath.rTreeInterpolate(db, acc.payload)
-          final = acc.pathTag.hexaryPath(db)
+          update = rPath.rTreeInterpolate(db, dbItem.payload)
+          final = dbItem.pathTag.hexaryPath(rootKey, db)
         if update != final:
           return err(AccountRepairBlocked)
-        db.acc[n].nodeKey = rPath.path[^1].key
+        dbItems[n].nodeKey = rPath.path[^1].key
+
+  # --------------------------------------------
+  # Replace temporary keys by proper node hashes
+  # --------------------------------------------
 
   # Replace temporary repair keys by proper hash based node keys.
   var reVisit: seq[NodeTag]
-  for n in countDown(db.acc.len-1,0):
-    let acc = db.acc[n]
-    if not acc.nodeKey.isZero:
-      let rPath = acc.pathTag.hexaryPath(db)
+  for n in countDown(dbItems.len-1,0):
+    let dbItem = dbItems[n]
+    if not dbItem.nodeKey.isZero:
+      let rPath = dbItem.pathTag.hexaryPath(rootKey, db)
       if rPath.path[^1].node.state == Mutable:
         let rc = rPath.rTreeUpdateKeys(db)
         if rc.isErr:
-          reVisit.add acc.pathTag
+          reVisit.add dbItem.pathTag
 
   while 0 < reVisit.len:
-    var again: seq[NodeTag]
-    for nodeTag in reVisit:
-      let rc = nodeTag.hexaryPath(db).rTreeUpdateKeys(db)
+    var
+      again: seq[NodeTag]
+      changed = false
+    for n,nodeTag in reVisit:
+      let rc = nodeTag.hexaryPath(rootKey, db).rTreeUpdateKeys(db)
       if rc.isErr:
         again.add nodeTag
-    if reVisit.len <= again.len:
-      return err(BoundaryProofFailed)
+        if rc.error:
+          changed = true
+    if reVisit.len <= again.len and not changed:
+      if addedRootNode:
+        return err(InternalDbInconsistency)
+      return err(RightBoundaryProofFailed)
     reVisit = again
+
+  # Update root node (if any). If the root node was constructed from scratch,
+  # it must be consistent.
+  if addedRootNode:
+    let node = db.rTreeSquashRootNode(rootKey)
+    if rootKey != node.convertTo(Blob).digestTo(NodeKey):
+      return err(RootNodeMismatch)
+    node.state = Locked
 
   ok()
 

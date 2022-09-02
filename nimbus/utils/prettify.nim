@@ -58,4 +58,5 @@ proc toPC*(
     multiplier = (10 ^ (minDigits + 1)).float
     roundUp = rounding / 10.0
   result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
-  result.insert(".", result.len - minDigits)
+  when 0 < digitsAfterDot:
+    result.insert(".", result.len - minDigits)

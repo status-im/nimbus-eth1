@@ -30,6 +30,9 @@ type
   SnapAccountRange* = accountRangeObj
     ## Syntactic sugar, type defined in `snap1`
 
+  SnapStorageRanges* = storageRangesObj
+    ## Ditto
+
   SnapTrieNodes* = trieNodesObj
     ## Ditto
 

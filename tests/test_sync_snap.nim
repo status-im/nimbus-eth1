@@ -9,7 +9,7 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-## Snap sync components tester
+## Snap sync components tester and TDD environment
 
 import
   std/[algorithm, distros, hashes, math, os, sets,
@@ -28,28 +28,26 @@ import
   ../nimbus/sync/snap/worker/accounts_db,
   ../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../nimbus/utils/prettify,
-  ./replay/[pp, undump_blocks, undump_proofs]
+  ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
+  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
   repoDir = [".", "tests"/"replay", "tests"/"test_sync_snap",
              "nimbus-eth1-blobs"/"replay"]
 
+  # Reference file for finding the database directory
+  sampleDirRefFile = "sample0.txt.gz"
+
+  # Standard test samples
+  bChainCapture = bulkTest0
+  accSample = snapTest0
+  storSample = snapTest4
+
+  # Number of database slots (needed for timing tests)
   nTestDbInstances = 9
 
 type
-  CaptureSpecs = tuple
-    name: string   ## sample name, also used as sub-directory for db separation
-    network: NetworkId
-    file: string   ## name of capture file
-    numBlocks: int ## Number of blocks to load
-
-  AccountsSample = object
-    name: string   ## sample name, also used as sub-directory for db separation
-    file: string
-    firstItem: int
-    lastItem: int
-
   TestDbs = object
     ## Provide enough spare empty databases
     persistent: bool
@@ -63,24 +61,10 @@ when defined(linux):
 else:
   const isUbuntu32bit = false
 
-const
-  sampleDirRefFile = "sample0.txt.gz"
-
-  goerliCapture: CaptureSpecs = (
-    name: "goerli",
-    network: GoerliNet,
-    file: "goerli68161.txt.gz",
-    numBlocks: 1_000)
-
-  accSample0 = AccountsSample(
-    name: "sample0",
-    file: "sample0.txt.gz",
-    firstItem: 0,
-    lastItem: high(int))
-
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
   OkHexDb = Result[void,HexaryDbError].ok()
+  OkStoDb = Result[void,seq[(int,HexaryDbError)]].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -109,6 +93,7 @@ proc findFilePath(file: string;
       let path = dir / repo / file
       if path.fileExists:
         return ok(path)
+  echo "*** File not found \"", file, "\"."
   err()
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
@@ -123,10 +108,6 @@ proc pp(d: Duration): string =
     d.ppMs
   else:
     d.ppUs
-
-proc pp(d: AccountLoadStats): string =
-  "[" & d.size.toSeq.mapIt(it.toSI).join(",") & "," &
-        d.dura.toSeq.mapIt(it.pp).join(",") & "]"
 
 proc pp(rc: Result[Account,HexaryDbError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
@@ -160,14 +141,28 @@ proc setErrorLevel =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc to(sample: AccountsSample; T: type seq[UndumpProof]): T =
-  ## Convert test data into usable format
+proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
+  ## Convert test data into usable in-memory format
   let file = sample.file.findFilePath(baseDir,repoDir).value
-  var
-    n = -1
-    root: Hash256
-  for w in file.undumpNextProof:
-    n.inc
+  var root: Hash256
+  for w in file.undumpNextAccount:
+    let n = w.seenAccounts - 1
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
+
+proc to(sample: AccountsSample; T: type seq[UndumpStorages]): T =
+  ## Convert test data into usable in-memory format
+  let file = sample.file.findFilePath(baseDir,repoDir).value
+  var root: Hash256
+  for w in file.undumpNextStorages:
+    let n = w.seenAccounts - 1 # storages selector based on accounts
     if n < sample.firstItem:
       continue
     if sample.lastItem < n:
@@ -220,7 +215,7 @@ proc flushDbDir(s: string; subDir = "") =
         break dontClearUnlessEmpty
       try: baseDir.removeDir except: discard
 
-proc testDbs(workDir = ""; subDir = ""): TestDbs =
+proc testDbs(workDir = ""; subDir = ""; instances = nTestDbInstances): TestDbs =
   if disablePersistentDB or workDir == "":
     result.persistent = false
     result.dbDir = "*notused*"
@@ -232,11 +227,15 @@ proc testDbs(workDir = ""; subDir = ""): TestDbs =
       result.dbDir = workDir / "tmp"
   if result.persistent:
     result.dbDir.flushDbDir
-    for n in 0 ..< result.cdb.len:
+    for n in 0 ..< min(result.cdb.len, instances):
       result.cdb[n] = (result.dbDir / $n).newChainDB
 
 proc lastTwo(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
+
+proc flatten(list: openArray[seq[Blob]]): seq[Blob] =
+  for w in list:
+    result.add w
 
 proc thisRecord(r: rocksdb_iterator_t): (Blob,Blob) =
   var kLen, vLen:  csize_t
@@ -255,65 +254,62 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
     result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
 # ------------------------------------------------------------------------------
-# Test Runners
+# Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
+proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   let
     peer = Peer.new
-    testItemLst = sample.to(seq[UndumpProof])
-    root = testItemLst[0].root
+    accountsList = sample.to(seq[UndumpAccounts])
+    root = accountsList[0].root
     tmpDir = getTmpDir()
-    db = if persistent: tmpDir.testDbs(sample.name) else: testDbs()
+    db = if persistent: tmpDir.testDbs(sample.name, instances=2) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
     info = if db.persistent: &"persistent db on \"{dbDir}\""
            else: "in-memory db"
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
 
   defer:
     if db.persistent:
+      if not db.cdb[0].rocksStoreRef.isNil:
+        db.cdb[0].rocksStoreRef.store.db.rocksdb_close
+        db.cdb[1].rocksStoreRef.store.db.rocksdb_close
       tmpDir.flushDbDir(sample.name)
 
-  suite &"SyncSnap: {sample.file} accounts and proofs for {info}":
+  suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
     var
       desc: AccountsDbSessionRef
       accKeys: seq[Hash256]
 
-    test &"Snap-proofing {testItemLst.len} items for state root ..{root.pp}":
+    test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
                    else: AccountsDbRef.init(newMemoryDB())
-      for n,w in testItemLst:
+      for n,w in accountsList:
         check dbBase.importAccounts(
-          peer, root, w.base, w.data, storeData = persistent) == OkHexDb
-      noisy.say "***", "import stats=", dbBase.dbImportStats.pp
+          peer, root, w.base, w.data, storeOk = persistent) == OkHexDb
 
-    test &"Merging {testItemLst.len} proofs for state root ..{root.pp}":
+    test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
                    else: AccountsDbRef.init(newMemoryDB())
       desc = AccountsDbSessionRef.init(dbBase, root, peer)
 
-      # Load/accumulate `proofs` data from several samples
-      for w in testItemLst:
-        check desc.merge(w.data.proof) == OkHexDb
+      # Load/accumulate data from several samples (needs some particular sort)
+      let
+        lowerBound = accountsList.mapIt(it.base).sortMerge
+        packed = PackedAccountRange(
+          accounts: accountsList.mapIt(it.data.accounts).sortMerge,
+          proof:    accountsList.mapIt(it.data.proof).flatten)
+      check desc.importAccounts(lowerBound, packed, true) == OkHexDb
 
-      # Load/accumulate accounts (needs some unique sorting)
-      let lowerBound = testItemLst.mapIt(it.base).sortMerge
-      var accounts = testItemLst.mapIt(it.data.accounts).sortMerge
-      check desc.merge(lowerBound, accounts) == OkHexDb
+      # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
-
-      # Build/complete hexary trie for accounts
-      check desc.interpolate() == OkHexDb
-
-      # Save/bulk-store hexary trie on disk
-      check desc.dbImports() == OkHexDb
-      noisy.say "***", "import stats=",  desc.dbImportStats.pp
 
       # Update list of accounts. There might be additional accounts in the set
       # of proof nodes, typically before the `lowerBound` of each block. As
       # there is a list of account ranges (that were merged for testing), one
       # need to check for additional records only on either end of a range.
-      var keySet = accounts.mapIt(it.accHash).toHashSet
-      for w in testItemLst:
+      var keySet = packed.accounts.mapIt(it.accHash).toHashSet
+      for w in accountsList:
         var key = desc.prevChainDbKey(w.data.accounts[0].accHash)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
@@ -328,7 +324,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           key = newKey
       accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
                              .mapIt(it.to(Hash256))
-      check accounts.len <= accKeys.len
+      check packed.accounts.len <= accKeys.len
 
     test &"Revisiting {accKeys.len} items stored items on BaseChainDb":
       var
@@ -342,9 +338,8 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           byChainDB = desc.getChainDbAccount(accHash)
           byNextKey = desc.nextChainDbKey(accHash)
           byPrevKey = desc.prevChainDbKey(accHash)
-          byBulker = desc.getBulkDbXAccount(accHash)
         noisy.say "*** find",
-          "<", count, "> byChainDb=", byChainDB.pp, " inBulker=", byBulker.pp
+          "<", count, "> byChainDb=", byChainDB.pp
         check byChainDB.isOk
 
         # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
@@ -362,10 +357,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
           if byPrevKey.isOk:
             check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
         prevAccount = accHash
-
-        if desc.dbBackendRocksDb():
-          check byBulker.isOk
-          check byChainDB == byBulker
 
       # Hexary trie memory database dump. These are key value pairs for
       # ::
@@ -391,10 +382,65 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample0) =
       # added later (typically these nodes are update `Mutable` nodes.)
       #
       # Beware: dumping a large database is not recommended
-      #noisy.say "***", "database dump\n    ", desc.dumpProofsDB.join("\n    ")
+      #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
 
 
-proc importRunner(noisy = true;  persistent = true; capture = goerliCapture) =
+proc storagesRunner(
+    noisy = true;
+    persistent = true;
+    sample = storSample;
+    knownFailures: seq[(string,seq[(int,HexaryDbError)])] = @[]) =
+  let
+    peer = Peer.new
+    accountsList = sample.to(seq[UndumpAccounts])
+    storagesList = sample.to(seq[UndumpStorages])
+    root = accountsList[0].root
+    tmpDir = getTmpDir()
+    db = if persistent: tmpDir.testDbs(sample.name, instances=1) else: testDbs()
+    dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
+    info = if db.persistent: &"persistent db on \"{dbDir}\""
+           else: "in-memory db"
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+
+  defer:
+    if db.persistent:
+      if not db.cdb[0].rocksStoreRef.isNil:
+        db.cdb[0].rocksStoreRef.store.db.rocksdb_close
+      tmpDir.flushDbDir(sample.name)
+
+  suite &"SyncSnap: {fileInfo} accounts storage for {info}":
+    let
+      dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
+               else: AccountsDbRef.init(newMemoryDB())
+    var
+      desc = AccountsDbSessionRef.init(dbBase, root, peer)
+
+    test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
+      for w in accountsList:
+         check dbBase.importAccounts(
+           peer, root, w.base, w.data, storeOk = persistent) == OkHexDb
+
+    test &"Merging {storagesList.len} storages lists":
+      let ignore = knownFailures.toTable
+      for n,w in storagesList:
+        let
+          testId = fileInfo & "#" & $n
+          expRc = if ignore.hasKey(testId):
+                    Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
+                  else:
+                    OkStoDb
+
+        #if expRc.isErr: setTraceLevel()
+        #else:           setErrorLevel()
+        #echo ">>> testId=", testId, " expect-error=", expRc.isErr
+
+        check dbBase.importStorages(peer, w.data, storeOk = persistent) == expRc
+
+# ------------------------------------------------------------------------------
+# Test Runners: database timing tests
+# ------------------------------------------------------------------------------
+
+proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
 
   let
     fileInfo = capture.file.splitFile.name.split(".")[0]
@@ -522,6 +568,7 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
     # * cdb[8] -- rocksdb, key length 33
     #
     doAssert 9 <= nTestDbInstances
+    doAssert not xDbs.cdb[8].isNil
 
     if xTab32.len == 0 or xTab33.len == 0:
       test &"Both tables with 32 byte keys(size={xTab32.len}), " &
@@ -652,7 +699,7 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
             "perRecord=", perRec.pp
 
       if xDbs.cdb[0].rocksStoreRef.isNil:
-        test "The rocksdb interface must be available": skip() 
+        test "The rocksdb interface must be available": skip()
       else:
         # cdb[6] -- rocksdb, key length 32
         test &"Store {xTab32.len} records " &
@@ -842,91 +889,6 @@ when isMainModule:
   const
     noisy = defined(debug) or true
 
-    # Some 20 `snap/1` reply equivalents
-    snapTest0 =
-      accSample0
-
-    # Only the the first `snap/1` reply from the sample
-    snapTest1 = AccountsSample(
-      name: "test1",
-      file: snapTest0.file,
-      lastItem: 0)
-
-    # Ditto for sample1
-    snapTest2 = AccountsSample(
-      name: "test2",
-      file: "sample1.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapTest3 = AccountsSample(
-      name: "test3",
-      file: snapTest2.file,
-      lastItem: 0)
-
-    # Other samples from bulk folder
-    snapOther0a = AccountsSample(
-      name: "Other0a",
-      file: "account0_00_06_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther0b = AccountsSample(
-      name: "Other0b",
-      file: "account0_07_08_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther1a = AccountsSample(
-      name: "Other1a",
-      file: "account1_09_09_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther1b = AccountsSample(
-      name: "Other1b",
-      file: "account1_10_17_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther2 = AccountsSample(
-      name: "Other2",
-      file: "account2_18_25_dump.txt.gz",
-      firstItem: 1,
-      lastItem: high(int))
-    snapOther3 = AccountsSample(
-      name: "Other3",
-      file: "account3_26_33_dump.txt.gz",
-      firstItem: 2,
-      lastItem: high(int))
-    snapOther4 = AccountsSample(
-      name: "Other4",
-      file: "account4_34_41_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-    snapOther5 = AccountsSample(
-      name: "Other5",
-      file: "account5_42_49_dump.txt.gz",
-      firstItem: 2,
-      lastItem: high(int))
-    snapOther6 = AccountsSample(
-      name: "Other6",
-      file: "account6_50_54_dump.txt.gz",
-      firstItem: 0,
-      lastItem: high(int))
-
-    bulkTest0 = goerliCapture
-    bulkTest1: CaptureSpecs = (
-      name:      "full-goerli",
-      network:   goerliCapture.network,
-      file:      goerliCapture.file,
-      numBlocks: high(int))
-    bulkTest2: CaptureSpecs = (
-      name:      "more-goerli",
-      network:   GoerliNet,
-      file:      "goerli482304.txt.gz",
-      numBlocks: high(int))
-    bulkTest3: CaptureSpecs = (
-      name:      "mainnet",
-      network:   MainNet,
-      file:      "mainnet332160.txt.gz",
-      numBlocks: high(int))
-
   #setTraceLevel()
   setErrorLevel()
 
@@ -952,7 +914,7 @@ when isMainModule:
   #   Patricia-Mercle trie starting at the state root with all the account
   #   leaves. There are enough nodes that show that there is no account before
   #   the least account (which is currently ignored.)
-  #    
+  #
   # There are test data samples on the sub-directory `test_sync_snap`. These
   # are complete replies for some (admittedly smapp) test requests from a `kiln`
   # session.
@@ -964,7 +926,7 @@ when isMainModule:
   #    sequentially to about 20 data sets.
   #
   # 2. Test individual functional items which are hidden in test 1. while
-  #    merging the sample data. 
+  #    merging the sample data.
   #    * Load/accumulate `proofs` data from several samples
   #    * Load/accumulate accounts (needs some unique sorting)
   #    * Build/complete hexary trie for accounts
@@ -978,24 +940,40 @@ when isMainModule:
   #    re-visted using the account hash as access path.
   #
 
-  noisy.showElapsed("accountsRunner()"):
-    #false.accountsRunner(persistent=true, snapOther0a)
-    false.accountsRunner(persistent=true, snapOther0b)
-    #false.accountsRunner(persistent=true, snapOther1a)
-    #false.accountsRunner(persistent=true, snapOther1b)
-    #false.accountsRunner(persistent=true, snapOther2)
-    #false.accountsRunner(persistent=true, snapOther3)
-    #false.accountsRunner(persistent=true, snapOther4)
-    #false.accountsRunner(persistent=true, snapOther5)
-    #false.accountsRunner(persistent=true, snapOther6)
+  # This one uses dumps from the external `nimbus-eth1-blob` repo
+  when true and false:
+    import ./test_sync_snap/snap_other_xx
+    noisy.showElapsed("accountsRunner()"):
+      for n,sam in snapOtherList:
+        if n in {999} or true:
+          false.accountsRunner(persistent=true, sam)
 
-    false.accountsRunner(persistent=true,  snapTest0)
-    #noisy.accountsRunner(persistent=true,  snapTest1)
-    false.accountsRunner(persistent=true,  snapTest2)
-    #noisy.accountsRunner(persistent=true,  snapTest3)
-    discard
+  # This one usues dumps from the external `nimbus-eth1-blob` repo
+  when true and false:
+    import ./test_sync_snap/snap_storage_xx
+    let knownFailures = @[
+      ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),
+      ("storages4__26__33_dump#11", @[(1193, RightBoundaryProofFailed)]),
+      ("storages5__34__41_dump#10", @[( 508, RootNodeMismatch)]),
+      ("storagesB__84__92_dump#6",  @[( 325, RightBoundaryProofFailed)]),
+      ("storagesD_102_109_dump#17", @[(1102, RightBoundaryProofFailed)]),
+    ]
+    noisy.showElapsed("storageRunner()"):
+      for n,sam in snapStorageList:
+        if n in {999} or true:
+          false.storagesRunner(persistent=true, sam, knownFailures)
+          #if true: quit()
 
+  # This one uses readily available dumps
   when true: # and false:
+    for n,sam in snapTestList:
+      false.accountsRunner(persistent=true, sam)
+    for n,sam in snapTestStorageList:
+      false.accountsRunner(persistent=true, sam)
+      false.storagesRunner(persistent=true, sam)
+
+  # This one uses readily available dumps
+  when true and false:
     # ---- database storage timings -------
 
     noisy.showElapsed("importRunner()"):

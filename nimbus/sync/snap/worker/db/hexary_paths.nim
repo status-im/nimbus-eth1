@@ -13,7 +13,6 @@
 import
   std/[sequtils, tables],
   eth/[common/eth_types, trie/nibbles],
-  ../../range_desc,
   ./hexary_desc
 
 {.push raises: [Defect].}
@@ -91,9 +90,9 @@ when false:
 proc pathExtend(
     path: RPath;
     key: RepairKey;
-    db: HexaryTreeDB
+    db: HexaryTreeDB;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [Defect,KeyError].} =
   ## For the given path, extend to the longest possible repair tree `db`
   ## path following the argument `path.tail`.
   result = path
@@ -389,21 +388,14 @@ proc leafData*(path: XPath): Blob =
 
 proc hexaryPath*(
     nodeKey: NodeKey;
-    db: HexaryTreeDB
+    rootKey: RepairKey;
+    db: HexaryTreeDB;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Compute logest possible repair tree `db` path matching the `nodeKey`
   ## nibbles. The `nodeNey` path argument come first to support a more
   ## functional notation.
-  RPath(tail: nodeKey.to(NibblesSeq)).pathExtend(db.rootKey.to(RepairKey),db)
-
-proc hexaryPath*(
-    nodeTag: NodeTag;
-    db: HexaryTreeDB
-      ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Variant of `hexaryPath()` for traversing a repair tree
-  nodeTag.to(NodeKey).hexaryPath(db)
+  RPath(tail: nodeKey.to(NibblesSeq)).pathExtend(rootKey,db)
 
 proc hexaryPath*(
     nodeKey: NodeKey;

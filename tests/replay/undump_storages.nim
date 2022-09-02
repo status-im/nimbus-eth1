@@ -13,25 +13,29 @@ import
   eth/common,
   nimcrypto,
   stew/byteutils,
-  ../../nimbus/sync/snap/range_desc,
-  ../../nimbus/sync/snap/worker/db/hexary_desc,
+  ../../nimbus/sync/snap/[range_desc, worker/db/hexary_desc],
+  ../../nimbus/sync/protocol,
   ./gunzip
 
 type
   UndumpState = enum
-    UndumpHeader
-    UndumpStateRoot
-    UndumpBase
-    UndumpAccounts
+    UndumpStoragesHeader
+    UndumpStoragesRoot
+    UndumpSlotsHeader
+    UndumpSlotsAccount
+    UndumpSlotsRoot
+    UndumpSlotsList
     UndumpProofs
     UndumpCommit
     UndumpError
+    UndumpSkipUntilCommit
 
-  UndumpProof* = object
+  UndumpStorages* = object
     ## Palatable output for iterator
     root*: Hash256
-    base*: NodeTag
-    data*: PackedAccountRange
+    data*: AccountStorageRange
+    seenAccounts*: int
+    seenStorages*: int
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -54,29 +58,35 @@ proc fromHex(T: type NodeTag; s: string): T =
 # Public capture
 # ------------------------------------------------------------------------------
 
-proc dumpAccountProof*(
+proc dumpStorages*(
     root: Hash256;
-    base: NodeTag;
-    data: PackedAccountRange;
+    data: AccountStorageRange
       ): string =
-  ## Dump accounts data in parseable Ascii text
+  ## Dump account and storage data in parseable Ascii text
   proc ppStr(blob: Blob): string =
     blob.mapIt(it.toHex(2)).join.toLowerAscii
 
   proc ppStr(hash: Hash256): string =
     hash.data.mapIt(it.toHex(2)).join.toLowerAscii
 
-  result = "accounts " & $data.accounts.len & " " & $data.proof.len & "\n"
-
+  result = "storages " & $data.storages.len & " " & $data.proof.len & "\n"
   result &= root.ppStr & "\n"
-  result &= base.to(Hash256).ppStr & "\n"
 
-  for n in 0 ..< data.accounts.len:
-    result &= data.accounts[n].accHash.ppStr & " "
-    result &= data.accounts[n].accBlob.ppStr & "\n"
+  for n in 0 ..< data.storages.len:
+    let slots = data.storages[n]
+    result &= "# -- " & $n & " --\n"
+    result &= "slots " & $slots.data.len & "\n"
+    result &= slots.account.accHash.ppStr & "\n"
+    result &= slots.account.storageRoot.ppStr & "\n"
 
-  for n in 0 ..< data.proof.len:
-    result &= data.proof[n].ppStr & "\n"
+    for i in 0 ..< slots.data.len:
+      result &= slots.data[i].slotHash.ppStr & " "
+      result &= slots.data[i].slotData.ppStr & "\n"
+
+  if 0 < data.proof.len:
+    result &= "# ----\n"
+    for n in 0 ..< data.proof.len:
+      result &= data.proof[n].ppStr & "\n"
 
   result &= "commit\n"
 
@@ -84,14 +94,17 @@ proc dumpAccountProof*(
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpNextProof*(gzFile: string): UndumpProof =
+iterator undumpNextStorages*(gzFile: string): UndumpStorages =
   var
     line = ""
     lno = 0
-    state = UndumpHeader
-    data: UndumpProof
+    state = UndumpStoragesHeader
+    data: UndumpStorages
     nAccounts = 0u
     nProofs = 0u
+    nSlots = 0u
+    seenAccounts = 0
+    seenStorages = 0
 
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
@@ -105,47 +118,86 @@ iterator undumpNextProof*(gzFile: string): UndumpProof =
     #    " state=", state,
     #    " nAccounts=", nAccounts,
     #    " nProofs=", nProofs,
+    #    " nSlots=", nSlots,
     #    " flds=", flds
 
     case state:
-    of UndumpHeader, UndumpError:
-      if flds.len == 3 and flds[0] == "accounts":
+    of UndumpSkipUntilCommit:
+      if flds.len == 1 and flds[0] == "commit":
+        state = UndumpStoragesHeader
+
+    of UndumpStoragesHeader, UndumpError:
+      if flds.len == 3 and flds[0] == "storages":
         nAccounts = flds[1].parseUInt
         nProofs = flds[2].parseUInt
         data.reset
-        state = UndumpStateRoot
+        state = UndumpStoragesRoot
+        seenStorages.inc
+        continue
+      if 1 < flds.len and flds[0] == "accounts":
+        state = UndumpSkipUntilCommit
+        seenAccounts.inc
         continue
       if state != UndumpError:
          state = UndumpError
-         say &"*** line {lno}: expected header, got {line}"
+         say &"*** line {lno}: expected storages header, got {line}"
 
-    of UndumpStateRoot:
+    of UndumpStoragesRoot:
       if flds.len == 1:
         data.root = Hash256.fromHex(flds[0])
-        state = UndumpBase
+        if 0 < nAccounts:
+          state = UndumpSlotsHeader
+          continue
+        state = UndumpCommit
         continue
       state = UndumpError
-      say &"*** line {lno}: expected state root, got {line}"
+      say &"*** line {lno}: expected storages state root, got {line}"
 
-    of UndumpBase:
+    of UndumpSlotsHeader:
+      if flds.len == 2 and flds[0] == "slots":
+        nSlots = flds[1].parseUInt
+        state = UndumpSlotsAccount
+        continue
+      state = UndumpError
+      say &"*** line {lno}: expected slots header, got {line}"
+
+    of UndumpSlotsAccount:
       if flds.len == 1:
-        data.base = NodeTag.fromHex(flds[0])
-        state = UndumpAccounts
+        data.data.storages.add AccountSlots(
+          account:   AccountSlotsHeader(
+            accHash: Hash256.fromHex(flds[0])))
+        state = UndumpSlotsRoot
         continue
       state = UndumpError
-      say &"*** line {lno}: expected account base, got {line}"
+      say &"*** line {lno}: expected slots account, got {line}"
 
-    of UndumpAccounts:
-      if flds.len == 2:
-        data.data.accounts.add PackedAccount(
-          accHash: Hash256.fromHex(flds[0]),
-          accBlob: flds[1].toByteSeq)
-        nAccounts.dec
-        if nAccounts <= 0:
-          state = UndumpProofs
+    of UndumpSlotsRoot:
+      if flds.len == 1:
+        data.data.storages[^1].account.storageRoot = Hash256.fromHex(flds[0])
+        state = UndumpSlotsList
         continue
       state = UndumpError
-      say &"*** line {lno}: expected account data, got {line}"
+      say &"*** line {lno}: expected slots storage root, got {line}"
+
+    of UndumpSlotsList:
+      if flds.len == 2:
+        data.data.storages[^1].data.add SnapStorage(
+          slotHash: Hash256.fromHex(flds[0]),
+          slotData:  flds[1].toByteSeq)
+        nSlots.dec
+        if 0 < nSlots:
+          continue
+        nAccounts.dec
+        if 0 < nAccounts:
+          state = UndumpSlotsHeader
+          continue
+        if 0 < nProofs:
+          state = UndumpProofs
+          continue
+        state = UndumpCommit
+        continue
+      state = UndumpError
+      say &"*** line {lno}: expected slot data, got {line}"
 
     of UndumpProofs:
       if flds.len == 1:
@@ -159,8 +211,10 @@ iterator undumpNextProof*(gzFile: string): UndumpProof =
 
     of UndumpCommit:
       if flds.len == 1 and flds[0] == "commit":
+        data.seenAccounts = seenAccounts
+        data.seenStorages = seenStorages
         yield data
-        state = UndumpHeader
+        state = UndumpStoragesHeader
         continue
       state = UndumpError
       say &"*** line {lno}: expected commit, got {line}"

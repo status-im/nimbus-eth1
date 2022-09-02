@@ -312,8 +312,8 @@ p2pProtocol snap1(version = 1,
 
     # User message 0x03: StorageRanges.
     # Note: See comments in this file for a list of Geth quirks to expect.
-    proc storageRange(peer: Peer, slots: openArray[seq[SnapStorage]],
-                      proof: SnapStorageProof)
+    proc storageRanges(peer: Peer, slots: openArray[seq[SnapStorage]],
+                       proof: SnapStorageProof)
 
   # User message 0x04: GetByteCodes.
   requestResponse:

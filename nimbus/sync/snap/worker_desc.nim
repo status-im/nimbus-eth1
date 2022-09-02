@@ -10,7 +10,7 @@
 # except according to those terms.
 
 import
-  std/[sequtils, strutils],
+  std/[hashes, sequtils, strutils],
   eth/[common/eth_types, p2p],
   nimcrypto,
   stew/[byteutils, keyed_queue],
@@ -92,14 +92,27 @@ type
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
+  SnapSlotQueueItemRef* = ref object
+    ## Accounts storage request data.
+    q*: seq[AccountSlotsHeader]
+
+  SnapSlotsQueue* = KeyedQueueNV[SnapSlotQueueItemRef]
+    ## Handles list of storage data for re-fetch.
+    ##
+    ## This construct is the is a nested queue rather than a flat one because
+    ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
+    ## effective sub-range specification (later ones will be ignored.)
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
-    stateHeader*: BlockHeader         ## Pivot state, containg state root
-    pivotAccount*: NodeTag            ## Random account
-    availAccounts*: LeafRangeSet      ## Accounts to fetch (organised as ranges)
-    nAccounts*: uint64                ## Number of accounts imported
+    stateHeader*: BlockHeader          ## Pivot state, containg state root
+    pivotAccount*: NodeTag             ## Random account
+    availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
+    nAccounts*: uint64                 ## Number of accounts imported
+    nStorage*: uint64                  ## Number of storage spaces imported
+    leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
     when switchPivotAfterCoverage < 1.0:
-      minCoverageReachedOk*: bool     ## Stop filling this pivot
+      minCoverageReachedOk*: bool      ## Stop filling this pivot
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -107,10 +120,10 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    stats*: SnapBuddyStats            ## Statistics counters
-    errors*: SnapBuddyErrors          ## For error handling
-    pivotHeader*: Option[BlockHeader] ## For pivot state hunter
-    workerPivot*: WorkerPivotBase     ## Opaque object reference for sub-module
+    stats*: SnapBuddyStats             ## Statistics counters
+    errors*: SnapBuddyErrors           ## For error handling
+    pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
+    workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
     ## All buddies call back (the argument type is defined below with
@@ -118,17 +131,17 @@ type
 
   CtxData* = object
     ## Globally shared data extension
-    seenBlock: WorkerSeenBlocks       ## Temporary, debugging, pretty logs
-    rng*: ref HmacDrbgContext         ## Random generator
-    coveredAccounts*: LeafRangeSet    ## Derived from all available accounts
-    dbBackend*: ChainDB               ## Low level DB driver access (if any)
-    ticker*: TickerRef                ## Ticker, logger
-    pivotTable*: SnapPivotTable       ## Per state root environment
-    pivotCount*: uint64               ## Total of all created tab entries
-    pivotEnv*: SnapPivotRef           ## Environment containing state root
-    accountRangeMax*: UInt256         ## Maximal length, high(u256)/#peers
-    accountsDb*: AccountsDbRef        ## Proof processing for accounts
-    runPoolHook*: BuddyPoolHookFn     ## Callback for `runPool()` 
+    seenBlock: WorkerSeenBlocks        ## Temporary, debugging, pretty logs
+    rng*: ref HmacDrbgContext          ## Random generator
+    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
+    dbBackend*: ChainDB                ## Low level DB driver access (if any)
+    ticker*: TickerRef                 ## Ticker, logger
+    pivotTable*: SnapPivotTable        ## Per state root environment
+    pivotCount*: uint64                ## Total of all created tab entries
+    pivotEnv*: SnapPivotRef            ## Environment containing state root
+    accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
+    accountsDb*: AccountsDbRef         ## Proof processing for accounts
+    runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
     # --------
     when snapAccountsDumpEnable:
       proofDumpOk*: bool
@@ -146,6 +159,10 @@ type
 # ------------------------------------------------------------------------------
 
 proc inc(stat: var BuddyStat) {.borrow.}
+
+proc hash*(a: SnapSlotQueueItemRef): Hash =
+  ## Table/KeyedQueue mixin
+  cast[pointer](a).hash
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)
