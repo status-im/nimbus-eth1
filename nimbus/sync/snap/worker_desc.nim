@@ -10,7 +10,7 @@
 # except according to those terms.
 
 import
-  std/[sequtils, strutils],
+  std/[hashes, sequtils, strutils],
   eth/[common/eth_types, p2p],
   nimcrypto,
   stew/[byteutils, keyed_queue],
@@ -92,6 +92,17 @@ type
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
+  SnapSlotQueueItemRef* = ref object
+    ## Accounts storage request data.
+    q*: seq[AccountSlotsHeader]
+
+  SnapSlotsQueue* = KeyedQueueNV[SnapSlotQueueItemRef]
+    ## Handles list of storage data for re-fetch.
+    ##
+    ## This construct is the is a nested queue rather than a flat one because
+    ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
+    ## effective sub-range specification (later ones will be ignored.)
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
@@ -99,7 +110,7 @@ type
     availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
     nAccounts*: uint64                 ## Number of accounts imported
     nStorage*: uint64                  ## Number of storage spaces imported
-    leftOver*: seq[AccountSlotsHeader] ## Fetch storage for these accounts
+    leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
     when switchPivotAfterCoverage < 1.0:
       minCoverageReachedOk*: bool      ## Stop filling this pivot
 
@@ -148,6 +159,10 @@ type
 # ------------------------------------------------------------------------------
 
 proc inc(stat: var BuddyStat) {.borrow.}
+
+proc hash*(a: SnapSlotQueueItemRef): Hash =
+  ## Table/KeyedQueue mixin
+  cast[pointer](a).hash
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

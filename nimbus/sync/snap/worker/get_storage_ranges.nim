@@ -25,6 +25,7 @@ logScope:
 type
   GetStorageRangesError* = enum
     GsreNothingSerious
+    GsreEmptyAccountsArguments
     GsreNoStorageForAccounts
     GsreTooManyStorageSlots
     GsreNetworkProblem
@@ -39,7 +40,7 @@ type
   #  proof*: SnapStorageProof
 
   GetStorageRanges* = object
-    leftOver*: seq[AccountSlotsHeader]
+    leftOver*: SnapSlotQueueItemRef
     data*: AccountStorageRange
 
 const
@@ -54,7 +55,8 @@ proc getStorageRangesReq(
     root: Hash256;
     accounts: seq[Hash256],
     iv: Option[LeafRange]
-      ): Future[Result[Option[SnapStorageRanges],void]] {.async.} =
+      ): Future[Result[Option[SnapStorageRanges],void]]
+      {.async.} =
   let
     peer = buddy.peer
   try:
@@ -83,16 +85,30 @@ proc getStorageRangesReq(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getStorageRangesImpl(
+proc getStorageRanges*(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
     accounts: seq[AccountSlotsHeader],
-    iv: Option[LeafRange]
-      ): Future[Result[GetStorageRanges,GetStorageRangesError]] {.async.} =
+      ): Future[Result[GetStorageRanges,GetStorageRangesError]]
+      {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
+  ##
+  ## If the first `accounts` argument sequence item has the `firstSlot` field
+  ## set non-zero, only this account is fetched with a range. Otherwise all
+  ## accounts are asked for without a range (non-zero `firstSlot` fields are
+  ## ignored of later sequence items.)
   let
     peer = buddy.peer
+  var
     nAccounts = accounts.len
+    maybeIv = none(LeafRange)
+
+  if nAccounts == 0:
+    return err(GsreEmptyAccountsArguments)
+  if accounts[0].firstSlot != Hash256.default:
+    # Set up for range
+    maybeIv = some(LeafRange.new(
+      accounts[0].firstSlot.to(NodeTag), high(NodeTag)))
 
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetStorageRanges", peer,
@@ -100,7 +116,7 @@ proc getStorageRangesImpl(
 
   var dd = block:
     let rc = await buddy.getStorageRangesReq(
-      stateRoot, accounts.mapIt(it.accHash), iv)
+      stateRoot, accounts.mapIt(it.accHash), maybeIv)
     if rc.isErr:
       return err(GsreNetworkProblem)
     if rc.value.isNone:
@@ -136,33 +152,27 @@ proc getStorageRangesImpl(
   # Complete response data
   for n in 0 ..< nStorages:
     dd.data.storages[n].account = accounts[n]
-  dd.leftOver = accounts[nStorages ..< nAccounts]
+
+  # Calculate what was not fetched
+  if nProof == 0:
+    dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages ..< nAccounts])
+  else:
+    # If the storage data for the last account comes with a proof, then it is
+    # incomplete. So record the missing part on the `dd.leftOver` list.
+    let top = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+    if top < high(NodeTag):
+      dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages-1 ..< nAccounts])
+      dd.leftOver.q[0].firstSlot = (top + 1.u256).to(Hash256)
+    else:
+      # Contrived situation: the proof would be useless
+      dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages ..< nAccounts])
 
   # Notice that `dd.leftOver.len < nAccounts` as 0 < nStorages
 
   trace trSnapRecvReceived & "StorageRanges", peer,
-    nAccounts, nStorages, nProof, nLeftOver=dd.leftOver.len, stateRoot
+    nAccounts, nStorages, nProof, nLeftOver=dd.leftOver.q.len, stateRoot
 
   return ok(dd)
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc getStorageRanges*(
-    buddy: SnapBuddyRef;
-    stateRoot: Hash256;
-    accounts: seq[AccountSlotsHeader],
-      ): Future[Result[GetStorageRanges,GetStorageRangesError]] {.async.} =
-  return await buddy.getStorageRangesImpl(stateRoot, accounts, none(LeafRange))
-
-proc getStorageRanges*(
-    buddy: SnapBuddyRef;
-    stateRoot: Hash256;
-    accounts: seq[AccountSlotsHeader],
-    iv: LeafRange
-      ): Future[Result[GetStorageRanges,GetStorageRangesError]] {.async.} =
-  return await buddy.getStorageRangesImpl(stateRoot, accounts, some(iv))
 
 # ------------------------------------------------------------------------------
 # End

@@ -417,9 +417,10 @@ proc importStorages*(
   ##
   ## Note that the `peer` argument is for log messages, only.
   ##
-  ## On error, the function returns a list slot IDs and error codes for the
-  ## entries that could not be processed. If the slot ID is -1, the error
-  ## returned is not related to a slot.
+  ## On error, the function returns a non-empty list of slot IDs and error
+  ## codes for the entries that could not be processed. If the slot ID is -1,
+  ## the error returned is not related to a slot. If any, this -1 entry is
+  ## always the last in the list.
   let
     nItems = data.storages.len
     sTop = nItems - 1
@@ -462,9 +463,10 @@ proc importStorages*(
       errors.add (slotID,RlpEncoding)
 
     if 0 < errors.len:
+      # So non-empty error list is guaranteed
       return err(errors)
 
-  trace "Storage slots ok", peer=ps.peer,
+  trace "Storage slots imported", peer=ps.peer,
     slots=data.storages.len, proofs=data.proof.len
 
   ok()

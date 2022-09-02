@@ -940,6 +940,7 @@ when isMainModule:
   #    re-visted using the account hash as access path.
   #
 
+  # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
@@ -947,11 +948,8 @@ when isMainModule:
         if n in {999} or true:
           false.accountsRunner(persistent=true, sam)
 
-      for n,sam in snapTestList:
-        if n in {999} or true:
-          false.accountsRunner(persistent=true, sam)
-
-  when true: # and false:
+  # This one usues dumps from the external `nimbus-eth1-blob` repo
+  when true and false:
     import ./test_sync_snap/snap_storage_xx
     let knownFailures = @[
       ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),
@@ -966,10 +964,15 @@ when isMainModule:
           false.storagesRunner(persistent=true, sam, knownFailures)
           #if true: quit()
 
-      for n,sam in snapTestStorageList:
-        if n in {999} or true:
-          false.storagesRunner(persistent=true, sam)
+  # This one uses readily available dumps
+  when true: # and false:
+    for n,sam in snapTestList:
+      false.accountsRunner(persistent=true, sam)
+    for n,sam in snapTestStorageList:
+      false.accountsRunner(persistent=true, sam)
+      false.storagesRunner(persistent=true, sam)
 
+  # This one uses readily available dumps
   when true and false:
     # ---- database storage timings -------
 

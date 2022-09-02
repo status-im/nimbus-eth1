@@ -51,8 +51,9 @@ type
 
   AccountSlotsHeader* = object
     ## Storage root header
-    accHash*: Hash256
-    storageRoot*: Hash256
+    accHash*: Hash256              ## Owner account, maybe unnecessary
+    storageRoot*: Hash256          ## Start of storage tree
+    firstSlot*: Hash256            ## Continuation if non-zero
 
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
