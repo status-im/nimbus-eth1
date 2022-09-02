@@ -240,15 +240,9 @@ proc getPowCacheLookup*(tm: PowRef;
     raise newException(KeyError, "block not found")
 
   result[0] = ds.size
-
-  var ctx: keccak256
-  ctx.init()
-
-  for a in ds.data:
-    ctx.update(a.data[0].unsafeAddr, uint(a.data.len))
-
-  ctx.finish result[1].data
-  ctx.clear()
+  result[1] = withKeccakHash:
+    for a in ds.data:
+      h.update(a.data)
 
 # ------------------------
 

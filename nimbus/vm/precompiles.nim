@@ -1,7 +1,7 @@
 import
   ./types, ../forks,
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
-  ../errors, stint, eth/[keys, common], chronicles, tables, macros,
+  ../errors, stint, eth/[keys, common], chronicles, macros,
   math, nimcrypto/[ripemd, sha2, utils], bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
 type
