@@ -68,4 +68,8 @@ const
     firstItem: 0,
     lastItem: high(int))
 
+  snapOtherList* = [
+    snapOther0a, snapOther0b, snapOther1a, snapOther1b, snapOther2,
+    snapOther3,  snapOther4,  snapOther5,  snapOther6]
+
 # End

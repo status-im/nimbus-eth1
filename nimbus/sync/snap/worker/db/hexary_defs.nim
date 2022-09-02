@@ -17,13 +17,18 @@ type
     AccountsNotSrictlyIncreasing
     AccountRangesOverlap
     AccountRepairBlocked
-    BoundaryProofFailed
+    DifferentNodeValueExists
+    InternalDbInconsistency
+    RightBoundaryProofFailed
     Rlp2Or17ListEntries
     RlpBlobExpected
     RlpBranchLinkExpected
     RlpEncoding
     RlpExtPathEncoding
     RlpNonEmptyBlobExpected
+    RootNodeMismatch
+    RootNodeMissing
+    SlotsNotSrictlyIncreasing
 
     # bulk storage
     AddBulkItemFailed
@@ -31,6 +36,7 @@ type
     CommitBulkItemsFailed
     NoRocksDbBackend
     UnresolvedRepairNode
+    OSErrorException
 
 # End
 

@@ -187,7 +187,7 @@ proc fetchAccounts*(buddy: SnapBuddyRef): Future[bool] {.async.} =
     nAccounts = dd.data.accounts.len
     nStorage = dd.withStorage.len
     rc = ctx.data.accountsDb.importAccounts(
-      peer, stateRoot, iv.minPt, dd.data, storeData = true)
+      peer, stateRoot, iv.minPt, dd.data, storeOk = true)
   if rc.isErr:
     # Bad data, just try another peer
     buddy.putUnprocessed(iv)

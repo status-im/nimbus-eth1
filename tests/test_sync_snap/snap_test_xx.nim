@@ -25,7 +25,7 @@ const
     lastItem: 0) # Only the first `snap/1` reply from the sample
 
   snapTest2* = AccountsSample(
-    name: "test2",
+    name: "sample1",
     file: "sample1.txt.gz",
     lastItem: high(int))
 
@@ -33,5 +33,23 @@ const
     name: "test3",
     file: snapTest2.file,
     lastItem: 0) # Only the first `snap/1` reply from the sample
+
+  # Also for storage tests
+  snapTest4* = AccountsSample(
+    name: "sample2",
+    file: "sample2.txt.gz",
+    lastItem: high(int))
+
+  # Also for storage tests
+  snapTest5* = AccountsSample(
+    name: "sample3",
+    file: "sample3.txt.gz",
+    lastItem: high(int))
+
+  snapTestList* = [
+    snapTest0, snapTest1, snapTest2, snapTest3]
+
+  snapTestStorageList* = [
+    snapTest4, snapTest5]
 
 # End

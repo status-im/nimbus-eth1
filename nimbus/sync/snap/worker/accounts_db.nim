@@ -9,11 +9,10 @@
 # except according to those terms.
 
 import
-  std/[algorithm, hashes, options, sequtils, sets, strutils, strformat,
-       tables, times],
+  std/[algorithm, sequtils, sets, strutils, tables, times],
   chronos,
   eth/[common/eth_types, p2p, rlp],
-  eth/trie/[db, nibbles, trie_defs],
+  eth/trie/[db, nibbles],
   nimcrypto/keccak,
   stew/byteutils,
   stint,
@@ -42,24 +41,22 @@ type
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
     base: AccountsDbRef              ## Back reference to common parameters
     peer: Peer                       ## For log messages
-    rpDB: HexaryTreeDB               ## Repair database
+    accRoot: NodeKey                 ## Current accounts root node
+    accDb: HexaryTreeDB              ## Accounts database
+    stoDb: HexaryTreeDB              ## Storage database
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc newHexaryTreeDb(ps: AccountsDbSessionRef): HexaryTreeDB =
+  result.keyPp = ps.stoDb.keyPp # for debugging, will go away
 
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.NodeHash.init(data) # error => zero
-
-template elapsed(duration: times.Duration; code: untyped) =
-  block:
-    let start = getTime()
-    block:
-      code
-    duration = getTime() - start
 
 template noKeyError(info: static[string]; code: untyped) =
   try:
@@ -111,57 +108,193 @@ proc pp(a: NodeKey; ps: AccountsDbSessionRef): string =
   if a.isZero: "ø" else:"$" & $a.toKey(ps)
 
 proc pp(a: RepairKey; ps: AccountsDbSessionRef): string =
-  if a.isZero: "ø" elif a.isNodeKey: "$" & $a.toKey(ps) else: "¶" & $a.toKey(ps)
+  if a.isZero: "ø" elif a.isNodeKey: "$" & $a.toKey(ps) else: "@" & $a.toKey(ps)
 
 proc pp(a: NodeTag; ps: AccountsDbSessionRef): string =
   a.to(NodeKey).pp(ps)
 
-# ---------
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
-proc pp(a: Hash256; collapse = true): string =
-  if not collapse:
-    a.data.mapIt(it.toHex(2)).join.toLowerAscii
-  elif a == emptyRlpHash:
-    "emptyRlpHash"
-  elif a == blankStringHash:
-    "blankStringHash"
+proc mergeProofs(
+    peer: Peer,             ## For log messages
+    db: var HexaryTreeDB;   ## Database table
+    root: NodeKey;          ## Root for checking nodes
+    proof: seq[Blob];       ## Node records
+    freeStandingOk = false; ## Remove freestanding nodes
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect, RlpError, KeyError].} =
+  ## Import proof records (as received with snap message) into a hexary trie
+  ## of the repair table. These hexary trie records can be extended to a full
+  ## trie at a later stage and used for validating account data.
+  var
+    nodes: HashSet[RepairKey]
+    refs = @[root.to(RepairKey)].toHashSet
+
+  for n,rlpRec in proof:
+    let rc = db.hexaryImport(rlpRec, nodes, refs)
+    if rc.isErr:
+      let error = rc.error
+      trace "mergeProofs()", peer, item=n, proofs=proof.len, error
+      return err(error)
+
+  # Remove free standing nodes (if any)
+  if 0 < nodes.len:
+    let rest = nodes - refs
+    if 0 < rest.len:
+      if freeStandingOk:
+        trace "mergeProofs() detected unrelated nodes", peer, nodes=nodes.len
+        discard
+      else:
+        # Delete unreferenced nodes
+        for nodeKey in nodes:
+          db.tab.del(nodeKey)
+        trace "mergeProofs() ignoring unrelated nodes", peer, nodes=nodes.len
+
+  ok()
+
+
+proc persistentAccounts(
+    ps: AccountsDbSessionRef
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+  ## Store accounts trie table on databse
+  if ps.base.rocky.isNil:
+    let rc = ps.accDb.bulkStorageAccounts(ps.base.db)
+    if rc.isErr: return rc
   else:
-    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
+    let rc = ps.accDb.bulkStorageAccountsRocky(ps.base.rocky)
+    if rc.isErr: return rc
+  ok()
 
-proc pp(q: openArray[byte]; noHash = false): string =
-  if q.len == 32 and not noHash:
-    var a: array[32,byte]
-    for n in 0..31: a[n] = q[n]
-    ($Hash256(data: a)).pp
+proc persistentStorages(
+    ps: AccountsDbSessionRef
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+  ## Store accounts trie table on databse
+  if ps.base.rocky.isNil:
+    let rc = ps.stoDb.bulkStorageStorages(ps.base.db)
+    if rc.isErr: return rc
   else:
-    q.toSeq.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
+    let rc = ps.stoDb.bulkStorageStoragesRocky(ps.base.rocky)
+    if rc.isErr: return rc
+  ok()
 
-proc pp(a: Account): string =
-  noPpError("pp(Account)"):
-    result = &"({a.nonce},{a.balance},{a.storageRoot},{a.codeHash})"
 
-proc pp(sa: SnapAccount): string =
-  "(" & $sa.accHash & "," & sa.accBody.pp & ")"
+proc collectAccounts(
+    peer: Peer,               ## for log messages
+    base: NodeTag;
+    acc: seq[PackedAccount];
+      ): Result[seq[RLeafSpecs],HexaryDbError]
+      {.gcsafe, raises: [Defect, RlpError].} =
+  ## Repack account records into a `seq[RLeafSpecs]` queue. The argument data
+  ## `acc` are as received with the snap message `AccountRange`).
+  ##
+  ## The returned list contains leaf node information for populating a repair
+  ## table. The accounts, together with some hexary trie records for proofs
+  ## can be used for validating the argument account data.
+  var rcAcc: seq[RLeafSpecs]
 
-proc pp(al: seq[SnapAccount]): string =
-  result = "  @["
-  noPpError("pp(seq[SnapAccount])"):
-    for n,rec in al:
-      result &= &"|    # <{n}>|    {rec.pp},"
-  if 10 < result.len:
-    result[^1] = ']'
-  else:
-    result &= "]"
+  if acc.len != 0:
+    let pathTag0 = acc[0].accHash.to(NodeTag)
 
-proc pp(blobs: seq[Blob]): string =
-  result = "  @["
-  noPpError("pp(seq[Blob])"):
-    for n,rec in blobs:
-      result &= "|    # <" & $n & ">|    \"" & rec.pp & "\".hexToSeqByte,"
-  if 10 < result.len:
-    result[^1] = ']'
-  else:
-    result &= "]"
+    # Verify lower bound
+    if pathTag0 < base:
+      let error = HexaryDbError.AccountSmallerThanBase
+      trace "collectAccounts()", peer, base, accounts=acc.len, error
+      return err(error)
+
+    # Add base for the records (no payload). Note that the assumption
+    # holds: `rcAcc[^1].tag <= base`
+    if base < pathTag0:
+      rcAcc.add RLeafSpecs(pathTag: base)
+
+    # Check for the case that accounts are appended
+    elif 0 < rcAcc.len and pathTag0 <= rcAcc[^1].pathTag:
+      let error = HexaryDbError.AccountsNotSrictlyIncreasing
+      trace "collectAccounts()", peer, base, accounts=acc.len, error
+      return err(error)
+
+    # Add first account
+    rcAcc.add RLeafSpecs(pathTag: pathTag0, payload: acc[0].accBlob)
+
+    # Veify & add other accounts
+    for n in 1 ..< acc.len:
+      let nodeTag = acc[n].accHash.to(NodeTag)
+
+      if nodeTag <= rcAcc[^1].pathTag:
+        let error = AccountsNotSrictlyIncreasing
+        trace "collectAccounts()", peer, item=n, base, accounts=acc.len, error
+        return err(error)
+
+      rcAcc.add RLeafSpecs(pathTag: nodeTag, payload: acc[n].accBlob)
+
+  ok(rcAcc)
+
+
+proc collectStorageSlots(
+    peer: Peer;
+    slots: seq[SnapStorage];
+      ): Result[seq[RLeafSpecs],HexaryDbError]
+      {.gcsafe, raises: [Defect, RlpError].} =
+  ## Similar to `collectAccounts()`
+  var rcSlots: seq[RLeafSpecs]
+
+  if slots.len != 0:
+    # Add initial account
+    rcSlots.add RLeafSpecs(
+      pathTag: slots[0].slotHash.to(NodeTag),
+      payload: slots[0].slotData)
+
+    # Veify & add other accounts
+    for n in 1 ..< slots.len:
+      let nodeTag = slots[n].slotHash.to(NodeTag)
+
+      if nodeTag <= rcSlots[^1].pathTag:
+        let error = SlotsNotSrictlyIncreasing
+        trace "collectStorageSlots()", peer, item=n, slots=slots.len, error
+        return err(error)
+
+      rcSlots.add RLeafSpecs(pathTag: nodeTag, payload: slots[n].slotData)
+
+  ok(rcSlots)
+
+
+proc importStorageSlots*(
+    ps: AccountsDbSessionRef; ## Re-usable session descriptor
+    data: AccountSlots;       ## account storage descriptor
+    proof: SnapStorageProof;  ## account storage proof
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect, RlpError,KeyError].} =
+  ## Preocess storage slots for a particular storage root
+  let
+    stoRoot = data.account.storageRoot.to(NodeKey)
+  var
+    slots: seq[RLeafSpecs]
+    db = ps.newHexaryTreeDB()
+
+  if 0 < proof.len:
+    let rc = ps.peer.mergeProofs(db, stoRoot, proof)
+    if rc.isErr:
+      return err(rc.error)
+  block:
+    let rc = ps.peer.collectStorageSlots(data.data)
+    if rc.isErr:
+      return err(rc.error)
+    slots = rc.value
+  block:
+    let rc = db.hexaryInterpolate(stoRoot, slots, bootstrap = (proof.len == 0))
+    if rc.isErr:
+      return err(rc.error)
+
+  # Commit to main descriptor
+  for k,v in db.tab.pairs:
+    if not k.isNodeKey:
+      return err(UnresolvedRepairNode)
+    ps.stoDb.tab[k] = v
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -192,149 +325,162 @@ proc init*(
   ## Start a new session, do some actions an then discard the session
   ## descriptor (probably after commiting data.)
   let desc = AccountsDbSessionRef(
-    base: pv,
-    peer: peer,
-    rpDB: HexaryTreeDB(
-      rootKey: root.to(NodeKey)))
+    base:    pv,
+    peer:    peer,
+    accRoot: root.to(NodeKey))
 
   # Debugging, might go away one time ...
-  desc.rpDB.keyPp = proc(key: RepairKey): string = key.pp(desc)
+  desc.accDb.keyPp = proc(key: RepairKey): string = key.pp(desc)
+  desc.stoDb.keyPp = desc.accDb.keyPp
+
   return desc
 
 # ------------------------------------------------------------------------------
-# Public functions, session related
+# Public functions
 # ------------------------------------------------------------------------------
 
-proc merge*(
-    ps: AccountsDbSessionRef;
-    proof: SnapAccountProof
-      ): Result[void,HexaryDbError]
-      {.gcsafe, raises: [Defect, RlpError].} =
-  ## Import account proof records (as received with the snap message
-  ## `AccountRange`) into the hexary trie of the repair database. These hexary
-  ## trie records can be extended to a full trie at a later stage and used for
-  ## validating account data.
+proc dbBackendRocksDb*(pv: AccountsDbRef): bool =
+  ## Returns `true` if rocksdb features are available
+  not pv.rocky.isNil
+
+proc dbBackendRocksDb*(ps: AccountsDbSessionRef): bool =
+  ## Returns `true` if rocksdb features are available
+  not ps.base.rocky.isNil
+
+proc importAccounts*(
+    ps: AccountsDbSessionRef; ## Re-usable session descriptor
+    base: NodeTag;            ## before or at first account entry in `data`
+    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
+    storeOk = false;          ## store data on disk
+      ): Result[void,HexaryDbError] =
+  ## Validate and import accounts (using proofs as received with the snap
+  ## message `AccountRange`). This function accumulates data in a memory table
+  ## which can be written to disk with the argument `storeOk` set `true`. The
+  ## memory table is held in the descriptor argument`ps`.
+  ##
+  ## Note that the `peer` argument is for log messages, only.
+  var accounts: seq[RLeafSpecs]
   try:
-    for n,rlpRec in proof:
-      let rc = ps.rpDB.hexaryImport(rlpRec)
+    if 0 < data.proof.len:
+      let rc = ps.peer.mergeProofs(ps.accDb, ps.accRoot, data.proof)
       if rc.isErr:
-        trace "merge(SnapAccountProof)", peer=ps.peer,
-          proofs=ps.rpDB.tab.len, accounts=ps.rpDB.acc.len, error=rc.error
+        return err(rc.error)
+    block:
+      let rc = ps.peer.collectAccounts(base, data.accounts)
+      if rc.isErr:
+        return err(rc.error)
+      accounts = rc.value
+    block:
+      let rc = ps.accDb.hexaryInterpolate(
+        ps.accRoot, accounts, bootstrap = (data.proof.len == 0))
+      if rc.isErr:
+        return err(rc.error)
+    if storeOk:
+      let rc = ps.persistentAccounts()
+      if rc.isErr:
         return err(rc.error)
   except RlpError:
     return err(RlpEncoding)
-  except Exception as e:
-    raiseAssert "Ooops merge(SnapAccountProof) " & $e.name & ": " & e.msg
+  except KeyError as e:
+    raiseAssert "Not possible @ importAccounts: " & e.msg
+  except OSError as e:
+    trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
+    return err(OSErrorException)
 
+  trace "Accounts and proofs ok", peer=ps.peer,
+    root=ps.accRoot.ByteArray32.toHex,
+    proof=data.proof.len, base, accounts=data.accounts.len
   ok()
 
+proc importAccounts*(
+    pv: AccountsDbRef;        ## Base descriptor on `BaseChainDB`
+    peer: Peer,               ## for log messages
+    root: Hash256;            ## state root
+    base: NodeTag;            ## before or at first account entry in `data`
+    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
+    storeOk = false;          ## store data on disk
+      ): Result[void,HexaryDbError] =
+  ## Variant of `importAccounts()`
+  AccountsDbSessionRef.init(pv, root, peer).importAccounts(base, data, storeOk)
 
-proc merge*(
-    ps: AccountsDbSessionRef;
-    base: NodeTag;
-    acc: seq[PackedAccount];
-      ): Result[void,HexaryDbError]
-      {.gcsafe, raises: [Defect, RlpError].} =
-  ## Import account records (as received with the snap message `AccountRange`)
-  ## into the accounts list of the repair database. The accounts, together
-  ## with some hexary trie records for proof can be used for validating
-  ## the argument account data.
+
+
+proc importStorages*(
+    ps: AccountsDbSessionRef;  ## Re-usable session descriptor
+    data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
+    storeOk = false;           ## store data on disk
+      ): Result[void,seq[(int,HexaryDbError)]] =
+  ## Validate and import storage slots (using proofs as received with the snap
+  ## message `StorageRanges`). This function accumulates data in a memory table
+  ## which can be written to disk with the argument `storeOk` set `true`. The
+  ## memory table is held in the descriptor argument`ps`.
   ##
-  if acc.len != 0:
-    let
-      pathTag0 = acc[0].accHash.to(NodeTag)
-      pathTagTop = acc[^1].accHash.to(NodeTag)
-      saveLen = ps.rpDB.acc.len
-
-      # For error logging
-      (peer, proofs, accounts) = (ps.peer, ps.rpDB.tab.len, ps.rpDB.acc.len)
-
+  ## Note that the `peer` argument is for log messages, only.
+  ##
+  ## On error, the function returns a list slot IDs and error codes for the
+  ## entries that could not be processed. If the slot ID is -1, the error
+  ## returned is not related to a slot.
+  let
+    nItems = data.storages.len
+    sTop = nItems - 1
+  if 0 <= sTop:
     var
-      error = NothingSerious
-      saveQ: seq[RLeafSpecs]
-      prependOk = false
-    if 0 < ps.rpDB.acc.len:
-      if pathTagTop <= ps.rpDB.acc[0].pathTag:
-        # Prepend `acc` argument before `ps.rpDB.acc`
-        saveQ = ps.rpDB.acc
-        prependOk = true
+      errors: seq[(int,HexaryDbError)]
+      slotID = -1 # so excepions see the current solt ID
+    try:
+      for n in 0 ..< sTop:
+        # These ones never come with proof data
+        slotID = n
+        let rc = ps.importStorageSlots(data.storages[slotID], @[])
+        if rc.isErr:
+          trace "Storage slots item fails", peer=ps.peer, slotID, nItems,
+            slots=data.storages[slotID].data.len, proofs=0
+          errors.add (slotID,rc.error)
 
-      # Append, verify that there is no overlap
-      elif pathTag0 <= ps.rpDB.acc[^1].pathTag:
-        return err(AccountRangesOverlap)
+      # Final one might come with proof data
+      block:
+        slotID = sTop
+        let rc = ps.importStorageSlots(data.storages[slotID], data.proof)
+        if rc.isErr:
+          trace "Storage slots last item fails", peer=ps.peer, nItems,
+            slots=data.storages[sTop].data.len, proofs=data.proof.len
+          errors.add (slotID,rc.error)
 
-    block collectAccounts:
-      # Verify lower bound
-      if pathTag0 < base:
-        error = HexaryDbError.AccountSmallerThanBase
-        trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
-        break collectAccounts
+      # Store to disk
+      if storeOk:
+        slotID = -1
+        let rc = ps.persistentStorages()
+        if rc.isErr:
+          errors.add (slotID,rc.error)
 
-      # Add base for the records (no payload). Note that the assumption
-      # holds: `ps.rpDB.acc[^1].tag <= base`
-      if base < pathTag0:
-        ps.rpDB.acc.add RLeafSpecs(pathTag: base)
+    except RlpError:
+      errors.add (slotID,RlpEncoding)
+    except KeyError as e:
+      raiseAssert "Not possible @ importAccounts: " & e.msg
+    except OSError as e:
+      trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
+      errors.add (slotID,RlpEncoding)
 
-      # Check for the case that accounts are appended
-      elif 0 < ps.rpDB.acc.len and pathTag0 <= ps.rpDB.acc[^1].pathTag:
-        error = HexaryDbError.AccountsNotSrictlyIncreasing
-        trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
-        break collectAccounts
+    if 0 < errors.len:
+      return err(errors)
 
-      # Add first account
-      ps.rpDB.acc.add RLeafSpecs(pathTag: pathTag0, payload: acc[0].accBlob)
-
-      # Veify & add other accounts
-      for n in 1 ..< acc.len:
-        let nodeTag = acc[n].accHash.to(NodeTag)
-
-        if nodeTag <= ps.rpDB.acc[^1].pathTag:
-          # Recover accounts list and return error
-          ps.rpDB.acc.setLen(saveLen)
-
-          error = AccountsNotSrictlyIncreasing
-          trace "merge(seq[PackedAccount])", peer, proofs, base, accounts, error
-          break collectAccounts
-
-        ps.rpDB.acc.add RLeafSpecs(pathTag: nodeTag, payload: acc[n].accBlob)
-
-      # End block `collectAccounts`
-
-    if prependOk:
-      if error == NothingSerious:
-        ps.rpDB.acc = ps.rpDB.acc & saveQ
-      else:
-        ps.rpDB.acc = saveQ
-
-    if error != NothingSerious:
-      return err(error)
+  trace "Storage slots ok", peer=ps.peer,
+    slots=data.storages.len, proofs=data.proof.len
 
   ok()
 
-proc interpolate*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
-  ## Verifiy accounts by interpolating the collected accounts on the hexary
-  ## trie of the repair database. If all accounts can be represented in the
-  ## hexary trie, they are vonsidered validated.
-  ##
-  ## Note:
-  ##   This function is temporary and proof-of-concept. For production purposes,
-  ##   it must be replaced by the new facility of the upcoming re-factored
-  ##   database layer.
-  ##
-  noKeyError("interpolate"):
-    result = ps.rpDB.hexaryInterpolate()
+proc importStorages*(
+    pv: AccountsDbRef;         ## Base descriptor on `BaseChainDB`
+    peer: Peer,                ## For log messages, only
+    data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
+    storeOk = false;           ## store data on disk
+      ): Result[void,seq[(int,HexaryDbError)]] =
+  ## Variant of `importStorages()`
+  AccountsDbSessionRef.init(pv, Hash256(), peer).importStorages(data, storeOk)
 
-proc dbImports*(ps: AccountsDbSessionRef): Result[void,HexaryDbError] =
-  ## Experimental: try several db-import modes and record statistics
-  noPpError("dbImports"):
-    if  ps.base.rocky.isNil:
-      let rc = ps.rpDB.bulkStorageHexaryNodesOnChainDb(ps.base.db)
-      if rc.isErr: return rc
-    else:
-      let rc = ps.rpDB.bulkStorageHexaryNodesOnRockyDb(ps.base.rocky)
-      if rc.isErr: return rc
-
-  ok()
+# ------------------------------------------------------------------------------
+# Debugging (and playing with the hexary database)
+# ------------------------------------------------------------------------------
 
 proc sortMerge*(base: openArray[NodeTag]): NodeTag =
   ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
@@ -351,85 +497,12 @@ proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
   ## so that there are no overlap which would be rejected by `merge()`.
   ##
   ## This function flattens and sorts the argument account lists.
-  noPpError("sortMergeAccounts"):
+  noKeyError("sortMergeAccounts"):
     var accounts: Table[NodeTag,PackedAccount]
     for accList in acc:
       for item in accList:
         accounts[item.accHash.to(NodeTag)] = item
     result = toSeq(accounts.keys).sorted(cmp).mapIt(accounts[it])
-
-proc nHexaryRecords*(ps: AccountsDbSessionRef): int  =
-  ## Number of hexary record entries in the session database.
-  ps.rpDB.tab.len
-
-proc nAccountRecords*(ps: AccountsDbSessionRef): int  =
-  ## Number of account records in the session database. This number includes
-  ## lower bound entries (which are not accoiunts, strictly speaking.)
-  ps.rpDB.acc.len
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc dbBackendRocksDb*(pv: AccountsDbRef): bool =
-  ## Returns `true` if rocksdb features are available
-  not pv.rocky.isNil
-
-proc dbBackendRocksDb*(ps: AccountsDbSessionRef): bool =
-  ## Returns `true` if rocksdb features are available
-  not ps.base.rocky.isNil
-
-proc importAccounts*(
-    pv: AccountsDbRef;
-    peer: Peer,               ## for log messages
-    root: Hash256;            ## state root
-    base: NodeTag;            ## before or at first account entry in `data`
-    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-    storeData = false
-      ): Result[void,HexaryDbError] =
-  ## Validate and accounts and proofs (as received with the snap message
-  ## `AccountRange`). This function combines the functionality of the `merge()`
-  ## and the `interpolate()` functions.
-  ##
-  ## At a later stage, that function also will bulk-import the accounts into
-  ## the block chain database
-  ##
-  ## Note that the `peer` argument is for log messages, only.
-  let ps = AccountsDbSessionRef.init(pv, root, peer)
-  try:
-    block:
-      let rc = ps.merge(data.proof)
-      if rc.isErr:
-        return err(rc.error)
-    block:
-      let rc = ps.merge(base, data.accounts)
-      if rc.isErr:
-        return err(rc.error)
-  except RlpError:
-    return err(RlpEncoding)
-
-  block:
-    # Note:
-    #   `interpolate()` is a temporary proof-of-concept function. For
-    #   production purposes, it must be replaced by the new facility of
-    #   the upcoming re-factored database layer.
-    let rc = ps.interpolate()
-    if rc.isErr:
-      return err(rc.error)
-
-  if storeData:
-    # Experimental
-    let rc = ps.dbImports()
-    if rc.isErr:
-      return err(rc.error)
-
-  trace "Accounts and proofs ok", peer, root=root.data.toHex,
-    proof=data.proof.len, base, accounts=data.accounts.len
-  ok()
-
-# ------------------------------------------------------------------------------
-# Debugging (and playing with the hexary database)
-# ------------------------------------------------------------------------------
 
 proc getChainDbAccount*(
     ps: AccountsDbSessionRef;
@@ -439,7 +512,7 @@ proc getChainDbAccount*(
   noRlpExceptionOops("getChainDbAccount()"):
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      leaf = accHash.to(NodeKey).hexaryPath(ps.rpDB.rootKey, getFn).leafData
+      leaf = accHash.to(NodeKey).hexaryPath(ps.accRoot, getFn).leafData
     if 0 < leaf.len:
       let acc = rlp.decode(leaf,Account)
       return ok(acc)
@@ -456,7 +529,7 @@ proc nextChainDbKey*(
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
       path = accHash.to(NodeKey)
-                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .hexaryPath(ps.accRoot, getFn)
                     .next(getFn)
                     .getNibbles
     if 64 == path.len:
@@ -474,7 +547,7 @@ proc prevChainDbKey*(
     let
       getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
       path = accHash.to(NodeKey)
-                    .hexaryPath(ps.rpDB.rootKey, getFn)
+                    .hexaryPath(ps.accRoot, getFn)
                     .prev(getFn)
                     .getNibbles
     if 64 == path.len:
@@ -487,13 +560,13 @@ proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
   ## sets the root key to `"$"`, for instance.
   noPpError("validate(1)"):
     # Make keys assigned in pretty order for printing
-    var keysList = toSeq(ps.rpDB.tab.keys)
-    let rootKey = ps.rpDB.rootKey.to(RepairKey)
+    var keysList = toSeq(ps.accDb.tab.keys)
+    let rootKey = ps.accRoot.to(RepairKey)
     discard rootKey.toKey(ps)
-    if ps.rpDB.tab.hasKey(rootKey):
+    if ps.accDb.tab.hasKey(rootKey):
       keysList = @[rootKey] & keysList
     for key in keysList:
-      let node = ps.rpDB.tab[key]
+      let node = ps.accDb.tab[key]
       discard key.toKey(ps)
       case node.kind:
       of Branch: (for w in node.bLink: discard w.toKey(ps))
@@ -503,19 +576,17 @@ proc assignPrettyKeys*(ps: AccountsDbSessionRef) =
 proc dumpPath*(ps: AccountsDbSessionRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the
   ## argument `key`.
-  noKeyError("dumpPath"):
-    let rPath = key.hexaryPath(ps.rpDB)
-    result = rPath.path.mapIt(it.pp(ps.rpDB)) & @["(" & rPath.tail.pp & ")"]
+  noPpError("dumpPath"):
+    let rPath= key.to(NodeKey).hexaryPath(ps.accRoot.to(RepairKey), ps.accDb)
+    result = rPath.path.mapIt(it.pp(ps.accDb)) & @["(" & rPath.tail.pp & ")"]
 
-proc dumpProofsDB*(ps: AccountsDbSessionRef): seq[string] =
-  ## Dump the entries from the repair tree.
-  noPpError("dumpRoot"):
-    var accu = @[(0u, "($0" & "," & ps.rpDB.rootKey.pp(ps) & ")")]
-    for key,node in ps.rpDB.tab.pairs:
-      accu.add (key.toKey(ps), "(" & key.pp(ps) & "," & node.pp(ps.rpDB) & ")")
-    proc cmpIt(x, y: (uint,string)): int =
-      cmp(x[0],y[0])
-    result = accu.sorted(cmpIt).mapIt(it[1])
+proc dumpAccDB*(ps: AccountsDbSessionRef; indent = 4): string =
+  ## Dump the entries from the a generic accounts trie.
+  ps.accDb.pp(ps.accRoot,indent)
+
+proc hexaryPpFn*(ps: AccountsDbSessionRef): HexaryPpFn =
+  ## Key mapping function used in `HexaryTreeDB`
+  ps.accDb.keyPp
 
 # ------------------------------------------------------------------------------
 # End

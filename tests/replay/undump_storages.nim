@@ -34,6 +34,8 @@ type
     ## Palatable output for iterator
     root*: Hash256
     data*: AccountStorageRange
+    seenAccounts*: int
+    seenStorages*: int
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -92,7 +94,7 @@ proc dumpStorages*(
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpNextStorage*(gzFile: string): UndumpStorages =
+iterator undumpNextStorages*(gzFile: string): UndumpStorages =
   var
     line = ""
     lno = 0
@@ -101,6 +103,8 @@ iterator undumpNextStorage*(gzFile: string): UndumpStorages =
     nAccounts = 0u
     nProofs = 0u
     nSlots = 0u
+    seenAccounts = 0
+    seenStorages = 0
 
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
@@ -128,9 +132,11 @@ iterator undumpNextStorage*(gzFile: string): UndumpStorages =
         nProofs = flds[2].parseUInt
         data.reset
         state = UndumpStoragesRoot
+        seenStorages.inc
         continue
       if 1 < flds.len and flds[0] == "accounts":
         state = UndumpSkipUntilCommit
+        seenAccounts.inc
         continue
       if state != UndumpError:
          state = UndumpError
@@ -205,6 +211,8 @@ iterator undumpNextStorage*(gzFile: string): UndumpStorages =
 
     of UndumpCommit:
       if flds.len == 1 and flds[0] == "commit":
+        data.seenAccounts = seenAccounts
+        data.seenStorages = seenStorages
         yield data
         state = UndumpStoragesHeader
         continue

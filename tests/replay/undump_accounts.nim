@@ -32,6 +32,8 @@ type
     root*: Hash256
     base*: NodeTag
     data*: PackedAccountRange
+    seenAccounts*: int
+    seenStorages*: int
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -94,6 +96,8 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
     data: UndumpAccounts
     nAccounts = 0u
     nProofs = 0u
+    seenAccounts = 0
+    seenStorages = 0
 
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
@@ -120,8 +124,10 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         nProofs = flds[2].parseUInt
         data.reset
         state = UndumpStateRoot
+        seenAccounts.inc
         continue
       if 1 < flds.len and flds[0] == "storages":
+        seenStorages.inc
         state = UndumpSkipUntilCommit
         continue
       if state != UndumpError:
@@ -178,6 +184,8 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
 
     of UndumpCommit:
       if flds.len == 1 and flds[0] == "commit":
+        data.seenAccounts = seenAccounts
+        data.seenStorages = seenStorages
         yield data
         state = UndumpHeader
         continue
