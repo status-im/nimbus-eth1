@@ -725,7 +725,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
           return false
 
         # Finally, attempt to fetch the invalid payload using the JSON-RPC endpoint
-        var header: BlockHeader
+        var header: rpc_types.BlockHeader
         let rp = client.headerByHash(alteredPayload.blockHash.hash256, header)
         rp.isErr
     ))
