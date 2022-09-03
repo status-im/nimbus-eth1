@@ -23,9 +23,7 @@ import
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
-  eth/common,
-  nimcrypto,
-  stint
+  eth/common
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -51,7 +49,7 @@ const
       k.cpt.stack.push(EMPTY_SHA3)
     else:
       k.cpt.stack.push:
-        keccak256.digest k.cpt.memory.bytes.toOpenArray(pos, endRange)
+        keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

@@ -3,7 +3,7 @@ import
   stew/byteutils,
   chronicles,
   unittest2,
-  nimcrypto,
+  nimcrypto/sysrand,
   chronos,
   "."/[test_env, helper, types],
   ../../../nimbus/transaction,
@@ -120,7 +120,7 @@ proc invalidTerminalBlockNewPayload(t: TestEnv): TestStatus =
   let payload = ExecutableData(
     parentHash:   gBlock.blockHash,
     stateRoot:    gBlock.stateRoot,
-    receiptsRoot: BLANK_ROOT_HASH,
+    receiptsRoot: EMPTY_ROOT_HASH,
     number:       1,
     gasLimit:     gBlock.gasLimit,
     gasUsed:      0,
@@ -145,7 +145,7 @@ proc unknownHeadBlockHash(t: TestEnv): TestStatus =
   testCond ok
 
   var randomHash: Hash256
-  testCond nimcrypto.randomBytes(randomHash.data) == 32
+  testCond randomBytes(randomHash.data) == 32
 
   let clMock = t.clMock
   let forkchoiceStateUnknownHeadHash = ForkchoiceStateV1(
@@ -192,7 +192,7 @@ proc unknownSafeBlockHash(t: TestEnv): TestStatus =
     onNewPayloadBroadcast: proc(): bool =
       # Generate a random SafeBlock hash
       var randomSafeBlockHash: Hash256
-      doAssert nimcrypto.randomBytes(randomSafeBlockHash.data) == 32
+      doAssert randomBytes(randomSafeBlockHash.data) == 32
 
       # Send forkchoiceUpdated with random SafeBlockHash
       let forkchoiceStateUnknownSafeHash = ForkchoiceStateV1(
@@ -225,7 +225,7 @@ proc unknownFinalizedBlockHash(t: TestEnv): TestStatus =
     onNewPayloadBroadcast: proc(): bool =
       # Generate a random SafeBlock hash
       var randomFinalBlockHash: Hash256
-      doAssert nimcrypto.randomBytes(randomFinalBlockHash.data) == 32
+      doAssert randomBytes(randomFinalBlockHash.data) == 32
 
       # Send forkchoiceUpdated with random SafeBlockHash
       let forkchoiceStateUnknownFinalizedHash = ForkchoiceStateV1(
@@ -353,7 +353,7 @@ template invalidPayloadAttributesGen(procname: untyped, syncingCond: bool) =
         var blockHash: Hash256
         when syncingCond:
           # Setting a random hash will put the client into `SYNCING`
-          doAssert nimcrypto.randomBytes(blockHash.data) == 32
+          doAssert randomBytes(blockHash.data) == 32
         else:
           # Set the block hash to the next payload that was broadcasted
           blockHash = hash256(clMock.latestPayloadBuilt.blockHash)
@@ -480,7 +480,7 @@ template badHashOnNewPayloadGen(procname: untyped, syncingCond: bool, sideChain:
         elif syncingCond:
           # We need to send an fcU to put the client in SYNCING state.
           var randomHeadBlock: Hash256
-          doAssert nimcrypto.randomBytes(randomHeadBlock.data) == 32
+          doAssert randomBytes(randomHeadBlock.data) == 32
 
           let latestHeaderHash = clMock.latestHeader.blockHash
           let fcU = ForkchoiceStateV1(
@@ -725,7 +725,7 @@ template invalidPayloadTestCaseGen(procName: untyped, payloadField: InvalidPaylo
           return false
 
         # Finally, attempt to fetch the invalid payload using the JSON-RPC endpoint
-        var header: BlockHeader
+        var header: rpc_types.BlockHeader
         let rp = client.headerByHash(alteredPayload.blockHash.hash256, header)
         rp.isErr
     ))
@@ -1205,7 +1205,7 @@ proc multipleNewCanonicalPayloads(t: TestEnv): TestStatus =
 
       # Fabricate and send multiple new payloads by changing the PrevRandao field
       for i in 0..<payloadCount:
-        doAssert nimcrypto.randomBytes(newPrevRandao.data) == 32
+        doAssert randomBytes(newPrevRandao.data) == 32
         let newPayload = customizePayload(basePayload, CustomPayload(
           prevRandao: some(newPrevRandao)
         ))
@@ -1242,7 +1242,7 @@ proc outOfOrderPayloads(t: TestEnv): TestStatus =
     payloadCount = 10
 
   var recipient: EthAddress
-  doAssert nimcrypto.randomBytes(recipient) == 20
+  doAssert randomBytes(recipient) == 20
 
   let clMock = t.clMock
   let client = t.rpcClient
@@ -1521,7 +1521,7 @@ proc sidechainReorg(t: TestEnv): TestStatus =
       # At this point the clMocker has a payload that will result in a specific outcome,
       # we can produce an alternative payload, send it, fcU to it, and verify the changes
       var alternativePrevRandao: Hash256
-      doAssert nimcrypto.randomBytes(alternativePrevRandao.data) == 32
+      doAssert randomBytes(alternativePrevRandao.data) == 32
 
       let timestamp = Quantity toUnix(clMock.latestHeader.timestamp + 1.seconds)
       let payloadAttributes = PayloadAttributesV1(
@@ -1600,7 +1600,7 @@ proc suggestedFeeRecipient(t: TestEnv): TestStatus =
 
   # Verify that, in a block with transactions, fees are accrued by the suggestedFeeRecipient
   var feeRecipient: EthAddress
-  testCond nimcrypto.randomBytes(feeRecipient) == 20
+  testCond randomBytes(feeRecipient) == 20
 
   let
     client = t.rpcClient
@@ -1737,7 +1737,7 @@ proc prevRandaoOpcodeTx(t: TestEnv): TestStatus =
   ))
 
   testCond produceBlockRes
-  
+
   let rr = client.blockNumber()
   testCond rr.isOk:
     error "Unable to get latest block number"

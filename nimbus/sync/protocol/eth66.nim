@@ -38,7 +38,7 @@
 import
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, p2p/private/p2p_types, p2p/blockchain_utils],
+  eth/[common/eth_types_rlp, p2p, p2p/private/p2p_types, p2p/blockchain_utils],
   stew/byteutils,
   ./trace_config
 

@@ -9,8 +9,8 @@
 
 import
   std/[options, tables],
-  stew/results, chronos, chronicles, nimcrypto/[keccak, hash],
-  eth/[common/eth_types, rlp, trie, trie/db],
+  stew/results, chronos, chronicles,
+  eth/[common/eth_types_rlp, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../../../nimbus/constants,
@@ -170,7 +170,7 @@ proc validateBlockBody(
     body: BlockBodySSZ, txsRoot, ommersHash: KeccakHash):
     Result[void, string] =
   ## Validate the block body against the txRoot amd ommersHash from the header.
-  let calculatedOmmersHash = keccak256.digest(body.uncles.asSeq())
+  let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
   if calculatedOmmersHash != ommersHash:
     return err("Invalid ommers hash")
 
@@ -340,7 +340,7 @@ proc getBlockBody*(
     Future[Option[BlockBody]] {.async.} =
 
   # Got header with empty body, no need to make any db calls or network requests
-  if header.txRoot == BLANK_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
+  if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     return some(BlockBody(transactions: @[], uncles: @[]))
 
   let
@@ -409,7 +409,7 @@ proc getReceipts*(
     chainId: uint16,
     hash: BlockHash,
     header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
-  if header.receiptRoot == BLANK_ROOT_HASH:
+  if header.receiptRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return some(newSeq[Receipt]())
 

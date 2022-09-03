@@ -11,7 +11,7 @@
 
 import
   unittest2, stint, stew/byteutils,
-  eth/common/eth_types,
+  eth/common/eth_types_rlp,
   ../populate_db,
   ../network/history/[history_content, accumulator]
 

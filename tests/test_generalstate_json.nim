@@ -16,7 +16,6 @@ import
   chronicles,
   eth/[rlp, common],
   eth/trie/[db, trie_defs],
-  nimcrypto,
   unittest2,
   stew/results
 

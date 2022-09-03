@@ -13,7 +13,6 @@ import
   chronos,
   eth/[common/eth_types, p2p, rlp],
   eth/trie/[db, nibbles],
-  nimcrypto/keccak,
   stew/byteutils,
   stint,
   rocksdb,

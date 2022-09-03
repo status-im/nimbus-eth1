@@ -15,7 +15,6 @@
 
 import
   std/[sequtils, strformat, strutils, tables, times],
-  nimcrypto/hash,
   eth/common,
   ../../nimbus/constants
 
@@ -110,8 +109,8 @@ proc pp*(a: MDigest[256]; collapse = true): string =
     a.data.mapIt(it.toHex(2)).join.toLowerAscii
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
-  elif a == BLANK_ROOT_HASH:
-    "BLANK_ROOT_HASH"
+  elif a == EMPTY_ROOT_HASH:
+    "EMPTY_ROOT_HASH"
   elif a == EMPTY_UNCLE_HASH:
     "EMPTY_UNCLE_HASH"
   elif a == EMPTY_SHA3:

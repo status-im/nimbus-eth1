@@ -1,6 +1,6 @@
 import
   stew/[byteutils, endians2],
-  nimcrypto/[keccak, hash], eth/[common, rlp],
+  eth/[common, rlp],
   eth/trie/[trie_defs, nibbles, db],
   faststreams/outputs,
   ./witness_types, ../nimbus/constants,
@@ -119,7 +119,7 @@ proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node:
     wb.writeByte(depth)
 
   when defined(debugHash):
-    wb.write(keccak(node).data)
+    wb.write(keccakHash(node).data)
 
 proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
   # write type
@@ -135,7 +135,7 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
     wb.writeByte(depth)
 
   when defined(debugHash):
-    wb.write(keccak(node).data)
+    wb.write(keccakHash(node).data)
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
   # usually a hash node means the recursion will not go deeper
@@ -258,7 +258,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
 
     if not mg.match:
       # return immediately if there is no match
-      writeHashNode(wb, keccak(z.node).data, z.depth, z.storageMode)
+      writeHashNode(wb, keccakHash(z.node).data, z.depth, z.storageMode)
       return
 
     let value = nodeRlp.listElem(1)

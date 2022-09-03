@@ -10,7 +10,6 @@
 import
   std/[tables, strutils, options, times],
   eth/[common, rlp, p2p], stint, stew/[byteutils],
-  nimcrypto/hash,
   json_serialization, chronicles,
   json_serialization/std/options as jsoptions,
   json_serialization/std/tables as jstable,

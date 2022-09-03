@@ -12,7 +12,6 @@
 import
   std/[hashes, sequtils, strutils],
   eth/[common/eth_types, p2p],
-  nimcrypto,
   stew/[byteutils, keyed_queue],
   ../../db/select_backend,
   ../../constants,
@@ -198,8 +197,8 @@ proc seen*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber) =
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
     a.data.mapIt(it.toHex(2)).join.toLowerAscii
-  elif a == BLANK_ROOT_HASH:
-    "BLANK_ROOT_HASH"
+  elif a == EMPTY_ROOT_HASH:
+    "EMPTY_ROOT_HASH"
   elif a == EMPTY_UNCLE_HASH:
     "EMPTY_UNCLE_HASH"
   elif a == EMPTY_SHA3:

@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, tables],
-  eth/[common/eth_types, trie/nibbles],
+  eth/[common/eth_types_rlp, trie/nibbles],
   ./hexary_desc
 
 {.push raises: [Defect].}

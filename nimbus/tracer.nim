@@ -1,7 +1,7 @@
 import
   db/[db_chain, accounts_cache, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth/trie/db, nimcrypto, strutils,
+  eth/trie/db, strutils, nimcrypto/utils as ncrutils,
   chronicles, rpc/hexstrings, launcher,
   stew/results
 
@@ -94,7 +94,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
 
   var stateDb = vmState.stateDB
 
-  if header.txRoot == BLANK_ROOT_HASH: return newJNull()
+  if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
   doAssert(body.transactions.len != 0)
 
@@ -221,7 +221,7 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     captureFlags = tracerFlags + {EnableTracing}
     vmState = BaseVMState.new(header, captureChainDB, captureFlags)
 
-  if header.txRoot == BLANK_ROOT_HASH: return newJNull()
+  if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
   doAssert(body.transactions.len != 0)
 

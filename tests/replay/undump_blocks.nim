@@ -13,7 +13,7 @@ import
   ../../nimbus/db/db_chain,
   ./gunzip,
   eth/[common, rlp],
-  nimcrypto,
+  nimcrypto/utils,
   stew/results
 
 # ------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ template say(args: varargs[untyped]) =
   discard
 
 proc toByteSeq(s: string): seq[byte] =
-  nimcrypto.fromHex(s)
+  utils.fromHex(s)
 
 # ------------------------------------------------------------------------------
 # Public capture

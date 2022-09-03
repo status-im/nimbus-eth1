@@ -9,11 +9,13 @@
 
 import
   std/options,
-  eth/common/eth_types,
+  eth/common/[eth_types, eth_types_rlp],
   eth/bloom as bFilter,
   stint,
   ./rpc_types,
   ./hexstrings
+
+export rpc_types
 
 proc topicToDigest(t: seq[Topic]): seq[Hash256] =
   var resSeq: seq[Hash256] = @[]

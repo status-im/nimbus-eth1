@@ -35,7 +35,6 @@ import
   ./replay/[undump_blocks, pp],
   chronicles,
   eth/[common, p2p, trie/db],
-  nimcrypto/hash,
   stew/results,
   unittest2
 

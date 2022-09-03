@@ -32,7 +32,7 @@ proc randCode(db: DB): Hash256 =
   else:
     let codeLen = rand(1..150)
     let code = randList(byte, rng(0, 255), codeLen, unique = false)
-    result = hexary.keccak(code)
+    result = keccakHash(code)
     db.put(contractHashKey(result).toOpenArray, code)
 
 proc randStorage(db: DB): StorageKeys =

@@ -22,7 +22,6 @@ import
   ./process_transaction,
   chronicles,
   eth/[common, trie/db],
-  nimcrypto,
   stew/results
 
 {.push raises: [Defect].}
@@ -45,7 +44,7 @@ proc procBlkPreamble(vmState: BaseVMState;
       blockNumber = header.blockNumber
     return false
 
-  if header.txRoot != BLANK_ROOT_HASH:
+  if header.txRoot != EMPTY_ROOT_HASH:
     if body.transactions.len == 0:
       debug "No transactions in body",
         blockNumber = header.blockNumber

@@ -1,6 +1,6 @@
 import
   stew/[byteutils, endians2], json, strutils,
-  nimcrypto/[keccak, hash], eth/[common, rlp],
+  eth/[common, rlp],
   eth/trie/[trie_defs, nibbles, db],
   ./witness_types, ../nimbus/constants,
   ../nimbus/db/storage_types, ./multi_keys
@@ -141,7 +141,7 @@ proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node:
   wb.writeByte(ExtensionNodeType, "nodeType")
   wb.writeNibbles(n)
   wb.writeByte(depth, "debugDepth")
-  wb.write(keccak(node).data, "debugHash")
+  wb.write(keccakHash(node).data, "debugHash")
   wb.pop()
 
 proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
@@ -151,7 +151,7 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   wb.writeByte(BranchNodeType, "nodeType")
   wb.write(byte((mask shr 8) and 0xFF), byte(mask and 0xFF), "mask")
   wb.writeByte(depth, "debugDepth")
-  wb.write(keccak(node).data, "debugHash")
+  wb.write(keccakHash(node).data, "debugHash")
   wb.pop()
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
@@ -231,7 +231,7 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, node: o
     wb.writeStorage(kd, acc)
 
   wb.writeByte(depth, "debugDepth")
-  wb.write(keccak(node).data, "debugHash")
+  wb.write(keccakHash(node).data, "debugHash")
   wb.pop()
 
 proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, node: openArray[byte], depth: int) =
@@ -240,7 +240,7 @@ proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], v
   wb.write(key, "key")
   wb.write(val.toBytesBE, "value")
   wb.writeByte(depth, "debugDepth")
-  wb.write(keccak(node).data, "debugHash")
+  wb.write(keccakHash(node).data, "debugHash")
   wb.pop()
 
 proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
@@ -254,7 +254,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
 
     if not mg.match:
       # return immediately if there is no match
-      writeHashNode(wb, keccak(z.node).data)
+      writeHashNode(wb, keccakHash(z.node).data)
       return
 
     let value = nodeRlp.listElem(1)

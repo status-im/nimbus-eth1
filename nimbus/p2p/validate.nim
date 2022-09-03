@@ -19,7 +19,7 @@ import
   ./gaslimit,
   chronicles,
   eth/[common, rlp],
-  nimcrypto,
+  nimcrypto/utils,
   options,
   stew/[objects, results, endians2]
 
@@ -324,7 +324,7 @@ proc validateTransaction*(
 
   # EIP-3607 Reject transactions from senders with deployed code
   # The EIP spec claims this attack never happened before
-  # Clients might choose to disable this rule for RPC calls like 
+  # Clients might choose to disable this rule for RPC calls like
   # `eth_call` and `eth_estimateGas`
   # EOA = Externally Owned Account
   let codeHash = roDB.getCodeHash(sender)

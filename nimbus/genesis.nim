@@ -71,8 +71,8 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     coinbase: g.coinbase,
     stateRoot: sdb.rootHash,
     parentHash: GENESIS_PARENT_HASH,
-    txRoot: BLANK_ROOT_HASH,
-    receiptRoot: BLANK_ROOT_HASH,
+    txRoot: EMPTY_ROOT_HASH,
+    receiptRoot: EMPTY_ROOT_HASH,
     ommersHash: EMPTY_UNCLE_HASH
   )
 

@@ -13,7 +13,6 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
-  nimcrypto/keccak,
   stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,

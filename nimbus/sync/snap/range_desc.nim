@@ -11,8 +11,7 @@
 
 import
   std/[math, hashes],
-  eth/common/eth_types,
-  nimcrypto/keccak,
+  eth/common/eth_types_rlp,
   stew/[byteutils, interval_set],
   stint,
   ../../constants,
@@ -146,7 +145,7 @@ proc hash*(a: NodeTag): Hash =
 
 proc digestTo*(data: Blob; T: type NodeTag): T =
   ## Hash the `data` argument
-  keccak256.digest(data).to(T)
+  keccakHash(data).to(T)
 
 proc freeFactor*(lrs: LeafRangeSet): float =
   ## Free factor, ie. `#items-free / 2^256` to be used in statistics

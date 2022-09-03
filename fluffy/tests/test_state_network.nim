@@ -8,7 +8,7 @@
 import
   std/os,
   testutils/unittests, chronos,
-  eth/[keys, trie/db, trie/hexary],
+  eth/[common/eth_hash, keys, trie/db, trie/hexary],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain, db/state_db],
   ../network/wire/[portal_protocol, portal_stream],
@@ -85,7 +85,7 @@ procSuite "State Content Network":
       check:
         foundContent.isSome()
 
-      let hash = hexary.keccak(foundContent.get())
+      let hash = keccakHash(foundContent.get())
       check hash.data == key
 
     await node1.closeWait()
@@ -149,7 +149,7 @@ procSuite "State Content Network":
     check:
       foundContent.isSome()
 
-    let hash = hexary.keccak(foundContent.get())
+    let hash = keccakHash(foundContent.get())
 
     check hash.data == firstKey
 

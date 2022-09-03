@@ -9,7 +9,7 @@ import
   unittest2, json, os, tables, strutils, sets,
   options,
   eth/[common, rlp], eth/trie/[db, trie_defs],
-  stew/endians2, nimcrypto,
+  stew/endians2,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, utils, vm_types, errors, constants, forks],

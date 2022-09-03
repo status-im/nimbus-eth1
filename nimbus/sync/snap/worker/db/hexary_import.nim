@@ -10,7 +10,7 @@
 
 import
   std/[sequtils, sets, strutils, tables],
-  eth/[common/eth_types, trie/nibbles],
+  eth/[common/eth_types_rlp, trie/nibbles],
   stew/results,
   "."/[hexary_defs, hexary_desc]
 

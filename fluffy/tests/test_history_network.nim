@@ -9,7 +9,7 @@ import
   std/os,
   testutils/unittests, chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types,
+  eth/common/eth_types_rlp,
   eth/rlp,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_network, accumulator, history_content],
@@ -54,7 +54,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH
-    bh.txRoot = BLANK_ROOT_HASH
+    bh.txRoot = EMPTY_ROOT_HASH
     headers.add(bh)
   return headers
 

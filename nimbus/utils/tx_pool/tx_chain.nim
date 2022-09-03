@@ -25,8 +25,7 @@ import
   ../../vm_types,
   ./tx_chain/[tx_basefee, tx_gaslimits],
   ./tx_item,
-  eth/[common],
-  nimcrypto
+  eth/[common]
 
 export
   TxChainGasLimits,
@@ -96,7 +95,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
     miner     = dh.miner,
     chainDB   = dh.db)
 
-  dh.txEnv.txRoot = BLANK_ROOT_HASH
+  dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
 
 proc update(dh: TxChainRef; parent: BlockHeader)

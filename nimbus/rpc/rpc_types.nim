@@ -6,7 +6,7 @@ import
 from
   web3/ethtypes import FixedBytes
 
-export FixedBytes
+export FixedBytes, common
 
 #[
   Notes:

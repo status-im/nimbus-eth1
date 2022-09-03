@@ -1,8 +1,8 @@
 import
   json, strutils, sets, hashes,
-  chronicles, nimcrypto, eth/common, stint,
+  chronicles, eth/common, stint,
   ./types, ./memory, ./stack, ../db/accounts_cache,
-  eth/trie/hexary,
+  eth/trie/hexary, nimcrypto/utils,
   ./interpreter/op_codes
 
 logScope:

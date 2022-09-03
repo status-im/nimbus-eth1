@@ -1,7 +1,7 @@
 import
   typetraits,
   faststreams/inputs, eth/[common, rlp], stint, stew/endians2,
-  eth/trie/[db, trie_defs], nimcrypto/[keccak, hash],
+  eth/trie/[db, trie_defs],
   ./witness_types, stew/byteutils, ../nimbus/constants
 
 type
@@ -166,7 +166,7 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
     result.usedBytes = z.len
     result.data[0..z.len-1] = z[0..z.len-1]
   else:
-    result.data = keccak(z).data
+    result.data = keccakHash(z).data
     result.usedBytes = 32
     t.db.put(result.data, z)
 
@@ -177,13 +177,13 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
   result.data[0..z.len-1] = z[0..z.len-1]
 
 proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
-  let hash = keccak(r.data.toOpenArray(0, r.usedBytes-1))
+  let hash = keccakHash(r.data.toOpenArray(0, r.usedBytes-1))
   t.db.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
   result.data = hash.data
   result.usedBytes = 32
 
 proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
-  result = keccak(code)
+  result = keccakHash(code)
   put(t.db, result.data, code)
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
@@ -365,7 +365,7 @@ func toAddress(x: openArray[byte]): EthAddress =
 proc readAddress(t: var TreeBuilder): Hash256 =
   safeReadBytes(t, 20):
     let address = toAddress(t.read(20))
-    result = keccak(address)
+    result = keccakHash(address)
     t.keys.add AccountAndSlots(address: address)
 
 proc readCodeLen(t: var TreeBuilder): int =
@@ -464,7 +464,7 @@ func toStorageSlot(x: openArray[byte]): StorageSlot =
 proc readStorageSlot(t: var TreeBuilder): Hash256 =
   safeReadBytes(t, 32):
     let slot = toStorageSlot(t.read(32))
-    result = keccak(slot)
+    result = keccakHash(slot)
     t.keys[^1].slots.add slot
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
