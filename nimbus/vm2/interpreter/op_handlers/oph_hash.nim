@@ -23,8 +23,7 @@ import
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
-  eth/common,
-  stint
+  eth/common
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

@@ -10,7 +10,7 @@
 import
   std/[options, tables],
   stew/results, chronos, chronicles,
-  eth/[common/eth_types, rlp, trie, trie/db],
+  eth/[common/eth_types_rlp, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../../../nimbus/constants,

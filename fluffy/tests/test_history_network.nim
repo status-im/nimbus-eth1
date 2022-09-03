@@ -9,7 +9,7 @@ import
   std/os,
   testutils/unittests, chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types,
+  eth/common/eth_types_rlp,
   eth/rlp,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_network, accumulator, history_content],
