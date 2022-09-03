@@ -9,7 +9,7 @@
 
 import
   std/[strutils, tables],
-  nimcrypto, eth/common as eth_common,
+  nimcrypto/utils, eth/common as eth_common,
   stint, json_rpc/server, json_rpc/errors,
   eth/p2p, eth/p2p/enode,
   ../config, ./hexstrings
@@ -31,8 +31,8 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     result = conf.agentString
 
   server.rpc("web3_sha3") do(data: HexDataStr) -> string:
-    var rawdata = nimcrypto.fromHex(data.string[2 .. ^1])
-    result = "0x" & $keccak256.digest(rawdata)
+    var rawdata = utils.fromHex(data.string[2 .. ^1])
+    result = "0x" & $keccakHash(rawdata)
 
   server.rpc("net_version") do() -> string:
     result = $conf.networkId

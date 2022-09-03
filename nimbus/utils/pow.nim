@@ -18,7 +18,6 @@ import
   ./pow/[pow_cache, pow_dataset],
   eth/[common, keys, p2p, rlp],
   ethash,
-  nimcrypto,
   stint
 
 {.push raises: [Defect].}

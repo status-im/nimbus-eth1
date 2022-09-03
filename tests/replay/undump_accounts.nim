@@ -11,7 +11,7 @@
 import
   std/[os, sequtils, strformat, strutils],
   eth/common,
-  nimcrypto,
+  nimcrypto/utils,
   stew/byteutils,
   ../../nimbus/sync/snap/[range_desc, worker/db/hexary_desc],
   ./gunzip
@@ -44,7 +44,7 @@ template say(args: varargs[untyped]) =
   discard
 
 proc toByteSeq(s: string): seq[byte] =
-  nimcrypto.fromHex(s)
+  utils.fromHex(s)
 
 proc fromHex(T: type Hash256; s: string): T =
   result.data = ByteArray32.fromHex(s)

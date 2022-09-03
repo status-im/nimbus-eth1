@@ -11,7 +11,6 @@
 import
   std/[algorithm, hashes, sequtils, strutils, tables],
   eth/[common/eth_types, p2p, trie/nibbles],
-  nimcrypto/keccak,
   stint,
   ../../range_desc
 
@@ -378,7 +377,7 @@ proc isNodeKey*(a: RepairKey): bool =
   a.ByteArray33[0] == 0
 
 proc digestTo*(data: Blob; T: type NodeKey): T =
-  keccak256.digest(data).data.T
+  keccakHash(data).data.T
 
 proc convertTo*[W: NodeKey|RepairKey](data: Blob; T: type W): T =
   ## Probably lossy conversion, use `init()` for safe conversion

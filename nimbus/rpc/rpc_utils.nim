@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
+import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils,
   ../db/db_chain, strutils, algorithm, options, times, json,
   ../constants, stint, hexstrings, rpc_types,
   ../utils, ../transaction,

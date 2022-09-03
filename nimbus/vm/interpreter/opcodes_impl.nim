@@ -7,7 +7,7 @@
 
 import
   strformat, times, sets, sequtils, options,
-  chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
+  chronicles, stint, stew/ranges/ptr_arith, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values,
   ".."/[memory, stack, code_stream, computation, state, types],
@@ -252,7 +252,7 @@ op sha3, inline = true, startPos, length:
     push(EMPTY_SHA3)
   else:
     push:
-      keccak256.digest c.memory.bytes.toOpenArray(pos, endRange)
+      keccakHash c.memory.bytes.toOpenArray(pos, endRange)
 
 # ##########################################
 # 30s: Environmental Information

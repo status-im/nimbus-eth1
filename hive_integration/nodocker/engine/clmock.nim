@@ -1,7 +1,7 @@
 import
   std/[times, tables],
   chronicles,
-  nimcrypto,
+  nimcrypto/sysrand,
   stew/byteutils,
   eth/common, chronos,
   web3/engine_api_types,
@@ -121,7 +121,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 proc getNextPayloadID*(cl: CLMocker): bool =
   # Generate a random value for the PrevRandao field
   var nextPrevRandao: Hash256
-  doAssert nimcrypto.randomBytes(nextPrevRandao.data) == 32
+  doAssert randomBytes(nextPrevRandao.data) == 32
 
   let timestamp = Quantity toUnix(cl.latestHeader.timestamp + 1.seconds)
   let payloadAttributes = PayloadAttributesV1(

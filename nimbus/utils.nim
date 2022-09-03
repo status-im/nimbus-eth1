@@ -1,8 +1,7 @@
 import
-  pkg/[nimcrypto],
-  eth/[trie, rlp, common, trie/db]
+  eth/[trie, rlp, common/eth_types_rlp, trie/db]
 
-export nimcrypto.`$`
+export eth_types_rlp
 
 proc calcRootHash[T](items: openArray[T]): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
@@ -16,9 +15,6 @@ template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
 template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
 
-func keccakHash*(value: openArray[byte]): Hash256 {.inline.} =
-  keccak256.digest value
-
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =
   result[0..19] = keccakHash(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
@@ -30,17 +26,13 @@ const ZERO_CONTRACTSALT* = default(ContractSalt)
 func generateSafeAddress*(address: EthAddress, salt: ContractSalt,
                           data: openArray[byte]): EthAddress =
   const prefix = [0xff.byte]
-  let dataHash = keccakHash(data)
-  var hashResult: Hash256
-
-  var ctx: keccak256
-  ctx.init()
-  ctx.update(prefix)
-  ctx.update(address)
-  ctx.update(salt.bytes)
-  ctx.update(dataHash.data)
-  ctx.finish hashResult.data
-  ctx.clear()
+  let
+    dataHash = keccakHash(data)
+    hashResult = withKeccakHash:
+      h.update(prefix)
+      h.update(address)
+      h.update(salt.bytes)
+      h.update(dataHash.data)
 
   result[0..19] = hashResult.data.toOpenArray(12, 31)
 

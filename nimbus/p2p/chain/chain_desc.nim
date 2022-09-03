@@ -18,6 +18,7 @@ import
   ../clique,
   ../validate,
   chronicles,
+  eth/common/chaindb,
   eth/[common, trie/db],
   stew/endians2,
   stint

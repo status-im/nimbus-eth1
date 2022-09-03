@@ -43,6 +43,6 @@ when isMainModule:
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
   assert(h == fromEvmc(Hash256, eh))
-  var s = cast[ContractSalt](BLANK_ROOT_HASH)
+  var s = cast[ContractSalt](EMPTY_ROOT_HASH)
   var es = toEvmc(s)
   assert(s == fromEvmc(ContractSalt, es))

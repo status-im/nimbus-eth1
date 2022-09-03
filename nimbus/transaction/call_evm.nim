@@ -9,7 +9,7 @@
 import
   std/[options, times],
   chronicles,
-  eth/[common/eth_types, trie/db],
+  eth/[common/eth_types_rlp, trie/db],
   stint,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
   ".."/[db/db_chain, db/accounts_cache, chain_config],

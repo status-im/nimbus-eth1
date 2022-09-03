@@ -147,7 +147,7 @@ proc stateDBMain*() =
       ac.setCode(addr2, code)
       ac.persist()
       check ac.getCode(addr2) == code
-      let key = contractHashKey(hexary.keccak(code))
+      let key = contractHashKey(keccakHash(code))
       check acDB.get(key.toOpenArray) == code
 
     test "accessList operations":

@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  asynctest, json, strformat, strutils, options, tables, os, typetraits, nimcrypto,
-  nimcrypto/hash, stew/byteutils, times,
+  asynctest, json, strformat, strutils, options, tables, os, typetraits,
+  nimcrypto/[hash], nimcrypto/utils as ncrutils, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, rpc_utils],
@@ -188,8 +188,8 @@ proc rpcMain*() =
 
       let data = "0x" & byteutils.toHex(NimbusName.toOpenArrayByte(0, NimbusName.len-1))
       let res = await client.web3_sha3(data.hexDataStr)
-      let rawdata = nimcrypto.fromHex(data[2 .. ^1])
-      let hash = "0x" & $keccak256.digest(rawdata)
+      let rawdata = ncrutils.fromHex(data[2 .. ^1])
+      let hash = "0x" & $keccakHash(rawdata)
       check hash == res
 
     test "net_version":

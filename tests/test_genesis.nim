@@ -1,6 +1,6 @@
 import
   std/[os],
-  unittest2, eth/common, nimcrypto/hash,
+  unittest2, eth/common,
   ../nimbus/[genesis, config, chain_config]
 
 const

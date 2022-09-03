@@ -21,7 +21,6 @@ import
   ./keyed_queue/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
-  nimcrypto,
   stew/[keyed_queue, results],
   stint
 
@@ -80,7 +79,7 @@ proc encodePreSealed(header: BlockHeader): seq[byte] =
 
 proc hashPreSealed(header: BlockHeader): Hash256 =
   ## Returns the hash of a block prior to it being sealed.
-  keccak256.digest header.encodePreSealed
+  keccakHash header.encodePreSealed
 
 
 proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =

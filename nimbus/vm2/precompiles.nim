@@ -12,7 +12,7 @@ import
   ./types, ../forks,
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
-  math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
+  math, nimcrypto/[ripemd, sha2], bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
 type
   PrecompileAddresses* = enum
@@ -138,7 +138,7 @@ proc sha256*(computation: Computation) =
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  computation.output = @(nimcrypto.sha256.digest(computation.msg.data).data)
+  computation.output = @(sha256.digest(computation.msg.data).data)
   #trace "SHA256 precompile", output = computation.output.toHex
 
 proc ripemd160*(computation: Computation) =
@@ -148,7 +148,7 @@ proc ripemd160*(computation: Computation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   computation.output.setLen(32)
-  computation.output[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
+  computation.output[12..31] = @(ripemd160.digest(computation.msg.data).data)
   #trace "RIPEMD160 precompile", output = computation.output.toHex
 
 proc identity*(computation: Computation) =

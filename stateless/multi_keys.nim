@@ -69,7 +69,7 @@ proc newMultiKeys*(keys: openArray[AccountKey]): MultikeysRef =
   for i, a in keys:
     result.keys[i] = KeyData(
       storageMode: false,
-      hash: keccak(a.address).data,
+      hash: keccakHash(a.address).data,
       address: a.address,
       codeTouched: a.codeTouched,
       storageKeys: a.storageKeys)
@@ -79,20 +79,20 @@ proc newMultiKeys*(keys: openArray[StorageSlot]): MultikeysRef =
   result = new Multikeys
   result.keys = newSeq[KeyData](keys.len)
   for i, a in keys:
-    result.keys[i] = KeyData(storageMode: true, hash: keccak(a).data, storageSlot: a)
+    result.keys[i] = KeyData(storageMode: true, hash: keccakHash(a).data, storageSlot: a)
   result.keys.sort(cmpHash)
 
 # never mix storageMode!
 proc add*(m: MultikeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultikeysRef(nil)) =
   m.keys.add KeyData(
     storageMode: false,
-    hash: keccak(address).data,
+    hash: keccakHash(address).data,
     address: address,
     codeTouched: codeTouched,
     storageKeys: storageKeys)
 
 proc add*(m: MultikeysRef, slot: StorageSlot) =
-  m.keys.add KeyData(storageMode: true, hash: keccak(slot).data, storageSlot: slot)
+  m.keys.add KeyData(storageMode: true, hash: keccakHash(slot).data, storageSlot: slot)
 
 proc sort*(m: MultikeysRef) =
   m.keys.sort(cmpHash)

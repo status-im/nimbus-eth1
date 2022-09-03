@@ -1,7 +1,7 @@
 import
   std/[strutils, math, tables, options, times],
   eth/[trie/db, keys, common, trie/hexary],
-  stew/[byteutils, results], nimcrypto, unittest2,
+  stew/[byteutils, results], unittest2,
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/p2p/chain,
   ../nimbus/p2p/clique/[clique_sealer, clique_desc],
@@ -125,7 +125,7 @@ proc runTxPoolCliqueTest*() =
                   Result[RawSignature, cstring] {.gcsafe.} =
     doAssert(signer == conf.engineSigner)
     let
-      data = keccak256.digest(msg)
+      data = keccakHash(msg)
       rawSign  = sign(signerKey, SkMessage(data.data)).toRaw
 
     ok(rawSign)

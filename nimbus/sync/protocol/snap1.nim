@@ -201,12 +201,12 @@ proc snapRead*(rlp: var Rlp; T: type Account; strict: static[bool] = false): T
   if rlp.blobLen != 0 or not rlp.isBlob:
     result.storageRoot = rlp.read(typeof(result.storageRoot))
     when strict:
-      if result.storageRoot == BLANK_ROOT_HASH:
+      if result.storageRoot == EMPTY_ROOT_HASH:
         raise newException(RlpTypeMismatch,
-          "BLANK_ROOT_HASH not encoded as empty string in Snap protocol")
+          "EMPTY_ROOT_HASH not encoded as empty string in Snap protocol")
   else:
     rlp.skipElem()
-    result.storageRoot = BLANK_ROOT_HASH
+    result.storageRoot = EMPTY_ROOT_HASH
   if rlp.blobLen != 0 or not rlp.isBlob:
     result.codeHash = rlp.read(typeof(result.codeHash))
     when strict:
@@ -225,7 +225,7 @@ proc snapAppend*(writer: var RlpWriter; account: Account) =
   writer.startList(4)
   writer.append(account.nonce)
   writer.append(account.balance)
-  if account.storageRoot == BLANK_ROOT_HASH:
+  if account.storageRoot == EMPTY_ROOT_HASH:
     writer.append("")
   else:
     writer.append(account.storageRoot)

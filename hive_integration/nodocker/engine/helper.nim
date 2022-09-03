@@ -1,9 +1,8 @@
 import
   std/[typetraits, json],
-  nimcrypto,
+  nimcrypto/sysrand,
   test_env,
   eth/[common,  rlp, keys],
-  stew/byteutils,
   json_rpc/[rpcclient],
   ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/transaction
@@ -253,7 +252,7 @@ proc generateInvalidPayload*(basePayload: ExecutableData,
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
     var randomHash: Hash256
-    doAssert nimcrypto.randomBytes(randomHash.data) == 32
+    doAssert randomBytes(randomHash.data) == 32
     customPayload.prevRandao = some(randomHash)
   of RemoveTransaction:
     let emptyTxs: seq[Transaction] = @[]

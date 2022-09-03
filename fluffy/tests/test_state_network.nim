@@ -85,7 +85,7 @@ procSuite "State Content Network":
       check:
         foundContent.isSome()
 
-      let hash = hexary.keccak(foundContent.get())
+      let hash = keccakHash(foundContent.get())
       check hash.data == key
 
     await node1.closeWait()
@@ -149,7 +149,7 @@ procSuite "State Content Network":
     check:
       foundContent.isSome()
 
-    let hash = hexary.keccak(foundContent.get())
+    let hash = keccakHash(foundContent.get())
 
     check hash.data == firstKey
 

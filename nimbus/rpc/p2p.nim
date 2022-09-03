@@ -12,7 +12,7 @@ import
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   json_serialization, web3/conversions, json_serialization/std/options,
   eth/common/eth_types_json_serialization,
-  eth/[common, keys, rlp, p2p], nimcrypto,
+  eth/[common, keys, rlp, p2p],
   ".."/[transaction, vm_state, constants, utils, context],
   ../db/[db_chain, state_db],
   rpc_types, rpc_utils,
@@ -251,7 +251,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       rlpTx    = rlp.encode(signedTx)
 
     txPool.add(signedTx)
-    result = keccak256.digest(rlpTx).ethHashStr
+    result = keccakHash(rlpTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -264,7 +264,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       signedTx = rlp.decode(txBytes, Transaction)
 
     txPool.add(signedTx)
-    result = keccak256.digest(txBytes).ethHashStr
+    result = keccakHash(txBytes).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

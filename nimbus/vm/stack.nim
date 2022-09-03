@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, macros, eth/common, nimcrypto,
+  chronicles, strformat, strutils, sequtils, macros, eth/common,
   ../errors, ../validation
 
 logScope:

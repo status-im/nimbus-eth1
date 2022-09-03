@@ -1,7 +1,7 @@
 {.used.}
 
 import
-  eth/common, nimcrypto/hash
+  eth/common/eth_types
 
 proc default(t: typedesc): t = discard
 

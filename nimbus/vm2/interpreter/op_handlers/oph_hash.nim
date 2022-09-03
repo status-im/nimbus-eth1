@@ -24,7 +24,6 @@ import
   ../utils/utils_numeric,
   ./oph_defs,
   eth/common,
-  nimcrypto,
   stint
 
 # ------------------------------------------------------------------------------
@@ -51,7 +50,7 @@ const
       k.cpt.stack.push(EMPTY_SHA3)
     else:
       k.cpt.stack.push:
-        keccak256.digest k.cpt.memory.bytes.toOpenArray(pos, endRange)
+        keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

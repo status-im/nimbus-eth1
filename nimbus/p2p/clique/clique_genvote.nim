@@ -132,8 +132,8 @@ proc cliqueGenvote*(
     ommersHash:  EMPTY_UNCLE_HASH,
     stateRoot:   parent.stateRoot,
     timestamp:   parent.timestamp + timeElapsed,
-    txRoot:      BLANK_ROOT_HASH,
-    receiptRoot: BLANK_ROOT_HASH,
+    txRoot:      EMPTY_ROOT_HASH,
+    receiptRoot: EMPTY_ROOT_HASH,
     blockNumber: parent.blockNumber + 1,
     gasLimit:    parent.gasLimit,
     #

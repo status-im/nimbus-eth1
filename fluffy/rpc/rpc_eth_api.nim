@@ -9,7 +9,7 @@
 
 import
   std/[times, sequtils],
-  json_rpc/[rpcproxy, rpcserver], nimcrypto/[hash, keccak], stew/byteutils,
+  json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   web3/conversions, # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   ../../nimbus/rpc/[rpc_types, hexstrings, filters],
@@ -101,7 +101,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add %(keccak256.digest(rlp.encode(tx)))
+        blockObject.transactions.add %(keccakHash(rlp.encode(tx)))
 
   blockObject
 

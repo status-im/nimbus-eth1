@@ -10,7 +10,7 @@
 
 import
   std/[math, strutils, hashes],
-  eth/common/eth_types,
+  eth/common/eth_types_rlp,
   stew/byteutils
 
 {.push raises: [Defect].}

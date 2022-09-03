@@ -9,7 +9,7 @@
 
 import
   json_serialization, json_serialization/std/tables,
-  stew/[byteutils, io2, results], nimcrypto/keccak, chronos, chronicles,
+  stew/[byteutils, io2, results], chronos, chronicles,
   eth/[rlp, common/eth_types],
   # TODO: `NetworkId` should not be in these private types
   eth/p2p/private/p2p_types,
@@ -90,7 +90,7 @@ func readBlockData(
   try:
     # If wanted the hash for the corresponding header can be verified
     if verify:
-      if keccak256.digest(blockData.header.hexToSeqByte()) != blockHash:
+      if keccakHash(blockData.header.hexToSeqByte()) != blockHash:
         return err("Data is not matching hash, number " & $blockData.number)
 
     block:

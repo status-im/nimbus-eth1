@@ -1,6 +1,6 @@
 import
   json, strutils, sets, hashes,
-  chronicles, nimcrypto, eth/common, stint,
+  chronicles, eth/common, stint,
   ./types, ./memory, ./stack, ../db/accounts_cache,
   eth/trie/hexary,
   ./interpreter/op_codes

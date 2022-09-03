@@ -19,7 +19,6 @@ import
   ./pow_cache,
   eth/common,
   ethash,
-  nimcrypto,
   stew/keyed_queue
 
 {.push raises: [Defect].}

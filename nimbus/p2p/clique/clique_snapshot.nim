@@ -22,7 +22,6 @@ import
   std/[sequtils, strutils],
   chronicles,
   eth/[common, keys],
-  nimcrypto,
   stew/[keyed_queue, results],
   stint,
   "../.."/[constants, db/db_chain, utils/prettify],
@@ -69,7 +68,7 @@ template say(d: var LocalSnaps; v: varargs[untyped]): untyped =
   # d.c.cfg.say v
 
 proc pp(a: Hash256): string =
-  if a == BLANK_ROOT_HASH:
+  if a == EMPTY_ROOT_HASH:
     "*blank-root*"
   elif a == EMPTY_SHA3:
     "*empty-sha3*"
