@@ -67,15 +67,20 @@ method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader,
     result = c.db.getBlockHeader(h.blockNumber - offset, output)
 
 
-method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
-  ## Always `nil`
-  result = nil
+method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef {.gcsafe, raises: [Defect,RlpError].} =
+  result = BlockBodyRef()
+  if not c.db.getBlockBody(blockHash, result[]):
+    result = nil
 
 
 method getForkId*(c: Chain, n: BlockNumber): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   let fork = c.db.config.toChainFork(n)
   c.forkIds[fork]
+
+
+method getTotalDifficulty*(c: Chain): DifficultyInt {.gcsafe, raises: [Defect,RlpError].} =
+  c.db.headTotalDifficulty()
 
 # ------------------------------------------------------------------------------
 # End
