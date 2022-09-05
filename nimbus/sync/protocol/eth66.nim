@@ -131,13 +131,14 @@ p2pProtocol eth66(version = ethVersion,
       network = peer.network
       chain = network.chain
       bestBlock = chain.getBestBlockHeader
+      totalDifficulty = chain.getTotalDifficulty
       chainForkId = chain.getForkId(bestBlock.blockNumber)
       forkId = ForkId(
         forkHash: chainForkId.crc.toBytesBE,
         forkNext: chainForkId.nextFork.toBlockNumber)
 
     trace trEthSendSending & "Status (0x00)", peer,
-      td=bestBlock.difficulty,
+      td=totalDifficulty,
       bestHash=bestBlock.blockHash.toHex,
       networkId=network.networkId,
       genesis=chain.genesisHash.toHex,
@@ -145,7 +146,7 @@ p2pProtocol eth66(version = ethVersion,
 
     let m = await peer.status(ethVersion,
                               network.networkId,
-                              bestBlock.difficulty,
+                              totalDifficulty,
                               bestBlock.blockHash,
                               chain.genesisHash,
                               forkId,
