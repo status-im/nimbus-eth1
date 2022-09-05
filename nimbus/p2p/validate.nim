@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[sequtils, sets, tables, times],
+  std/[sequtils, sets, times],
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../transaction,
@@ -20,7 +20,6 @@ import
   chronicles,
   eth/[common, rlp],
   nimcrypto/utils,
-  options,
   stew/[objects, results, endians2]
 
 from stew/byteutils
