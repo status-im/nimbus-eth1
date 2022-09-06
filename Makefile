@@ -227,6 +227,10 @@ utp-test: | build deps
 fluffy-test-portal-testnet: | build deps
 	$(ENV_SCRIPT) nim test_portal_testnet $(NIM_PARAMS) nimbus.nims
 
+# builds and runs the lc proxy test suite
+lc-proxy-test: | build deps
+	$(ENV_SCRIPT) nim testlcproxy $(NIM_PARAMS) nimbus.nims
+
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,db/test_kvstore_rocksdb,test_rpc,all_fluffy_tests,portalcli,*.dSYM}

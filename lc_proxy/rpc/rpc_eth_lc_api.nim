@@ -1,4 +1,4 @@
-# beacon_chain
+# ligh client proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -14,7 +14,8 @@ import
   web3,
   web3/ethhexstrings,
   beacon_chain/eth1/eth1_monitor,
-  beacon_chain/spec/forks
+  beacon_chain/spec/forks,
+  ../validate_proof
 
 export forks
 
@@ -59,12 +60,25 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     # `latest` to actual block number as `latest` on proxy and on data provider
     # can mean different blocks and ultimatly piece received piece of state
     # must by validated against correct state root
-    let blockNumber = payload.get.blockNumber.uint64
+    let
+      executionPayload = payload.get
+      blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding get_Balance", executionBn = blockNumber
 
-    # TODO this could be realised by eth_getProof as it return also balance
-    # of the account
-    let b = await lcProxy.client.eth_getBalance(address, blockId(blockNumber))
+    let proof = await lcProxy.client.eth_getProof(address, @[], blockId(blockNumber))
 
-    return encodeQuantity(b)
+    let proofValid = isAccountProofValid(
+      executionPayload.stateRoot,
+      proof.address,
+      proof.balance,
+      proof.nonce,
+      proof.codeHash,
+      proof.storageHash,
+      proof.accountProof
+    )
+
+    if proofValid:
+      return encodeQuantity(proof.balance)
+    else:
+      raise newException(ValueError, "Data provided by data provider server is invalid")
