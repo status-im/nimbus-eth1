@@ -1,4 +1,4 @@
-# ligh client proxy
+# light client proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -17,9 +17,7 @@ import
   web3/ethtypes
 
 func toMDigest(arg: FixedBytes[32]): MDigest[256] =
-  var ret: MDigest[256]
-  ret.data = distinctBase(arg)
-  return ret
+  MDigest[256](data: distinctBase(arg))
 
 proc isAccountProofValid*(
     stateRoot: FixedBytes[32],
