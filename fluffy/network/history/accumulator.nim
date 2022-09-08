@@ -109,7 +109,15 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 ## against the Accumulator and the header proofs.
 
 func inCurrentEpoch*(blockNumber: uint64, a: Accumulator): bool =
-  blockNumber > uint64(a.historicalEpochs.len() * epochSize) - 1
+  # Note:
+  # Block numbers start at 0, so historical epochs are set as:
+  # 0 -> 8191 -> len = 1 * 8192
+  # 8192 -> 16383 -> len = 2 * 8192
+  # ...
+  # A block number is in the current epoch if it is bigger than the last block
+  # number in the last historical epoch. Which is the same as being equal or
+  # bigger than current length of historical epochs * epochSize.
+  blockNumber >= uint64(a.historicalEpochs.len() * epochSize)
 
 func inCurrentEpoch*(header: BlockHeader, a: Accumulator): bool =
   let blockNumber = header.blockNumber.truncate(uint64)

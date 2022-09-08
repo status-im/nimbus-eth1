@@ -63,7 +63,7 @@ suite "Header Accumulator":
 
       check accumulator.hash_tree_root().data.toHex() == hashTreeRoots[i]
 
-  test "Header Accumulator Proofs":
+  test "Header Accumulator Canonical Verification":
     const
       # Amount of headers to be created and added to the accumulator
       amount = 25000
@@ -117,7 +117,54 @@ suite "Header Accumulator":
 
         check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
 
-  test "Header Accumulator header hash for blocknumber":
+  test "Header Accumulator Canonical Verification - No Historical Epochs":
+    const
+      # Amount of headers to be created and added to the accumulator
+      amount = epochSize
+      # Headers to test verification for
+      headersToTest = [
+        0,
+        epochSize - 1]
+
+    var headers: seq[BlockHeader]
+    for i in 0..<amount:
+      # Note: These test headers will not be a blockchain, as the parent hashes
+      # are not properly filled in. That's fine however for this test, as that
+      # is not the way the headers are verified with the accumulator.
+      headers.add(BlockHeader(
+        blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+
+    let
+      accumulator = buildAccumulator(headers)
+      epochAccumulators = buildAccumulatorData(headers)
+
+    block: # Test valid headers
+      for i in headersToTest:
+        let header = headers[i]
+        let proofOpt =
+          if header.inCurrentEpoch(accumulator):
+            none(seq[Digest])
+          else:
+            let proof = buildProof(accumulator, epochAccumulators, header)
+            check proof.isOk()
+
+            some(proof.get())
+
+        check verifyHeader(accumulator, header, proofOpt).isOk()
+
+    block: # Test some invalid headers
+      # Test a header with block number > than latest in accumulator
+      let header = BlockHeader(blockNumber: (amount).stuint(256))
+      check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
+
+      # Test different block headers by altering the difficulty
+      for i in headersToTest:
+        let header = BlockHeader(
+          blockNumber: i.stuint(256), difficulty: 2.stuint(256))
+
+        check verifyHeader(accumulator, header, none(seq[Digest])).isErr()
+
+  test "Header Accumulator Blocknumber to Header Hash":
     var acc = Accumulator.init()
 
     let
