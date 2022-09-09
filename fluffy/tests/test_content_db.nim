@@ -8,7 +8,6 @@
 {.used.}
 
 import
-  std/algorithm,
   unittest2, stint,
   eth/keys,
   ../network/state/state_content,
@@ -81,10 +80,10 @@ suite "Content Database":
 
     db.del(u256(2))
     db.del(u256(1))
-    
+
     let realSize1 = db.realSize()
     let size5 = db.size()
-    
+
     check:
       size4 == size5
       # real size will be smaller as after del, there are free pages in sqlite
