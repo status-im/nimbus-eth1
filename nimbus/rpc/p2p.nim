@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  times, tables,
+  std/[times, tables, typetraits],
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   json_serialization, web3/conversions, json_serialization/std/options,
   eth/common/eth_types_json_serialization,
@@ -30,7 +30,9 @@ import
       type cast to avoid extra processing.
 ]#
 
-proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPool: TxPoolRef, server: RpcServer) =
+proc setupEthRpc*(
+    node: EthereumNode, ctx: EthContext, chain: BaseChainDB,
+    txPool: TxPoolRef, server: RpcServer) =
 
   proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
@@ -52,6 +54,9 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB, txPoo
       if n.name == "eth":
         return some($n.version)
     return none(string)
+
+  server.rpc("eth_chainId") do() -> HexQuantityStr:
+    return encodeQuantity(distinctBase(chain.config.chainId))
 
   server.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.

@@ -216,6 +216,10 @@ proc rpcMain*() =
       # obvious.  Just change this number.
       check res == $ethVersion
 
+    test "eth_chainId":
+      let res = await client.eth_chainId()
+      check res == encodeQuantity(distinctBase(chain.config.chainId))
+
     test "eth_syncing":
       let res = await client.eth_syncing()
       if res.kind == JBool:

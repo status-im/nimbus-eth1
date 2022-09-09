@@ -368,7 +368,7 @@ proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   elif number >= c.homesteadBlock: FkHomestead
   else: FkFrontier
 
-proc chainConfigForNetwork(id: NetworkId): ChainConfig =
+proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 

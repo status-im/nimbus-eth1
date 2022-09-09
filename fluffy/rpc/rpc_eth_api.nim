@@ -8,12 +8,12 @@
 {.push raises: [Defect].}
 
 import
-  std/[times, sequtils],
+  std/[times, sequtils, typetraits],
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   web3/conversions, # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   ../../nimbus/rpc/[rpc_types, hexstrings, filters],
-  ../../nimbus/transaction,
+  ../../nimbus/[transaction, chain_config],
   ../network/history/[history_network, history_content]
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
@@ -116,7 +116,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_call")
 
-  rpcServerWithProxy.registerProxyMethod("eth_chainId")
+  # rpcServerWithProxy.registerProxyMethod("eth_chainId")
 
   rpcServerWithProxy.registerProxyMethod("eth_estimateGas")
 
@@ -188,6 +188,10 @@ proc installEthApiHandlers*(
 
   # Supported API through the Portal Network
 
+  rpcServerWithProxy.rpc("eth_chainId") do() -> HexQuantityStr:
+    # The Portal Network can only support MainNet at the moment
+    return encodeQuantity(distinctBase(MainNet.ChainId))
+
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
       data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by hash.
@@ -207,17 +211,18 @@ proc installEthApiHandlers*(
       let (header, body) = blockRes.unsafeGet()
       return some(BlockObject.init(header, body))
 
-  # TODO add test to local testnet, it requires addin proper handling accumulators
-  # in testnet
-  rpcServerWithProxy.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
-    # TODO for now support only numeric queries, as it is not obvious how to retrieve
-    # pending or even latest block.
+  # TODO: add test to local testnet, it requires activating accumulator
+  # in testnet script
+  rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
+      quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
+    # TODO: for now support only numeric queries, as it is not obvious how to
+    # retrieve pending or even latest block.
     if not isValidHexQuantity(quantityTag):
       raise newException(ValueError, "Provided tag should be valid hex number")
 
-    let blockNum = fromHex(UInt256, quantityTag)
-
-    let blockResult = await historyNetwork.getBlock(1'u16, blockNum)
+    let
+      blockNumber = fromHex(UInt256, quantityTag)
+      blockResult = await historyNetwork.getBlock(1'u16, blockNumber)
 
     if blockResult.isOk():
       let maybeBlock = blockResult.get()
