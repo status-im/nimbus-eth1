@@ -27,7 +27,7 @@ proc isValidProof(
     rootHash: KeccakHash,
     key, value: seq[byte]): bool =
   try:
-    # TODO Investigate if this handle proof of non-existence.
+    # TODO: Investigate if this handles proof of non-existence.
     # Probably not as bool is not expressive enough to say if proof is valid, but
     # key actually does not exists in MPT
     return isValidBranch(branch, rootHash, key, value)
@@ -123,7 +123,7 @@ proc getStorageData*(
       return ok(u256(0))
 
     if len(proof.storageProof) != 1:
-      return err("no storage proof for reqested slot")
+      return err("no storage proof for requested slot")
 
     let sproof = proof.storageProof[0]
 

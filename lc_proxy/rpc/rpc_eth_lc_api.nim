@@ -44,11 +44,12 @@ template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: strin
     raise newException(ValueError, "Syncing")
 
   if quantityTag != "latest":
-    # TODO for now we support only latest block, as its semanticly most streight
-    # forward i.e it is last received and valid ExecutionPayloadV1.
-    # Ultimatly we could keep track of n last valid payload and support number
-    # queries for this set of blocks
-    # `Pending` coud be mapped to some optimisc header with block fetched on demand
+    # TODO: for now we support only latest block, as its semantically most straight
+    # forward, i.e it is last received and a valid ExecutionPayloadV1.
+    # Ultimately we could keep track of n last valid payloads and support number
+    # queries for this set of blocks.
+    # `Pending` could be mapped to some optimistic header with the block
+    # fetched on demand.
     raise newException(ValueError, "Only latest block is supported")
 
 proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
