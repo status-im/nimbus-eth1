@@ -12,7 +12,7 @@
 import
   unittest2, stint, stew/byteutils,
   eth/common/eth_types_rlp,
-  ../populate_db,
+  ../data/history_data_parser,
   ../network/history/[history_content, accumulator]
 
 func buildProof(

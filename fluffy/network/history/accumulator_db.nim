@@ -13,7 +13,7 @@ import
   eth/common/eth_types,
   ssz_serialization, ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
-  ../../populate_db,
+  ../../data/history_data_seeding,
   "."/[history_content, accumulator]
 
 type

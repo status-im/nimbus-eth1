@@ -14,7 +14,8 @@ import
   ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
-  ".."/[populate_db, seed_db]
+  ../data/[history_data_seeding, history_data_parser],
+  ../seed_db
 
 type
   FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
