@@ -14,7 +14,7 @@ import
   stew/[byteutils, results],
   eth/[common/eth_types, rlp],
   ../common/common_types,
-  ../populate_db,
+  ../data/history_data_parser,
   ../network/history/history_network
 
 const

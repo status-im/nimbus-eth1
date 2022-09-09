@@ -15,8 +15,7 @@ import
   ../../content_db,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[history_content, accumulator],
-  ../../populate_db
+  "."/[history_content, accumulator]
 
 logScope:
   topics = "portal_hist"

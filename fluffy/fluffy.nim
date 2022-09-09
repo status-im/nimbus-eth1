@@ -20,7 +20,8 @@ import
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/wire/[portal_stream, portal_protocol_config],
-  "."/[content_db, populate_db]
+  ./data/[history_data_seeding, history_data_parser],
+  ./content_db
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
