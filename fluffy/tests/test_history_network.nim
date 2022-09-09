@@ -72,17 +72,18 @@ proc headersToContentInfo(headers: seq[BlockHeader]): seq[ContentInfo] =
 
 procSuite "History Content Network":
   let rng = newRng()
+
   asyncTest "Get Block by Number":
+    # enough headers for one historical epoch in the master accumulator
+    const lastBlockNumber = 9000
+
     let
       historyNode1 = newHistoryNode(rng, 20302)
       historyNode2 = newHistoryNode(rng, 20303)
-      # enough headers at least two epochs in the master accumulator
-      numHeaders = 9000
 
-    var headers: seq[BlockHeader] = createEmptyHeaders(0, numHeaders)
-
-    let masterAccumulator = buildAccumulator(headers)
-    let epochAccumulators = buildAccumulatorData(headers)
+      headers = createEmptyHeaders(0, lastBlockNumber)
+      masterAccumulator = buildAccumulator(headers)
+      epochAccumulators = buildAccumulatorData(headers)
 
     # Note:
     # Both nodes start with the same master accumulator, but only node 2 has all
@@ -104,8 +105,8 @@ procSuite "History Content Network":
 
     for (contentKey, epochAccumulator) in epochAccumulators:
       let contentId = toContentId(contentKey)
-      let bytes = SSZ.encode(epochAccumulator)
-      historyNode2.portalProtocol().storeContent(contentId, bytes)
+      historyNode2.portalProtocol().storeContent(
+        contentId, SSZ.encode(epochAccumulator))
 
     check:
       historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
@@ -114,7 +115,7 @@ procSuite "History Content Network":
       (await historyNode1.portalProtocol().ping(historyNode2.localNode())).isOk()
       (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
 
-    for i in 0..numHeaders:
+    for i in 0..lastBlockNumber:
       let blockResponse = await historyNode1.historyNetwork.getBlock(1'u16, u256(i))
 
       check blockResponse.isOk()
@@ -169,10 +170,8 @@ procSuite "History Content Network":
       contentInfos
     )
 
-    check:
-      # failing due timeout, as remote side won't respond to too large discv5
-      # packets
-      offerResultTooMany.isErr()
+    # failing due timeout, as remote side must drop too large discv5 packets
+    check offerResultTooMany.isErr()
 
     for ci in contentInfos:
       let id = toContentId(ci.contentKey)
@@ -186,7 +185,7 @@ procSuite "History Content Network":
       correctInfos
     )
 
-    check: offerResultCorrect.isOk()
+    check offerResultCorrect.isOk()
 
     for i, ci in contentInfos:
       let id = toContentId(ci.contentKey)
@@ -220,10 +219,10 @@ procSuite "History Content Network":
 
     # Need to store the epochAccumulators, because else the headers can't be
     # verified if being part of the canonical chain currently
-    for (key, accumulator) in epochAccumulators:
-      let contentId = toContentId(key)
+    for (contentKey, epochAccumulator) in epochAccumulators:
+      let contentId = toContentId(contentKey)
       historyNode1.portalProtocol.storeContent(
-        contentId, SSZ.encode(accumulator))
+        contentId, SSZ.encode(epochAccumulator))
 
     # Need to run start to get the processContentLoop running
     historyNode1.start()
