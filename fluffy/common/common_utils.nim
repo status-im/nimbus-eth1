@@ -66,7 +66,7 @@ proc getPersistentNetKey*(
 
     let netKeyInHex = readResult.get()
     if netKeyInHex.len() == 64:
-      let netKey = PrivateKey.fromHex(netkeyInHex)
+      let netKey = PrivateKey.fromHex(netKeyInHex)
       if netKey.isOk():
         info "Network key was successfully read"
         netKey.get()

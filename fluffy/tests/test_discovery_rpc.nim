@@ -38,10 +38,10 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
   await client.connect(localSrvAddress, Port(localSrvPort), false)
   return TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client)
 
-proc stop(t: TestCase) {.async.} =
-  await t.server.stop()
-  await t.server.closeWait()
-  await t.localDiscovery.closeWait()
+proc stop(testCase: TestCase) {.async.} =
+  await testCase.server.stop()
+  await testCase.server.closeWait()
+  await testCase.localDiscovery.closeWait()
 
 procSuite "Discovery Rpc":
   let rng = newRng()

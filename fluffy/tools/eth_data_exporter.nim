@@ -214,10 +214,10 @@ proc createAndOpenFile(dataDir: string, fileName: string): OutputStreamHandle =
   # Creates directory and file, if file already exists
   # program is aborted with info to user, to avoid losing data
   let fileName: string =
-    if not filename.endsWith(".json"):
-      filename & ".json"
+    if not fileName.endsWith(".json"):
+      fileName & ".json"
     else:
-      filename
+      fileName
 
   let filePath = dataDir / fileName
 
@@ -285,7 +285,7 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
       quit 1
 
 proc writeBlocksToDb(config: ExporterConf, client: RpcClient) =
-  let db = SeedDb.new(distinctBase(config.dataDir), config.filename)
+  let db = SeedDb.new(distinctBase(config.dataDir), config.fileName)
 
   defer:
     db.close()

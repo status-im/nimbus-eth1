@@ -218,7 +218,7 @@ proc validateReceiptsBytes*(
 
 ## ContentDB helper calls for specific history network types
 
-proc get(db: ContentDB, T: type BlockHeader, contentId: ContentID): Option[T] =
+proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Option[T] =
   let contentFromDB = db.get(contentId)
   if contentFromDB.isSome():
     let res = decodeRlp(contentFromDB.get(), T)
@@ -229,7 +229,7 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentID): Option[T] =
   else:
     none(T)
 
-proc get(db: ContentDB, T: type BlockBody, contentId: ContentID): Option[T] =
+proc get(db: ContentDB, T: type BlockBody, contentId: ContentId): Option[T] =
   let contentFromDB = db.getSszDecoded(contentId, BlockBodySSZ)
   if contentFromDB.isSome():
     let res = T.fromPortalBlockBody(contentFromDB.get())
@@ -240,7 +240,7 @@ proc get(db: ContentDB, T: type BlockBody, contentId: ContentID): Option[T] =
   else:
     none(T)
 
-proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentID): Option[T] =
+proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Option[T] =
   let contentFromDB = db.getSszDecoded(contentId, ReceiptsSSZ)
   if contentFromDB.isSome():
     let res = T.fromReceipts(contentFromDB.get())
@@ -252,7 +252,7 @@ proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentID): Option[T] =
     none(T)
 
 proc get(
-    db: ContentDB, T: type EpochAccumulator, contentId: ContentID): Option[T] =
+    db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Option[T] =
   db.getSszDecoded(contentId, T)
 
 proc getAccumulator(db: ContentDB): Option[Accumulator] =
@@ -503,7 +503,7 @@ proc getEpochAccumulator(
   return none(EpochAccumulator)
 
 proc getBlock*(
-    n: HistoryNetwork, chainId: uint16, bn: Uint256):
+    n: HistoryNetwork, chainId: uint16, bn: UInt256):
     Future[Result[Option[Block], string]] {.async.} =
 
   # TODO for now checking accumulator only in db, we could also ask our

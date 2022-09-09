@@ -231,7 +231,7 @@ func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
 proc inRange(
   p: PortalProtocol,
   nodeId: NodeId,
-  nodeRadius: Uint256,
+  nodeRadius: UInt256,
   contentId: ContentId): bool =
   let distance = p.routingTable.distance(nodeId, contentId)
   distance <= nodeRadius
@@ -313,7 +313,7 @@ proc handleFindContent(
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-  let (contentIdOpt, contentOpt) = p.dbGet(p.contentDb, fc.contentKey)
+  let (contentIdOpt, contentOpt) = p.dbGet(p.contentDB, fc.contentKey)
   if contentOpt.isSome():
     let content = contentOpt.get()
     if content.len <= maxPayloadSize:
@@ -406,10 +406,10 @@ proc messageHandler(protocol: TalkProtocol, request: seq[byte],
     case message.kind
     of MessageKind.ping:
       p.handlePing(message.ping, srcId)
-    of MessageKind.findnodes:
+    of MessageKind.findNodes:
       p.handleFindNodes(message.findNodes)
-    of MessageKind.findcontent:
-      p.handleFindContent(message.findcontent, srcId)
+    of MessageKind.findContent:
+      p.handleFindContent(message.findContent, srcId)
     of MessageKind.offer:
       p.handleOffer(message.offer, srcId)
     else:
@@ -489,7 +489,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     labelValues = [$p.protocolId, $messageKind(Request)])
 
   let talkresp =
-    await talkreq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
+    await talkReq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
 
   # Note: Failure of `decodeMessage` might also simply mean that the peer is
   # not supporting the specific talk protocol, as according to specification
@@ -560,7 +560,7 @@ proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
   let pongResponse = await p.pingImpl(dst)
 
-  if pongResponse.isOK():
+  if pongResponse.isOk():
     let pong = pongResponse.get()
     # TODO: This should become custom per Portal Network
     let customPayloadDecoded =
@@ -1282,7 +1282,7 @@ proc populateTable(p: PortalProtocol) {.async.} =
 proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
   let pong = await p.ping(n)
 
-  if pong.isOK():
+  if pong.isOk():
     let res = pong.get()
     if res.enrSeq > n.record.seqNum:
       # Request new ENR

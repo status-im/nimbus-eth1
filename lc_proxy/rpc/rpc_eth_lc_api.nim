@@ -28,7 +28,7 @@ template encodeQuantity(value: UInt256): HexQuantityStr =
 
 
 template encodeHexData(value: UInt256): HexDataStr =
-  hexDataStr("0x" & toBytesBe(value).toHex)
+  hexDataStr("0x" & toBytesBE(value).toHex)
 
 template encodeQuantity(value: Quantity): HexQuantityStr =
   hexQuantityStr(encodeQuantity(value.uint64))

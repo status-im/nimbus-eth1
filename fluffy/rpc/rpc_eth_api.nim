@@ -83,7 +83,7 @@ func init*(
     totalDifficulty: encodeQuantity(UInt256.low()),
     gasLimit: encodeQuantity(header.gasLimit.uint64),
     gasUsed: encodeQuantity(header.gasUsed.uint64),
-    timestamp: encodeQuantity(header.timeStamp.toUnix.uint64)
+    timestamp: encodeQuantity(header.timestamp.toUnix.uint64)
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
@@ -265,11 +265,11 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.rpc("eth_getLogs") do(
       filterOptions: FilterOptions) -> seq[FilterLog]:
-    if filterOptions.blockhash.isNone():
+    if filterOptions.blockHash.isNone():
       # Currently only queries by blockhash are supported.
       # To support range queries the Indicies network is required.
       raise newException(ValueError,
-        "Unsupported query: Only `blockhash` queries are currently supported")
+        "Unsupported query: Only `blockHash` queries are currently supported")
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 

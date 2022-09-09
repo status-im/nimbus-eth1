@@ -46,6 +46,6 @@ suite "Header Gossip ContentKey Encodings":
         contentKeyDecoded.contentType == contentKey.contentType
         contentKeyDecoded.newBlockHeaderKey == contentKey.newBlockHeaderKey
 
-        toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+        toContentId(contentKey) == parse(contentId, StUint[256], 10)
         # In stint this does BE hex string
         toContentId(contentKey).toHex() == contentIdHexBE

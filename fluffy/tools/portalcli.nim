@@ -32,8 +32,8 @@ type
   PortalCmd* = enum
     noCommand
     ping
-    findnodes
-    findcontent
+    findNodes
+    findContent
 
   PortalCliConf* = object
     logLevel* {.
@@ -124,7 +124,7 @@ type
         argument
         desc: "ENR URI of the node to a send ping message"
         name: "node" .}: Node
-    of findnodes:
+    of findNodes:
       distance* {.
         defaultValue: 255
         desc: "Distance parameter for the findNodes message"
@@ -135,7 +135,7 @@ type
         argument
         desc: "ENR URI of the node to send a findNodes message"
         name: "node" .}: Node
-    of findcontent:
+    of findContent:
       findContentTarget* {.
         argument
         desc: "ENR URI of the node to send a findContent message"
@@ -255,7 +255,7 @@ proc run(config: PortalCliConf) =
       echo pong.get()
     else:
       echo pong.error
-  of findnodes:
+  of findNodes:
     let distances = @[config.distance]
     let nodes = waitFor portal.findNodes(config.findNodesTarget, distances)
 
@@ -264,7 +264,7 @@ proc run(config: PortalCliConf) =
         echo $node.record & " - " & shortLog(node)
     else:
       echo nodes.error
-  of findcontent:
+  of findContent:
     proc random(T: type UInt256, rng: var HmacDrbgContext): T =
       rng.generate(T)
 
@@ -282,7 +282,7 @@ proc run(config: PortalCliConf) =
   of noCommand:
     d.start()
     portal.start()
-    waitfor(discover(d))
+    waitFor(discover(d))
 
 when isMainModule:
   let config = PortalCliConf.load()

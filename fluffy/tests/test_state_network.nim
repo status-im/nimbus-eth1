@@ -23,7 +23,7 @@ proc genesisToTrie(filePath: string): HexaryTrie =
     quit(1)
 
   var chainDB = newBaseChainDB(
-    newMemoryDb(),
+    newMemoryDB(),
     pruneTrie = false,
     CustomNet,
     cn

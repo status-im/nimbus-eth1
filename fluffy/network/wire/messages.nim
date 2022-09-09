@@ -39,9 +39,9 @@ type
   MessageKind* = enum
     ping = 0x00
     pong = 0x01
-    findnodes = 0x02
+    findNodes = 0x02
     nodes = 0x03
-    findcontent = 0x04
+    findContent = 0x04
     content = 0x05
     offer = 0x06
     accept = 0x07
@@ -92,12 +92,12 @@ type
       ping*: PingMessage
     of pong:
       pong*: PongMessage
-    of findnodes:
-      findnodes*: FindNodesMessage
+    of findNodes:
+      findNodes*: FindNodesMessage
     of nodes:
       nodes*: NodesMessage
-    of findcontent:
-      findcontent*: FindContentMessage
+    of findContent:
+      findContent*: FindContentMessage
     of content:
       content*: ContentMessage
     of offer:
@@ -114,9 +114,9 @@ type
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
   elif T is PongMessage: pong
-  elif T is FindNodesMessage: findnodes
+  elif T is FindNodesMessage: findNodes
   elif T is NodesMessage: nodes
-  elif T is FindContentMessage: findcontent
+  elif T is FindContentMessage: findContent
   elif T is ContentMessage: content
   elif T is OfferMessage: offer
   elif T is AcceptMessage: accept
@@ -136,9 +136,9 @@ func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   # or we just use SSZ.encode(Message) directly
   when T is PingMessage: SSZ.encode(Message(kind: ping, ping: m))
   elif T is PongMessage: SSZ.encode(Message(kind: pong, pong: m))
-  elif T is FindNodesMessage: SSZ.encode(Message(kind: findnodes, findnodes: m))
+  elif T is FindNodesMessage: SSZ.encode(Message(kind: findNodes, findNodes: m))
   elif T is NodesMessage: SSZ.encode(Message(kind: nodes, nodes: m))
-  elif T is FindContentMessage: SSZ.encode(Message(kind: findcontent, findcontent: m))
+  elif T is FindContentMessage: SSZ.encode(Message(kind: findContent, findContent: m))
   elif T is ContentMessage: SSZ.encode(Message(kind: content, content: m))
   elif T is OfferMessage: SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage: SSZ.encode(Message(kind: accept, accept: m))
