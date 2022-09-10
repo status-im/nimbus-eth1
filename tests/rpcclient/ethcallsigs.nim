@@ -19,6 +19,7 @@ proc net_version(): string
 proc net_peerCount(): HexQuantityStr
 proc net_listening(): bool
 proc eth_protocolVersion(): string
+proc eth_chainId(): HexQuantityStr
 proc eth_syncing(): JsonNode
 proc eth_coinbase(): EthAddressStr
 proc eth_mining(): bool
