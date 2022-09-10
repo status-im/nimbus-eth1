@@ -44,7 +44,7 @@ proc stop(hn: HistoryNode) {.async.} =
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
-  return hn.historyNetwork.contentDb.get(contentId).isSome()
+  return hn.historyNetwork.contentDB.get(contentId).isSome()
 
 proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
   var headers: seq[BlockHeader]

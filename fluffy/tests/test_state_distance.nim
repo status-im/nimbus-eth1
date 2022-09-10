@@ -27,7 +27,7 @@ suite "State network custom distance function":
       # Additional test cases to check some basic properties
       stateDistance(UInt256.zero, MID + MID) == UInt256.zero
       stateDistance(UInt256.zero, UInt256.one) == stateDistance(UInt256.zero, high(UInt256))
-      
+
   test "Calculate logarithimic distance":
     check:
       stateLogDistance(u256(0), u256(0)) == 0
@@ -38,7 +38,7 @@ suite "State network custom distance function":
       stateLogDistance(u256(8), u256(0)) == 3
       stateLogDistance(UInt256.zero, MID) == 255
       stateLogDistance(UInt256.zero, MID + UInt256.one) == 254
-  
+
   test "Calculate id at log distance":
     let logDistances = @[
       0'u16, 1, 2, 3, 4, 5, 6, 7, 8
@@ -49,8 +49,8 @@ suite "State network custom distance function":
     # starting log distances
     let logCalculated = logDistances.map(
       proc (x: uint16): uint16 =
-        let nodeAtDist = stateIdAtDistance(Uint256.zero, x)
-        return stateLogDistance(Uint256.zero, nodeAtDist)
+        let nodeAtDist = stateIdAtDistance(UInt256.zero, x)
+        return stateLogDistance(UInt256.zero, nodeAtDist)
     )
 
     check:

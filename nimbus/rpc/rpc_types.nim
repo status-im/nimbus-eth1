@@ -128,7 +128,7 @@ type
     toBlock*: Option[string]            # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
     address*: seq[EthAddress]           # (optional) contract address or a list of addresses from which logs should originate.
     topics*: seq[Option[seq[Hash256]]]  # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
-    blockhash*: Option[Hash256]         # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
+    blockHash*: Option[Hash256]         # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
 
 proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
   proc getOptionString(argName: string): Option[string] =
@@ -223,7 +223,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
       return filterArr
 
   proc getBlockHash(): Option[Hash256] =
-    let s = getOptionString("blockhash")
+    let s = getOptionString("blockHash")
     if s.isNone():
       return none[Hash256]()
     else:
@@ -233,7 +233,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
         hexToByteArray(strHash, hash.data)
         return some(hash)
       else:
-        let msg = "Invalid 'blockhash'. Expected 32byte hex string"
+        let msg = "Invalid 'blockHash'. Expected 32byte hex string"
         raise newException(ValueError, msg)
 
   n.kind.expect(JObject, argName)
@@ -252,4 +252,4 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
   result.toBlock = toBlock
   result.address = getAddress()
   result.topics = getTopics()
-  result.blockhash = blockHash
+  result.blockHash = blockHash

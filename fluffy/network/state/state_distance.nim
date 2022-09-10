@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,8 +9,9 @@ import
   eth/p2p/discoveryv5/routing_table,
   stint
 
-const MID* = u256(2).pow(u256(255))
-const MAX* = high(Uint256)
+const
+  MID* = u256(2).pow(u256(255))
+  MAX* = high(UInt256)
 
 # Custom distance function described in: https://notes.ethereum.org/h58LZcqqRRuarxx4etOnGQ#Storage-Layout
 # The implementation looks different than in spec, due to the fact that in practice
@@ -34,7 +35,7 @@ func stateDistance*(node_id: UInt256, content_id: UInt256): UInt256 =
       content_id - node_id
 
   if rawDiff > MID:
-    # If rawDiff is larger than mid this means that distance between node_id and 
+    # If rawDiff is larger than mid this means that distance between node_id and
     # content_id is smaller when going from max side.
     MAX - rawDiff + UInt256.one
   else:

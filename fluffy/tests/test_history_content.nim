@@ -44,7 +44,7 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.blockHeaderKey == contentKey.blockHeaderKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -77,7 +77,7 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.blockBodyKey == contentKey.blockBodyKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -110,7 +110,7 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.receiptsKey == contentKey.receiptsKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -143,7 +143,7 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.epochAccumulatorKey == contentKey.epochAccumulatorKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -173,7 +173,7 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.masterAccumulatorKey.accumulaterKeyType ==
         contentKey.masterAccumulatorKey.accumulaterKeyType
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -210,6 +210,6 @@ suite "History ContentKey Encodings":
       contentKeyDecoded.masterAccumulatorKey.masterHashKey ==
         contentKey.masterAccumulatorKey.masterHashKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE

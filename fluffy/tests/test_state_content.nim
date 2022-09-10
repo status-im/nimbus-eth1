@@ -54,7 +54,7 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.accountTrieNodeKey == contentKey.accountTrieNodeKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -92,7 +92,7 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contractStorageTrieNodeKey ==
         contentKey.contractStorageTrieNodeKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -124,7 +124,7 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.accountTrieProofKey == contentKey.accountTrieProofKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -160,7 +160,7 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contractStorageTrieProofKey ==
         contentKey.contractStorageTrieProofKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
@@ -196,6 +196,6 @@ suite "State ContentKey Encodings":
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.contractBytecodeKey == contentKey.contractBytecodeKey
 
-      toContentId(contentKey) == parse(contentId, Stuint[256], 10)
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE

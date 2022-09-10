@@ -113,7 +113,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
   rpcServer.rpc("discv5_talkReq") do(enr: Record, protocol, payload: string) -> string:
     let
       node = toNodeWithAddress(enr)
-      talkresp = await d.talkreq(
+      talkresp = await d.talkReq(
         node, hexToSeqByte(protocol), hexToSeqByte(payload))
     if talkresp.isErr():
       raise newException(ValueError, $talkresp.error)

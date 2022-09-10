@@ -16,10 +16,10 @@ import
 
 proc generateNRandomU256(rng: var HmacDrbgContext, n: int): seq[UInt256] =
   var i = 0
-  var res = newSeq[Uint256]()
+  var res = newSeq[UInt256]()
   while i < n:
     let bytes = rng.generateBytes(32)
-    let num = Uint256.fromBytesBE(bytes)
+    let num = UInt256.fromBytesBE(bytes)
     res.add(num)
     inc i
   return res
