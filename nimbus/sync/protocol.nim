@@ -33,6 +33,9 @@ type
   SnapStorageRanges* = storageRangesObj
     ## Ditto
 
+  SnapByteCodes* = byteCodesObj
+    ## Ditto
+
   SnapTrieNodes* = trieNodesObj
     ## Ditto
 

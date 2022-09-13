@@ -11,32 +11,23 @@
 ## Find node paths in hexary tries.
 
 import
-  std/[sequtils, tables],
+  std/[tables],
   eth/[common/eth_types_rlp, trie/nibbles],
+  ../../range_desc,
   ./hexary_desc
 
 {.push raises: [Defect].}
-
-const
-  HexaryXPathDebugging = false # or true
-
-type
-  HexaryGetFn* = proc(key: Blob): Blob {.gcsafe.}
-    ## Fortesting/debugging: database get() function
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(w: Blob; db: HexaryTreeDB): string =
+proc pp(w: Blob; db: HexaryTreeDbRef): string =
   w.convertTo(RepairKey).pp(db)
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc to(w: NodeKey; T: type Blob): T =
-  w.ByteArray32.toSeq
 
 proc getNibblesImpl(path: XPath; start = 0): NibblesSeq =
   ## Re-build the key path
@@ -90,7 +81,7 @@ when false:
 proc pathExtend(
     path: RPath;
     key: RepairKey;
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError].} =
   ## For the given path, extend to the longest possible repair tree `db`
@@ -389,13 +380,22 @@ proc leafData*(path: XPath): Blob =
 proc hexaryPath*(
     nodeKey: NodeKey;
     rootKey: RepairKey;
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Compute logest possible repair tree `db` path matching the `nodeKey`
   ## nibbles. The `nodeNey` path argument come first to support a more
   ## functional notation.
   RPath(tail: nodeKey.to(NibblesSeq)).pathExtend(rootKey,db)
+
+proc hexaryPath*(
+    partialPath: NibblesSeq;
+    rootKey: RepairKey;
+    db: HexaryTreeDbRef;
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Variant of `hexaryPath`.
+  RPath(tail: partialPath).pathExtend(rootKey,db)
 
 proc hexaryPath*(
     nodeKey: NodeKey;
@@ -412,6 +412,15 @@ proc hexaryPath*(
   ## Note that this function will flag a potential lowest level `Extception`
   ## in the invoking function due to the `getFn` argument.
   XPath(tail: nodeKey.to(NibblesSeq)).pathExtend(root.to(Blob), getFn)
+
+proc hexaryPath*(
+    partialPath: NibblesSeq;
+    root: NodeKey;
+    getFn: HexaryGetFn;
+      ): XPath
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPath`.
+  XPath(tail: partialPath).pathExtend(root.to(Blob), getFn)
 
 proc next*(
     path: XPath;

@@ -9,34 +9,24 @@
 # distributed except according to those terms.
 
 import
-  std/[math, strutils, hashes],
+  std/[math, hashes],
   eth/common/eth_types_rlp,
   stew/byteutils
 
 {.push raises: [Defect].}
 
 type
-  NodeHash* = distinct Hash256
-    ## Hash of a trie node or other blob carried over `NodeData` account trie
-    ## nodes, storage trie nodes, contract code.
-    ##
-    ## Note that the `ethXX` and `snapXX` protocol drivers always use the
-    ## underlying `Hash256` type which needs to be converted to `NodeHash`.
-
   BlockHash* = distinct Hash256
     ## Hash of a block, goes with `BlockNumber`.
     ##
     ## Note that the `ethXX` protocol driver always uses the
     ## underlying `Hash256` type which needs to be converted to `BlockHash`.
 
-  SomeDistinctHash256 =
-    NodeHash | BlockHash
-
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SomeDistinctHash256): T =
+proc new*(T: type BlockHash): T =
   Hash256().T
 
 # ------------------------------------------------------------------------------
@@ -57,11 +47,11 @@ proc to*(longNum: UInt256; T: type float): T =
     let exp = mantissaLen - 64
     (longNum shr exp).truncate(uint64).T * (2.0 ^ exp)
 
-proc to*(w: SomeDistinctHash256; T: type Hash256): T =
+proc to*(w: BlockHash; T: type Hash256): T =
   ## Syntactic sugar
   w.Hash256
 
-proc to*(w: seq[SomeDistinctHash256]; T: type seq[Hash256]): T =
+proc to*(w: seq[BlockHash]; T: type seq[Hash256]): T =
   ## Ditto
   cast[seq[Hash256]](w)
 
@@ -73,22 +63,22 @@ proc to*(bh: BlockHash; T: type HashOrNum): T =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc read*(rlp: var Rlp, T: type SomeDistinctHash256): T
+proc read*(rlp: var Rlp, T: type BlockHash): T
     {.gcsafe, raises: [Defect,RlpError]} =
   ## RLP mixin reader
   rlp.read(Hash256).T
 
-proc append*(writer: var RlpWriter; h: SomeDistinctHash256) =
+proc append*(writer: var RlpWriter; h: BlockHash) =
   ## RLP mixin
   append(writer, h.Hash256)
 
-proc `==`*(a: SomeDistinctHash256; b: Hash256): bool =
+proc `==`*(a: BlockHash; b: Hash256): bool =
   a.Hash256 == b
 
-proc `==`*[T: SomeDistinctHash256](a,b: T): bool =
+proc `==`*[T: BlockHash](a,b: T): bool =
   a.Hash256 == b.Hash256
 
-proc hash*(root: SomeDistinctHash256): Hash =
+proc hash*(root: BlockHash): Hash =
   ## Mixin for `Table` or `KeyedQueue`
   root.Hash256.data.hash
 
@@ -100,7 +90,7 @@ func toHex*(hash: Hash256): string =
   ## Shortcut for `byteutils.toHex(hash.data)`
   hash.data.toHex
 
-func `$`*(h: SomeDistinctHash256): string =
+func `$`*(h: BlockHash): string =
   $h.Hash256.data.toHex
 
 func `$`*(blob: Blob): string =

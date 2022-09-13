@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  std/[math, hashes],
+  std/[math, sequtils, hashes],
   eth/common/eth_types_rlp,
   stew/[byteutils, interval_set],
   stint,
@@ -21,9 +21,16 @@ import
 {.push raises: [Defect].}
 
 type
+  ByteArray32* = array[32,byte]
+    ## Used for 32 byte database keys
+
   NodeTag* = ##\
     ## Trie leaf item, account hash etc.
     distinct UInt256
+
+  NodeKey* = distinct ByteArray32
+    ## Hash key without the hash wrapper (as opposed to `NodeTag` which is a
+    ## number)
 
   LeafRange* = ##\
     ## Interval `[minPt,maxPt]` of` NodeTag` elements, can be managed in an
@@ -69,21 +76,29 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc to*(nid: NodeTag; T: type Hash256): T =
+proc to*(tag: NodeTag; T: type Hash256): T =
   ## Convert to serialised equivalent
-  result.data = nid.UInt256.toBytesBE
+  result.data = tag.UInt256.toBytesBE
 
-proc to*(nid: NodeTag; T: type NodeHash): T =
-  ## Syntactic sugar
-  nid.to(Hash256).T
-
-proc to*(h: Hash256; T: type NodeTag): T =
+proc to*(key: NodeKey; T: type NodeTag): T =
   ## Convert from serialised equivalent
-  UInt256.fromBytesBE(h.data).T
+  UInt256.fromBytesBE(key.ByteArray32).T
 
-proc to*(nh: NodeHash; T: type NodeTag): T =
+proc to*(key: Hash256; T: type NodeTag): T =
   ## Syntactic sugar
-  nh.Hash256.to(T)
+  key.data.NodeKey.to(T)
+
+proc to*(tag: NodeTag; T: type NodeKey): T =
+  ## Syntactic sugar
+  tag.UInt256.toBytesBE.T
+
+proc to*(hash: Hash256; T: type NodeKey): T =
+  ## Syntactic sugar
+  hash.data.NodeKey
+
+proc to*(key: NodeKey; T: type Blob): T =
+  ## Syntactic sugar
+  key.ByteArray32.toSeq
 
 proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
   ## Syntactic sugar
@@ -93,21 +108,21 @@ proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc init*(nh: var NodeHash; data: openArray[byte]): bool =
-  ## Import argument `data` into `nh` which must have length either `32` or `0`.
-  ## The latter case is equivalent to an all zero byte array of size `32`.
+proc init*(key: var NodeKey; data: openArray[byte]): bool =
+  ## ## Import argument `data` into `key` which must have length either `32`, ot
+  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
   if data.len == 32:
-    (addr nh.Hash256.data[0]).copyMem(unsafeAddr data[0], 32)
+    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
     return true
   elif data.len == 0:
-    nh.reset
+    key.reset
     return true
 
-proc init*(nt: var NodeTag; data: openArray[byte]): bool =
-  ## Similar to `init(nh: var NodeHash; .)`.
-  var h: NodeHash
-  if h.init(data):
-    nt = h.to(NodeTag)
+proc init*(tag: var NodeTag; data: openArray[byte]): bool =
+  ## Similar to `init(key: var NodeHash; .)`.
+  var key: NodeKey
+  if key.init(data):
+    tag = key.to(NodeTag)
     return true
 
 # ------------------------------------------------------------------------------

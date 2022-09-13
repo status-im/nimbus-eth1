@@ -15,7 +15,7 @@
 ## re-factored database layer.
 
 import
-  std/[sequtils, strutils, tables],
+  std/[sequtils, sets, strutils, tables],
   eth/[common/eth_types, trie/nibbles],
   stew/results,
   ../../range_desc,
@@ -34,13 +34,16 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(w: RPathXStep; db: var HexaryTreeDB): string =
+proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =
   let y = if w.canLock: "lockOk" else: "noLock"
   "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
 
-proc pp(w: seq[RPathXStep]; db: var HexaryTreeDB; indent = 4): string =
+proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
   let pfx = "\n" & " ".repeat(indent)
   w.mapIt(it.pp(db)).join(pfx)
+
+proc pp(rc: Result[TrieNodeStat, HexaryDbError]; db: HexaryTreeDbRef): string =
+  if rc.isErr: $rc.error else: rc.value.pp(db)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -53,7 +56,7 @@ proc dup(node: RNodeRef): RNodeRef =
 proc hexaryPath(
     tag: NodeTag;
     root: NodeKey;
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError].} =
   ## Shortcut
@@ -104,7 +107,7 @@ proc `xData=`(node: RNodeRef; val: Blob) =
 # ------------------------------------------------------------------------------
 
 proc rTreeExtendLeaf(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rPath: RPath;
     key: RepairKey
       ): RPath =
@@ -124,7 +127,7 @@ proc rTreeExtendLeaf(
       tail: EmptyNibbleRange)
 
 proc rTreeExtendLeaf(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rPath: RPath;
     key: RepairKey;
     node: RNodeRef;
@@ -140,7 +143,7 @@ proc rTreeExtendLeaf(
 
 
 proc rTreeSplitNode(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rPath: RPath;
     key: RepairKey;
     node: RNodeRef;
@@ -207,7 +210,7 @@ proc rTreeSplitNode(
 
 proc rTreeInterpolate(
     rPath: RPath;
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Extend path, add missing nodes to tree. The last node added will be
@@ -279,7 +282,7 @@ proc rTreeInterpolate(
 
 proc rTreeInterpolate(
     rPath: RPath;
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     payload: Blob;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
@@ -293,7 +296,7 @@ proc rTreeInterpolate(
 
 proc rTreeUpdateKeys(
     rPath: RPath;
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
       ): Result[void,bool]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## The argument `rPath` is assumed to organise database nodes as
@@ -431,7 +434,7 @@ proc rTreeUpdateKeys(
 # ------------------------------------------------------------------------------
 
 proc rTreeBranchAppendleaf(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     bNode: RNodeRef;
     leaf: RLeafSpecs;
      ): bool =
@@ -448,7 +451,7 @@ proc rTreeBranchAppendleaf(
     return true
 
 proc rTreePrefill(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rootKey: NodeKey;
     dbItems: var seq[RLeafSpecs];
       ) {.gcsafe, raises: [Defect,KeyError].} =
@@ -469,7 +472,7 @@ proc rTreePrefill(
     db.tab[rootKey.to(RepairKey)] = node
 
 proc rTreeSquashRootNode(
-    db: var HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rootKey: NodeKey;
       ): RNodeRef
       {.gcsafe, raises: [Defect,KeyError].} =
@@ -517,16 +520,22 @@ proc rTreeSquashRootNode(
 # ------------------------------------------------------------------------------
 
 proc hexaryInterpolate*(
-    db: var HexaryTreeDB;          ## Database
-    rootKey: NodeKey;              ## root node hash
-    dbItems: var seq[RLeafSpecs];  ## list of path and leaf items
-    bootstrap = false;             ## can create root node on-the-fly
+    db: HexaryTreeDbRef;           ## Database
+    rootKey: NodeKey;              ## Root node hash
+    dbItems: var seq[RLeafSpecs];  ## List of path and leaf items
+    bootstrap = false;             ## Can create root node on-the-fly
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## Verifiy `dbItems` by interpolating the collected `dbItems` on the hexary
-  ## trie of the repair database. If successful, there will be a complete
-  ## hexary trie avaliable with the `payload` fields of the `dbItems` argument
-  ## as leaf node values.
+  ## From the argument list `dbItems`, leaf nodes will be added to the hexary
+  ## trie while interpolating the path for the leaf nodes by adding  missing
+  ## nodes. This action is typically not a full trie rebuild. Some partial node
+  ## entries might have been added, already which is typical for a boundary
+  ## proof that comes with the `snap/1` protocol.
+  ##
+  ## If successful, there will be a complete hexary trie avaliable with the
+  ## `payload` fields of the `dbItems` argument list as leaf node values. The
+  ## argument list `dbItems` will have been updated by registering the node
+  ## keys of the leaf items.
   ##
   ## The algorithm employed here tries to minimise hashing hexary nodes for
   ## the price of re-vising the same node again.

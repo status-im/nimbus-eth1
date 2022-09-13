@@ -102,6 +102,11 @@ type
     ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
     ## effective sub-range specification (later ones will be ignored.)
 
+  SnapRepairState* = enum
+    Pristine                           ## Not initialised yet
+    KeepGoing                          ## Unfinished repair process
+    Done                               ## Stop repairing
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
@@ -110,6 +115,8 @@ type
     nAccounts*: uint64                 ## Number of accounts imported
     nStorage*: uint64                  ## Number of storage spaces imported
     leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
+    dangling*: seq[Blob]               ## Missing nodes for healing process
+    repairState*: SnapRepairState      ## State of healing process
     when switchPivotAfterCoverage < 1.0:
       minCoverageReachedOk*: bool      ## Stop filling this pivot
 
@@ -122,6 +129,7 @@ type
     stats*: SnapBuddyStats             ## Statistics counters
     errors*: SnapBuddyErrors           ## For error handling
     pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
+    pivot2Header*: Option[BlockHeader] ## Alternative header
     workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
@@ -138,9 +146,13 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotCount*: uint64                ## Total of all created tab entries
     pivotEnv*: SnapPivotRef            ## Environment containing state root
+    prevEnv*: SnapPivotRef             ## Previous state root environment
     accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
     accountsDb*: AccountsDbRef         ## Proof processing for accounts
     runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
+    # --------
+    untrusted*: seq[Peer]              ## Clean up list (pivot2)
+    trusted*: HashSet[Peer]            ## Peers ready for delivery (pivot2)
     # --------
     when snapAccountsDumpEnable:
       proofDumpOk*: bool
