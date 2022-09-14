@@ -177,3 +177,38 @@
 	path = vendor/nimbus-eth2
 	url = https://github.com/status-im/nimbus-eth2.git
 	branch = unstable
+[submodule "vendor/nim-taskpools"]
+	path = vendor/nim-taskpools
+	url = https://github.com/status-im/nim-taskpools.git
+	ignore = untracked
+	branch = stable
+[submodule "vendor/nim-normalize"]
+	path = vendor/nim-normalize
+	url = https://github.com/nitely/nim-normalize.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/nim-unicodedb"]
+	path = vendor/nim-unicodedb
+	url = https://github.com/nitely/nim-unicodedb.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/nim-libp2p"]
+	path = vendor/nim-libp2p
+	url = https://github.com/status-im/nim-libp2p.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/nim-presto"]
+	path = vendor/nim-presto
+	url = https://github.com/status-im/nim-presto.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/nim-zxcvbn"]
+	path = vendor/nim-zxcvbn
+	url = https://github.com/status-im/nim-zxcvbn.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/nimbus-security-resources"]
+	path = vendor/nimbus-security-resources
+	url = https://github.com/status-im/nimbus-security-resources.git
+	ignore = untracked
+	branch = master
