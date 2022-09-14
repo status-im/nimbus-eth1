@@ -129,14 +129,20 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       # Grab `monitorLock` (was `false` as checked above) and wait until clear
       # to run as the only activated instance.
       dsc.monitorLock = true
-      while 0 < dsc.activeMulti:
-        await sleepAsync(50.milliseconds)
-      while dsc.singleRunLock:
-        await sleepAsync(50.milliseconds)
-      var count = dsc.buddies.len
-      for w in dsc.buddies.nextValues:
-        count.dec
-        worker.runPool(count == 0)
+      block poolModeExec:
+        while 0 < dsc.activeMulti:
+          await sleepAsync(50.milliseconds)
+          if worker.ctrl.stopped:
+            break poolModeExec
+        while dsc.singleRunLock:
+          await sleepAsync(50.milliseconds)
+          if worker.ctrl.stopped:
+            break poolModeExec
+        var count = dsc.buddies.len
+        for w in dsc.buddies.nextValues:
+          count.dec
+          worker.runPool(count == 0)
+        # End `block poolModeExec`
       dsc.monitorLock = false
       continue
 
@@ -146,6 +152,8 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
 
     # Allow task switch
     await sleepAsync(50.milliseconds)
+    if worker.ctrl.stopped:
+      break
 
     # Multi mode
     if worker.ctrl.multiOk:
@@ -161,10 +169,14 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
     if not dsc.singleRunLock:
       # Lock single instance mode and wait for other workers to finish
       dsc.singleRunLock = true
-      while 0 < dsc.activeMulti:
-        await sleepAsync(50.milliseconds)
-      # Run single instance and release afterwards
-      await worker.runSingle()
+      block singleModeExec:
+        while 0 < dsc.activeMulti:
+          await sleepAsync(50.milliseconds)
+          if worker.ctrl.stopped:
+            break singleModeExec
+        # Run single instance and release afterwards
+        await worker.runSingle()
+        # End `block singleModeExec`
       dsc.singleRunLock = false
 
     # End while
