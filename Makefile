@@ -42,7 +42,14 @@ EXCLUDED_NIM_PACKAGES := 	\
 	vendor/nimbus-eth2/vendor/nim-unittest2					\
 	vendor/nimbus-eth2/vendor/nim-web3							\
 	vendor/nimbus-eth2/vendor/nim-websock						\
-	vendor/nimbus-eth2/vendor/nim-zlib
+	vendor/nimbus-eth2/vendor/nim-zlib							\
+	vendor/nimbus-eth2/vendor/nim-taskpools					\
+	vendor/nimbus-eth2/vendor/nim-normalize					\
+	vendor/nimbus-eth2/vendor/nim-unicodedb					\
+	vendor/nimbus-eth2/vendor/nim-libp2p						\
+	vendor/nimbus-eth2/vendor/nim-presto						\
+	vendor/nimbus-eth2/vendor/nim-zxcvbn						\
+	vendor/nimbus-eth2/vendor/nimbus-security-resources
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
