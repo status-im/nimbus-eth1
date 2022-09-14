@@ -14,8 +14,9 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/interval_set,
-  "../.."/[protocol, protocol/trace_config],
-  ".."/[range_desc, worker_desc]
+  "../../.."/[protocol, protocol/trace_config],
+  "../.."/[range_desc, worker_desc],
+  ./get_error
 
 {.push raises: [Defect].}
 
@@ -23,14 +24,6 @@ logScope:
   topics = "snap-fetch"
 
 type
-  GetStorageRangesError* = enum
-    GsreNothingSerious
-    GsreEmptyAccountsArguments
-    GsreNoStorageForAccounts
-    GsreTooManyStorageSlots
-    GsreNetworkProblem
-    GsreResponseTimeout
-
   # SnapStorage* = object
   #  slotHash*: Hash256
   #  slotData*: Blob
@@ -89,7 +82,7 @@ proc getStorageRanges*(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
     accounts: seq[AccountSlotsHeader],
-      ): Future[Result[GetStorageRanges,GetStorageRangesError]]
+      ): Future[Result[GetStorageRanges,ComError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   ##
@@ -104,7 +97,7 @@ proc getStorageRanges*(
     maybeIv = none(LeafRange)
 
   if nAccounts == 0:
-    return err(GsreEmptyAccountsArguments)
+    return err(ComEmptyAccountsArguments)
   if accounts[0].firstSlot != Hash256.default:
     # Set up for range
     maybeIv = some(LeafRange.new(
@@ -118,14 +111,15 @@ proc getStorageRanges*(
     let rc = await buddy.getStorageRangesReq(
       stateRoot, accounts.mapIt(it.accHash), maybeIv)
     if rc.isErr:
-      return err(GsreNetworkProblem)
+      return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for reply to GetStorageRanges", peer
-      return err(GsreResponseTimeout)
+      trace trSnapRecvTimeoutWaiting & "for reply to GetStorageRanges", peer,
+        nAccounts
+      return err(ComResponseTimeout)
     let snStoRanges = rc.value.get
     if nAccounts < snStoRanges.slots.len:
       # Ooops, makes no sense
-      return err(GsreTooManyStorageSlots)
+      return err(ComTooManyStorageSlots)
     GetStorageRanges(
       data: AccountStorageRange(
         proof:    snStoRanges.proof,
@@ -146,8 +140,8 @@ proc getStorageRanges*(
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
     trace trSnapRecvReceived & "empty StorageRanges", peer,
-      nAccounts, nStorages, nProof, stateRoot
-    return err(GsreNoStorageForAccounts)
+      nAccounts, nStorages, nProof, stateRoot, firstAccount=accounts[0].accHash
+    return err(ComNoStorageForAccounts)
 
   # Complete response data
   for n in 0 ..< nStorages:

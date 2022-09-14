@@ -424,11 +424,10 @@ proc importAccounts*(
     root: Hash256;            ## state root
     base: NodeTag;            ## before or at first account entry in `data`
     data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-    storeOk = true;           ##  Legacy, will go away
       ): Result[void,HexaryDbError] =
   ## Variant of `importAccounts()`
   AccountsDbSessionRef.init(
-    pv, root, peer).importAccounts(base, data, storeOk)
+    pv, root, peer).importAccounts(base, data, persistent=true)
 
 
 
@@ -502,11 +501,10 @@ proc importStorages*(
     pv: AccountsDbRef;         ## Base descriptor on `BaseChainDB`
     peer: Peer,                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
-    storeOk = true;            ## legacy, will go away
       ): Result[void,seq[(int,HexaryDbError)]] =
   ## Variant of `importStorages()`
   AccountsDbSessionRef.init(
-    pv, Hash256(), peer).importStorages(data, storeOk)
+    pv, Hash256(), peer).importStorages(data, persistent=true)
 
 
 

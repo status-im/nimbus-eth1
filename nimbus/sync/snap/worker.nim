@@ -355,7 +355,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       await sleepAsync(50.milliseconds)
       return
 
-  discard await buddy.fetchAccounts()
+  await buddy.fetchAccounts()
 
   if ctx.data.pivotEnv.repairState == Done:
     buddy.ctrl.multiOk = false
