@@ -181,7 +181,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     peers = dsc.pool.len
     workers = dsc.buddies.len
   if dsc.buddies.hasKey(peer.hash):
-    trace "Reconnecting zombie peer rejected", peer, peers, workers, maxWorkers
+    trace "Reconnecting zombie peer ignored", peer, peers, workers, maxWorkers
     return
 
   # Initialise worker for this peer

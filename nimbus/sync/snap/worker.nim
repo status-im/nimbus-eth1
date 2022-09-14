@@ -16,10 +16,19 @@ import
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ../../utils/prettify,
   ".."/[protocol, sync_desc],
-  ./worker/[accounts_db, fetch_accounts, pivot, ticker],
+  ./worker/[accounts_db, fetch_accounts, ticker],
   "."/[range_desc, worker_desc]
+
+const
+  usePivot2ok = false or true
+
+when usePivot2ok:
+  import ./worker/pivot2
+else:
+  import ./worker/pivot
+
+{.push raises: [Defect].}
 
 logScope:
   topics = "snap-sync"
@@ -81,30 +90,47 @@ proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   # Statistics
   ctx.data.pivotCount.inc
 
-  # Activate per-state root environment
+  # Activate per-state root environment (and hold previous one)
+  ctx.data.prevEnv = ctx.data.pivotEnv
   ctx.data.pivotEnv = ctx.data.pivotTable.lruAppend(key, env, ctx.buddiesMax)
 
 
 proc updatePivotEnv(buddy: SnapBuddyRef): bool =
   ## Update global state root environment from local `pivotHeader`. Choose the
   ## latest block number. Returns `true` if the environment was changed
-  if buddy.data.pivotHeader.isSome:
+  when usePivot2ok:
+    let maybeHeader = buddy.data.pivot2Header
+  else:
+    let maybeHeader = buddy.data.pivotHeader
+
+  if maybeHeader.isSome:
     let
+      peer = buddy.peer
       ctx = buddy.ctx
       env = ctx.data.pivotEnv
-      newStateNumber = buddy.data.pivotHeader.unsafeGet.blockNumber
+      pivotHeader = maybeHeader.unsafeGet
+      newStateNumber = pivotHeader.blockNumber
       stateNumber = if env.isNil: 0.toBlockNumber
                     else: env.stateHeader.blockNumber
+      stateWindow = stateNumber + maxPivotBlockWindow
 
-    when switchPivotAfterCoverage < 1.0:
-      if not env.isNil:
-        if stateNumber < newStateNumber and env.minCoverageReachedOk:
-          buddy.setPivotEnv(buddy.data.pivotHeader.get)
-          return true
+    block keepCurrent:
+      if env.isNil:
+        break keepCurrent # => new pivot
+      if stateNumber < newStateNumber:
+        when switchPivotAfterCoverage < 1.0:
+          if env.minCoverageReachedOk:
+            break keepCurrent # => new pivot
+        if stateWindow < newStateNumber:
+          break keepCurrent # => new pivot
+        if newStateNumber <= maxPivotBlockWindow:
+          break keepCurrent # => new pivot
+      # keep current
+      return false
 
-    if stateNumber + maxPivotBlockWindow < newStateNumber:
-      buddy.setPivotEnv(buddy.data.pivotHeader.get)
-      return true
+    # set new block
+    buddy.setPivotEnv(pivotHeader)
+    return true
 
 
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
@@ -151,6 +177,39 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       nStorage:      meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage))
 
+
+proc havePivot(buddy: SnapBuddyRef): bool =
+  ## ...
+  if buddy.data.pivotHeader.isSome and
+     buddy.data.pivotHeader.get.blockNumber != 0:
+
+    # So there is a `ctx.data.pivotEnv`
+    when 1.0 <= switchPivotAfterCoverage:
+      return true
+    else:
+      let
+        ctx = buddy.ctx
+        env = ctx.data.pivotEnv
+
+      # Force fetching new pivot if coverage reached by returning `false`
+      if not env.minCoverageReachedOk:
+
+        # Not sure yet, so check whether coverage has been reached at all
+        let cov = env.availAccounts.freeFactor
+        if switchPivotAfterCoverage <= cov:
+          trace " Snap accounts coverage reached", peer,
+            threshold=switchPivotAfterCoverage, coverage=cov.toPC
+
+          # Need to reset pivot handlers
+          buddy.ctx.poolMode = true
+          buddy.ctx.data.runPoolHook = proc(b: SnapBuddyRef) =
+            b.ctx.data.pivotEnv.minCoverageReachedOk = true
+            when usePivot2ok:
+              b.pivot2Restart
+            else:
+              b.pivotRestart
+          return true
+
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
@@ -187,7 +246,10 @@ proc start*(buddy: SnapBuddyRef): bool =
   if peer.supports(protocol.snap) and
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    buddy.pivotStart()
+    when usePivot2ok:
+      buddy.pivot2Start()
+    else:
+      buddy.pivotStart()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
     return true
@@ -198,7 +260,10 @@ proc stop*(buddy: SnapBuddyRef) =
     ctx = buddy.ctx
     peer = buddy.peer
   buddy.ctrl.stopped = true
-  buddy.pivotStop()
+  when usePivot2ok:
+    buddy.pivot2Stop()
+  else:
+    buddy.pivotStop()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stopBuddy()
 
@@ -218,7 +283,31 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  buddy.ctrl.multiOk = true
+  when usePivot2ok:
+    #
+    # Run alternative pivot finder. This one harmonises difficulties of at
+    # least two peers. The can only be one instance active/unfinished of the
+    # `pivot2Exec()` functions.
+    #
+    let peer = buddy.peer
+    if not buddy.havePivot:
+      if await buddy.pivot2Exec():
+        discard buddy.updatePivotEnv()
+      else:
+        if not buddy.ctrl.stopped:
+          await sleepAsync(2.seconds)
+        return
+
+    buddy.ctrl.multiOk = true
+
+    trace "Snap pivot initialised", peer,
+      multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
+  else:
+    #
+    # The default pivot finder runs in multi mode. So there is nothing to do
+    # here.
+    #
+    buddy.ctrl.multiOk = true
 
 
 proc runPool*(buddy: SnapBuddyRef, last: bool) =
@@ -253,34 +342,12 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  var
-    havePivotOk = (buddy.data.pivotHeader.isSome and
-                   buddy.data.pivotHeader.get.blockNumber != 0)
 
-  # Switch pivot state root if this much coverage has been achieved, already
-  when switchPivotAfterCoverage < 1.0:
-    if havePivotOk:
-      # So there is a `ctx.data.pivotEnv`
-      if ctx.data.pivotEnv.minCoverageReachedOk:
-        # Force fetching new pivot if coverage reached
-        havePivotOk = false
-      else:
-        # Not sure yet, so check whether coverage has been reached at all
-        let cov = ctx.data.pivotEnv.availAccounts.freeFactor
-        if switchPivotAfterCoverage <= cov:
-          trace " Snap accounts coverage reached",
-            threshold=switchPivotAfterCoverage, coverage=cov.toPC
-          # Need to reset pivot handlers
-          buddy.ctx.poolMode = true
-          buddy.ctx.data.runPoolHook = proc(b: SnapBuddyRef) =
-            b.ctx.data.pivotEnv.minCoverageReachedOk = true
-            b.pivotRestart
-          return
-
-  if not havePivotOk:
-    await buddy.pivotExec()
-    if not buddy.updatePivotEnv():
-      return
+  when not usePivot2ok:
+    if not buddy.havePivot:
+      await buddy.pivotExec()
+      if not buddy.updatePivotEnv():
+        return
 
   # Ignore rest if the pivot is still acceptably covered
   when switchPivotAfterCoverage < 1.0:
@@ -288,7 +355,9 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       await sleepAsync(50.milliseconds)
       return
 
-  if await buddy.fetchAccounts():
+  discard await buddy.fetchAccounts()
+
+  if ctx.data.pivotEnv.repairState == Done:
     buddy.ctrl.multiOk = false
     buddy.data.pivotHeader = none(BlockHeader)
 
