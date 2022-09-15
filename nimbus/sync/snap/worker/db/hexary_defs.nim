@@ -18,6 +18,7 @@ type
     AccountRangesOverlap
     RlpEncoding
     SlotsNotSrictlyIncreasing
+    LoopAlert
 
     # import
     DifferentNodeValueExists

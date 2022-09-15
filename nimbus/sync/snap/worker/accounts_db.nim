@@ -31,6 +31,9 @@ logScope:
 export
   HexaryDbError
 
+const
+  extraTraceMessages =  false # or true
+
 type
   AccountsDbRef* = ref object
     db: TrieDatabaseRef              ## General database
@@ -413,9 +416,10 @@ proc importAccounts*(
     trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
 
-  trace "Accounts and proofs ok", peer=ps.peer,
-    root=ps.accRoot.ByteArray32.toHex,
-    proof=data.proof.len, base, accounts=data.accounts.len
+  when extraTraceMessages:
+    trace "Accounts and proofs ok", peer=ps.peer,
+      root=ps.accRoot.ByteArray32.toHex,
+      proof=data.proof.len, base, accounts=data.accounts.len
   ok()
 
 proc importAccounts*(
@@ -492,9 +496,9 @@ proc importStorages*(
       # So non-empty error list is guaranteed
       return err(errors)
 
-  trace "Storage slots imported", peer=ps.peer,
-    slots=data.storages.len, proofs=data.proof.len
-
+  when extraTraceMessages:
+    trace "Storage slots imported", peer=ps.peer,
+      slots=data.storages.len, proofs=data.proof.len
   ok()
 
 proc importStorages*(
@@ -564,6 +568,7 @@ proc inspectAccountsTrie*(
     ps: AccountsDbSessionRef;     ## Re-usable session descriptor
     pathList = seq[Blob].default; ## Starting nodes for search
     persistent = false;           ## Read data from disk
+    ignoreError = false;          ## Return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
@@ -577,14 +582,20 @@ proc inspectAccountsTrie*(
     else:
       stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList)
 
-  if stats.stoppedAt == 0:
-    trace "Inspected account trie", peer=ps.peer,
-      pathList=pathList.len, nDangling=result.value.dangling.len
-  else:
-    trace "Inspected account trie loop detected", peer=ps.peer,
-      pathList=pathList.len, nDangling=result.value.dangling.len,
-      stoppedAt=stats.stoppedAt
+  let
+    peer = ps.peer
+    pathList = pathList.len
+    nDangling = stats.dangling.len
 
+  if stats.stoppedAt != 0:
+    let error = LoopAlert
+    trace "Inspect account trie loop", peer, pathList, nDangling,
+      stoppedAt=stats.stoppedAt, error
+    if ignoreError:
+      return ok(stats)
+    return err(error)
+
+  trace "Inspect account trie ok", peer, pathList, nDangling
   return ok(stats)
 
 proc inspectAccountsTrie*(
@@ -592,11 +603,11 @@ proc inspectAccountsTrie*(
     peer: Peer,                   ## For log messages, only
     root: Hash256;                ## state root
     pathList = seq[Blob].default; ## Starting paths for search
-    persistent = true;            ## Read data from disk
+    ignoreError = false;          ## Return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectAccountsTrie()` for persistent storage.
   AccountsDbSessionRef.init(
-    pv, root, peer).inspectAccountsTrie(pathList, persistent)
+    pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
 
 # ------------------------------------------------------------------------------
 # Debugging (and playing with the hexary database)
