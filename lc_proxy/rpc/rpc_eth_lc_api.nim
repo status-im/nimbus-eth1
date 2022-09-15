@@ -78,7 +78,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
     let proof = await lcProxy.client.eth_getProof(address, @[], blockId(blockNumber))
 
-    let proofValid = isAccountProofValid(
+    let accountResult = getAccountFromProof(
       executionPayload.stateRoot,
       proof.address,
       proof.balance,
@@ -88,10 +88,10 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
       proof.accountProof
     )
 
-    if proofValid:
-      return encodeQuantity(proof.balance)
+    if accountResult.isOk():
+      return encodeQuantity(accountResult.get.balance)
     else:
-      raise newException(ValueError, "Data provided by data provider server is invalid")
+      raise newException(ValueError, accountResult.error)
 
   lcProxy.server.rpc("eth_getStorageAt") do(address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
     checkPreconditions(payload, quantityTag)

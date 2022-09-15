@@ -14,13 +14,21 @@ import
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
   eth/rlp,
-  eth/trie/hexary,
+  eth/trie/[hexary, hexary_proof_verification],
   web3/ethtypes
 
 export results
 
 func toMDigest(arg: FixedBytes[32]): MDigest[256] =
   MDigest[256](data: distinctBase(arg))
+
+func emptyAccount(): etypes.Account =
+  return etypes.Account(
+    nonce: uint64(0),
+    balance: UInt256.zero,
+    storageRoot: etypes.EMPTY_ROOT_HASH,
+    codeHash: etypes.EMPTY_CODE_HASH
+  )
 
 proc isValidProof(
     branch: seq[seq[byte]],
@@ -34,7 +42,7 @@ proc isValidProof(
   except RlpError:
     return false
 
-proc isAccountProofValidInternal(
+proc getAccountFromProof*(
     stateRoot: FixedBytes[32],
     accountAddress: Address,
     accountBalance: UInt256,
@@ -42,7 +50,7 @@ proc isAccountProofValidInternal(
     accountCodeHash: CodeHash,
     accountStorageRootHash: StorageHash,
     mptNodes: seq[RlpEncodedBytes]
-    ): Option[etypes.Account] =
+    ): Result[etypes.Account, string] =
   let
     mptNodesBytes = mptNodes.mapIt(distinctBase(it))
     keccakStateRootHash = toMDigest(stateRoot)
@@ -55,56 +63,45 @@ proc isAccountProofValidInternal(
     accountEncoded = rlp.encode(acc)
     accountKey = toSeq(keccakHash(distinctBase(accountAddress)).data)
 
-  let validProof = isValidProof(
+  let proofResult = verifyMptProof(
     mptNodesBytes,
     keccakStateRootHash,
     accountKey,
     accountEncoded
   )
 
-  if validProof:
-    return some(acc)
-  else:
-    return none(etypes.Account)
+  case proofResult.kind
+  of MissingKey:
+    return ok(emptyAccount())
+  of ValidProof:
+    return ok(acc)
+  of InvalidProof:
+    return err(proofResult.errorMsg)
 
-proc isAccountProofValid*(
-    stateRoot: FixedBytes[32],
-    accountAddress: Address,
-    accountBalance: UInt256,
-    accountNonce: Quantity,
-    accountCodeHash: CodeHash,
-    accountStorageRootHash: StorageHash,
-    mptNodes: seq[RlpEncodedBytes]
-    ): bool =
-
-  let maybeAccount = isAccountProofValidInternal(
-    stateRoot,
-    accountAddress,
-    accountBalance,
-    accountNonce,
-    accountCodeHash,
-    accountStorageRootHash,
-    mptNodes
-  )
-
-  return maybeAccount.isSome()
-
-proc isStorageProofValid(
+proc getStorageData(
     account: etypes.Account,
-    storageProof: StorageProof): bool =
+    storageProof: StorageProof): Result[UInt256, string] =
   let
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
     key = toSeq(keccakHash(toBytesBE(storageProof.key)).data)
     encodedValue = rlp.encode(storageProof.value)
+    proofResult = verifyMptProof(storageMptNodes, account.storageRoot, key, encodedValue)
 
-  return isValidProof(storageMptNodes, account.storageRoot, key, encodedValue)
+  case proofResult.kind
+  of MissingKey:
+    return ok(UInt256.zero)
+  of ValidProof:
+    return ok(storageProof.value)
+  of InvalidProof:
+    return err(proofResult.errorMsg)
+
 
 proc getStorageData*(
     stateRoot: FixedBytes[32],
     requestedSlot: UInt256,
     proof: ProofResponse): Result[UInt256, string] =
 
-  let maybeAccount = isAccountProofValidInternal(
+  let account = ?getAccountFromProof(
     stateRoot,
     proof.address,
     proof.balance,
@@ -114,35 +111,20 @@ proc getStorageData*(
     proof.accountProof
   )
 
-  if maybeAccount.isSome():
-    let account = maybeAccount.unsafeGet()
+  if account.storageRoot == etypes.EMPTY_ROOT_HASH:
+    # valid account with empty storage, in that case getStorageAt
+    # return 0 value
+    return ok(u256(0))
 
-    if account.storageRoot == etypes.EMPTY_ROOT_HASH:
-      # valid account with empty storage, in that case getStorageAt
-      # return 0 value
-      return ok(u256(0))
+  if len(proof.storageProof) != 1:
+    return err("no storage proof for requested slot")
 
-    if len(proof.storageProof) != 1:
-      return err("no storage proof for requested slot")
+  let sproof = proof.storageProof[0]
 
-    let sproof = proof.storageProof[0]
+  if len(sproof.proof) == 0:
+    return err("empty mpt proof for account with not empty storage")
 
-    if len(sproof.proof) == 0:
-      return err("empty mpt proof for account with not empty storage")
+  if sproof.key != requestedSlot:
+    return err("received proof for invalid slot")
 
-    if sproof.key != requestedSlot:
-      return err("received proof for invalid slot")
-
-    if sproof.value == UInt256.zero:
-      # TODO: zero value means that storage is empty. We need to verify proof of
-      # no existance. As we currenctly do not have that ability just, return zero
-      # value
-      return ok(sproof.value)
-
-    if isStorageProofValid(account, sproof):
-      return ok(sproof.value)
-    else:
-      return err("invalid storage proof")
-
-  else:
-    return err("invalid account proof")
+  return getStorageData(account, sproof)

@@ -38,7 +38,7 @@ suite "Merkle proof of inclusion validation":
       ]
 
     check:
-      isAccountProofValid(
+      getAccountFromProof(
         stateRoot,
         address,
         balance,
@@ -46,7 +46,7 @@ suite "Merkle proof of inclusion validation":
         codeHash,
         storageRoot,
         rlpNodes
-      )
+      ).isOk()
 
   test "Validate storage proof":
     let slotValue = UInt256.fromHex("0x25a92a5853702f199bb2d805bba05d67025214a8")
