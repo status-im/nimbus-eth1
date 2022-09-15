@@ -1,9 +1,8 @@
 import strutils
 
---noNimblePath
-
-if getEnv("NIMBUS_BUILD_SYSTEM") == "yes" and
-   system.fileExists("nimbus-build-system.paths"):
+when getEnv("NIMBUS_BUILD_SYSTEM") == "yes" and
+     system.fileExists("nimbus-build-system.paths"):
+  --noNimblePath
   include "nimbus-build-system.paths"
 
 if defined(release):
