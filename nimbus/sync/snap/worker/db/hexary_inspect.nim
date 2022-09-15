@@ -9,20 +9,13 @@
 # except according to those terms.
 
 import
-  std/[hashes, sequtils, sets, strutils, tables],
+  std/[hashes, sequtils, sets, tables],
   eth/[common/eth_types_rlp, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_paths]
 
 {.push raises: [Defect].}
-
-# ------------------------------------------------------------------------------
-# Private debugging helpers
-# ------------------------------------------------------------------------------
-
-proc pp(a: HashSet[RepairKey]; db: HexaryTreeDbRef): string =
-  "{" & a.toSeq.mapIt(it.pp(db)).join(",") & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -36,6 +29,33 @@ proc convertTo(key: Blob; T: type NodeKey): T =
   ## Might be lossy, check before use
   discard result.init(key)
 
+proc doStepLink(step: RPathStep): Result[RepairKey,bool] =
+  ## Helper for `hexaryInspectPath()` variant
+  case step.node.kind:
+  of Branch:
+    if step.nibble < 0:
+      return err(false) # indicates caller should try parent
+    return ok(step.node.bLink[step.nibble])
+  of Extension:
+    return ok(step.node.eLink)
+  of Leaf:
+    discard
+  err(true) # fully fail
+
+proc doStepLink(step: XPathStep): Result[NodeKey,bool] =
+  ## Helper for `hexaryInspectPath()` variant
+  case step.node.kind:
+  of Branch:
+    if step.nibble < 0:
+      return err(false) # indicates caller should try parent
+    return ok(step.node.bLink[step.nibble].convertTo(NodeKey))
+  of Extension:
+    return ok(step.node.eLink.convertTo(NodeKey))
+  of Leaf:
+    discard
+  err(true) # fully fail
+
+
 proc hexaryInspectPath(
     db: HexaryTreeDbRef;           ## Database
     rootKey: RepairKey;            ## State root
@@ -45,14 +65,16 @@ proc hexaryInspectPath(
   ## Translate `path` into `RepairKey`
   let steps = path.hexaryPath(rootKey,db)
   if 0 < steps.path.len and steps.tail.len == 0:
-    let node = steps.path[^1].node
-    case node.kind:
-    of Branch:
-      return ok(node.bLink[steps.path[^1].nibble])
-    of Extension:
-      return ok(node.eLink)
-    of Leaf:
-      discard
+    block:
+      let rc = steps.path[^1].doStepLink()
+      if rc.isOk:
+         return ok(rc.value)
+      if rc.error or steps.path.len == 1:
+        return err()
+    block:
+      let rc = steps.path[^2].doStepLink()
+      if rc.isOk:
+         return ok(rc.value)
   err()
 
 proc hexaryInspectPath(
@@ -64,14 +86,16 @@ proc hexaryInspectPath(
   ## Translate `path` into `RepairKey`
   let steps = path.hexaryPath(root,getFn)
   if 0 < steps.path.len and steps.tail.len == 0:
-    let node = steps.path[^1].node
-    case node.kind:
-    of Branch:
-      return ok(node.bLink[steps.path[^1].nibble].convertTo(NodeKey))
-    of Extension:
-      return ok(node.eLink.convertTo(NodeKey))
-    of Leaf:
-      discard
+    block:
+      let rc = steps.path[^1].doStepLink()
+      if rc.isOk:
+         return ok(rc.value)
+      if rc.error or steps.path.len == 1:
+        return err()
+    block:
+      let rc = steps.path[^2].doStepLink()
+      if rc.isOk:
+         return ok(rc.value)
   err()
 
 # ------------------------------------------------------------------------------

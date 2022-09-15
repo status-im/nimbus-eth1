@@ -57,6 +57,11 @@ proc toPC*(
     minDigits = digitsAfterDot + 1
     multiplier = (10 ^ (minDigits + 1)).float
     roundUp = rounding / 10.0
-  result = ((num * multiplier) + roundUp).int.intToStr(minDigits) & "%"
+  let
+    sign = if num < 0: "-" else: ""
+    preTruncated = (num.abs * multiplier) + roundUp
+  if int.high.float <= preTruncated:
+    return "NaN"
+  result = sign & preTruncated.int.intToStr(minDigits) & "%"
   when 0 < digitsAfterDot:
     result.insert(".", result.len - minDigits)
