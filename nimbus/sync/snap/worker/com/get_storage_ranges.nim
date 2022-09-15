@@ -33,7 +33,7 @@ type
   #  proof*: SnapStorageProof
 
   GetStorageRanges* = object
-    leftOver*: SnapSlotQueueItemRef
+    leftOver*: seq[SnapSlotQueueItemRef]
     data*: AccountStorageRange
 
 const
@@ -78,6 +78,19 @@ proc getStorageRangesReq(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc addLeftOver*(dd: var GetStorageRanges; accounts: seq[AccountSlotsHeader]) =
+  ## Helper for maintaining the `leftOver` queue
+  if 0 < accounts.len:
+    if accounts[0].firstSlot != Hash256() or dd.leftOver.len == 0:
+      dd.leftOver.add SnapSlotQueueItemRef(q: accounts)
+    else:
+      dd.leftOver[^1].q = dd.leftOver[^1].q & accounts
+
+proc addLeftOver*(dd: var GetStorageRanges; account: AccountSlotsHeader) =
+  ## Variant of `addLeftOver()`
+  dd.addLeftOver @[account]
+
+
 proc getStorageRanges*(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
@@ -98,7 +111,7 @@ proc getStorageRanges*(
 
   if nAccounts == 0:
     return err(ComEmptyAccountsArguments)
-  if accounts[0].firstSlot != Hash256.default:
+  if accounts[0].firstSlot != Hash256():
     # Set up for range
     maybeIv = some(LeafRange.new(
       accounts[0].firstSlot.to(NodeTag), high(NodeTag)))
@@ -107,7 +120,7 @@ proc getStorageRanges*(
     trace trSnapSendSending & "GetStorageRanges", peer,
       nAccounts, stateRoot, bytesLimit=snapRequestBytesLimit
 
-  var dd = block:
+  let snStoRanges = block:
     let rc = await buddy.getStorageRangesReq(
       stateRoot, accounts.mapIt(it.accHash), maybeIv)
     if rc.isErr:
@@ -116,21 +129,16 @@ proc getStorageRanges*(
       trace trSnapRecvTimeoutWaiting & "for reply to GetStorageRanges", peer,
         nAccounts
       return err(ComResponseTimeout)
-    let snStoRanges = rc.value.get
-    if nAccounts < snStoRanges.slots.len:
+    if nAccounts < rc.value.get.slots.len:
       # Ooops, makes no sense
       return err(ComTooManyStorageSlots)
-    GetStorageRanges(
-      data: AccountStorageRange(
-        proof:    snStoRanges.proof,
-        storages: snStoRanges.slots.mapIt(
-          AccountSlots(
-            data: it))))
-  let
-    nStorages = dd.data.storages.len
-    nProof = dd.data.proof.len
+    rc.value.get
 
-  if nStorages == 0:
+  let
+    nSlots = snStoRanges.slots.len
+    nProof = snStoRanges.proof.len
+
+  if nSlots == 0:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getstorageranges-0x02:
     #
     # Notes:
@@ -140,31 +148,48 @@ proc getStorageRanges*(
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
     trace trSnapRecvReceived & "empty StorageRanges", peer,
-      nAccounts, nStorages, nProof, stateRoot, firstAccount=accounts[0].accHash
+      nAccounts, nSlots, nProof, stateRoot, firstAccount=accounts[0].accHash
     return err(ComNoStorageForAccounts)
 
-  # Complete response data
-  for n in 0 ..< nStorages:
-    dd.data.storages[n].account = accounts[n]
+  # Assemble return structure for given peer response
+  var dd = GetStorageRanges(data: AccountStorageRange(proof: snStoRanges.proof))
 
-  # Calculate what was not fetched
+  # Filter `slots` responses:
+  # * Accounts for empty ones go back to the `leftOver` list.
+  for n in 0 ..< nSlots:
+    # Empty data for a slot indicates missing data
+    if snStoRanges.slots[n].len == 0:
+      dd.addLeftOver accounts[n]
+    else:
+      dd.data.storages.add AccountSlots(
+        account: accounts[n], # known to be no fewer accounts than slots
+        data: snStoRanges.slots[n])
+
+  # Complete the part that was not answered by the peer
   if nProof == 0:
-    dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages ..< nAccounts])
+    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
   else:
+    if snStoRanges.slots[^1].len == 0:
+      # `dd.data.storages.len == 0` => `snStoRanges.slots[^1].len == 0` as
+      # it was confirmed that `0 < nSlots == snStoRanges.slots.len`
+      return err(ComNoDataForProof)
+
     # If the storage data for the last account comes with a proof, then it is
     # incomplete. So record the missing part on the `dd.leftOver` list.
     let top = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+
+    # Contrived situation with `top==high()`: any right proof will be useless
+    # so it is just ignored (i.e. `firstSlot` is zero in first slice.)
     if top < high(NodeTag):
-      dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages-1 ..< nAccounts])
-      dd.leftOver.q[0].firstSlot = (top + 1.u256).to(Hash256)
-    else:
-      # Contrived situation: the proof would be useless
-      dd.leftOver = SnapSlotQueueItemRef(q: accounts[nStorages ..< nAccounts])
+      dd.addLeftOver AccountSlotsHeader(
+        firstSlot:   (top + 1.u256).to(Hash256),
+        accHash:     accounts[nSlots-1].accHash,
+        storageRoot: accounts[nSlots-1].storageRoot)
+    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
 
-  # Notice that `dd.leftOver.len < nAccounts` as 0 < nStorages
-
+  let nLeftOver = dd.leftOver.foldl(a + b.q.len, 0)
   trace trSnapRecvReceived & "StorageRanges", peer,
-    nAccounts, nStorages, nProof, nLeftOver=dd.leftOver.q.len, stateRoot
+    nAccounts, nSlots, nProof, nLeftOver, stateRoot
 
   return ok(dd)
 

@@ -19,11 +19,16 @@ type
     ComNetworkProblem
     ComNoAccountsForStateRoot
     ComNoByteCodesAvailable
+    ComNoDataForProof
     ComNoStorageForAccounts
     ComNoTrieNodesAvailable
     ComResponseTimeout
     ComTooManyByteCodes
     ComTooManyStorageSlots
     ComTooManyTrieNodes
+
+    # Other errors not directly related to communication
+    ComInspectDbFailed
+    ComImportAccountsFailed
 
 # End

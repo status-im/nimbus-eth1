@@ -148,7 +148,11 @@ proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   discard buddy.ctx.data.pivotEnv.availAccounts.reduce(iv)
 
 
-proc waitAfterError(buddy: SnapBuddyRef; error: ComError): bool =
+proc stopAfterError(
+    buddy: SnapBuddyRef;
+    error: ComError;
+      ): Future[bool]
+      {.async.} =
   ## Error handling after data protocol failed.
   case error:
   of ComResponseTimeout:
@@ -156,9 +160,11 @@ proc waitAfterError(buddy: SnapBuddyRef; error: ComError): bool =
       # Mark this peer dead, i.e. avoid fetching from this peer for a while
       buddy.ctrl.zombie = true
     else:
-      # Otherwise try again some time later
+      # Otherwise try again some time later. Nevertheless, stop the
+      # current action.
       buddy.data.errors.nTimeouts.inc
-      result = true
+      await sleepAsync(5.seconds)
+    return true
 
   of ComNetworkProblem,
      ComMissingProof,
@@ -167,9 +173,13 @@ proc waitAfterError(buddy: SnapBuddyRef; error: ComError): bool =
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
     buddy.data.stats.major.networkErrors.inc()
     buddy.ctrl.zombie = true
+    return true
 
   of ComEmptyAccountsArguments,
      ComEmptyRequestArguments,
+     ComInspectDbFailed,
+     ComImportAccountsFailed,
+     ComNoDataForProof,
      ComNothingSerious:
     discard
 
@@ -182,60 +192,18 @@ proc waitAfterError(buddy: SnapBuddyRef; error: ComError): bool =
      ComTooManyTrieNodes:
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
     buddy.ctrl.zombie = true
+    return true
 
+# ------------------------------------------------------------------------------
+# Private functions: accounts
+# ------------------------------------------------------------------------------
 
-proc processStorageSlots(
+proc processAccounts(
     buddy: SnapBuddyRef;
-    reqSpecs: seq[AccountSlotsHeader];
-      ): Future[Result[SnapSlotQueueItemRef,ComError]]
+    iv: LeafRange;                    ## Accounts range to process
+      ): Future[Result[void,ComError]]
       {.async.} =
-  ## Fetch storage slots data from the network, store it on disk and
-  ## return yet unprocessed data.
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-    env = ctx.data.pivotEnv
-    stateRoot = env.stateHeader.stateRoot
-
-  # Get storage slots
-  let storage = block:
-    let rc = await buddy.getStorageRanges(stateRoot, reqSpecs)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
-
-  # -----------------------------
-  buddy.dumpStorage(storage.data)
-  # -----------------------------
-
-  # Verify/process data and save to disk
-  block:
-    let rc = ctx.data.accountsDb.importStorages(peer, storage.data)
-
-    if rc.isErr:
-      # Push back parts of the error item
-      for w in rc.error:
-        if 0 <= w[0]:
-          # Reset any partial requests by not copying the `firstSlot` field. So
-          # all the storage slots are re-fetched completely for this account.
-          storage.leftOver.q.add AccountSlotsHeader(
-            accHash:     storage.data.storages[w[0]].account.accHash,
-            storageRoot: storage.data.storages[w[0]].account.storageRoot)
-
-      if rc.error[^1][0] < 0:
-        discard
-        # TODO: disk storage failed or something else happend, so what?
-
-  # Return the remaining part to be processed later
-  return ok(storage.leftOver)
-
-
-proc processAccountsAndStorageSlots(
-    buddy: SnapBuddyRef;
-    iv: LeafRange;                    ## Accounts range requested
-    dd: GetAccountRange;              ## Accounts received
-      ) {.async.} =
-  ## Process accounts and storage bt bulk download on the current envirinment
+  ## Process accounts and storage by bulk download on the current envirinment
   # Reset error counts for detecting repeated timeouts
   buddy.data.errors.nTimeouts = 0
 
@@ -245,11 +213,18 @@ proc processAccountsAndStorageSlots(
     peer = buddy.peer
     env = ctx.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
+
+  # Fetch data for this range delegated to `fetchAccounts()`
+  let dd = block:
+    let rc = await buddy.getAccountRange(stateRoot, iv)
+    if rc.isErr:
+      buddy.putUnprocessed(iv) # fail => interval back to pool
+      return err(rc.error)
+    rc.value
+
+  let
     nAccounts = dd.data.accounts.len
     nStorage = dd.withStorage.len
-
-  trace "Start fetching accounts", peer, stateRoot, iv,
-    repairState=env.repairState
 
   block:
     let rc = ctx.data.accountsDb.importAccounts(
@@ -263,7 +238,7 @@ proc processAccountsAndStorageSlots(
 
       buddy.dumpBegin(iv, dd, rc.error)  # FIXME: Debugging (will go away)
       buddy.dumpEnd()                    # FIXME: Debugging (will go away)
-      return
+      return err(ComImportAccountsFailed)
 
   buddy.dumpBegin(iv, dd)                # FIXME: Debugging (will go away)
 
@@ -293,55 +268,118 @@ proc processAccountsAndStorageSlots(
         break registerConsumed
     # End registerConsumed
 
-  # Fetch storage data and save it on disk. Storage requests are managed by
-  # a request queue for handling partioal replies and re-fetch issues. For
-  # all practical puroses, this request queue should mostly be empty.
+  # Store accounts on the storage TODO list.
   discard env.leftOver.append SnapSlotQueueItemRef(q: dd.withStorage)
 
-  trace "Start fetching storages", peer, nAccounts=env.leftOver.len,
-    repairState=env.repairState
+  return ok()
+
+# ------------------------------------------------------------------------------
+# Private functions: accounts storage
+# ------------------------------------------------------------------------------
+
+proc fetchAndImportStorageSlots(
+    buddy: SnapBuddyRef;
+    reqSpecs: seq[AccountSlotsHeader];
+      ): Future[Result[seq[SnapSlotQueueItemRef],ComError]]
+      {.async.} =
+  ## Fetch storage slots data from the network, store it on disk and
+  ## return yet unprocessed data.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    env = ctx.data.pivotEnv
+    stateRoot = env.stateHeader.stateRoot
+
+  # Get storage slots
+  var stoRange = block:
+    let rc = await buddy.getStorageRanges(stateRoot, reqSpecs)
+    if rc.isErr:
+      return err(rc.error)
+    rc.value
+
+  if 0 < stoRange.data.storages.len:
+    # ------------------------------
+    buddy.dumpStorage(stoRange.data)
+    # ------------------------------
+
+    # Verify/process data and save to disk
+    block:
+      let rc = ctx.data.accountsDb.importStorages(peer, stoRange.data)
+
+      if rc.isErr:
+        # Push back parts of the error item
+        for w in rc.error:
+          if 0 <= w[0]:
+            # Reset any partial requests by not copying the `firstSlot` field.
+            # So all the storage slots are re-fetched completely for this
+            # account.
+            stoRange.addLeftOver AccountSlotsHeader(
+              accHash:     stoRange.data.storages[w[0]].account.accHash,
+              storageRoot: stoRange.data.storages[w[0]].account.storageRoot)
+
+        if rc.error[^1][0] < 0:
+          discard
+          # TODO: disk storage failed or something else happend, so what?
+
+  # Return the remaining part to be processed later
+  return ok(stoRange.leftOver)
+
+
+proc processStorageSlots(
+    buddy: SnapBuddyRef;
+      ): Future[Result[void,ComError]]
+      {.async.} =
+  ## Fetch storage data and save it on disk. Storage requests are managed by
+  ## a request queue for handling partioal replies and re-fetch issues. For
+  ## all practical puroses, this request queue should mostly be empty.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    env = ctx.data.pivotEnv
+    stateRoot = env.stateHeader.stateRoot
 
   while true:
     # Pull out the next request item from the queue
     let req = block:
       let rc = env.leftOver.shift
       if rc.isErr:
-        buddy.dumpEnd()                  # FIXME: Debugging (will go away)
-        return
+        return ok()
       rc.value
 
     block:
       # Fetch and store account storage slots. On some sort of success,
       # the `rc` return value contains a list of left-over items to be
       # re-processed.
-      let rc = await buddy.processStorageSlots(req.q)
+      let rc = await buddy.fetchAndImportStorageSlots(req.q)
 
       if rc.isErr:
         # Save accounts/storage list to be processed later, then stop
         discard env.leftOver.append req
-        if buddy.waitAfterError(rc.error):
-          buddy.dumpEnd() # FIXME: Debugging (will go away)
-          await sleepAsync(5.seconds)
-          return
-        elif buddy.ctrl.zombie:
-          return
+        return err(rc.error)
 
-      elif 0 < rc.value.q.len:
+      for qLo in rc.value:
         # Handle queue left-overs for processing in the next cycle
-        if rc.value.q[0].firstSlot == Hash256.default and
-           0 < env.leftOver.len:
+        if qLo.q[0].firstSlot == Hash256.default and 0 < env.leftOver.len:
           # Appending to last queue item is preferred over adding new item
           let item = env.leftOver.first.value
-          item.q = item.q & rc.value.q
+          item.q = item.q & qLo.q
         else:
           # Put back as-is.
-          discard env.leftOver.append rc.value
+          discard env.leftOver.append qLo
     # End while
 
-  buddy.dumpEnd()                        # FIXME: Debugging (will go away)
+  return ok()
 
+# ------------------------------------------------------------------------------
+# Private functions: healing
+# ------------------------------------------------------------------------------
 
-proc accountsTrieHealing(buddy: SnapBuddyRef; env: SnapPivotRef) {.async.} =
+proc accountsTrieHealing(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+    envSource: string;
+      ): Future[Result[void,ComError]]
+      {.async.} =
   ## ...
   # Starting with a given set of potentially dangling nodes, this set is
   # updated.
@@ -350,19 +388,20 @@ proc accountsTrieHealing(buddy: SnapBuddyRef; env: SnapPivotRef) {.async.} =
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
 
-  trace "Start healing", peer, repairState=env.repairState
-
   while env.repairState != Done and
         (env.dangling.len != 0 or env.repairState == Pristine):
+
+    trace "Accounts healing loop", peer, repairState=env.repairState,
+      envSource, nDangling=env.dangling.len
 
     let needNodes = block:
       let rc = ctx.data.accountsDb.inspectAccountsTrie(
         peer, stateRoot, env.dangling)
       if rc.isErr:
         let error = rc.error
-        trace "accountsTrieHealing failed", peer, repairState=env.repairState,
-          nDangling=env.dangling.len, error
-        return # TODO: error/loop handling
+        trace "Accounts healing failed", peer, repairState=env.repairState,
+          envSource, nDangling=env.dangling.len, error
+        return err(ComInspectDbFailed)
       rc.value.dangling
 
     # Clear dangling nodes register so that other processes would not fetch
@@ -371,14 +410,17 @@ proc accountsTrieHealing(buddy: SnapBuddyRef; env: SnapPivotRef) {.async.} =
 
     # Noting to anymore
     if needNodes.len == 0:
-      env.repairState = Done
-      return
+      if env.repairState != Pristine:
+        env.repairState = Done
+      trace "Done accounts healing for now", peer, repairState=env.repairState,
+        envSource, nDangling=env.dangling.len
+      return ok()
 
     let lastState = env.repairState
     env.repairState = KeepGoing
 
     trace "Need nodes for healing", peer, repairState=env.repairState,
-      nDangling=env.dangling.len, nNodes=needNodes.len
+      envSource, nDangling=env.dangling.len, nNodes=needNodes.len
 
     # Fetch nodes
     let dd = block:
@@ -386,11 +428,7 @@ proc accountsTrieHealing(buddy: SnapBuddyRef; env: SnapPivotRef) {.async.} =
       if rc.isErr:
         env.dangling = needNodes
         env.repairState = lastState
-        if buddy.waitAfterError(rc.error):
-          await sleepAsync(5.seconds)
-          return
-        elif buddy.ctrl.zombie:
-          return
+        return err(rc.error)
       rc.value
 
     # Store to disk and register left overs for the next pass
@@ -406,51 +444,90 @@ proc accountsTrieHealing(buddy: SnapBuddyRef; env: SnapPivotRef) {.async.} =
         env.dangling = dd.leftOver.mapIt(it[0]) & nodeKeys
     # End while
 
+  return ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc fetchAccounts*(buddy: SnapBuddyRef) {.async.} =
-  ## Fetch accounts data and store them in the database. The function returns
-  ## `true` if there are no more unprocessed accounts.
+  ## Fetch accounts and data and store them in the database.
+  ##
+  ## TODO: Healing for storages. Currently, healing in only run for accounts.
   let
     ctx = buddy.ctx
     peer = buddy.peer
     env = ctx.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
+  var
+    # Complete the previous environment by trie database healing (if any)
+    healingEnvs = if not ctx.data.prevEnv.isNil: @[ctx.data.prevEnv] else: @[]
 
-  # Get a range of accounts to fetch from
-  let iv = block:
-    let rc = buddy.getUnprocessed()
+  block processAccountsFrame:
+    # Get a range of accounts to fetch from
+    let iv = block:
+      let rc = buddy.getUnprocessed()
+      if rc.isErr:
+        # Although there are no accounts left to process, the other peer might
+        # still work on some accounts. As a general rule, not all from an
+        # account range gets served so the remaining range will magically
+        # reappear on the unprocessed ranges database.
+        trace "No more unprocessed accounts (maybe)", peer, stateRoot
+
+        # Complete healing for sporadic nodes missing.
+        healingEnvs.add env
+        break processAccountsFrame
+      rc.value
+
+    trace "Start fetching accounts", peer, stateRoot, iv,
+      repairState=env.repairState
+
+    # Process received accounts and stash storage slots to fetch later
+    block:
+      let rc = await buddy.processAccounts(iv)
+      if rc.isErr:
+        let error = rc.error
+        if await buddy.stopAfterError(error):
+          buddy.dumpEnd()                   # FIXME: Debugging (will go away)
+          trace "Stop fetching cycle", peer, repairState=env.repairState,
+            processing="accounts", error
+          return
+        break processAccountsFrame
+
+    # End `block processAccountsFrame`
+
+  trace "Start fetching storages", peer, nAccounts=env.leftOver.len,
+    repairState=env.repairState
+
+  # Process storage slots from environment batch
+  block:
+    let rc = await buddy.processStorageSlots()
     if rc.isErr:
-      trace "No more unprocessed accounts", peer, stateRoot
-      # Start healing for sporadic nodes missing
-      if env.repairState != Done:
-        await buddy.accountsTrieHealing(env)
-      return
-    rc.value
-
-  # Fetch data for this range delegated to `fetchAccounts()`
-  let dd = block:
-    let rc = await buddy.getAccountRange(stateRoot, iv)
-    if rc.isErr:
-      buddy.putUnprocessed(iv) # fail => interval back to pool
-      if buddy.waitAfterError(rc.error):
-        await sleepAsync(5.seconds)
+      let error = rc.error
+      if await buddy.stopAfterError(error):
+        buddy.dumpEnd()                     # FIXME: Debugging (will go away)
+        trace "Stop fetching cycle", peer, repairState=env.repairState,
+          processing="storage", error
         return
-      elif buddy.ctrl.zombie:
-        return
-    rc.value
 
-  # Process received accounts and receive storage slots
-  await buddy.processAccountsAndStorageSlots(iv, dd)
-
-  # Check whether there is some previous environment that can be completed by
+  # Check whether there is some environment that can be completed by
   # Patricia Merkle Tree healing.
-  let prvEnv = ctx.data.prevEnv
-  if not prvEnv.isNil:
-    # Continue with the healing process
-    await buddy.accountsTrieHealing(prvEnv)
+  for w in healingEnvs:
+    let envSource = if env == ctx.data.pivotEnv: "pivot" else: "retro"
+    trace "Start accounts healing", peer, repairState=env.repairState,
+      envSource, dangling=w.dangling.len
+
+    let rc = await buddy.accountsTrieHealing(w, envSource)
+    if rc.isErr:
+      let error = rc.error
+      if await buddy.stopAfterError(error):
+        buddy.dumpEnd()                     # FIXME: Debugging (will go away)
+        trace "Stop fetching cycle", peer, repairState=env.repairState,
+          processing="healing", dangling=w.dangling.len, error
+        return
+
+  buddy.dumpEnd()                           # FIXME: Debugging (will go away)
+  trace "Done fetching cycle", peer, repairState=env.repairState
 
 # ------------------------------------------------------------------------------
 # End
