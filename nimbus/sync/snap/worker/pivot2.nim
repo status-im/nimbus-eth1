@@ -25,7 +25,7 @@ logScope:
   topics = "snap-pivot"
 
 const
-  noisySyncVotingOk = false
+  extraTraceMessages = false # or true
     ## Additional trace commands
 
   minPeersToStartSync = 2
@@ -143,9 +143,15 @@ proc getBestHeader(
   trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
   return err()
 
-proc agreesOnChain(buddy: SnapBuddyRef; other: Peer): Future[bool] {.async.} =
+proc agreesOnChain(
+    buddy: SnapBuddyRef;
+    other: Peer
+     ): Future[Result[void,bool]] {.async.} =
   ## Returns `true` if one of the peers `buddy.peer` or `other` acknowledges
-  ## existence of the best block of the other peer.
+  ## existence of the best block of the other peer. The values returned mean
+  ## * ok()       -- `peer` is trusted
+  ## * err(true)  -- `peer` is untrusted
+  ## * err(false) -- `other` is dead
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `peersAgreeOnChain()`
   let
@@ -153,7 +159,7 @@ proc agreesOnChain(buddy: SnapBuddyRef; other: Peer): Future[bool] {.async.} =
   var
     start = peer
     fetch = other
-    swapped = false # logging only
+    swapped = false
   # Make sure that `fetch` has not the smaller difficulty.
   if fetch.state(eth).bestDifficulty < start.state(eth).bestDifficulty:
     swap(fetch, start)
@@ -176,7 +182,11 @@ proc agreesOnChain(buddy: SnapBuddyRef; other: Peer): Future[bool] {.async.} =
   buddy.safeTransport("Error fetching block header"):
     hdrResp = await fetch.getBlockHeaders(hdrReq)
   if buddy.ctrl.stopped:
-    return false
+    if swapped:
+      return err(true)
+    # No need to terminate `peer` if it was the `other`, failing nevertheless
+    buddy.ctrl.stopped = false
+    return err(false)
 
   if hdrResp.isSome:
     let hdrRespLen = hdrResp.get.headers.len
@@ -184,11 +194,11 @@ proc agreesOnChain(buddy: SnapBuddyRef; other: Peer): Future[bool] {.async.} =
       let blockNumber = hdrResp.get.headers[0].blockNumber
       trace trEthRecvReceivedBlockHeaders, peer, start, fetch,
         hdrRespLen, blockNumber
-    return true
+    return ok()
 
   trace trEthRecvReceivedBlockHeaders, peer, start, fetch,
     blockNumber="n/a", swapped
-
+  return err(true)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -198,10 +208,12 @@ proc pivot2Start*(buddy: SnapBuddyRef) =
   discard
 
 proc pivot2Stop*(buddy: SnapBuddyRef) =
-  discard
+  ## Clean up this peer
+  buddy.ctx.data.untrusted.add buddy.peer
 
 proc pivot2Restart*(buddy: SnapBuddyRef) =
   buddy.data.pivot2Header = none(BlockHeader)
+  buddy.ctx.data.untrusted.add buddy.peer
 
 
 proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
@@ -216,17 +228,17 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
 
   # Delayed clean up batch list
   if 0 < ctx.data.untrusted.len:
-    when noisySyncVotingOk:
-      trace "Removing untrused peers", peer,
-        count=ctx.data.untrusted.len, runState=buddy.ctrl.state
-    for p in ctx.data.untrusted:
-      ctx.data.trusted.excl p
+    when extraTraceMessages:
+      trace "Removing untrusted peers", peer, trusted=ctx.data.trusted.len,
+        untrusted=ctx.data.untrusted.len, runState=buddy.ctrl.state
+    ctx.data.trusted = ctx.data.trusted - ctx.data.untrusted.toHashSet
     ctx.data.untrusted.setLen(0)
 
   if buddy.data.pivot2Header.isNone:
-    # Only log for the first time, or so
-    trace "Pivot initialisation", peer,
-      trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+    when extraTraceMessages:
+      # Only log for the first time (if any)
+      trace "Pivot initialisation", peer,
+        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
 
     let rc = await buddy.getBestHeader()
     # Beware of peer terminating the session right after communicating
@@ -246,15 +258,19 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
     # We have enough trusted peers. Validate new peer against trusted
     let rc = buddy.getRandomTrustedPeer()
     if rc.isOK:
-      if await buddy.agreesOnChain(rc.value):
+      let rx = await buddy.agreesOnChain(rc.value)
+      if rx.isOk:
         ctx.data.trusted.incl peer
         return true
+      if not rx.error:
+        # Other peer is dead
+        ctx.data.trusted.excl rc.value
 
   # If there are no trusted peers yet, assume this very peer is trusted,
   # but do not finish initialisation until there are more peers.
   elif ctx.data.trusted.len == 0:
     ctx.data.trusted.incl peer
-    when noisySyncVotingOk:
+    when extraTraceMessages:
       trace "Assume initial trusted peer", peer,
         trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
 
@@ -271,38 +287,55 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
     var
       agreeScore = 0
       otherPeer: Peer
+      deadPeers: HashSet[Peer]
+    when extraTraceMessages:
+      trace "Trust scoring peer", peer,
+        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
     for p in ctx.data.trusted:
       if peer == p:
         inc agreeScore
-      elif await buddy.agreesOnChain(p):
-        inc agreeScore
-      elif buddy.ctrl.stopped:
-        # Beware of terminated session
-        return false
       else:
-        otherPeer = p
+        let rc = await buddy.agreesOnChain(p)
+        if rc.isOk:
+          inc agreeScore
+        elif buddy.ctrl.stopped:
+          # Beware of terminated session
+          return false
+        elif rc.error:
+          otherPeer = p
+        else:
+          # `Other` peer is dead
+          deadPeers.incl p
+
+    # Normalise
+    if 0 < deadPeers.len:
+      ctx.data.trusted = ctx.data.trusted - deadPeers
+      if ctx.data.trusted.len == 0 or
+         ctx.data.trusted.len == 1 and buddy.peer in ctx.data.trusted:
+        return false
 
     # Check for the number of peers that disagree
-    case ctx.data.trusted.len - agreeScore
+    case ctx.data.trusted.len - agreeScore:
     of 0:
       ctx.data.trusted.incl peer # best possible outcome
-      when noisySyncVotingOk:
+      when extraTraceMessages:
         trace "Agreeable trust score for peer", peer,
           trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
     of 1:
       ctx.data.trusted.excl otherPeer
       ctx.data.trusted.incl peer
-      when noisySyncVotingOk:
+      when extraTraceMessages:
         trace "Other peer no longer trusted", peer,
           otherPeer, trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
     else:
-      when noisySyncVotingOk:
+      when extraTraceMessages:
         trace "Peer not trusted", peer,
           trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
       discard
 
+    # Evaluate status, finally
     if minPeersToStartSync <= ctx.data.trusted.len:
-      when noisySyncVotingOk:
+      when extraTraceMessages:
         trace "Peer trusted now", peer,
           trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
       return true
