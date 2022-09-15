@@ -15,6 +15,10 @@ type
     terminalHash
     safeHash
     finalizedHash
+    skeletonProgress
+    skeletonBlockHashToNumber
+    skeletonBlock
+    skeletonTransaction
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -78,6 +82,27 @@ proc safeHashKey*(): DbKey {.inline.} =
 proc finalizedHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
+
+proc skeletonProgressKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonProgress)
+  result.dataEndPos = 1
+
+proc skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonBlockHashToNumber)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+proc skeletonBlockKey*(u: BlockNumber): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonBlock)
+  doAssert sizeof(u) <= 32
+  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
+  result.dataEndPos = uint8 sizeof(u)
+
+proc skeletonTransactionKey*(u: BlockNumber): DbKey {.inline.} =
+  result.data[0] = byte ord(skeletonTransaction)
+  doAssert sizeof(u) <= 32
+  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
+  result.dataEndPos = uint8 sizeof(u)
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

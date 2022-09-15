@@ -1,5 +1,6 @@
 import
-  eth/[trie, rlp, common/eth_types_rlp, trie/db]
+  eth/[trie, rlp, common/eth_types_rlp, trie/db],
+  stew/byteutils
 
 export eth_types_rlp
 
@@ -50,3 +51,9 @@ proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
     crcu32 = (crcu32 shr 4) xor kcrc32[int((crcu32 and 0xF) xor (uint32(b) shr 4'u32))]
 
   result = not crcu32
+
+proc short*(h: Hash256): string =
+  var bytes: array[6, byte]
+  bytes[0..2] = h.data[0..2]
+  bytes[^3..^1] = h.data[^3..^1]
+  bytes.toHex
