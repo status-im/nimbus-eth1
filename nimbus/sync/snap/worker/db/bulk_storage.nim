@@ -33,12 +33,12 @@ proc to(tag: NodeTag; T: type RepairKey): T =
   tag.to(NodeKey).to(RepairKey)
 
 proc convertTo(key: RepairKey; T: type NodeKey): T =
-  if key.isNodeKey:
-    discard result.init(key.ByteArray33[1 .. 32])
+  ## Might be lossy, check before use
+  discard result.init(key.ByteArray33[1 .. 32])
 
 proc convertTo(key: RepairKey; T: type NodeTag): T =
-  if key.isNodeKey:
-    result = UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
+  ## Might be lossy, check before use
+  UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
 
 # ------------------------------------------------------------------------------
 # Private helpers for bulk load testing
@@ -80,7 +80,7 @@ proc bulkStorageClearRockyCacheFile*(rocky: RocksStoreRef): bool =
 # ------------------------------------------------------------------------------
 
 proc bulkStorageAccounts*(
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
   ## Bulk load using transactional `put()`
@@ -96,7 +96,7 @@ proc bulkStorageAccounts*(
   ok()
 
 proc bulkStorageStorages*(
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
   ## Bulk load using transactional `put()`
@@ -113,7 +113,7 @@ proc bulkStorageStorages*(
 
 
 proc bulkStorageAccountsRocky*(
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
@@ -162,7 +162,7 @@ proc bulkStorageAccountsRocky*(
 
 
 proc bulkStorageStoragesRocky*(
-    db: HexaryTreeDB;
+    db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =

@@ -449,10 +449,8 @@ proc initaliseWorker(buddy: FullBuddyRef): Future[bool] {.async.} =
     let rc = buddy.getRandomTrustedPeer()
     if rc.isOK:
       if await buddy.agreesOnChain(rc.value):
-        # Beware of peer terminating the session
-        if not buddy.ctrl.stopped:
-          ctx.data.trusted.incl peer
-          return true
+        ctx.data.trusted.incl peer
+        return true
 
   # If there are no trusted peers yet, assume this very peer is trusted,
   # but do not finish initialisation until there are more peers.
@@ -476,15 +474,13 @@ proc initaliseWorker(buddy: FullBuddyRef): Future[bool] {.async.} =
     for p in ctx.data.trusted:
       if peer == p:
         inc agreeScore
-      else:
-        let agreedOk = await buddy.agreesOnChain(p)
+      elif await buddy.agreesOnChain(p):
+        inc agreeScore
+      elif buddy.ctrl.stopped:
         # Beware of peer terminating the session
-        if buddy.ctrl.stopped:
-          return false
-        if agreedOk:
-          inc agreeScore
-        else:
-          otherPeer = p
+        return false
+      else:
+        otherPeer = p
 
     # Check for the number of peers that disagree
     case ctx.data.trusted.len - agreeScore

@@ -16,19 +16,25 @@ type
     AccountSmallerThanBase
     AccountsNotSrictlyIncreasing
     AccountRangesOverlap
-    AccountRepairBlocked
+    RlpEncoding
+    SlotsNotSrictlyIncreasing
+    LoopAlert
+
+    # import
     DifferentNodeValueExists
-    InternalDbInconsistency
-    RightBoundaryProofFailed
+    ExpectedNodeKeyDiffers
     Rlp2Or17ListEntries
     RlpBlobExpected
     RlpBranchLinkExpected
-    RlpEncoding
     RlpExtPathEncoding
     RlpNonEmptyBlobExpected
+
+    # interpolate
+    AccountRepairBlocked
+    InternalDbInconsistency
+    RightBoundaryProofFailed
     RootNodeMismatch
     RootNodeMissing
-    SlotsNotSrictlyIncreasing
 
     # bulk storage
     AddBulkItemFailed

@@ -1,5 +1,4 @@
-# Nimbus - Fetch account and storage states from peers by snapshot traversal
-#
+# Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -18,8 +17,9 @@ import
   chronos,
   eth/[common/eth_types, p2p, trie/trie_defs],
   stew/interval_set,
-  "../.."/[protocol, protocol/trace_config],
-  ".."/[range_desc, worker_desc]
+  "../../.."/[protocol, protocol/trace_config],
+  "../.."/[range_desc, worker_desc],
+  ./get_error
 
 {.push raises: [Defect].}
 
@@ -27,15 +27,6 @@ logScope:
   topics = "snap-fetch"
 
 type
-  GetAccountRangeError* = enum
-    GareNothingSerious
-    GareMissingProof
-    GareAccountsMinTooSmall
-    GareAccountsMaxTooLarge
-    GareNoAccountsForStateRoot
-    GareNetworkProblem
-    GareResponseTimeout
-
   GetAccountRange* = object
     consumed*:    LeafRange               ## Real accounts interval covered
     data*: PackedAccountRange             ## Re-packed reply data
@@ -69,7 +60,7 @@ proc getAccountRange*(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
     iv: LeafRange
-      ): Future[Result[GetAccountRange,GetAccountRangeError]] {.async.} =
+      ): Future[Result[GetAccountRange,ComError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   let
     peer = buddy.peer
@@ -80,10 +71,10 @@ proc getAccountRange*(
   var dd = block:
     let rc = await buddy.getAccountRangeReq(stateRoot, iv)
     if rc.isErr:
-      return err(GareNetworkProblem)
+      return err(ComNetworkProblem)
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
-      return err(GareResponseTimeout)
+      return err(ComResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
       consumed:   iv,
@@ -119,7 +110,7 @@ proc getAccountRange*(
       # Maybe try another peer
       trace trSnapRecvReceived & "empty AccountRange", peer,
         nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
-      return err(GareNoAccountsForStateRoot)
+      return err(ComNoAccountsForStateRoot)
 
     # So there is no data, otherwise an account beyond the interval end
     # `iv.maxPt` would have been returned.
@@ -144,14 +135,14 @@ proc getAccountRange*(
       trace trSnapRecvProtocolViolation & "proof-less AccountRange", peer,
         nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
         reqRange=iv, stateRoot
-      return err(GareMissingProof)
+      return err(ComMissingProof)
 
   if accMinPt < iv.minPt:
     # Not allowed
     trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
       nAccounts, nProof, accRange=LeafRange.new(accMinPt, accMaxPt),
       reqRange=iv, stateRoot
-    return err(GareAccountsMinTooSmall)
+    return err(ComAccountsMinTooSmall)
 
   if iv.maxPt < accMaxPt:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getaccountrange-0x00:
@@ -168,7 +159,7 @@ proc getAccountRange*(
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
           nAccounts, nProof, accRange=LeafRange.new(iv.minPt, accMaxPt),
           reqRange=iv, stateRoot
-        return err(GareAccountsMaxTooLarge)
+        return err(ComAccountsMaxTooLarge)
 
   dd.consumed = LeafRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
   trace trSnapRecvReceived & "AccountRange", peer,

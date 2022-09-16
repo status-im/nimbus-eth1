@@ -13,7 +13,7 @@ import
   eth/common,
   nimcrypto/utils,
   stew/byteutils,
-  ../../nimbus/sync/snap/[range_desc, worker/db/hexary_desc],
+  ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/protocol,
   ./gunzip
 

@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[algorithm, hashes, sequtils, strutils, tables],
+  std/[algorithm, hashes, sequtils, sets, strutils, tables],
   eth/[common/eth_types, p2p, trie/nibbles],
   stint,
   ../../range_desc
@@ -20,14 +20,8 @@ type
   HexaryPpFn* = proc(key: RepairKey): string {.gcsafe.}
     ## For testing/debugging: key pretty printer function
 
-  ByteArray32* = array[32,byte]
-    ## Used for 32 byte database keys
-
   ByteArray33* = array[33,byte]
     ## Used for 31 byte database keys, i.e. <marker> + <32-byte-key>
-
-  NodeKey* = distinct ByteArray32
-    ## Hash key without the hash wrapper
 
   RepairKey* = distinct ByteArray33
     ## Byte prefixed `NodeKey` for internal DB records
@@ -139,10 +133,21 @@ type
     nodeKey*: RepairKey             ## Leaf hash into hexary repair table
     payload*: Blob                  ## Data payload
 
-  HexaryTreeDB* = object
+  TrieNodeStat* = object
+    ## Trie inspection report
+    stoppedAt*: int                 ## Potential loop dedected if positive
+    dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
+
+  HexaryTreeDbRef* = ref object
+    ## Hexary trie plus helper structures
     tab*: Table[RepairKey,RNodeRef] ## key-value trie table, in-memory db
     repairKeyGen*: uint64           ## Unique tmp key generator
     keyPp*: HexaryPpFn              ## For debugging, might go away
+
+  HexaryGetFn* = proc(key: Blob): Blob {.gcsafe.}
+    ## Persistent database get() function. For read-only cacses, this function
+    ## can be seen as the persistent alternative to `HexaryTreeDbRef`.
+
 
 const
   EmptyNodeBlob* = seq[byte].default
@@ -161,18 +166,9 @@ var
 
 proc initImpl(key: var RepairKey; data: openArray[byte]): bool =
   key.reset
-  if data.len <= 33:
-    if 0 < data.len:
-      let trg = addr key.ByteArray33[33 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
-    return true
-
-proc initImpl(key: var NodeKey; data: openArray[byte]): bool =
-  key.reset
-  if data.len <= 32:
-    if 0 < data.len:
-      let trg = addr key.ByteArray32[32 - data.len]
-      trg.copyMem(unsafeAddr data[0], data.len)
+  if 0 < data.len and data.len <= 33:
+    let trg = addr key.ByteArray33[33 - data.len]
+    trg.copyMem(unsafeAddr data[0], data.len)
     return true
 
 # ------------------------------------------------------------------------------
@@ -196,7 +192,7 @@ proc ppImpl(s: string; hex = false): string =
     (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
-proc ppImpl(key: RepairKey; db: HexaryTreeDB): string =
+proc ppImpl(key: RepairKey; db: HexaryTreeDbRef): string =
   try:
     if not disablePrettyKeys and not db.keyPp.isNil:
       return db.keyPp(key)
@@ -204,13 +200,13 @@ proc ppImpl(key: RepairKey; db: HexaryTreeDB): string =
     discard
   key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
 
-proc ppImpl(key: NodeKey; db: HexaryTreeDB): string =
+proc ppImpl(key: NodeKey; db: HexaryTreeDbRef): string =
   key.to(RepairKey).ppImpl(db)
 
-proc ppImpl(w: openArray[RepairKey]; db: HexaryTreeDB): string =
+proc ppImpl(w: openArray[RepairKey]; db: HexaryTreeDbRef): string =
   w.mapIt(it.ppImpl(db)).join(",")
 
-proc ppImpl(w: openArray[Blob]; db: HexaryTreeDB): string =
+proc ppImpl(w: openArray[Blob]; db: HexaryTreeDbRef): string =
   var q: seq[RepairKey]
   for a in w:
     var key: RepairKey
@@ -222,7 +218,7 @@ proc ppStr(blob: Blob): string =
   if blob.len == 0: ""
   else: blob.mapIt(it.toHex(2)).join.toLowerAscii.ppImpl(hex = true)
 
-proc ppImpl(n: RNodeRef; db: HexaryTreeDB): string =
+proc ppImpl(n: RNodeRef; db: HexaryTreeDbRef): string =
   let so = n.state.ord
   case n.kind:
   of Leaf:
@@ -232,7 +228,7 @@ proc ppImpl(n: RNodeRef; db: HexaryTreeDB): string =
   of Branch:
     ["b","þ","B","R"][so] & "(" & n.bLink.ppImpl(db) & "," & n.bData.ppStr & ")"
 
-proc ppImpl(n: XNodeObj; db: HexaryTreeDB): string =
+proc ppImpl(n: XNodeObj; db: HexaryTreeDbRef): string =
   case n.kind:
   of Leaf:
     "l(" & $n.lPfx & "," & n.lData.ppStr & ")"
@@ -243,19 +239,19 @@ proc ppImpl(n: XNodeObj; db: HexaryTreeDB): string =
   of Branch:
     "b(" & n.bLink[0..15].ppImpl(db) & "," &  n.bLink[16].ppStr & ")"
 
-proc ppImpl(w: RPathStep; db: HexaryTreeDB): string =
+proc ppImpl(w: RPathStep; db: HexaryTreeDbRef): string =
   let
     nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
     key = w.key.ppImpl(db)
   "(" & key & "," & nibble & "," & w.node.ppImpl(db) & ")"
 
-proc ppImpl(w: XPathStep; db: HexaryTreeDB): string =
+proc ppImpl(w: XPathStep; db: HexaryTreeDbRef): string =
   let nibble = if 0 <= w.nibble: w.nibble.toHex(1).toLowerAscii else: "ø"
   var key: RepairKey
   discard key.initImpl(w.key)
   "(" & key.ppImpl(db) & "," & $nibble & "," & w.node.ppImpl(db) & ")"
 
-proc ppImpl(db: HexaryTreeDB; root: NodeKey): seq[string] =
+proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
   ## Dump the entries from the a generic repair tree. This function assumes
   ## that mapped keys are printed `$###` if a node is locked or static, and
   ## some substitute for the first letter `$` otherwise (if they are mutable.)
@@ -280,6 +276,14 @@ proc ppImpl(db: HexaryTreeDB; root: NodeKey): seq[string] =
   except Exception as e:
     result &= " ! Ooops ppImpl(): name=" & $e.name & " msg=" & e.msg
 
+proc ppDangling(a: seq[Blob]; maxItems = 30): string =
+  proc ppBlob(w: Blob): string =
+    w.mapIt(it.toHex(2)).join.toLowerAscii
+  let
+    q = a.toSeq.mapIt(it.ppBlob)[0 ..< min(maxItems,a.len)]
+    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
+  "{" & q.join(",") & andMore & "}"
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
@@ -299,40 +303,43 @@ proc pp*(key: NodeKey): string =
   ## Raw key, for referenced key dump use `key.pp(db)` below
   key.ByteArray32.toSeq.mapIt(it.toHex(2)).join.tolowerAscii
 
-proc pp*(key: NodeKey|RepairKey; db: HexaryTreeDB): string =
+proc pp*(key: NodeKey|RepairKey; db: HexaryTreeDbRef): string =
   key.ppImpl(db)
 
-proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDB): string =
+proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDbRef): string =
   w.ppImpl(db)
 
-proc pp*(w:openArray[RPathStep|XPathStep]; db:HexaryTreeDB; indent=4): string =
+proc pp*(w:openArray[RPathStep|XPathStep];db:HexaryTreeDbRef;indent=4): string =
   w.toSeq.mapIt(it.ppImpl(db)).join(indent.toPfx)
 
-proc pp*(w: RPath; db: HexaryTreeDB; indent=4): string =
+proc pp*(w: RPath; db: HexaryTreeDbRef; indent=4): string =
   w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & ")"
 
-proc pp*(w: XPath; db: HexaryTreeDB; indent=4): string =
+proc pp*(w: XPath; db: HexaryTreeDbRef; indent=4): string =
   w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & "," & $w.depth & ")"
 
-proc pp*(db: HexaryTreeDB; root: NodeKey; indent=4): string =
+proc pp*(db: HexaryTreeDbRef; root: NodeKey; indent=4): string =
   ## Dump the entries from the a generic repair tree.
   db.ppImpl(root).join(indent.toPfx)
 
-proc pp*(db: HexaryTreeDB; indent=4): string =
+proc pp*(db: HexaryTreeDbRef; indent=4): string =
   ## varinat of `pp()` above
   db.ppImpl(NodeKey.default).join(indent.toPfx)
+
+proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
+  "(" &
+    $a.stoppedAt & "," &
+    $a.dangling.len & "," &
+    a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)
 # ------------------------------------------------------------------------------
 
-proc init*(key: var NodeKey; data: openArray[byte]): bool =
-  key.initImpl(data)
-
 proc init*(key: var RepairKey; data: openArray[byte]): bool =
   key.initImpl(data)
 
-proc newRepairKey*(db: var HexaryTreeDB): RepairKey =
+proc newRepairKey*(db: HexaryTreeDbRef): RepairKey =
   db.repairKeyGen.inc
   var src = db.repairKeyGen.toBytesBE
   (addr result.ByteArray33[25]).copyMem(addr src[0], 8)
@@ -358,17 +365,11 @@ proc `==`*(a, b: RepairKey): bool =
   ## Tables mixin
   a.ByteArray33 == b.ByteArray33
 
-proc to*(tag: NodeTag; T: type NodeKey): T =
-  tag.UInt256.toBytesBE.T
-
 proc to*(key: NodeKey; T: type NibblesSeq): T =
   key.ByteArray32.initNibbleRange
 
 proc to*(key: NodeKey; T: type RepairKey): T =
   (addr result.ByteArray33[1]).copyMem(unsafeAddr key.ByteArray32[0], 32)
-
-proc to*(hash: Hash256; T: type NodeKey): T =
-  hash.data.NodeKey
 
 proc isZero*[T: NodeTag|NodeKey|RepairKey](a: T): bool =
   a == T.default
@@ -379,9 +380,13 @@ proc isNodeKey*(a: RepairKey): bool =
 proc digestTo*(data: Blob; T: type NodeKey): T =
   keccakHash(data).data.T
 
-proc convertTo*[W: NodeKey|RepairKey](data: Blob; T: type W): T =
+proc convertTo*(data: Blob; T: type NodeKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.init(data)
+
+proc convertTo*(data: Blob; T: type RepairKey): T =
+  ## Probably lossy conversion, use `init()` for safe conversion
+  discard result.initImpl(data)
 
 proc convertTo*(node: RNodeRef; T: type Blob): T =
   ## Write the node as an RLP-encoded blob

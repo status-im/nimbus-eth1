@@ -21,7 +21,7 @@ import
   "../.."/[protocol, types],
   ../range_desc,
   ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_import,
-        hexary_interpolate, hexary_paths, rocky_bulk_load]
+        hexary_interpolate, hexary_inspect, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
@@ -30,6 +30,9 @@ logScope:
 
 export
   HexaryDbError
+
+const
+  extraTraceMessages =  false # or true
 
 type
   AccountsDbRef* = ref object
@@ -41,21 +44,21 @@ type
     base: AccountsDbRef              ## Back reference to common parameters
     peer: Peer                       ## For log messages
     accRoot: NodeKey                 ## Current accounts root node
-    accDb: HexaryTreeDB              ## Accounts database
-    stoDb: HexaryTreeDB              ## Storage database
+    accDb: HexaryTreeDbRef           ## Accounts database
+    stoDb: HexaryTreeDbRef           ## Storage database
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc newHexaryTreeDb(ps: AccountsDbSessionRef): HexaryTreeDB =
-  result.keyPp = ps.stoDb.keyPp # for debugging, will go away
+proc newHexaryTreeDbRef(ps: AccountsDbSessionRef): HexaryTreeDbRef =
+  HexaryTreeDbRef(keyPp: ps.stoDb.keyPp) # for debugging, will go away
 
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
-  discard result.NodeHash.init(data) # error => zero
+  discard result.data.NodeKey.init(data) # size error => zero
 
 template noKeyError(info: static[string]; code: untyped) =
   try:
@@ -68,6 +71,8 @@ template noRlpExceptionOops(info: static[string]; code: untyped) =
     code
   except RlpError:
     return err(RlpEncoding)
+  except KeyError as e:
+    raiseAssert "Not possible (" & info & "): " & e.msg
   except Defect as e:
     raise e
   except Exception as e:
@@ -118,7 +123,7 @@ proc pp(a: NodeTag; ps: AccountsDbSessionRef): string =
 
 proc mergeProofs(
     peer: Peer,             ## For log messages
-    db: var HexaryTreeDB;   ## Database table
+    db: HexaryTreeDbRef;    ## Database table
     root: NodeKey;          ## Root for checking nodes
     proof: seq[Blob];       ## Node records
     freeStandingOk = false; ## Remove freestanding nodes
@@ -155,28 +160,30 @@ proc mergeProofs(
 
 
 proc persistentAccounts(
-    ps: AccountsDbSessionRef
+    db: HexaryTreeDbRef;          ## Current table
+    pv: AccountsDbRef;            ## Persistent database
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
-  if ps.base.rocky.isNil:
-    let rc = ps.accDb.bulkStorageAccounts(ps.base.db)
+  if pv.rocky.isNil:
+    let rc = db.bulkStorageAccounts(pv.db)
     if rc.isErr: return rc
   else:
-    let rc = ps.accDb.bulkStorageAccountsRocky(ps.base.rocky)
+    let rc = db.bulkStorageAccountsRocky(pv.rocky)
     if rc.isErr: return rc
   ok()
 
 proc persistentStorages(
-    ps: AccountsDbSessionRef
+    db: HexaryTreeDbRef;          ## Current table
+    pv: AccountsDbRef;            ## Persistent database
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
-  if ps.base.rocky.isNil:
-    let rc = ps.stoDb.bulkStorageStorages(ps.base.db)
+  if pv.rocky.isNil:
+    let rc = db.bulkStorageStorages(pv.db)
     if rc.isErr: return rc
   else:
-    let rc = ps.stoDb.bulkStorageStoragesRocky(ps.base.rocky)
+    let rc = db.bulkStorageStoragesRocky(pv.rocky)
     if rc.isErr: return rc
   ok()
 
@@ -271,7 +278,7 @@ proc importStorageSlots*(
     stoRoot = data.account.storageRoot.to(NodeKey)
   var
     slots: seq[RLeafSpecs]
-    db = ps.newHexaryTreeDB()
+    db = ps.newHexaryTreeDbRef()
 
   if 0 < proof.len:
     let rc = ps.peer.mergeProofs(db, stoRoot, proof)
@@ -326,13 +333,36 @@ proc init*(
   let desc = AccountsDbSessionRef(
     base:    pv,
     peer:    peer,
-    accRoot: root.to(NodeKey))
+    accRoot: root.to(NodeKey),
+    accDb:   HexaryTreeDbRef(),
+    stoDb:   HexaryTreeDbRef())
 
   # Debugging, might go away one time ...
   desc.accDb.keyPp = proc(key: RepairKey): string = key.pp(desc)
   desc.stoDb.keyPp = desc.accDb.keyPp
 
   return desc
+
+proc dup*(
+    ps: AccountsDbSessionRef;
+    root: Hash256;
+    peer: Peer;
+      ): AccountsDbSessionRef =
+  ## Resume a session with different `root` key and `peer`. This new session
+  ## will access the same memory database as the `ps` argument session.
+  AccountsDbSessionRef(
+    base:    ps.base,
+    peer:    peer,
+    accRoot: root.to(NodeKey),
+    accDb:   ps.accDb,
+    stoDb:   ps.stoDb)
+
+proc dup*(
+    ps: AccountsDbSessionRef;
+    root: Hash256;
+      ): AccountsDbSessionRef =
+  ## Variant of `dup()` without the `peer` argument.
+  ps.dup(root, ps.peer)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -350,11 +380,11 @@ proc importAccounts*(
     ps: AccountsDbSessionRef; ## Re-usable session descriptor
     base: NodeTag;            ## before or at first account entry in `data`
     data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-    storeOk = false;          ## store data on disk
+    persistent = false;       ## store data on disk
       ): Result[void,HexaryDbError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
-  ## which can be written to disk with the argument `storeOk` set `true`. The
+  ## which can be written to disk with the argument `persistent` set `true`. The
   ## memory table is held in the descriptor argument`ps`.
   ##
   ## Note that the `peer` argument is for log messages, only.
@@ -374,8 +404,8 @@ proc importAccounts*(
         ps.accRoot, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
         return err(rc.error)
-    if storeOk:
-      let rc = ps.persistentAccounts()
+    if persistent:
+      let rc = ps.accDb.persistentAccounts(ps.base)
       if rc.isErr:
         return err(rc.error)
   except RlpError:
@@ -386,9 +416,10 @@ proc importAccounts*(
     trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
 
-  trace "Accounts and proofs ok", peer=ps.peer,
-    root=ps.accRoot.ByteArray32.toHex,
-    proof=data.proof.len, base, accounts=data.accounts.len
+  when extraTraceMessages:
+    trace "Accounts and proofs ok", peer=ps.peer,
+      root=ps.accRoot.ByteArray32.toHex,
+      proof=data.proof.len, base, accounts=data.accounts.len
   ok()
 
 proc importAccounts*(
@@ -397,21 +428,21 @@ proc importAccounts*(
     root: Hash256;            ## state root
     base: NodeTag;            ## before or at first account entry in `data`
     data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-    storeOk = false;          ## store data on disk
       ): Result[void,HexaryDbError] =
   ## Variant of `importAccounts()`
-  AccountsDbSessionRef.init(pv, root, peer).importAccounts(base, data, storeOk)
+  AccountsDbSessionRef.init(
+    pv, root, peer).importAccounts(base, data, persistent=true)
 
 
 
 proc importStorages*(
     ps: AccountsDbSessionRef;  ## Re-usable session descriptor
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
-    storeOk = false;           ## store data on disk
+    persistent = false;        ## store data on disk
       ): Result[void,seq[(int,HexaryDbError)]] =
   ## Validate and import storage slots (using proofs as received with the snap
   ## message `StorageRanges`). This function accumulates data in a memory table
-  ## which can be written to disk with the argument `storeOk` set `true`. The
+  ## which can be written to disk with the argument `persistent` set `true`. The
   ## memory table is held in the descriptor argument`ps`.
   ##
   ## Note that the `peer` argument is for log messages, only.
@@ -447,9 +478,9 @@ proc importStorages*(
           errors.add (slotID,rc.error)
 
       # Store to disk
-      if storeOk:
+      if persistent:
         slotID = -1
-        let rc = ps.persistentStorages()
+        let rc = ps.stoDb.persistentStorages(ps.base)
         if rc.isErr:
           errors.add (slotID,rc.error)
 
@@ -465,19 +496,118 @@ proc importStorages*(
       # So non-empty error list is guaranteed
       return err(errors)
 
-  trace "Storage slots imported", peer=ps.peer,
-    slots=data.storages.len, proofs=data.proof.len
-
+  when extraTraceMessages:
+    trace "Storage slots imported", peer=ps.peer,
+      slots=data.storages.len, proofs=data.proof.len
   ok()
 
 proc importStorages*(
     pv: AccountsDbRef;         ## Base descriptor on `BaseChainDB`
     peer: Peer,                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
-    storeOk = false;           ## store data on disk
       ): Result[void,seq[(int,HexaryDbError)]] =
   ## Variant of `importStorages()`
-  AccountsDbSessionRef.init(pv, Hash256(), peer).importStorages(data, storeOk)
+  AccountsDbSessionRef.init(
+    pv, Hash256(), peer).importStorages(data, persistent=true)
+
+
+
+proc importRawNodes*(
+    ps: AccountsDbSessionRef;  ## Re-usable session descriptor
+    nodes: openArray[Blob];    ## Node records
+    persistent = false;        ## store data on disk
+      ): Result[void,seq[(int,HexaryDbError)]] =
+  ## ...
+  var
+    errors: seq[(int,HexaryDbError)]
+    nodeID = -1
+  let
+    db = ps.newHexaryTreeDbRef()
+  try:
+    # Import nodes
+    for n,rec in nodes:
+      nodeID = n
+      let rc = db.hexaryImport(rec)
+      if rc.isErr:
+        let error = rc.error
+        trace "importRawNodes()", peer=ps.peer, item=n, nodes=nodes.len, error
+        errors.add (nodeID,error)
+
+    # Store to disk
+    if persistent:
+      nodeID = -1
+      let rc = db.persistentAccounts(ps.base)
+      if rc.isErr:
+        errors.add (nodeID,rc.error)
+
+  except RlpError:
+    errors.add (nodeID,RlpEncoding)
+  except KeyError as e:
+    raiseAssert "Not possible @ importAccounts: " & e.msg
+  except OSError as e:
+    trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
+    errors.add (nodeID,RlpEncoding)
+
+  if 0 < errors.len:
+    return err(errors)
+
+  trace "Raw nodes imported", peer=ps.peer, nodes=nodes.len
+  ok()
+
+proc importRawNodes*(
+    pv: AccountsDbRef;               ## Base descriptor on `BaseChainDB`
+    peer: Peer,                      ## For log messages, only
+    nodes: openArray[Blob];          ## Node records
+      ): Result[void,seq[(int,HexaryDbError)]] =
+  ## Variant of `importRawNodes()` for persistent storage.
+  AccountsDbSessionRef.init(
+    pv, Hash256(), peer).importRawNodes(nodes, persistent=true)
+
+
+proc inspectAccountsTrie*(
+    ps: AccountsDbSessionRef;     ## Re-usable session descriptor
+    pathList = seq[Blob].default; ## Starting nodes for search
+    persistent = false;           ## Read data from disk
+    ignoreError = false;          ## Return partial results if available
+      ): Result[TrieNodeStat, HexaryDbError] =
+  ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
+  ## the hexary trie which have at least one node key reference missing in
+  ## the trie database.
+  ##
+  var stats: TrieNodeStat
+  noRlpExceptionOops("inspectAccountsTrie()"):
+    if persistent:
+      let getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      stats = getFn.hexaryInspectTrie(ps.accRoot, pathList)
+    else:
+      stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList)
+
+  let
+    peer = ps.peer
+    pathList = pathList.len
+    nDangling = stats.dangling.len
+
+  if stats.stoppedAt != 0:
+    let error = LoopAlert
+    trace "Inspect account trie loop", peer, pathList, nDangling,
+      stoppedAt=stats.stoppedAt, error
+    if ignoreError:
+      return ok(stats)
+    return err(error)
+
+  trace "Inspect account trie ok", peer, pathList, nDangling
+  return ok(stats)
+
+proc inspectAccountsTrie*(
+    pv: AccountsDbRef;            ## Base descriptor on `BaseChainDB`
+    peer: Peer,                   ## For log messages, only
+    root: Hash256;                ## state root
+    pathList = seq[Blob].default; ## Starting paths for search
+    ignoreError = false;          ## Return partial results if available
+      ): Result[TrieNodeStat, HexaryDbError] =
+  ## Variant of `inspectAccountsTrie()` for persistent storage.
+  AccountsDbSessionRef.init(
+    pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
 
 # ------------------------------------------------------------------------------
 # Debugging (and playing with the hexary database)
@@ -584,6 +714,10 @@ proc dumpPath*(ps: AccountsDbSessionRef; key: NodeTag): seq[string] =
 proc dumpAccDB*(ps: AccountsDbSessionRef; indent = 4): string =
   ## Dump the entries from the a generic accounts trie.
   ps.accDb.pp(ps.accRoot,indent)
+
+proc getAcc*(ps: AccountsDbSessionRef): HexaryTreeDbRef =
+  ## Low level access to accounts DB
+  ps.accDb
 
 proc hexaryPpFn*(ps: AccountsDbSessionRef): HexaryPpFn =
   ## Key mapping function used in `HexaryTreeDB`
