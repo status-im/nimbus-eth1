@@ -52,6 +52,10 @@ type
 
     blockZeroStateRoot: KeccakHash
 
+    validateBlock: bool ##\
+      ## If turn off, `persistBlocks` will always return
+      ## ValidationResult.OK and disable extraValidation too.
+
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
@@ -167,6 +171,7 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
 
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
+  c.validateBlock = true
   c.extraValidation = extraValidation
   c.setForkId()
 
@@ -246,6 +251,10 @@ proc db*(c: Chain): BaseChainDB =
   ## Getter
   c.db
 
+proc validateBlock*(c: Chain): bool =
+  ## Getter
+  c.validateBlock
+
 proc extraValidation*(c: Chain): bool =
   ## Getter
   c.extraValidation
@@ -268,6 +277,10 @@ proc currentBlock*(c: Chain): BlockHeader
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
+proc `validateBlock=`*(c: Chain; validateBlock: bool) =
+  ## Setter. If set `true`, the assignment value `validateBlock` enables
+  ## block execution, else it will always return ValidationResult.OK
+  c.validateBlock = validateBlock
 
 proc `extraValidation=`*(c: Chain; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables

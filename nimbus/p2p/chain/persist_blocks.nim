@@ -76,7 +76,10 @@ proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
       return ValidationResult.Error
 
     let
-      validationResult = vmState.processBlock(c.clique, header, body)
+      validationResult = if c.validateBlock:
+                           vmState.processBlock(c.clique, header, body)
+                         else:
+                           ValidationResult.OK
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
@@ -86,7 +89,8 @@ proc persistBlocksImpl(c: Chain; headers: openArray[BlockHeader];
     if validationResult != ValidationResult.OK:
       return validationResult
 
-    if c.extraValidation and c.verifyFrom <= header.blockNumber:
+    if c.validateBlock and c.extraValidation and
+       c.verifyFrom <= header.blockNumber:
       let isBlockAfterTtd = c.isBlockAfterTtd(header)
       if c.db.config.poaEngine and not isBlockAfterTtd:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
