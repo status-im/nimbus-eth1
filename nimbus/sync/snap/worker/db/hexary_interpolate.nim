@@ -19,7 +19,7 @@ import
   eth/[common/eth_types, trie/nibbles],
   stew/results,
   ../../range_desc,
-  "."/[hexary_defs, hexary_desc, hexary_paths]
+  "."/[hexary_desc, hexary_error, hexary_paths]
 
 {.push raises: [Defect].}
 

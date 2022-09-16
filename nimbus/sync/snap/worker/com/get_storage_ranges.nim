@@ -78,18 +78,17 @@ proc getStorageRangesReq(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc addLeftOver*(dd: var GetStorageRanges; accounts: seq[AccountSlotsHeader]) =
+proc addLeftOver*(
+    dd: var GetStorageRanges;              ## Descriptor
+    accounts: seq[AccountSlotsHeader];     ## List of items to re-queue
+    forceNew = false;                      ## Begin new block regardless
+      ) =
   ## Helper for maintaining the `leftOver` queue
   if 0 < accounts.len:
     if accounts[0].firstSlot != Hash256() or dd.leftOver.len == 0:
       dd.leftOver.add SnapSlotQueueItemRef(q: accounts)
     else:
       dd.leftOver[^1].q = dd.leftOver[^1].q & accounts
-
-proc addLeftOver*(dd: var GetStorageRanges; account: AccountSlotsHeader) =
-  ## Variant of `addLeftOver()`
-  dd.addLeftOver @[account]
-
 
 proc getStorageRanges*(
     buddy: SnapBuddyRef;
@@ -159,7 +158,7 @@ proc getStorageRanges*(
   for n in 0 ..< nSlots:
     # Empty data for a slot indicates missing data
     if snStoRanges.slots[n].len == 0:
-      dd.addLeftOver accounts[n]
+      dd.addLeftOver @[accounts[n]]
     else:
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
@@ -181,10 +180,10 @@ proc getStorageRanges*(
     # Contrived situation with `top==high()`: any right proof will be useless
     # so it is just ignored (i.e. `firstSlot` is zero in first slice.)
     if top < high(NodeTag):
-      dd.addLeftOver AccountSlotsHeader(
+      dd.addLeftOver @[AccountSlotsHeader(
         firstSlot:   (top + 1.u256).to(Hash256),
         accHash:     accounts[nSlots-1].accHash,
-        storageRoot: accounts[nSlots-1].storageRoot)
+        storageRoot: accounts[nSlots-1].storageRoot)]
     dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
 
   let nLeftOver = dd.leftOver.foldl(a + b.q.len, 0)

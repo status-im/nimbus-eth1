@@ -20,7 +20,7 @@ import
   ../../../db/[kvstore_rocksdb, select_backend],
   "../.."/[protocol, types],
   ../range_desc,
-  ./db/[bulk_storage, hexary_defs, hexary_desc, hexary_import,
+  ./db/[bulk_storage,  hexary_desc, hexary_error, hexary_import,
         hexary_interpolate, hexary_inspect, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
@@ -32,7 +32,7 @@ export
   HexaryDbError
 
 const
-  extraTraceMessages =  false # or true
+  extraTraceMessages = false or true
 
 type
   AccountsDbRef* = ref object
@@ -404,10 +404,12 @@ proc importAccounts*(
         ps.accRoot, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
         return err(rc.error)
-    if persistent:
+
+    if persistent and 0 < ps.accDb.tab.len:
       let rc = ps.accDb.persistentAccounts(ps.base)
       if rc.isErr:
         return err(rc.error)
+
   except RlpError:
     return err(RlpEncoding)
   except KeyError as e:
@@ -464,21 +466,23 @@ proc importStorages*(
         slotID = n
         let rc = ps.importStorageSlots(data.storages[slotID], @[])
         if rc.isErr:
+          let error = rc.error
           trace "Storage slots item fails", peer=ps.peer, slotID, nItems,
-            slots=data.storages[slotID].data.len, proofs=0
-          errors.add (slotID,rc.error)
+            slots=data.storages[slotID].data.len, proofs=0, error
+          errors.add (slotID,error)
 
       # Final one might come with proof data
       block:
         slotID = sTop
         let rc = ps.importStorageSlots(data.storages[slotID], data.proof)
         if rc.isErr:
+          let error = rc.error
           trace "Storage slots last item fails", peer=ps.peer, nItems,
-            slots=data.storages[sTop].data.len, proofs=data.proof.len
-          errors.add (slotID,rc.error)
+            slots=data.storages[sTop].data.len, proofs=data.proof.len, error
+          errors.add (slotID,error)
 
       # Store to disk
-      if persistent:
+      if persistent and 0 < ps.stoDb.tab.len:
         slotID = -1
         let rc = ps.stoDb.persistentStorages(ps.base)
         if rc.isErr:
@@ -534,7 +538,7 @@ proc importRawNodes*(
         errors.add (nodeID,error)
 
     # Store to disk
-    if persistent:
+    if persistent and 0 < db.tab.len:
       nodeID = -1
       let rc = db.persistentAccounts(ps.base)
       if rc.isErr:
@@ -574,6 +578,7 @@ proc inspectAccountsTrie*(
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database.
   ##
+  let peer = ps.peer
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectAccountsTrie()"):
     if persistent:
@@ -582,20 +587,21 @@ proc inspectAccountsTrie*(
     else:
       stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList)
 
-  let
-    peer = ps.peer
-    pathList = pathList.len
-    nDangling = stats.dangling.len
-
-  if stats.stoppedAt != 0:
-    let error = LoopAlert
-    trace "Inspect account trie loop", peer, pathList, nDangling,
-      stoppedAt=stats.stoppedAt, error
-    if ignoreError:
-      return ok(stats)
+  block checkForError:
+    let error = block:
+      if stats.stopped:
+        TrieLoopAlert
+      elif stats.level <= 1:
+        TrieIsEmpty
+      else:
+        break checkForError
+    trace "Inspect account trie failed", peer, nPathList=pathList.len,
+      nDangling=stats.dangling.len, stoppedAt=stats.level, error
     return err(error)
 
-  trace "Inspect account trie ok", peer, pathList, nDangling
+  when extraTraceMessages:
+    trace "Inspect account trie ok", peer, nPathList=pathList.len,
+      nDangling=stats.dangling.len, level=stats.level
   return ok(stats)
 
 proc inspectAccountsTrie*(

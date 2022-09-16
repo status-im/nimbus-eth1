@@ -15,7 +15,7 @@ import
   ../../../../db/[kvstore_rocksdb, storage_types],
   ../../../types,
   ../../range_desc,
-  "."/[hexary_defs, hexary_desc, rocky_bulk_load]
+  "."/[hexary_desc, hexary_error, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
