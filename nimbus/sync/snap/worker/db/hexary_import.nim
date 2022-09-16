@@ -13,7 +13,7 @@ import
   eth/[common/eth_types_rlp, trie/nibbles],
   stew/results,
   ../../range_desc,
-  "."/[hexary_defs, hexary_desc]
+  "."/[hexary_desc, hexary_error]
 
 {.push raises: [Defect].}
 

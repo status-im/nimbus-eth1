@@ -25,7 +25,7 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  maxPivotBlockWindow* = 50
+  maxPivotBlockWindow* = 128
     ## The maximal depth of two block headers. If the pivot block header
     ## (containing the current state root) is more than this many blocks
     ## away from a new pivot block header candidate, then the latter one
@@ -33,6 +33,13 @@ const
     ##
     ## This mechanism applies to new worker buddies which start by finding
     ## a new pivot.
+
+  maxTrieNodeFetch* = 1024
+    ## Informal maximal number of trie nodes to fetch at once. This is nor
+    ## an official limit but found on several implementations (e.g. geth.)
+    ##
+    ## Resticting the fetch list length early allows to better paralellise
+    ## healing.
 
   switchPivotAfterCoverage* = 1.0 # * 0.30
     ## Stop fetching from the same pivot state root with this much coverage
@@ -102,6 +109,9 @@ type
     ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
     ## effective sub-range specification (later ones will be ignored.)
 
+  SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
+    ## Ditto but without order, to be used as veto set
+
   SnapRepairState* = enum
     Pristine                           ## Not initialised yet
     KeepGoing                          ## Unfinished repair process
@@ -126,11 +136,12 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    stats*: SnapBuddyStats             ## Statistics counters
+    stats*: SnapBuddyStats             ## Statistics counters (not really used)
     errors*: SnapBuddyErrors           ## For error handling
     pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
-    pivot2Header*: Option[BlockHeader] ## Alternative header
+    pivot2Header*: Option[BlockHeader] ## Alternative header instead
     workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
+    vetoSlots*: SnapSlotsSet           ## Do not ask for this slots, again
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
     ## All buddies call back (the argument type is defined below with
