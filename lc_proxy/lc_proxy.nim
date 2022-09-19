@@ -144,8 +144,8 @@ proc run() {.raises: [Exception, Defect].} =
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
-    info "New LC finalized header", finalized_header = shortLog(finalizedHeader)
-    optimisticProcessor.setFinalizedHeader(finalizedHeader)
+    info "New LC finalized header",
+      finalized_header = shortLog(finalizedHeader)
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: BeaconBlockHeader) =

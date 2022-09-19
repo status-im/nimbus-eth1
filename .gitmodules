@@ -167,7 +167,7 @@
   path = vendor/nim-websock
   url = https://github.com/status-im/nim-websock
   ignore = dirty
-  branch = master
+  branch = main
 [submodule "vendor/nim-ssz-serialization"]
 	path = vendor/nim-ssz-serialization
 	url = https://github.com/status-im/nim-ssz-serialization.git
