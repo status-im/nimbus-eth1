@@ -95,7 +95,7 @@ proc run() {.raises: [Exception, Defect].} =
       [initTAddress(config.rpcAddress, config.rpcPort)]
     )
 
-    lcProxy = LightClientRpcProxy(server: rpcHttpServer, client: rpcClient)
+    lcProxy = LightClientRpcProxy.new(rpcHttpServer, rpcClient, metadata.eth1Network)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -140,7 +140,8 @@ proc run() {.raises: [Exception, Defect].} =
 
   waitFor network.startListening()
   waitFor network.start()
-  lcProxy.server.start()
+  rpcHttpServer.start()
+  waitFor lcProxy.start()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =

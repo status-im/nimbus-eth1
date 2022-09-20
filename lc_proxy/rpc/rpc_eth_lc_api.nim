@@ -13,8 +13,9 @@ import
   chronicles,
   json_rpc/[rpcserver, rpcclient],
   web3,
-  web3/ethhexstrings,
+  web3/[ethhexstrings, ethtypes],
   beacon_chain/eth1/eth1_monitor,
+  beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   ../validate_proof
 
@@ -23,9 +24,10 @@ export forks
 logScope:
   topics = "light_proxy"
 
+proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
+
 template encodeQuantity(value: UInt256): HexQuantityStr =
   hexQuantityStr("0x" & value.toHex())
-
 
 template encodeHexData(value: UInt256): HexDataStr =
   hexDataStr("0x" & toBytesBE(value).toHex)
@@ -35,9 +37,9 @@ template encodeQuantity(value: Quantity): HexQuantityStr =
 
 type LightClientRpcProxy* = ref object
   client*: RpcClient
-  server*: RpcHttpServer
+  server*: RpcServer
   executionPayload*: Opt[ExecutionPayloadV1]
-
+  chainId: Option[Quantity]
 
 template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: string) =
   if payload.isNone():
@@ -54,6 +56,15 @@ template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: strin
 
 proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
   template payload(): Opt[ExecutionPayloadV1] = lcProxy.executionPayload
+
+  lcProxy.server.rpc("eth_chainId") do() -> HexQuantityStr:
+    if lcProxy.chainId.isSome():
+      return encodeQuantity(lcProxy.chainId.get())
+    else:
+      # we got some unknown chainId, probably someone using proxy on some private
+      # unknown network. Retrieve it form data provider.
+      let chainId = await lcProxy.client.eth_chainId()
+      return encodeQuantity(chainId)
 
   lcProxy.server.rpc("eth_blockNumber") do() -> HexQuantityStr:
     ## Returns the number of most recent block.
@@ -112,3 +123,55 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
       return encodeHexData(slotValue)
     else:
       raise newException(ValueError, dataResult.error)
+
+proc networkToChainId(eth1Network: Option[Eth1Network]): Option[Quantity] =
+  if eth1Network.isSome():
+    let
+      net = eth1Network.get()
+      chainId = case net
+        of mainnet: 1.Quantity
+        of ropsten: 3.Quantity
+        of rinkeby: 4.Quantity
+        of goerli:  5.Quantity
+        of sepolia: 11155111.Quantity
+
+    return some(chainId)
+  else:
+    return none(Quantity)
+
+proc new*(
+    T: type LightClientRpcProxy,
+    server: RpcServer,
+    client: RpcClient,
+    eth1Network: Option[Eth1Network]): T =
+
+  return LightClientRpcProxy(
+    client: client,
+    server: server,
+    chainId: networkToChainId(eth1Network)
+  )
+
+proc start*(p: LightClientRpcProxy): Future[void] {.async.} =
+  if p.chainId.isNone():
+    return
+  else:
+    let localId = p.chainId.get()
+
+    # retry 2 times, if the data provider will fail despite re-tries, propagate
+    # exception to the caller.
+    let providerId = awaitWithRetries(
+      p.client.eth_chainId(),
+      retries = 2,
+      timeout = seconds(30)
+    )
+
+    # this configuration error, in theory we could allow proxy to chung on, but
+    # it would only mislead the user. It is better to fail fast here.
+    if localId != providerId:
+      fatal "The specified data provider serves data for a different chain",
+        expectedChain = distinctBase(localId),
+        providerChain = distinctBase(providerId)
+      quit 1
+
+    return
+
