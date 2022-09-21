@@ -39,7 +39,7 @@ type LightClientRpcProxy* = ref object
   client*: RpcClient
   server*: RpcServer
   executionPayload*: Opt[ExecutionPayloadV1]
-  chainId: Option[Quantity]
+  chainId: Quantity
 
 template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: string) =
   if payload.isNone():
@@ -58,13 +58,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
   template payload(): Opt[ExecutionPayloadV1] = lcProxy.executionPayload
 
   lcProxy.server.rpc("eth_chainId") do() -> HexQuantityStr:
-    if lcProxy.chainId.isSome():
-      return encodeQuantity(lcProxy.chainId.get())
-    else:
-      # we got some unknown chainId, probably someone using proxy on some private
-      # unknown network. Retrieve it form data provider.
-      let chainId = await lcProxy.client.eth_chainId()
-      return encodeQuantity(chainId)
+    return encodeQuantity(lcProxy.chainId)
 
   lcProxy.server.rpc("eth_blockNumber") do() -> HexQuantityStr:
     ## Returns the number of most recent block.
@@ -124,54 +118,36 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     else:
       raise newException(ValueError, dataResult.error)
 
-proc networkToChainId(eth1Network: Option[Eth1Network]): Option[Quantity] =
-  if eth1Network.isSome():
-    let
-      net = eth1Network.get()
-      chainId = case net
-        of mainnet: 1.Quantity
-        of ropsten: 3.Quantity
-        of rinkeby: 4.Quantity
-        of goerli:  5.Quantity
-        of sepolia: 11155111.Quantity
-
-    return some(chainId)
-  else:
-    return none(Quantity)
-
 proc new*(
     T: type LightClientRpcProxy,
     server: RpcServer,
     client: RpcClient,
-    eth1Network: Option[Eth1Network]): T =
+    chainId: Quantity): T =
 
   return LightClientRpcProxy(
     client: client,
     server: server,
-    chainId: networkToChainId(eth1Network)
+    chainId: chainId
   )
 
 proc verifyChaindId*(p: LightClientRpcProxy): Future[void] {.async.} =
-  if p.chainId.isNone():
-    return
-  else:
-    let localId = p.chainId.get()
+  let localId = p.chainId
 
-    # retry 2 times, if the data provider will fail despite re-tries, propagate
-    # exception to the caller.
-    let providerId = awaitWithRetries(
-      p.client.eth_chainId(),
-      retries = 2,
-      timeout = seconds(30)
-    )
+  # retry 2 times, if the data provider will fail despite re-tries, propagate
+  # exception to the caller.
+  let providerId = awaitWithRetries(
+    p.client.eth_chainId(),
+    retries = 2,
+    timeout = seconds(30)
+  )
 
-    # this configuration error, in theory we could allow proxy to chung on, but
-    # it would only mislead the user. It is better to fail fast here.
-    if localId != providerId:
-      fatal "The specified data provider serves data for a different chain",
-        expectedChain = distinctBase(localId),
-        providerChain = distinctBase(providerId)
-      quit 1
+  # this configuration error, in theory we could allow proxy to chung on, but
+  # it would only mislead the user. It is better to fail fast here.
+  if localId != providerId:
+    fatal "The specified data provider serves data for a different chain",
+      expectedChain = distinctBase(localId),
+      providerChain = distinctBase(providerId)
+    quit 1
 
-    return
+  return
 
