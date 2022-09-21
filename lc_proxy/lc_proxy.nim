@@ -39,6 +39,20 @@ proc initRpcClient(config: LcProxyConf): Future[RpcClient] {.async.} =
     await httpClient.connect(config.web3ClientConfig.url)
     return httpClient
 
+func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
+  if networkMetadata.eth1Network.isSome():
+    let
+      net = networkMetadata.eth1Network.get()
+      chainId = case net
+        of mainnet: 1.Quantity
+        of ropsten: 3.Quantity
+        of rinkeby: 4.Quantity
+        of goerli:  5.Quantity
+        of sepolia: 11155111.Quantity
+    return chainId
+  else:
+    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
+
 # TODO Find what can throw exception
 proc run() {.raises: [Exception, Defect].} =
   {.pop.}
@@ -54,7 +68,9 @@ proc run() {.raises: [Exception, Defect].} =
   notice "Launching light client proxy",
     version = fullVersionStr, cmdParams = commandLineParams(), config
 
-  let metadata = loadEth2Network(config.eth2Network)
+  let
+    metadata = loadEth2Network(config.eth2Network)
+    chainId = getConfiguredChainId(metadata)
 
   for node in metadata.bootstrapNodes:
     lcConfig.bootstrapNodes.add node
@@ -95,7 +111,7 @@ proc run() {.raises: [Exception, Defect].} =
       [initTAddress(config.rpcAddress, config.rpcPort)]
     )
 
-    lcProxy = LightClientRpcProxy(server: rpcHttpServer, client: rpcClient)
+    lcProxy = LightClientRpcProxy.new(rpcHttpServer, rpcClient, chainId)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -140,7 +156,8 @@ proc run() {.raises: [Exception, Defect].} =
 
   waitFor network.startListening()
   waitFor network.start()
-  lcProxy.server.start()
+  rpcHttpServer.start()
+  waitFor lcProxy.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
