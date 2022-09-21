@@ -141,7 +141,7 @@ proc run() {.raises: [Exception, Defect].} =
   waitFor network.startListening()
   waitFor network.start()
   rpcHttpServer.start()
-  waitFor lcProxy.start()
+  waitFor lcProxy.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =

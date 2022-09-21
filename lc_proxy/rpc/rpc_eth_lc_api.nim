@@ -151,7 +151,7 @@ proc new*(
     chainId: networkToChainId(eth1Network)
   )
 
-proc start*(p: LightClientRpcProxy): Future[void] {.async.} =
+proc verifyChaindId*(p: LightClientRpcProxy): Future[void] {.async.} =
   if p.chainId.isNone():
     return
   else:
