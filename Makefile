@@ -173,6 +173,10 @@ test: | build deps
 	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
+# FIXME-howDoIMakeASubSuite
+test-evm: | build deps
+	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
+
 # Primitive reproducibility test.
 #
 # On some platforms, with some GCC versions, it may not be possible to get a

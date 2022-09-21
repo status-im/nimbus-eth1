@@ -3,6 +3,10 @@ import
   stew/byteutils, chronicles, eth/[common, keys],
   stew/shims/macros
 
+# Need to exclude ServerCommand because it contains something
+# called Stop that interferes with the EVM operation named Stop.
+import chronos except ServerCommand
+
 import
   options, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
@@ -238,7 +242,8 @@ proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler): bool =
     payload: boa.data
   )
   let tx = signTransaction(unsignedTx, privateKey, chainDB.config.chainId, false)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
+  # FIXME-eventuallyPropagateAsyncFurtherUpward
+  let asmResult = waitFor(testCallEvm(tx, tx.getSender, vmState, boa.fork))
 
   if not asmResult.isError:
     if boa.success == false:

@@ -24,6 +24,7 @@ import
   ./state,
   ./types,
   chronicles,
+  chronos,
   eth/[common, keys],
   macros,
   options,
@@ -104,6 +105,20 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
 
       genLowMemDispatcher(fork, c.instr, desc)
 
+# UGLY-duplicatedForAsync
+# Note that I'm omitting the computedGoto stuff in the async
+# version, though. --Adam
+proc asyncSelectVM(c: Computation, fork: Fork): Future[void] {.gcsafe, async.} =
+  ## Async version of the op code execution handler main loop.
+  var desc: Vm2Ctx
+  desc.cpt = c
+
+  if c.tracingEnabled:
+    c.prepareTracer()
+
+  while true:
+    c.instr = c.code.next()
+    genLowMemAsyncDispatcher(fork, c.instr, desc)
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
@@ -214,6 +229,27 @@ proc executeOpcodes*(c: Computation) =
     #trace "executeOpcodes error", msg=c.error.info
 
 
+# UGLY-duplicatedForAsync
+proc asyncExecuteOpcodes*(c: Computation): Future[void] {.async.} =
+  let fork = c.fork
+
+  block:
+    if not c.continuation.isNil:
+      c.continuation = nil
+    elif c.execPrecompiles(fork):
+      break
+
+    try:
+      await asyncSelectVM(c, fork)
+    except CatchableError as e:
+      c.setError(
+        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
+
+  if c.isError() and c.continuation.isNil:
+    if c.tracingEnabled: c.traceError()
+    #trace "executeOpcodes error", msg=c.error.info
+
+
 proc execCallOrCreate*(cParam: Computation) =
   var (c, before) = (cParam, true)
   defer:
@@ -235,7 +271,35 @@ proc execCallOrCreate*(cParam: Computation) =
       break
     c.dispose()
     (before, c.parent, c) = (false, nil.Computation, c.parent)
-    (c.continuation)()
+    # AARDVARK - I don't like this waitFor; I made "continuation" async,
+    # but I still want this synchronous version of the loop to exist,
+    # so I guess this is better than maintaining even *more* duplicated
+    # code, but it still bothers me. --Adam
+    waitFor(c.continuation())
+
+# UGLY-duplicatedForAsync
+proc asyncExecCallOrCreate*(cParam: Computation): Future[void] {.async.} =
+  var (c, before) = (cParam, true)
+  defer:
+    while not c.isNil:
+      c.dispose()
+      c = c.parent
+
+  # No actual recursion, but simulate recursion including before/after/dispose.
+  while true:
+    while true:
+      if before and c.beforeExec():
+        break
+      await(asyncExecuteOpcodes(c))
+      if c.continuation.isNil:
+        c.afterExec()
+        break
+      (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
+    if c.parent.isNil:
+      break
+    c.dispose()
+    (before, c.parent, c) = (false, nil.Computation, c.parent)
+    await((c.continuation)())
 
 # ------------------------------------------------------------------------------
 # End

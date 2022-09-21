@@ -21,6 +21,7 @@ import
   ./transaction_tracer,
   ./types,
   chronicles,
+  chronos,
   eth/[common, keys],
   options,
   sets
@@ -221,7 +222,7 @@ proc writeContract*(c: Computation) =
 
 template chainTo*(c, toChild: Computation, after: untyped) =
   c.child = toChild
-  c.continuation = proc() =
+  c.continuation = proc(): Future[void] =
     after
 
 proc merge*(c, child: Computation) =

@@ -18,6 +18,7 @@ const
   isChatty {.used.} = noisy > 1
 
 import
+  options,
   strformat,
   ../../forks,
   ./op_codes,
@@ -82,9 +83,10 @@ proc mkOpTable(selected: Fork): array[Op,Vm2OpExec] {.compileTime.} =
 
 type
   vmOpHandlersRec* = tuple
-    name: string    ## Name (or ID) of op handler
-    info: string    ## Some op handler info
-    run:  Vm2OpFn   ## Executable handler
+    name: string                      ## Name (or ID) of op handler
+    info: string                      ## Some op handler info
+    runSynchronously:  Vm2OpFn        ## Synchronous executable handler
+    runAsynchronously: Vm2AsyncOpFn   ## Asynchronous executable handler
 
 const
   # Pack handler record.
@@ -110,9 +112,19 @@ const
       for fork in Fork:
         var tab = fork.mkOpTable
         for op in Op:
-          rc[fork][op].name = tab[op].name
-          rc[fork][op].info = tab[op].info
-          rc[fork][op].run  = tab[op].exec.run
+          rc[fork][op].name              = tab[op].name
+          rc[fork][op].info              = tab[op].info
+          rc[fork][op].runSynchronously  = tab[op].exec.run
+          rc[fork][op].runAsynchronously = if isSome(tab[op].asyncHandlers):
+                                             tab[op].asyncHandlers.get().run
+                                           else:
+                                             nil
+          #[
+          AARDVARK: Uncomment this if you want to see a Nim compiler bug.
+          rc[fork][op].runAsynchronously = nil
+          if rc[fork][op].runAsynchronously != nil:
+            echo("Why is this printing?")
+          ]#
       rc
 
 # ------------------------------------------------------------------------------

@@ -57,6 +57,8 @@ proc execSubCreate(k: var Vm2Ctx; childMsg: Message;
     elif not child.error.burnsGas: # Means return was `REVERT`.
       # From create, only use `outputData` if child returned with `REVERT`.
       c.returnData = child.output
+    
+    newCompletedVoidFuture()
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -188,7 +190,8 @@ const
      info: "Create a new account with associated code",
      exec: (prep: vm2OpIgnore,
             run: createOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Create2,   ## 0xf5, Create using keccak256
      forks: Vm2OpConstantinopleAndLater,
@@ -196,7 +199,8 @@ const
      info: "Behaves identically to CREATE, except using keccak256",
      exec: (prep: vm2OpIgnore,
             run: create2Op,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

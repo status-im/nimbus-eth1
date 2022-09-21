@@ -273,7 +273,8 @@ const
      info: "Get address of currently executing account",
      exec: (prep: vm2OpIgnore,
             run:  addressOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Balance,         ## 0x31, Balance
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
@@ -281,7 +282,8 @@ const
      info: "Get balance of the given account",
      exec: (prep: vm2OpIgnore,
             run:  balanceOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Balance,         ## 0x31, Balance for Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -289,7 +291,8 @@ const
      info: "EIP2929: Get balance of the given account",
      exec: (prep: vm2OpIgnore,
             run:  balanceEIP2929Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Origin,          ## 0x32, Origination address
      forks: Vm2OpAllForks,
@@ -297,7 +300,8 @@ const
      info: "Get execution origination address",
      exec: (prep: vm2OpIgnore,
             run:  originOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Caller,          ## 0x33, Caller address
      forks: Vm2OpAllForks,
@@ -305,7 +309,8 @@ const
      info: "Get caller address",
      exec: (prep: vm2OpIgnore,
             run:  callerOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
      forks: Vm2OpAllForks,
@@ -314,7 +319,8 @@ const
            "responsible for this execution",
      exec: (prep: vm2OpIgnore,
             run:  callValueOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CallDataLoad,    ## 0x35, Input data
      forks: Vm2OpAllForks,
@@ -322,7 +328,8 @@ const
      info: "Get input data of current environment",
      exec: (prep: vm2OpIgnore,
             run:  callDataLoadOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CallDataSize,    ## 0x36, Size of input data
      forks: Vm2OpAllForks,
@@ -330,7 +337,8 @@ const
      info: "Get size of input data in current environment",
      exec: (prep: vm2OpIgnore,
             run:  callDataSizeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.
      forks: Vm2OpAllForks,
@@ -338,7 +346,8 @@ const
      info: "Copy input data in current environment to memory",
      exec: (prep: vm2OpIgnore,
             run:  callDataCopyOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CodeSize,       ## 0x38, Size of code
      forks: Vm2OpAllForks,
@@ -346,7 +355,8 @@ const
      info: "Get size of code running in current environment",
      exec: (prep: vm2OpIgnore,
             run:  codeSizeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CodeCopy,       ## 0x39, Copy code to memory.
      forks: Vm2OpAllForks,
@@ -354,7 +364,8 @@ const
      info: "Copy code running in current environment to memory",
      exec: (prep: vm2OpIgnore,
             run:  codeCopyOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: GasPrice,       ## 0x3a, Gas price
      forks: Vm2OpAllForks,
@@ -362,7 +373,8 @@ const
      info: "Get price of gas in current environment",
      exec: (prep: vm2OpIgnore,
             run:  gasPriceOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
@@ -370,7 +382,8 @@ const
      info: "Get size of an account's code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeSizeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -378,7 +391,8 @@ const
      info: "EIP2929: Get size of an account's code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeSizeEIP2929Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
@@ -386,7 +400,8 @@ const
      info: "Copy an account's code to memory",
      exec: (prep: vm2OpIgnore,
             run:  extCodeCopyOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -394,7 +409,8 @@ const
      info: "EIP2929: Copy an account's code to memory",
      exec: (prep: vm2OpIgnore,
             run:  extCodeCopyEIP2929Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
      forks: Vm2OpByzantiumAndLater,
@@ -403,7 +419,8 @@ const
            "from the current environment",
      exec: (prep: vm2OpIgnore,
             run:  returnDataSizeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ReturnDataCopy, ## 0x3e, Previous call output data copy to memory
      forks: Vm2OpByzantiumAndLater,
@@ -411,7 +428,8 @@ const
      info: "Copy output data from the previous call to memory",
      exec: (prep: vm2OpIgnore,
             run:  returnDataCopyOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash
      forks: Vm2OpConstantinopleAndLater - Vm2OpBerlinAndLater,
@@ -419,7 +437,8 @@ const
      info: "Returns the keccak256 hash of a contract’s code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeHashOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -427,7 +446,8 @@ const
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeHashEIP2929Op,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

@@ -86,7 +86,8 @@ const
      info: "Get the hash of one of the 256 most recent complete blocks",
      exec: (prep: vm2OpIgnore,
             run:  blockhashOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Coinbase,        ## 0x41, Beneficiary address
      forks: Vm2OpAllForks,
@@ -94,7 +95,8 @@ const
      info: "Get the block's beneficiary address",
      exec: (prep: vm2OpIgnore,
             run:  coinBaseOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Timestamp,       ## 0x42, Block timestamp.
      forks: Vm2OpAllForks,
@@ -102,7 +104,8 @@ const
      info: "Get the block's timestamp",
      exec: (prep: vm2OpIgnore,
             run:  timestampOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Number,          ## 0x43, Block number
      forks: Vm2OpAllForks,
@@ -110,7 +113,8 @@ const
      info: "Get the block's number",
      exec: (prep: vm2OpIgnore,
             run:  blocknumberOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Difficulty,      ## 0x44, Block difficulty
      forks: Vm2OpAllForks,
@@ -118,7 +122,8 @@ const
      info: "Get the block's difficulty",
      exec: (prep: vm2OpIgnore,
             run:  difficultyOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: GasLimit,        ## 0x45, Block gas limit
      forks: Vm2OpAllForks,
@@ -126,7 +131,8 @@ const
      info: "Get the block's gas limit",
      exec: (prep: vm2OpIgnore,
             run:  gasLimitOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ChainIdOp,       ## 0x46, EIP-155 chain identifier
      forks: Vm2OpIstanbulAndLater,
@@ -134,7 +140,8 @@ const
      info: "Get current chain’s EIP-155 unique identifier",
      exec: (prep: vm2OpIgnore,
             run:  chainIdOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SelfBalance,     ## 0x47, Contract balance.
      forks: Vm2OpIstanbulAndLater,
@@ -142,7 +149,8 @@ const
      info: "Get current contract's balance",
      exec: (prep: vm2OpIgnore,
             run:  selfBalanceOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.
      forks: Vm2OpLondonAndLater,
@@ -150,7 +158,8 @@ const
      info: "Get current block's EIP-1559 base fee",
      exec: (prep: vm2OpIgnore,
             run:  baseFeeOp,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

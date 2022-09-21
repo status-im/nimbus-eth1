@@ -26,6 +26,10 @@ import
   chronicles,
   macros
 
+# Need to exclude ServerCommand because it contains something
+# called Stop that interferes with the EVM operation named Stop.
+import chronos except ServerCommand
+
 export
   Fork, Op,
   oph_defs,
@@ -42,23 +46,56 @@ template handleStopDirective(k: var Vm2Ctx) =
     k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)
     k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
 
-
 template handleFixedGasCostsDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
     if k.cpt.tracingEnabled:
       k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
     k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
-    vmOpHandlers[fork][op].run(k)
+    vmOpHandlers[fork][op].runSynchronously(k)
 
     if k.cpt.tracingEnabled:
       k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
-
 
 template handleOtherDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
     if k.cpt.tracingEnabled:
       k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    vmOpHandlers[fork][op].run(k)
+    vmOpHandlers[fork][op].runSynchronously(k)
+
+    if k.cpt.tracingEnabled:
+      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+
+# UGLY-duplicatedForAsync
+template asyncHandleStopDirective(k: var Vm2Ctx) =
+  #trace "op: Stop"
+  if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
+    # we only trace `REAL STOP` and ignore `FAKE STOP`
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)
+    k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
+
+# UGLY-duplicatedForAsync
+template asyncHandleFixedGasCostsDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
+    if k.cpt.tracingEnabled:
+      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+
+    k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
+    if isNil(vmOpHandlers[fork][op].runAsynchronously):
+      vmOpHandlers[fork][op].runSynchronously(k)
+    else:
+      await(vmOpHandlers[fork][op].runAsynchronously(k))
+    
+    if k.cpt.tracingEnabled:
+      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+
+# UGLY-duplicatedForAsync
+template asyncHandleOtherDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
+    if k.cpt.tracingEnabled:
+      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+
+    if isNil(vmOpHandlers[fork][op].runAsynchronously):
+      vmOpHandlers[fork][op].runSynchronously(k)
+    else:
+      await(vmOpHandlers[fork][op].runAsynchronously(k))
 
     if k.cpt.tracingEnabled:
       k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
@@ -135,6 +172,26 @@ template genLowMemDispatcher*(fork: Fork; op: Op; k: Vm2Ctx) =
     handleOtherDirective(fork, op, k)
 
   case c.instr
+  of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
+    if not k.cpt.continuation.isNil:
+      break
+  of Return, Revert, SelfDestruct:
+    break
+  else:
+    discard
+
+# UGLY-duplicatedForAsync
+template genLowMemAsyncDispatcher*(fork: Fork; op: Op; k: Vm2Ctx) =
+  if op == Stop:
+    asyncHandleStopDirective(k)
+    break
+
+  if BaseGasCosts[op].kind == GckFixed:
+    asyncHandleFixedGasCostsDirective(fork, op, k)
+  else:
+    asyncHandleOtherDirective(fork, op, k)
+
+  case op
   of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
     if not k.cpt.continuation.isNil:
       break

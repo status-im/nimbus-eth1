@@ -31,6 +31,7 @@ import
   ./state,
   ./types,
   chronicles,
+  chronos,
   eth/common,
   eth/common/eth_types,
   options,
@@ -56,12 +57,13 @@ proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
     db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
 
 
-proc execComputation*(c: Computation) =
+proc execComputation*(c: Computation): Future[void] {.async.} =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
 
-  c.execCallOrCreate()
+  # This is one place where we used to call the synchronous version.
+  await c.asyncExecCallOrCreate()
 
   if c.isSuccess:
     if c.fork < FkLondon:

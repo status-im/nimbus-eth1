@@ -8,6 +8,7 @@
 
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
+  chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/accounts_cache, forks],
@@ -196,7 +197,7 @@ when defined(evmc_enabled):
       {.gcsafe.}:
         callResult.release(callResult)
 
-proc runComputation*(call: CallParams): CallResult =
+proc runComputation*(call: CallParams): Future[CallResult] {.async.} =
   let host = setupHost(call)
   let c = host.computation
 
@@ -212,7 +213,7 @@ proc runComputation*(call: CallParams): CallResult =
   when defined(evmc_enabled):
     doExecEvmc(host, call)
   else:
-    execComputation(host.computation)
+    await execComputation(host.computation)
 
   # EIP-3529: Reduction in refunds
   let MaxRefundQuotient = if host.vmState.fork >= FkLondon:

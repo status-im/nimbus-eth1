@@ -161,6 +161,8 @@ proc execSubCall(k: var Vm2Ctx; childMsg: Message; memPos, memLen: int) =
     if actualOutputSize > 0:
       c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
 
+    newCompletedVoidFuture()
+
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
@@ -426,7 +428,8 @@ const
      info: "Message-Call into an account",
      exec: (prep: vm2OpIgnore,
             run: callOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
      forks: Vm2OpAllForks,
@@ -434,7 +437,8 @@ const
      info: "Message-call into this account with alternative account's code",
      exec: (prep: vm2OpIgnore,
             run: callCodeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
      forks: Vm2OpHomesteadAndLater,
@@ -443,7 +447,8 @@ const
            "code but persisting the current values for sender and value.",
      exec: (prep: vm2OpIgnore,
             run: delegateCallOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: StaticCall,   ## 0xfa, Static message-call into an account
      forks: Vm2OpByzantiumAndLater,
@@ -451,7 +456,8 @@ const
      info: "Static message-call into an account",
      exec: (prep: vm2OpIgnore,
             run: staticCallOp,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

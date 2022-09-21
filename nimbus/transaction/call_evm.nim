@@ -9,6 +9,7 @@
 import
   std/[options, times],
   chronicles,
+  chronos,
   eth/[common/eth_types, trie/db],
   stint,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
@@ -85,7 +86,8 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): 
   var dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
-  runComputation(params)
+  # FIXME-eventuallyPropagateAsyncFurtherUpward
+  waitFor(runComputation(params))
 
 proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB, gasCap: GasInt): GasInt =
   # Binary search the gas requirement, as it may be higher than the amount used
@@ -156,7 +158,8 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB,
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
-    runComputation(params).isError
+    # FIXME-eventuallyPropagateAsyncFurtherUpward
+    waitFor(runComputation(params)).isError
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
@@ -191,9 +194,10 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   )
   if tx.txType > TxLegacy:
     shallowCopy(call.accessList, tx.accessList)
-  return runComputation(call).gasUsed
+  # FIXME-eventuallyPropagateAsyncFurtherUpward
+  return waitFor(runComputation(call)).gasUsed
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Future[CallResult] {.async.} =
   var call = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
@@ -210,4 +214,4 @@ proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, for
   )
   if tx.txType > TxLegacy:
     shallowCopy(call.accessList, tx.accessList)
-  runComputation(call)
+  return await runComputation(call)

@@ -27,6 +27,7 @@ import
   ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
+  chronos,
   eth/common,
   stint,
   strformat
@@ -126,10 +127,27 @@ const
   # -------
 
   sloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    # AARDVARK: I don't want to actually enable this line of
+    # code in the commit, but:
+    # echo "Why is this still printing? I added an async version."
+    
     ## 0x54, Load word from storage.
     let (slot) = k.cpt.stack.popInt(1)
     k.cpt.stack.push:
       k.cpt.getStorage(slot)
+
+  # AARDVARK not working yet
+  asyncSloadOp: Vm2AsyncOpFn = proc (k: var Vm2Ctx): Future[void] =
+    echo "It would be very nice if this printed."
+  
+    ## 0x54, Load word from storage.
+    let (slot) = k.cpt.stack.popInt(1)
+    k.cpt.stack.push:
+      k.cpt.getStorage(slot)
+    
+    let f = newFuture[void]("oph_memory.asyncSloadOp()")
+    f.complete()
+    f
 
   sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
@@ -302,7 +320,8 @@ const
      info: "Remove item from stack",
      exec: (prep: vm2OpIgnore,
             run:  popOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mload,     ## 0x51, Load word from memory
      forks: Vm2OpAllForks,
@@ -310,7 +329,8 @@ const
      info: "Load word from memory",
      exec: (prep: vm2OpIgnore,
             run:  mloadOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mstore,    ## 0x52, Save word to memory
      forks: Vm2OpAllForks,
@@ -318,7 +338,8 @@ const
      info: "Save word to memory",
      exec: (prep: vm2OpIgnore,
             run:  mstoreOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mstore8,   ## 0x53, Save byte to memory
      forks: Vm2OpAllForks,
@@ -326,7 +347,8 @@ const
      info: "Save byte to memory",
      exec: (prep: vm2OpIgnore,
             run:  mstore8Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sload,     ## 0x54, Load word from storage
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
@@ -334,7 +356,10 @@ const
      info: "Load word from storage",
      exec: (prep: vm2OpIgnore,
             run:  sloadOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: some((prep: vm2AsyncOpIgnore,
+                          run:  asyncSloadOp,
+                          post: vm2AsyncOpIgnore))),
 
     (opCode: Sload,     ## 0x54, sload for Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -342,7 +367,8 @@ const
      info: "EIP2929: sload for Berlin and later",
      exec: (prep: vm2OpIgnore,
             run:  sloadEIP2929Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sstore,    ## 0x55, Save word
      forks: Vm2OpAllForks - Vm2OpConstantinopleAndLater,
@@ -350,7 +376,8 @@ const
      info: "Save word to storage",
      exec: (prep: vm2OpIgnore,
             run:  sstoreOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sstore,    ## 0x55, sstore for Constantinople and later
      forks: Vm2OpConstantinopleAndLater - Vm2OpPetersburgAndLater,
@@ -358,7 +385,8 @@ const
      info: "EIP1283: sstore for Constantinople and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP1283Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sstore,    ## 0x55, sstore for Petersburg and later
      forks: Vm2OpPetersburgAndLater - Vm2OpIstanbulAndLater,
@@ -366,7 +394,8 @@ const
      info: "sstore for Constantinople and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
      forks: Vm2OpIstanbulAndLater - Vm2OpBerlinAndLater,
@@ -374,7 +403,8 @@ const
      info: "EIP2200: sstore for Istanbul and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP2200Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sstore,    ##  0x55, sstore for Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -382,7 +412,8 @@ const
      info: "EIP2929: sstore for Istanbul and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP2929Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Jump,      ## 0x56, Jump
      forks: Vm2OpAllForks,
@@ -390,7 +421,8 @@ const
      info: "Alter the program counter",
      exec: (prep: vm2OpIgnore,
             run:  jumpOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: JumpI,     ## 0x57, Conditional jump
      forks: Vm2OpAllForks,
@@ -398,7 +430,8 @@ const
      info: "Conditionally alter the program counter",
      exec: (prep: vm2OpIgnore,
             run:  jumpIOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
      forks: Vm2OpAllForks,
@@ -407,7 +440,8 @@ const
            "corresponding to this instruction",
      exec: (prep: vm2OpIgnore,
             run:  pcOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Msize,     ## 0x59, Memory size
      forks: Vm2OpAllForks,
@@ -415,7 +449,8 @@ const
      info: "Get the size of active memory in bytes",
      exec: (prep: vm2OpIgnore,
             run:  msizeOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Gas,       ##  0x5a, Get available gas
      forks: Vm2OpAllForks,
@@ -424,7 +459,8 @@ const
            "reduction for the cost of this instruction",
      exec: (prep: vm2OpIgnore,
             run:  gasOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
                         ##       on machine state during execution
@@ -433,7 +469,8 @@ const
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
             run:  jumpDestOp,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 #[
     EIP-2315: temporary disabled
@@ -444,7 +481,8 @@ const
      info: " Marks the entry point to a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  beginSubOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: ReturnSub, ## 0x5d, Return
      forks: Vm2OpBerlinAndLater,
@@ -452,7 +490,8 @@ const
      info: "Returns control to the caller of a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  returnSubOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: JumpSub,   ## 0x5e, Call subroutine
      forks: Vm2OpBerlinAndLater,
@@ -460,7 +499,8 @@ const
      info: "Transfers control to a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  jumpSubOp,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 ]#
 
 # ------------------------------------------------------------------------------

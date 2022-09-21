@@ -11,6 +11,7 @@
 import
   tables, eth/common,
   options, json, sets,
+  chronos,
   ./stack,  ./memory, ./code_stream, ../forks,
   ./interpreter/[gas_costs, op_codes],
   # TODO - will be hidden at a lower layer
@@ -81,7 +82,7 @@ type
     instr*:                 Op
     opIndex*:               int
     parent*, child*:        Computation
-    continuation*:          proc() {.gcsafe.}
+    continuation*:          proc(): Future[void] {.gcsafe.}
 
   Error* = ref object
     info*:                  string
@@ -112,3 +113,13 @@ type
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
+
+# AARDVARK - This is very obviously not the right place for this;
+# that's why I'm putting it here. This must already exist elsewhere.
+# Either find the existing one, or create it in the chronos
+# library, or learn why it's a bad idea.
+# -- Adam
+proc newCompletedVoidFuture*(): Future[void] =
+  let f = newFuture[void]("vm2/types/newCompletedVoidFuture()")
+  f.complete()
+  f

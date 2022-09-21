@@ -24,7 +24,9 @@ else:
     ./vm2/interpreter_dispatch as vmi
   export
     vmi.execCallOrCreate,
-    vmi.executeOpcodes
+    vmi.executeOpcodes,
+    vmi.asyncExecCallOrCreate,
+    vmi.asyncExecuteOpcodes
 
 export
   vmc.accountExists,

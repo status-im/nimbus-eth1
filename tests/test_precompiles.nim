@@ -7,7 +7,7 @@
 
 import
   std/[strformat, strutils, json, os, tables, macros, options],
-  unittest2, stew/byteutils,
+  unittest2, stew/byteutils, chronos,
   eth/[trie/db, common, keys],
 
   ../nimbus/[vm_computation,
@@ -43,7 +43,8 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: Fork, address: Pr
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
+    # FIXME-eventuallyPropagateAsyncFurtherUpward
+    let fixtureResult = waitFor(testCallEvm(tx, tx.getSender, vmState, fork))
 
     if expectedErr:
       check fixtureResult.isError

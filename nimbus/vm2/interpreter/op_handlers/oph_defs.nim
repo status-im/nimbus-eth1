@@ -13,6 +13,8 @@
 ##
 
 import
+  chronos,
+  options,
   ../../types,
   ../../../forks,
   ../op_codes,
@@ -27,29 +29,48 @@ type
                               ## back via argument descriptor ``k``
     proc(k: var Vm2Ctx) {.gcsafe.}
 
+  # AARDVARK - does the gcsafe pragma make any sense here? I don't
+  # really understand how gcsafe interacts with async. --Adam
+  Vm2AsyncOpFn* =             ## here's the async version
+    proc(k: var Vm2Ctx): Future[void] {.gcsafe.}
 
-  Vm2OpHanders* = tuple       ## three step op code execution, typically
-                              ## only the ``run`` entry is activated
+  Vm2OpHandlers* = tuple   ## three step op code execution, typically
+                           ## only the ``run`` entry is activated
     prep: Vm2OpFn
     run:  Vm2OpFn
     post: Vm2OpFn
 
+  # AARDVARK - I'm still not sure whether it makes sense to have this
+  # tuple with async versions of prep and post too, or whether all I
+  # need is an asynchronouslyRun field in the Vm2OpHandlers tuple.
+  Vm2AsyncOpHandlers* = tuple
+    prep: Vm2AsyncOpFn
+    run:  Vm2AsyncOpFn
+    post: Vm2AsyncOpFn
 
   Vm2OpExec* = tuple          ## op code handler entry
     opCode: Op                ## index back-reference
     forks: set[Fork]          ## forks applicable for this operation
     name: string              ## handler name
     info: string              ## handter info, explainer
-    exec: Vm2OpHanders
+    exec: Vm2OpHandlers       ## handlers to be used if synchronous
+    asyncHandlers: Option[Vm2AsyncOpHandlers] ## if asynchronous
+
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpIgnore*: Vm2OpFn =      ## No operation, placeholder function
+  vm2OpIgnore*: Vm2OpFn =                ## No operation, placeholder function
     proc(k: var Vm2Ctx) = discard
 
+  vm2AsyncOpIgnore*: Vm2AsyncOpFn =      ## No operation, placeholder function
+    proc(k: var Vm2Ctx): Future[void] = newCompletedVoidFuture()
+
+  vm2NoAsyncOpHandlers*: Option[Vm2AsyncOpHandlers] =
+    none[Vm2AsyncOpHandlers]()
+  
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   Vm2OpAllForks* =
     {Fork.low .. Fork.high}

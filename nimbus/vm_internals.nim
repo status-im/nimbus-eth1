@@ -128,6 +128,8 @@ else:
     bChp.writeContract,
     cVmc.execCallOrCreate,
     cVmc.executeOpcodes,
+    cVmc.asyncExecCallOrCreate,
+    cVmc.asyncExecuteOpcodes,
     eGmt.consumeGas,
     eGmt.init,
     eGmt.refundGas,

@@ -295,7 +295,8 @@ const
      info: "Addition operation",
      exec: (prep: vm2OpIgnore,
             run:  addOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mul,         ##  0x02, Multiplication
      forks: Vm2OpAllForks,
@@ -303,7 +304,8 @@ const
      info: "Multiplication operation",
      exec: (prep: vm2OpIgnore,
             run:  mulOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sub,         ## 0x03, Subtraction
      forks: Vm2OpAllForks,
@@ -311,7 +313,8 @@ const
      info: "Subtraction operation",
      exec: (prep: vm2OpIgnore,
             run:  subOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Div,         ## 0x04, Division
      forks: Vm2OpAllForks,
@@ -319,7 +322,8 @@ const
      info: "Integer division operation",
      exec: (prep: vm2OpIgnore,
             run:  divideOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sdiv,        ## 0x05, Signed division
      forks: Vm2OpAllForks,
@@ -327,7 +331,8 @@ const
      info: "Signed integer division operation (truncated)",
      exec: (prep: vm2OpIgnore,
             run:  sdivOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mod,         ## 0x06, Modulo
      forks: Vm2OpAllForks,
@@ -335,7 +340,8 @@ const
      info: "Modulo remainder operation",
      exec: (prep: vm2OpIgnore,
             run:  moduloOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: Vm2OpAllForks,
@@ -343,7 +349,8 @@ const
      info: "Signed modulo remainder operation",
      exec: (prep: vm2OpIgnore,
             run:  smodOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
                           ## computations do not roll over at 2^256
@@ -352,7 +359,8 @@ const
      info: "Modulo addition operation",
      exec: (prep: vm2OpIgnore,
             run:  addmodOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
                           ## computations do not roll over at 2^256
@@ -361,7 +369,8 @@ const
      info: "Modulo multiplication operation",
      exec: (prep: vm2OpIgnore,
             run:  mulmodOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Exp,         ## 0x0a, Exponentiation
      forks: Vm2OpAllForks,
@@ -369,7 +378,8 @@ const
      info: "Exponentiation operation",
      exec: (prep: vm2OpIgnore,
             run:  expOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SignExtend,  ## 0x0b, Extend 2's complemet length
      forks: Vm2OpAllForks,
@@ -377,7 +387,8 @@ const
      info: "Extend length of two’s complement signed integer",
      exec: (prep: vm2OpIgnore,
             run:  signExtendOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Lt,          ## 0x10, Less-than
      forks: Vm2OpAllForks,
@@ -385,7 +396,8 @@ const
      info: "Less-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  ltOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Gt,          ## 0x11, Greater-than
      forks: Vm2OpAllForks,
@@ -393,7 +405,8 @@ const
      info: "Greater-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  gtOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Slt,         ## 0x12, Signed less-than
      forks: Vm2OpAllForks,
@@ -401,7 +414,8 @@ const
      info: "Signed less-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  sltOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sgt,         ## 0x13, Signed greater-than
      forks: Vm2OpAllForks,
@@ -409,7 +423,8 @@ const
      info: "Signed greater-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  sgtOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Eq,          ## 0x14, Equality
      forks: Vm2OpAllForks,
@@ -417,7 +432,8 @@ const
      info: "Equality comparison",
      exec: (prep: vm2OpIgnore,
             run:  eqOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: IsZero,      ## 0x15, Not operator
      forks: Vm2OpAllForks,
@@ -425,7 +441,8 @@ const
      info: "Simple not operator (Note: real Yellow Paper description)",
      exec: (prep: vm2OpIgnore,
             run:  isZeroOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: And,         ## 0x16, AND
      forks: Vm2OpAllForks,
@@ -433,7 +450,8 @@ const
      info: "Bitwise AND operation",
      exec: (prep: vm2OpIgnore,
             run:  andOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Or,          ## 0x17, OR
      forks: Vm2OpAllForks,
@@ -441,7 +459,8 @@ const
      info: "Bitwise OR operation",
      exec: (prep: vm2OpIgnore,
             run:  orOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Xor,         ## 0x18, XOR
      forks: Vm2OpAllForks,
@@ -449,7 +468,8 @@ const
      info: "Bitwise XOR operation",
      exec: (prep: vm2OpIgnore,
             run:  xorOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Not,         ## 0x19, NOT
      forks: Vm2OpAllForks,
@@ -457,7 +477,8 @@ const
      info: "Bitwise NOT operation",
      exec: (prep: vm2OpIgnore,
             run:  notOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Byte,        ## 0x1a, Retrieve byte
      forks: Vm2OpAllForks,
@@ -465,7 +486,8 @@ const
      info: "Retrieve single byte from word",
      exec: (prep: vm2OpIgnore,
             run:  byteOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     # Constantinople's new opcodes
 
@@ -475,7 +497,8 @@ const
      info: "Shift left",
      exec: (prep: vm2OpIgnore,
             run:  shlOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Shr,         ## 0x1c, Shift right logical
      forks: Vm2OpConstantinopleAndLater,
@@ -483,7 +506,8 @@ const
      info: "Logical shift right",
      exec: (prep: vm2OpIgnore,
             run:  shrOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Sar,         ## 0x1d, Shift right arithmetic
      forks: Vm2OpConstantinopleAndLater,
@@ -491,7 +515,8 @@ const
      info: "Arithmetic shift right",
      exec: (prep: vm2OpIgnore,
             run:  sarOp,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

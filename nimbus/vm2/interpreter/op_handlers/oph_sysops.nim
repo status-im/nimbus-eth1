@@ -148,7 +148,8 @@ const
      info: "Halt execution returning output data",
      exec: (prep: vm2OpIgnore,
             run: returnOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Revert,       ## 0xfd, Halt and revert state changes
      forks: Vm2OpByzantiumAndLater,
@@ -157,7 +158,8 @@ const
            "and remaining gas",
      exec: (prep: vm2OpIgnore,
             run: revertOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: Invalid,      ## 0xfe, invalid instruction.
      forks: Vm2OpAllForks,
@@ -165,7 +167,8 @@ const
      info: "Designated invalid instruction",
      exec: (prep: vm2OpIgnore,
             run: invalidOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SelfDestruct, ## 0xff, Halt execution, prep for later deletion
      forks: Vm2OpAllForks - Vm2OpTangerineAndLater,
@@ -173,7 +176,8 @@ const
      info: "Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SelfDestruct, ## 0xff, EIP150: self destruct, Tangerine
      forks: Vm2OpTangerineAndLater - Vm2OpSpuriousAndLater,
@@ -181,7 +185,8 @@ const
      info: "EIP150: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP150Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SelfDestruct, ## 0xff, EIP161: self destruct, Spurious and later
      forks: Vm2OpSpuriousAndLater - Vm2OpBerlinAndLater,
@@ -189,7 +194,8 @@ const
      info: "EIP161: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP161Op,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers),
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
      forks: Vm2OpBerlinAndLater,
@@ -197,7 +203,8 @@ const
      info: "EIP2929: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP2929Op,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End

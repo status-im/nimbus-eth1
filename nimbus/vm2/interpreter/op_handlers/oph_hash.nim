@@ -66,7 +66,8 @@ const
      info: "Compute Keccak-256 hash",
      exec: (prep: vm2OpIgnore,
             run:  sha3Op,
-            post: vm2OpIgnore))]
+            post: vm2OpIgnore),
+     asyncHandlers: vm2NoAsyncOpHandlers)]
 
 # ------------------------------------------------------------------------------
 # End
