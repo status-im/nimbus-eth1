@@ -45,7 +45,8 @@ proc httpCors*(allowedOrigins: seq[Uri]): HttpAuthHook =
     # this section shared by all http method
     let origin = parseUri(origins[0])
     let resp = req.getResponse()
-    if not allowedOrigins.containsOrigin(origin):
+
+    if not everyOriginAllowed and not allowedOrigins.containsOrigin(origin):
       return await req.respond(Http403, "Origin not allowed")
 
     if everyOriginAllowed:
@@ -57,21 +58,29 @@ proc httpCors*(allowedOrigins: seq[Uri]): HttpAuthHook =
       resp.addHeader("Vary", "Origin")
       resp.addHeader("Access-Control-Allow-Origin", origins[0])
 
-    if req.meth == MethodOptions:
-      # Preflight request
-      let meth = resp.getHeader("Access-Control-Request-Method", "?")
-      if meth != "?":
-        # TODO: get actual methods supported by respective server
-        # e.g. JSON-RPC, GRAPHQL, ENGINE-API
-        resp.addHeader("Access-Control-Allow-Methods", "GET, POST")
-        resp.addHeader("Vary", "Access-Control-Request-Method")
+    let methods = req.headers.getList("Access-Control-Request-Method")
 
-      let heads = resp.getHeader("Access-Control-Request-Headers", "?")
-      if heads != "?":
+    # Check it this is preflight request
+    # There are three conditions to identify proper preflight request:
+    # - Origin header is present (we checked this earlier)
+    # - It uses OPTIONS method
+    # - It has Access-Control-Request-Method header
+    if req.meth == MethodOptions and len(methods) > 0:
+      # TODO: get actual methods supported by respective server
+      # e.g. JSON-RPC, GRAPHQL, ENGINE-API
+      resp.addHeader("Access-Control-Allow-Methods", "GET, POST")
+      resp.addHeader("Vary", "Access-Control-Request-Method")
+
+      # check headers
+      let headers = req.headers.getString("Access-Control-Request-Headers", "?")
+
+      if headers != "?":
         # TODO: get actual headers supported by each server?
-        resp.addHeader("Access-Control-Allow-Headers", heads)
+        resp.addHeader("Access-Control-Allow-Headers", headers)
         resp.addHeader("Vary", "Access-Control-Request-Headers")
-      return await req.respond(Http400)
+
+      # Response to preflight request should be in 200 range.
+      return await req.respond(Http204)
 
     # other method such as POST or GET will fill
     # the rest of response in server
