@@ -9,7 +9,7 @@
 
 import
   std/hashes,
-  eth/common/eth_types_rlp,
+  eth/common/eth_types_rlp, eth/rlp,
   ssz_serialization, ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
   ./history_content
@@ -87,23 +87,16 @@ func buildAccumulator*(headers: seq[BlockHeader]): Accumulator =
   accumulator
 
 func buildAccumulatorData*(headers: seq[BlockHeader]):
-    seq[(ContentKey, EpochAccumulator)] =
+    (Accumulator, seq[EpochAccumulator]) =
   var accumulator: Accumulator
-  var epochAccumulators: seq[(ContentKey, EpochAccumulator)]
+  var epochAccumulators: seq[EpochAccumulator]
   for header in headers:
     updateAccumulator(accumulator, header)
 
     if accumulator.currentEpoch.len() == epochSize:
-      let
-        rootHash = accumulator.currentEpoch.hash_tree_root()
-        key = ContentKey(
-          contentType: epochAccumulator,
-          epochAccumulatorKey: EpochAccumulatorKey(
-            epochHash: rootHash))
+      epochAccumulators.add((accumulator.currentEpoch))
 
-      epochAccumulators.add((key, accumulator.currentEpoch))
-
-  epochAccumulators
+  (accumulator, epochAccumulators)
 
 ## Calls and helper calls for building header proofs and verifying headers
 ## against the Accumulator and the header proofs.
@@ -193,3 +186,46 @@ func getHeaderHashForBlockNumber*(a: Accumulator, bn: UInt256): BlockHashResult=
       epochIndex: epochIndex,
       blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex)
     )
+
+func buildHeaderWithProof*(
+    header: BlockHeader,
+    accumulator: Accumulator,
+    epochAccumulators: seq[EpochAccumulator]):
+    Result[BlockHeaderWithProof, string] =
+  ## Construct the accumulator proof for a specific header.
+  ## Returns the block header with the proof
+  if header.inCurrentEpoch(accumulator):
+    # TODO: If the accumulator gets optimised to a purely static structure than
+    # these checks can be removed
+    err("Can't build proof for headers in current epoch")
+  else:
+    let epochIndex = getEpochIndex(header)
+
+    # TODO: Avoid this assert with some master and epoch accumulators combined
+    # object?
+    doAssert(epochIndex < uint64(epochAccumulators.len()))
+    let
+      epochAccumulator = epochAccumulators[epochIndex]
+      headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+
+      gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+
+      proof = ? epochAccumulator.build_proof(gIndex)
+
+      content = BlockHeaderWithProof(
+        header: ByteList.init(rlp.encode(header)),
+        proof: BlockHeaderProof.init(proof))
+
+    ok(content)
+
+func buildHeadersWithProof*(
+    headers: seq[BlockHeader],
+    accumulator: Accumulator,
+    epochAccumulators: seq[EpochAccumulator]):
+    Result[seq[BlockHeaderWithProof], string] =
+  var headersWithProof: seq[BlockHeaderWithProof]
+  for header in headers:
+    headersWithProof.add(
+      ? buildHeaderWithProof(header, accumulator, epochAccumulators))
+
+  ok(headersWithProof)

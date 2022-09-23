@@ -271,9 +271,9 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     done
   fi
 
-  # if [[ ${NUM_NODE} -lt ${LOCAL_ACCUMULATOR_NODES} ]]; then
-  #   ACCUMULATOR_ARG="--accumulator-file=./fluffy/scripts/eth-accumulator.json"
-  # fi
+  if [[ ${NUM_NODE} -lt ${LOCAL_ACCUMULATOR_NODES} ]]; then
+    ACCUMULATOR_ARG="--accumulator-file=./fluffy/tests/blocks/eth_accumulator.json"
+  fi
 
   # Running with bits-per-hop of 1 to make the lookups more likely requiring
   # to request to nodes over the network instead of having most of them in the

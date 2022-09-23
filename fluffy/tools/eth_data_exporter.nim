@@ -111,6 +111,10 @@ type
         desc: "Only export the headers instead of full blocks and receipts"
         defaultValue: false
         name: "headers-only" .}: bool
+      headersWithProofOnly* {.
+        desc: "Only export the headers with accumulator based proofs"
+        defaultValue: false
+        name: "headers-with-proof-only" .}: bool
     of exportAccumulatorData:
       accumulatorFileName* {.
         desc: "File to which the serialized accumulator data is written"
@@ -155,6 +159,23 @@ proc writeHeaderRecord(
       number: header.blockNumber.truncate(uint64))
 
     headerHash = to0xHex(rlpHash(header).data)
+
+  writer.writeField(headerHash, dataRecord)
+
+proc writeHeaderWithProofRecord(
+    writer: var JsonWriter, headerWithProof: BlockHeaderWithProof)
+    {.raises: [IOError, Defect].} =
+  let blockHeader =
+    try:
+      rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
+    except RlpError as exc:
+      raiseAssert(exc.msg)
+  let
+    dataRecord = HeaderRecord(
+      header: SSZ.encode(headerWithProof).to0xHex(),
+      number: blockHeader.blockNumber.truncate(uint64))
+
+    headerHash = to0xHex(keccakHash(headerWithProof.header.asSeq()).data)
 
   writer.writeField(headerHash, dataRecord)
 
@@ -249,6 +270,42 @@ proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
       writer.writeHeaderRecord(blck)
       if ((i - config.initialBlock) mod 8192) == 0 and i != config.initialBlock:
         info "Downloaded 8192 new block headers", currentHeader = i
+    writer.endRecord()
+    info "File successfully written", path = config.dataDir / config.fileName
+  except IOError as e:
+    fatal "Error occured while writing to file", error = e.msg
+    quit 1
+  finally:
+    try:
+      fh.close()
+    except IOError as e:
+      fatal "Error occured while closing file", error = e.msg
+      quit 1
+
+proc writeHeadersWithProofToJson(config: ExporterConf, client: RpcClient) =
+  let fh = createAndOpenFile(string config.dataDir, string config.fileName)
+
+  try:
+    var headers: seq[BlockHeader]
+    # Need to build accumulator so we need to start from header 0
+    for i in 0..config.endBlock:
+      headers.add(client.downloadHeader(i))
+      if (i mod 8192) == 0 and i != 0:
+        info "Downloaded 8192 new block headers", currentHeader = i
+
+    let (accumulator, epochAccumulators) = buildAccumulatorData(headers)
+
+    var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
+    writer.beginRecord()
+    for i in config.initialBlock..config.endBlock:
+      let headerWithProof =
+        headers[i].buildHeaderWithProof(accumulator, epochAccumulators)
+      if headerWithProof.isErr():
+        fatal "Error occured while building proof",
+          error = headerWithProof.error
+        quit 1
+
+      writer.writeHeaderWithProofRecord(headerWithProof.get())
     writer.endRecord()
     info "File successfully written", path = config.dataDir / config.fileName
   except IOError as e:
@@ -360,6 +417,8 @@ proc exportBlocks(config: ExporterConf, client: RpcClient) =
   of Json:
     if config.headersOnly:
       writeHeadersToJson(config, client)
+    elif config.headersWithProofOnly:
+      writeHeadersWithProofToJson(config, client)
     else:
       writeBlocksToJson(config, client)
   of Db:
@@ -412,13 +471,11 @@ when isMainModule:
     waitFor client.close()
 
     info "Building the accumulator"
-    let accumulator = buildAccumulator(headers)
+    let (accumulator, epochAccumulators) = buildAccumulatorData(headers)
     writeAccumulatorToJson(
       string config.dataDir, string config.accumulatorFileName, accumulator)
-
-    let epochAccumulators = buildAccumulatorData(headers)
 
     for i, epochAccumulator in epochAccumulators:
       writeEpochAccumulatorToJson(
         string config.dataDir, "eth-epoch-accumulator_" & $i & ".json",
-        epochAccumulator[1])
+        epochAccumulator)

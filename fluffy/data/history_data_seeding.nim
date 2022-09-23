@@ -19,6 +19,9 @@ export results
 ### Helper calls to seed the local database and/or the network
 
 proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
+  ## Build the master accumulator from a data file holding a set of consecutive
+  ## headers.
+  ## Returns the master accumulator
   let blockData = ? readJsonType(dataFile, BlockDataTable)
 
   var headers: seq[BlockHeader]
@@ -35,7 +38,10 @@ proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
 
 proc buildAccumulatorData*(
     dataFile: string):
-    Result[seq[(ContentKey, EpochAccumulator)], string] =
+    Result[(Accumulator, seq[EpochAccumulator]), string] =
+  ## Build the master accumulator from a data file holding a set of consecutive
+  ## headers.
+  ## Returns the master accumulator and all epoch accumulators.
   let blockData = ? readJsonType(dataFile, BlockDataTable)
 
   var headers: seq[BlockHeader]
@@ -67,18 +73,25 @@ proc propagateAccumulatorData*(
     Future[Result[void, string]] {.async.} =
   ## Propagate all epoch accumulators created when building the accumulator
   ## from the block headers.
-  ## dataFile holds block data
-  let epochAccumulators = buildAccumulatorData(dataFile)
-  if epochAccumulators.isErr():
-    return err(epochAccumulators.error)
+  ## dataFile a set of consecutive headers.
+  let res = buildAccumulatorData(dataFile)
+  if res.isErr():
+    return err(res.error)
   else:
-    for (key, epochAccumulator) in epochAccumulators.get():
-      let content = SSZ.encode(epochAccumulator)
+    let (accumulator, epochAccumulators) = res.get()
+    for i, epochAccumulator in epochAccumulators:
+      let
+        rootHash = Digest(data: accumulator.historicalEpochs[i])
+        contentKey = ContentKey(
+          contentType: ContentType.epochAccumulator,
+          epochAccumulatorKey: EpochAccumulatorKey(
+            epochHash: rootHash))
 
-      p.storeContent(
-        history_content.toContentId(key), content)
+        content = SSZ.encode(epochAccumulator)
+
+      p.storeContent(history_content.toContentId(contentKey), content)
       await p.neighborhoodGossip(
-        ContentKeysList(@[encode(key)]), @[content])
+        ContentKeysList(@[encode(contentKey)]), @[content])
 
     return ok()
 
@@ -127,7 +140,12 @@ proc historyPropagate*(
   let blockData = readJsonType(dataFile, BlockDataTable)
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
-      for value in b:
+      for i, value in b:
+        if i == 0:
+          # TODO: Skipping propagation of headers without proof for now.
+          # Need to figure out of we need to keep those or not.
+          continue
+
         # Only sending non empty data, e.g. empty receipts are not send
         # TODO: Could do a similar thing for a combination of empty
         # txs and empty uncles, as then the serialization is always the same.
@@ -139,7 +157,6 @@ proc historyPropagate*(
 
           await gossipQueue.addLast(
             (ContentKeysList(@[encode(value[0])]), value[1]))
-
     return ok()
   else:
     return err(blockData.error)
@@ -172,3 +189,36 @@ proc historyPropagateBlock*(
     return ok()
   else:
     return err(blockDataTable.error)
+
+proc historyPropagateHeaders*(
+    p: PortalProtocol, dataFile: string, verify = false):
+    Future[Result[void, string]] {.async.} =
+  # TODO: Should perhaps be integrated with `historyPropagate` call.
+  const concurrentGossips = 20
+
+  var gossipQueue =
+    newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
+  var gossipWorkers: seq[Future[void]]
+
+  proc gossipWorker(p: PortalProtocol) {.async.} =
+    while true:
+      let (keys, content) = await gossipQueue.popFirst()
+
+      await p.neighborhoodGossip(keys, @[content])
+
+  for i in 0 ..< concurrentGossips:
+    gossipWorkers.add(gossipWorker(p))
+
+  let blockData = readJsonType(dataFile, BlockDataTable)
+  if blockData.isOk():
+    for header in headers(blockData.get(), verify):
+      info "Seeding header content into the network", contentKey = header[0]
+      let contentId = history_content.toContentId(header[0])
+      p.storeContent(contentId, header[1])
+
+      await gossipQueue.addLast(
+        (ContentKeysList(@[encode(header[0])]), header[1]))
+
+    return ok()
+  else:
+    return err(blockData.error)

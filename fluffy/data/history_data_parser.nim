@@ -128,9 +128,14 @@ iterator blocks*(
       error "Failed reading block from block data", error = res.error
 
 iterator blocksContent*(
-    blockData: BlockDataTable, verify = false): (ContentId, seq[byte], seq[byte]) =
+    blockData: BlockDataTable, verify = false):
+    (ContentId, seq[byte], seq[byte]) =
   for b in blocks(blockData, verify):
-    for value in b:
+    for i, value in b:
+      if i == 0:
+        # TODO: Skipping propagation of headers without proof for now.
+        # Need to figure out of we need to keep those or not.
+        continue
       if len(value[1]) > 0:
         let ckBytes = history_content.encode(value[0])
         let contentId = history_content.toContentId(ckBytes)
@@ -148,6 +153,45 @@ func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
     return ok(rlp.read(BlockHeader))
   except RlpError as e:
     return err("Invalid header, number " & $blockData.number & ": " & e.msg)
+
+func readHeaderData*(
+    hash: string, blockData: BlockData, verify = false):
+    Result[(ContentKey, seq[byte]), string] =
+  var blockHash: BlockHash
+  try:
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+  except ValueError as e:
+    return err("Invalid hex for blockhash, number " &
+      $blockData.number & ": " & e.msg)
+
+  let contentKeyType =
+    BlockKey(chainId: 1'u16, blockHash: blockHash)
+
+  try:
+    # If wanted the hash for the corresponding header can be verified
+    if verify:
+      if keccakHash(blockData.header.hexToSeqByte()) != blockHash:
+        return err("Data is not matching hash, number " & $blockData.number)
+
+    let contentKey = ContentKey(
+      contentType: blockHeaderWithProof,
+      blockHeaderWithProofKey: contentKeyType)
+
+    let res = (contentKey, blockData.header.hexToSeqByte())
+    return ok(res)
+
+  except ValueError as e:
+    return err("Invalid hex data, number " & $blockData.number & ": " & e.msg)
+
+iterator headers*(
+    blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
+  for k,v in blockData:
+    let res = readHeaderData(k, v, verify)
+
+    if res.isOk():
+      yield res.get()
+    else:
+      error "Failed reading header from block data", error = res.error
 
 proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   let params =

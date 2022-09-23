@@ -22,7 +22,7 @@ const
   # Maximum content key size comes from:
   # 34 bytes for ssz serialized BlockKey
   # 1 byte for contentType
-  # TODO it would be nice to caluclate it somehow from the object definition (macro?)
+  # TODO: it would be nice to calculate it somehow from the object definition (macro?)
   maxContentKeySize* = 35
 
 type
@@ -32,6 +32,7 @@ type
     receipts = 0x02
     epochAccumulator = 0x03
     masterAccumulator = 0x04
+    blockHeaderWithProof = 0x05
 
   BlockKey* = object
     chainId*: uint16
@@ -63,6 +64,8 @@ type
       epochAccumulatorKey*: EpochAccumulatorKey
     of masterAccumulator:
       masterAccumulatorKey*: MasterAccumulatorKey
+    of blockHeaderWithProof:
+      blockHeaderWithProofKey*: BlockKey
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -107,6 +110,8 @@ func `$`*(x: ContentKey): string =
       res.add($key.accumulaterKeyType)
     of masterHash:
       res.add($key.accumulaterKeyType & ": " & $key.masterHashKey)
+  of blockHeaderWithProof:
+    res.add($x.blockHeaderWithProofKey)
 
   res.add(")")
 
@@ -135,3 +140,11 @@ type
 
   ReceiptByteList* = List[byte, MAX_RECEIPT_LENGTH] # RLP data
   ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
+
+  # TODO:
+  # - Change proof to be a SSZ vector instead of List?
+  # - Proof could also be an SSZ Union, with `None` and `AccumulatorProof` types
+  BlockHeaderProof* = List[Digest, 15]
+  BlockHeaderWithProof* = object
+    header*: ByteList # RLP data
+    proof*: BlockHeaderProof

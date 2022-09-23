@@ -14,6 +14,7 @@ import
   ../../nimbus/rpc/[hexstrings, rpc_types],
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
+  ../network/history/history_content,
   ../data/[history_data_seeding, history_data_parser],
   ../seed_db
 
@@ -233,10 +234,9 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    # const dataFileEpoch = "./fluffy/scripts/eth-epoch-accumulator.json"
-    # check (await clients[0].portal_history_propagateEpochAccumulator(dataFileEpoch))
-    # await clients[0].close()
-    # await sleepAsync(60.seconds)
+    const dataFileHeaders = "./fluffy/tests/blocks/mainnet_headers_with_proof_1000001_1000010.json"
+    check (await clients[0].portal_history_propagateHeaders(dataFileHeaders))
+    await clients[0].close()
 
     const dataFile = "./fluffy/tests/blocks/mainnet_blocks_1000001_1000010.json"
     # This will fill the first node its db with blocks from the data file. Next,
@@ -251,10 +251,10 @@ procSuite "Portal testnet tests":
       # Note: Once there is the Canonical Indices Network, we don't need to
       # access this file anymore here for the block hashes.
       for hash in blockData.get().blockHashes():
-
         # Note: More flexible approach instead of generic retries could be to
-        # add a json-rpc debug proc that returns whether the offer queue is empty or
-        # not. And then poll every node until all nodes have an empty queue.
+        # add a json-rpc debug proc that returns whether the offer queue is
+        # empty or not. And then poll every node until all nodes have an empty
+        # queue.
 
         let content = await retryUntil(
           proc (): Future[Option[BlockObject]] {.async.} =
@@ -317,39 +317,51 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000011_1000030.json"
+    const
+      headersDataFile = "./fluffy/tests/blocks/mainnet_headers_with_proof_1000011_1000030.json"
+      blocksDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000011_1000030.json"
 
-    # path for temporary db, separate dir is used as sqlite usually also creates
-    # wal files, and we do not want for those to linger in filesystem
-    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000011_1000030.sqlite3"
+      # Path for the temporary db. A separate dir is used as sqlite usually also
+      # creates wal files.
+      tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000011_1000030.sqlite3"
 
     let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
-
-    let blockData = readJsonType(dataPath, BlockDataTable)
-    check blockData.isOk()
-    let bd = blockData.get()
 
     createDir(dbFile)
     let db = SeedDb.new(path = dbFile, name = dbName)
 
     try:
+      let blockDataRes = readJsonType(blocksDataFile, BlockDataTable)
+      check blockDataRes.isOk()
+      let blockData = blockDataRes.get()
+
+      let headerData = readJsonType(headersDataFile, BlockDataTable)
+      check headerData.isOk()
+      for header in headers(headerData.get()):
+        let
+          contentId = history_content.toContentId(header[0])
+          contentKey = SSZ.encode(header[0])
+          contentValue = header[1]
+        db.put(contentId, contentKey, contentValue)
+
       let lastNodeIdx = len(nodeInfos) - 1
 
       # populate temp database from json file
-      for t in blocksContent(bd, false):
+      for t in blocksContent(blockData, false):
         db.put(t[0], t[1], t[2])
 
       # store content in node0 database
-      check (await clients[0].portal_history_storeContentInNodeRange(tempDbPath, 100, 0))
+      check (await clients[0].portal_history_storeContentInNodeRange(
+        tempDbPath, 100, 0))
       await clients[0].close()
 
       # offer content to node 1..63
       for i in 1..lastNodeIdx:
-        let receipientId = nodeInfos[i].nodeId
+        let recipientId = nodeInfos[i].nodeId
         let offerResponse = await retryUntil(
           proc (): Future[int] {.async.} =
             try:
-              let res = await clients[0].portal_history_offerContentInNodeRange(tempDbPath, receipientId, 64, 0)
+              let res = await clients[0].portal_history_offerContentInNodeRange(tempDbPath, recipientId, 64, 0)
               await clients[0].close()
               return res
             except CatchableError as exc:
@@ -366,7 +378,7 @@ procSuite "Portal testnet tests":
       for i, client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to
         # access this file anymore here for the block hashes.
-        for hash in bd.blockHashes():
+        for hash in blockData.blockHashes():
           let content = await retryUntil(
             proc (): Future[Option[BlockObject]] {.async.} =
               try:
@@ -405,26 +417,37 @@ procSuite "Portal testnet tests":
       await client.close()
       nodeInfos.add(nodeInfo)
 
-    # different set of data for each test as tests are statefull so previously propagated
-    # block are already in the network
-    const dataPath = "./fluffy/tests/blocks/mainnet_blocks_1000040_1000050.json"
+    # different set of data for each test as tests are statefull so previously
+    # propagated content is still in the network
+    const
+      headersDataFile = "./fluffy/tests/blocks/mainnet_headers_with_proof_1000040_1000050.json"
+      blocksDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000040_1000050.json"
 
-    # path for temporary db, separate dir is used as sqlite usually also creates
-    # wal files, and we do not want for those to linger in filesystem
-    const tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000040_100050.sqlite3"
+      # Path for the temporary db. A separate dir is used as sqlite usually also
+      # creates wal files.
+      tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000040_100050.sqlite3"
 
     let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
-
-    let blockData = readJsonType(dataPath, BlockDataTable)
-    check blockData.isOk()
-    let bd = blockData.get()
 
     createDir(dbFile)
     let db = SeedDb.new(path = dbFile, name = dbName)
 
     try:
+      let blockDataRes = readJsonType(blocksDataFile, BlockDataTable)
+      check blockDataRes.isOk()
+      let blockData = blockDataRes.get()
+
+      let headerData = readJsonType(headersDataFile, BlockDataTable)
+      check headerData.isOk()
+      for header in headers(headerData.get()):
+        let
+          contentId = history_content.toContentId(header[0])
+          contentKey = SSZ.encode(header[0])
+          contentValue = header[1]
+        db.put(contentId, contentKey, contentValue)
+
       # populate temp database from json file
-      for t in blocksContent(bd, false):
+      for t in blocksContent(blockData, false):
         db.put(t[0], t[1], t[2])
 
       check (await clients[0].portal_history_depthContentPropagate(tempDbPath, 64))
@@ -433,7 +456,7 @@ procSuite "Portal testnet tests":
       for i, client in clients:
         # Note: Once there is the Canonical Indices Network, we don't need to
         # access this file anymore here for the block hashes.
-        for hash in bd.blockHashes():
+        for hash in blockData.blockHashes():
           let content = await retryUntil(
             proc (): Future[Option[BlockObject]] {.async.} =
               try:

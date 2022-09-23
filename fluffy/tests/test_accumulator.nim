@@ -17,12 +17,12 @@ import
 
 func buildProof(
     accumulator: Accumulator,
-    epochAccumulators: seq[(ContentKey, EpochAccumulator)],
+    epochAccumulators: seq[EpochAccumulator],
     header: BlockHeader):
     Result[seq[Digest], string] =
   let
     epochIndex = getEpochIndex(header)
-    epochAccumulator = epochAccumulators[epochIndex][1]
+    epochAccumulator = epochAccumulators[epochIndex]
 
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
     gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
@@ -87,9 +87,7 @@ suite "Header Accumulator":
       headers.add(BlockHeader(
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
-    let
-      accumulator = buildAccumulator(headers)
-      epochAccumulators = buildAccumulatorData(headers)
+    let (accumulator, epochAccumulators) = buildAccumulatorData(headers)
 
     block: # Test valid headers
       for i in headersToTest:
@@ -134,9 +132,7 @@ suite "Header Accumulator":
       headers.add(BlockHeader(
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
-    let
-      accumulator = buildAccumulator(headers)
-      epochAccumulators = buildAccumulatorData(headers)
+    let (accumulator, epochAccumulators) = buildAccumulatorData(headers)
 
     block: # Test valid headers
       for i in headersToTest:

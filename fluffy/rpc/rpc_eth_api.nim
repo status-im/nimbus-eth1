@@ -273,7 +273,7 @@ proc installEthApiHandlers*(
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 
-      let headerOpt = await historyNetwork.getBlockHeader(1'u16, hash)
+      let headerOpt = await historyNetwork.getVerifiedBlockHeader(1'u16, hash)
       if headerOpt.isNone():
         raise newException(ValueError,
           "Could not find header with requested hash")
