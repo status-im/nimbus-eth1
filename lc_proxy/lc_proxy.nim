@@ -14,30 +14,19 @@ import
   std/[os, strutils],
   chronicles, chronicles/chronos_tools, chronos,
   eth/keys,
-  json_rpc/[rpcserver, rpcclient],
+  json_rpc/rpcproxy,
   beacon_chain/eth1/eth1_monitor,
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
+  ../nimbus/rpc/cors,
   ./rpc/rpc_eth_lc_api,
   ./lc_proxy_conf
 
-from beacon_chain/consensus_object_pools/consensus_manager import runForkchoiceUpdated
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
-
-proc initRpcClient(config: LcProxyConf): Future[RpcClient] {.async.} =
-  case config.web3ClientConfig.kind
-  of WsClient:
-    let wssClient = newRpcWebSocketClient()
-    await wssClient.connect(config.web3ClientConfig.url)
-    return wssClient
-  of HttpClient:
-    let httpClient = newRpcHttpClient()
-    await httpClient.connect(config.web3ClientConfig.url)
-    return httpClient
 
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   if networkMetadata.eth1Network.isSome():
@@ -105,13 +94,18 @@ proc run() {.raises: [Exception, Defect].} =
       forkDigests, getBeaconTime, genesis_validators_root
     )
 
-    rpcClient = waitFor initRpcClient(config)
+    # TODO: for now we serve all cross origin requests
+    authHooks = @[httpCors(@[])]
 
-    rpcHttpServer = newRpcHttpServer(
-      [initTAddress(config.rpcAddress, config.rpcPort)]
+    clientConfig = config.web3url.asClientConfig()
+
+    rpcProxy = RpcProxy.new(
+      [initTAddress(config.rpcAddress, config.rpcPort)],
+      clientConfig,
+      authHooks
     )
 
-    lcProxy = LightClientRpcProxy.new(rpcHttpServer, rpcClient, chainId)
+    lcProxy = LightClientRpcProxy.new(rpcProxy, chainId)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -156,7 +150,7 @@ proc run() {.raises: [Exception, Defect].} =
 
   waitFor network.startListening()
   waitFor network.start()
-  rpcHttpServer.start()
+  waitFor rpcProxy.start()
   waitFor lcProxy.verifyChaindId()
 
   proc onFinalizedHeader(

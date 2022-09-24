@@ -11,7 +11,7 @@ import
   stint,
   stew/byteutils,
   chronicles,
-  json_rpc/[rpcserver, rpcclient],
+  json_rpc/[rpcproxy, rpcserver, rpcclient],
   web3,
   web3/[ethhexstrings, ethtypes],
   beacon_chain/eth1/eth1_monitor,
@@ -36,8 +36,7 @@ template encodeQuantity(value: Quantity): HexQuantityStr =
   hexQuantityStr(encodeQuantity(value.uint64))
 
 type LightClientRpcProxy* = ref object
-  client*: RpcClient
-  server*: RpcServer
+  proxy: RpcProxy
   executionPayload*: Opt[ExecutionPayloadV1]
   chainId: Quantity
 
@@ -54,13 +53,15 @@ template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: strin
     # fetched on demand.
     raise newException(ValueError, "Only latest block is supported")
 
+template rpcClient(lcProxy: LightClientRpcProxy): RpcClient = lcProxy.proxy.getClient()
+
 proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
   template payload(): Opt[ExecutionPayloadV1] = lcProxy.executionPayload
 
-  lcProxy.server.rpc("eth_chainId") do() -> HexQuantityStr:
+  lcProxy.proxy.rpc("eth_chainId") do() -> HexQuantityStr:
     return encodeQuantity(lcProxy.chainId)
 
-  lcProxy.server.rpc("eth_blockNumber") do() -> HexQuantityStr:
+  lcProxy.proxy.rpc("eth_blockNumber") do() -> HexQuantityStr:
     ## Returns the number of most recent block.
     if payload.isNone:
       raise newException(ValueError, "Syncing")
@@ -68,7 +69,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     return encodeQuantity(payload.get.blockNumber)
 
   # TODO quantity tag should be better typed
-  lcProxy.server.rpc("eth_getBalance") do(address: Address, quantityTag: string) -> HexQuantityStr:
+  lcProxy.proxy.rpc("eth_getBalance") do(address: Address, quantityTag: string) -> HexQuantityStr:
     checkPreconditions(payload, quantityTag)
 
     # When requesting state for `latest` block number, we need to translate
@@ -81,7 +82,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
     info "Forwarding get_Balance", executionBn = blockNumber
 
-    let proof = await lcProxy.client.eth_getProof(address, @[], blockId(blockNumber))
+    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
 
     let accountResult = getAccountFromProof(
       executionPayload.stateRoot,
@@ -98,7 +99,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     else:
       raise newException(ValueError, accountResult.error)
 
-  lcProxy.server.rpc("eth_getStorageAt") do(address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
+  lcProxy.proxy.rpc("eth_getStorageAt") do(address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
     checkPreconditions(payload, quantityTag)
 
     let
@@ -108,7 +109,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
     info "Forwarding eth_getStorageAt", executionBn = blockNumber
 
-    let proof = await lcProxy.client.eth_getProof(address, @[uslot], blockId(blockNumber))
+    let proof = await lcProxy.rpcClient.eth_getProof(address, @[uslot], blockId(blockNumber))
 
     let dataResult = getStorageData(executionPayload.stateRoot, uslot, proof)
 
@@ -118,15 +119,23 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     else:
       raise newException(ValueError, dataResult.error)
 
+  # TODO This methods are forwarded directly to provider therefore thay are not
+  # validated in any way
+  lcProxy.proxy.registerProxyMethod("net_version")
+  lcProxy.proxy.registerProxyMethod("eth_call")
+
+  # TODO cache blocks received from light client, and respond using them in this
+  # call. It would also enable handling of numerical `quantityTag` for the
+  # set of cached blocks
+  lcProxy.proxy.registerProxyMethod("eth_getBlockByNumber")
+
 proc new*(
     T: type LightClientRpcProxy,
-    server: RpcServer,
-    client: RpcClient,
+    proxy: RpcProxy,
     chainId: Quantity): T =
 
   return LightClientRpcProxy(
-    client: client,
-    server: server,
+    proxy: proxy,
     chainId: chainId
   )
 
@@ -136,7 +145,7 @@ proc verifyChaindId*(p: LightClientRpcProxy): Future[void] {.async.} =
   # retry 2 times, if the data provider will fail despite re-tries, propagate
   # exception to the caller.
   let providerId = awaitWithRetries(
-    p.client.eth_chainId(),
+    p.rpcClient.eth_chainId(),
     retries = 2,
     timeout = seconds(30)
   )

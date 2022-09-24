@@ -14,7 +14,8 @@ import
   std/os,
   json_serialization/std/net,
   beacon_chain/light_client,
-  beacon_chain/conf
+  beacon_chain/conf,
+  json_rpc/[rpcproxy]
 
 export net, conf
 
@@ -28,18 +29,16 @@ proc defaultLCPDataDir*(): string =
 
   getHomeDir() / dataDir
 
-
-type Web3ClientType* = enum
-  WsClient, HttpClient
-
-type Web3ClientConfig* = object
-  kind*: Web3ClientType
-  url*: string
-
 const
-  defaultWeb3Address* = (static "http://127.0.0.1:8546")
-  defaultWeb3ClientConfig* = Web3ClientConfig(url: defaultWeb3Address, kind: HttpClient)
   defaultDataLCPDirDesc* = defaultLCPDataDir()
+
+type
+  Web3UrlKind* = enum
+    HttpUrl, WsUrl
+
+  ValidatedWeb3Url* = object
+    kind*: Web3UrlKind
+    web3Url*: string
 
 type LcProxyConf* = object
   # Config
@@ -164,25 +163,25 @@ type LcProxyConf* = object
     defaultValueDesc: $defaultAdminListenAddressDesc
     name: "rpc-address" .}: ValidIpAddress
 
-  web3ClientConfig* {.
+  # There is no default as its need to be provided by the user
+  web3url* {.
     desc: "url of web3 data provider"
-    defaultValue: defaultWeb3ClientConfig
-    name: "web3-url" .}: Web3ClientConfig
+    name: "web3-url" .}: ValidatedWeb3Url
 
-proc parseCmdArg*(T: type Web3ClientConfig, p: TaintedString): T
+proc parseCmdArg*(T: type ValidatedWeb3Url, p: TaintedString): T
       {.raises: [Defect, ConfigurationError].} =
   let url = parseUri(p)
   let normalizedScheme = url.scheme.toLowerAscii()
   if (normalizedScheme == "http" or normalizedScheme == "https"):
-    Web3ClientConfig(kind: HttpClient, url: p)
+    ValidatedWeb3Url(kind: HttpUrl, web3Url: p)
   elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    Web3ClientConfig(kind: WsClient, url: p)
+    ValidatedWeb3Url(kind: WsUrl, web3Url: p)
   else:
     raise newException(
-      ConfigurationError, "Web3 client uri should have defined scheme (http/https/ws/wss)"
+      ConfigurationError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
 
-proc completeCmdArg*(T: type Web3ClientConfig, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type ValidatedWeb3Url, val: TaintedString): seq[string] =
   return @[]
 
 func asLightClientConf*(pc: LcProxyConf): LightClientConf =
@@ -210,3 +209,13 @@ func asLightClientConf*(pc: LcProxyConf): LightClientConf =
     jwtSecret: none(string),
     stopAtEpoch: 0
   )
+
+# TODO: Cannot use ClientConfig in LcProxyConf due to the fact that
+# it contain `set[TLSFlags]` which does not have proper toml serialization
+func asClientConfig*(url: ValidatedWeb3Url): ClientConfig =
+  case url.kind
+  of HttpUrl:
+    getHttpClientConfig(url.web3Url)
+  of WsUrl:
+    getWebSocketClientConfig(url.web3Url, flags = {})
+
