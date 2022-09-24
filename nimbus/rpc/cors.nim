@@ -14,8 +14,7 @@ import
   chronos/apps/http/[httptable, httpserver],
   json_rpc/rpcserver,
   httputils,
-  websock/websock as ws,
-  ../config
+  websock/websock as ws
 
 proc sameOrigin(a, b: Uri): bool =
   a.hostname == b.hostname and
