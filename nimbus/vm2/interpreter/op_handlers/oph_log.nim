@@ -63,14 +63,23 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
 
-  var log: Log
-  log.topics = newSeqOfCap[Topic](topicCount)
-  for i in 0 ..< topicCount:
-    log.topics.add(c.stack.popTopic())
+  when evmc_enabled:
+    var topics: array[4, evmc_bytes32]
+    for i in 0 ..< topicCount:
+      topics[i].bytes = c.stack.popTopic()
 
-  log.data = c.memory.read(memPos, len)
-  log.address = c.msg.contractAddress
-  c.addLogEntry(log)
+    c.host.emitLog(c.msg.contractAddress,
+      c.memory.read(memPos, len),
+      topics[0].addr, topicCount)
+  else:
+    var log: Log
+    log.topics = newSeqOfCap[Topic](topicCount)
+    for i in 0 ..< topicCount:
+      log.topics.add(c.stack.popTopic())
+
+    log.data = c.memory.read(memPos, len)
+    log.address = c.msg.contractAddress
+    c.addLogEntry(log)
 
 const
   inxRange = toSeq(0 .. 4)

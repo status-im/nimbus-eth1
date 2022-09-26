@@ -17,21 +17,6 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-            evmc: nimevm
-          - os: linux
-            cpu: i386
-            evmc: nimevm
-          - os: macos
-            cpu: amd64
-            evmc: nimevm
-          - os: windows
-            cpu: amd64
-            evmc: nimevm
-          - os: windows
-            cpu: i386
-            evmc: nimevm
-          - os: linux
-            cpu: amd64
             evmc: evmc
           - os: linux
             cpu: i386
@@ -124,18 +109,15 @@ jobs:
 
           if [[ '${{ matrix.target.evmc }}' == 'evmc' ]]; then
             echo "ENABLE_EVMC=1" >> $GITHUB_ENV
-            echo "ENABLE_VM2=0" >> $GITHUB_ENV
-          elif [[ '${{ matrix.target.evmc }}' == 'nimvm2' ]]; then
-            echo "ENABLE_EVMC=0" >> $GITHUB_ENV
-            echo "ENABLE_VM2=1" >> $GITHUB_ENV
-            case '${{ matrix.target.cpu }}:${{ runner.os }}' in
-            'i386:Windows')
-              # on a real win7/i386, there is only 64k optimiser space for gcc
-              echo "ENABLE_VM2LOWMEM=1" >> $GITHUB_ENV
-            esac
           else
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
-            echo "ENABLE_VM2=0" >> $GITHUB_ENV
+          fi
+
+          if [[ '${{ runner.os }}' == 'Windows' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
+            # on a real win7/i386, there is only 64k optimiser space for gcc
+            echo "ENABLE_VMLOWMEM=1" >> $GITHUB_ENV
+          else
+            echo "ENABLE_VMLOWMEM=0" >> $GITHUB_ENV
           fi
 
       - name: Install build dependencies (Linux i386)
@@ -268,7 +250,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM}"
           mingw32-make ${DEFAULT_MAKE_FLAGS}
           build/nimbus.exe --help
           mingw32-make ${DEFAULT_MAKE_FLAGS} test

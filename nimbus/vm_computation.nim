@@ -11,20 +11,12 @@
 
 # The VM computation module suffers from a circular include/import dependency.
 # After fixing this wrapper should be re-factored.
-when defined(evmc_enabled) or not defined(vm2_enabled):
-  import
-    ./vm/computation as vmc
-  export
-    vmc.execCallOrCreate,
-    vmc.executeOpcodes
-
-else:
-  import
-    ./vm2/computation as vmc,
-    ./vm2/interpreter_dispatch as vmi
-  export
-    vmi.execCallOrCreate,
-    vmi.executeOpcodes
+import
+  ./vm2/computation as vmc,
+  ./vm2/interpreter_dispatch as vmi
+export
+  vmi.execCallOrCreate,
+  vmi.executeOpcodes
 
 export
   vmc.accountExists,

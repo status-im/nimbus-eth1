@@ -24,22 +24,33 @@ import
   macros,
   stint
 
+when defined(evmc_enabled):
+  import ../../evmc_api, ../../evmc_helpers, evmc/evmc
+
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
 proc gasEip2929AccountCheck*(c: Computation; address: EthAddress) =
-  c.vmState.mutateStateDB:
-    let gasCost = if not db.inAccessList(address):
-                    db.accessList(address)
+  when defined(evmc_enabled):
+    let gasCost = if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
                     ColdAccountAccessCost
                   else:
                     WarmStorageReadCost
-
     c.gasMeter.consumeGas(
       gasCost,
       reason = "gasEIP2929AccountCheck")
+  else:
+    c.vmState.mutateStateDB:
+      let gasCost = if not db.inAccessList(address):
+                      db.accessList(address)
+                      ColdAccountAccessCost
+                    else:
+                      WarmStorageReadCost
 
+      c.gasMeter.consumeGas(
+        gasCost,
+        reason = "gasEIP2929AccountCheck")
 
 template checkInStaticContext*(c: Computation) =
   ## Verify static context in handler function, raise an error otherwise

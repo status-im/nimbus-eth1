@@ -11,10 +11,8 @@
 func vmName(): string =
   when defined(evmc_enabled):
     "evmc"
-  elif defined(vm2_enabled):
-    "vm2"
   else:
-    "nimvm"
+    "vm2"
 
 const
   VmName* = vmName()

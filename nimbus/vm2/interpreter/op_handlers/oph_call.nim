@@ -71,15 +71,21 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
   #           because it will affect `c.gasMeter.gasRemaining`
   #           and further `childGasLimit`
   if FkBerlin <= c.fork:
-    c.vmState.mutateStateDB:
-      if not db.inAccessList(q.destination):
-        db.accessList(q.destination)
-
-        # The WarmStorageReadCostEIP2929 (100) is already deducted in
-        # the form of a constant `gasCall`
+    when evmc_enabled:
+      if c.host.accessAccount(q.destination) == EVMC_ACCESS_COLD:
         c.gasMeter.consumeGas(
           ColdAccountAccessCost - WarmStorageReadCost,
           reason = "EIP2929 gasCall")
+    else:
+      c.vmState.mutateStateDB:
+        if not db.inAccessList(q.destination):
+          db.accessList(q.destination)
+
+          # The WarmStorageReadCostEIP2929 (100) is already deducted in
+          # the form of a constant `gasCall`
+          c.gasMeter.consumeGas(
+            ColdAccountAccessCost - WarmStorageReadCost,
+            reason = "EIP2929 gasCall")
 
 
 proc callParams(c: Computation): LocalParams =
@@ -138,28 +144,45 @@ proc staticCallParams(c: Computation):  LocalParams =
 
   result.updateStackAndParams(c)
 
+when evmc_enabled:
+  template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
+    c.chainTo(msg):
+      c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
 
-proc execSubCall(k: var Vm2Ctx; childMsg: Message; memPos, memLen: int) =
-  ## Call new VM -- helper for `Call`-like operations
+      let actualOutputSize = min(p.memOutLen, c.returnData.len)
+      if actualOutputSize > 0:
+        c.memory.write(p.memOutPos,
+          c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-  # need to provide explicit <c> and <child> for capturing in chainTo proc()
-  # <memPos> and <memLen> are provided by value and need not be captured
-  var
-    c = k.cpt
-    child = newComputation(k.cpt.vmState, childMsg)
+      c.gasMeter.returnGas(c.res.gas_left)
 
-  k.cpt.chainTo(child):
-    if not child.shouldBurnGas:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      if c.res.status_code == EVMC_SUCCESS:
+        c.stack.top(1)
 
-    if child.isSuccess:
-      c.merge(child)
-      c.stack.top(1)
+      if not c.res.release.isNil:
+        c.res.release(c.res)
 
-    c.returnData = child.output
-    let actualOutputSize = min(memLen, child.output.len)
-    if actualOutputSize > 0:
-      c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+else:
+  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
+    ## Call new VM -- helper for `Call`-like operations
+
+    # need to provide explicit <c> and <child> for capturing in chainTo proc()
+    # <memPos> and <memLen> are provided by value and need not be captured
+    var
+      child = newComputation(c.vmState, childMsg)
+
+    c.chainTo(child):
+      if not child.shouldBurnGas:
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+      if child.isSuccess:
+        c.merge(child)
+        c.stack.top(1)
+
+      c.returnData = child.output
+      let actualOutputSize = min(memLen, child.output.len)
+      if actualOutputSize > 0:
+        c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -218,19 +241,36 @@ const
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 
-    k.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            evmcCall,
-        depth:           k.cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.destination,
-        value:           p.value,
-        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-        flags:           p.flags))
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind       : evmcCall.evmc_call_kind,
+        depth      : (k.cpt.msg.depth + 1).int32,
+        gas        : childGasLimit,
+        sender     : p.sender,
+        destination: p.destination,
+        input_data : k.cpt.memory.readPtr(p.memInPos),
+        input_size : p.memInLen.uint,
+        value      : toEvmc(p.value),
+        flags      : p.flags.uint32
+      )
+      c.execSubCall(msg, p)
+    else:
+      k.cpt.execSubCall(
+        memPos = p.memOutPos,
+        memLen = p.memOutLen,
+        childMsg = Message(
+          kind:            evmcCall,
+          depth:           k.cpt.msg.depth + 1,
+          gas:             childGasLimit,
+          sender:          p.sender,
+          contractAddress: p.contractAddress,
+          codeAddress:     p.destination,
+          value:           p.value,
+          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+          flags:           p.flags))
 
   # ---------------------
 
@@ -284,19 +324,36 @@ const
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 
-    k.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            evmcCallCode,
-        depth:           k.cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.destination,
-        value:           p.value,
-        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-        flags:           p.flags))
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind       : evmcCallCode.evmc_call_kind,
+        depth      : (k.cpt.msg.depth + 1).int32,
+        gas        : childGasLimit,
+        sender     : p.sender,
+        destination: p.destination,
+        input_data : k.cpt.memory.readPtr(p.memInPos),
+        input_size : p.memInLen.uint,
+        value      : toEvmc(p.value),
+        flags      : p.flags.uint32
+      )
+      c.execSubCall(msg, p)
+    else:
+      k.cpt.execSubCall(
+        memPos = p.memOutPos,
+        memLen = p.memOutLen,
+        childMsg = Message(
+          kind:            evmcCallCode,
+          depth:           k.cpt.msg.depth + 1,
+          gas:             childGasLimit,
+          sender:          p.sender,
+          contractAddress: p.contractAddress,
+          codeAddress:     p.destination,
+          value:           p.value,
+          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+          flags:           p.flags))
 
   # ---------------------
 
@@ -339,19 +396,36 @@ const
     k.cpt.memory.extend(p.memInPos, p.memInLen)
     k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    k.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            evmcDelegateCall,
-        depth:           k.cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.destination,
-        value:           p.value,
-        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-        flags:           p.flags))
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind       : evmcDelegateCall.evmc_call_kind,
+        depth      : (k.cpt.msg.depth + 1).int32,
+        gas        : childGasLimit,
+        sender     : p.sender,
+        destination: p.destination,
+        input_data : k.cpt.memory.readPtr(p.memInPos),
+        input_size : p.memInLen.uint,
+        value      : toEvmc(p.value),
+        flags      : p.flags.uint32
+      )
+      c.execSubCall(msg, p)
+    else:
+      k.cpt.execSubCall(
+        memPos = p.memOutPos,
+        memLen = p.memOutLen,
+        childMsg = Message(
+          kind:            evmcDelegateCall,
+          depth:           k.cpt.msg.depth + 1,
+          gas:             childGasLimit,
+          sender:          p.sender,
+          contractAddress: p.contractAddress,
+          codeAddress:     p.destination,
+          value:           p.value,
+          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+          flags:           p.flags))
 
   # ---------------------
 
@@ -399,19 +473,36 @@ const
     k.cpt.memory.extend(p.memInPos, p.memInLen)
     k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    k.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            evmcCall,
-        depth:           k.cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.destination,
-        value:           p.value,
-        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-        flags:           p.flags))
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind       : evmcCall.evmc_call_kind,
+        depth      : (k.cpt.msg.depth + 1).int32,
+        gas        : childGasLimit,
+        sender     : p.sender,
+        destination: p.destination,
+        input_data : k.cpt.memory.readPtr(p.memInPos),
+        input_size : p.memInLen.uint,
+        value      : toEvmc(p.value),
+        flags      : p.flags.uint32
+      )
+      c.execSubCall(msg, p)
+    else:
+      k.cpt.execSubCall(
+        memPos = p.memOutPos,
+        memLen = p.memOutLen,
+        childMsg = Message(
+          kind:            evmcCall,
+          depth:           k.cpt.msg.depth + 1,
+          gas:             childGasLimit,
+          sender:          p.sender,
+          contractAddress: p.contractAddress,
+          codeAddress:     p.destination,
+          value:           p.value,
+          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+          flags:           p.flags))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

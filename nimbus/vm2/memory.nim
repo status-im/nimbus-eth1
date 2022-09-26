@@ -42,12 +42,15 @@ proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
   # TODO: use an openArray[byte]
   result = memory.bytes[startPos ..< (startPos + size)]
 
+when defined(evmc_enabled):
+  proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
+    if memory.bytes.len == 0 or startPos >= memory.bytes.len: return
+    result = memory.bytes[startPos].addr
+
 proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   let size = value.len
   if size == 0:
     return
-  #echo size
-  #echo startPos
   validateLte(startPos + size, memory.len)
   if memory.len < startPos + size:
     memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPos + size))) # TODO: better logarithmic scaling?

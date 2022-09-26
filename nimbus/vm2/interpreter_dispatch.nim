@@ -15,10 +15,11 @@ const
 
 import
   ../constants,
+  ../utils,
   ../db/accounts_cache,
   ./code_stream,
   ./computation,
-  ./interpreter/op_dispatcher,
+  ./interpreter/[op_dispatcher, gas_costs],
   ./message,
   ./precompiles,
   ./state,
@@ -146,7 +147,7 @@ proc beforeExecCreate(c: Computation): bool =
   c.snapshot()
 
   if c.vmState.readOnlyStateDB().hasCodeOrNonce(c.msg.contractAddress):
-    var blurb =c.msg.contractAddress.toHex
+    let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address={blurb}", true)
     c.rollback()
     return true
@@ -198,12 +199,12 @@ proc executeOpcodes*(c: Computation) =
   let fork = c.fork
 
   block:
-    if not c.continuation.isNil:
-      c.continuation = nil
-    elif c.execPrecompiles(fork):
+    if c.continuation.isNil and c.execPrecompiles(fork):
       break
 
     try:
+      if not c.continuation.isNil:
+        (c.continuation)()
       c.selectVM(fork)
     except CatchableError as e:
       c.setError(
@@ -213,30 +214,48 @@ proc executeOpcodes*(c: Computation) =
     if c.tracingEnabled: c.traceError()
     #trace "executeOpcodes error", msg=c.error.info
 
-
-proc execCallOrCreate*(cParam: Computation) =
-  var (c, before) = (cParam, true)
-  defer:
-    while not c.isNil:
-      c.dispose()
-      c = c.parent
-
-  # No actual recursion, but simulate recursion including before/after/dispose.
-  while true:
-    while true:
-      if before and c.beforeExec():
-        break
+when vm_use_recursion:
+  # Recursion with tiny stack frame per level.
+  proc execCallOrCreate*(c: Computation) =
+    defer: c.dispose()
+    if c.beforeExec():
+      return
+    c.executeOpcodes()
+    while not c.continuation.isNil:
+      when evmc_enabled:
+        c.res = c.host.call(c.child[])
+      else:
+        execCallOrCreate(c.child)
+      c.child = nil
       c.executeOpcodes()
-      if c.continuation.isNil:
-        c.afterExec()
+    c.afterExec()
+
+else:
+  proc execCallOrCreate*(cParam: Computation) =
+    var (c, before) = (cParam, true)
+    defer:
+      while not c.isNil:
+        c.dispose()
+        c = c.parent
+
+    # No actual recursion, but simulate recursion including before/after/dispose.
+    while true:
+      while true:
+        if before and c.beforeExec():
+          break
+        c.executeOpcodes()
+        if c.continuation.isNil:
+          c.afterExec()
+          break
+        (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
+      if c.parent.isNil:
         break
-      (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
-    if c.parent.isNil:
-      break
-    c.dispose()
-    (before, c.parent, c) = (false, nil.Computation, c.parent)
-    (c.continuation)()
+      c.dispose()
+      (before, c.parent, c) = (false, nil.Computation, c.parent)
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+when defined(evmc_enabled):
+  include evmc_host

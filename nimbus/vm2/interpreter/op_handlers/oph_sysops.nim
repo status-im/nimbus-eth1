@@ -126,10 +126,14 @@ const
     var gasCost =
       k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
 
-    k.cpt.vmState.mutateStateDB:
-      if not db.inAccessList(beneficiary):
-        db.accessList(beneficiary)
+    when evmc_enabled:
+      if k.cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
         gasCost = gasCost + ColdAccountAccessCost
+    else:
+      k.cpt.vmState.mutateStateDB:
+        if not db.inAccessList(beneficiary):
+          db.accessList(beneficiary)
+          gasCost = gasCost + ColdAccountAccessCost
 
     k.cpt.gasMeter.consumeGas(
       gasCost, reason = "SELFDESTRUCT EIP161")

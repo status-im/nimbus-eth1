@@ -8,12 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
-  import
-    ./vm/types as vmt
-else:
-  import
-    ./vm2/types as vmt
+import
+  ./vm2/types as vmt
 
 export
   vmt.BaseVMState,
@@ -29,7 +25,7 @@ export
 
 when defined(evmc_enabled):
   import
-    ./vm/evmc_api as evmc
+    ./vm2/evmc_api as evmc
   export
     evmc.HostContext,
     evmc.accountExists,

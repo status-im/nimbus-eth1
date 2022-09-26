@@ -31,6 +31,22 @@ logScope:
 when defined(chronicles_log_level):
   import stew/byteutils
 
+when defined(evmc_enabled):
+  import
+    evmc/evmc,
+    evmc_helpers,
+    evmc_api,
+    stew/ranges/ptr_arith
+
+  export
+    evmc,
+    evmc_helpers,
+    evmc_api,
+    ptr_arith
+
+const
+  evmc_enabled* = defined(evmc_enabled)
+
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
@@ -47,63 +63,114 @@ proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
 # ------------------------------------------------------------------------------
 
 template getCoinbase*(c: Computation): EthAddress =
-  c.vmState.coinbase
+  when evmc_enabled:
+    c.host.getTxContext().block_coinbase
+  else:
+    c.vmState.coinbase
 
 template getTimestamp*(c: Computation): int64 =
-  c.vmState.timestamp.toUnix
+  when evmc_enabled:
+    c.host.getTxContext().block_timestamp
+  else:
+    c.vmState.timestamp.toUnix
 
 template getBlockNumber*(c: Computation): UInt256 =
-  c.vmState.blockNumber.blockNumberToVmWord
+  when evmc_enabled:
+    c.host.getTxContext().block_number.u256
+  else:
+    c.vmState.blockNumber.blockNumberToVmWord
 
 template getDifficulty*(c: Computation): DifficultyInt =
-  c.vmState.difficulty
+  when evmc_enabled:
+    UInt256.fromEvmc c.host.getTxContext().block_difficulty
+  else:
+    c.vmState.difficulty
 
 template getGasLimit*(c: Computation): GasInt =
-  c.vmState.gasLimit
+  when evmc_enabled:
+    c.host.getTxContext().block_gas_limit.GasInt
+  else:
+    c.vmState.gasLimit
 
 template getBaseFee*(c: Computation): UInt256 =
-  c.vmState.baseFee
+  when evmc_enabled:
+    UInt256.fromEvmc c.host.getTxContext().block_base_fee
+  else:
+    c.vmState.baseFee
 
 template getChainId*(c: Computation): uint =
-  c.vmState.chainDB.config.chainId.uint
+  when evmc_enabled:
+    UInt256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
+  else:
+    c.vmState.chainDB.config.chainId.uint
 
 template getOrigin*(c: Computation): EthAddress =
-  c.vmState.txOrigin
+  when evmc_enabled:
+    c.host.getTxContext().tx_origin
+  else:
+    c.vmState.txOrigin
 
 template getGasPrice*(c: Computation): GasInt =
-  c.vmState.txGasPrice
+  when evmc_enabled:
+    UInt256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
+  else:
+    c.vmState.txGasPrice
 
 template getBlockHash*(c: Computation, blockNumber: UInt256): Hash256 =
-  c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
+  when evmc_enabled:
+    c.host.getBlockHash(blockNumber)
+  else:
+    c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
-  if c.fork >= FkSpurious:
-    not c.vmState.readOnlyStateDB.isDeadAccount(address)
+  when evmc_enabled:
+    c.host.accountExists(address)
   else:
-    c.vmState.readOnlyStateDB.accountExists(address)
+    if c.fork >= FkSpurious:
+      not c.vmState.readOnlyStateDB.isDeadAccount(address)
+    else:
+      c.vmState.readOnlyStateDB.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
-  c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
+  when evmc_enabled:
+    c.host.getStorage(c.msg.contractAddress, slot)
+  else:
+    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: EthAddress): UInt256 =
-  c.vmState.readOnlyStateDB.getBalance(address)
+  when evmc_enabled:
+    c.host.getBalance(address)
+  else:
+    c.vmState.readOnlyStateDB.getBalance(address)
 
 template getCodeSize*(c: Computation, address: EthAddress): uint =
-  uint(c.vmState.readOnlyStateDB.getCodeSize(address))
+  when evmc_enabled:
+    c.host.getCodeSize(address)
+  else:
+    uint(c.vmState.readOnlyStateDB.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
-  let
-    db = c.vmState.readOnlyStateDB
-  if not db.accountExists(address) or db.isEmptyAccount(address):
-    default(Hash256)
+  when evmc_enabled:
+    c.host.getCodeHash(address)
   else:
-    db.getCodeHash(address)
+    let
+      db = c.vmState.readOnlyStateDB
+    if not db.accountExists(address) or db.isEmptyAccount(address):
+      default(Hash256)
+    else:
+      db.getCodeHash(address)
 
 template selfDestruct*(c: Computation, address: EthAddress) =
-  c.execSelfDestruct(address)
+  when evmc_enabled:
+    c.host.selfDestruct(c.msg.contractAddress, address)
+  else:
+    c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: EthAddress): seq[byte] =
-  c.vmState.readOnlyStateDB.getCode(address)
+  when evmc_enabled:
+    c.host.copyCode(address)
+  else:
+    c.vmState.readOnlyStateDB.getCode(address)
 
 proc newComputation*(vmState: BaseVMState, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
@@ -124,6 +191,30 @@ proc newComputation*(vmState: BaseVMState, message: Message,
   else:
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
+
+  when evmc_enabled:
+    result.host.init(
+      nim_host_get_interface(),
+      cast[evmc_host_context](result)
+    )
+
+proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): Computation =
+  new result
+  result.vmState = vmState
+  result.msg = message
+  result.memory = Memory()
+  result.stack = newStack()
+  result.returnStack = @[]
+  result.gasMeter.init(message.gas)
+  result.touchedAccounts = initHashSet[EthAddress]()
+  result.selfDestructs = initHashSet[EthAddress]()
+  result.code = newCodeStream(code)
+
+  when evmc_enabled:
+    result.host.init(
+      nim_host_get_interface(),
+      cast[evmc_host_context](result)
+    )
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -219,9 +310,10 @@ proc writeContract*(c: Computation) =
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c, toChild: Computation, after: untyped) =
+template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
   c.continuation = proc() =
+    c.continuation = nil
     after
 
 proc merge*(c, child: Computation) =

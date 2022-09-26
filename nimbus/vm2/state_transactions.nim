@@ -8,16 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# This source must have the <vm2_enabled> compiler flag set.
-#
-# why:
-#   ../config, ../transaction,  etc include ../vm_* interface files which in
-#   turn will refer to the ../vm/* definitions rather than ../vm2/* unless the
-#    <vm2_enabled> compiler flag is set.
-#
-when not defined(vm2_enabled):
-  {.error: "NIM flag must be set: -d:vm2_enabled".}
-
 import
   ../chain_config,
   ../constants,

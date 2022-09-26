@@ -8,18 +8,11 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
-  import
-    ./vm/state as vms
-  export
-    vms.setupTxContext
-
-else:
-  import
-    ./vm2/state_transactions as vmx,
-    ./vm2/state as vms
-  export
-    vmx.setupTxContext
+import
+  ./vm2/state_transactions as vmx,
+  ./vm2/state as vms
+export
+  vmx.setupTxContext
 
 export
   vms.`$`,

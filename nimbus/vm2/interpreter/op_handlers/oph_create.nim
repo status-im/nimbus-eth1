@@ -38,25 +38,38 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc execSubCreate(k: var Vm2Ctx; childMsg: Message;
-                   salt: ContractSalt = ZERO_CONTRACTSALT) =
-  ## Create new VM -- helper for `Create`-like operations
+when evmc_enabled:
+  template execSubCreate(c: Computation; msg: ref nimbus_message) =
+    c.chainTo(msg):
+      c.gasMeter.returnGas(c.res.gas_left)
+      if c.res.status_code == EVMC_SUCCESS:
+        c.stack.top(c.res.create_address)
+      elif c.res.status_code == EVMC_REVERT:
+        # From create, only use `outputData` if child returned with `REVERT`.
+        c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
+      if not c.res.release.isNil:
+        c.res.release(c.res)
 
-  # need to provide explicit <c> and <child> for capturing in chainTo proc()
-  var
-    c = k.cpt
-    child = newComputation(k.cpt.vmState, childMsg, salt)
+else:
+  proc execSubCreate(c: Computation; childMsg: Message;
+                    salt: ContractSalt = ZERO_CONTRACTSALT) =
+    ## Create new VM -- helper for `Create`-like operations
 
-  k.cpt.chainTo(child):
-    if not child.shouldBurnGas:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+    # need to provide explicit <c> and <child> for capturing in chainTo proc()
+    var
+      child = newComputation(c.vmState, childMsg, salt)
 
-    if child.isSuccess:
-      c.merge(child)
-      c.stack.top child.msg.contractAddress
-    elif not child.error.burnsGas: # Means return was `REVERT`.
-      # From create, only use `outputData` if child returned with `REVERT`.
-      c.returnData = child.output
+    c.chainTo(child):
+      if not child.shouldBurnGas:
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+      if child.isSuccess:
+        c.merge(child)
+        c.stack.top child.msg.contractAddress
+      elif not child.error.burnsGas: # Means return was `REVERT`.
+        # From create, only use `outputData` if child returned with `REVERT`.
+        c.returnData = child.output
+
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -107,14 +120,30 @@ const
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
 
-    k.execSubCreate(
-      childMsg = Message(
-        kind:   evmcCreate,
-        depth:  k.cpt.msg.depth + 1,
-        gas:    createMsgGas,
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind: evmcCreate.evmc_call_kind,
+        depth: (k.cpt.msg.depth + 1).int32,
+        gas: createMsgGas,
         sender: k.cpt.msg.contractAddress,
-        value:  endowment,
-        data:   k.cpt.memory.read(memPos, memLen)))
+        input_data: k.cpt.memory.readPtr(memPos),
+        input_size: memLen.uint,
+        value: toEvmc(endowment),
+        create2_salt: toEvmc(ZERO_CONTRACTSALT),
+      )
+      c.execSubCreate(msg)
+    else:
+      k.cpt.execSubCreate(
+        childMsg = Message(
+          kind:   evmcCreate,
+          depth:  k.cpt.msg.depth + 1,
+          gas:    createMsgGas,
+          sender: k.cpt.msg.contractAddress,
+          value:  endowment,
+          data:   k.cpt.memory.read(memPos, memLen)))
 
   # ---------------------
 
@@ -165,15 +194,31 @@ const
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
 
-    k.execSubCreate(
-      salt = salt,
-      childMsg = Message(
-        kind:   evmcCreate2,
-        depth:  k.cpt.msg.depth + 1,
-        gas:    createMsgGas,
+    when evmc_enabled:
+      let
+        msg = new(nimbus_message)
+        c   = k.cpt
+      msg[] = nimbus_message(
+        kind: evmcCreate2.evmc_call_kind,
+        depth: (k.cpt.msg.depth + 1).int32,
+        gas: createMsgGas,
         sender: k.cpt.msg.contractAddress,
-        value:  endowment,
-        data:   k.cpt.memory.read(memPos, memLen)))
+        input_data: k.cpt.memory.readPtr(memPos),
+        input_size: memLen.uint,
+        value: toEvmc(endowment),
+        create2_salt: toEvmc(salt),
+      )
+      c.execSubCreate(msg)
+    else:
+      k.cpt.execSubCreate(
+        salt = salt,
+        childMsg = Message(
+          kind:   evmcCreate2,
+          depth:  k.cpt.msg.depth + 1,
+          gas:    createMsgGas,
+          sender: k.cpt.msg.contractAddress,
+          value:  endowment,
+          data:   k.cpt.memory.read(memPos, memLen)))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

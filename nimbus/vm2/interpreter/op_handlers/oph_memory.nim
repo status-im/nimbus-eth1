@@ -35,27 +35,60 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256) =
-  let
-    stateDB = c.vmState.readOnlyStateDB
-    currentValue = c.getStorage(slot)
+when evmc_enabled:
+  proc sstoreEvmc(c: Computation, slot, newValue: UInt256) =
+    let
+      currentValue = c.getStorage(slot)
+      status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
+      gasParam = GasParams(kind: Op.Sstore, s_status: status)
+      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
 
-    gasParam = GasParams(
-      kind: Op.Sstore,
-      s_currentValue: currentValue,
-      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+    c.gasMeter.consumeGas(
+      gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] " &
+              &"-> {newValue} ({currentValue})")
 
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+else:
+  proc sstoreImpl(c: Computation, slot, newValue: UInt256) =
+    let
+      currentValue = c.getStorage(slot)
+      gasParam = GasParams(
+        kind: Op.Sstore,
+        s_currentValue: currentValue)
 
-  c.gasMeter.consumeGas(
-    gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}]" &
-             &" -> {newValue} ({currentValue})")
+      (gasCost, gasRefund) =
+        c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-  if gasRefund != 0:
-    c.gasMeter.refundGas(gasRefund)
+    c.gasMeter.consumeGas(
+      gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] " &
+              &"-> {newValue} ({currentValue})")
+    if gasRefund > 0:
+      c.gasMeter.refundGas(gasRefund)
 
-  c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    c.vmState.mutateStateDB:
+      db.setStorage(c.msg.contractAddress, slot, newValue)
+
+
+  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256) =
+    let
+      stateDB = c.vmState.readOnlyStateDB
+      currentValue = c.getStorage(slot)
+
+      gasParam = GasParams(
+        kind: Op.Sstore,
+        s_currentValue: currentValue,
+        s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+
+      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+
+    c.gasMeter.consumeGas(
+      gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}]" &
+              &" -> {newValue} ({currentValue})")
+
+    if gasRefund != 0:
+      c.gasMeter.refundGas(gasRefund)
+
+    c.vmState.mutateStateDB:
+      db.setStorage(c.msg.contractAddress, slot, newValue)
 
 
 proc jumpImpl(c: Computation; jumpTarget: UInt256) =
@@ -131,17 +164,25 @@ const
     k.cpt.stack.push:
       k.cpt.getStorage(slot)
 
+
   sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
     let (slot) = k.cpt.stack.popInt(1)
 
-    k.cpt.vmState.mutateStateDB:
-      let gasCost = if not db.inAccessList(k.cpt.msg.contractAddress, slot):
-                      db.accessList(k.cpt.msg.contractAddress, slot)
+    when evmc_enabled:
+      let gasCost = if k.cpt.host.accessStorage(k.cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
                       ColdSloadCost
                     else:
                       WarmStorageReadCost
       k.cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+    else:
+      k.cpt.vmState.mutateStateDB:
+        let gasCost = if not db.inAccessList(k.cpt.msg.contractAddress, slot):
+                        db.accessList(k.cpt.msg.contractAddress, slot)
+                        ColdSloadCost
+                      else:
+                        WarmStorageReadCost
+        k.cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
     k.cpt.stack.push:
       k.cpt.getStorage(slot)
 
@@ -152,25 +193,10 @@ const
     let (slot, newValue) = k.cpt.stack.popInt(2)
 
     checkInStaticContext(k.cpt)
-    # sstoreImpl(k.cpt, slot, newValue)
-    # template sstoreImpl(c: Computation, slot, newValue: UInt256) =
-    let
-      currentValue = k.cpt.getStorage(slot)
-      gasParam = GasParams(
-        kind: Op.Sstore,
-        s_currentValue: currentValue)
-
-      (gasCost, gasRefund) =
-        k.cpt.gasCosts[Sstore].c_handler(newValue, gasParam)
-
-    k.cpt.gasMeter.consumeGas(
-      gasCost, &"SSTORE: {k.cpt.msg.contractAddress}[{slot}] " &
-               &"-> {newValue} ({currentValue})")
-    if gasRefund > 0:
-      k.cpt.gasMeter.refundGas(gasRefund)
-
-    k.cpt.vmState.mutateStateDB:
-      db.setStorage(k.cpt.msg.contractAddress, slot, newValue)
+    when evmc_enabled:
+      sstoreEvmc(k.cpt, slot, newValue)
+    else:
+      sstoreImpl(k.cpt, slot, newValue)
 
 
   sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -178,7 +204,10 @@ const
     let (slot, newValue) = k.cpt.stack.popInt(2)
 
     checkInStaticContext(k.cpt)
-    sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+    when evmc_enabled:
+      sstoreEvmc(k.cpt, slot, newValue)
+    else:
+      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
 
   sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -193,7 +222,10 @@ const
         OutOfGas,
         "Gas not enough to perform EIP2200 SSTORE")
 
-    sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+    when evmc_enabled:
+      sstoreEvmc(k.cpt, slot, newValue)
+    else:
+      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
 
   sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -207,12 +239,19 @@ const
     if k.cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
       raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
-    k.cpt.vmState.mutateStateDB:
-      if not db.inAccessList(k.cpt.msg.contractAddress, slot):
-        db.accessList(k.cpt.msg.contractAddress, slot)
+    when evmc_enabled:
+      if k.cpt.host.accessStorage(k.cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
         k.cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+    else:
+      k.cpt.vmState.mutateStateDB:
+        if not db.inAccessList(k.cpt.msg.contractAddress, slot):
+          db.accessList(k.cpt.msg.contractAddress, slot)
+          k.cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
 
-    sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+    when evmc_enabled:
+      sstoreEvmc(k.cpt, slot, newValue)
+    else:
+      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
   # -------
 

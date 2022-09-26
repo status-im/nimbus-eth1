@@ -131,14 +131,9 @@ ifneq ($(ENABLE_EVMC), 0)
   NIM_PARAMS += -d:evmc_enabled
 endif
 
-# disabled by default, enable with ENABLE_VM2LOWMEM=1
-ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
-  NIM_PARAMS += -d:vm2_enabled -d:lowmem:1
-else
-  # disabled by default, enable with ENABLE_VM2=1
-  ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
-    NIM_PARAMS += -d:vm2_enabled
-  endif
+# disabled by default, enable with ENABLE_VMLOWMEM=1
+ifneq ($(if $(ENABLE_VMLOWMEM),$(ENABLE_VMLOWMEM),0),0)
+  NIM_PARAMS += -d:lowmem:1
 endif
 
 # chunked messages enabled by default, use ENABLE_CHUNKED_RLPX=0 to disable
