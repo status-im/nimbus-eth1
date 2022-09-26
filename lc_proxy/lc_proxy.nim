@@ -23,7 +23,8 @@ import
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../nimbus/rpc/cors,
   ./rpc/rpc_eth_lc_api,
-  ./lc_proxy_conf
+  ./lc_proxy_conf,
+  ./block_cache
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
@@ -94,6 +95,8 @@ proc run() {.raises: [Exception, Defect].} =
       forkDigests, getBeaconTime, genesis_validators_root
     )
 
+    blockCache = BlockCache.new(uint32(64))
+
     # TODO: for now we serve all cross origin requests
     authHooks = @[httpCors(@[])]
 
@@ -105,7 +108,7 @@ proc run() {.raises: [Exception, Defect].} =
       authHooks
     )
 
-    lcProxy = LightClientRpcProxy.new(rpcProxy, chainId)
+    lcProxy = LightClientRpcProxy.new(rpcProxy, blockCache, chainId)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -116,7 +119,7 @@ proc run() {.raises: [Exception, Defect].} =
         when stateFork >= BeaconStateFork.Bellatrix:
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
-            lcProxy.executionPayload.ok payload.asEngineExecutionPayload()
+            blockCache.add(payload.asEngineExecutionPayload())
         else: discard
       return
 
