@@ -11,7 +11,7 @@
 import
   sets, times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache, ../forks,
-  ".."/[vm_state, vm_computation, vm_internals],
+  ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
   ./host_types, ./host_trace, ./host_call_nested
 
 proc setupTxContext(host: TransactionHost) =
@@ -45,7 +45,7 @@ proc setupTxContext(host: TransactionHost) =
   # [EIP-1985](https://eips.ethereum.org/EIPS/eip-1985) although it's not
   # officially accepted), and `vmState.gasLimit` is too (`GasInt`).
   #
-  # `txContext.block_difficulty` is 256-bit, and this one can genuinely take
+  # `txContext.block_prev_randao` is 256-bit, and this one can genuinely take
   # values over much of the 256-bit range.
 
   let vmState = host.vmState
@@ -73,7 +73,7 @@ proc setupTxContext(host: TransactionHost) =
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE
   let difficulty = vmState.difficulty.toEvmc
-  host.txContext.block_difficulty = flip256(difficulty)
+  host.txContext.block_prev_randao = flip256(difficulty)
 
   host.cachedTxContext = true
 
@@ -100,80 +100,66 @@ proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
 proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getStorage(address, key)
 
-const
-  # EIP-1283
-  SLOAD_GAS_CONSTANTINOPLE = 200
-  # EIP-2200
-  SSTORE_SET_GAS           = 20000
-  SSTORE_RESET_GAS         = 5000
-  SLOAD_GAS_ISTANBUL       = 800
-  # EIP-2929
-  WARM_STORAGE_READ_COST   = 100
-  COLD_SLOAD_COST          = 2100
-  COLD_ACCOUNT_ACCESS_COST = 2600
+proc setStorageStatus(host: TransactionHost, address: HostAddress,
+                      key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
+  let
+    db = host.vmState.readOnlyStateDB
+    currentVal = db.getStorage(address, key)
 
-  SSTORE_CLEARS_SCHEDULE_EIP2200 = 15000
-  SSTORE_CLEARS_SCHEDULE_EIP3529 = 4800
-
-func storageModifiedAgainRefund(originalValue, oldValue, value: HostValue,
-                                fork: Fork): int {.inline.} =
-  # Calculate `SSTORE` refund according to EIP-2929 (Berlin),
-  # EIP-2200 (Istanbul) or EIP-1283 (Constantinople only).
-  result = 0
-  if value == originalValue:
-    result = if value.isZero: SSTORE_SET_GAS
-             elif fork >= FkBerlin: SSTORE_RESET_GAS - COLD_SLOAD_COST
-             else: SSTORE_RESET_GAS
-    let SLOAD_GAS = if fork >= FkBerlin: WARM_STORAGE_READ_COST
-                    elif fork >= FkIstanbul: SLOAD_GAS_ISTANBUL
-                    else: SLOAD_GAS_CONSTANTINOPLE
-    result -= SLOAD_GAS
-
-  let SSTORE_CLEARS_SCHEDULE = if fork >= FkLondon:
-                                 SSTORE_CLEARS_SCHEDULE_EIP3529
-                               else:
-                                 SSTORE_CLEARS_SCHEDULE_EIP2200
-  if not originalValue.isZero:
-    if value.isZero:
-      result += SSTORE_CLEARS_SCHEDULE
-    elif oldValue.isZero:
-      result -= SSTORE_CLEARS_SCHEDULE
-
-proc setStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, value: HostValue): EvmcStorageStatus {.show.} =
-  let db = host.vmState.readOnlyStateDB
-  let oldValue = db.getStorage(address, key)
-
-  if oldValue == value:
-    return EVMC_STORAGE_UNCHANGED
+  if currentVal == newVal:
+    return EVMC_STORAGE_ASSIGNED
 
   host.vmState.mutateStateDB:
-    db.setStorage(address, key, value)
+    db.setStorage(address, key, newVal)
 
-  if host.vmState.fork >= FkIstanbul or host.vmState.fork == FkConstantinople:
-    let originalValue = db.getCommittedStorage(address, key)
-    if oldValue != originalValue:
-      # Gas refund for `MODIFIED_AGAIN` (EIP-1283/2200/2929 only).
-      let refund = storageModifiedAgainRefund(originalValue, oldValue, value,
-                                              host.vmState.fork)
-      # TODO: Refund depends on `Computation` at the moment.
-      if refund != 0:
-        host.computation.gasMeter.refundGas(refund)
-      return EVMC_STORAGE_MODIFIED_AGAIN
+  # https://eips.ethereum.org/EIPS/eip-1283
+  let originalVal = db.getCommittedStorage(address, key)
+  if originalVal == currentVal:
+    if originalVal.isZero:
+      return EVMC_STORAGE_ADDED
 
-  if oldValue.isZero:
-    return EVMC_STORAGE_ADDED
-  elif value.isZero:
-    # Gas refund for `DELETED` (all forks).
-    # TODO: Refund depends on `Computation` at the moment.
-    let SSTORE_CLEARS_SCHEDULE = if host.vmState.fork >= FkLondon:
-                                   SSTORE_CLEARS_SCHEDULE_EIP3529
-                                 else:
-                                   SSTORE_CLEARS_SCHEDULE_EIP2200
-    host.computation.gasMeter.refundGas(SSTORE_CLEARS_SCHEDULE)
-    return EVMC_STORAGE_DELETED
+    # !is_zero(original_val)
+    if newVal.isZero:
+      return EVMC_STORAGE_DELETED
+    else:
+      return EVMC_STORAGE_MODIFIED
+
+  # originalVal != currentVal
+  if originalVal.isZero.not:
+    if currentVal.isZero:
+      if originalVal == newVal:
+        return EVMC_STORAGE_DELETED_RESTORED
+      else:
+        return EVMC_STORAGE_DELETED_ADDED
+
+    # !is_zero(current_val)
+    if newVal.isZero:
+      return EVMC_STORAGE_MODIFIED_DELETED
+
+    # !is_zero(new_val)
+    if originalVal == newVal:
+      return EVMC_STORAGE_MODIFIED_RESTORED
+    else:
+      return EVMC_STORAGE_ASSIGNED
+
+  # is_zero(original_val)
+  if originalVal == newVal:
+    return EVMC_STORAGE_ADDED_DELETED
   else:
-    return EVMC_STORAGE_MODIFIED
+    return EVMC_STORAGE_ASSIGNED
+
+proc setStorage(host: TransactionHost, address: HostAddress,
+                key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
+  let
+    status = setStorageStatus(host, address, key, newVal)
+    fork   = host.vmState.fork
+    refund = SstoreCost[fork][status].gasRefund
+
+  if refund != 0:
+    # TODO: Refund depends on `Computation` at the moment.
+    host.computation.gasMeter.refundGas(refund)
+
+  status
 
 proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
   host.vmState.readOnlyStateDB.getBalance(address)

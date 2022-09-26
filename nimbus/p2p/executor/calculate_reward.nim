@@ -38,7 +38,10 @@ const
     eth2, # FkPetersburg
     eth2, # FkIstanbul
     eth2, # FkBerlin
-    eth2  # FkLondon
+    eth2, # FkLondon
+    eth0, # FkParis
+    eth0, # FkShanghai
+    eth0, # FkCancun
    ]
 
 {.push raises: [Defect].}

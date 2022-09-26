@@ -82,7 +82,7 @@ template getBlockNumber*(c: Computation): UInt256 =
 
 template getDifficulty*(c: Computation): DifficultyInt =
   when evmc_enabled:
-    UInt256.fromEvmc c.host.getTxContext().block_difficulty
+    UInt256.fromEvmc c.host.getTxContext().block_prev_randao
   else:
     c.vmState.difficulty
 
@@ -192,12 +192,6 @@ proc newComputation*(vmState: BaseVMState, message: Message,
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
-  when evmc_enabled:
-    result.host.init(
-      nim_host_get_interface(),
-      cast[evmc_host_context](result)
-    )
-
 proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): Computation =
   new result
   result.vmState = vmState
@@ -209,12 +203,6 @@ proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): C
   result.touchedAccounts = initHashSet[EthAddress]()
   result.selfDestructs = initHashSet[EthAddress]()
   result.code = newCodeStream(code)
-
-  when evmc_enabled:
-    result.host.init(
-      nim_host_get_interface(),
-      cast[evmc_host_context](result)
-    )
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts

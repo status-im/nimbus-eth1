@@ -48,4 +48,8 @@ export
   vmg.ACCESS_LIST_STORAGE_KEY_COST,
   vmg.ACCESS_LIST_ADDRESS_COST
 
+when defined(evmc_enabled):
+  export
+    vmg.SstoreCost
+
 # End

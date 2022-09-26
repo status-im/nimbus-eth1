@@ -40,7 +40,7 @@ type
   LocalParams = tuple
     gas:             UInt256
     value:           UInt256
-    destination:     EthAddress
+    codeAddress:     EthAddress
     sender:          EthAddress
     memInPos:        int
     memInLen:        int
@@ -72,14 +72,14 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
   #           and further `childGasLimit`
   if FkBerlin <= c.fork:
     when evmc_enabled:
-      if c.host.accessAccount(q.destination) == EVMC_ACCESS_COLD:
+      if c.host.accessAccount(q.codeAddress) == EVMC_ACCESS_COLD:
         c.gasMeter.consumeGas(
           ColdAccountAccessCost - WarmStorageReadCost,
           reason = "EIP2929 gasCall")
     else:
       c.vmState.mutateStateDB:
-        if not db.inAccessList(q.destination):
-          db.accessList(q.destination)
+        if not db.inAccessList(q.codeAddress):
+          db.accessList(q.codeAddress)
 
           # The WarmStorageReadCostEIP2929 (100) is already deducted in
           # the form of a constant `gasCall`
@@ -91,7 +91,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
 proc callParams(c: Computation): LocalParams =
   ## Helper for callOp()
   result.gas             = c.stack.popInt()
-  result.destination     = c.stack.popAddress()
+  result.codeAddress     = c.stack.popAddress()
   result.value           = c.stack.popInt()
   result.memInPos        = c.stack.popInt().cleanMemRef
   result.memInLen        = c.stack.popInt().cleanMemRef
@@ -100,7 +100,7 @@ proc callParams(c: Computation): LocalParams =
 
   result.sender          = c.msg.contractAddress
   result.flags           = c.msg.flags
-  result.contractAddress = result.destination
+  result.contractAddress = result.codeAddress
 
   result.updateStackAndParams(c)
 
@@ -114,7 +114,7 @@ proc callCodeParams(c: Computation): LocalParams =
 proc delegateCallParams(c: Computation): LocalParams =
   ## Helper for delegateCall()
   result.gas             = c.stack.popInt()
-  result.destination     = c.stack.popAddress()
+  result.codeAddress     = c.stack.popAddress()
   result.memInPos        = c.stack.popInt().cleanMemRef
   result.memInLen        = c.stack.popInt().cleanMemRef
   result.memOutPos       = c.stack.popInt().cleanMemRef
@@ -131,7 +131,7 @@ proc delegateCallParams(c: Computation): LocalParams =
 proc staticCallParams(c: Computation):  LocalParams =
   ## Helper for staticCall()
   result.gas             = c.stack.popInt()
-  result.destination     = c.stack.popAddress()
+  result.codeAddress     = c.stack.popAddress()
   result.memInPos        = c.stack.popInt().cleanMemRef
   result.memInLen        = c.stack.popInt().cleanMemRef
   result.memOutPos       = c.stack.popInt().cleanMemRef
@@ -140,7 +140,7 @@ proc staticCallParams(c: Computation):  LocalParams =
   result.value           = 0.u256
   result.sender          = c.msg.contractAddress
   result.flags           = emvcStatic
-  result.contractAddress = result.destination
+  result.contractAddress = result.codeAddress
 
   result.updateStackAndParams(c)
 
@@ -246,15 +246,16 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind       : evmcCall.evmc_call_kind,
-        depth      : (k.cpt.msg.depth + 1).int32,
-        gas        : childGasLimit,
-        sender     : p.sender,
-        destination: p.destination,
-        input_data : k.cpt.memory.readPtr(p.memInPos),
-        input_size : p.memInLen.uint,
-        value      : toEvmc(p.value),
-        flags      : p.flags.uint32
+        kind        : evmcCall.evmc_call_kind,
+        depth       : (k.cpt.msg.depth + 1).int32,
+        gas         : childGasLimit,
+        sender      : p.sender,
+        recipient   : p.contractAddress,
+        code_address: p.codeAddress,
+        input_data  : k.cpt.memory.readPtr(p.memInPos),
+        input_size  : p.memInLen.uint,
+        value       : toEvmc(p.value),
+        flags       : p.flags.uint32
       )
       c.execSubCall(msg, p)
     else:
@@ -267,7 +268,7 @@ const
           gas:             childGasLimit,
           sender:          p.sender,
           contractAddress: p.contractAddress,
-          codeAddress:     p.destination,
+          codeAddress:     p.codeAddress,
           value:           p.value,
           data:            k.cpt.memory.read(p.memInPos, p.memInLen),
           flags:           p.flags))
@@ -329,15 +330,16 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind       : evmcCallCode.evmc_call_kind,
-        depth      : (k.cpt.msg.depth + 1).int32,
-        gas        : childGasLimit,
-        sender     : p.sender,
-        destination: p.destination,
-        input_data : k.cpt.memory.readPtr(p.memInPos),
-        input_size : p.memInLen.uint,
-        value      : toEvmc(p.value),
-        flags      : p.flags.uint32
+        kind        : evmcCallCode.evmc_call_kind,
+        depth       : (k.cpt.msg.depth + 1).int32,
+        gas         : childGasLimit,
+        sender      : p.sender,
+        recipient   : p.contractAddress,
+        code_address: p.codeAddress,
+        input_data  : k.cpt.memory.readPtr(p.memInPos),
+        input_size  : p.memInLen.uint,
+        value       : toEvmc(p.value),
+        flags       : p.flags.uint32
       )
       c.execSubCall(msg, p)
     else:
@@ -350,7 +352,7 @@ const
           gas:             childGasLimit,
           sender:          p.sender,
           contractAddress: p.contractAddress,
-          codeAddress:     p.destination,
+          codeAddress:     p.codeAddress,
           value:           p.value,
           data:            k.cpt.memory.read(p.memInPos, p.memInLen),
           flags:           p.flags))
@@ -401,15 +403,16 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind       : evmcDelegateCall.evmc_call_kind,
-        depth      : (k.cpt.msg.depth + 1).int32,
-        gas        : childGasLimit,
-        sender     : p.sender,
-        destination: p.destination,
-        input_data : k.cpt.memory.readPtr(p.memInPos),
-        input_size : p.memInLen.uint,
-        value      : toEvmc(p.value),
-        flags      : p.flags.uint32
+        kind        : evmcDelegateCall.evmc_call_kind,
+        depth       : (k.cpt.msg.depth + 1).int32,
+        gas         : childGasLimit,
+        sender      : p.sender,
+        recipient   : p.contractAddress,
+        code_address: p.codeAddress,
+        input_data  : k.cpt.memory.readPtr(p.memInPos),
+        input_size  : p.memInLen.uint,
+        value       : toEvmc(p.value),
+        flags       : p.flags.uint32
       )
       c.execSubCall(msg, p)
     else:
@@ -422,7 +425,7 @@ const
           gas:             childGasLimit,
           sender:          p.sender,
           contractAddress: p.contractAddress,
-          codeAddress:     p.destination,
+          codeAddress:     p.codeAddress,
           value:           p.value,
           data:            k.cpt.memory.read(p.memInPos, p.memInLen),
           flags:           p.flags))
@@ -451,7 +454,7 @@ const
     # from 700 to 40
     #
     # when opCode == StaticCall:
-    #  if k.cpt.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
+    #  if k.cpt.fork >= FkBerlin and codeAddress.toInt <= MaxPrecompilesAddr:
     #    gasCost = gasCost - 660.GasInt
     if gasCost >= 0:
       k.cpt.gasMeter.consumeGas(gasCost, reason = $StaticCall)
@@ -478,15 +481,16 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind       : evmcCall.evmc_call_kind,
-        depth      : (k.cpt.msg.depth + 1).int32,
-        gas        : childGasLimit,
-        sender     : p.sender,
-        destination: p.destination,
-        input_data : k.cpt.memory.readPtr(p.memInPos),
-        input_size : p.memInLen.uint,
-        value      : toEvmc(p.value),
-        flags      : p.flags.uint32
+        kind        : evmcCall.evmc_call_kind,
+        depth       : (k.cpt.msg.depth + 1).int32,
+        gas         : childGasLimit,
+        sender      : p.sender,
+        recipient   : p.contractAddress,
+        code_address: p.codeAddress,
+        input_data  : k.cpt.memory.readPtr(p.memInPos),
+        input_size  : p.memInLen.uint,
+        value       : toEvmc(p.value),
+        flags       : p.flags.uint32
       )
       c.execSubCall(msg, p)
     else:
@@ -499,7 +503,7 @@ const
           gas:             childGasLimit,
           sender:          p.sender,
           contractAddress: p.contractAddress,
-          codeAddress:     p.destination,
+          codeAddress:     p.codeAddress,
           value:           p.value,
           data:            k.cpt.memory.read(p.memInPos, p.memInLen),
           flags:           p.flags))

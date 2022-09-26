@@ -56,9 +56,9 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
     depth: m.depth,
     gas: m.gas,
     sender: m.sender.fromEvmc,
-    codeAddress: m.destination.fromEvmc,
+    codeAddress: m.code_address.fromEvmc,
     contractAddress: if m.kind == EVMC_CALL:
-                       m.destination.fromEvmc
+                       m.recipient.fromEvmc
                      else:
                        host.computation.msg.contractAddress,
     value: m.value.fromEvmc,

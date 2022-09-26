@@ -53,8 +53,8 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     depth:           msg.depth,
     gas:             msg.gas,
     sender:          msg.sender.fromEvmc,
-    contractAddress: msg.destination.fromEvmc,
-    codeAddress:     msg.destination.fromEvmc,
+    contractAddress: msg.recipient.fromEvmc,
+    codeAddress:     msg.code_address.fromEvmc,
     value:           msg.value.fromEvmc,
     # When input size is zero, input data pointer may be null.
     data:            if msg.input_size <= 0: @[]
@@ -122,18 +122,19 @@ proc setupHost(call: CallParams): TransactionHost =
   let host = TransactionHost(
     vmState:       vmState,
     msg: EvmcMessage(
-      kind:        if call.isCreate: EVMC_CREATE else: EVMC_CALL,
+      kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
       # Default: flags:       {},
       # Default: depth:       0,
-      gas:         call.gasLimit - intrinsicGas,
-      destination: call.to.toEvmc,
-      sender:      call.sender.toEvmc,
-      value:       call.value.toEvmc,
+      gas:          call.gasLimit - intrinsicGas,
+      recipient:    call.to.toEvmc,
+      code_address: call.to.toEvmc,
+      sender:       call.sender.toEvmc,
+      value:        call.value.toEvmc,
     )
     # All other defaults in `TransactionHost` are fine.
   )
 
-  # Generate new contract address, prepare code, and update message `destination`
+  # Generate new contract address, prepare code, and update message `recipient`
   # with the contract address.  This differs from the previous Nimbus EVM API.
   # Guarded under `evmc_enabled` for now so it doesn't break vm2.
   when defined(evmc_enabled):
@@ -142,14 +143,14 @@ proc setupHost(call: CallParams): TransactionHost =
       let sender = call.sender
       let contractAddress =
         generateAddress(sender, call.vmState.readOnlyStateDB.getNonce(sender))
-      host.msg.destination = contractAddress.toEvmc
+      host.msg.recipient = contractAddress.toEvmc
       host.msg.input_size = 0
       host.msg.input_data = nil
       code = call.input
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      code = host.vmState.readOnlyStateDB.getCode(host.msg.destination.fromEvmc)
+      code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
       if call.input.len > 0:
         host.msg.input_size = call.input.len.csize_t
         # Must copy the data so the `host.msg.input_data` pointer

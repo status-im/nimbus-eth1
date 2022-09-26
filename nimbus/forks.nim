@@ -18,3 +18,6 @@ type
     FkIstanbul       = "Istanbul"
     FkBerlin         = "Berlin"
     FkLondon         = "London"
+    FkParis          = "Paris"
+    FkShanghai       = "Shanghai"
+    FkCancun         = "Cancun"

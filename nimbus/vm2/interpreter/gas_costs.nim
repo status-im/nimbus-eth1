@@ -125,6 +125,87 @@ const
   ACCESS_LIST_STORAGE_KEY_COST* = 1900.GasInt
   ACCESS_LIST_ADDRESS_COST*     = 2400.GasInt
 
+
+when defined(evmc_enabled):
+  type
+    # The gas cost specification for storage instructions.
+    StorageCostSpec = object
+      netCost   : bool   # Is this net gas cost metering schedule?
+      warmAccess: int16  # Storage warm access cost, YP: G_{warmaccess}
+      sset      : int16  # Storage addition cost, YP: G_{sset}
+      reset     : int16  # Storage modification cost, YP: G_{sreset}
+      clear     : int16  # Storage deletion refund, YP: R_{sclear}
+
+    StorageStoreCost* = object
+      gasCost*  : int16
+      gasRefund*: int16
+
+  # Table of gas cost specification for storage instructions per EVM revision.
+  func storageCostSpec(): array[Fork, StorageCostSpec] {.compileTime.} =
+    # Legacy cost schedule.
+    const revs = [
+      FkFrontier, FkHomestead, FkTangerine,
+      FkSpurious, FkByzantium, FkPetersburg]
+
+    for rev in revs:
+      result[rev] = StorageCostSpec(
+        netCost: false, warmAccess: 200, sset: 20000, reset: 5000, clear: 15000)
+
+    # Net cost schedule.
+    result[FkConstantinople] = StorageCostSpec(
+      netCost: true, warmAccess: 200, sset: 20000, reset: 5000, clear: 15000)
+    result[FkIstanbul]       = StorageCostSpec(
+      netCost: true, warmAccess: 800, sset: 20000, reset: 5000, clear: 15000)
+    result[FkBerlin]         = StorageCostSpec(
+      netCost: true, warmAccess: WarmStorageReadCost, sset: 20000,
+        reset: 5000 - ColdSloadCost, clear: 15000)
+    result[FkLondon]         = StorageCostSpec(
+      netCost: true, warmAccess: WarmStorageReadCost, sset: 20000,
+        reset: 5000 - ColdSloadCost, clear: 4800)
+
+    result[FkParis]    = result[FkLondon]
+    result[FkShanghai] = result[FkLondon]
+    result[FkCancun]   = result[FkLondon]
+
+  proc legacySStoreCost(e: var array[evmc_storage_status, StorageStoreCost],
+                        c: StorageCostSpec) {.compileTime.} =
+    e[EVMC_STORAGE_ADDED]             = StorageStoreCost(gasCost: c.sset , gasRefund: 0)
+    e[EVMC_STORAGE_DELETED]           = StorageStoreCost(gasCost: c.reset, gasRefund: c.clear)
+    e[EVMC_STORAGE_MODIFIED]          = StorageStoreCost(gasCost: c.reset, gasRefund: 0)
+    e[EVMC_STORAGE_ASSIGNED]          = e[EVMC_STORAGE_MODIFIED]
+    e[EVMC_STORAGE_DELETED_ADDED]     = e[EVMC_STORAGE_ADDED]
+    e[EVMC_STORAGE_MODIFIED_DELETED]  = e[EVMC_STORAGE_DELETED]
+    e[EVMC_STORAGE_DELETED_RESTORED]  = e[EVMC_STORAGE_ADDED]
+    e[EVMC_STORAGE_ADDED_DELETED]     = e[EVMC_STORAGE_DELETED]
+    e[EVMC_STORAGE_MODIFIED_RESTORED] = e[EVMC_STORAGE_MODIFIED]
+
+  proc netSStoreCost(e: var array[evmc_storage_status, StorageStoreCost],
+                      c: StorageCostSpec) {.compileTime.} =
+    e[EVMC_STORAGE_ASSIGNED]          = StorageStoreCost(gasCost: c.warmAccess, gasRefund: 0)
+    e[EVMC_STORAGE_ADDED]             = StorageStoreCost(gasCost: c.sset      , gasRefund: 0)
+    e[EVMC_STORAGE_DELETED]           = StorageStoreCost(gasCost: c.reset     , gasRefund: c.clear)
+    e[EVMC_STORAGE_MODIFIED]          = StorageStoreCost(gasCost: c.reset     , gasRefund: 0)
+    e[EVMC_STORAGE_DELETED_ADDED]     = StorageStoreCost(gasCost: c.warmAccess, gasRefund: -c.clear)
+    e[EVMC_STORAGE_MODIFIED_DELETED]  = StorageStoreCost(gasCost: c.warmAccess, gasRefund: c.clear)
+    e[EVMC_STORAGE_DELETED_RESTORED]  = StorageStoreCost(gasCost: c.warmAccess,
+      gasRefund: c.reset - c.warmAccess - c.clear)
+    e[EVMC_STORAGE_ADDED_DELETED]     = StorageStoreCost(gasCost: c.warmAccess,
+      gasRefund: c.sset - c.warmAccess)
+    e[EVMC_STORAGE_MODIFIED_RESTORED] = StorageStoreCost(gasCost: c.warmAccess,
+      gasRefund: c.reset - c.warm_access)
+
+  proc storageStoreCost(): array[Fork, array[evmc_storage_status, StorageStoreCost]] {.compileTime.} =
+    const tbl = storageCostSpec()
+    for rev in Fork:
+      let c = tbl[rev]
+      if not c.netCost: # legacy
+        legacySStoreCost(result[rev], c)
+      else: # net cost
+        netSStoreCost(result[rev], c)
+
+  const
+    SstoreCost* = storageStoreCost()
+
 template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   ## Generate the gas cost for each forks and store them in a const
@@ -224,52 +305,31 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   func `prefix gasSstore`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
     ## Value is word to save
-
-    when fork >= FkBerlin:
-      # EIP2929
-      const
-        SLOAD_GAS = WarmStorageReadCost
-        SSTORE_RESET_GAS = 5000 - ColdSloadCost
-    else:
-      const
-        SLOAD_GAS = FeeSchedule[GasSload]
-        SSTORE_RESET_GAS = FeeSchedule[GasSreset]
-
-    const
-      NoopGas     = SLOAD_GAS # if the value doesn't change.
-      DirtyGas    = SLOAD_GAS # if a dirty value is changed.
-      InitGas     = FeeSchedule[GasSset]  # from clean zero to non-zero
-      InitRefund  = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
-      CleanGas    = SSTORE_RESET_GAS # from clean non-zero to something else
-      CleanRefund = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
-      ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
-
     when defined(evmc_enabled):
-      const
-        sstoreDirty = when fork < FkConstantinople or fork == FkPetersburg: CleanGas
-                      else: DirtyGas
-
-      case gasParams.s_status
-      of EVMC_STORAGE_ADDED: result.gasCost = InitGas
-      of EVMC_STORAGE_MODIFIED: result.gasCost = CleanGas
-      of EVMC_STORAGE_DELETED:
-        result.gasCost = CleanGas
-        result.gasRefund += ClearRefund
-      of EVMC_STORAGE_UNCHANGED: result.gasCost = sstoreDirty
-      of EVMC_STORAGE_MODIFIED_AGAIN:
-        result.gasCost = sstoreDirty
-        if not gasParams.s_originalValue.isZero:
-          if gasParams.s_currentValue.isZero:
-            result.gasRefund -= ClearRefund
-          if value.isZero:
-            result.gasRefund += ClearRefund
-
-        if gasParams.s_originalValue == value:
-          if gasParams.s_originalValue.isZero:
-            result.gasRefund += InitRefund
-          else:
-            result.gasRefund += CleanRefund
+      const c = SStoreCost[fork]
+      let sc  = c[gasParams.s_status]
+      result.gasCost   = sc.gasCost
+      result.gasRefund = sc.gasRefund
     else:
+      when fork >= FkBerlin:
+        # EIP2929
+        const
+          SLOAD_GAS = WarmStorageReadCost
+          SSTORE_RESET_GAS = 5000 - ColdSloadCost
+      else:
+        const
+          SLOAD_GAS = FeeSchedule[GasSload]
+          SSTORE_RESET_GAS = FeeSchedule[GasSreset]
+
+      const
+        NoopGas     = SLOAD_GAS # if the value doesn't change.
+        DirtyGas    = SLOAD_GAS # if a dirty value is changed.
+        InitGas     = FeeSchedule[GasSset]  # from clean zero to non-zero
+        InitRefund  = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
+        CleanGas    = SSTORE_RESET_GAS # from clean non-zero to something else
+        CleanRefund = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
+        ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
+
       when fork < FkConstantinople or fork == FkPetersburg:
         let isStorageEmpty = gasParams.s_currentValue.isZero
 
@@ -760,7 +820,10 @@ const
     FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
     FkBerlin: BerlinGasFees,
-    FkLondon: LondonGasFees
+    FkLondon: LondonGasFees,
+    FkParis: LondonGasFees,
+    FkShanghai: LondonGasFees,
+    FkCancun: LondonGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)

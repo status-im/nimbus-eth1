@@ -64,6 +64,8 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
     # Gas left is required to be zero when not `EVMC_SUCCESS` or `EVMC_REVERT`.
     gas_left:    if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}: 0'i64
                  else: c.gasMeter.gasRemaining.int64,
+    gas_refund:  if result.status_code == EVMC_SUCCESS: c.gasMeter.gasRefunded.int64
+                 else: 0'i64,
     output_data: output_data,
     output_size: output_size.csize_t,
     release:     if output_data.isNil: nil
@@ -100,8 +102,8 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
   GC_ref(vm)
   return cast[ptr evmc_vm](vm)
 
-# This code assumes fields, methods and types of ABI version 9, and must be
+# This code assumes fields, methods and types of ABI version 10, and must be
 # checked for compatibility if the `import evmc/evmc` major version is updated.
-when EVMC_ABI_VERSION != 9:
-  {.error: ("This code assumes EVMC_ABI_VERSION 9;" &
+when EVMC_ABI_VERSION != 10:
+  {.error: ("This code assumes EVMC_ABI_VERSION 10;" &
             " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}

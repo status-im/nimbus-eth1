@@ -58,7 +58,8 @@ proc showEvmcMessage(msg: EvmcMessage): string =
     &" gas={$msg.gas}" &
     &" value={$msg.value.fromEvmc}" &
     &" sender={$msg.sender.fromEvmc}" &
-    &" destination={$msg.destination.fromEvmc}" &
+    &" recipient={$msg.recipient.fromEvmc}" &
+    &" code_address={$msg.code_address.fromEvmc}" &
     &" input_data={inputStr}"
   if msg.kind == EVMC_CREATE2:
     result.add &" create2_salt={$msg.create2_salt.fromEvmc}"
@@ -88,7 +89,7 @@ proc showEvmcTxContext(txc: EvmcTxContext): string =
     &" block_number={$txc.block_number}" &
     &" block_timestamp={$txc.block_timestamp}" &
     &" block_gas_limit={$txc.block_gas_limit}" &
-    &" block_difficulty={$txc.block_difficulty.fromEvmc}" &
+    &" block_prev_randao={$txc.block_prev_randao.fromEvmc}" &
     &" chain_id={$txc.chain_id.fromEvmc}" &
     &" block_base_fee={$txc.block_base_fee.fromEvmc}"
 

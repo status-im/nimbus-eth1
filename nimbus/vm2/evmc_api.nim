@@ -23,30 +23,32 @@ type
     block_number*    : int64          # The block number.
     block_timestamp* : int64          # The block timestamp.
     block_gas_limit* : int64          # The block gas limit.
-    block_difficulty*: evmc_uint256be # The block difficulty.
+    block_prev_randao*: evmc_uint256be # The block difficulty.
     chain_id*        : evmc_uint256be # The blockchain's ChainID.
     block_base_fee*  : evmc_uint256be # The block base fee.
 
   nimbus_message* = object
-    kind*: evmc_call_kind
-    flags*: uint32
-    depth*: int32
-    gas*: int64
-    destination*: EthAddress
-    sender*: EthAddress
-    input_data*: ptr byte
-    input_size*: uint
-    value*: evmc_uint256be
+    kind*        : evmc_call_kind
+    flags*       : uint32
+    depth*       : int32
+    gas*         : int64
+    recipient*   : EthAddress
+    sender*      : EthAddress
+    input_data*  : ptr byte
+    input_size*  : uint
+    value*       : evmc_uint256be
     create2_salt*: evmc_bytes32
+    code_address*: EthAddress
 
   nimbus_result* = object
-    status_code*: evmc_status_code
-    gas_left*: int64
-    output_data*: ptr byte
-    output_size*: uint
-    release*: proc(result: var nimbus_result) {.cdecl, gcsafe.}
+    status_code*   : evmc_status_code
+    gas_left*      : int64
+    gas_refund*    : int64
+    output_data*   : ptr byte
+    output_size*   : uint
+    release*       : proc(result: var nimbus_result) {.cdecl, gcsafe.}
     create_address*: EthAddress
-    padding*: array[4, byte]
+    padding*       : array[4, byte]
 
   nimbus_host_interface* = object
     account_exists*: proc(context: evmc_host_context, address: EthAddress): bool {.cdecl, gcsafe.}
@@ -151,11 +153,3 @@ proc accessStorage*(ctx: HostContext, address: EthAddress,
                     key: UInt256): evmc_access_status {.inline.} =
   var key = toEvmc(key)
   ctx.host.access_storage(ctx.context, address, key)
-
-#proc vmHost*(vmState: BaseVMState, gasPrice: GasInt, origin: EthAddress): HostContext =
-#  let host = nim_host_get_interface()
-#  let context = nim_host_create_context(cast[pointer](vmState), gasPrice, toEvmc(origin))
-#  result.init(host, context)
-#
-#proc destroy*(hc: HostContext) =
-#  nim_host_destroy_context(hc.context)
