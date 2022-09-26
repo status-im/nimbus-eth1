@@ -9,7 +9,7 @@ import
   unittest2, json, os, tables, strutils, sets,
   options,
   eth/[common, rlp], eth/trie/[db, trie_defs],
-  stew/endians2,
+  stew/[endians2, byteutils],
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, utils, vm_types, errors, constants, forks],
@@ -39,6 +39,7 @@ type
     vmState      : BaseVMState
     debugData    : JsonNode
     network      : string
+    postStateHash: Hash256
 
 var pow = PowRef.new
 
@@ -146,7 +147,9 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.berlinBlock         = number[FkBerlin]
     c.londonBlock         = number[FkLondon]
     c.arrowGlacierBlock   = number[FkLondon]
+    c.mergeForkBlock      = some(number[FkParis])
 
+  c.terminalTotalDifficulty = none(UInt256)
   case network
   of "EIP150":
     c.assignNumber(FkTangerine, Zero)
@@ -183,6 +186,12 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.assignNumber(FkLondon, Zero)
   of "BerlinToLondonAt5":
     c.assignNumber(FkLondon, Five)
+  of "Merge":
+    c.assignNumber(FkParis, Zero)
+    c.terminalTotalDifficulty = some(0.u256)
+  of "ArrowGlacierToMergeAtDiffC0000":
+    c.assignNumber(FkParis, H)
+    c.terminalTotalDifficulty = some(0xC0000.u256)
   else:
     raise newException(ValueError, "unsupported network " & network)
 
@@ -205,6 +214,10 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
   if "sealEngine" in fixture:
     result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
+
+  if "postStateHash" in fixture:
+    result.postStateHash.data = hexToByteArray[32](fixture["postStateHash"].getStr)
+
   result.network = fixture["network"].getStr
 
 proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
@@ -230,7 +243,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   preminedBlock: EthBlock, tb: TestBlock, checkSeal, validation: bool): EthBlock =
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
-  let baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
+  var baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
       parentHeader,
       preminedBlock.header.coinbase,
       some(preminedBlock.header.timestamp),
@@ -240,6 +253,12 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   )
 
   deepCopy(result, preminedBlock)
+  let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
+  if ttdReached and chainDB.config.mergeForkBlock.isNone:
+    chainDB.config.mergeForkBlock = some(preminedBlock.header.blockNumber)
+
+  if ttdReached:
+    baseHeaderForImport.prevRandao = preminedBlock.header.prevRandao
 
   tester.vmState = BaseVMState.new(
     parentHeader,
@@ -252,6 +271,14 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
     transactions: result.txs,
     uncles: result.uncles
   )
+
+  if validation:
+    let rc = chainDB.validateHeaderAndKinship(
+      result.header, body, checkSeal, ttdReached, pow)
+    if rc.isErr:
+      raise newException(
+        ValidationError, "validateHeaderAndKinship: " & rc.error)
+
   let res = tester.vmState.processBlockNotPoA(result.header, body)
   if res == ValidationResult.Error:
     if not (tb.hasException or (not tb.goodBlock)):
@@ -259,13 +286,6 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   else:
     if tester.vmState.generateWitness():
       blockWitness(tester.vmState, chainDB)
-
-  if validation:
-    let rc = chainDB.validateHeaderAndKinship(
-      result.header, body, checkSeal, false, pow)
-    if rc.isErr:
-      raise newException(
-        ValidationError, "validateHeaderAndKinship: " & rc.error)
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
@@ -279,6 +299,7 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
     preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
     minedBlock = tester.importBlock(chainDB, preminedBlock, tb, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
+
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
 func shouldCheckSeal(tester: Tester): bool =
@@ -310,9 +331,20 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
             testBlock, chainDB, checkSeal, validation = false)
 
+        let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
+        if ttdReached and chainDB.config.mergeForkBlock.isNone:
+          chainDB.config.mergeForkBlock = some(preminedBlock.header.blockNumber)
+
         # manually validating
-        check chainDB.validateHeaderAndKinship(
-          preminedBlock, checkSeal, false, pow).isOk
+        let res = chainDB.validateHeaderAndKinship(
+          preminedBlock, checkSeal, ttdReached, pow)
+        check res.isOk
+        when defined(noisy):
+          if res.isErr:
+            debugEcho "blockNumber: ", preminedBlock.header.blockNumber
+            debugEcho "fork: ", chainDB.config.toFork(preminedBlock.header.blockNumber)
+            debugEcho "error message: ", res.error
+            debugEcho "ttdReached: ", ttdReached
 
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
@@ -361,13 +393,45 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, accountList: JsonNode):
     "accounts": accounts
   }
 
-proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtureIndex: int, success: bool) =
-  let accountList = if fixture["postState"].kind == JObject: fixture["postState"] else: fixture["pre"]
+proc accountList(fixture: JsonNode): JsonNode =
+  if fixture["postState"].kind == JObject:
+    fixture["postState"]
+  else:
+    fixture["pre"]
+
+proc debugDataFromAccountList(tester: Tester, fixture: JsonNode): JsonNode =
+  let accountList = fixture.accountList
   let vmState = tester.vmState
-  let debugData = if vmState.isNil:
-                    %{"debugData": tester.debugData}
+  if vmState.isNil:
+    %{"debugData": tester.debugData}
+  else:
+    dumpDebugData(tester, vmState, accountList)
+
+proc debugDataFromPostStateHash(tester: Tester): JsonNode =
+  var
+    accounts = newJObject()
+    accountList = newSeq[EthAddress]()
+    vmState = tester.vmState
+
+  for address in vmState.stateDB.addresses:
+    accountList.add address
+
+  for i, ac in accountList:
+    accounts[ac.toHex] = dumpAccount(vmState.readOnlyStateDB, ac, "acc" & $i)
+
+  %{
+    "debugData": tester.debugData,
+    "postStateHash": %($vmState.readOnlyStateDB.rootHash),
+    "expectedStateHash": %($tester.postStateHash),
+    "accounts": accounts
+  }
+
+proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtureIndex: int, success: bool) =
+  let debugData = if tester.postStateHash != Hash256():
+                    debugDataFromPostStateHash(tester)
                   else:
-                    dumpDebugData(tester, vmState, accountList)
+                    debugDataFromAccountList(tester, fixture)
+
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
 
@@ -411,7 +475,15 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       tester.runTester(chainDB, testStatusIMPL)
       let latestBlockHash = chainDB.getCanonicalHead().blockHash
       if latestBlockHash != tester.lastBlockHash:
-        verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)
+        if tester.postStateHash != Hash256():
+          let rootHash = tester.vmState.stateDB.rootHash
+          if tester.postStateHash != rootHash:
+            raise newException(ValidationError, "incorrect postStateHash, expect=" &
+              $rootHash & ", get=" &
+              $tester.postStateHash
+            )
+        else:
+          verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)
     except ValidationError as E:
       echo fixtureName, " ERROR: ", E.msg
       success = false

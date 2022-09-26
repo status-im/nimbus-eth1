@@ -144,6 +144,10 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
 proc getScore*(self: BaseChainDB; blockHash: Hash256): UInt256 =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
 
+proc setScore*(self: BaseChainDB; blockHash: Hash256, score: UInt256) =
+  ## for testing purpose
+  self.db.put(blockHashToScoreKey(blockHash).toOpenArray, rlp.encode(score))
+
 proc getTd*(self: BaseChainDB; blockHash: Hash256, td: var UInt256): bool =
   let bytes = self.db.get(blockHashToScoreKey(blockHash).toOpenArray)
   if bytes.len == 0: return false
@@ -162,7 +166,14 @@ proc headTotalDifficulty*(self: BaseChainDB): UInt256 =
 
   let blockHash = rlp.decode(data, Hash256)
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray), UInt256)
-  
+
+proc isBlockAfterTtd*(self: BaseChainDB, header: BlockHeader): bool =
+  let
+    ttd = self.ttd
+    ptd = self.getScore(header.parentHash)
+    td  = ptd + header.difficulty
+  ptd >= ttd and td >= ttd
+
 proc getAncestorsHashes*(self: BaseChainDB, limit: UInt256, header: BlockHeader): seq[Hash256] =
   var ancestorCount = min(header.blockNumber, limit).truncate(int)
   var h = header
@@ -465,7 +476,7 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if headScore < ttd and score >= ttd:
     self.writeTerminalHash(headerHash)
 
-  if score > headScore:
+  if score > headScore or score >= ttd:
     result = self.setAsCanonicalChainHead(headerHash)
 
 proc persistHeaderToDbWithoutSetHead*(self: BaseChainDB; header: BlockHeader) =

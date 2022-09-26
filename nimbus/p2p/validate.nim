@@ -321,6 +321,10 @@ proc validateTransaction*(
       accountNonce=nonce
     return false
 
+  if tx.nonce == high(uint64):
+    debug "invalid tx: nonce at maximum"
+    return false
+
   # EIP-3607 Reject transactions from senders with deployed code
   # The EIP spec claims this attack never happened before
   # Clients might choose to disable this rule for RPC calls like

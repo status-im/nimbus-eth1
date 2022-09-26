@@ -463,6 +463,24 @@ proc persist*(ac: AccountsCache, clearCache: bool = true) =
 
   ac.isDirty = false
 
+iterator addresses*(ac: AccountsCache): EthAddress =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for address, _ in ac.savePoint.cache:
+    yield address
+
+iterator accounts*(ac: AccountsCache): Account =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for _, account in ac.savePoint.cache:
+    yield account.account
+
+iterator pairs*(ac: AccountsCache): (EthAddress, Account) =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavepoint.isNil)
+  for address, account in ac.savePoint.cache:
+    yield (address, account.account)
+
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated

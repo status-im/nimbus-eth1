@@ -13,6 +13,8 @@ import
 proc newStateDB*(db: TrieDatabaseRef, pruneTrie: bool): AccountStateDB =
   newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
+import debug
+
 proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
@@ -76,15 +78,16 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     ommersHash: EMPTY_UNCLE_HASH
   )
 
+  let fork = db.config.toFork(0.toBlockNumber)
   if g.baseFeePerGas.isSome:
     result.baseFee = g.baseFeePerGas.get()
-  elif db.config.toFork(0.toBlockNumber) >= FkLondon:
+  elif fork >= FkLondon:
     result.baseFee = EIP1559_INITIAL_BASE_FEE.u256
 
   if g.gasLimit.isZero:
     result.gasLimit = GENESIS_GAS_LIMIT
 
-  if g.difficulty.isZero:
+  if g.difficulty.isZero and fork <= FkLondon:
     result.difficulty = GENESIS_DIFFICULTY
 
 proc toGenesisHeader*(params: NetworkParams): BlockHeader

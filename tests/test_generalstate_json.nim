@@ -17,7 +17,7 @@ import
   eth/[rlp, common],
   eth/trie/[db, trie_defs],
   unittest2,
-  stew/results
+  stew/[results, byteutils]
 
 type
   Tester = object
@@ -89,8 +89,16 @@ let chainParams = networkParams(MainNet)
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   let
     chainDB = newBaseChainDB(newMemoryDB(), getConfiguration().pruning, params = chainParams)
-    vmState = BaseVMState.new(
-      parent      = BlockHeader(stateRoot: emptyRlpHash),
+    parent  = BlockHeader(stateRoot: emptyRlpHash)
+
+  # can't be assigned to
+  # tester.header.parentHash = parent.blockHash
+  chainDB.setScore(parent.blockHash, 0.u256)
+  if tester.fork >= FkParis:
+    chainDB.config.terminalTotalDifficulty = some(0.u256)
+
+  let vmState = BaseVMState.new(
+      parent      = parent,
       header      = tester.header,
       chainDB     = chainDB,
       tracerFlags = (if tester.trace: {TracerFlags.EnableTracing} else: {}),
@@ -157,16 +165,19 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 
   let fenv = fixture["env"]
   tester.header = BlockHeader(
-    coinbase: fenv["currentCoinbase"].getStr.ethAddressFromHex,
-    difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
+    coinbase   : fenv["currentCoinbase"].getStr.ethAddressFromHex,
+    difficulty : fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
     blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
-    gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
-    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
-    stateRoot: emptyRlpHash
+    gasLimit   : fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
+    timestamp  : fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
+    stateRoot  : emptyRlpHash
     )
 
   if "currentBaseFee" in fenv:
     tester.header.baseFee = fromHex(UInt256, fenv{"currentBaseFee"}.getStr)
+
+  if "currentRandom" in fenv:
+    tester.header.prevRandao.data = hexToByteArray[32](fenv{"currentRandom"}.getStr)
 
   let specifyIndex = getConfiguration().index
   tester.trace = trace

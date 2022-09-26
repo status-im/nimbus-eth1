@@ -357,6 +357,9 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   ## Map to EVM fork, which doesn't include the DAO or Glacier forks.
+  if c.mergeForkBlock.isSome and number >= c.mergeForkBlock.get:
+    return FkParis
+
   if number >= c.londonBlock: FkLondon
   elif number >= c.berlinBlock: FkBerlin
   elif number >= c.istanbulBlock: FkIstanbul

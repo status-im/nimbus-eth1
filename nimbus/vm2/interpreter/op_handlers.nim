@@ -142,6 +142,7 @@ when isMainModule and isChatty:
   echo ">>>       frontier[sstore]: ",       FkFrontier.opHandlersInfo(Sstore)
   echo ">>> constantinople[sstore]: ", FkConstantinople.opHandlersInfo(Sstore)
   echo ">>>         berlin[sstore]: ",         FkBerlin.opHandlersInfo(Sstore)
+  echo ">>>          paris[sstore]: ",          FkParis.opHandlersInfo(Sstore)
 
 # ------------------------------------------------------------------------------
 # End
