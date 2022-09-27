@@ -8,6 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Negotiate a pivot header base on the *best header* values. Buddies that
+## cannot provide a minimal block number will be disconnected.
+##
 ## Borrowed from `full/worker.nim`
 
 import
@@ -16,12 +19,12 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/byteutils,
-  "../.."/[protocol, sync_desc]
+  ".."/[protocol, sync_desc]
 
 {.push raises:[Defect].}
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Additional trace commands
 
   minPeersToStartSync = 2
@@ -214,25 +217,25 @@ proc hash*(peer: Peer): Hash =
 
 # ------------
 
-proc pivotSetup*[S](ctx: CtxRef[S]) =
+proc bestPivotSetup*[S](ctx: CtxRef[S]) =
   ## Global initialisation
   ctx.pivot = PivotCtxRef()
 
-proc pivotRelease*[S](ctx: CtxRef[S]) =
+proc bestPivotRelease*[S](ctx: CtxRef[S]) =
   ## Global destruction
   ctx.pivot = nil
 
 # ------------
 
-proc pivotStart*[S,W](buddy: BuddyRef[S,W]) =
+proc  bestPivotStart*[S,W](buddy: BuddyRef[S,W]) =
   ## Initialise this wotrker
   buddy.pivot = PivotDataRef(header: none(BlockHeader))
 
-proc pivotStop*[S,W](buddy: BuddyRef[S,W]) =
+proc  bestPivotStop*[S,W](buddy: BuddyRef[S,W]) =
   ## Clean up this peer
   buddy.global.untrusted.add buddy.peer
 
-proc pivotRestart*[S,W](buddy: BuddyRef[S,W]) =
+proc  bestPivotRestart*[S,W](buddy: BuddyRef[S,W]) =
   ## Restart finding pivot header for this peer
   buddy.pivotStop()
   buddy.pivotStart()
@@ -241,8 +244,8 @@ proc pivotRestart*[S,W](buddy: BuddyRef[S,W]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pivotHeader*[S,W](buddy: BuddyRef[S,W]): Result[BlockHeader,void] =
-  ## Returns cached block header if available
+proc bestPivotHeader*[S,W](buddy: BuddyRef[S,W]): Result[BlockHeader,void] =
+  ## Returns cached block header if available and the buddy `peer` is trusted.
   let
     peer = buddy.peer
     local = buddy.local
@@ -253,12 +256,12 @@ proc pivotHeader*[S,W](buddy: BuddyRef[S,W]): Result[BlockHeader,void] =
     return ok(buddy.local.header.unsafeGet)
   err()
 
-proc pivotExec*[S,W](
+proc bestPivotNegotiate*[S,W](
     buddy: BuddyRef[S,W];          ## Worker peer
     minBlockNumber: BlockNumber;   ## Minimum block number to expect
       ): Future[bool] {.async.} =
-  ## Initalise worker. This function must be run in single mode at the
-  ## beginning of running worker peer.
+  ## Negotiate best header pivot. This function must be run in single mode at
+  ## the beginning of a running worker peer.
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `startSyncWithPeer()`
   ##

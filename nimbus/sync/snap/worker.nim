@@ -24,9 +24,9 @@ const
   usePivot2ok = false or true
 
 when usePivot2ok:
-  import ./worker/pivot2
+  import ../pivot/best_pivot
 else:
-  import ./worker/pivot
+  import ../pivot/snap_pivot
 
 {.push raises: [Defect].}
 
@@ -60,6 +60,31 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # Private functions
 # ------------------------------------------------------------------------------
 
+when usePivot2ok:
+  proc envPivotNumber(buddy: SnapBuddyRef): BlockNumber =
+    if buddy.ctx.data.pivotEnv.isNil:
+      0.u256
+    else:
+      buddy.ctx.data.pivotEnv.stateHeader.blockNumber
+
+  template pivotSetup(ctx: SnapCtxRef) = ctx.bestPivotSetup()
+  template pivotRelease(ctx: SnapCtxRef) = ctx.bestPivotRelease()
+  template pivotStart(b: SnapBuddyRef) = b.bestPivotStart()
+  template pivotStop(b: SnapBuddyRef) = b.bestPivotStop()
+  template pivotRestart(b: SnapBuddyRef) = b.bestPivotRestart()
+  template pivotHeader(b: SnapBuddyRef): auto = b.bestPivotHeader()
+  template pivotNegotiate(b: SnapBuddyRef; n: BlockNumber): auto =
+    b.bestPivotNegotiate(n)
+else:
+  template pivotSetup(ctx: SnapCtxRef) = ctx.snapPivotSetup()
+  template pivotRelease(ctx: SnapCtxRef) = ctx.snapPivotRelease()
+  template pivotStart(b: SnapBuddyRef) = b.snapPivotStart()
+  template pivotStop(b: SnapBuddyRef) = b.snapPivotStop()
+  template pivotRestart(b: SnapBuddyRef) = b.snapPivotRestart()
+  template pivotHeader(b: SnapBuddyRef): auto = b.snapPivotHeader()
+  template pivotNegotiate(b: SnapBuddyRef): auto = b.snapPivotNegotiate()
+
+
 proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
   ## Create random node tag
   let
@@ -68,12 +93,6 @@ proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
   var data: array[32,byte]
   ctx.data.rng[].generate(data)
   UInt256.fromBytesBE(data).NodeTag
-
-proc envPivotNumber(buddy: SnapBuddyRef): BlockNumber =
-  if buddy.ctx.data.pivotEnv.isNil:
-    0.u256
-  else:
-    buddy.ctx.data.pivotEnv.stateHeader.blockNumber
 
 
 proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
@@ -286,7 +305,7 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
     #
     let peer = buddy.peer
     if buddy.pivotHeader.isErr:
-      if await buddy.pivotExec(buddy.envPivotNumber):
+      if await buddy.pivotNegotiate(buddy.envPivotNumber):
         discard buddy.updatePivotEnv()
       else:
         # Wait if needed, then return => repeat
@@ -341,7 +360,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   when not usePivot2ok:
     if not buddy.havePivot:
-      await buddy.pivotExec()
+      await buddy.pivotNegotiate()
       if not buddy.updatePivotEnv():
         return
 

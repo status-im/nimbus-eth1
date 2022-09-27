@@ -63,9 +63,9 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
-  "../../.."/[constants, genesis, p2p/chain/chain_desc],
-  "../.."/[protocol, sync_desc, types],
-  ../worker_desc
+  "../.."/[constants, genesis, p2p/chain/chain_desc],
+  ".."/[protocol, sync_desc, types],
+  ../snap/worker_desc
 
 {.push raises: [Defect].}
 
@@ -513,15 +513,17 @@ proc peerSyncChainNonEmptyReply(
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc pivotSetup*(ctx: SnapCtxRef) =
+proc snapPivotSetup*(ctx: SnapCtxRef) =
   ## Global initialisation
   discard
 
-proc pivotRelease*(ctx: SnapCtxRef) =
+proc snapPivotRelease*(ctx: SnapCtxRef) =
   ## Global destruction
   discard
 
-proc pivotStart*(buddy: SnapBuddyRef) =
+# ---------------
+
+proc snapPivotStart*(buddy: SnapBuddyRef) =
   ## Setup state root hunter
   buddy.hunt = WorkerHuntEx.new(HuntForward)
 
@@ -531,25 +533,25 @@ proc pivotStart*(buddy: SnapBuddyRef) =
   # TODO: Temporarily disabled because it's useful to test the worker.
   # buddy.syncMode = SyncOnlyHash
 
-proc pivotStop*(buddy: SnapBuddyRef) =
+proc snapPivotStop*(buddy: SnapBuddyRef) =
   ## Clean up this peer
   discard
 
-proc pivotRestart*(buddy: SnapBuddyRef) =
-  buddy.pivotStart
+proc snapPivotRestart*(buddy: SnapBuddyRef) =
+  buddy.snapPivotStart
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pivotHeader*(buddy: SnapBuddyRef): Result[BlockHeader,void] =
+proc snapPivotHeader*(buddy: SnapBuddyRef): Result[BlockHeader,void] =
   ## Returns cached block header if available
   if buddy.hunt.header.isSome:
     ok(buddy.hunt.header.unsafeGet)
   else:
     err()
 
-proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
+proc snapPivotNegiotiate*(buddy: SnapBuddyRef) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
