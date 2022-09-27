@@ -103,7 +103,9 @@ proc getPayloadByTag(
   of BlockNumber:
     let payLoadResult = proxy.blockCache.getByNumber(tag.blockNumber)
     if payLoadResult.isErr():
-      raise newException(ValueError, "Unknown block with number " & $tag.blockNumber)
+      raise newException(
+        ValueError, "Block not stored in cache " & $tag.blockNumber
+      )
     payload = payLoadResult.get
 
   return payload

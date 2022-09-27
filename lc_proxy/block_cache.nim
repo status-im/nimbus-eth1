@@ -13,10 +13,9 @@ import
   stew/[results, keyed_queue]
 
 
-## Simple block cache implementation which main purpose is to cache execution
-## payloads received through block gossip (and validated by light clicent).
-## Payloads are stored in order of arrival. When cache is full full oldest
-## payloads are deleted.
+## payloads received through block gossip (and validated by light client).
+## Payloads are stored in order of arrival. When cache is full the oldest
+## payload is deleted first.
 type BlockCache* = ref object
   max: int
   blocks: KeyedQueue[BlockHash, ExecutionPayloadV1]
