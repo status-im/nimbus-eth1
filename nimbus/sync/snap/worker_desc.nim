@@ -70,21 +70,6 @@ const
 type
   BuddyStat* = distinct uint
 
-  SnapBuddyStats* = tuple
-    ## Statistics counters for events associated with this peer.
-    ## These may be used to recognise errors and select good peers.
-    ok: tuple[
-      reorgDetected:       BuddyStat,
-      getBlockHeaders:     BuddyStat,
-      getNodeData:         BuddyStat]
-    minor: tuple[
-      timeoutBlockHeaders: BuddyStat,
-      unexpectedBlockHash: BuddyStat]
-    major: tuple[
-      networkErrors:       BuddyStat,
-      excessBlockHeaders:  BuddyStat,
-      wrongBlockHeader:    BuddyStat]
-
   SnapBuddyErrors* = tuple
     ## particular error counters so connections will not be cut immediately
     ## after a particular error.
@@ -133,9 +118,9 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    stats*: SnapBuddyStats             ## Statistics counters (not really used)
     errors*: SnapBuddyErrors           ## For error handling
-    vetoSlots*: SnapSlotsSet           ## Do not ask for this slots, again
+    workerPivot*: RootRef              ## Opaque object reference for sub-module
+    vetoSlots*: SnapSlotsSet           ## Do not ask for these slots, again
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
     ## All buddies call back (the argument type is defined below with
@@ -152,6 +137,7 @@ type
     pivotCount*: uint64                ## Total of all created tab entries
     pivotEnv*: SnapPivotRef            ## Environment containing state root
     prevEnv*: SnapPivotRef             ## Previous state root environment
+    pivotData*: RootRef                ## Opaque object reference for sub-module
     accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
     accountsDb*: AccountsDbRef         ## Proof processing for accounts
     runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`

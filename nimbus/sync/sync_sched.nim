@@ -201,6 +201,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     dsc:    dsc,
     worker: BuddyRef[S,W](
       ctx:  dsc.ctx,
+      ctrl: BuddyCtrlRef(),
       peer: peer))
   if not buddy.worker.runStart():
     trace "Ignoring useless peer", peer, peers, workers, maxWorkers

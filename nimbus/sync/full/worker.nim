@@ -57,13 +57,13 @@
 ##
 
 import
-  std/[algorithm, hashes, options, random, sequtils, sets, strutils],
+  std/[algorithm, hashes, options, sequtils, sets, strutils],
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
   stew/[byteutils, interval_set, sorted_set],
   "../.."/[db/db_chain, utils],
-  ".."/[protocol, sync_desc],
+  ".."/[protocol, pivot/best_pivot, sync_desc],
   ./ticker
 
 {.push raises:[Defect].}
@@ -112,15 +112,16 @@ type
 
   BuddyData* = object
     ## Local descriptor data extension
+    pivot: BestPivotWorkerRef       ## Local pivot worker descriptor
     bestNumber: Option[BlockNumber] ## Largest block number reported
 
   CtxData* = object
     ## Globally shared data extension
+    rng*: ref HmacDrbgContext       ## Random generator, pre-initialised
+    pivot: BestPivotCtxRef          ## Global pivot descriptor
     backtrack: Option[Hash256]      ## Find reverse block after re-org
     unprocessed: BlockRangeSetRef   ## Block ranges to fetch
     staged: WorkItemQueue           ## Blocks fetched but not stored yet
-    untrusted: seq[Peer]            ## Clean up list
-    trusted: HashSet[Peer]          ## Peers ready for delivery
     topPersistent: BlockNumber      ## Up to this block number stored OK
     ticker: TickerRef               ## Logger ticker
 
@@ -223,7 +224,6 @@ proc globalReset(ctx: FullCtxRef; backBlocks = maxHeadersFetch): bool =
 
   ctx.data.unprocessed.clear()
   ctx.data.staged.clear()
-  ctx.data.trusted.clear()
   ctx.data.topPersistent = topPersistent
   discard ctx.data.unprocessed.merge(topPersistent + 1, highBlockNumber)
 
@@ -255,27 +255,6 @@ template safeTransport(
   except TransportError as e:
     error info & ", stop", error=($e.name), msg=e.msg
     buddy.ctrl.stopped = true
-
-
-proc getRandomTrustedPeer(buddy: FullBuddyRef): Result[Peer,void] =
-  ## Return random entry from `trusted` peer different from this peer set if
-  ## there are enough
-  ##
-  ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `randomTrustedPeer()`
-  let
-    ctx = buddy.ctx
-    nPeers = ctx.data.trusted.len
-    offInx = if buddy.peer in ctx.data.trusted: 2 else: 1
-  if 0 < nPeers:
-    var (walkInx, stopInx) = (0, rand(nPeers - offInx))
-    for p in ctx.data.trusted:
-      if p == buddy.peer:
-        continue
-      if walkInx == stopInx:
-        return ok(p)
-      walkInx.inc
-  err()
-
 
 proc newWorkItem(buddy: FullBuddyRef): Result[WorkItemRef,void] =
   ## Fetch the next unprocessed block range and register it as work item.
@@ -325,182 +304,8 @@ proc recycleStaged(buddy: FullBuddyRef) =
   ctx.data.staged.clear()
 
 # ------------------------------------------------------------------------------
-# Private `Future` helpers
-# ------------------------------------------------------------------------------
-
-proc getBestNumber(
-    buddy: FullBuddyRef
-     ): Future[Result[BlockNumber,void]] {.async.} =
-  ## Get best block number from best block hash.
-  ##
-  ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `getBestBlockNumber()`
-  let
-    peer = buddy.peer
-    startHash = peer.state(eth).bestBlockHash
-    reqLen = 1u
-    hdrReq = BlocksRequest(
-      startBlock: HashOrNum(
-        isHash:   true,
-        hash:     startHash),
-      maxResults: reqLen,
-      skip:       0,
-      reverse:    true)
-
-  trace trEthSendSendingGetBlockHeaders, peer,
-    startBlock=startHash.data.toHex, reqLen
-
-  var hdrResp: Option[blockHeadersObj]
-  buddy.safeTransport("Error fetching block header"):
-    hdrResp = await peer.getBlockHeaders(hdrReq)
-  if buddy.ctrl.stopped:
-    return err()
-
-  if hdrResp.isNone:
-    trace trEthRecvReceivedBlockHeaders, peer, reqLen, respose="n/a"
-    return err()
-
-  let hdrRespLen = hdrResp.get.headers.len
-  if hdrRespLen == 1:
-    let blockNumber = hdrResp.get.headers[0].blockNumber
-    trace trEthRecvReceivedBlockHeaders, peer, hdrRespLen, blockNumber
-    return ok(blockNumber)
-
-  trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
-  return err()
-
-
-proc agreesOnChain(buddy: FullBuddyRef; other: Peer): Future[bool] {.async.} =
-  ## Returns `true` if one of the peers `buddy.peer` or `other` acknowledges
-  ## existence of the best block of the other peer.
-  ##
-  ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `peersAgreeOnChain()`
-  var
-    peer = buddy.peer
-    start = peer
-    fetch = other
-  # Make sure that `fetch` has not the smaller difficulty.
-  if fetch.state(eth).bestDifficulty < start.state(eth).bestDifficulty:
-    swap(fetch, start)
-
-  let
-    startHash = start.state(eth).bestBlockHash
-    hdrReq = BlocksRequest(
-      startBlock: HashOrNum(
-        isHash:   true,
-        hash:     startHash),
-      maxResults: 1,
-      skip:       0,
-      reverse:    true)
-
-  trace trEthSendSendingGetBlockHeaders, peer, start, fetch,
-    startBlock=startHash.data.toHex, hdrReqLen=1
-
-  var hdrResp: Option[blockHeadersObj]
-  buddy.safeTransport("Error fetching block header"):
-    hdrResp = await fetch.getBlockHeaders(hdrReq)
-  if buddy.ctrl.stopped:
-    return false
-
-  if hdrResp.isSome:
-    let hdrRespLen = hdrResp.get.headers.len
-    if 0 < hdrRespLen:
-      let blockNumber = hdrResp.get.headers[0].blockNumber
-      trace trEthRecvReceivedBlockHeaders, peer, start, fetch,
-        hdrRespLen, blockNumber
-    return true
-
-  trace trEthRecvReceivedBlockHeaders, peer, start, fetch,
-    blockNumber="n/a"
-
-# ------------------------------------------------------------------------------
 # Private functions, worker sub-tasks
 # ------------------------------------------------------------------------------
-
-proc initaliseWorker(buddy: FullBuddyRef): Future[bool] {.async.} =
-  ## Initalise worker. This function must be run in single mode at the
-  ## beginning of running worker peer.
-  ##
-  ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `startSyncWithPeer()`
-  ##
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-
-  # Delayed clean up batch list
-  if 0 < ctx.data.untrusted.len:
-    trace "Removing untrused peers", peer, count=ctx.data.untrusted.len
-    for p in ctx.data.untrusted:
-      ctx.data.trusted.excl p
-    ctx.data.untrusted.setLen(0)
-
-  if buddy.data.bestNumber.isNone:
-    let rc = await buddy.getBestNumber()
-    # Beware of peer terminating the session right after communicating
-    if rc.isErr or buddy.ctrl.stopped:
-      return false
-    if rc.value <= ctx.data.topPersistent:
-      buddy.ctrl.zombie = true
-      trace "Useless peer, best number too low", peer,
-        topPersistent=ctx.data.topPersistent, bestNumber=rc.value
-    buddy.data.bestNumber = some(rc.value)
-
-  if minPeersToStartSync <= ctx.data.trusted.len:
-    # We have enough trusted peers. Validate new peer against trusted
-    let rc = buddy.getRandomTrustedPeer()
-    if rc.isOK:
-      if await buddy.agreesOnChain(rc.value):
-        ctx.data.trusted.incl peer
-        return true
-
-  # If there are no trusted peers yet, assume this very peer is trusted,
-  # but do not finish initialisation until there are more peers.
-  elif ctx.data.trusted.len == 0:
-    trace "Assume initial trusted peer", peer
-    ctx.data.trusted.incl peer
-
-  elif ctx.data.trusted.len == 1 and buddy.peer in ctx.data.trusted:
-    # Ignore degenerate case, note that `trusted.len < minPeersToStartSync`
-    discard
-
-  else:
-    # At this point we have some "trusted" candidates, but they are not
-    # "trusted" enough. We evaluate `peer` against all other candidates. If
-    # one of the candidates disagrees, we swap it for `peer`. If all candidates
-    # agree, we add `peer` to trusted set. The peers in the set will become
-    # "fully trusted" (and sync will start) when the set is big enough
-    var
-      agreeScore = 0
-      otherPeer: Peer
-    for p in ctx.data.trusted:
-      if peer == p:
-        inc agreeScore
-      elif await buddy.agreesOnChain(p):
-        inc agreeScore
-      elif buddy.ctrl.stopped:
-        # Beware of peer terminating the session
-        return false
-      else:
-        otherPeer = p
-
-    # Check for the number of peers that disagree
-    case ctx.data.trusted.len - agreeScore
-    of 0:
-      trace "Peer trusted by score", peer,
-        trusted=ctx.data.trusted.len
-      ctx.data.trusted.incl peer # best possible outcome
-    of 1:
-      trace "Other peer no longer trusted", peer,
-        otherPeer, trusted=ctx.data.trusted.len
-      ctx.data.trusted.excl otherPeer
-      ctx.data.trusted.incl peer
-    else:
-      trace "Peer not trusted", peer,
-        trusted=ctx.data.trusted.len
-      discard
-
-    if minPeersToStartSync <= ctx.data.trusted.len:
-      return true
-
 
 proc fetchHeaders(
     buddy: FullBuddyRef;
@@ -786,6 +591,7 @@ proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.unprocessed = BlockRangeSetRef.init()
   ctx.data.staged.init()
+  ctx.data.pivot = BestPivotCtxRef.init(ctx.data.rng)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdater)
   else:
@@ -794,6 +600,7 @@ proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
 
 proc release*(ctx: FullCtxRef) =
   ## Global clean up
+  ctx.data.pivot = nil
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stop()
 
@@ -804,13 +611,16 @@ proc start*(buddy: FullBuddyRef): bool =
      buddy.peer.state(protocol.eth).initialized:
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
+    buddy.data.pivot =
+      BestPivotWorkerRef.init(ctx.data.pivot, buddy.ctrl, buddy.peer)
     return true
 
 proc stop*(buddy: FullBuddyRef) =
   ## Clean up this peer
   let ctx = buddy.ctx
   buddy.ctrl.stopped = true
-  ctx.data.untrusted.add buddy.peer
+  #ctx.data.untrusted.add buddy.peer
+  buddy.data.pivot.clear()
   if not ctx.data.ticker.isNil:
      ctx.data.ticker.stopBuddy()
 
@@ -859,18 +669,15 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
     discard ctx.data.unprocessed.merge(wi)
     buddy.ctrl.zombie = true
 
-  else:
-    if buddy.data.bestNumber.isNone:
-      # Only log for the first time, or so
-      trace "Single run mode, initialisation", peer,
-        trusted=ctx.data.trusted.len
-      discard
+  # Initialise/re-initialise this worker
+  elif await buddy.data.pivot.bestPivotNegotiate(buddy.data.bestNumber):
+    buddy.ctrl.multiOk = true
+    # Update/activate `bestNumber` for local use
+    buddy.data.bestNumber =
+      some(buddy.data.pivot.bestPivotHeader.value.blockNumber)
 
-    # Initialise/re-initialise this worker
-    if await buddy.initaliseWorker():
-      buddy.ctrl.multiOk = true
-    elif not buddy.ctrl.stopped:
-      await sleepAsync(2.seconds)
+  elif not buddy.ctrl.stopped:
+    await sleepAsync(2.seconds)
 
 
 proc runPool*(buddy: FullBuddyRef; last: bool) =

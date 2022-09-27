@@ -173,7 +173,7 @@ proc stopAfterError(
      ComAccountsMinTooSmall,
      ComAccountsMaxTooLarge:
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
-    buddy.data.stats.major.networkErrors.inc()
+    # buddy.data.stats.major.networkErrors.inc()
     buddy.ctrl.zombie = true
     return true
 

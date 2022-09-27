@@ -26,7 +26,7 @@ const
 when usePivot2ok:
   import ../pivot/best_pivot
 else:
-  import ../pivot/snap_pivot
+  import ../pivot/snap_pivot, ../../p2p/chain/chain_desc
 
 {.push raises: [Defect].}
 
@@ -57,41 +57,78 @@ template noExceptionOops(info: static[string]; code: untyped) =
     raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helpers: integration of pivot negotiator
 # ------------------------------------------------------------------------------
 
 when usePivot2ok:
-  proc envPivotNumber(buddy: SnapBuddyRef): BlockNumber =
-    if buddy.ctx.data.pivotEnv.isNil:
-      0.u256
-    else:
-      buddy.ctx.data.pivotEnv.stateHeader.blockNumber
-
-  template pivotSetup(ctx: SnapCtxRef) = ctx.bestPivotSetup()
-  template pivotRelease(ctx: SnapCtxRef) = ctx.bestPivotRelease()
-  template pivotStart(b: SnapBuddyRef) = b.bestPivotStart()
-  template pivotStop(b: SnapBuddyRef) = b.bestPivotStop()
-  template pivotRestart(b: SnapBuddyRef) = b.bestPivotRestart()
-  template pivotHeader(b: SnapBuddyRef): auto = b.bestPivotHeader()
-  template pivotNegotiate(b: SnapBuddyRef; n: BlockNumber): auto =
-    b.bestPivotNegotiate(n)
+  type
+    PivotCtxRef = BestPivotCtxRef
+    PivotWorkerRef = BestPivotWorkerRef
 else:
-  template pivotSetup(ctx: SnapCtxRef) = ctx.snapPivotSetup()
-  template pivotRelease(ctx: SnapCtxRef) = ctx.snapPivotRelease()
-  template pivotStart(b: SnapBuddyRef) = b.snapPivotStart()
-  template pivotStop(b: SnapBuddyRef) = b.snapPivotStop()
-  template pivotRestart(b: SnapBuddyRef) = b.snapPivotRestart()
-  template pivotHeader(b: SnapBuddyRef): auto = b.snapPivotHeader()
-  template pivotNegotiate(b: SnapBuddyRef): auto = b.snapPivotNegotiate()
+  type
+    PivotCtxRef = SnapPivotCtxRef
+    PivotWorkerRef = SnapPivotWorkerRef
 
+proc pivot(ctx: SnapCtxRef): PivotCtxRef =
+  ctx.data.pivotData.PivotCtxRef
+
+proc `pivot=`(ctx: SnapCtxRef; val: PivotCtxRef) =
+  ctx.data.pivotData = val
+
+proc pivot(buddy: SnapBuddyRef): PivotWorkerRef =
+  buddy.data.workerPivot.PivotWorkerRef
+
+proc `pivot=`(buddy: SnapBuddyRef; val: PivotWorkerRef) =
+  buddy.data.workerPivot = val
+
+# --------------------
+
+proc pivotSetup(ctx: SnapCtxRef) =
+  when usePivot2ok:
+    ctx.pivot = PivotCtxRef.init(ctx.data.rng)
+  else:
+    ctx.pivot = PivotCtxRef.init(ctx, ctx.chain.Chain)
+
+proc pivotRelease(ctx: SnapCtxRef) =
+  ctx.pivot = nil
+
+
+proc pivotStart(buddy: SnapBuddyRef) =
+  buddy.pivot = PivotWorkerRef.init(buddy.ctx.pivot, buddy.ctrl, buddy.peer)
+
+proc pivotStop(buddy: SnapBuddyRef) =
+  buddy.pivot.clear()
+
+# --------------------
+
+proc pivotHeader(buddy: SnapBuddyRef): Result[BlockHeader,void] =
+  when usePivot2ok:
+    buddy.pivot.bestPivotHeader()
+  else:
+    buddy.pivot.snapPivotHeader()
+
+when usePivot2ok:
+  proc envPivotNumber(buddy: SnapBuddyRef): Option[BlockNumber] =
+    let env = buddy.ctx.data.pivotEnv
+    if env.isNil:
+      none(BlockNumber)
+    else:
+      some(env.stateHeader.blockNumber)
+
+  template pivotNegotiate(buddy: SnapBuddyRef; n: Option[BlockNumber]): auto =
+    buddy.pivot.bestPivotNegotiate(n)
+else:
+  template pivotNegotiate(buddy: SnapBuddyRef): auto =
+    buddy.pivot.snapPivotNegotiate()
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
   ## Create random node tag
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
   var data: array[32,byte]
-  ctx.data.rng[].generate(data)
+  buddy.ctx.data.rng[].generate(data)
   UInt256.fromBytesBE(data).NodeTag
 
 
@@ -245,7 +282,6 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   else:
     trace "Ticker is disabled"
   result = true
-
   # -----------------------
   when snapAccountsDumpEnable:
     doAssert ctx.data.proofDumpFile.open("./dump-stream.out", fmWrite)
@@ -318,10 +354,7 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
     trace "Snap pivot initialised", peer,
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
   else:
-    #
-    # The default pivot finder runs in multi mode. So there is nothing to do
-    # here.
-    #
+    # Default pivot finder runs in multi mode => nothing to do here.
     buddy.ctrl.multiOk = true
 
 
@@ -374,7 +407,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   if ctx.data.pivotEnv.repairState == Done:
     buddy.ctrl.multiOk = false
-    buddy.pivotRestart()
+    buddy.pivotStop()
+    buddy.pivotStart()
 
 # ------------------------------------------------------------------------------
 # End
