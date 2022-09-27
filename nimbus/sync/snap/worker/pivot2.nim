@@ -16,38 +16,42 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/byteutils,
-  "../.."/[protocol, sync_desc],
-  ../worker_desc
+  "../.."/[protocol, sync_desc]
 
 {.push raises:[Defect].}
 
-logScope:
-  topics = "snap-pivot"
-
 const
-  extraTraceMessages = false # or true
+  extraTraceMessages = false or true
     ## Additional trace commands
 
   minPeersToStartSync = 2
     ## Wait for consensus of at least this number of peers before syncing.
 
+type
+  PivotDataRef = ref object of BuddyPivotBase
+    ## Data for this peer only
+    header: Option[BlockHeader] ## Pivot header (if any)
+
+  PivotCtxRef = ref object of CtxPivotBase
+    ## Data shared by all peers.
+    untrusted: seq[Peer]        ## Clean up list
+    trusted: HashSet[Peer]      ## Peers ready for delivery
+
+proc hash*(peer: Peer): Hash
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hash(peer: Peer): Hash =
-  ## Mixin `HashSet[Peer]` handler
-  hash(cast[pointer](peer))
+proc local[S,W](buddy: BuddyRef[S,W]): PivotDataRef =
+  PivotDataRef(buddy.pivot)
 
-proc pivotNumber(buddy: SnapBuddyRef): BlockNumber =
-  #  data.pivot2Header
-  if buddy.ctx.data.pivotEnv.isNil:
-    0.u256
-  else:
-    buddy.ctx.data.pivotEnv.stateHeader.blockNumber
+proc global[S,W](buddy: BuddyRef[S,W]): PivotCtxRef =
+  PivotCtxRef(buddy.ctx.pivot)
 
-template safeTransport(
-    buddy: SnapBuddyRef;
+
+template safeTransport[S,W](
+    buddy: BuddyRef[S,W];
     info: static[string];
     code: untyped) =
   try:
@@ -82,18 +86,18 @@ proc rand(r: ref HmacDrbgContext; maxVal: int): int =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getRandomTrustedPeer(buddy: SnapBuddyRef): Result[Peer,void] =
+proc getRandomTrustedPeer[S,W](buddy: BuddyRef[S,W]): Result[Peer,void] =
   ## Return random entry from `trusted` peer different from this peer set if
   ## there are enough
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `randomTrustedPeer()`
   let
     ctx = buddy.ctx
-    nPeers = ctx.data.trusted.len
-    offInx = if buddy.peer in ctx.data.trusted: 2 else: 1
+    nPeers = buddy.global.trusted.len
+    offInx = if buddy.peer in buddy.global.trusted: 2 else: 1
   if 0 < nPeers:
     var (walkInx, stopInx) = (0, ctx.data.rng.rand(nPeers - offInx))
-    for p in ctx.data.trusted:
+    for p in buddy.global.trusted:
       if p == buddy.peer:
         continue
       if walkInx == stopInx:
@@ -101,8 +105,8 @@ proc getRandomTrustedPeer(buddy: SnapBuddyRef): Result[Peer,void] =
       walkInx.inc
   err()
 
-proc getBestHeader(
-    buddy: SnapBuddyRef
+proc getBestHeader[S,W](
+    buddy: BuddyRef[S,W];
      ): Future[Result[BlockHeader,void]] {.async.} =
   ## Get best block number from best block hash.
   ##
@@ -143,8 +147,8 @@ proc getBestHeader(
   trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
   return err()
 
-proc agreesOnChain(
-    buddy: SnapBuddyRef;
+proc agreesOnChain[S,W](
+    buddy: BuddyRef[S,W];
     other: Peer
      ): Future[Result[void,bool]] {.async.} =
   ## Returns `true` if one of the peers `buddy.peer` or `other` acknowledges
@@ -201,22 +205,58 @@ proc agreesOnChain(
   return err(true)
 
 # ------------------------------------------------------------------------------
+# Public start/stop and admin functions
+# ------------------------------------------------------------------------------
+
+proc hash*(peer: Peer): Hash =
+  ## Mixin `HashSet[Peer]` handler
+  hash(cast[pointer](peer))
+
+# ------------
+
+proc pivotSetup*[S](ctx: CtxRef[S]) =
+  ## Global initialisation
+  ctx.pivot = PivotCtxRef()
+
+proc pivotRelease*[S](ctx: CtxRef[S]) =
+  ## Global destruction
+  ctx.pivot = nil
+
+# ------------
+
+proc pivotStart*[S,W](buddy: BuddyRef[S,W]) =
+  ## Initialise this wotrker
+  buddy.pivot = PivotDataRef(header: none(BlockHeader))
+
+proc pivotStop*[S,W](buddy: BuddyRef[S,W]) =
+  ## Clean up this peer
+  buddy.global.untrusted.add buddy.peer
+
+proc pivotRestart*[S,W](buddy: BuddyRef[S,W]) =
+  ## Restart finding pivot header for this peer
+  buddy.pivotStop()
+  buddy.pivotStart()
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pivot2Start*(buddy: SnapBuddyRef) =
-  discard
+proc pivotHeader*[S,W](buddy: BuddyRef[S,W]): Result[BlockHeader,void] =
+  ## Returns cached block header if available
+  let
+    peer = buddy.peer
+    local = buddy.local
+    global = buddy.global
+  if local.header.isSome and
+     peer notin global.untrusted and
+     minPeersToStartSync <= global.trusted.len and peer in global.trusted:
+    return ok(buddy.local.header.unsafeGet)
+  err()
 
-proc pivot2Stop*(buddy: SnapBuddyRef) =
-  ## Clean up this peer
-  buddy.ctx.data.untrusted.add buddy.peer
-
-proc pivot2Restart*(buddy: SnapBuddyRef) =
-  buddy.data.pivot2Header = none(BlockHeader)
-  buddy.ctx.data.untrusted.add buddy.peer
-
-
-proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
+proc pivotExec*[S,W](
+    buddy: BuddyRef[S,W];          ## Worker peer
+    minBlockNumber: BlockNumber;   ## Minimum block number to expect
+      ): Future[bool] {.async.} =
   ## Initalise worker. This function must be run in single mode at the
   ## beginning of running worker peer.
   ##
@@ -225,56 +265,66 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
+    local = buddy.local
+    global = buddy.global
 
   # Delayed clean up batch list
-  if 0 < ctx.data.untrusted.len:
+  if 0 < global.untrusted.len:
     when extraTraceMessages:
-      trace "Removing untrusted peers", peer, trusted=ctx.data.trusted.len,
-        untrusted=ctx.data.untrusted.len, runState=buddy.ctrl.state
-    ctx.data.trusted = ctx.data.trusted - ctx.data.untrusted.toHashSet
-    ctx.data.untrusted.setLen(0)
+      trace "Removing untrusted peers", peer, trusted=global.trusted.len,
+        untrusted=global.untrusted.len, runState=buddy.ctrl.state
+    global.trusted = global.trusted - global.untrusted.toHashSet
+    global.untrusted.setLen(0)
 
-  if buddy.data.pivot2Header.isNone:
+  if local.header.isNone:
     when extraTraceMessages:
       # Only log for the first time (if any)
       trace "Pivot initialisation", peer,
-        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+        trusted=global.trusted.len, runState=buddy.ctrl.state
 
     let rc = await buddy.getBestHeader()
     # Beware of peer terminating the session right after communicating
     if rc.isErr or buddy.ctrl.stopped:
       return false
-    let
-      bestNumber = rc.value.blockNumber
-      minNumber = buddy.pivotNumber
-    if bestNumber < minNumber:
+    let bestBlockNumber = rc.value.blockNumber
+    if bestBlockNumber < minBlockNumber:
       buddy.ctrl.zombie = true
       trace "Useless peer, best number too low", peer,
-        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state,
-        minNumber, bestNumber
-    buddy.data.pivot2Header = some(rc.value)
+        trusted=global.trusted.len, runState=buddy.ctrl.state,
+        minBlockNumber, bestBlockNumber
+    local.header = some(rc.value)
 
-  if minPeersToStartSync <= ctx.data.trusted.len:
+  if minPeersToStartSync <= global.trusted.len:
     # We have enough trusted peers. Validate new peer against trusted
     let rc = buddy.getRandomTrustedPeer()
     if rc.isOK:
       let rx = await buddy.agreesOnChain(rc.value)
       if rx.isOk:
-        ctx.data.trusted.incl peer
+        global.trusted.incl peer
+        when extraTraceMessages:
+          let bestHeader =
+            if local.header.isSome: "#" & $local.header.get.blockNumber
+            else: "nil"
+          trace "Accepting peer", peer, trusted=global.trusted.len,
+            untrusted=global.untrusted.len, runState=buddy.ctrl.state,
+            bestHeader
         return true
       if not rx.error:
         # Other peer is dead
-        ctx.data.trusted.excl rc.value
+        global.trusted.excl rc.value
 
   # If there are no trusted peers yet, assume this very peer is trusted,
   # but do not finish initialisation until there are more peers.
-  elif ctx.data.trusted.len == 0:
-    ctx.data.trusted.incl peer
+  elif global.trusted.len == 0:
+    global.trusted.incl peer
     when extraTraceMessages:
+      let bestHeader =
+        if local.header.isSome: "#" & $local.header.get.blockNumber
+        else: "nil"
       trace "Assume initial trusted peer", peer,
-        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+        trusted=global.trusted.len, runState=buddy.ctrl.state, bestHeader
 
-  elif ctx.data.trusted.len == 1 and buddy.peer in ctx.data.trusted:
+  elif global.trusted.len == 1 and buddy.peer in global.trusted:
     # Ignore degenerate case, note that `trusted.len < minPeersToStartSync`
     discard
 
@@ -290,8 +340,8 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
       deadPeers: HashSet[Peer]
     when extraTraceMessages:
       trace "Trust scoring peer", peer,
-        trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
-    for p in ctx.data.trusted:
+        trusted=global.trusted.len, runState=buddy.ctrl.state
+    for p in global.trusted:
       if peer == p:
         inc agreeScore
       else:
@@ -309,35 +359,38 @@ proc pivot2Exec*(buddy: SnapBuddyRef): Future[bool] {.async.} =
 
     # Normalise
     if 0 < deadPeers.len:
-      ctx.data.trusted = ctx.data.trusted - deadPeers
-      if ctx.data.trusted.len == 0 or
-         ctx.data.trusted.len == 1 and buddy.peer in ctx.data.trusted:
+      global.trusted = global.trusted - deadPeers
+      if global.trusted.len == 0 or
+         global.trusted.len == 1 and buddy.peer in global.trusted:
         return false
 
     # Check for the number of peers that disagree
-    case ctx.data.trusted.len - agreeScore:
+    case global.trusted.len - agreeScore:
     of 0:
-      ctx.data.trusted.incl peer # best possible outcome
+      global.trusted.incl peer # best possible outcome
       when extraTraceMessages:
         trace "Agreeable trust score for peer", peer,
-          trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+          trusted=global.trusted.len, runState=buddy.ctrl.state
     of 1:
-      ctx.data.trusted.excl otherPeer
-      ctx.data.trusted.incl peer
+      global.trusted.excl otherPeer
+      global.trusted.incl peer
       when extraTraceMessages:
         trace "Other peer no longer trusted", peer,
-          otherPeer, trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+          otherPeer, trusted=global.trusted.len, runState=buddy.ctrl.state
     else:
       when extraTraceMessages:
         trace "Peer not trusted", peer,
-          trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+          trusted=global.trusted.len, runState=buddy.ctrl.state
       discard
 
     # Evaluate status, finally
-    if minPeersToStartSync <= ctx.data.trusted.len:
+    if minPeersToStartSync <= global.trusted.len:
       when extraTraceMessages:
+        let bestHeader =
+          if local.header.isSome: "#" & $local.header.get.blockNumber
+          else: "nil"
         trace "Peer trusted now", peer,
-          trusted=ctx.data.trusted.len, runState=buddy.ctrl.state
+          trusted=global.trusted.len, runState=buddy.ctrl.state, bestHeader
       return true
 
 # ------------------------------------------------------------------------------

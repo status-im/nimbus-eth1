@@ -69,6 +69,12 @@ proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
   ctx.data.rng[].generate(data)
   UInt256.fromBytesBE(data).NodeTag
 
+proc envPivotNumber(buddy: SnapBuddyRef): BlockNumber =
+  if buddy.ctx.data.pivotEnv.isNil:
+    0.u256
+  else:
+    buddy.ctx.data.pivotEnv.stateHeader.blockNumber
+
 
 proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   ## Activate environment for state root implied by `header` argument
@@ -98,17 +104,13 @@ proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
 proc updatePivotEnv(buddy: SnapBuddyRef): bool =
   ## Update global state root environment from local `pivotHeader`. Choose the
   ## latest block number. Returns `true` if the environment was changed
-  when usePivot2ok:
-    let maybeHeader = buddy.data.pivot2Header
-  else:
-    let maybeHeader = buddy.data.pivotHeader
-
-  if maybeHeader.isSome:
+  let rc = buddy.pivotHeader
+  if rc.isOk:
     let
       peer = buddy.peer
       ctx = buddy.ctx
       env = ctx.data.pivotEnv
-      pivotHeader = maybeHeader.unsafeGet
+      pivotHeader = rc.value
       newStateNumber = pivotHeader.blockNumber
       stateNumber = if env.isNil: 0.toBlockNumber
                     else: env.stateHeader.blockNumber
@@ -180,8 +182,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc havePivot(buddy: SnapBuddyRef): bool =
   ## ...
-  if buddy.data.pivotHeader.isSome and
-     buddy.data.pivotHeader.get.blockNumber != 0:
+  let rc = buddy.pivotHeader
+  if rc.isOk and rc.value.blockNumber != 0:
 
     # So there is a `ctx.data.pivotEnv`
     when 1.0 <= switchPivotAfterCoverage:
@@ -204,10 +206,7 @@ proc havePivot(buddy: SnapBuddyRef): bool =
           buddy.ctx.poolMode = true
           buddy.ctx.data.runPoolHook = proc(b: SnapBuddyRef) =
             b.ctx.data.pivotEnv.minCoverageReachedOk = true
-            when usePivot2ok:
-              b.pivot2Restart
-            else:
-              b.pivotRestart
+            b.pivotRestart
           return true
 
 # ------------------------------------------------------------------------------
@@ -221,6 +220,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ctx.data.accountsDb =
       if ctx.data.dbBackend.isNil: AccountsDbRef.init(ctx.chain.getTrieDB)
       else: AccountsDbRef.init(ctx.data.dbBackend)
+  ctx.pivotSetup()
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
@@ -234,6 +234,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
+  ctx.pivotRelease()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stop()
     ctx.data.ticker = nil
@@ -246,10 +247,7 @@ proc start*(buddy: SnapBuddyRef): bool =
   if peer.supports(protocol.snap) and
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    when usePivot2ok:
-      buddy.pivot2Start()
-    else:
-      buddy.pivotStart()
+    buddy.pivotStart()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
     return true
@@ -260,10 +258,7 @@ proc stop*(buddy: SnapBuddyRef) =
     ctx = buddy.ctx
     peer = buddy.peer
   buddy.ctrl.stopped = true
-  when usePivot2ok:
-    buddy.pivot2Stop()
-  else:
-    buddy.pivotStop()
+  buddy.pivotStop()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stopBuddy()
 
@@ -290,10 +285,11 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
     # `pivot2Exec()` functions.
     #
     let peer = buddy.peer
-    if not buddy.havePivot:
-      if await buddy.pivot2Exec():
+    if buddy.pivotHeader.isErr:
+      if await buddy.pivotExec(buddy.envPivotNumber):
         discard buddy.updatePivotEnv()
       else:
+        # Wait if needed, then return => repeat
         if not buddy.ctrl.stopped:
           await sleepAsync(2.seconds)
         return
@@ -359,7 +355,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   if ctx.data.pivotEnv.repairState == Done:
     buddy.ctrl.multiOk = false
-    buddy.data.pivotHeader = none(BlockHeader)
+    buddy.pivotRestart()
 
 # ------------------------------------------------------------------------------
 # End

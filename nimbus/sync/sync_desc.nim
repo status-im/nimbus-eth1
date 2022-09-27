@@ -30,11 +30,18 @@ type
     runState: BuddyRunState ## Access with getters
     multiOk*: bool          ## Triggers `runSingle()` mode unless `true`
 
+  BuddyPivotBase* = ref object of RootObj
+    ## Stub object, to be inherited
+
+  CtxPivotBase* = ref object of RootObj
+    ## Stub object, to be inherited
+
   BuddyRef*[S,W] = ref object
     ## Worker peer state descriptor.
     ctx*: CtxRef[S]         ## Shared data descriptor back reference
     peer*: Peer             ## Reference to eth p2pProtocol entry
     ctrl*: BuddyCtrl        ## Control and state settings
+    pivot*: BuddyPivotBase  ## Opaque object reference for sub-module (optional)
     data*: W                ## Worker peer specific data
 
   CtxRef*[S] = ref object
@@ -42,6 +49,7 @@ type
     buddiesMax*: int        ## Max number of buddies
     chain*: AbstractChainDB ## Block chain database (no need for `Peer`)
     poolMode*: bool         ## Activate `runPool()` workers if set `true`
+    pivot*: CtxPivotBase    ## Opaque object reference for sub-module (optional)
     data*: S                ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

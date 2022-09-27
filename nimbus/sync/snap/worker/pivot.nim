@@ -69,9 +69,6 @@ import
 
 {.push raises: [Defect].}
 
-export
-  worker_desc
-
 logScope:
   topics = "snap-pivot"
 
@@ -121,14 +118,15 @@ type
     HuntRange
     HuntRangeFinal
 
-  WorkerHuntEx = ref object of WorkerPivotBase
+  WorkerHuntEx = ref object of BuddyPivotBase
     ## Peer canonical chain head ("best block") search state.
-    syncMode:      WorkerMode    ## Action mode
-    lowNumber:     BlockNumber   ## Recent lowest known block number.
-    highNumber:    BlockNumber   ## Recent highest known block number.
-    bestNumber:    BlockNumber
-    bestHash:      BlockHash
-    step:          uint
+    header:     Option[BlockHeader] ## Pivot header (if any)
+    syncMode:   WorkerMode          ## Action mode
+    lowNumber:  BlockNumber         ## Recent lowest known block number.
+    highNumber: BlockNumber         ## Recent highest known block number.
+    bestNumber: BlockNumber
+    bestHash:   BlockHash
+    step:       uint
 
 static:
   doAssert syncLockedMinimumReply >= 2
@@ -147,10 +145,10 @@ static:
 # ------------------------------------------------------------------------------
 
 proc hunt(buddy: SnapBuddyRef): WorkerHuntEx =
-  buddy.data.workerPivot.WorkerHuntEx
+  buddy.pivot.WorkerHuntEx
 
 proc `hunt=`(buddy: SnapBuddyRef; value: WorkerHuntEx) =
-  buddy.data.workerPivot = value
+  buddy.pivot = value
 
 proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
   T(syncMode:   syncMode,
@@ -189,9 +187,9 @@ proc traceSyncLocked(buddy: SnapBuddyRef, num: BlockNumber, hash: BlockHash) =
 # ------------------------------------------------------------------------------
 
 proc clearSyncStateRoot(buddy: SnapBuddyRef) =
-  if buddy.data.pivotHeader.isSome:
+  if buddy.hunt.header.isSome:
     debug "Stopping state sync from this peer", peer=buddy.peer
-    buddy.data.pivotHeader = none(BlockHeader)
+    buddy.hunt.header = none(BlockHeader)
 
 proc lockSyncStateAndFetch(buddy: SnapBuddyRef; header: BlockHeader) =
   let
@@ -206,12 +204,12 @@ proc lockSyncStateAndFetch(buddy: SnapBuddyRef; header: BlockHeader) =
   buddy.hunt.bestHash = hash
   buddy.hunt.syncMode = SyncLocked
 
-  if buddy.data.pivotHeader.isNone:
+  if buddy.hunt.header.isNone:
     debug "Starting state sync from this peer", peer, thisBlock, stateRoot
-  elif buddy.data.pivotHeader.unsafeGet.stateRoot != stateRoot:
+  elif buddy.hunt.header.unsafeGet.stateRoot != stateRoot:
     trace "Adjusting state sync root from this peer", peer, thisBlock, stateRoot
 
-  buddy.data.pivotHeader = some(header)
+  buddy.hunt.header = some(header)
 
 proc setHuntBackward(buddy: SnapBuddyRef, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
@@ -515,6 +513,14 @@ proc peerSyncChainNonEmptyReply(
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
+proc pivotSetup*(ctx: SnapCtxRef) =
+  ## Global initialisation
+  discard
+
+proc pivotRelease*(ctx: SnapCtxRef) =
+  ## Global destruction
+  discard
+
 proc pivotStart*(buddy: SnapBuddyRef) =
   ## Setup state root hunter
   buddy.hunt = WorkerHuntEx.new(HuntForward)
@@ -535,6 +541,13 @@ proc pivotRestart*(buddy: SnapBuddyRef) =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc pivotHeader*(buddy: SnapBuddyRef): Result[BlockHeader,void] =
+  ## Returns cached block header if available
+  if buddy.hunt.header.isSome:
+    ok(buddy.hunt.header.unsafeGet)
+  else:
+    err()
 
 proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best

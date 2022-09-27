@@ -68,9 +68,6 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerPivotBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `worker.nim`
-
   BuddyStat* = distinct uint
 
   SnapBuddyStats* = tuple
@@ -138,9 +135,6 @@ type
     ## Per-worker local descriptor data extension
     stats*: SnapBuddyStats             ## Statistics counters (not really used)
     errors*: SnapBuddyErrors           ## For error handling
-    pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
-    pivot2Header*: Option[BlockHeader] ## Alternative header instead
-    workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
     vetoSlots*: SnapSlotsSet           ## Do not ask for this slots, again
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
@@ -161,10 +155,6 @@ type
     accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
     accountsDb*: AccountsDbRef         ## Proof processing for accounts
     runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
-    # --------
-    untrusted*: seq[Peer]              ## Clean up list (pivot2)
-    trusted*: HashSet[Peer]            ## Peers ready for delivery (pivot2)
-    # --------
     when snapAccountsDumpEnable:
       proofDumpOk*: bool
       proofDumpFile*: File
