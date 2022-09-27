@@ -18,12 +18,13 @@ import
 export ssz_serialization, common_types, hash
 
 ## Types and calls for history network content keys
+
 const
-  # Maximum content key size comes from:
-  # 34 bytes for ssz serialized BlockKey
-  # 1 byte for contentType
-  # TODO it would be nice to caluclate it somehow from the object definition (macro?)
-  maxContentKeySize* = 35
+  # Maximum content key size:
+  # - 32 bytes for SSZ serialized `BlockKey`
+  # - 1 byte for `ContentType`
+  # TODO: calculate it somehow from the object definition (macro?)
+  maxContentKeySize* = 33
 
 type
   ContentType* = enum
@@ -34,7 +35,6 @@ type
     masterAccumulator = 0x04
 
   BlockKey* = object
-    chainId*: uint16
     blockHash*: BlockHash
 
   EpochAccumulatorKey* = object
@@ -85,7 +85,7 @@ func `$`*(x: BlockHash): string =
   "0x" & x.data.toHex()
 
 func `$`*(x: BlockKey): string =
-  "blockHash: " & $x.blockHash & ", chainId: " & $x.chainId
+  "blockHash: " & $x.blockHash
 
 func `$`*(x: ContentKey): string =
   var res = "(type: " & $x.contentType & ", "

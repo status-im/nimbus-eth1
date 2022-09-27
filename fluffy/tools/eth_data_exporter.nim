@@ -294,7 +294,7 @@ proc writeBlocksToDb(config: ExporterConf, client: RpcClient) =
     let
       blck = downloadBlock(i, client)
       blockHash = blck.header.blockHash()
-      contentKeyType = BlockKey(chainId: 1, blockHash: blockHash)
+      contentKeyType = BlockKey(blockHash: blockHash)
       headerKey = encode(ContentKey(
         contentType: blockHeader, blockHeaderKey: contentKeyType))
       bodyKey = encode(ContentKey(

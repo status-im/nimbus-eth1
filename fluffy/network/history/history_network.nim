@@ -52,9 +52,9 @@ func encodeKey(k: ContentKey): (ByteList, ContentId) =
   return (keyEncoded, toContentId(keyEncoded))
 
 func getEncodedKeyForContent(
-    cType: ContentType, chainId: uint16, hash: BlockHash):
+    cType: ContentType, hash: BlockHash):
     (ByteList, ContentId) =
-  let contentKeyType = BlockKey(chainId: chainId, blockHash: hash)
+  let contentKeyType = BlockKey(blockHash: hash)
 
   let contentKey =
     case cType
@@ -296,10 +296,10 @@ const requestRetries = 4
 # however that response is not yet validated at that moment.
 
 proc getBlockHeader*(
-    n: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    n: HistoryNetwork, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
   let (keyEncoded, contentId) =
-    getEncodedKeyForContent(blockHeader, chainId, hash)
+    getEncodedKeyForContent(blockHeader, hash)
 
   let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
   if headerFromDb.isSome():
@@ -335,7 +335,7 @@ proc getBlockHeader*(
   return none(BlockHeader)
 
 proc getBlockBody*(
-    n: HistoryNetwork, chainId: uint16, hash: BlockHash, header: BlockHeader):
+    n: HistoryNetwork, hash: BlockHash, header: BlockHeader):
     Future[Option[BlockBody]] {.async.} =
 
   # Got header with empty body, no need to make any db calls or network requests
@@ -343,7 +343,7 @@ proc getBlockBody*(
     return some(BlockBody(transactions: @[], uncles: @[]))
 
   let
-    (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, chainId, hash)
+    (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, hash)
     bodyFromDb = n.getContentFromDb(BlockBody, contentId)
 
   if bodyFromDb.isSome():
@@ -381,11 +381,11 @@ proc getBlockBody*(
   return none(BlockBody)
 
 proc getBlock*(
-    n: HistoryNetwork, chainId: uint16, hash: BlockHash):
+    n: HistoryNetwork, hash: BlockHash):
     Future[Option[Block]] {.async.} =
   debug "Trying to retrieve block with hash", hash
 
-  let headerOpt = await n.getBlockHeader(chainId, hash)
+  let headerOpt = await n.getBlockHeader(hash)
   if headerOpt.isNone():
     warn "Failed to get header when getting block with hash", hash
     # Cannot validate block without header.
@@ -393,7 +393,7 @@ proc getBlock*(
 
   let header = headerOpt.unsafeGet()
 
-  let bodyOpt = await n.getBlockBody(chainId, hash, header)
+  let bodyOpt = await n.getBlockBody(hash, header)
 
   if bodyOpt.isNone():
     warn "Failed to get body when gettin block with hash", hash
@@ -405,14 +405,13 @@ proc getBlock*(
 
 proc getReceipts*(
     n: HistoryNetwork,
-    chainId: uint16,
     hash: BlockHash,
     header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
   if header.receiptRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return some(newSeq[Receipt]())
 
-  let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, chainId, hash)
+  let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, hash)
 
   let receiptsFromDb = n.getContentFromDb(seq[Receipt], contentId)
 
@@ -503,7 +502,7 @@ proc getEpochAccumulator(
   return none(EpochAccumulator)
 
 proc getBlock*(
-    n: HistoryNetwork, chainId: uint16, bn: UInt256):
+    n: HistoryNetwork, bn: UInt256):
     Future[Result[Option[Block], string]] {.async.} =
 
   # TODO for now checking accumulator only in db, we could also ask our
@@ -520,7 +519,7 @@ proc getBlock*(
   case hashResponse.kind
   of BHash:
     # we got header hash in current epoch accumulator, try to retrieve it from network
-    let blockResponse = await n.getBlock(chainId, hashResponse.blockHash)
+    let blockResponse = await n.getBlock(hashResponse.blockHash)
     return ok(blockResponse)
   of HEpoch:
     let digest = Digest(data: hashResponse.epochHash)
@@ -534,7 +533,7 @@ proc getBlock*(
       epoch = epochOpt.unsafeGet()
       blockHash = epoch[hashResponse.blockRelativeIndex].blockHash
 
-    let maybeBlock = await n.getBlock(chainId, blockHash)
+    let maybeBlock = await n.getBlock(blockHash)
 
     return ok(maybeBlock)
   of UnknownBlockNumber:
@@ -657,8 +656,7 @@ proc validateContent(
     else:
       return true
   of blockBody:
-    let headerOpt = await n.getBlockHeader(
-      key.blockBodyKey.chainId, key.blockBodyKey.blockHash)
+    let headerOpt = await n.getBlockHeader(key.blockBodyKey.blockHash)
 
     if headerOpt.isNone():
       warn "Cannot find the header, no way to validate the block body"
@@ -680,8 +678,7 @@ proc validateContent(
     else:
       return true
   of receipts:
-    let headerOpt = await n.getBlockHeader(
-      key.receiptsKey.chainId, key.receiptsKey.blockHash)
+    let headerOpt = await n.getBlockHeader(key.receiptsKey.blockHash)
 
     if headerOpt.isNone():
       warn "Cannot find the header, no way to validate the receipts"
