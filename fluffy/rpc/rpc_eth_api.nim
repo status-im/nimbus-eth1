@@ -203,7 +203,7 @@ proc installEthApiHandlers*(
     ## Returns BlockObject or nil when no block was found.
     let
       blockHash = data.toHash()
-      blockRes = await historyNetwork.getBlock(1'u16, blockHash)
+      blockRes = await historyNetwork.getBlock(blockHash)
 
     if blockRes.isNone():
       return none(BlockObject)
@@ -222,7 +222,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = fromHex(UInt256, quantityTag)
-      blockResult = await historyNetwork.getBlock(1'u16, blockNumber)
+      blockResult = await historyNetwork.getBlock(blockNumber)
 
     if blockResult.isOk():
       let maybeBlock = blockResult.get()
@@ -244,7 +244,7 @@ proc installEthApiHandlers*(
     ## Returns integer of the number of transactions in this block.
     let
       blockHash = data.toHash()
-      blockRes = await historyNetwork.getBlock(1'u16, blockHash)
+      blockRes = await historyNetwork.getBlock(blockHash)
 
     if blockRes.isNone():
       raise newException(ValueError, "Could not find block with requested hash")
@@ -273,7 +273,7 @@ proc installEthApiHandlers*(
     else:
       let hash = filterOptions.blockHash.unsafeGet()
 
-      let headerOpt = await historyNetwork.getBlockHeader(1'u16, hash)
+      let headerOpt = await historyNetwork.getBlockHeader(hash)
       if headerOpt.isNone():
         raise newException(ValueError,
           "Could not find header with requested hash")
@@ -285,8 +285,8 @@ proc installEthApiHandlers*(
         # are no assumptions about usage of concurrent queries on portal
         # wire protocol level
         let
-          bodyOpt = await historyNetwork.getBlockBody(1'u16, hash, header)
-          receiptsOpt = await historyNetwork.getReceipts(1'u16, hash, header)
+          bodyOpt = await historyNetwork.getBlockBody(hash, header)
+          receiptsOpt = await historyNetwork.getReceipts(hash, header)
 
         if bodyOpt.isSome() and receiptsOpt.isSome():
           let

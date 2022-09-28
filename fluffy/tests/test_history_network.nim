@@ -63,7 +63,7 @@ proc headersToContentInfo(headers: seq[BlockHeader]): seq[ContentInfo] =
   for h in headers:
     let
       headerHash = h.blockHash()
-      bk = BlockKey(chainId: 1'u16, blockHash: headerHash)
+      bk = BlockKey(blockHash: headerHash)
       ck = encode(ContentKey(contentType: blockHeader, blockHeaderKey: bk))
       headerEncoded = rlp.encode(h)
       ci = ContentInfo(contentKey: ck, content: headerEncoded)
@@ -96,7 +96,7 @@ procSuite "History Content Network":
     for h in headers:
       let
         headerHash = h.blockHash()
-        blockKey = BlockKey(chainId: 1'u16, blockHash: headerHash)
+        blockKey = BlockKey(blockHash: headerHash)
         contentKey = ContentKey(
           contentType: blockHeader, blockHeaderKey: blockKey)
         contentId = toContentId(contentKey)
@@ -116,7 +116,7 @@ procSuite "History Content Network":
       (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
 
     for i in 0..lastBlockNumber:
-      let blockResponse = await historyNode1.historyNetwork.getBlock(1'u16, u256(i))
+      let blockResponse = await historyNode1.historyNetwork.getBlock(u256(i))
 
       check blockResponse.isOk()
 

@@ -23,16 +23,16 @@ suite "History ContentKey Encodings":
     # Output
     const
       contentKeyHex =
-        "000f00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
-        "15025167517633317571792618561170587584740338038067807801482118109695980329625"
+        "28281392725701906550238743427348001871342819822834514257505083923073246729726"
       # or
       contentIdHexBE =
-        "2137f185b713a60dd1190e650d01227b4f94ecddc9c95478e2c591c40557da99"
+        "3e86b3767b57402ea72e369ae0496ce47cc15be685bec3b4726b9f316e3895fe"
 
     let contentKey = ContentKey(
       contentType: blockHeader,
-      blockHeaderKey: BlockKey(chainId: 15'u16, blockHash: blockHash))
+      blockHeaderKey: BlockKey(blockHash: blockHash))
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -56,16 +56,16 @@ suite "History ContentKey Encodings":
     # Output
     const
       contentKeyHex =
-        "011400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
-        "12834862124958403129911294156243112356210437741210740000860318140844473844426"
+        "106696502175825986237944249828698290888857178633945273402044845898673345165419"
       # or
       contentIdHexBE =
-        "1c6046475f0772132774ab549173ca8487bea031ce539cad8e990c08df5802ca"
+        "ebe414854629d60c58ddd5bf60fd72e41760a5f7a463fdcb169f13ee4a26786b"
 
     let contentKey = ContentKey(
       contentType: blockBody,
-      blockBodyKey: BlockKey(chainId: 20'u16, blockHash: blockHash))
+      blockBodyKey: BlockKey(blockHash: blockHash))
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -89,16 +89,16 @@ suite "History ContentKey Encodings":
     # Output
     const
       contentKeyHex =
-        "020400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
       contentId =
-        "76995449220721979583200368506411933662679656077191192504502358532083948020658"
+        "76230538398907151249589044529104962263309222250374376758768131420767496438948"
       # or
       contentIdHexBE =
-        "aa39e1423e92f5a667ace5b79c2c98adbfd79c055d891d0b9c49c40f816563b2"
+        "a888f4aafe9109d495ac4d4774a6277c1ada42035e3da5e10a04cc93247c04a4"
 
     let contentKey = ContentKey(
       contentType: receipts,
-      receiptsKey: BlockKey(chainId: 4'u16, blockHash: blockHash))
+      receiptsKey: BlockKey(blockHash: blockHash))
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
