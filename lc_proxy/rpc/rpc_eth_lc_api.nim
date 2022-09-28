@@ -8,8 +8,9 @@
 {.push raises: [Defect].}
 
 import
+  std/strutils,
   stint,
-  stew/byteutils,
+  stew/[byteutils, results],
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   web3,
@@ -17,7 +18,8 @@ import
   beacon_chain/eth1/eth1_monitor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
-  ../validate_proof
+  ../validate_proof,
+  ../block_cache
 
 export forks
 
@@ -35,25 +37,78 @@ template encodeHexData(value: UInt256): HexDataStr =
 template encodeQuantity(value: Quantity): HexQuantityStr =
   hexQuantityStr(encodeQuantity(value.uint64))
 
-type LightClientRpcProxy* = ref object
-  proxy: RpcProxy
-  executionPayload*: Opt[ExecutionPayloadV1]
-  chainId: Quantity
+type
+  LightClientRpcProxy* = ref object
+    proxy: RpcProxy
+    blockCache: BlockCache
+    chainId: Quantity
 
-template checkPreconditions(payload: Opt[ExecutionPayloadV1], quantityTag: string) =
-  if payload.isNone():
+  QuantityTagKind = enum
+    LatestBlock, BlockNumber
+
+  QuantityTag = object
+    case kind: QuantityTagKind
+    of LatestBlock:
+      discard
+    of BlockNumber:
+      blockNumber: Quantity
+
+func parseHexIntResult(tag: string): Result[uint64, string] =
+  try:
+    ok(parseHexInt(tag).uint64)
+  except ValueError as e:
+    err(e.msg)
+
+func parseHexQuantity(tag: string): Result[Quantity, string] =
+  let hexQuantity = hexQuantityStr(tag)
+  if validate(hexQuantity):
+    let parsed = ? parseHexIntResult(tag)
+    return ok(Quantity(parsed))
+  else:
+    return err("Invalid Etheruem Hex quantity.")
+
+func parseQuantityTag(blockTag: string): Result[QuantityTag, string] =
+  let tag = blockTag.toLowerAscii
+  case tag
+  of "latest":
+    return ok(QuantityTag(kind: LatestBlock))
+  else:
+    let quantity = ? parseHexQuantity(tag)
+    return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
+
+template checkPreconditions(proxy: LightClientRpcProxy) =
+  if proxy.blockCache.isEmpty():
     raise newException(ValueError, "Syncing")
 
-  if quantityTag != "latest":
-    # TODO: for now we support only latest block, as its semantically most straight
-    # forward, i.e it is last received and a valid ExecutionPayloadV1.
-    # Ultimately we could keep track of n last valid payloads and support number
-    # queries for this set of blocks.
-    # `Pending` could be mapped to some optimistic header with the block
-    # fetched on demand.
-    raise newException(ValueError, "Only latest block is supported")
-
 template rpcClient(lcProxy: LightClientRpcProxy): RpcClient = lcProxy.proxy.getClient()
+
+proc getPayloadByTag(
+    proxy: LightClientRpcProxy,
+    quantityTag: string): ExecutionPayloadV1 {.raises: [ValueError, Defect].} =
+  checkPreconditions(proxy)
+
+  let tagResult = parseQuantityTag(quantityTag)
+
+  if tagResult.isErr:
+    raise newException(ValueError, tagResult.error)
+
+  let tag = tagResult.get()
+
+  var payload: ExecutionPayloadV1
+
+  case tag.kind
+  of LatestBlock:
+    # this will always be ok as we always validate that cache is not empty
+    payload = proxy.blockCache.latest.get
+  of BlockNumber:
+    let payLoadResult = proxy.blockCache.getByNumber(tag.blockNumber)
+    if payLoadResult.isErr():
+      raise newException(
+        ValueError, "Block not stored in cache " & $tag.blockNumber
+      )
+    payload = payLoadResult.get
+
+  return payload
 
 proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
   template payload(): Opt[ExecutionPayloadV1] = lcProxy.executionPayload
@@ -63,21 +118,17 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
   lcProxy.proxy.rpc("eth_blockNumber") do() -> HexQuantityStr:
     ## Returns the number of most recent block.
-    if payload.isNone:
-      raise newException(ValueError, "Syncing")
+    checkPreconditions(lcProxy)
 
-    return encodeQuantity(payload.get.blockNumber)
+    return encodeQuantity(lcProxy.blockCache.latest.get.blockNumber)
 
-  # TODO quantity tag should be better typed
   lcProxy.proxy.rpc("eth_getBalance") do(address: Address, quantityTag: string) -> HexQuantityStr:
-    checkPreconditions(payload, quantityTag)
-
     # When requesting state for `latest` block number, we need to translate
     # `latest` to actual block number as `latest` on proxy and on data provider
     # can mean different blocks and ultimatly piece received piece of state
     # must by validated against correct state root
     let
-      executionPayload = payload.get
+      executionPayload = lcProxy.getPayloadByTag(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding get_Balance", executionBn = blockNumber
@@ -100,10 +151,8 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
       raise newException(ValueError, accountResult.error)
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
-    checkPreconditions(payload, quantityTag)
-
     let
-      executionPayload = payload.get
+      executionPayload = lcProxy.getPayloadByTag(quantityTag)
       uslot = UInt256.fromHex(slot.string)
       blockNumber = executionPayload.blockNumber.uint64
 
@@ -132,10 +181,12 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 proc new*(
     T: type LightClientRpcProxy,
     proxy: RpcProxy,
+    blockCache: BlockCache,
     chainId: Quantity): T =
 
   return LightClientRpcProxy(
     proxy: proxy,
+    blockCache: blockCache,
     chainId: chainId
   )
 
