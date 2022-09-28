@@ -107,7 +107,6 @@ proc graphqlMain*() =
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:
-    disableParamFiltering()
     ctx.executeCases(caseFolder, purgeSchema = false)
 
 when isMainModule:

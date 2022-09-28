@@ -14,13 +14,11 @@
 
 import
   ../../../constants,
-  ../../../db/accounts_cache,
   ../../../errors,
   ../../../forks,
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../state,
   ../../types,
   ../gas_costs,
   ../gas_meter,
@@ -31,6 +29,11 @@ import
   eth/common,
   eth/common/eth_types,
   stint
+
+when not defined(evmc_enabled):
+  import
+    ../../state,
+    ../../../db/accounts_cache
 
 # ------------------------------------------------------------------------------
 # Private

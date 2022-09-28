@@ -84,7 +84,6 @@ macro cliBuilder*(stmtList: typed): untyped =
       const names = `moduleNames`
       quit(executeMyself(`moduleCount`, names))
     else:
-      disableParamFiltering()
       `caseStmt`
 
 # if you want to add new test module(s)

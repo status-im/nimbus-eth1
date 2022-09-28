@@ -255,5 +255,4 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-  disableParamFiltering()
   generalStateJsonMain(true)

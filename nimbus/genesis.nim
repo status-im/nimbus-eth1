@@ -13,8 +13,6 @@ import
 proc newStateDB*(db: TrieDatabaseRef, pruneTrie: bool): AccountStateDB =
   newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
-import debug
-
 proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table

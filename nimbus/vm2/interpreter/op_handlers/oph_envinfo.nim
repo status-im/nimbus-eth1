@@ -18,7 +18,6 @@ import
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../state,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -29,6 +28,9 @@ import
   sequtils,
   stint,
   strformat
+
+when not defined(evmc_enabled):
+  import ../../state
 
 # ------------------------------------------------------------------------------
 # Private helpers

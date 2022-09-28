@@ -17,7 +17,7 @@ proc `$`(nonce: BlockNonce): string =
 
 proc `$`(data: Blob): string =
   data.toHex
-  
+
 proc debug*(h: BlockHeader): string =
   result.add "parentHash : " & $h.parentHash  & "\n"
   result.add "ommersHash : " & $h.ommersHash  & "\n"

@@ -13,13 +13,11 @@
 ##
 
 import
-  ../../../db/accounts_cache,
   ../../../errors,
   ../../code_stream,
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../state,
   ../../types,
   ../gas_costs,
   ../gas_meter,
@@ -30,6 +28,11 @@ import
   eth/common,
   stint,
   strformat
+
+when not defined(evmc_enabled):
+  import
+    ../../state,
+    ../../../db/accounts_cache
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -288,6 +291,9 @@ const
     ##       on machine state during execution.
     discard
 
+#[
+  EIP-2315: temporary disabled
+  Reason  : not included in berlin hard fork
   beginSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5c, Marks the entry point to a subroutine
     raise newException(
@@ -327,6 +333,7 @@ const
 
     k.cpt.returnStack.add returnPC
     inc k.cpt.code.pc
+]#
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

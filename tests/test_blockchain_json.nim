@@ -327,7 +327,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
   for idx, testBlock in tester.blocks:
     if testBlock.goodBlock:
-      try:
+      #try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
             testBlock, chainDB, checkSeal, validation = false)
 
@@ -346,8 +346,8 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
             debugEcho "error message: ", res.error
             debugEcho "ttdReached: ", ttdReached
 
-      except:
-        debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
+      #except:
+        #debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
 
     else:
       var noError = true
@@ -537,7 +537,6 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-  disableParamFiltering()
   blockchainJsonMain(true)
 
 # lastBlockHash -> every fixture has it, hash of a block header

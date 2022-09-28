@@ -32,9 +32,6 @@ const
   prngSeed = 42
 
 type
-  SimpleTypePP = BlockNonce|EthAddress|Blob|BlockHeader
-  SeqTypePP = EthAddress|BlockHeader
-
   CliqueCfg* = ref object of RootRef
     db*: BaseChainDB ##\
       ## All purpose (incl. blockchain) database.

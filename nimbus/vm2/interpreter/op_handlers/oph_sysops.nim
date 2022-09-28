@@ -13,12 +13,10 @@
 ##
 
 import
-  ../../../db/accounts_cache,
   ../../../errors,
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../state,
   ../../types,
   ../gas_costs,
   ../gas_meter,
@@ -28,6 +26,11 @@ import
   ./oph_helpers,
   eth/common,
   stint
+
+when not defined(evmc_enabled):
+  import
+    ../../state,
+    ../../../db/accounts_cache
 
 # ------------------------------------------------------------------------------
 # Private

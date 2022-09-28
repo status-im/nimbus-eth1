@@ -15,7 +15,7 @@ import
   ../db/[db_chain, accounts_cache],
   ../errors,
   ../forks,
-  ../utils/[difficulty, ec_recover],
+  ../utils/[ec_recover],
   ./transaction_tracer,
   ./types,
   eth/[common, keys]

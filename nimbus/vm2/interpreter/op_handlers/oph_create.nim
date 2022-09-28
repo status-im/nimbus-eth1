@@ -20,7 +20,6 @@ import
   ../../computation,
   ../../memory,
   ../../stack,
-  ../../state,
   ../../types,
   ../gas_costs,
   ../gas_meter,
@@ -33,6 +32,11 @@ import
   eth/common/eth_types,
   stint,
   strformat
+
+when not defined(evmc_enabled):
+  import
+    ../../state,
+    ../../../db/accounts_cache
 
 # ------------------------------------------------------------------------------
 # Private helpers

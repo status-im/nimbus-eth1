@@ -15,12 +15,13 @@
 import
   ../../computation,
   ../../stack,
-  ../../state,
   ../op_codes,
   ./oph_defs,
   eth/common,
-  stint,
-  times
+  stint
+
+when not defined(evmc_enabled):
+  import ../../state
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

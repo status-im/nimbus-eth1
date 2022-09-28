@@ -13,9 +13,7 @@
 ##
 
 import
-  ../../../db/accounts_cache,
   ../../../errors,
-  ../../state,
   ../../types,
   ../gas_costs,
   ../gas_meter,
@@ -26,6 +24,10 @@ import
 
 when defined(evmc_enabled):
   import ../../evmc_api, ../../evmc_helpers, evmc/evmc
+else:
+  import
+    ../../state,
+    ../../../db/accounts_cache
 
 # ------------------------------------------------------------------------------
 # Public
