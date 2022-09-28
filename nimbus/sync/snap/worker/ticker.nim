@@ -16,7 +16,7 @@ import
   eth/[common/eth_types, p2p],
   stint,
   ../../../utils/prettify,
-  ../../timer_helper
+  ../../misc/timer_helper
 
 {.push raises: [Defect].}
 

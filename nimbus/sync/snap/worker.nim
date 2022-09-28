@@ -24,9 +24,9 @@ const
   usePivot2ok = false or true
 
 when usePivot2ok:
-  import ../pivot/best_pivot
+  import ../misc/best_pivot
 else:
-  import ../pivot/snap_pivot, ../../p2p/chain/chain_desc
+  import ../misc/snap_pivot, ../../p2p/chain/chain_desc
 
 {.push raises: [Defect].}
 
