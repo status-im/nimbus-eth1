@@ -168,15 +168,40 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     else:
       raise newException(ValueError, dataResult.error)
 
+  lcProxy.proxy.rpc("eth_getTransactionCount") do(address: Address, quantityTag: string) -> HexQuantityStr:
+    let
+      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      blockNumber = executionPayload.blockNumber.uint64
+
+    info "Forwarding eth_getTransactionCount", executionBn = blockNumber
+
+    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+
+    let accountResult = getAccountFromProof(
+      executionPayload.stateRoot,
+      proof.address,
+      proof.balance,
+      proof.nonce,
+      proof.codeHash,
+      proof.storageHash,
+      proof.accountProof
+    )
+
+    if accountResult.isOk():
+      return hexQuantityStr(encodeQuantity(accountResult.get.nonce))
+    else:
+      raise newException(ValueError, accountResult.error)
+
   # TODO This methods are forwarded directly to provider therefore thay are not
   # validated in any way
   lcProxy.proxy.registerProxyMethod("net_version")
   lcProxy.proxy.registerProxyMethod("eth_call")
+  lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
+  lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
-  # TODO cache blocks received from light client, and respond using them in this
-  # call. It would also enable handling of numerical `quantityTag` for the
-  # set of cached blocks
+  # TODO Respond to this calls using BlockCache
   lcProxy.proxy.registerProxyMethod("eth_getBlockByNumber")
+  lcProxy.proxy.registerProxyMethod("eth_getBlockByHash")
 
 proc new*(
     T: type LightClientRpcProxy,
