@@ -149,6 +149,45 @@ func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
   except RlpError as e:
     return err("Invalid header, number " & $blockData.number & ": " & e.msg)
 
+func readHeaderData*(
+    hash: string, blockData: BlockData, verify = false):
+    Result[(ContentKey, seq[byte]), string] =
+  var blockHash: BlockHash
+  try:
+    blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+  except ValueError as e:
+    return err("Invalid hex for blockhash, number " &
+      $blockData.number & ": " & e.msg)
+
+  let contentKeyType =
+    BlockKey(blockHash: blockHash)
+
+  try:
+    # If wanted the hash for the corresponding header can be verified
+    if verify:
+      if keccakHash(blockData.header.hexToSeqByte()) != blockHash:
+        return err("Data is not matching hash, number " & $blockData.number)
+
+    let contentKey = ContentKey(
+      contentType: blockHeader,
+      blockHeaderKey: contentKeyType)
+
+    let res = (contentKey, blockData.header.hexToSeqByte())
+    return ok(res)
+
+  except ValueError as e:
+    return err("Invalid hex data, number " & $blockData.number & ": " & e.msg)
+
+iterator headers*(
+    blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
+  for k,v in blockData:
+    let res = readHeaderData(k, v, verify)
+
+    if res.isOk():
+      yield res.get()
+    else:
+      error "Failed reading header from block data", error = res.error
+
 proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   let params =
     try:

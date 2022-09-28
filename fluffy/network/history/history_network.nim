@@ -753,32 +753,44 @@ proc new*(
     contentQueue: cq
   )
 
+proc validateContent(
+    n: HistoryNetwork,
+    contentKeys: ContentKeysList,
+    contentItems: seq[seq[byte]]): Future[bool] {.async.} =
+  # content passed here can have less items then contentKeys, but not more.
+  for i, contentItem in contentItems:
+    let contentKey = contentKeys[i]
+    if await n.validateContent(contentItem, contentKey):
+      let contentIdOpt = n.portalProtocol.toContentId(contentKey)
+      if contentIdOpt.isNone():
+        error "Received offered content with invalid content key", contentKey
+        return false
+
+      let contentId = contentIdOpt.get()
+
+      n.portalProtocol.storeContent(contentId, contentItem)
+
+      info "Received offered content validated successfully", contentKey
+
+    else:
+      error "Received offered content failed validation", contentKey
+      return false
+
+  return true
+
 proc processContentLoop(n: HistoryNetwork) {.async.} =
   try:
     while true:
       let (contentKeys, contentItems) =
         await n.contentQueue.popFirst()
 
-      # content passed here can have less items then contentKeys, but not more.
-      for i, contentItem in contentItems:
-        let contentKey = contentKeys[i]
-        if await n.validateContent(contentItem, contentKey):
-          let contentIdOpt = n.portalProtocol.toContentId(contentKey)
-          if contentIdOpt.isNone():
-            continue
+      # When there is one invalid content item, all other content items are
+      # dropped and not gossiped around.
+      # TODO: Differentiate between failures due to invalid data and failures
+      # due to missing network data for validation.
+      if await n.validateContent(contentKeys, contentItems):
+        asyncSpawn n.portalProtocol.neighborhoodGossip(contentKeys, contentItems)
 
-          let contentId = contentIdOpt.get()
-
-          n.portalProtocol.storeContent(contentId, contentItem)
-
-          info "Received offered content validated successfully", contentKey
-        else:
-          error "Received offered content failed validation", contentKey
-          # On one invalid piece of content we drop all and don't forward any of it
-          # TODO: Could also filter it out and still gossip the rest.
-          continue
-
-      asyncSpawn n.portalProtocol.neighborhoodGossip(contentKeys, contentItems)
   except CancelledError:
     trace "processContentLoop canceled"
 
