@@ -127,7 +127,13 @@ proc historyPropagate*(
   let blockData = readJsonType(dataFile, BlockDataTable)
   if blockData.isOk():
     for b in blocks(blockData.get(), verify):
-      for value in b:
+      for i, value in b:
+        if i == 0:
+          # Note: Skipping propagation of headers here as they should be offered
+          # separately to be certain that bodies and receipts can be verified.
+          # TODO: Rename this chain of calls to be more clear about this and
+          # adjust the interator call.
+          continue
         # Only sending non empty data, e.g. empty receipts are not send
         # TODO: Could do a similar thing for a combination of empty
         # txs and empty uncles, as then the serialization is always the same.
@@ -172,3 +178,36 @@ proc historyPropagateBlock*(
     return ok()
   else:
     return err(blockDataTable.error)
+
+proc historyPropagateHeaders*(
+    p: PortalProtocol, dataFile: string, verify = false):
+    Future[Result[void, string]] {.async.} =
+  # TODO: Should perhaps be integrated with `historyPropagate` call.
+  const concurrentGossips = 20
+
+  var gossipQueue =
+    newAsyncQueue[(ContentKeysList, seq[byte])](concurrentGossips)
+  var gossipWorkers: seq[Future[void]]
+
+  proc gossipWorker(p: PortalProtocol) {.async.} =
+    while true:
+      let (keys, content) = await gossipQueue.popFirst()
+
+      await p.neighborhoodGossip(keys, @[content])
+
+  for i in 0 ..< concurrentGossips:
+    gossipWorkers.add(gossipWorker(p))
+
+  let blockData = readJsonType(dataFile, BlockDataTable)
+  if blockData.isOk():
+    for header in headers(blockData.get(), verify):
+      info "Seeding header content into the network", contentKey = header[0]
+      let contentId = history_content.toContentId(header[0])
+      p.storeContent(contentId, header[1])
+
+      await gossipQueue.addLast(
+        (ContentKeysList(@[encode(header[0])]), header[1]))
+
+    return ok()
+  else:
+    return err(blockData.error)
