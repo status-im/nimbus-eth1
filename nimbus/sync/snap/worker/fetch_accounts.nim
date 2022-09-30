@@ -25,11 +25,13 @@ when snapAccountsDumpEnable:
 
 {.push raises: [Defect].}
 
-
 logScope:
   topics = "snap-fetch"
 
 const
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
+
   maxTimeoutErrors = 2
     ## maximal number of non-resonses accepted in a row
 
@@ -171,7 +173,7 @@ proc stopAfterError(
      ComAccountsMinTooSmall,
      ComAccountsMaxTooLarge:
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
-    buddy.data.stats.major.networkErrors.inc()
+    # buddy.data.stats.major.networkErrors.inc()
     buddy.ctrl.zombie = true
     return true
 
@@ -308,14 +310,21 @@ proc fetchAndImportStorageSlots(
 
       if rc.isErr:
         # Push back parts of the error item
+        var once = false
         for w in rc.error:
           if 0 <= w[0]:
             # Reset any partial requests by not copying the `firstSlot` field.
             # So all the storage slots are re-fetched completely for this
             # account.
-            stoRange.addLeftOver AccountSlotsHeader(
-              accHash:     stoRange.data.storages[w[0]].account.accHash,
-              storageRoot: stoRange.data.storages[w[0]].account.storageRoot)
+            stoRange.addLeftOver(
+              @[AccountSlotsHeader(
+                accHash:     stoRange.data.storages[w[0]].account.accHash,
+                storageRoot: stoRange.data.storages[w[0]].account.storageRoot)],
+              forceNew = not once)
+            once = true
+        # Do not ask for the same entries again on this `peer`
+        if once:
+          buddy.data.vetoSlots.incl stoRange.leftOver[^1]
 
         if rc.error[^1][0] < 0:
           discard
@@ -323,7 +332,6 @@ proc fetchAndImportStorageSlots(
 
   # Return the remaining part to be processed later
   return ok(stoRange.leftOver)
-
 
 proc processStorageSlots(
     buddy: SnapBuddyRef;
@@ -340,11 +348,15 @@ proc processStorageSlots(
 
   while true:
     # Pull out the next request item from the queue
-    let req = block:
-      let rc = env.leftOver.shift
-      if rc.isErr:
-        return ok()
-      rc.value
+    var req: SnapSlotQueueItemRef
+    block getNextAvailableItem:
+      for w in env.leftOver.nextKeys:
+        # Make sure that this item was not fetched for, already
+        if w notin buddy.data.vetoSlots:
+          env.leftOver.del(w)
+          req = w
+          break getNextAvailableItem
+      return ok()
 
     block:
       # Fetch and store account storage slots. On some sort of success,
@@ -394,33 +406,48 @@ proc accountsTrieHealing(
     trace "Accounts healing loop", peer, repairState=env.repairState,
       envSource, nDangling=env.dangling.len
 
-    let needNodes = block:
+    var needNodes: seq[Blob]
+    block getDanglingNodes:
       let rc = ctx.data.accountsDb.inspectAccountsTrie(
         peer, stateRoot, env.dangling)
-      if rc.isErr:
-        let error = rc.error
-        trace "Accounts healing failed", peer, repairState=env.repairState,
-          envSource, nDangling=env.dangling.len, error
-        return err(ComInspectDbFailed)
-      rc.value.dangling
+      if rc.isOk:
+        needNodes = rc.value.dangling
+        break getDanglingNodes
+      let error = rc.error
+      if error == TrieIsEmpty and env.dangling.len == 0:
+        when extraTraceMessages:
+          trace "Accounts healing on empty trie", peer,
+            repairState=env.repairState, envSource
+        return ok()
+      trace "Accounts healing failed", peer, repairState=env.repairState,
+        envSource, nDangling=env.dangling.len, error
+      return err(ComInspectDbFailed)
 
-    # Clear dangling nodes register so that other processes would not fetch
+    # Update dangling nodes register so that other processes would not fetch
     # the same list simultaneously.
-    env.dangling.setLen(0)
+    if maxTrieNodeFetch < needNodes.len:
+      # No point in processing more at the same time. So leave the rest on
+      # the `dangling` queue.
+      env.dangling = needNodes[maxTrieNodeFetch ..< needNodes.len]
+      needNodes.setLen(maxTrieNodeFetch)
+    else:
+      env.dangling.setLen(0)
 
     # Noting to anymore
     if needNodes.len == 0:
       if env.repairState != Pristine:
         env.repairState = Done
-      trace "Done accounts healing for now", peer, repairState=env.repairState,
-        envSource, nDangling=env.dangling.len
+      when extraTraceMessages:
+        trace "Done accounts healing for now", peer,
+          repairState=env.repairState, envSource, nDangling=env.dangling.len
       return ok()
 
     let lastState = env.repairState
     env.repairState = KeepGoing
 
-    trace "Need nodes for healing", peer, repairState=env.repairState,
-      envSource, nDangling=env.dangling.len, nNodes=needNodes.len
+    when extraTraceMessages:
+      trace "Need nodes for healing", peer, repairState=env.repairState,
+        envSource, nDangling=env.dangling.len, nNodes=needNodes.len
 
     # Fetch nodes
     let dd = block:
@@ -479,8 +506,9 @@ proc fetchAccounts*(buddy: SnapBuddyRef) {.async.} =
         break processAccountsFrame
       rc.value
 
-    trace "Start fetching accounts", peer, stateRoot, iv,
-      repairState=env.repairState
+    when extraTraceMessages:
+      trace "Start fetching accounts", peer, stateRoot, iv,
+        repairState=env.repairState
 
     # Process received accounts and stash storage slots to fetch later
     block:
@@ -496,8 +524,9 @@ proc fetchAccounts*(buddy: SnapBuddyRef) {.async.} =
 
     # End `block processAccountsFrame`
 
-  trace "Start fetching storages", peer, nAccounts=env.leftOver.len,
-    repairState=env.repairState
+  when extraTraceMessages:
+    trace "Start fetching storages", peer, nAccounts=env.leftOver.len,
+      nVetoSlots=buddy.data.vetoSlots.len, repairState=env.repairState
 
   # Process storage slots from environment batch
   block:
@@ -514,20 +543,23 @@ proc fetchAccounts*(buddy: SnapBuddyRef) {.async.} =
   # Patricia Merkle Tree healing.
   for w in healingEnvs:
     let envSource = if env == ctx.data.pivotEnv: "pivot" else: "retro"
-    trace "Start accounts healing", peer, repairState=env.repairState,
-      envSource, dangling=w.dangling.len
+    when extraTraceMessages:
+      trace "Start accounts healing", peer, repairState=env.repairState,
+        envSource, dangling=w.dangling.len
 
     let rc = await buddy.accountsTrieHealing(w, envSource)
     if rc.isErr:
       let error = rc.error
       if await buddy.stopAfterError(error):
         buddy.dumpEnd()                     # FIXME: Debugging (will go away)
-        trace "Stop fetching cycle", peer, repairState=env.repairState,
-          processing="healing", dangling=w.dangling.len, error
+        when extraTraceMessages:
+          trace "Stop fetching cycle", peer, repairState=env.repairState,
+            processing="healing", dangling=w.dangling.len, error
         return
 
   buddy.dumpEnd()                           # FIXME: Debugging (will go away)
-  trace "Done fetching cycle", peer, repairState=env.repairState
+  when extraTraceMessages:
+    trace "Done fetching cycle", peer, repairState=env.repairState
 
 # ------------------------------------------------------------------------------
 # End

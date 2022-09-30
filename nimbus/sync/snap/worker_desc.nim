@@ -25,7 +25,7 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  maxPivotBlockWindow* = 50
+  maxPivotBlockWindow* = 128
     ## The maximal depth of two block headers. If the pivot block header
     ## (containing the current state root) is more than this many blocks
     ## away from a new pivot block header candidate, then the latter one
@@ -33,6 +33,13 @@ const
     ##
     ## This mechanism applies to new worker buddies which start by finding
     ## a new pivot.
+
+  maxTrieNodeFetch* = 1024
+    ## Informal maximal number of trie nodes to fetch at once. This is nor
+    ## an official limit but found on several implementations (e.g. geth.)
+    ##
+    ## Resticting the fetch list length early allows to better paralellise
+    ## healing.
 
   switchPivotAfterCoverage* = 1.0 # * 0.30
     ## Stop fetching from the same pivot state root with this much coverage
@@ -61,25 +68,7 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerPivotBase* = ref object of RootObj
-    ## Stub object, to be inherited in file `worker.nim`
-
   BuddyStat* = distinct uint
-
-  SnapBuddyStats* = tuple
-    ## Statistics counters for events associated with this peer.
-    ## These may be used to recognise errors and select good peers.
-    ok: tuple[
-      reorgDetected:       BuddyStat,
-      getBlockHeaders:     BuddyStat,
-      getNodeData:         BuddyStat]
-    minor: tuple[
-      timeoutBlockHeaders: BuddyStat,
-      unexpectedBlockHash: BuddyStat]
-    major: tuple[
-      networkErrors:       BuddyStat,
-      excessBlockHeaders:  BuddyStat,
-      wrongBlockHeader:    BuddyStat]
 
   SnapBuddyErrors* = tuple
     ## particular error counters so connections will not be cut immediately
@@ -101,6 +90,9 @@ type
     ## This construct is the is a nested queue rather than a flat one because
     ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
     ## effective sub-range specification (later ones will be ignored.)
+
+  SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
+    ## Ditto but without order, to be used as veto set
 
   SnapRepairState* = enum
     Pristine                           ## Not initialised yet
@@ -126,11 +118,9 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    stats*: SnapBuddyStats             ## Statistics counters
     errors*: SnapBuddyErrors           ## For error handling
-    pivotHeader*: Option[BlockHeader]  ## For pivot state hunter
-    pivot2Header*: Option[BlockHeader] ## Alternative header
-    workerPivot*: WorkerPivotBase      ## Opaque object reference for sub-module
+    workerPivot*: RootRef              ## Opaque object reference for sub-module
+    vetoSlots*: SnapSlotsSet           ## Do not ask for these slots, again
 
   BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
     ## All buddies call back (the argument type is defined below with
@@ -147,13 +137,10 @@ type
     pivotCount*: uint64                ## Total of all created tab entries
     pivotEnv*: SnapPivotRef            ## Environment containing state root
     prevEnv*: SnapPivotRef             ## Previous state root environment
+    pivotData*: RootRef                ## Opaque object reference for sub-module
     accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
     accountsDb*: AccountsDbRef         ## Proof processing for accounts
     runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
-    # --------
-    untrusted*: seq[Peer]              ## Clean up list (pivot2)
-    trusted*: HashSet[Peer]            ## Peers ready for delivery (pivot2)
-    # --------
     when snapAccountsDumpEnable:
       proofDumpOk*: bool
       proofDumpFile*: File

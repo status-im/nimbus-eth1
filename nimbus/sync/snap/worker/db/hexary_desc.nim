@@ -135,8 +135,9 @@ type
 
   TrieNodeStat* = object
     ## Trie inspection report
-    stoppedAt*: int                 ## Potential loop dedected if positive
     dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
+    level*: int                     ## Maximim nesting depth of dangling nodes
+    stopped*: bool                  ## Potential loop detected if `true`
 
   HexaryTreeDbRef* = ref object
     ## Hexary trie plus helper structures
@@ -327,10 +328,10 @@ proc pp*(db: HexaryTreeDbRef; indent=4): string =
   db.ppImpl(NodeKey.default).join(indent.toPfx)
 
 proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
-  "(" &
-    $a.stoppedAt & "," &
-    $a.dangling.len & "," &
-    a.dangling.ppDangling(maxItems) & ")"
+  result = "(" & $a.level & ","
+  if a.stopped:
+    result &= "stopped,"
+  result &= $a.dangling.len & "," & a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)

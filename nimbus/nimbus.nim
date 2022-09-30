@@ -148,7 +148,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
     of SyncMode.Full:
-      FullSyncRef.init(nimbus.ethNode, conf.maxPeers, tickerOK).start
+      FullSyncRef.init(nimbus.ethNode, nimbus.ctx.rng, conf.maxPeers,
+                       tickerOK).start
     of SyncMode.Snap:
       SnapSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
                        conf.maxPeers, nimbus.dbBackend, tickerOK).start

@@ -10,12 +10,19 @@
 
 import
   std/[hashes, sequtils, sets, tables],
+  chronicles,
   eth/[common/eth_types_rlp, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_paths]
 
 {.push raises: [Defect].}
+
+logScope:
+  topics = "snap-db"
+
+const
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -196,12 +203,8 @@ proc hexaryInspectTrie*(
   if not db.tab.hasKey(rootKey):
     return TrieNodeStat()
 
-  var
-    reVisit = newTable[RepairKey,NibblesSeq]()
-    rcValue: TrieNodeStat
-    level = 0
-
   # Initialise TODO list
+  var reVisit = newTable[RepairKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[rootKey] = EmptyNibbleRange
   else:
@@ -213,8 +216,8 @@ proc hexaryInspectTrie*(
           reVisit[rc.value] = nibbles
 
   while 0 < reVisit.len:
-    if stopAtLevel < level:
-      rcValue.stoppedAt = level
+    if stopAtLevel < result.level:
+      result.stopped = true
       break
 
     let again = newTable[RepairKey,NibblesSeq]()
@@ -229,23 +232,21 @@ proc hexaryInspectTrie*(
         let
           trail = parentTrail & node.ePfx
           child = node.eLink
-        db.processLink(stats=rcValue, inspect=again, parent, trail, child)
+        db.processLink(stats=result, inspect=again, parent, trail, child)
       of Branch:
         for n in 0 ..< 16:
           let
             trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
             child = node.bLink[n]
-          db.processLink(stats=rcValue, inspect=again, parent, trail, child)
+          db.processLink(stats=result, inspect=again, parent, trail, child)
       of Leaf:
         # Done with this link, forget the key
         discard
       # End `for`
 
-    level.inc  
+    result.level.inc
     reVisit = again
     # End while
-
-  return rcValue
 
 
 proc hexaryInspectTrie*(
@@ -255,17 +256,13 @@ proc hexaryInspectTrie*(
     stopAtLevel = 32;              ## Instead of loop detector
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,RlpError,KeyError]} =
-  ## Varianl of `hexaryInspectTrie()` for persistent database.
+  ## Variant of `hexaryInspectTrie()` for persistent database.
   ##
   if root.to(Blob).getFn().len == 0:
     return TrieNodeStat()
 
-  var
-    reVisit = newTable[NodeKey,NibblesSeq]()
-    rcValue: TrieNodeStat
-    level = 0
-
   # Initialise TODO list
+  var reVisit = newTable[NodeKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[root] = EmptyNibbleRange
   else:
@@ -276,10 +273,17 @@ proc hexaryInspectTrie*(
         if rc.isOk:
           reVisit[rc.value] = nibbles
 
+  when extraTraceMessages:
+    trace "Hexary inspect start", nPaths=paths.len, reVisit=reVisit.len
+
   while 0 < reVisit.len:
-    if stopAtLevel < level:
-      rcValue.stoppedAt = level
+    if stopAtLevel < result.level:
+      result.stopped = true
       break
+
+    when extraTraceMessages:
+      trace "Hexary inspect processing", level=result.level,
+        reVisit=reVisit.len, dangling=result.dangling.len
 
     let again = newTable[NodeKey,NibblesSeq]()
 
@@ -292,23 +296,25 @@ proc hexaryInspectTrie*(
           let
             trail = parentTrail & ePfx
             child = nodeRlp.listElem(1)
-          getFn.processLink(stats=rcValue, inspect=again, parent, trail, child)
+          getFn.processLink(stats=result, inspect=again, parent, trail, child)
       of 17:
         for n in 0 ..< 16:
           let
             trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
             child = nodeRlp.listElem(n)
-          getFn.processLink(stats=rcValue, inspect=again, parent, trail, child)
+          getFn.processLink(stats=result, inspect=again, parent, trail, child)
       else:
         # Done with this link, forget the key
         discard
       # End `for`
 
-    level.inc
+    result.level.inc
     reVisit = again
     # End while
 
-  return rcValue
+  when extraTraceMessages:
+    trace "Hexary inspect finished", level=result.level, maxLevel=stopAtLevel,
+      reVisit=reVisit.len, dangling=result.dangling.len, stopped=result.stopped
 
 # ------------------------------------------------------------------------------
 # End

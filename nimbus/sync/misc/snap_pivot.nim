@@ -63,14 +63,11 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p, p2p/private/p2p_types],
-  "../../.."/[constants, genesis, p2p/chain/chain_desc],
-  "../.."/[protocol, sync_desc, types],
-  ../worker_desc
+  "../.."/[constants, genesis, p2p/chain/chain_desc],
+  ".."/[protocol, sync_desc, types],
+  ../snap/worker_desc
 
 {.push raises: [Defect].}
-
-export
-  worker_desc
 
 logScope:
   topics = "snap-pivot"
@@ -121,14 +118,38 @@ type
     HuntRange
     HuntRangeFinal
 
-  WorkerHuntEx = ref object of WorkerPivotBase
+  SnapWorkerStats* = tuple
+    ## Statistics counters for events associated with this peer.
+    ## These may be used to recognise errors and select good peers.
+    ok: tuple[
+      reorgDetected:       BuddyStat,
+      getBlockHeaders:     BuddyStat,
+      getNodeData:         BuddyStat]
+    minor: tuple[
+      timeoutBlockHeaders: BuddyStat,
+      unexpectedBlockHash: BuddyStat]
+    major: tuple[
+      networkErrors:       BuddyStat,
+      excessBlockHeaders:  BuddyStat,
+      wrongBlockHeader:    BuddyStat]
+
+  SnapPivotCtxRef* = ref object of RootRef
+    stats*:     SnapWorkerStats     ## Statistics counters
+    ctx:        SnapCtxRef          ## For debugging
+    chain:      Chain               ## Block chain database
+
+  SnapPivotWorkerRef* = ref object of RootRef
     ## Peer canonical chain head ("best block") search state.
-    syncMode:      WorkerMode    ## Action mode
-    lowNumber:     BlockNumber   ## Recent lowest known block number.
-    highNumber:    BlockNumber   ## Recent highest known block number.
-    bestNumber:    BlockNumber
-    bestHash:      BlockHash
-    step:          uint
+    header:     Option[BlockHeader] ## Pivot header (if any)
+    syncMode:   WorkerMode          ## Action mode
+    lowNumber:  BlockNumber         ## Recent lowest known block number.
+    highNumber: BlockNumber         ## Recent highest known block number.
+    bestNumber: BlockNumber
+    bestHash:   BlockHash
+    step:       uint
+    global:     SnapPivotCtxRef
+    peer:       Peer                ## Current network peer
+    ctrl:       BuddyCtrlRef        ## Worker control start/stop
 
 static:
   doAssert syncLockedMinimumReply >= 2
@@ -143,148 +164,132 @@ static:
   doAssert 66 <= protocol.ethVersion
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc hunt(buddy: SnapBuddyRef): WorkerHuntEx =
-  buddy.data.workerPivot.WorkerHuntEx
-
-proc `hunt=`(buddy: SnapBuddyRef; value: WorkerHuntEx) =
-  buddy.data.workerPivot = value
-
-proc new(T: type WorkerHuntEx; syncMode: WorkerMode): T =
-  T(syncMode:   syncMode,
-    lowNumber:  0.toBlockNumber.BlockNumber,
-    highNumber: high(BlockNumber).BlockNumber, # maximum uncertainty range.
-    bestNumber: 0.toBlockNumber.BlockNumber,
-    bestHash:   ZERO_HASH256.BlockHash,        # whatever
-    step:       0u)
-
-# ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-proc traceSyncLocked(buddy: SnapBuddyRef, num: BlockNumber, hash: BlockHash) =
+proc traceSyncLocked(
+    sp: SnapPivotWorkerRef;
+    num: BlockNumber;
+    hash: BlockHash;
+      ) =
   ## Trace messages when peer canonical head is confirmed or updated.
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
-    bestBlock = ctx.pp(hash, num)
-  if buddy.hunt.syncMode != SyncLocked:
+    peer = sp.peer
+    bestBlock = sp.global.ctx.pp(hash, num)
+  if sp.syncMode != SyncLocked:
     debug "Now tracking chain head of peer", peer,
       bestBlock
-  elif num > buddy.hunt.bestNumber:
-    if num == buddy.hunt.bestNumber + 1:
+  elif num > sp.bestNumber:
+    if num == sp.bestNumber + 1:
       debug "Peer chain head advanced one block", peer,
         advance=1, bestBlock
     else:
       debug "Peer chain head advanced some blocks", peer,
-        advance=(buddy.hunt.bestNumber - num), bestBlock
-  elif num < buddy.hunt.bestNumber or hash != buddy.hunt.bestHash:
+        advance=(sp.bestNumber - num), bestBlock
+  elif num < sp.bestNumber or hash != sp.bestHash:
     debug "Peer chain head reorg detected", peer,
-      advance=(buddy.hunt.bestNumber - num), bestBlock
+      advance=(sp.bestNumber - num), bestBlock
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc clearSyncStateRoot(buddy: SnapBuddyRef) =
-  if buddy.data.pivotHeader.isSome:
-    debug "Stopping state sync from this peer", peer=buddy.peer
-    buddy.data.pivotHeader = none(BlockHeader)
+proc clearSyncStateRoot(sp: SnapPivotWorkerRef) =
+  if sp.header.isSome:
+    debug "Stopping state sync from this peer", peer=sp.peer
+    sp.header = none(BlockHeader)
 
-proc lockSyncStateAndFetch(buddy: SnapBuddyRef; header: BlockHeader) =
+proc lockSyncStateAndFetch(sp: SnapPivotWorkerRef; header: BlockHeader) =
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
+    peer = sp.peer
     stateRoot = header.stateRoot
     hash = header.blockHash.BlockHash
-    thisBlock = ctx.pp(hash, header.blockNumber)
+    thisBlock = sp.global.ctx.pp(hash, header.blockNumber)
 
-  buddy.traceSyncLocked(header.blockNumber, hash)
-  buddy.hunt.bestNumber = header.blockNumber
-  buddy.hunt.bestHash = hash
-  buddy.hunt.syncMode = SyncLocked
+  sp.traceSyncLocked(header.blockNumber, hash)
+  sp.bestNumber = header.blockNumber
+  sp.bestHash = hash
+  sp.syncMode = SyncLocked
 
-  if buddy.data.pivotHeader.isNone:
+  if sp.header.isNone:
     debug "Starting state sync from this peer", peer, thisBlock, stateRoot
-  elif buddy.data.pivotHeader.unsafeGet.stateRoot != stateRoot:
+  elif sp.header.unsafeGet.stateRoot != stateRoot:
     trace "Adjusting state sync root from this peer", peer, thisBlock, stateRoot
 
-  buddy.data.pivotHeader = some(header)
+  sp.header = some(header)
 
-proc setHuntBackward(buddy: SnapBuddyRef, lowestAbsent: BlockNumber) =
+proc setHuntBackward(sp: SnapPivotWorkerRef, lowestAbsent: BlockNumber) =
   ## Start exponential search mode backward due to new uncertainty.
-  buddy.hunt.syncMode = HuntBackward
-  buddy.hunt.step = 0
+  sp.syncMode = HuntBackward
+  sp.step = 0
   # Block zero is always present.
-  buddy.hunt.lowNumber = 0.toBlockNumber
+  sp.lowNumber = 0.toBlockNumber
   # Zero `lowestAbsent` is never correct, but an incorrect peer could send it.
-  buddy.hunt.highNumber =
+  sp.highNumber =
           if lowestAbsent > 0: lowestAbsent
           else: 1.toBlockNumber
-  buddy.clearSyncStateRoot()
+  sp.clearSyncStateRoot()
 
-proc setHuntForward(buddy: SnapBuddyRef, highestPresent: BlockNumber) =
+proc setHuntForward(sp: SnapPivotWorkerRef, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
-  buddy.hunt.syncMode = HuntForward
-  buddy.hunt.step = 0
-  buddy.hunt.lowNumber = highestPresent
-  buddy.hunt.highNumber = high(BlockNumber)
-  buddy.clearSyncStateRoot()
+  sp.syncMode = HuntForward
+  sp.step = 0
+  sp.lowNumber = highestPresent
+  sp.highNumber = high(BlockNumber)
+  sp.clearSyncStateRoot()
 
-proc updateHuntAbsent(buddy: SnapBuddyRef, lowestAbsent: BlockNumber) =
+proc updateHuntAbsent(sp: SnapPivotWorkerRef, lowestAbsent: BlockNumber) =
   ## Converge uncertainty range backward.
-  if lowestAbsent < buddy.hunt.highNumber:
-    buddy.hunt.highNumber = lowestAbsent
+  if lowestAbsent < sp.highNumber:
+    sp.highNumber = lowestAbsent
     # If uncertainty range has moved outside the search window, change to hunt
     # backward to block zero.  Note that empty uncertainty range is allowed
     # (empty range is `hunt.lowNumber + 1 == hunt.highNumber`).
-    if buddy.hunt.highNumber <= buddy.hunt.lowNumber:
-      buddy.setHuntBackward(lowestAbsent)
-  buddy.clearSyncStateRoot()
+    if sp.highNumber <= sp.lowNumber:
+      sp.setHuntBackward(lowestAbsent)
+  sp.clearSyncStateRoot()
 
-proc updateHuntPresent(buddy: SnapBuddyRef, highestPresent: BlockNumber) =
+proc updateHuntPresent(sp: SnapPivotWorkerRef, highestPresent: BlockNumber) =
   ## Converge uncertainty range forward.
-  if highestPresent > buddy.hunt.lowNumber:
-    buddy.hunt.lowNumber = highestPresent
+  if highestPresent > sp.lowNumber:
+    sp.lowNumber = highestPresent
     # If uncertainty range has moved outside the search window, change to hunt
     # forward to no upper limit.  Note that empty uncertainty range is allowed
     # (empty range is `hunt.lowNumber + 1 == hunt.highNumber`).
-    if buddy.hunt.lowNumber >= buddy.hunt.highNumber:
-      buddy.setHuntForward(highestPresent)
-  buddy.clearSyncStateRoot()
+    if sp.lowNumber >= sp.highNumber:
+      sp.setHuntForward(highestPresent)
+  sp.clearSyncStateRoot()
 
 # ------------------------------------------------------------------------------
 # Private functions, assemble request
 # ------------------------------------------------------------------------------
 
-proc peerSyncChainRequest(buddy: SnapBuddyRef): BlocksRequest =
+proc peerSyncChainRequest(sp: SnapPivotWorkerRef): BlocksRequest =
   ## Choose `GetBlockHeaders` parameters when hunting or following the canonical
   ## chain of a peer.
-  if buddy.hunt.syncMode == SyncLocked:
+  if sp.syncMode == SyncLocked:
     # Stable and locked.  This is just checking for changes including reorgs.
-    # `buddy.hunt.bestNumber` was recently the head of the peer's canonical
+    # `sp.bestNumber` was recently the head of the peer's canonical
     # chain.  We must include this block number to detect when the canonical
     # chain gets shorter versus no change.
     result.startBlock.number =
-        if buddy.hunt.bestNumber <= syncLockedQueryOverlap:
+        if sp.bestNumber <= syncLockedQueryOverlap:
           # Every peer should send genesis for block 0, so don't ask for it.
           # `peerSyncChainEmptyReply` has logic to handle this reply as if it
           # was for block 0.  Aside from saving bytes, this is more robust if
           # some client doesn't do genesis reply correctly.
           1.toBlockNumber
         else:
-          min(buddy.hunt.bestNumber - syncLockedQueryOverlap.toBlockNumber,
+          min(sp.bestNumber - syncLockedQueryOverlap.toBlockNumber,
               high(BlockNumber) - (syncLockedQuerySize - 1).toBlockNumber)
     result.maxResults = syncLockedQuerySize
     return
 
-  if buddy.hunt.syncMode == SyncOnlyHash:
+  if sp.syncMode == SyncOnlyHash:
     # We only have the hash of the recent head of the peer's canonical chain.
     # Like `SyncLocked`, query more than one item to detect when the
     # canonical chain gets shorter, no change or longer.
-    result.startBlock = buddy.hunt.bestHash.to(HashOrNum)
+    result.startBlock = sp.bestHash.to(HashOrNum)
     result.maxResults = syncLockedQuerySize
     return
 
@@ -322,9 +327,9 @@ proc peerSyncChainRequest(buddy: SnapBuddyRef): BlocksRequest =
   var maxStep = 0u
 
   let fullRangeClamped =
-    if buddy.hunt.highNumber <= buddy.hunt.lowNumber: 0u
+    if sp.highNumber <= sp.lowNumber: 0u
     else: min(high(uint).toBlockNumber,
-              buddy.hunt.highNumber - buddy.hunt.lowNumber).truncate(uint) - 1
+              sp.highNumber - sp.lowNumber).truncate(uint) - 1
 
   if fullRangeClamped >= huntFinalSize: # `HuntRangeFinal` condition.
     maxStep = if huntQuerySize == 1:
@@ -338,28 +343,28 @@ proc peerSyncChainRequest(buddy: SnapBuddyRef): BlocksRequest =
 
   # Check for exponential search (expanding).  Iterate `hunt.step`.  O(log N)
   # requires `startBlock` to be offset from `hunt.lowNumber`/`hunt.highNumber`.
-  if buddy.hunt.syncMode in {HuntForward, HuntBackward} and
+  if sp.syncMode in {HuntForward, HuntBackward} and
      fullRangeClamped >= huntFinalSize:
-    let forward = buddy.hunt.syncMode == HuntForward
+    let forward = sp.syncMode == HuntForward
     let expandShift = if forward: huntForwardExpandShift
                       else: huntBackwardExpandShift
     # Switches to range search when this condition is no longer true.
-    if buddy.hunt.step < maxStep shr expandShift:
+    if sp.step < maxStep shr expandShift:
       # The `if` above means the next line cannot overflow.
-      buddy.hunt.step = if buddy.hunt.step > 0: buddy.hunt.step shl expandShift
+      sp.step = if sp.step > 0: sp.step shl expandShift
                         else: 1
       # Satisfy the O(log N) convergence conditions.
       result.startBlock.number =
-        if forward: buddy.hunt.lowNumber + buddy.hunt.step.toBlockNumber
-        else: buddy.hunt.highNumber -
-                 (buddy.hunt.step * huntQuerySize).toBlockNumber
+        if forward: sp.lowNumber + sp.step.toBlockNumber
+        else: sp.highNumber -
+                 (sp.step * huntQuerySize).toBlockNumber
       result.maxResults = huntQuerySize
-      result.skip = buddy.hunt.step - 1
+      result.skip = sp.step - 1
       return
 
   # For tracing/display.
-  buddy.hunt.step = maxStep
-  buddy.hunt.syncMode = HuntRange
+  sp.step = maxStep
+  sp.syncMode = HuntRange
   if maxStep > 0:
     # Quasi-binary search (converging in a range).  O(log N) requires
     # `startBlock` to satisfy the constraints described above, with the
@@ -369,7 +374,7 @@ proc peerSyncChainRequest(buddy: SnapBuddyRef): BlocksRequest =
     var offset = fullRangeClamped - maxStep * (huntQuerySize-1)
     # Rounding must bias towards end to ensure `offset >= 1` after this.
     offset -= offset shr 1
-    result.startBlock.number = buddy.hunt.lowNumber + offset.toBlockNumber
+    result.startBlock.number = sp.lowNumber + offset.toBlockNumber
     result.maxResults = huntQuerySize
     result.skip = maxStep - 1
   else:
@@ -388,24 +393,22 @@ proc peerSyncChainRequest(buddy: SnapBuddyRef): BlocksRequest =
     before = min(before, beforeHardMax)
     # See `SyncLocked` case.
     result.startBlock.number =
-      if buddy.hunt.bestNumber <= before.toBlockNumber: 1.toBlockNumber
-      else: min(buddy.hunt.bestNumber - before.toBlockNumber,
+      if sp.bestNumber <= before.toBlockNumber: 1.toBlockNumber
+      else: min(sp.bestNumber - before.toBlockNumber,
                 high(BlockNumber) - (huntFinalSize - 1).toBlockNumber)
     result.maxResults = huntFinalSize
-    buddy.hunt.syncMode = HuntRangeFinal
+    sp.syncMode = HuntRangeFinal
 
 # ------------------------------------------------------------------------------
 # Private functions, reply handling
 # ------------------------------------------------------------------------------
 
-proc peerSyncChainEmptyReply(buddy: SnapBuddyRef; request: BlocksRequest) =
+proc peerSyncChainEmptyReply(sp: SnapPivotWorkerRef; request: BlocksRequest) =
   ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
   ## absent on the peer.  If it was `SyncLocked` there must have been a reorg
   ## and the previous canonical chain head has disappeared.  If hunting, this
   ## updates the range of uncertainty.
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
+  let peer = sp.peer
 
   # Treat empty response to a request starting from block 1 as equivalent to
   # length 1 starting from block 0 in `peerSyncChainNonEmptyReply`.  We treat
@@ -415,46 +418,46 @@ proc peerSyncChainEmptyReply(buddy: SnapBuddyRef; request: BlocksRequest) =
      not request.startBlock.isHash and
      request.startBlock.number == 1.toBlockNumber:
     try:
-      buddy.lockSyncStateAndFetch(ctx.chain.Chain.db.toGenesisHeader)
+      sp.lockSyncStateAndFetch(sp.global.chain.db.toGenesisHeader)
     except RlpError as e:
       raiseAssert "Gensis/chain problem (" & $e.name & "): " & e.msg
     return
 
-  if buddy.hunt.syncMode in {SyncLocked, SyncOnlyHash}:
-    inc buddy.data.stats.ok.reorgDetected
+  if sp.syncMode in {SyncLocked, SyncOnlyHash}:
+    inc sp.global.stats.ok.reorgDetected
     trace "Peer reorg detected, best block disappeared", peer,
       startBlock=request.startBlock
 
   let lowestAbsent = request.startBlock.number
-  case buddy.hunt.syncMode:
+  case sp.syncMode:
   of SyncLocked:
     # If this message doesn't change our knowledge, ignore it.
-    if lowestAbsent > buddy.hunt.bestNumber:
+    if lowestAbsent > sp.bestNumber:
       return
     # Due to a reorg, peer's canonical head has lower block number, outside
     # our tracking window.  Sync lock is no longer valid.  Switch to hunt
     # backward to find the new canonical head.
-    buddy.setHuntBackward(lowestAbsent)
+    sp.setHuntBackward(lowestAbsent)
   of SyncOnlyHash:
     # Due to a reorg, peer doesn't have the block hash it originally gave us.
     # Switch to hunt forward from block zero to find the canonical head.
-    buddy.setHuntForward(0.toBlockNumber)
+    sp.setHuntForward(0.toBlockNumber)
   of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
     # Update the hunt range.
-    buddy.updateHuntAbsent(lowestAbsent)
+    sp.updateHuntAbsent(lowestAbsent)
 
   # Update best block number.  It is invalid except when `SyncLocked`, but
   # still useful as a hint of what we knew recently, for example in displays.
-  if lowestAbsent <= buddy.hunt.bestNumber:
-    buddy.hunt.bestNumber =
+  if lowestAbsent <= sp.bestNumber:
+    sp.bestNumber =
       if lowestAbsent == 0.toBlockNumber: lowestAbsent
       else: lowestAbsent - 1.toBlockNumber
-    buddy.hunt.bestHash = default(typeof(buddy.hunt.bestHash))
-    ctx.seen(buddy.hunt.bestHash,buddy.hunt.bestNumber)
+    sp.bestHash = default(typeof(sp.bestHash))
+    sp.global.ctx.seen(sp.bestHash,sp.bestNumber)
 
 
 proc peerSyncChainNonEmptyReply(
-    buddy: SnapBuddyRef;
+    sp: SnapPivotWorkerRef;
     request: BlocksRequest;
     headers: openArray[BlockHeader]) =
   ## Handle non-empty `GetBlockHeaders` reply.  This means `request.startBlock`
@@ -465,7 +468,6 @@ proc peerSyncChainNonEmptyReply(
   ## range of uncertainty.
 
   let
-    ctx = buddy.ctx
     len = headers.len
     highestIndex = if request.reverse: 0 else: len - 1
 
@@ -478,7 +480,7 @@ proc peerSyncChainNonEmptyReply(
   if len < syncLockedMinimumReply and
      request.skip == 0 and not request.reverse and
      len.uint < request.maxResults:
-    buddy.lockSyncStateAndFetch(headers[highestIndex])
+    sp.lockSyncStateAndFetch(headers[highestIndex])
     return
 
   # Be careful, this number is from externally supplied data and arithmetic
@@ -489,54 +491,73 @@ proc peerSyncChainNonEmptyReply(
   # tells us headers up to some number, but it doesn't tell us if there are
   # more after it in the peer's canonical chain.  We have to request more
   # headers to find out.
-  case buddy.hunt.syncMode:
+  case sp.syncMode:
   of SyncLocked:
     # If this message doesn't change our knowledge, ignore it.
-    if highestPresent <= buddy.hunt.bestNumber:
+    if highestPresent <= sp.bestNumber:
       return
     # Sync lock is no longer valid as we don't have confirmed canonical head.
     # Switch to hunt forward to find the new canonical head.
-    buddy.setHuntForward(highestPresent)
+    sp.setHuntForward(highestPresent)
   of SyncOnlyHash:
     # As `SyncLocked` but without the block number check.
-    buddy.setHuntForward(highestPresent)
+    sp.setHuntForward(highestPresent)
   of HuntForward, HuntBackward, HuntRange, HuntRangeFinal:
     # Update the hunt range.
-    buddy.updateHuntPresent(highestPresent)
+    sp.updateHuntPresent(highestPresent)
 
   # Update best block number.  It is invalid except when `SyncLocked`, but
   # still useful as a hint of what we knew recently, for example in displays.
-  if highestPresent > buddy.hunt.bestNumber:
-    buddy.hunt.bestNumber = highestPresent
-    buddy.hunt.bestHash = headers[highestIndex].blockHash.BlockHash
-    ctx.seen(buddy.hunt.bestHash,buddy.hunt.bestNumber)
+  if highestPresent > sp.bestNumber:
+    sp.bestNumber = highestPresent
+    sp.bestHash = headers[highestIndex].blockHash.BlockHash
+    sp.global.ctx.seen(sp.bestHash,sp.bestNumber)
 
 # ------------------------------------------------------------------------------
-# Public start/stop and admin functions
+# Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc pivotStart*(buddy: SnapBuddyRef) =
-  ## Setup state root hunter
-  buddy.hunt = WorkerHuntEx.new(HuntForward)
+proc init*(
+    T: type SnapPivotCtxRef;
+    ctx: SnapCtxRef;          ## For debugging
+    chain: Chain;             ## Block chain database
+      ): T =
+  T(ctx:   ctx,
+    chain: chain)
 
-  # We know the hash but not the block number.
-  buddy.hunt.bestHash = buddy.peer.state(protocol.eth).bestBlockHash.BlockHash
+proc clear*(sp: SnapPivotWorkerRef) =
+  sp.syncMode = HuntForward
+  sp.lowNumber = 0.toBlockNumber.BlockNumber
+  sp.highNumber = high(BlockNumber).BlockNumber
+  sp.bestNumber = 0.toBlockNumber.BlockNumber
+  sp.bestHash = sp.peer.state(protocol.eth).bestBlockHash.BlockHash
+  sp.step = 0u
 
+proc init*(
+    T: type SnapPivotWorkerRef;
+    ctx: SnapPivotCtxRef;     ## Global descriptor
+    ctrl: BuddyCtrlRef;       ## Worker control start/stop
+    peer: Peer;               ## Current network peer
+      ): T =
+  result = T(global: ctx,
+             peer:   peer,
+             ctrl:   ctrl)
+  result.clear()
   # TODO: Temporarily disabled because it's useful to test the worker.
-  # buddy.syncMode = SyncOnlyHash
-
-proc pivotStop*(buddy: SnapBuddyRef) =
-  ## Clean up this peer
-  discard
-
-proc pivotRestart*(buddy: SnapBuddyRef) =
-  buddy.pivotStart
+  # result.syncMode = SyncOnlyHash
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
+proc snapPivotHeader*(sp: SnapPivotWorkerRef): Result[BlockHeader,void] =
+  ## Returns cached block header if available
+  if sp.header.isSome:
+    ok(sp.header.unsafeGet)
+  else:
+    err()
+
+proc snapPivotNegotiate*(sp: SnapPivotWorkerRef) {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -547,35 +568,32 @@ proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
   ##
   ## All replies to this query are part of the peer's canonical chain at the
   ## time the peer sends them.
-  let
-    peer = buddy.peer
-    ctx = buddy.ctx
-
+  ##
+  ## This function can run in *multi mode*.
+  let peer = sp.peer
   trace "Starting pivotExec()", peer
 
-  let
-    request = buddy.peerSyncChainRequest
-
+  let request = sp.peerSyncChainRequest
   trace trEthSendSendingGetBlockHeaders, peer,
     count=request.maxResults,
-    startBlock=ctx.pp(request.startBlock), step=request.traceStep
+    startBlock=sp.global.ctx.pp(request.startBlock), step=request.traceStep
 
-  inc buddy.data.stats.ok.getBlockHeaders
+  inc sp.global.stats.ok.getBlockHeaders
   var reply: Option[protocol.blockHeadersObj]
   try:
     reply = await peer.getBlockHeaders(request)
   except CatchableError as e:
     trace trEthRecvError & "waiting for GetBlockHeaders reply", peer,
       error=e.msg
-    inc buddy.data.stats.major.networkErrors
+    inc sp.global.stats.major.networkErrors
     # Just try another peer
-    buddy.ctrl.zombie = true
+    sp.ctrl.zombie = true
     return
 
   if reply.isNone:
     trace trEthRecvTimeoutWaiting & "for GetBlockHeaders reply", peer
     # TODO: Should disconnect?
-    inc buddy.data.stats.minor.timeoutBlockHeaders
+    inc sp.global.stats.minor.timeoutBlockHeaders
     return
 
   let nHeaders = reply.get.headers.len
@@ -592,14 +610,14 @@ proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
     trace trEthRecvProtocolViolation & "excess headers in BlockHeaders message",
       peer, got=nHeaders, requested=request.maxResults
     # TODO: Should disconnect.
-    inc buddy.data.stats.major.excessBlockHeaders
+    inc sp.global.stats.major.excessBlockHeaders
     return
 
   if 0 < nHeaders:
     # TODO: Check this is not copying the `headers`.
-    buddy.peerSyncChainNonEmptyReply(request, reply.get.headers)
+    sp.peerSyncChainNonEmptyReply(request, reply.get.headers)
   else:
-    buddy.peerSyncChainEmptyReply(request)
+    sp.peerSyncChainEmptyReply(request)
 
   trace "Done pivotExec()", peer
 
@@ -607,12 +625,11 @@ proc pivotExec*(buddy: SnapBuddyRef) {.async.} =
 # Debugging
 # ------------------------------------------------------------------------------
 
-proc huntPp*(buddy: SnapBuddyRef): string =
-  let hx = buddy.hunt
-  result &= "(mode=" & $hx.syncMode
-  result &= ",num=(" & hx.lowNumber.pp & "," & hx.highNumber.pp & ")"
-  result &= ",best=(" & hx.bestNumber.pp & "," & hx.bestHash.pp & ")"
-  result &= ",step=" & $hx.step
+proc pp*(sp: SnapPivotWorkerRef): string =
+  result &= "(mode=" & $sp.syncMode
+  result &= ",num=(" & sp.lowNumber.pp & "," & sp.highNumber.pp & ")"
+  result &= ",best=(" & sp.bestNumber.pp & "," & sp.bestHash.pp & ")"
+  result &= ",step=" & $sp.step
   result &= ")"
 
 # ------------------------------------------------------------------------------

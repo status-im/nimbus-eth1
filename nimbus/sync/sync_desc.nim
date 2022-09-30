@@ -25,7 +25,7 @@ type
     ZombieStop              ## Abandon/ignore (wait for pushed out of LRU table)
     ZombieRun               ## Extra zombie state to potentially recover from
 
-  BuddyCtrl* = object
+  BuddyCtrlRef* = ref object
     ## Control and state settings
     runState: BuddyRunState ## Access with getters
     multiOk*: bool          ## Triggers `runSingle()` mode unless `true`
@@ -34,7 +34,7 @@ type
     ## Worker peer state descriptor.
     ctx*: CtxRef[S]         ## Shared data descriptor back reference
     peer*: Peer             ## Reference to eth p2pProtocol entry
-    ctrl*: BuddyCtrl        ## Control and state settings
+    ctrl*: BuddyCtrlRef     ## Control and state settings
     data*: W                ## Worker peer specific data
 
   CtxRef*[S] = ref object
@@ -55,19 +55,19 @@ proc `$`*[S,W](worker: BuddyRef[S,W]): string =
 # Public getters, `BuddyRunState` execution control functions
 # ------------------------------------------------------------------------------
 
-proc state*(ctrl: BuddyCtrl): BuddyRunState =
+proc state*(ctrl: BuddyCtrlRef): BuddyRunState =
   ## Getter (logging only, details of `BuddyCtrl` are private)
   ctrl.runState
 
-proc running*(ctrl: BuddyCtrl): bool =
+proc running*(ctrl: BuddyCtrlRef): bool =
   ## Getter, if `true` if `ctrl.state()` is `Running`
   ctrl.runState == Running
 
-proc stopped*(ctrl: BuddyCtrl): bool =
+proc stopped*(ctrl: BuddyCtrlRef): bool =
   ## Getter, if `true`, if `ctrl.state()` is not `Running`
   ctrl.runState in {Stopped, ZombieStop, ZombieRun}
 
-proc zombie*(ctrl: BuddyCtrl): bool =
+proc zombie*(ctrl: BuddyCtrlRef): bool =
   ## Getter, `true` if `ctrl.state()` is `Zombie` (i.e. not `running()` and
   ## not `stopped()`)
   ctrl.runState in {ZombieStop, ZombieRun}
@@ -76,7 +76,7 @@ proc zombie*(ctrl: BuddyCtrl): bool =
 # Public setters, `BuddyRunState` execution control functions
 # ------------------------------------------------------------------------------
 
-proc `zombie=`*(ctrl: var BuddyCtrl; value: bool) =
+proc `zombie=`*(ctrl: BuddyCtrlRef; value: bool) =
   ## Setter
   if value:
     case ctrl.runState:
@@ -95,7 +95,7 @@ proc `zombie=`*(ctrl: var BuddyCtrl; value: bool) =
     else:
       discard
 
-proc `stopped=`*(ctrl: var BuddyCtrl; value: bool) =
+proc `stopped=`*(ctrl: BuddyCtrlRef; value: bool) =
   ## Setter
   if value:
     case ctrl.runState:
