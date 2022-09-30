@@ -10,11 +10,11 @@
 
 ## Introduction
 This folder holds the development of light client proxy. Light client proxy
-uses [consensus light client](https://github.com/ethereum/consensus-specs/tree/dev/specs/altair/light-client)
-to follow the tip of consensus chain and exposes typical ethereum json rpc api.
-Rpc calls are proxied to configured web3 data provider, then responses are verified
-against recent known consensus data provided by light client before returning
-result to the caller.
+uses the [consensus light client](https://github.com/ethereum/consensus-specs/tree/dev/specs/altair/light-client)
+to follow the tip of the consensus chain and exposes the standard Ethereum [JSON RPC Execution API](https://github.com/ethereum/execution-apis).
+The API calls are proxied to a configured web3 data provider and the provider its responses are verified
+against recent consensus data provided by the light client before returning
+the result to the caller.
 
 ### Build light client proxy
 ```bash
@@ -31,27 +31,27 @@ make lc-proxy
 Most of command line options have reasonable defaults. There are two options which
 needs to be explicitly configured by user.
 
-`--trusted-block-root` - option necessary to initialize light client.
+`--trusted-block-root` - option necessary to initialize the consensus light client.
 The trusted block should be within the weak subjectivity period,
 and its root should be from a finalized Checkpoint.
 
-`--web3-url` - as proxy does not have any storage, it does need to know endpoint which
-will provide all requested data. It can be either some known full node, or
-external provider like [alchemy](https://www.alchemy.com/).
+`--web3-url` - as the proxy does not have any storage, it needs to know an endpoint which
+will provide all the requested data. This can either be a known full node, or
+an external provider like [Alchemy](https://www.alchemy.com/).
 
-First requirement for external provider is that not only it must support standard ethereum json rpc api,
-it also must support [eth_getProof](https://eips.ethereum.org/EIPS/eip-1186) endpoint
-which is necessary to validate provided data against light client.
+First requirement for the external provider is that it must support the standard Ethereum JSON RPC Execution API, and specifically
+it MUST also support the [eth_getProof](https://eips.ethereum.org/EIPS/eip-1186) call.
+The latter is necessary to validate the provided data against the light client.
 
-Second requirement is that data served from provider need to be consistent with
-configured light client network. By default light client proxy is configured
-to work on mainnet. In this case, configured provider needs to serve mainnet data.
-This is verified on start up by querying provider `eth_chainId` endpoint, and comparing
-received chain id with the one configured locally. If this validation fails, light
+The second requirement is that data served from provider needs to be consistent with
+the configured light client network. By default the light client proxy is configured
+to work on mainnet. In this case, the configured provider needs to serve mainnet data.
+This is verified on start-up by querying the provider its `eth_chainId` endpoint, and comparing the
+received chain id with the one configured locally. If this validation fails, the light
 client proxy process will quit.
 
-Detailed document showing how to configure proxy and pair it with metamask
-[metamask](./docs/metamask_configuration.md).
+[Detailed document](./docs/metamask_configuration.md) showing how to configure the proxy and pair it with
+MetaMask.
 
 ### Update and rebuild light client proxy
 ```bash
