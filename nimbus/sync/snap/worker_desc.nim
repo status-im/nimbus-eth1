@@ -28,6 +28,13 @@ const
     ## The minimal depth of two block headers needed to activate a new state
     ## root pivot.
 
+  backPivotBlockDistance* = 64
+    ## When a pivot header is found, move pivot back `backPivotBlockDistance`
+    ## blocks so that the pivot is guaranteed to have some distance from the
+    ## chain head.
+    ##
+    ## Set `backPivotBlockDistance` to zero for disabling this feature.
+
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
     ## an official limit but found on several implementations (e.g. geth.)

@@ -1,5 +1,4 @@
 # Nimbus
-#
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -17,7 +16,8 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[protocol, sync_desc],
-  ./worker/[com/com_error, snap_db, store_accounts, store_storages, ticker],
+  ./worker/[snap_db, store_accounts, store_storages, ticker],
+  ./worker/com/[com_error, get_block_header],
   "."/[range_desc, worker_desc]
 
 const
@@ -142,12 +142,31 @@ proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
     return true
 
   let
+    peer = buddy.peer
     env = buddy.ctx.data.pivotTable.lastValue.get(otherwise = nil)
     nMin = if env.isNil: none(BlockNumber)
            else: some(env.stateHeader.blockNumber)
 
   if await buddy.pivot.pivotNegotiate(nMin):
-    buddy.appendPivotEnv(buddy.pivot.pivotHeader.value)
+    var header = buddy.pivot.pivotHeader.value
+
+    when 0 < backPivotBlockDistance:
+      # Backtrack, do not use the very latest pivot header
+      const backThreshold = backPivotBlockDistance + minPivotBlockDistance
+      if backThreshold.toBlockNumber < header.blockNumber:
+        let
+          backNum = header.blockNumber - backPivotBlockDistance.toBlockNumber
+          rc = await buddy.getBlockHeader(backNum)
+        if rc.isErr:
+          if rc.error in {ComNoHeaderAvailable, ComTooManyHeaders}:
+            buddy.ctrl.zombie = true
+          return false
+        header = rc.value
+
+    trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
+      multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
+
+    buddy.appendPivotEnv(header)
     return true
 
 # Syntactic sugar
@@ -267,20 +286,13 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
     # least two peers. The can only be one instance active/unfinished of the
     # `pivot2Exec()` functions.
     let peer = buddy.peer
-
     if not await buddy.updateSinglePivot():
       # Wait if needed, then return => repeat
       if not buddy.ctrl.stopped:
         await sleepAsync(2.seconds)
       return
 
-    buddy.ctrl.multiOk = true
-
-    trace "Snap pivot initialised", peer,
-      multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
-  else:
-    # Default pivot finder runs in multi mode => nothing to do here.
-    buddy.ctrl.multiOk = true
+  buddy.ctrl.multiOk = true
 
 
 proc runPool*(buddy: SnapBuddyRef, last: bool) =

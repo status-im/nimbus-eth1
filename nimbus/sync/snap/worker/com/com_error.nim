@@ -36,10 +36,12 @@ type
     ComNoAccountsForStateRoot
     ComNoByteCodesAvailable
     ComNoDataForProof
+    ComNoHeaderAvailable
     ComNoStorageForAccounts
     ComNoTrieNodesAvailable
     ComResponseTimeout
     ComTooManyByteCodes
+    ComTooManyHeaders
     ComTooManyStorageSlots
     ComTooManyTrieNodes
 
@@ -87,8 +89,10 @@ proc stopAfterSeriousComError*(
   of ComNoAccountsForStateRoot,
      ComNoStorageForAccounts,
      ComNoByteCodesAvailable,
+     ComNoHeaderAvailable,
      ComNoTrieNodesAvailable,
      ComTooManyByteCodes,
+     ComTooManyHeaders,
      ComTooManyStorageSlots,
      ComTooManyTrieNodes:
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
