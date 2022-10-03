@@ -128,10 +128,10 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     let env = SnapPivotRef(
       stateHeader:   header,
       pivotAccount:  nodeKey.to(Nodetag),
-      availAccounts: LeafRangeSet.init())
+      fetchAccounts: LeafRangeSet.init())
 
     # Pre-filled with the largest possible interval
-    discard env.availAccounts.merge(low(NodeTag),high(NodeTag))
+    discard env.fetchAccounts.merge(low(NodeTag),high(NodeTag))
 
     # Activate per-state root environment (and hold previous one)
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
@@ -194,7 +194,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         aSqSum += aLen * aLen
 
         # Fill utilisation mean & variance
-        let fill = kvp.data.availAccounts.freeFactor
+        let fill = kvp.data.fetchAccounts.freeFactor
         uSum += fill
         uSqSum += fill * fill
 
@@ -319,10 +319,10 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
       let env = rc.value
       if not env.serialSync:
         # Check whether accounts are complete
-        if env.availAccounts.chunks == 0:
+        if env.fetchAccounts.chunks == 0:
           env.accountsDone = true
           # Check whether storage slots are complete
-          if env.leftOver.len == 0:
+          if env.fetchStorage.len == 0:
             env.serialSync = true
 
 
@@ -357,12 +357,12 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     await buddy.storeAccounts()
     await buddy.storeStorages()
 
-    if healAccountsTrigger < env.availAccounts.freeFactor:
+    if healAccountsTrigger < env.fetchAccounts.freeFactor:
       await buddy.fetchAndHealAccounts()
 
       # Check whether accounts might be complete.
       # Note that *storageDone => accountsDone*.
-      if env.availAccounts.chunks == 0 or env.leftOver.len == 0:
+      if env.fetchAccounts.chunks == 0 or env.fetchStorage.len == 0:
         # Possibly done but some buddies might wait for an account range to be
         # received from the network. So we need to sync.
         buddy.ctx.poolMode = true

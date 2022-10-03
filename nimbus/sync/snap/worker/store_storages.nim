@@ -53,10 +53,10 @@ const
 
 proc getNextSlotItem(buddy: SnapBuddyRef): Result[SnapSlotQueueItemRef,void] =
   let env = buddy.data.pivotEnv
-  for w in env.leftOver.nextKeys:
+  for w in env.fetchStorage.nextKeys:
     # Make sure that this item was not fetched and rejected earlier
     if w notin buddy.data.vetoSlots:
-      env.leftOver.del(w)
+      env.fetchStorage.del(w)
       return ok(w)
   err()
 
@@ -138,8 +138,9 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
     when extraTraceMessages:
       if once:
         once = false
+        let nAccounts = 1 + env.fetchStorage.len
         trace "Start fetching storage slotss", peer,
-          nAccounts=(1+env.leftOver.len), nVetoSlots=buddy.data.vetoSlots.len
+          nAccounts, nVetoSlots=buddy.data.vetoSlots.len
 
     block:
       # Fetch and store account storage slots. On success, the `rc` value will
@@ -147,7 +148,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
       let rc = await buddy.fetchAndImportStorageSlots(req.q)
       if rc.isErr:
         # Save accounts/storage list to be processed later, then stop
-        discard env.leftOver.append req
+        discard env.fetchStorage.append req
         let error = rc.error
         if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
           trace "Error fetching storage slots => stop", peer, error
@@ -159,17 +160,17 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
 
       for qLo in rc.value:
         # Handle queue left-overs for processing in the next cycle
-        if qLo.q[0].firstSlot == Hash256() and 0 < env.leftOver.len:
+        if qLo.q[0].firstSlot == Hash256() and 0 < env.fetchStorage.len:
           # Appending to last queue item is preferred over adding new item
-          let item = env.leftOver.first.value
+          let item = env.fetchStorage.first.value
           item.q = item.q & qLo.q
         else:
           # Put back as-is.
-          discard env.leftOver.append qLo
+          discard env.fetchStorage.append qLo
     # End while
 
   when extraTraceMessages:
-    trace "Done fetching storage slots", peer, nAccounts=env.leftOver.len
+    trace "Done fetching storage slots", peer, nAccounts=env.fetchStorage.len
 
 # ------------------------------------------------------------------------------
 # End

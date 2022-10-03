@@ -77,14 +77,16 @@ type
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
-    pivotAccount*: NodeTag             ## Random account
-    availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
-    leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
-    dangling*: seq[Blob]               ## Missing nodes for healing process
 
-    # State of affairs
+    # Accounts download
+    pivotAccount*: NodeTag             ## Random account to start with
+    fetchAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
+    danglAccountNodes*: seq[Blob]      ## Dangling account nodes for healing
     accountsDone*: bool                ## All accounts have been processed
-    serialSync*: bool                  ## Continue with serial block download
+
+    # Storage slots download
+    fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
+    serialSync*: bool                  ## Done with storage, block sync next
 
     # Info
     nAccounts*: uint64                 ## Number of accounts imported

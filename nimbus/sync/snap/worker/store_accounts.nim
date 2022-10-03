@@ -78,40 +78,40 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
 
   block:
     # Take the next interval to the right (aka ge) `pivotPt`
-    let rc = env.availAccounts.ge(pivotPt)
+    let rc = env.fetchAccounts.ge(pivotPt)
     if rc.isOk:
       let iv = buddy.withMaxLen(
         rc.value, accountRangeMax)
-      discard env.availAccounts.reduce(iv)
+      discard env.fetchAccounts.reduce(iv)
       return ok(iv)
 
   block:
     # Check whether the `pivotPt` is in the middle of an interval
-    let rc = env.availAccounts.envelope(pivotPt)
+    let rc = env.fetchAccounts.envelope(pivotPt)
     if rc.isOk:
       let iv = buddy.withMaxLen(
         LeafRange.new(pivotPt, rc.value.maxPt), accountRangeMax)
-      discard env.availAccounts.reduce(iv)
+      discard env.fetchAccounts.reduce(iv)
       return ok(iv)
 
   block:
     # Otherwise wrap around
-    let rc = env.availAccounts.ge()
+    let rc = env.fetchAccounts.ge()
     if rc.isOk:
       let iv = buddy.withMaxLen(
         rc.value, accountRangeMax)
-      discard env.availAccounts.reduce(iv)
+      discard env.fetchAccounts.reduce(iv)
       return ok(iv)
 
   err()
 
 proc putUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.availAccounts.merge(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.merge(iv)
 
 proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.availAccounts.reduce(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.reduce(iv)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -196,7 +196,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
     # End registerConsumed
 
   # Store accounts on the storage TODO list.
-  discard env.leftOver.append SnapSlotQueueItemRef(q: dd.withStorage)
+  discard env.fetchStorage.append SnapSlotQueueItemRef(q: dd.withStorage)
 
   when extraTraceMessages:
     trace "Done fetching accounts", peer, stateRoot, iv

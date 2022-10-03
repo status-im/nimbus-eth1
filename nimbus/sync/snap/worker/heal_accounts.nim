@@ -40,39 +40,40 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
 
-  trace "Start accounts healing", peer, nDangling=env.dangling.len
+  trace "Start accounts healing", peer, nDangling=env.danglAccountNodes.len
 
-  # Starting with a given set of potentially dangling nodes `env.dangling`, this
-  # set is filtered and processed. The outcome is fed back to `env.dangling`
+  # Starting with a given set of potentially dangling account nodes
+  # `env.danglAccountNodes`, this set is filtered and processed. The outcome
+  # is fed back to the vey same list `env.danglAccountNodes`
   var
     nLeaves = 0            # For logging
     nodesNeeded: seq[Blob] # Trie nodes to process by this instance
   block:
     let
-      maxLeaves = if env.dangling.len == 0: 0 else: maxHealingLeafPaths
+      maxLeaves = if env.danglAccountNodes.len == 0: 0 else: maxHealingLeafPaths
       rc = ctx.data.snapDb.inspectAccountsTrie(
-        peer, stateRoot, env.dangling, maxLeaves)
+        peer, stateRoot, env.danglAccountNodes, maxLeaves)
     if rc.isErr:
-      let error = rc.error
+      let
+        error = rc.error
+        nDangling = env.danglAccountNodes.len
       if error == TrieIsEmpty:
         when extraTraceMessages:
-          trace "Accounts healing on healthy trie", peer,
-            nDangling=env.dangling.len, error
+          trace "Accounts healing on healthy trie", peer, nDangling, error
       else:
         # FIXME: This is typically a trie loop error, appears with a corrupted
         #        database.
-        error "Accounts healing failed => stop", peer,
-          nDangling=env.dangling.len, error
+        error "Accounts healing failed => stop", peer, nDangling, error
         buddy.ctrl.zombie = true
       return
     # Replace global/env batch list by preprocessed local one.
     nodesNeeded = rc.value.dangling
-    env.dangling.setLen(0)
+    env.danglAccountNodes.setLen(0)
     # Remove reported leaf paths from the accounts interval
     nLeaves = rc.value.leaves.len
     for accKey in rc.value.leaves:
       let pt = accKey.to(NodeTag)
-      discard env.availAccounts.reduce(pt,pt)
+      discard env.fetchAccounts.reduce(pt,pt)
 
   while 0 < nodesNeeded.len:
     var fetchNodes: seq[Blob]
@@ -86,19 +87,21 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
       nodesNeeded.setLen(0)
 
     when extraTraceMessages:
-      trace "Accounts healing loop", peer, nDangling=env.dangling.len,
+      let nDangling=env.danglAccountNodes.len
+      trace "Accounts healing loop", peer, nDangling,
          nNodesNeeded=nodesNeeded.len, nLeaves
 
     # Fetch nodes
     let dd = block:
       let rc = await buddy.getTrieNodes(stateRoot, fetchNodes.mapIt(@[it]))
       if rc.isErr:
-        env.dangling = env.dangling & fetchNodes
+        env.danglAccountNodes = env.danglAccountNodes & fetchNodes
         when extraTraceMessages:
-          let error = rc.error
+          let
+            error = rc.error
+            nDangling=env.danglAccountNodes.len
           trace "Error fetching account nodes for healing", peer,
-            dangling=env.dangling.len, nNodesNeeded=nodesNeeded.len, nLeaves,
-            error
+            nDangling, nNodesNeeded=nodesNeeded.len, nLeaves, error
         # Just try the next round
         continue
       rc.value
@@ -107,18 +110,19 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
     block:
       let rc = ctx.data.snapDb.importRawNodes(peer, dd.nodes)
       if rc.isOk:
-        env.dangling = env.dangling & dd.leftOver.mapIt(it[0])
+        env.danglAccountNodes = env.danglAccountNodes & dd.leftOver.mapIt(it[0])
       elif 0 < rc.error.len and rc.error[^1][0] < 0:
         # negative index => storage error
-        env.dangling = env.dangling & fetchNodes
+        env.danglAccountNodes = env.danglAccountNodes & fetchNodes
       else:
-        env.dangling = env.dangling &
+        env.danglAccountNodes = env.danglAccountNodes &
           dd.leftOver.mapIt(it[0]) & rc.error.mapIt(dd.nodes[it[0]])
 
     # End while
 
   when extraTraceMessages:
-    trace "Done accounts healing", peer, nDangling=env.dangling.len, nLeaves
+    let nDangling=env.danglAccountNodes.len
+    trace "Done accounts healing", peer, nDangling, nLeaves
 
 # ------------------------------------------------------------------------------
 # End
