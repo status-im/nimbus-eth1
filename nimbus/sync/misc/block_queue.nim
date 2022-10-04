@@ -13,21 +13,21 @@
 ##
 ## Worker items state diagram and sketch of sync algorithm:
 ## ::
-##   set of unprocessed | peer workers     | list of work items ready
-##   block ranges       |                  | for persistent database
-##   ==================================================================
+##   unprocessed      |                   | ready for           | store into
+##   block ranges     | peer workers      | persistent database | database
+##   =======================================================================
 ##
-##       +---------------------------------------------+
-##       |                                             |
-##       |  +---------------------------------+        |
-##       |  |                                 |        |
-##       V  v                                 |        |
-##   <unprocessed> ---+-----> <worker-0> -----+---> <staged> ---> OUTPUT
-##                    |                       |
-##                    +-----> <worker-1> -----+
-##                    |                       |
-##                    +-----> <worker-2> -----+
-##                    :                       :
+##        +------------------------------------------+
+##        |                                          |
+##        |  +----------------------------+          |
+##        |  |                            |          |
+##        V  v                            |          |
+##   <unprocessed> ---+---> <worker-0> ---+-----> <staged> -------> OUTPUT
+##                    |                   |
+##                    +---> <worker-1> ---+
+##                    |                   |
+##                    +---> <worker-2> ---+
+##                    :                   :
 ##
 ## A work item is created from a range of block numbers extracted from the
 ## `<unprocessed>` set of block ranges.

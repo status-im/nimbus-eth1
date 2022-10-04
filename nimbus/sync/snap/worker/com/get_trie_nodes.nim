@@ -11,7 +11,7 @@ import
   eth/[common/eth_types, p2p],
   "../../.."/[protocol, protocol/trace_config],
   ../../worker_desc,
-  ./get_error
+  ./com_error
 
 {.push raises: [Defect].}
 

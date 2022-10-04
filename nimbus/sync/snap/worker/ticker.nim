@@ -30,8 +30,7 @@ type
     nStorage*: (float,float)           ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
     accCoverage*: float                ## as factor
-    activeQueues*: int
-    flushedQueues*: int64
+    nQueues*: int
 
   TickerStatsUpdater* =
     proc: TickerStats {.gcsafe, raises: [Defect].}
@@ -119,19 +118,18 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       accCov = data.accountsFill[0].toPC(1) &
          "(" & data.accountsFill[1].toPC(1) & ")" &
          "/" & data.accountsFill[2].toPC(0)
-      flushed = data.flushedQueues
       buddies = t.nBuddies
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
-        pivot = &"#{data.pivotBlock.get}/{data.activeQueues}"
+        pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
       nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
       nStore = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, nStore, flushed, mem
+      tick, buddies, pivot, nAcc, accCov, nStore, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

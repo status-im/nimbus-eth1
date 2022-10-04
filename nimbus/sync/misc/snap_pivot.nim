@@ -122,16 +122,16 @@ type
     ## Statistics counters for events associated with this peer.
     ## These may be used to recognise errors and select good peers.
     ok: tuple[
-      reorgDetected:       BuddyStat,
-      getBlockHeaders:     BuddyStat,
-      getNodeData:         BuddyStat]
+      reorgDetected:       uint,
+      getBlockHeaders:     uint,
+      getNodeData:         uint]
     minor: tuple[
-      timeoutBlockHeaders: BuddyStat,
-      unexpectedBlockHash: BuddyStat]
+      timeoutBlockHeaders: uint,
+      unexpectedBlockHash: uint]
     major: tuple[
-      networkErrors:       BuddyStat,
-      excessBlockHeaders:  BuddyStat,
-      wrongBlockHeader:    BuddyStat]
+      networkErrors:       uint,
+      excessBlockHeaders:  uint,
+      wrongBlockHeader:    uint]
 
   SnapPivotCtxRef* = ref object of RootRef
     stats*:     SnapWorkerStats     ## Statistics counters
@@ -550,14 +550,19 @@ proc init*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc snapPivotHeader*(sp: SnapPivotWorkerRef): Result[BlockHeader,void] =
+proc pivotHeader*(sp: SnapPivotWorkerRef): Result[BlockHeader,void] =
   ## Returns cached block header if available
   if sp.header.isSome:
-    ok(sp.header.unsafeGet)
-  else:
-    err()
+    let header = sp.header.unsafeGet
+    if header.blockNumber != 0:
+      return ok(header)
+  err()
 
-proc snapPivotNegotiate*(sp: SnapPivotWorkerRef) {.async.} =
+proc pivotNegotiate*(
+    sp: SnapPivotWorkerRef;
+    ign: Option[BlockNumber]; ## Minimum block number to expect,ignored for now
+      ): Future[bool]
+      {.async.} =
   ## Query a peer to update our knowledge of its canonical chain and its best
   ## block, which is its canonical chain head.  This can be called at any time
   ## after a peer has negotiated the connection.
@@ -588,13 +593,13 @@ proc snapPivotNegotiate*(sp: SnapPivotWorkerRef) {.async.} =
     inc sp.global.stats.major.networkErrors
     # Just try another peer
     sp.ctrl.zombie = true
-    return
+    return false
 
   if reply.isNone:
     trace trEthRecvTimeoutWaiting & "for GetBlockHeaders reply", peer
     # TODO: Should disconnect?
     inc sp.global.stats.minor.timeoutBlockHeaders
-    return
+    return false
 
   let nHeaders = reply.get.headers.len
   if nHeaders == 0:
@@ -611,7 +616,7 @@ proc snapPivotNegotiate*(sp: SnapPivotWorkerRef) {.async.} =
       peer, got=nHeaders, requested=request.maxResults
     # TODO: Should disconnect.
     inc sp.global.stats.major.excessBlockHeaders
-    return
+    return false
 
   if 0 < nHeaders:
     # TODO: Check this is not copying the `headers`.
@@ -620,6 +625,7 @@ proc snapPivotNegotiate*(sp: SnapPivotWorkerRef) {.async.} =
     sp.peerSyncChainEmptyReply(request)
 
   trace "Done pivotExec()", peer
+  return sp.header.isSome
 
 # ------------------------------------------------------------------------------
 # Debugging

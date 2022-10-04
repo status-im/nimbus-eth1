@@ -17,16 +17,25 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[protocol, sync_desc],
-  ./worker/[accounts_db, fetch_accounts, ticker],
+  ./worker/[com/com_error, snap_db, store_accounts, store_storages, ticker],
   "."/[range_desc, worker_desc]
 
 const
   usePivot2ok = false or true
 
 when usePivot2ok:
-  import ../misc/best_pivot
+  import
+    ../misc/best_pivot
+  type
+    PivotCtxRef = BestPivotCtxRef
+    PivotWorkerRef = BestPivotWorkerRef
 else:
-  import ../misc/snap_pivot, ../../p2p/chain/chain_desc
+  import
+    ../../p2p/chain/chain_desc,
+    ../misc/snap_pivot
+  type
+    PivotCtxRef = SnapPivotCtxRef
+    PivotWorkerRef = SnapPivotWorkerRef
 
 {.push raises: [Defect].}
 
@@ -36,10 +45,6 @@ logScope:
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc hash(h: Hash256): Hash =
-  ## Mixin for `Table` or `keyedQueue`
-  h.data.hash
 
 proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
   if 0 < length:
@@ -57,29 +62,24 @@ template noExceptionOops(info: static[string]; code: untyped) =
     raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
-# Private helpers: integration of pivot negotiator
+# Private helpers: integration of pivot finder
 # ------------------------------------------------------------------------------
 
-when usePivot2ok:
-  type
-    PivotCtxRef = BestPivotCtxRef
-    PivotWorkerRef = BestPivotWorkerRef
-else:
-  type
-    PivotCtxRef = SnapPivotCtxRef
-    PivotWorkerRef = SnapPivotWorkerRef
-
 proc pivot(ctx: SnapCtxRef): PivotCtxRef =
-  ctx.data.pivotData.PivotCtxRef
+  # Getter
+  ctx.data.pivotFinderCtx.PivotCtxRef
 
 proc `pivot=`(ctx: SnapCtxRef; val: PivotCtxRef) =
-  ctx.data.pivotData = val
+  # Setter
+  ctx.data.pivotFinderCtx = val
 
 proc pivot(buddy: SnapBuddyRef): PivotWorkerRef =
-  buddy.data.workerPivot.PivotWorkerRef
+  # Getter
+  buddy.data.pivotFinder.PivotWorkerRef
 
 proc `pivot=`(buddy: SnapBuddyRef; val: PivotWorkerRef) =
-  buddy.data.workerPivot = val
+  # Setter
+  buddy.data.pivotFinder = val
 
 # --------------------
 
@@ -92,103 +92,71 @@ proc pivotSetup(ctx: SnapCtxRef) =
 proc pivotRelease(ctx: SnapCtxRef) =
   ctx.pivot = nil
 
-
 proc pivotStart(buddy: SnapBuddyRef) =
   buddy.pivot = PivotWorkerRef.init(buddy.ctx.pivot, buddy.ctrl, buddy.peer)
 
 proc pivotStop(buddy: SnapBuddyRef) =
   buddy.pivot.clear()
 
-# --------------------
-
-proc pivotHeader(buddy: SnapBuddyRef): Result[BlockHeader,void] =
-  when usePivot2ok:
-    buddy.pivot.bestPivotHeader()
-  else:
-    buddy.pivot.snapPivotHeader()
-
-when usePivot2ok:
-  proc envPivotNumber(buddy: SnapBuddyRef): Option[BlockNumber] =
-    let env = buddy.ctx.data.pivotEnv
-    if env.isNil:
-      none(BlockNumber)
-    else:
-      some(env.stateHeader.blockNumber)
-
-  template pivotNegotiate(buddy: SnapBuddyRef; n: Option[BlockNumber]): auto =
-    buddy.pivot.bestPivotNegotiate(n)
-else:
-  template pivotNegotiate(buddy: SnapBuddyRef): auto =
-    buddy.pivot.snapPivotNegotiate()
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc rndNodeTag(buddy: SnapBuddyRef): NodeTag =
-  ## Create random node tag
-  var data: array[32,byte]
-  buddy.ctx.data.rng[].generate(data)
-  UInt256.fromBytesBE(data).NodeTag
-
-
-proc setPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
-  ## Activate environment for state root implied by `header` argument
+proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
+  ## Activate environment for state root implied by `header` argument. This
+  ## function appends a new environment unless there was any not far enough
+  ## apart.
+  ##
+  ## Note that this function relies on a queue sorted by the block numbers of
+  ## the pivot header. To maintain the sort order, the function `lruFetch()`
+  ## must not be called and only records appended with increasing block
+  ## numbers.
   let
     ctx = buddy.ctx
-    key = header.stateRoot
-    rc = ctx.data.pivotTable.lruFetch(key)
-  if rc.isOk:
-    ctx.data.pivotEnv = rc.value
-    return
+    minNumber = block:
+      let rc = ctx.data.pivotTable.lastValue
+      if rc.isOk: rc.value.stateHeader.blockNumber + minPivotBlockDistance
+      else: 1.toBlockNumber
 
-  let env = SnapPivotRef(
-    stateHeader:   header,
-    pivotAccount:  buddy.rndNodeTag,
-    availAccounts: LeafRangeSet.init())
-  # Pre-filled with the largest possible interval
-  discard env.availAccounts.merge(low(NodeTag),high(NodeTag))
+  # Check whether the new header follows minimum depth requirement
+  if minNumber <= header.blockNumber:
+    var nodeKey: NodeKey
+    ctx.data.rng[].generate(nodeKey.ByteArray32)
 
-  # Statistics
-  ctx.data.pivotCount.inc
+    # Ok, append a new environment
+    let env = SnapPivotRef(
+      stateHeader:   header,
+      pivotAccount:  nodeKey.to(Nodetag),
+      availAccounts: LeafRangeSet.init())
 
-  # Activate per-state root environment (and hold previous one)
-  ctx.data.prevEnv = ctx.data.pivotEnv
-  ctx.data.pivotEnv = ctx.data.pivotTable.lruAppend(key, env, ctx.buddiesMax)
+    # Pre-filled with the largest possible interval
+    discard env.availAccounts.merge(low(NodeTag),high(NodeTag))
+
+    # Activate per-state root environment (and hold previous one)
+    discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
 
-proc updatePivotEnv(buddy: SnapBuddyRef): bool =
-  ## Update global state root environment from local `pivotHeader`. Choose the
-  ## latest block number. Returns `true` if the environment was changed
-  let rc = buddy.pivotHeader
-  if rc.isOk:
-    let
-      peer = buddy.peer
-      ctx = buddy.ctx
-      env = ctx.data.pivotEnv
-      pivotHeader = rc.value
-      newStateNumber = pivotHeader.blockNumber
-      stateNumber = if env.isNil: 0.toBlockNumber
-                    else: env.stateHeader.blockNumber
-      stateWindow = stateNumber + maxPivotBlockWindow
-
-    block keepCurrent:
-      if env.isNil:
-        break keepCurrent # => new pivot
-      if stateNumber < newStateNumber:
-        when switchPivotAfterCoverage < 1.0:
-          if env.minCoverageReachedOk:
-            break keepCurrent # => new pivot
-        if stateWindow < newStateNumber:
-          break keepCurrent # => new pivot
-        if newStateNumber <= maxPivotBlockWindow:
-          break keepCurrent # => new pivot
-      # keep current
-      return false
-
-    # set new block
-    buddy.setPivotEnv(pivotHeader)
+proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
+  ## Helper, negotiate pivot unless present
+  if buddy.pivot.pivotHeader.isOk:
     return true
+
+  let
+    env = buddy.ctx.data.pivotTable.lastValue.get(otherwise = nil)
+    nMin = if env.isNil: none(BlockNumber)
+           else: some(env.stateHeader.blockNumber)
+
+  if await buddy.pivot.pivotNegotiate(nMin):
+    buddy.appendPivotEnv(buddy.pivot.pivotHeader.value)
+    return true
+
+# Syntactic sugar
+when usePivot2ok:
+  template updateSinglePivot(buddy: SnapBuddyRef): auto =
+    buddy.updatePivotImpl()
+else:
+  template updateMultiPivot(buddy: SnapBuddyRef): auto =
+    buddy.updatePivotImpl()
 
 
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
@@ -216,54 +184,18 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
     let
       tabLen = ctx.data.pivotTable.len
-      pivotBlock = if ctx.data.pivotEnv.isNil: none(BlockNumber)
-                   else: some(ctx.data.pivotEnv.stateHeader.blockNumber)
+      env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
+      pivotBlock = if env.isNil: none(BlockNumber)
+                   else: some(env.stateHeader.blockNumber)
       accCoverage = ctx.data.coveredAccounts.fullFactor
       accFill = meanStdDev(uSum, uSqSum, count)
 
-    when snapAccountsDumpEnable:
-      if snapAccountsDumpCoverageStop < accCoverage:
-        trace " Snap proofs dump stop",
-          threshold=snapAccountsDumpCoverageStop, coverage=accCoverage.toPC
-        ctx.data.proofDumpOk = false
-
     TickerStats(
       pivotBlock:    pivotBlock,
-      activeQueues:  tabLen,
-      flushedQueues: ctx.data.pivotCount.int64 - tabLen,
+      nQueues:       tabLen,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nStorage:      meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage))
-
-
-proc havePivot(buddy: SnapBuddyRef): bool =
-  ## ...
-  let rc = buddy.pivotHeader
-  if rc.isOk and rc.value.blockNumber != 0:
-
-    # So there is a `ctx.data.pivotEnv`
-    when 1.0 <= switchPivotAfterCoverage:
-      return true
-    else:
-      let
-        ctx = buddy.ctx
-        env = ctx.data.pivotEnv
-
-      # Force fetching new pivot if coverage reached by returning `false`
-      if not env.minCoverageReachedOk:
-
-        # Not sure yet, so check whether coverage has been reached at all
-        let cov = env.availAccounts.freeFactor
-        if switchPivotAfterCoverage <= cov:
-          trace " Snap accounts coverage reached", peer,
-            threshold=switchPivotAfterCoverage, coverage=cov.toPC
-
-          # Need to reset pivot handlers
-          buddy.ctx.poolMode = true
-          buddy.ctx.data.runPoolHook = proc(b: SnapBuddyRef) =
-            b.ctx.data.pivotEnv.minCoverageReachedOk = true
-            b.pivotRestart
-          return true
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -273,19 +205,15 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
   ctx.data.coveredAccounts = LeafRangeSet.init()
-  ctx.data.accountsDb =
-      if ctx.data.dbBackend.isNil: AccountsDbRef.init(ctx.chain.getTrieDB)
-      else: AccountsDbRef.init(ctx.data.dbBackend)
+  ctx.data.snapDb =
+      if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
+      else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivotSetup()
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
     trace "Ticker is disabled"
   result = true
-  # -----------------------
-  when snapAccountsDumpEnable:
-    doAssert ctx.data.proofDumpFile.open("./dump-stream.out", fmWrite)
-    ctx.data.proofDumpOk = true
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
@@ -303,6 +231,7 @@ proc start*(buddy: SnapBuddyRef): bool =
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
     buddy.pivotStart()
+    buddy.data.errors = ComErrorStatsRef()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
     return true
@@ -334,20 +263,16 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ## Note that this function runs in `async` mode.
   ##
   when usePivot2ok:
-    #
     # Run alternative pivot finder. This one harmonises difficulties of at
     # least two peers. The can only be one instance active/unfinished of the
     # `pivot2Exec()` functions.
-    #
     let peer = buddy.peer
-    if buddy.pivotHeader.isErr:
-      if await buddy.pivotNegotiate(buddy.envPivotNumber):
-        discard buddy.updatePivotEnv()
-      else:
-        # Wait if needed, then return => repeat
-        if not buddy.ctrl.stopped:
-          await sleepAsync(2.seconds)
-        return
+
+    if not await buddy.updateSinglePivot():
+      # Wait if needed, then return => repeat
+      if not buddy.ctrl.stopped:
+        await sleepAsync(2.seconds)
+      return
 
     buddy.ctrl.multiOk = true
 
@@ -392,23 +317,26 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     peer = buddy.peer
 
   when not usePivot2ok:
-    if not buddy.havePivot:
-      await buddy.pivotNegotiate()
-      if not buddy.updatePivotEnv():
-        return
+    discard await buddy.updateMultiPivot()
 
-  # Ignore rest if the pivot is still acceptably covered
-  when switchPivotAfterCoverage < 1.0:
-    if ctx.data.pivotEnv.minCoverageReachedOk:
-      await sleepAsync(50.milliseconds)
-      return
+  # Set up current state root environment for accounts snapshot
+  buddy.data.pivotEnv = block:
+    let rc = ctx.data.pivotTable.lastValue
+    if rc.isErr:
+      return # nothing to do
+    rc.value
 
-  await buddy.fetchAccounts()
+  await buddy.storeStorages() # always clean the queue
+  await buddy.storeAccounts()
+  await buddy.storeStorages()
 
-  if ctx.data.pivotEnv.repairState == Done:
-    buddy.ctrl.multiOk = false
-    buddy.pivotStop()
-    buddy.pivotStart()
+  # use accounts healer if enough accounts are stored
+  # use storage healer if enough accounts are stored
+
+  #if buddy.data.pivotEnv.repairState == Done: # TODO:
+  #  buddy.ctrl.multiOk = false                #  This is all rubbish and needs
+  #  buddy.pivotStop()                         #  to be re-done
+  #  buddy.pivotStart()                        #
 
 # ------------------------------------------------------------------------------
 # End
