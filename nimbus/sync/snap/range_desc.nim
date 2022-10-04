@@ -161,25 +161,46 @@ proc digestTo*(data: Blob; T: type NodeTag): T =
   ## Hash the `data` argument
   keccakHash(data).to(T)
 
-proc freeFactor*(lrs: LeafRangeSet): float =
-  ## Free factor, ie. `#items-free / 2^256` to be used in statistics
+
+proc emptyFactor*(lrs: LeafRangeSet): float =
+  ## Relative uncovered total, i.e. `#points-not-covered / 2^256` to be used
+  ## in statistics or triggers.
   if 0 < lrs.total:
     ((high(NodeTag) - lrs.total).u256 + 1).to(float) / (2.0^256)
   elif lrs.chunks == 0:
     1.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
-    0.0
+    0.0 # number of points in `lrs` is `2^256 + 1`
+
+proc emptyFactor*(lrs: openArray[LeafRangeSet]): float =
+  ## Variant of `emptyFactor()` where intervals are distributed across several
+  ## sets. This function makes sense only if the interval sets are mutually
+  ## disjunct.
+  var accu: Nodetag
+  for ivSet in lrs:
+    if 0 < ivSet.total:
+      if high(NodeTag) - ivSet.total < accu:
+        return 0.0
+      accu = accu + ivSet.total
+    elif ivSet.chunks == 0:
+      discard
+    else: # number of points in `ivSet` is `2^256 + 1`
+      return 0.0
+  ((high(NodeTag) - accu).u256 + 1).to(float) / (2.0^256)
 
 proc fullFactor*(lrs: LeafRangeSet): float =
-  ## Free factor, ie. `#items-contained / 2^256` to be used in statistics
+  ## Relative covered total, i.e. `#points-covered / 2^256` to be used
+  ## in statistics or triggers
   if 0 < lrs.total:
     lrs.total.u256.to(float) / (2.0^256)
   elif lrs.chunks == 0:
-    0.0
+    0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
-    1.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
+    1.0 # number of points in `lrs` is `2^256 + 1`
+
 
 # Printing & pretty printing
+
 proc `$`*(nt: NodeTag): string =
   if nt == high(NodeTag):
     "high(NodeTag)"

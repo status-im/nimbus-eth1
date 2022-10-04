@@ -26,6 +26,19 @@ const
   minPivotBlockDistance* = 128
     ## The minimal depth of two block headers needed to activate a new state
     ## root pivot.
+    ##
+    ## Effects on assembling the state via `snap/1` protocol:
+    ##
+    ## * A small value of this constant increases the propensity to update the
+    ##   pivot header more often. This is so because each new peer negoiates a
+    ##   pivot block number at least the current one.
+    ##
+    ## * A large value keeps the current pivot more stable but some experiments
+    ##   suggest that the `snap/1` protocol is answered only for later block
+    ##   numbers (aka pivot blocks.) So a large value tends to keep the pivot
+    ##   farther away from the chain head.
+    ##
+    ##   Note that 128 is the magic distance for snapshots used by *Geth*.
 
   backPivotBlockDistance* = 64
     ## When a pivot header is found, move pivot back `backPivotBlockDistance`
@@ -34,9 +47,16 @@ const
     ##
     ## Set `backPivotBlockDistance` to zero for disabling this feature.
 
-  healAccountsTrigger* = 0.7
-    ## Apply accounts healing if the snap download coverage factor exceeds
-    ## this setting.
+  backPivotBlockThreshold* = backPivotBlockDistance + minPivotBlockDistance
+    ## Ignore `backPivotBlockDistance` unless the current block number is
+    ## larger than this constant (which must be at least
+    ## `backPivotBlockDistance`.)
+
+  healAccountsTrigger* = 0.95
+    ## Apply accounts healing if the global snap download coverage factor
+    ## exceeds this setting. The global coverage factor is derived by merging
+    ## all account ranges retrieved for all pivot state roots (see
+    ## `coveredAccounts` in `CtxData`.)
 
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
@@ -50,6 +70,10 @@ const
     ## for dangling nodes. This allows to run healing paralell to accounts or
     ## storage download without requestinng an account/storage slot found by
     ## healing again with the download.
+
+  noPivotEnvChangeIfComplete* = true
+    ## If set `true`, new peers will not change the pivot even if the
+    ## negotiated pivot would be newer. This should be the default.
 
   # -------
 
@@ -74,13 +98,17 @@ type
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
 
+  SnapAccountRanges* = array[2,LeafRangeSet]
+    ## Pair of account hash range lists. The first entry must be processed
+    ## first. This allows to coordinate peers working on different state roots
+    ## to avoid ovelapping accounts as long as they fetch from the first entry.
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download
-    pivotAccount*: NodeTag             ## Random account to start with
-    fetchAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
+    fetchAccounts*: SnapAccountRanges  ## Sets of accounts ranges to fetch
     danglAccountNodes*: seq[Blob]      ## Dangling account nodes for healing
     accountsDone*: bool                ## All accounts have been processed
 
@@ -111,10 +139,10 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
+    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger
-    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
 
   SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
     ## Extended worker peer descriptor
@@ -124,6 +152,7 @@ type
 
 static:
   doAssert healAccountsTrigger < 1.0 # larger values make no sense
+  doAssert backPivotBlockDistance <= backPivotBlockThreshold
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -8,6 +8,28 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Heal accounts DB:
+## =================
+##
+## Worker items state diagram:
+## ::
+##       +----------------------------------------+
+##       |                                        |
+##       v                                        |
+##    {path-list} -> <inspect-trie> ---------> {dangling-node-paths}
+##                       |                        |
+##                       v                        v
+##                   {leaf-nodes}              <fetch-via-snap/1>
+##                       |                        |
+##                       v                        v
+##                   <update-accounts-batch>   {nodes-list}
+##                       |                        |
+##                       v                        v
+##                   {storage-roots}           <merge-into-trie>
+##                       |
+##                       v
+##                   <update-storage-batch>
+
 import
   std/sequtils,
   chronicles,
@@ -32,6 +54,19 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc getCoveringLeafRangeSet(buddy: SnapBuddyRef; pt: NodeTag): LeafRangeSet =
+  ## Helper ...
+  let env = buddy.data.pivotEnv
+  for ivSet in env.fetchAccounts:
+    if 0 < ivSet.covered(pt,pt):
+      return ivSet
+
+proc commitLeafAccount(buddy: SnapBuddyRef; ivSet: LeafRangeSet; pt: NodeTag) =
+  ## Helper ...
+  discard ivSet.reduce(pt,pt)
+  discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
+
+
 proc mergeIsolatedAccounts(
     buddy: SnapBuddyRef;
     paths: openArray[NodeKey];
@@ -46,24 +81,25 @@ proc mergeIsolatedAccounts(
 
   # Remove reported leaf paths from the accounts interval
   for accKey in paths:
-    let pt = accKey.to(NodeTag)
-    if 0 < env.fetchAccounts.covered(pt,pt):
-
+    let
+      pt = accKey.to(NodeTag)
+      ivSet = buddy.getCoveringLeafRangeSet(pt)
+    if not ivSet.isNil:
       let
         rc = ctx.data.snapDb.getAccountData(peer, stateRoot, accKey)
         accountHash = Hash256(data: accKey.ByteArray32)
       if rc.isOk:
         let storageRoot = rc.value.storageRoot
-        if storageRoot != emptyRlpHash:
-          result.add AccountSlotsHeader(
-            accHash:     accountHash,
-            storageRoot: storageRoot)
-        discard env.fetchAccounts.reduce(pt,pt)
         when extraTraceMessages:
           let stRootStr = if storageRoot != emptyRlpHash: $storageRoot
                           else: "emptyRlpHash"
           trace "Registered isolated persistent account", peer, accountHash,
             storageRoot=stRootStr
+        if storageRoot != emptyRlpHash:
+          result.add AccountSlotsHeader(
+            accHash:     accountHash,
+            storageRoot: storageRoot)
+        buddy.commitLeafAccount(ivSet, pt)
         continue
 
       when extraTraceMessages:
@@ -74,7 +110,7 @@ proc mergeIsolatedAccounts(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   ## Fetch missing account nodes
   let
     ctx = buddy.ctx
@@ -100,14 +136,9 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
       let
         error = rc.error
         nDangling = env.danglAccountNodes.len
-      if error == TrieIsEmpty:
-        when extraTraceMessages:
-          trace "Accounts healing on healthy trie", peer, nDangling, error
-      else:
-        # FIXME: This is typically a trie loop error, appears with a corrupted
-        #        database.
-        error "Accounts healing failed => stop", peer, nDangling, error
-        buddy.ctrl.zombie = true
+      error "Accounts healing failed => stop", peer, nDangling, error
+      # Attempt to switch peers, there is not much else we can do here
+      buddy.ctrl.zombie = true
       return
 
     # Replace global/env batch list by preprocessed local one.

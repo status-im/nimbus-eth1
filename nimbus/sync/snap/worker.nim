@@ -43,6 +43,10 @@ else:
 logScope:
   topics = "snap-sync"
 
+const
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -103,6 +107,40 @@ proc pivotStop(buddy: SnapBuddyRef) =
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
+  ## Return a pair of account hash range lists with the whole range of
+  ## smartly spread `[low(NodeTag),high(NodeTag)]` across the mutually
+  ## disjunct interval sets.
+  result = [LeafRangeSet.init(),LeafRangeSet.init()]
+
+  # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
+  # range sets.
+  if ctx.data.coveredAccounts.total == 0 and
+     ctx.data.coveredAccounts.chunks == 1:
+    # 100% of accounts covered by range fetch batches for the total
+    # of pivot environments. Do a random split distributing the range
+    # `[low(NodeTag),high(NodeTag)]` across the pair of range sats.
+    var nodeKey: NodeKey
+    ctx.data.rng[].generate(nodeKey.ByteArray32)
+
+    let partition = nodeKey.to(NodeTag)
+    discard result[0].merge(partition, high(NodeTag))
+    if low(NodeTag) < partition:
+      discard result[1].merge(low(NodeTag), partition - 1.u256)
+  else:
+    # Not all account hashes are covered, yet. So keep the uncovered
+    # account hashes in the first range set, and the other account hashes
+    # in the second range set.
+
+    # Pre-filled with thefirst range set with largest possible interval
+    discard result[0].merge(low(NodeTag),high(NodeTag))
+
+    # Move covered account ranges (aka intervals) to the second set.
+    for iv in ctx.data.coveredAccounts.increasing:
+      discard result[0].reduce(iv)
+      discard result[1].merge(iv)
+
+
 proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   ## Activate environment for state root implied by `header` argument. This
   ## function appends a new environment unless there was any not far enough
@@ -119,22 +157,24 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
       if rc.isOk: rc.value.stateHeader.blockNumber + minPivotBlockDistance
       else: 1.toBlockNumber
 
-  # Check whether the new header follows minimum depth requirement
+  # Check whether the new header follows minimum depth requirement. This is
+  # where the queue is assumed to have increasing block numbers.
   if minNumber <= header.blockNumber:
-    var nodeKey: NodeKey
-    ctx.data.rng[].generate(nodeKey.ByteArray32)
-
     # Ok, append a new environment
     let env = SnapPivotRef(
       stateHeader:   header,
-      pivotAccount:  nodeKey.to(Nodetag),
-      fetchAccounts: LeafRangeSet.init())
+      fetchAccounts: SnapAccountRanges.init(ctx))
 
-    # Pre-filled with the largest possible interval
-    discard env.fetchAccounts.merge(low(NodeTag),high(NodeTag))
-
-    # Activate per-state root environment (and hold previous one)
+    # Append per-state root environment to LRU queue
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
+
+    # Debugging, will go away
+    block:
+      let ivSet = env.fetchAccounts[0].clone
+      for iv in env.fetchAccounts[1].increasing:
+        doAssert ivSet.merge(iv) == iv.len
+      doAssert ivSet.chunks == 1
+      doAssert ivSet.total == 0
 
 
 proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
@@ -143,18 +183,29 @@ proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
     return true
 
   let
+    ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.ctx.data.pivotTable.lastValue.get(otherwise = nil)
+    env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
     nMin = if env.isNil: none(BlockNumber)
            else: some(env.stateHeader.blockNumber)
 
   if await buddy.pivot.pivotNegotiate(nMin):
     var header = buddy.pivot.pivotHeader.value
 
+    # Check whether there is no environment change needed
+    when noPivotEnvChangeIfComplete:
+      let rc = ctx.data.pivotTable.lastValue
+      if rc.isOk and rc.value.serialSync:
+        # No neede to change
+        if extraTraceMessages:
+          trace "No need to change snap pivot", peer,
+            pivot=("#" & $rc.value.stateHeader.blockNumber),
+            multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
+        return true
+
     when 0 < backPivotBlockDistance:
       # Backtrack, do not use the very latest pivot header
-      const backThreshold = backPivotBlockDistance + minPivotBlockDistance
-      if backThreshold.toBlockNumber < header.blockNumber:
+      if backPivotBlockThreshold.toBlockNumber < header.blockNumber:
         let
           backNum = header.blockNumber - backPivotBlockDistance.toBlockNumber
           rc = await buddy.getBlockHeader(backNum)
@@ -164,10 +215,11 @@ proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
           return false
         header = rc.value
 
+    buddy.appendPivotEnv(header)
+
     trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
-    buddy.appendPivotEnv(header)
     return true
 
 # Syntactic sugar
@@ -194,7 +246,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         aSqSum += aLen * aLen
 
         # Fill utilisation mean & variance
-        let fill = kvp.data.fetchAccounts.freeFactor
+        let fill = kvp.data.fetchAccounts.emptyFactor
         uSum += fill
         uSqSum += fill * fill
 
@@ -203,7 +255,6 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSqSum += sLen * sLen
 
     let
-      tabLen = ctx.data.pivotTable.len
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
       pivotBlock = if env.isNil: none(BlockNumber)
                    else: some(env.stateHeader.blockNumber)
@@ -212,7 +263,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
     TickerStats(
       pivotBlock:    pivotBlock,
-      nQueues:       tabLen,
+      nQueues:       ctx.data.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nStorage:      meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage))
@@ -225,8 +276,8 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.coveredAccounts = LeafRangeSet.init()
   ctx.data.snapDb =
-      if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
-      else: SnapDbRef.init(ctx.data.dbBackend)
+    if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
+    else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivotSetup()
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
@@ -318,8 +369,11 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
       # Check whether accounts and storage might be complete.
       let env = rc.value
       if not env.serialSync:
-        # Check whether accounts are complete
-        if env.fetchAccounts.chunks == 0:
+        # Check whether accounts download is complete
+        block checkAccountsComplete:
+          for ivSet in env.fetchAccounts:
+            if ivSet.chunks != 0:
+              break checkAccountsComplete
           env.accountsDone = true
           # Check whether storage slots are complete
           if env.fetchStorage.len == 0:
@@ -352,18 +406,30 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     await sleepAsync(5.seconds)
 
   else:
-    # Snapshot sync processing
+    # Snapshot sync processing. Note that *serialSync => accountsDone*.
     await buddy.storeStorages() # always pre-clean the queue
     await buddy.storeAccounts()
     await buddy.storeStorages()
 
-    if healAccountsTrigger < env.fetchAccounts.freeFactor:
-      await buddy.fetchAndHealAccounts()
-      # TODO: use storage healer
+    # If the current database is not complete yet
+    if 0 < env.fetchAccounts[0].chunks or
+       0 < env.fetchAccounts[1].chunks:
+
+      # Healing applies to the latest pivot only. The pivot might have changed
+      # in the background (while netwoking) due to a new peer worker that has
+      # negotiated another, newer pivot.
+      if env == ctx.data.pivotTable.lastValue.value:
+
+        # Only start healing if there is some data already on the database
+        # and the coverage factor is large enough
+        if 0 < env.nAccounts:
+          if healAccountsTrigger <= ctx.data.coveredAccounts.fullFactor:
+            await buddy.healAccountsDb()
+
+      # TODO: use/apply storage healer
 
       # Check whether accounts might be complete.
-      # Note that *storageDone => accountsDone*.
-      if env.fetchAccounts.chunks == 0 or env.fetchStorage.len == 0:
+      if env.fetchStorage.len == 0:
         # Possibly done but some buddies might wait for an account range to be
         # received from the network. So we need to sync.
         buddy.ctx.poolMode = true

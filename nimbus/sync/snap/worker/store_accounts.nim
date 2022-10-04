@@ -1,3 +1,4 @@
+
 # Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
@@ -68,50 +69,31 @@ proc withMaxLen(
 # ------------------------------------------------------------------------------
 
 proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
-  ## Fetch an interval from the account range list. Use the `pivotAccount`
-  ## value as a start entry to fetch data from, wrapping around if necessary.
+  ## Fetch an interval from one of the account range lists.
   let
-    ctx = buddy.ctx
     env = buddy.data.pivotEnv
-    pivotPt = env.pivotAccount
-    accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
+    accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
 
-  block:
-    # Take the next interval to the right (aka ge) `pivotPt`
-    let rc = env.fetchAccounts.ge(pivotPt)
+  for ivSet in env.fetchAccounts:
+    let rc = ivSet.ge()
     if rc.isOk:
-      let iv = buddy.withMaxLen(
-        rc.value, accountRangeMax)
-      discard env.fetchAccounts.reduce(iv)
-      return ok(iv)
-
-  block:
-    # Check whether the `pivotPt` is in the middle of an interval
-    let rc = env.fetchAccounts.envelope(pivotPt)
-    if rc.isOk:
-      let iv = buddy.withMaxLen(
-        LeafRange.new(pivotPt, rc.value.maxPt), accountRangeMax)
-      discard env.fetchAccounts.reduce(iv)
-      return ok(iv)
-
-  block:
-    # Otherwise wrap around
-    let rc = env.fetchAccounts.ge()
-    if rc.isOk:
-      let iv = buddy.withMaxLen(
-        rc.value, accountRangeMax)
-      discard env.fetchAccounts.reduce(iv)
+      let iv = buddy.withMaxLen(rc.value, accountRangeMax)
+      discard ivSet.reduce(iv)
       return ok(iv)
 
   err()
 
 proc putUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts.merge(iv)
+  discard buddy.data.pivotEnv.fetchAccounts[1].merge(iv)
 
 proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts.reduce(iv)
+  discard buddy.data.pivotEnv.fetchAccounts[1].reduce(iv)
+
+proc markGloballyProcessed(buddy: SnapBuddyRef; iv: LeafRange) =
+  ## Shortcut
+  discard buddy.ctx.data.coveredAccounts.merge(iv)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -136,10 +118,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   when extraTraceMessages:
     trace "Start fetching accounts", peer, stateRoot, iv
 
-  # -- # Process received accounts and stash storage slots to fetch later
-  # Process accounts and storage by bulk download on the current envirinment
-
-  # Fetch data for this range delegated to `fetchAccounts()`
+  # Process received accounts and stash storage slots to fetch later
   let dd = block:
     let rc = await buddy.getAccountRange(stateRoot, iv)
     if rc.isErr:
@@ -174,7 +153,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   env.nStorage.inc(nStorage)
 
   # Register consumed intervals on the accumulator over all state roots
-  discard buddy.ctx.data.coveredAccounts.merge(dd.consumed)
+  buddy.markGloballyProcessed(dd.consumed)
 
   # Register consumed and bulk-imported (well, not yet) accounts range
   block registerConsumed:
@@ -199,7 +178,8 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   discard env.fetchStorage.append SnapSlotQueueItemRef(q: dd.withStorage)
 
   when extraTraceMessages:
-    trace "Done fetching accounts", peer, stateRoot, iv
+    let withStorage = dd.withStorage.len
+    trace "Done fetching accounts", peer, stateRoot, nAccounts, withStorage, iv
 
 # ------------------------------------------------------------------------------
 # End
