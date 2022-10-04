@@ -12,8 +12,8 @@ import
   std/sequtils,
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
-  stew/interval_set,
+  eth/[common/eth_types, p2p, trie/trie_defs],
+  stew/[interval_set, keyed_queue],
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/get_trie_nodes,
@@ -27,6 +27,48 @@ logScope:
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc mergeIsolatedAccounts(
+    buddy: SnapBuddyRef;
+    paths: openArray[NodeKey];
+      ): seq[AccountSlotsHeader] =
+  ## Process leaves found with nodes inspection, returns a list of
+  ## storage slots for these nodes.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    env = buddy.data.pivotEnv
+    stateRoot = env.stateHeader.stateRoot
+
+  # Remove reported leaf paths from the accounts interval
+  for accKey in paths:
+    let pt = accKey.to(NodeTag)
+    if 0 < env.fetchAccounts.covered(pt,pt):
+
+      let
+        rc = ctx.data.snapDb.getAccountData(peer, stateRoot, accKey)
+        accountHash = Hash256(data: accKey.ByteArray32)
+      if rc.isOk:
+        let storageRoot = rc.value.storageRoot
+        if storageRoot != emptyRlpHash:
+          result.add AccountSlotsHeader(
+            accHash:     accountHash,
+            storageRoot: storageRoot)
+        discard env.fetchAccounts.reduce(pt,pt)
+        when extraTraceMessages:
+          let stRootStr = if storageRoot != emptyRlpHash: $storageRoot
+                          else: "emptyRlpHash"
+          trace "Registered isolated persistent account", peer, accountHash,
+            storageRoot=stRootStr
+        continue
+
+      when extraTraceMessages:
+        let error = rc.error
+        trace "Get persistent account problem", peer, accountHash, error
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -46,8 +88,9 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
   # `env.danglAccountNodes`, this set is filtered and processed. The outcome
   # is fed back to the vey same list `env.danglAccountNodes`
   var
-    nLeaves = 0            # For logging
     nodesNeeded: seq[Blob] # Trie nodes to process by this instance
+    nLeaves = 0            # For logging
+    nWithStorage = 0       # For logging
   block:
     let
       maxLeaves = if env.danglAccountNodes.len == 0: 0 else: maxHealingLeafPaths
@@ -66,20 +109,23 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
         error "Accounts healing failed => stop", peer, nDangling, error
         buddy.ctrl.zombie = true
       return
+
     # Replace global/env batch list by preprocessed local one.
     nodesNeeded = rc.value.dangling
     env.danglAccountNodes.setLen(0)
-    # Remove reported leaf paths from the accounts interval
     nLeaves = rc.value.leaves.len
-    for accKey in rc.value.leaves:
-      let pt = accKey.to(NodeTag)
-      discard env.fetchAccounts.reduce(pt,pt)
+
+    # Store accounts leaves on the storage batch list.
+    let withStorage = buddy.mergeIsolatedAccounts(rc.value.leaves)
+    if 0 < withStorage.len:
+      nWithStorage = withStorage.len
+      discard env.fetchStorage.append SnapSlotQueueItemRef(q: withStorage)
 
   while 0 < nodesNeeded.len:
     var fetchNodes: seq[Blob]
     if maxTrieNodeFetch < nodesNeeded.len:
       # No point in processing more at the same time. So leave the rest on
-      # the `dangling` queue.
+      # the `danglAccountNodes` queue.
       fetchNodes = nodesNeeded[maxTrieNodeFetch ..< nodesNeeded.len]
       nodesNeeded.setLen(maxTrieNodeFetch)
     else:
@@ -87,9 +133,11 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
       nodesNeeded.setLen(0)
 
     when extraTraceMessages:
-      let nDangling=env.danglAccountNodes.len
+      let
+        nDangling = env.danglAccountNodes.len
+        nNodesNeeded = nodesNeeded.len
       trace "Accounts healing loop", peer, nDangling,
-         nNodesNeeded=nodesNeeded.len, nLeaves
+         nNodesNeeded, nLeaves, nWithStorage
 
     # Fetch nodes
     let dd = block:
@@ -99,9 +147,10 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
         when extraTraceMessages:
           let
             error = rc.error
-            nDangling=env.danglAccountNodes.len
-          trace "Error fetching account nodes for healing", peer,
-            nDangling, nNodesNeeded=nodesNeeded.len, nLeaves, error
+            nDangling = env.danglAccountNodes.len
+            nNodesNeeded = nodesNeeded.len
+          trace "Error fetching account nodes for healing", peer, nDangling,
+            nNodesNeeded, nLeaves, nWithStorage, error
         # Just try the next round
         continue
       rc.value
@@ -122,7 +171,7 @@ proc fetchAndHealAccounts*(buddy: SnapBuddyRef) {.async.} =
 
   when extraTraceMessages:
     let nDangling=env.danglAccountNodes.len
-    trace "Done accounts healing", peer, nDangling, nLeaves
+    trace "Done accounts healing", peer, nDangling, nLeaves, nWithStorage
 
 # ------------------------------------------------------------------------------
 # End

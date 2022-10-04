@@ -611,7 +611,7 @@ proc inspectAccountsTrie*(
 
 proc inspectAccountsTrie*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer,                   ## For log messages, only
+    peer: Peer;                   ## For log messages, only
     root: Hash256;                ## state root
     pathList = seq[Blob].default; ## Starting paths for search
     maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
@@ -621,6 +621,41 @@ proc inspectAccountsTrie*(
   SnapDbSessionRef.init(
     pv, root, peer).inspectAccountsTrie(
       pathList, maxLeafPaths, persistent=true, ignoreError)
+
+
+proc getAccountData*(
+    ps: SnapDbSessionRef;         ## Re-usable session descriptor
+    path: NodeKey;                ## Account to visit
+    persistent = false;           ## Read data from disk
+      ): Result[Account,HexaryDbError] =
+  ## Fetch account data.
+  ##
+  ## Caveat: There is no unit test yet for the non-persistent version
+  let peer = ps.peer
+  var acc: Account
+
+  noRlpExceptionOops("getAccountData()"):
+    var leaf: Blob
+    if persistent:
+      let getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      leaf = path.hexaryPath(ps.accRoot, getFn).leafData
+    else:
+      leaf = path.hexaryPath(ps.accRoot.to(RepairKey),ps.accDb).leafData
+
+    if leaf.len == 0:
+      return err(AccountNotFound)
+    acc = rlp.decode(leaf,Account)
+
+  return ok(acc)
+
+proc getAccountData*(
+    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    peer: Peer,                   ## For log messages, only
+    root: Hash256;                ## state root
+    path: NodeKey;                ## Account to visit
+      ): Result[Account,HexaryDbError] =
+  ## Variant of `getAccount()` for persistent storage.
+  SnapDbSessionRef.init(pv, root, peer).getAccountData(path, persistent=true)
 
 # ------------------------------------------------------------------------------
 # Public functions: additional helpers
@@ -653,15 +688,7 @@ proc getChainDbAccount*(
     accHash: Hash256
       ): Result[Account,HexaryDbError] =
   ## Fetch account via `BaseChainDB`
-  noRlpExceptionOops("getChainDbAccount()"):
-    let
-      getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      leaf = accHash.to(NodeKey).hexaryPath(ps.accRoot, getFn).leafData
-    if 0 < leaf.len:
-      let acc = rlp.decode(leaf,Account)
-      return ok(acc)
-
-  err(AccountNotFound)
+  ps.getAccountData(accHash.to(NodeKey),persistent=true)
 
 proc nextChainDbKey*(
     ps: SnapDbSessionRef;

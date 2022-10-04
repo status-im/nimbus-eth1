@@ -359,6 +359,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
     if healAccountsTrigger < env.fetchAccounts.freeFactor:
       await buddy.fetchAndHealAccounts()
+      # TODO: use storage healer
 
       # Check whether accounts might be complete.
       # Note that *storageDone => accountsDone*.
@@ -366,8 +367,6 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
         # Possibly done but some buddies might wait for an account range to be
         # received from the network. So we need to sync.
         buddy.ctx.poolMode = true
-
-    # use storage healer if enough accounts are stored
 
 # ------------------------------------------------------------------------------
 # End
