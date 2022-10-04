@@ -1,5 +1,4 @@
-# Nimbus - New sync approach - A fusion of snap, trie, beam and other methods
-#
+# Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -15,7 +14,7 @@ import
   stew/[byteutils, keyed_queue],
   "../.."/[constants, db/select_backend],
   ".."/[sync_desc, types],
-  ./worker/[com/com_error, snap_db, ticker],
+  ./worker/[com/com_error, db/snap_db, ticker],
   ./range_desc
 
 {.push raises: [Defect].}
@@ -35,12 +34,22 @@ const
     ##
     ## Set `backPivotBlockDistance` to zero for disabling this feature.
 
+  healAccountsTrigger* = 0.7
+    ## Apply accounts healing if the snap download coverage factor exceeds
+    ## this setting.
+
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
     ## an official limit but found on several implementations (e.g. geth.)
     ##
     ## Resticting the fetch list length early allows to better paralellise
     ## healing.
+
+  maxHealingLeafPaths* = 1024
+    ## Retrieve this many leave nodes with proper 32 bytes path when inspecting
+    ## for dangling nodes. This allows to run healing paralell to accounts or
+    ## storage download without requestinng an account/storage slot found by
+    ## healing again with the download.
 
   # -------
 
@@ -65,21 +74,21 @@ type
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
 
-  SnapRepairState* = enum
-    Pristine                           ## Not initialised yet
-    KeepGoing                          ## Unfinished repair process
-    Done                               ## Stop repairing
-
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
     pivotAccount*: NodeTag             ## Random account
     availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
-    nAccounts*: uint64                 ## Number of accounts imported
-    nStorage*: uint64                  ## Number of storage spaces imported
     leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
     dangling*: seq[Blob]               ## Missing nodes for healing process
-    repairState*: SnapRepairState      ## State of healing process
+
+    # State of affairs
+    accountsDone*: bool                ## All accounts have been processed
+    serialSync*: bool                  ## Continue with serial block download
+
+    # Info
+    nAccounts*: uint64                 ## Number of accounts imported
+    nStorage*: uint64                  ## Number of storage spaces imported
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -92,28 +101,27 @@ type
     pivotEnv*: SnapPivotRef            ## Environment containing state root
     vetoSlots*: SnapSlotsSet           ## Do not ask for these slots, again
 
-  BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
-    ## All buddies call back (the argument type is defined below with
-    ## pretty name `SnapBuddyRef`.)
-
   CtxData* = object
     ## Globally shared data extension
     seenBlock: WorkerSeenBlocks        ## Temporary, debugging, pretty logs
     rng*: ref HmacDrbgContext          ## Random generator
-    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
-    ticker*: TickerRef                 ## Ticker, logger
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
-    accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
-    runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
+
+    # Info
+    ticker*: TickerRef                 ## Ticker, logger
+    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
 
   SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
     ## Extended worker peer descriptor
 
   SnapCtxRef* = CtxRef[CtxData]
     ## Extended global descriptor
+
+static:
+  doAssert healAccountsTrigger < 1.0 # larger values make no sense
 
 # ------------------------------------------------------------------------------
 # Public functions

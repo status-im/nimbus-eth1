@@ -36,7 +36,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
-  ./snap_db
+  ./db/snap_db
 
 {.push raises: [Defect].}
 

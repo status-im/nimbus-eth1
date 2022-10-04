@@ -25,8 +25,8 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/snap_db,
-  ../nimbus/sync/snap/worker/db/[hexary_desc, hexary_inspect, rocky_bulk_load],
+  ../nimbus/sync/snap/worker/db/[hexary_desc, hexary_inspect,
+                                 rocky_bulk_load, snap_db,],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -588,7 +588,7 @@ proc inspectionRunner(
             cscStep[rootKey][0].inc
           let
             r0 = desc.inspectAccountsTrie(persistent=false)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],false)
+            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
           check rc.isOk
           let
             accumulated = r0.value.dangling.toHashSet
@@ -620,7 +620,7 @@ proc inspectionRunner(
             cscStep[rootKey][0].inc
           let
             r0 = desc.inspectAccountsTrie(persistent=true)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],true)
+            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
           check rc.isOk
           let
             accumulated = r0.value.dangling.toHashSet

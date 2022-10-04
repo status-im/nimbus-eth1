@@ -16,30 +16,33 @@ import
   stew/byteutils,
   stint,
   rocksdb,
-  ../../../constants,
-  ../../../db/[kvstore_rocksdb, select_backend],
-  "../.."/[protocol, types],
-  ../range_desc,
-  ./db/[bulk_storage,  hexary_desc, hexary_error, hexary_import,
-        hexary_interpolate, hexary_inspect, hexary_paths, rocky_bulk_load]
+  ../../../../constants,
+  ../../../../db/[kvstore_rocksdb, select_backend],
+  "../../.."/[protocol, types],
+  ../../range_desc,
+  "."/[bulk_storage, hexary_desc, hexary_error, hexary_import,
+       hexary_interpolate, hexary_inspect, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-proof"
+  topics = "snap-db"
 
 export
-  HexaryDbError
+  HexaryDbError,
+  TrieNodeStat
 
 const
   extraTraceMessages = false or true
 
 type
   SnapDbRef* = ref object
+    ## Global, re-usable descriptor
     db: TrieDatabaseRef              ## General database
     rocky: RocksStoreRef             ## Set if rocksdb is available
 
   SnapDbSessionRef* = ref object
+    ## Database session descriptor
     keyMap: Table[RepairKey,uint]    ## For debugging only (will go away)
     base: SnapDbRef                  ## Back reference to common parameters
     peer: Peer                       ## For log messages
@@ -571,6 +574,7 @@ proc importRawNodes*(
 proc inspectAccountsTrie*(
     ps: SnapDbSessionRef;         ## Re-usable session descriptor
     pathList = seq[Blob].default; ## Starting nodes for search
+    maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
     persistent = false;           ## Read data from disk
     ignoreError = false;          ## Return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
@@ -583,9 +587,9 @@ proc inspectAccountsTrie*(
   noRlpExceptionOops("inspectAccountsTrie()"):
     if persistent:
       let getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      stats = getFn.hexaryInspectTrie(ps.accRoot, pathList)
+      stats = getFn.hexaryInspectTrie(ps.accRoot, pathList, maxLeafPaths)
     else:
-      stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList)
+      stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList, maxLeafPaths)
 
   block checkForError:
     let error = block:
@@ -596,12 +600,13 @@ proc inspectAccountsTrie*(
       else:
         break checkForError
     trace "Inspect account trie failed", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, stoppedAt=stats.level, error
+      nDangling=stats.dangling.len, leaves=stats.leaves.len,
+      stoppedAt=stats.level, error
     return err(error)
 
   when extraTraceMessages:
     trace "Inspect account trie ok", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, level=stats.level
+      nDangling=stats.dangling.len, leaves=stats.leaves.len, level=stats.level
   return ok(stats)
 
 proc inspectAccountsTrie*(
@@ -609,11 +614,13 @@ proc inspectAccountsTrie*(
     peer: Peer,                   ## For log messages, only
     root: Hash256;                ## state root
     pathList = seq[Blob].default; ## Starting paths for search
+    maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
     ignoreError = false;          ## Return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectAccountsTrie()` for persistent storage.
   SnapDbSessionRef.init(
-    pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
+    pv, root, peer).inspectAccountsTrie(
+      pathList, maxLeafPaths, persistent=true, ignoreError)
 
 # ------------------------------------------------------------------------------
 # Public functions: additional helpers

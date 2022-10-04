@@ -16,8 +16,9 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[protocol, sync_desc],
-  ./worker/[snap_db, store_accounts, store_storages, ticker],
+  ./worker/[heal_accounts, store_accounts, store_storages, ticker],
   ./worker/com/[com_error, get_block_header],
+  ./worker/db/snap_db,
   "."/[range_desc, worker_desc]
 
 const
@@ -222,7 +223,6 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.data.accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
   ctx.data.coveredAccounts = LeafRangeSet.init()
   ctx.data.snapDb =
       if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
@@ -312,11 +312,18 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
   let ctx = buddy.ctx
   if ctx.poolMode:
     ctx.poolMode = false
-  if not ctx.data.runPoolHook.isNil:
-    noExceptionOops("runPool"):
-      ctx.data.runPoolHook(buddy)
-    if last:
-      ctx.data.runPoolHook = nil
+
+    let rc = ctx.data.pivotTable.lastValue
+    if rc.isOk:
+      # Check whether accounts and storage might be complete.
+      let env = rc.value
+      if not env.serialSync:
+        # Check whether accounts are complete
+        if env.availAccounts.chunks == 0:
+          env.accountsDone = true
+          # Check whether storage slots are complete
+          if env.leftOver.len == 0:
+            env.serialSync = true
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
@@ -332,23 +339,35 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     discard await buddy.updateMultiPivot()
 
   # Set up current state root environment for accounts snapshot
-  buddy.data.pivotEnv = block:
+  let env = block:
     let rc = ctx.data.pivotTable.lastValue
     if rc.isErr:
       return # nothing to do
     rc.value
 
-  await buddy.storeStorages() # always clean the queue
-  await buddy.storeAccounts()
-  await buddy.storeStorages()
+  buddy.data.pivotEnv = env
 
-  # use accounts healer if enough accounts are stored
-  # use storage healer if enough accounts are stored
+  if env.serialSync:
+    trace "Snap serial sync -- not implemented yet", peer
+    await sleepAsync(5.seconds)
 
-  #if buddy.data.pivotEnv.repairState == Done: # TODO:
-  #  buddy.ctrl.multiOk = false                #  This is all rubbish and needs
-  #  buddy.pivotStop()                         #  to be re-done
-  #  buddy.pivotStart()                        #
+  else:
+    # Snapshot sync processing
+    await buddy.storeStorages() # always pre-clean the queue
+    await buddy.storeAccounts()
+    await buddy.storeStorages()
+
+    if healAccountsTrigger < env.availAccounts.freeFactor:
+      await buddy.fetchAndHealAccounts()
+
+      # Check whether accounts might be complete.
+      # Note that *storageDone => accountsDone*.
+      if env.availAccounts.chunks == 0 or env.leftOver.len == 0:
+        # Possibly done but some buddies might wait for an account range to be
+        # received from the network. So we need to sync.
+        buddy.ctx.poolMode = true
+
+    # use storage healer if enough accounts are stored
 
 # ------------------------------------------------------------------------------
 # End

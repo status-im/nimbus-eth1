@@ -37,7 +37,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./snap_db
+  ./db/snap_db
 
 {.push raises: [Defect].}
 
@@ -52,9 +52,12 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc withMaxLen(buddy: SnapBuddyRef; iv: LeafRange): LeafRange =
+proc withMaxLen(
+    buddy: SnapBuddyRef;
+    iv: LeafRange;
+    maxlen: UInt256;
+      ): LeafRange =
   ## Reduce accounts interval to maximal size
-  let maxlen = buddy.ctx.data.accountRangeMax
   if 0 < iv.len and iv.len <= maxLen:
     iv
   else:
@@ -71,12 +74,14 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
     ctx = buddy.ctx
     env = buddy.data.pivotEnv
     pivotPt = env.pivotAccount
+    accountRangeMax = high(UInt256) div ctx.buddiesMax.u256
 
   block:
     # Take the next interval to the right (aka ge) `pivotPt`
     let rc = env.availAccounts.ge(pivotPt)
     if rc.isOk:
-      let iv = buddy.withMaxLen(rc.value)
+      let iv = buddy.withMaxLen(
+        rc.value, accountRangeMax)
       discard env.availAccounts.reduce(iv)
       return ok(iv)
 
@@ -84,7 +89,8 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
     # Check whether the `pivotPt` is in the middle of an interval
     let rc = env.availAccounts.envelope(pivotPt)
     if rc.isOk:
-      let iv = buddy.withMaxLen(LeafRange.new(pivotPt, rc.value.maxPt))
+      let iv = buddy.withMaxLen(
+        LeafRange.new(pivotPt, rc.value.maxPt), accountRangeMax)
       discard env.availAccounts.reduce(iv)
       return ok(iv)
 
@@ -92,7 +98,8 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
     # Otherwise wrap around
     let rc = env.availAccounts.ge()
     if rc.isOk:
-      let iv = buddy.withMaxLen(rc.value)
+      let iv = buddy.withMaxLen(
+        rc.value, accountRangeMax)
       discard env.availAccounts.reduce(iv)
       return ok(iv)
 

@@ -193,6 +193,7 @@ proc hexaryInspectTrie*(
     db: HexaryTreeDbRef;           ## Database
     root: NodeKey;                 ## State root
     paths: seq[Blob];              ## Starting paths for search
+    maxLeafPaths = 0;              ## Record leaves with proper 32 bytes path
     stopAtLevel = 32;              ## Instead of loop detector
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,KeyError]} =
@@ -204,7 +205,9 @@ proc hexaryInspectTrie*(
     return TrieNodeStat()
 
   # Initialise TODO list
-  var reVisit = newTable[RepairKey,NibblesSeq]()
+  var
+    leafSlots = maxLeafPaths
+    reVisit = newTable[RepairKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[rootKey] = EmptyNibbleRange
   else:
@@ -240,8 +243,13 @@ proc hexaryInspectTrie*(
             child = node.bLink[n]
           db.processLink(stats=result, inspect=again, parent, trail, child)
       of Leaf:
-        # Done with this link, forget the key
-        discard
+        if 0 < leafSlots:
+          let trail = parentTrail & node.lPfx
+          if trail.len == 64:
+            result.leaves.add trail.getBytes.convertTo(NodeKey)
+            leafSlots.dec
+        # Done with this link
+
       # End `for`
 
     result.level.inc
@@ -253,6 +261,7 @@ proc hexaryInspectTrie*(
     getFn: HexaryGetFn;
     root: NodeKey;                 ## State root
     paths: seq[Blob];              ## Starting paths for search
+    maxLeafPaths = 0;              ## Record leaves with proper 32 bytes path
     stopAtLevel = 32;              ## Instead of loop detector
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,RlpError,KeyError]} =
@@ -262,7 +271,9 @@ proc hexaryInspectTrie*(
     return TrieNodeStat()
 
   # Initialise TODO list
-  var reVisit = newTable[NodeKey,NibblesSeq]()
+  var
+    leafSlots = maxLeafPaths
+    reVisit = newTable[NodeKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[root] = EmptyNibbleRange
   else:
@@ -291,10 +302,16 @@ proc hexaryInspectTrie*(
       let nodeRlp = rlpFromBytes parent.to(Blob).getFn()
       case nodeRlp.listLen:
       of 2:
-        let (isLeaf,ePfx) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-        if not isleaf:
+        let (isLeaf,xPfx) = hexPrefixDecode nodeRlp.listElem(0).toBytes
+        if isleaf:
+          if 0 < leafSlots:
+            let trail = parentTrail & xPfx
+            if trail.len == 64:
+              result.leaves.add trail.getBytes.convertTo(NodeKey)
+              leafSlots.dec
+        else:
           let
-            trail = parentTrail & ePfx
+            trail = parentTrail & xPfx
             child = nodeRlp.listElem(1)
           getFn.processLink(stats=result, inspect=again, parent, trail, child)
       of 17:
@@ -304,7 +321,7 @@ proc hexaryInspectTrie*(
             child = nodeRlp.listElem(n)
           getFn.processLink(stats=result, inspect=again, parent, trail, child)
       else:
-        # Done with this link, forget the key
+        # Ooops, forget node and key
         discard
       # End `for`
 
