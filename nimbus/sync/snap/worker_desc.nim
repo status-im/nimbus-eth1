@@ -98,7 +98,7 @@ type
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
 
-  SnapAccountRanges* = array[2,LeafRangeSet]
+  SnapAccountRanges* = array[2,NodeTagRangeSet]
     ## Pair of account hash range lists. The first entry must be processed
     ## first. This allows to coordinate peers working on different state roots
     ## to avoid ovelapping accounts as long as they fetch from the first entry.
@@ -140,7 +140,7 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
-    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
+    coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger

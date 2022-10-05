@@ -108,18 +108,17 @@ proc pivotStop(buddy: SnapBuddyRef) =
 # ------------------------------------------------------------------------------
 
 proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
-  ## Return a pair of account hash range lists with the whole range of
-  ## smartly spread `[low(NodeTag),high(NodeTag)]` across the mutually
-  ## disjunct interval sets.
-  result = [LeafRangeSet.init(),LeafRangeSet.init()]
+  ## Returns a pair of account hash range lists with the full range of hashes
+  ## smartly spread across the mutually disjunct interval sets.
+  result = [NodeTagRangeSet.init(),NodeTagRangeSet.init()]
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
   if ctx.data.coveredAccounts.total == 0 and
      ctx.data.coveredAccounts.chunks == 1:
-    # 100% of accounts covered by range fetch batches for the total
-    # of pivot environments. Do a random split distributing the range
-    # `[low(NodeTag),high(NodeTag)]` across the pair of range sats.
+    # All (i.e. 100%) of accounts hashes are covered by completed range fetch
+    # processes for all pivot environments. Do a random split distributing the
+    # full accounts hash range across the pair of range sats.
     var nodeKey: NodeKey
     ctx.data.rng[].generate(nodeKey.ByteArray32)
 
@@ -132,8 +131,8 @@ proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
 
-    # Pre-filled with the first range set with largest possible interval
-    discard result[0].merge(low(NodeTag),high(NodeTag))
+    # Pre-filled with thefirst range set with largest possible interval
+    discard result[0].merge(FullNodeTagRange)
 
     # Move covered account ranges (aka intervals) to the second set.
     for iv in ctx.data.coveredAccounts.increasing:
@@ -274,7 +273,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.data.coveredAccounts = LeafRangeSet.init()
+  ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
     else: SnapDbRef.init(ctx.data.dbBackend)

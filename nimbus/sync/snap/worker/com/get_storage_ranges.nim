@@ -47,7 +47,7 @@ proc getStorageRangesReq(
     buddy: SnapBuddyRef;
     root: Hash256;
     accounts: seq[Hash256],
-    iv: Option[LeafRange]
+    iv: Option[NodeTagRange]
       ): Future[Result[Option[SnapStorageRanges],void]]
       {.async.} =
   let
@@ -106,13 +106,13 @@ proc getStorageRanges*(
     peer = buddy.peer
   var
     nAccounts = accounts.len
-    maybeIv = none(LeafRange)
+    maybeIv = none(NodeTagRange)
 
   if nAccounts == 0:
     return err(ComEmptyAccountsArguments)
   if accounts[0].firstSlot != Hash256():
     # Set up for range
-    maybeIv = some(LeafRange.new(
+    maybeIv = some(NodeTagRange.new(
       accounts[0].firstSlot.to(NodeTag), high(NodeTag)))
 
   if trSnapTracePacketsOk:

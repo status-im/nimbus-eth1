@@ -117,14 +117,14 @@ proc coverageInfo(buddy: SnapBuddyRef): string =
     "/" &
     ctx.data.coveredAccounts.fullFactor.toPC(0)
 
-proc getCoveringLeafRangeSet(buddy: SnapBuddyRef; pt: NodeTag): LeafRangeSet =
+proc getCoveringRangeSet(buddy: SnapBuddyRef; pt: NodeTag): NodeTagRangeSet =
   ## Helper ...
   let env = buddy.data.pivotEnv
   for ivSet in env.fetchAccounts:
     if 0 < ivSet.covered(pt,pt):
       return ivSet
 
-proc commitLeafAccount(buddy: SnapBuddyRef; ivSet: LeafRangeSet; pt: NodeTag) =
+proc commitLeafAccount(buddy:SnapBuddyRef; ivSet: NodeTagRangeSet; pt: NodeTag)=
   ## Helper ...
   discard ivSet.reduce(pt,pt)
   discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
@@ -173,7 +173,7 @@ proc mergeIsolatedAccounts(
   for accKey in paths:
     let
       pt = accKey.to(NodeTag)
-      ivSet = buddy.getCoveringLeafRangeSet(pt)
+      ivSet = buddy.getCoveringRangeSet(pt)
     if not ivSet.isNil:
       let
         rc = ctx.data.snapDb.getAccountData(peer, stateRoot, accKey)

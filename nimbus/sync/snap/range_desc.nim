@@ -31,13 +31,13 @@ type
     ## Hash key without the hash wrapper (as opposed to `NodeTag` which is a
     ## number)
 
-  LeafRange* = ##\
+  NodeTagRange* = ##\
     ## Interval `[minPt,maxPt]` of` NodeTag` elements, can be managed in an
     ## `IntervalSet` data type.
     Interval[NodeTag,UInt256]
 
-  LeafRangeSet* = ##\
-    ## Managed structure to handle non-adjacent `LeafRange` intervals
+  NodeTagRangeSet* = ##\
+    ## Managed structure to handle non-adjacent `NodeTagRange` intervals
     IntervalSetRef[NodeTag,UInt256]
 
   PackedAccountRange* = object
@@ -70,6 +70,9 @@ type
     ## Account storage descriptor
     account*: AccountSlotsHeader
     data*: seq[SnapStorage]
+
+# See below, after seting arithmetic rules for `NodeTag`
+# const FullNodeTagRange* = ...
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -136,7 +139,7 @@ proc append*(writer: var RlpWriter, nid: NodeTag) =
   writer.append(nid.to(Hash256))
 
 # ------------------------------------------------------------------------------
-# Public `NodeTag` and `LeafRange` functions
+# Public `NodeTag` and `NodeTagRange` functions
 # ------------------------------------------------------------------------------
 
 proc u256*(lp: NodeTag): UInt256 = lp.UInt256
@@ -161,8 +164,14 @@ proc digestTo*(data: Blob; T: type NodeTag): T =
   ## Hash the `data` argument
   keccakHash(data).to(T)
 
+# ------------------------------------------------------------------------------
+# Public functions: helpers and constants
+# ------------------------------------------------------------------------------
 
-proc emptyFactor*(lrs: LeafRangeSet): float =
+const
+  FullNodeTagRange* = NodeTagRange.new(low(NodeTag),high(NodeTag))
+
+proc emptyFactor*(lrs: NodeTagRangeSet): float =
   ## Relative uncovered total, i.e. `#points-not-covered / 2^256` to be used
   ## in statistics or triggers.
   if 0 < lrs.total:
@@ -172,7 +181,7 @@ proc emptyFactor*(lrs: LeafRangeSet): float =
   else:
     0.0 # number of points in `lrs` is `2^256 + 1`
 
-proc emptyFactor*(lrs: openArray[LeafRangeSet]): float =
+proc emptyFactor*(lrs: openArray[NodeTagRangeSet]): float =
   ## Variant of `emptyFactor()` where intervals are distributed across several
   ## sets. This function makes sense only if the interval sets are mutually
   ## disjunct.
@@ -188,7 +197,7 @@ proc emptyFactor*(lrs: openArray[LeafRangeSet]): float =
       return 0.0
   ((high(NodeTag) - accu).u256 + 1).to(float) / (2.0^256)
 
-proc fullFactor*(lrs: LeafRangeSet): float =
+proc fullFactor*(lrs: NodeTagRangeSet): float =
   ## Relative covered total, i.e. `#points-covered / 2^256` to be used
   ## in statistics or triggers
   if 0 < lrs.total:
@@ -199,7 +208,9 @@ proc fullFactor*(lrs: LeafRangeSet): float =
     1.0 # number of points in `lrs` is `2^256 + 1`
 
 
-# Printing & pretty printing
+# ------------------------------------------------------------------------------
+# Public functions: printing & pretty printing
+# ------------------------------------------------------------------------------
 
 proc `$`*(nt: NodeTag): string =
   if nt == high(NodeTag):
@@ -221,7 +232,7 @@ proc `$`*(a, b: NodeTag): string =
   ## Prettyfied prototype
   leafRangePp(a,b)
 
-proc `$`*(iv: LeafRange): string =
+proc `$`*(iv: NodeTagRange): string =
   leafRangePp(iv.minPt, iv.maxPt)
 
 # ------------------------------------------------------------------------------

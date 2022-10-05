@@ -55,20 +55,20 @@ const
 
 proc withMaxLen(
     buddy: SnapBuddyRef;
-    iv: LeafRange;
+    iv: NodeTagRange;
     maxlen: UInt256;
-      ): LeafRange =
+      ): NodeTagRange =
   ## Reduce accounts interval to maximal size
   if 0 < iv.len and iv.len <= maxLen:
     iv
   else:
-    LeafRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
+    NodeTagRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
+proc getUnprocessed(buddy: SnapBuddyRef): Result[NodeTagRange,void] =
   ## Fetch an interval from one of the account range lists.
   let
     env = buddy.data.pivotEnv
@@ -83,15 +83,15 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
 
   err()
 
-proc putUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc putUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
   discard buddy.data.pivotEnv.fetchAccounts[1].merge(iv)
 
-proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc delUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
   discard buddy.data.pivotEnv.fetchAccounts[1].reduce(iv)
 
-proc markGloballyProcessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
   discard buddy.ctx.data.coveredAccounts.merge(iv)
 
