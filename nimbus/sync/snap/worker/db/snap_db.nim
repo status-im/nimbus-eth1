@@ -576,11 +576,12 @@ proc inspectAccountsTrie*(
     pathList = seq[Blob].default; ## Starting nodes for search
     maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
     persistent = false;           ## Read data from disk
-    ignoreError = false;          ## Return partial results if available
+    ignoreError = false;          ## Always return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
-  ## the trie database.
+  ## the trie database. Argument `pathSet` list entries that do not refer to a
+  ## valid node are silently ignored.
   ##
   let peer = ps.peer
   var stats: TrieNodeStat
@@ -595,18 +596,19 @@ proc inspectAccountsTrie*(
     let error = block:
       if stats.stopped:
         TrieLoopAlert
-      elif stats.level <= 1:
+      elif stats.level == 0:
         TrieIsEmpty
       else:
         break checkForError
     trace "Inspect account trie failed", peer, nPathList=pathList.len,
       nDangling=stats.dangling.len, leaves=stats.leaves.len,
-      stoppedAt=stats.level, error
+      maxleaves=maxLeafPaths, stoppedAt=stats.level, error
     return err(error)
 
   when extraTraceMessages:
     trace "Inspect account trie ok", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, leaves=stats.leaves.len, level=stats.level
+      nDangling=stats.dangling.len, leaves=stats.leaves.len,
+      maxleaves=maxLeafPaths, level=stats.level
   return ok(stats)
 
 proc inspectAccountsTrie*(
@@ -615,12 +617,40 @@ proc inspectAccountsTrie*(
     root: Hash256;                ## state root
     pathList = seq[Blob].default; ## Starting paths for search
     maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
-    ignoreError = false;          ## Return partial results if available
+    ignoreError = false;          ## Always return partial results when avail.
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectAccountsTrie()` for persistent storage.
   SnapDbSessionRef.init(
     pv, root, peer).inspectAccountsTrie(
       pathList, maxLeafPaths, persistent=true, ignoreError)
+
+
+proc getAccountNodeKey*(
+    ps: SnapDbSessionRef;         ## Re-usable session descriptor
+    path: Blob;                   ## Partial node path
+    persistent = false;           ## Read data from disk
+      ): Result[NodeKey,HexaryDbError] =
+  ## For a partial node path argument `path`, return the raw node key.
+  var rc: Result[NodeKey,void]
+  noRlpExceptionOops("inspectAccountsPath()"):
+    if persistent:
+      let getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
+      rc = getFn.hexaryInspectPath(ps.accRoot, path)
+    else:
+      rc = ps.accDb.hexaryInspectPath(ps.accRoot, path)
+  if rc.isOk:
+    return ok(rc.value)
+  err(NodeNotFound)
+
+proc getAccountNodeKey*(
+    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    peer: Peer;                   ## For log messages, only
+    root: Hash256;                ## state root
+    path: Blob;                   ## Partial node path
+      ): Result[NodeKey,HexaryDbError] =
+  ## Variant of `inspectAccountsPath()` for persistent storage.
+  SnapDbSessionRef.init(
+    pv, root, peer).getAccountNodeKey(path, persistent=true)
 
 
 proc getAccountData*(

@@ -109,7 +109,8 @@ type
 
     # Accounts download
     fetchAccounts*: SnapAccountRanges  ## Sets of accounts ranges to fetch
-    danglAccountNodes*: seq[Blob]      ## Dangling account nodes for healing
+    checkAccountNodes*: seq[Blob]      ## Nodes with prob. dangling child links
+    missingAccountNodes*: seq[Blob]    ## Dangling links to fetch and merge
     accountsDone*: bool                ## All accounts have been processed
 
     # Storage slots download

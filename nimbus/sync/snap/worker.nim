@@ -132,7 +132,7 @@ proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
 
-    # Pre-filled with thefirst range set with largest possible interval
+    # Pre-filled with the first range set with largest possible interval
     discard result[0].merge(low(NodeTag),high(NodeTag))
 
     # Move covered account ranges (aka intervals) to the second set.
@@ -419,12 +419,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       # in the background (while netwoking) due to a new peer worker that has
       # negotiated another, newer pivot.
       if env == ctx.data.pivotTable.lastValue.value:
-
-        # Only start healing if there is some data already on the database
-        # and the coverage factor is large enough
-        if 0 < env.nAccounts:
-          if healAccountsTrigger <= ctx.data.coveredAccounts.fullFactor:
-            await buddy.healAccountsDb()
+        await buddy.healAccountsDb()
 
       # TODO: use/apply storage healer
 
