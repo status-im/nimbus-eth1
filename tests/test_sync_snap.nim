@@ -25,8 +25,8 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/[accounts_db, db/hexary_desc,
-                              db/hexary_inspect, db/rocky_bulk_load],
+  ../nimbus/sync/snap/worker/db/[hexary_desc, hexary_inspect,
+                                 rocky_bulk_load, snap_db,],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -117,7 +117,7 @@ proc pp(rc: Result[Hash256,HexaryDbError]): string =
 
 proc pp(
     rc: Result[TrieNodeStat,HexaryDbError];
-    db: AccountsDbSessionRef
+    db: SnapDbSessionRef
       ): string =
   if rc.isErr: $rc.error else: rc.value.pp(db.getAcc)
 
@@ -284,21 +284,21 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
     var
-      desc: AccountsDbSessionRef
+      desc: SnapDbSessionRef
       accKeys: seq[Hash256]
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
-        dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
-                 else: AccountsDbRef.init(newMemoryDB())
-        dbDesc = AccountsDbSessionRef.init(dbBase, root, peer)
+        dbBase = if persistent: SnapDbRef.init(db.cdb[0])
+                 else: SnapDbRef.init(newMemoryDB())
+        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
       for n,w in accountsList:
         check dbDesc.importAccounts(w.base, w.data, persistent) == OkHexDb
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
-      let dbBase = if persistent: AccountsDbRef.init(db.cdb[1])
-                   else: AccountsDbRef.init(newMemoryDB())
-      desc = AccountsDbSessionRef.init(dbBase, root, peer)
+      let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
+                   else: SnapDbRef.init(newMemoryDB())
+      desc = SnapDbSessionRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
       let
@@ -417,19 +417,19 @@ proc storagesRunner(
 
   suite &"SyncSnap: {fileInfo} accounts storage for {info}":
     let
-      dbBase = if persistent: AccountsDbRef.init(db.cdb[0])
-               else: AccountsDbRef.init(newMemoryDB())
+      dbBase = if persistent: SnapDbRef.init(db.cdb[0])
+               else: SnapDbRef.init(newMemoryDB())
     var
-      desc = AccountsDbSessionRef.init(dbBase, root, peer)
+      desc = SnapDbSessionRef.init(dbBase, root, peer)
 
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
-        let desc = AccountsDbSessionRef.init(dbBase, root, peer)
+        let desc = SnapDbSessionRef.init(dbBase, root, peer)
         check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = AccountsDbSessionRef.init(dbBase, root, peer)
+        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -466,18 +466,18 @@ proc inspectionRunner(
 
   suite &"SyncSnap: inspect {fileInfo} lists for {info} for healing":
     let
-      memBase = AccountsDbRef.init(newMemoryDB())
-      memDesc = AccountsDbSessionRef.init(memBase, Hash256(), peer)
+      memBase = SnapDbRef.init(newMemoryDB())
+      memDesc = SnapDbSessionRef.init(memBase, Hash256(), peer)
     var
       singleStats: seq[(int,TrieNodeStat)]
       accuStats: seq[(int,TrieNodeStat)]
-      perBase,altBase: AccountsDbRef
-      perDesc,altDesc: AccountsDbSessionRef
+      perBase,altBase: SnapDbRef
+      perDesc,altDesc: SnapDbSessionRef
     if persistent:
-      perBase = AccountsDbRef.init(db.cdb[0])
-      perDesc = AccountsDbSessionRef.init(perBase, Hash256(), peer)
-      altBase = AccountsDbRef.init(db.cdb[1])
-      altDesc = AccountsDbSessionRef.init(altBase, Hash256(), peer)
+      perBase = SnapDbRef.init(db.cdb[0])
+      perDesc = SnapDbSessionRef.init(perBase, Hash256(), peer)
+      altBase = SnapDbRef.init(db.cdb[1])
+      altDesc = SnapDbSessionRef.init(altBase, Hash256(), peer)
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for in-memory-db":
@@ -486,7 +486,7 @@ proc inspectionRunner(
         let
           root = accList[0].root
           rootKey = root.to(NodeKey)
-          desc = AccountsDbSessionRef.init(memBase, root, peer)
+          desc = SnapDbSessionRef.init(memBase, root, peer)
         for w in accList:
           check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
         let rc = desc.inspectAccountsTrie(persistent=false)
@@ -510,8 +510,8 @@ proc inspectionRunner(
           let
             root = accList[0].root
             rootKey = root.to(NodeKey)
-            dbBase = AccountsDbRef.init(db.cdb[2+n])
-            desc = AccountsDbSessionRef.init(dbBase, root, peer)
+            dbBase = SnapDbRef.init(db.cdb[2+n])
+            desc = SnapDbSessionRef.init(dbBase, root, peer)
           for w in accList:
             check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
           let rc = desc.inspectAccountsTrie(persistent=false)
@@ -572,8 +572,8 @@ proc inspectionRunner(
         skip()
       else:
         let
-          cscBase = AccountsDbRef.init(newMemoryDB())
-          cscDesc = AccountsDbSessionRef.init(cscBase, Hash256(), peer)
+          cscBase = SnapDbRef.init(newMemoryDB())
+          cscDesc = SnapDbSessionRef.init(cscBase, Hash256(), peer)
         var
           cscStep: Table[NodeKey,(int,seq[Blob])]
         for n,accList in inspectList:
@@ -588,7 +588,7 @@ proc inspectionRunner(
             cscStep[rootKey][0].inc
           let
             r0 = desc.inspectAccountsTrie(persistent=false)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],false)
+            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
           check rc.isOk
           let
             accumulated = r0.value.dangling.toHashSet
@@ -620,7 +620,7 @@ proc inspectionRunner(
             cscStep[rootKey][0].inc
           let
             r0 = desc.inspectAccountsTrie(persistent=true)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],true)
+            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
           check rc.isOk
           let
             accumulated = r0.value.dangling.toHashSet

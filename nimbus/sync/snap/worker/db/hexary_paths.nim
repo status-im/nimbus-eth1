@@ -373,6 +373,18 @@ proc leafData*(path: XPath): Blob =
     of Extension:
       discard
 
+proc leafData*(path: RPath): Blob =
+  ## Return the leaf data from a successful `RPath` computation (if any.)
+  if path.tail.len == 0 and 0 < path.path.len:
+    let node = path.path[^1].node
+    case node.kind:
+    of Branch:
+      return node.bData
+    of Leaf:
+      return node.lData
+    of Extension:
+      discard
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

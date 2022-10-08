@@ -136,6 +136,7 @@ type
   TrieNodeStat* = object
     ## Trie inspection report
     dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
+    leaves*: seq[NodeKey]           ## Paths to leave nodes (if any)
     level*: int                     ## Maximim nesting depth of dangling nodes
     stopped*: bool                  ## Potential loop detected if `true`
 
@@ -281,7 +282,13 @@ proc ppDangling(a: seq[Blob]; maxItems = 30): string =
   proc ppBlob(w: Blob): string =
     w.mapIt(it.toHex(2)).join.toLowerAscii
   let
-    q = a.toSeq.mapIt(it.ppBlob)[0 ..< min(maxItems,a.len)]
+    q = a.mapIt(it.ppBlob)[0 ..< min(maxItems,a.len)]
+    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
+  "{" & q.join(",") & andMore & "}"
+
+proc ppLeaves(a: openArray[NodeKey]; db: HexaryTreeDbRef; maxItems=30): string =
+  let
+    q = a.mapIt(it.ppImpl(db))[0 ..< min(maxItems,a.len)]
     andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
   "{" & q.join(",") & andMore & "}"
 
@@ -328,10 +335,12 @@ proc pp*(db: HexaryTreeDbRef; indent=4): string =
   db.ppImpl(NodeKey.default).join(indent.toPfx)
 
 proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
-  result = "(" & $a.level & ","
+  result = "(" & $a.level
   if a.stopped:
     result &= "stopped,"
-  result &= $a.dangling.len & "," & a.dangling.ppDangling(maxItems) & ")"
+  result &= $a.dangling.len & "," &
+    a.dangling.ppDangling(maxItems) & "," &
+    a.leaves.ppLeaves(db, maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)

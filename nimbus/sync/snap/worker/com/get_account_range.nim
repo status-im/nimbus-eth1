@@ -19,7 +19,7 @@ import
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[range_desc, worker_desc],
-  ./get_error
+  ./com_error
 
 {.push raises: [Defect].}
 

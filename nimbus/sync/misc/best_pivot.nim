@@ -242,7 +242,7 @@ proc clear*(bp: BestPivotWorkerRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc bestPivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
+proc pivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
   ## Returns cached block header if available and the buddy `peer` is trusted.
   if bp.header.isSome and
      bp.peer notin bp.global.untrusted and
@@ -251,10 +251,11 @@ proc bestPivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
     return ok(bp.header.unsafeGet)
   err()
 
-proc bestPivotNegotiate*(
-    bp: BestPivotWorkerRef;                ## Worker peer
+proc pivotNegotiate*(
+    bp: BestPivotWorkerRef;              ## Worker peer
     minBlockNumber: Option[BlockNumber]; ## Minimum block number to expect
-      ): Future[bool] {.async.} =
+      ): Future[bool]
+      {.async.} =
   ## Negotiate best header pivot. This function must be run in *single mode* at
   ## the beginning of a running worker peer. If the function returns `true`,
   ## the current `buddy` can be used for syncing and the function

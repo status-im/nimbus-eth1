@@ -16,6 +16,7 @@ type
     AccountSmallerThanBase
     AccountsNotSrictlyIncreasing
     AccountRangesOverlap
+    NodeNotFound
     RlpEncoding
     SlotsNotSrictlyIncreasing
     TrieLoopAlert

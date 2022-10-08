@@ -240,11 +240,11 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
     buddy.ctrl.zombie = true
 
   # Initialise/re-initialise this worker
-  elif await buddy.data.pivot.bestPivotNegotiate(buddy.data.bestNumber):
+  elif await buddy.data.pivot.pivotNegotiate(buddy.data.bestNumber):
     buddy.ctrl.multiOk = true
     # Update/activate `bestNumber` for local use
     buddy.data.bestNumber =
-      some(buddy.data.pivot.bestPivotHeader.value.blockNumber)
+      some(buddy.data.pivot.pivotHeader.value.blockNumber)
 
   elif not buddy.ctrl.stopped:
     await sleepAsync(2.seconds)

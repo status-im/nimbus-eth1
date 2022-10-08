@@ -1,5 +1,4 @@
-# Nimbus - New sync approach - A fusion of snap, trie, beam and other methods
-#
+# Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -13,10 +12,9 @@ import
   std/[hashes, sequtils, strutils],
   eth/[common/eth_types, p2p],
   stew/[byteutils, keyed_queue],
-  ../../db/select_backend,
-  ../../constants,
+  "../.."/[constants, db/select_backend],
   ".."/[sync_desc, types],
-  ./worker/[accounts_db, ticker],
+  ./worker/[com/com_error, db/snap_db, ticker],
   ./range_desc
 
 {.push raises: [Defect].}
@@ -25,14 +23,40 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  maxPivotBlockWindow* = 128
-    ## The maximal depth of two block headers. If the pivot block header
-    ## (containing the current state root) is more than this many blocks
-    ## away from a new pivot block header candidate, then the latter one
-    ## replaces the current block header.
+  minPivotBlockDistance* = 128
+    ## The minimal depth of two block headers needed to activate a new state
+    ## root pivot.
     ##
-    ## This mechanism applies to new worker buddies which start by finding
-    ## a new pivot.
+    ## Effects on assembling the state via `snap/1` protocol:
+    ##
+    ## * A small value of this constant increases the propensity to update the
+    ##   pivot header more often. This is so because each new peer negoiates a
+    ##   pivot block number at least the current one.
+    ##
+    ## * A large value keeps the current pivot more stable but some experiments
+    ##   suggest that the `snap/1` protocol is answered only for later block
+    ##   numbers (aka pivot blocks.) So a large value tends to keep the pivot
+    ##   farther away from the chain head.
+    ##
+    ##   Note that 128 is the magic distance for snapshots used by *Geth*.
+
+  backPivotBlockDistance* = 64
+    ## When a pivot header is found, move pivot back `backPivotBlockDistance`
+    ## blocks so that the pivot is guaranteed to have some distance from the
+    ## chain head.
+    ##
+    ## Set `backPivotBlockDistance` to zero for disabling this feature.
+
+  backPivotBlockThreshold* = backPivotBlockDistance + minPivotBlockDistance
+    ## Ignore `backPivotBlockDistance` unless the current block number is
+    ## larger than this constant (which must be at least
+    ## `backPivotBlockDistance`.)
+
+  healAccountsTrigger* = 0.95
+    ## Apply accounts healing if the global snap download coverage factor
+    ## exceeds this setting. The global coverage factor is derived by merging
+    ## all account ranges retrieved for all pivot state roots (see
+    ## `coveredAccounts` in `CtxData`.)
 
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
@@ -41,42 +65,22 @@ const
     ## Resticting the fetch list length early allows to better paralellise
     ## healing.
 
-  switchPivotAfterCoverage* = 1.0 # * 0.30
-    ## Stop fetching from the same pivot state root with this much coverage
-    ## and try to find a new one. Setting this value to `1.0`, this feature
-    ## is disabled. Note that settting low coverage levels is primarily for
-    ## testing/debugging (may produce stress conditions.)
-    ##
-    ## If this setting is active, it typically supersedes the pivot update
-    ## mechainsm implied by the `maxPivotBlockWindow`. This for the simple
-    ## reason that the pivot state root is typically near the head of the
-    ## block chain.
-    ##
-    ## This mechanism applies to running worker buddies. When triggered, all
-    ## pivot handlers are reset so they will start from scratch finding a
-    ## better pivot.
+  maxHealingLeafPaths* = 1024
+    ## Retrieve this many leave nodes with proper 32 bytes path when inspecting
+    ## for dangling nodes. This allows to run healing paralell to accounts or
+    ## storage download without requestinng an account/storage slot found by
+    ## healing again with the download.
 
-  # ---
+  noPivotEnvChangeIfComplete* = true
+    ## If set `true`, new peers will not change the pivot even if the
+    ## negotiated pivot would be newer. This should be the default.
 
-  snapAccountsDumpEnable* = false # or true
-    ## Enable data dump
-
-  snapAccountsDumpCoverageStop* = 0.99999
-    ## Stop dumping if most accounts are covered
+  # -------
 
   seenBlocksMax = 500
     ## Internal size of LRU cache (for debugging)
 
 type
-  BuddyStat* = distinct uint
-
-  SnapBuddyErrors* = tuple
-    ## particular error counters so connections will not be cut immediately
-    ## after a particular error.
-    nTimeouts: uint
-
-  # -------
-
   WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
@@ -94,23 +98,28 @@ type
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
 
-  SnapRepairState* = enum
-    Pristine                           ## Not initialised yet
-    KeepGoing                          ## Unfinished repair process
-    Done                               ## Stop repairing
+  SnapAccountRanges* = array[2,LeafRangeSet]
+    ## Pair of account hash range lists. The first entry must be processed
+    ## first. This allows to coordinate peers working on different state roots
+    ## to avoid ovelapping accounts as long as they fetch from the first entry.
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
-    pivotAccount*: NodeTag             ## Random account
-    availAccounts*: LeafRangeSet       ## Accounts to fetch (as ranges)
+
+    # Accounts download
+    fetchAccounts*: SnapAccountRanges  ## Sets of accounts ranges to fetch
+    checkAccountNodes*: seq[Blob]      ## Nodes with prob. dangling child links
+    missingAccountNodes*: seq[Blob]    ## Dangling links to fetch and merge
+    accountsDone*: bool                ## All accounts have been processed
+
+    # Storage slots download
+    fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
+    serialSync*: bool                  ## Done with storage, block sync next
+
+    # Info
     nAccounts*: uint64                 ## Number of accounts imported
     nStorage*: uint64                  ## Number of storage spaces imported
-    leftOver*: SnapSlotsQueue          ## Re-fetch storage for these accounts
-    dangling*: seq[Blob]               ## Missing nodes for healing process
-    repairState*: SnapRepairState      ## State of healing process
-    when switchPivotAfterCoverage < 1.0:
-      minCoverageReachedOk*: bool      ## Stop filling this pivot
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -118,33 +127,23 @@ type
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
-    errors*: SnapBuddyErrors           ## For error handling
-    workerPivot*: RootRef              ## Opaque object reference for sub-module
+    errors*: ComErrorStatsRef          ## For error handling
+    pivotFinder*: RootRef              ## Opaque object reference for sub-module
+    pivotEnv*: SnapPivotRef            ## Environment containing state root
     vetoSlots*: SnapSlotsSet           ## Do not ask for these slots, again
-
-  BuddyPoolHookFn* = proc(buddy: BuddyRef[CtxData,BuddyData]) {.gcsafe.}
-    ## All buddies call back (the argument type is defined below with
-    ## pretty name `SnapBuddyRef`.)
 
   CtxData* = object
     ## Globally shared data extension
     seenBlock: WorkerSeenBlocks        ## Temporary, debugging, pretty logs
     rng*: ref HmacDrbgContext          ## Random generator
-    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
-    ticker*: TickerRef                 ## Ticker, logger
     pivotTable*: SnapPivotTable        ## Per state root environment
-    pivotCount*: uint64                ## Total of all created tab entries
-    pivotEnv*: SnapPivotRef            ## Environment containing state root
-    prevEnv*: SnapPivotRef             ## Previous state root environment
-    pivotData*: RootRef                ## Opaque object reference for sub-module
-    accountRangeMax*: UInt256          ## Maximal length, high(u256)/#peers
-    accountsDb*: AccountsDbRef         ## Proof processing for accounts
-    runPoolHook*: BuddyPoolHookFn      ## Callback for `runPool()`
-    when snapAccountsDumpEnable:
-      proofDumpOk*: bool
-      proofDumpFile*: File
-      proofDumpInx*: int
+    pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
+    snapDb*: SnapDbRef                 ## Accounts snapshot DB
+    coveredAccounts*: LeafRangeSet     ## Derived from all available accounts
+
+    # Info
+    ticker*: TickerRef                 ## Ticker, logger
 
   SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
     ## Extended worker peer descriptor
@@ -152,15 +151,21 @@ type
   SnapCtxRef* = CtxRef[CtxData]
     ## Extended global descriptor
 
+static:
+  doAssert healAccountsTrigger < 1.0 # larger values make no sense
+  doAssert backPivotBlockDistance <= backPivotBlockThreshold
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc inc(stat: var BuddyStat) {.borrow.}
-
 proc hash*(a: SnapSlotQueueItemRef): Hash =
   ## Table/KeyedQueue mixin
   cast[pointer](a).hash
+
+proc hash*(a: Hash256): Hash =
+  ## Table/KeyedQueue mixin
+  a.data.hash
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)
