@@ -107,10 +107,11 @@ proc pivotStop(buddy: SnapBuddyRef) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
+proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
   ## Returns a pair of account hash range lists with the full range of hashes
   ## smartly spread across the mutually disjunct interval sets.
-  result = [NodeTagRangeSet.init(),NodeTagRangeSet.init()]
+  for n in 0 ..< batch.unprocessed.len:
+    batch.unprocessed[n] = NodeTagRangeSet.init()
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
@@ -123,21 +124,21 @@ proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
     ctx.data.rng[].generate(nodeKey.ByteArray32)
 
     let partition = nodeKey.to(NodeTag)
-    discard result[0].merge(partition, high(NodeTag))
+    discard batch.unprocessed[0].merge(partition, high(NodeTag))
     if low(NodeTag) < partition:
-      discard result[1].merge(low(NodeTag), partition - 1.u256)
+      discard batch.unprocessed[1].merge(low(NodeTag), partition - 1.u256)
   else:
     # Not all account hashes are covered, yet. So keep the uncovered
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
 
     # Pre-filled with thefirst range set with largest possible interval
-    discard result[0].merge(low(NodeTag),high(NodeTag))
+    discard batch.unprocessed[0].merge(low(NodeTag),high(NodeTag))
 
     # Move covered account ranges (aka intervals) to the second set.
     for iv in ctx.data.coveredAccounts.increasing:
-      discard result[0].reduce(iv)
-      discard result[1].merge(iv)
+      discard batch.unprocessed[0].reduce(iv)
+      discard batch.unprocessed[1].merge(iv)
 
 
 proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
@@ -160,17 +161,16 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
   # where the queue is assumed to have increasing block numbers.
   if minNumber <= header.blockNumber:
     # Ok, append a new environment
-    let env = SnapPivotRef(
-      stateHeader:   header,
-      fetchAccounts: SnapAccountRanges.init(ctx))
+    let env = SnapPivotRef(stateHeader: header)
+    env.fetchAccounts.init(ctx)
 
     # Append per-state root environment to LRU queue
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
     # Debugging, will go away
     block:
-      let ivSet = env.fetchAccounts[0].clone
-      for iv in env.fetchAccounts[1].increasing:
+      let ivSet = env.fetchAccounts.unprocessed[0].clone
+      for iv in env.fetchAccounts.unprocessed[1].increasing:
         doAssert ivSet.merge(iv) == iv.len
       doAssert ivSet.chunks == 1
       doAssert ivSet.total == 0
@@ -245,7 +245,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         aSqSum += aLen * aLen
 
         # Fill utilisation mean & variance
-        let fill = kvp.data.fetchAccounts.emptyFactor
+        let fill = kvp.data.fetchAccounts.unprocessed.emptyFactor
         uSum += fill
         uSqSum += fill * fill
 
@@ -370,7 +370,7 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
       if not env.serialSync:
         # Check whether accounts download is complete
         block checkAccountsComplete:
-          for ivSet in env.fetchAccounts:
+          for ivSet in env.fetchAccounts.unprocessed:
             if ivSet.chunks != 0:
               break checkAccountsComplete
           env.accountsDone = true
@@ -413,8 +413,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     if buddy.ctrl.stopped: return
 
     # If the current database is not complete yet
-    if 0 < env.fetchAccounts[0].chunks or
-       0 < env.fetchAccounts[1].chunks:
+    if 0 < env.fetchAccounts.unprocessed[0].chunks or
+       0 < env.fetchAccounts.unprocessed[1].chunks:
 
       # Healing applies to the latest pivot only. The pivot might have changed
       # in the background (while netwoking) due to a new peer worker that has

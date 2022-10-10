@@ -103,14 +103,18 @@ type
     ## first. This allows to coordinate peers working on different state roots
     ## to avoid ovelapping accounts as long as they fetch from the first entry.
 
+  SnapTrieRangeBatch* = object
+    ## `NodeTag` ranges to fetch, healing support
+    unprocessed*: SnapAccountRanges    ## Range of slots not covered, yet
+    checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
+    missingNodes*: seq[Blob]           ## Dangling links to fetch and merge
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download
-    fetchAccounts*: SnapAccountRanges  ## Sets of accounts ranges to fetch
-    checkAccountNodes*: seq[Blob]      ## Nodes with prob. dangling child links
-    missingAccountNodes*: seq[Blob]    ## Dangling links to fetch and merge
+    fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
     accountsDone*: bool                ## All accounts have been processed
 
     # Storage slots download

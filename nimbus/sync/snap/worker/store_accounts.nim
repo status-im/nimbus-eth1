@@ -74,7 +74,7 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[NodeTagRange,void] =
     env = buddy.data.pivotEnv
     accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
 
-  for ivSet in env.fetchAccounts:
+  for ivSet in env.fetchAccounts.unprocessed:
     let rc = ivSet.ge()
     if rc.isOk:
       let iv = buddy.withMaxLen(rc.value, accountRangeMax)
@@ -85,11 +85,11 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[NodeTagRange,void] =
 
 proc putUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts[1].merge(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].merge(iv)
 
 proc delUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts[1].reduce(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].reduce(iv)
 
 proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut

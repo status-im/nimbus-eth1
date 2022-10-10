@@ -113,14 +113,14 @@ proc coverageInfo(buddy: SnapBuddyRef): string =
   let
     ctx = buddy.ctx
     env = buddy.data.pivotEnv
-  env.fetchAccounts.emptyFactor.toPC(0) &
+  env.fetchAccounts.unprocessed.emptyFactor.toPC(0) &
     "/" &
     ctx.data.coveredAccounts.fullFactor.toPC(0)
 
 proc getCoveringRangeSet(buddy: SnapBuddyRef; pt: NodeTag): NodeTagRangeSet =
   ## Helper ...
   let env = buddy.data.pivotEnv
-  for ivSet in env.fetchAccounts:
+  for ivSet in env.fetchAccounts.unprocessed:
     if 0 < ivSet.covered(pt,pt):
       return ivSet
 
@@ -145,16 +145,16 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
   var
     nodes: seq[Blob]
 
-  for accKey in env.missingAccountNodes:
+  for accKey in env.fetchAccounts.missingNodes:
     let rc = ctx.data.snapDb.getAccountNodeKey(peer, stateRoot, accKey)
     if rc.isOk:
       # Check nodes for dangling links
-      env.checkAccountNodes.add acckey
+      env.fetchAccounts.checkNodes.add acckey
     else:
       # Node is still missing
       nodes.add acckey
 
-  env.missingAccountNodes = nodes
+  env.fetchAccounts.missingNodes = nodes
 
 
 proc mergeIsolatedAccounts(
@@ -210,11 +210,11 @@ proc fetchDanglingNodesList(
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
 
-    maxLeaves = if env.checkAccountNodes.len == 0: 0
+    maxLeaves = if env.fetchAccounts.checkNodes.len == 0: 0
                 else: maxHealingLeafPaths
 
     rc = ctx.data.snapDb.inspectAccountsTrie(
-      peer, stateRoot, env.checkAccountNodes, maxLeaves)
+      peer, stateRoot, env.fetchAccounts.checkNodes, maxLeaves)
 
   if rc.isErr:
     # Attempt to switch peers, there is not much else we can do here
@@ -222,7 +222,7 @@ proc fetchDanglingNodesList(
     return err(rc.error)
 
   # Global/env batch list to be replaced by by `rc.value.leaves` return value
-  env.checkAccountNodes.setLen(0)
+  env.fetchAccounts.checkNodes.setLen(0)
 
   # Store accounts leaves on the storage batch list.
   let withStorage = buddy.mergeIsolatedAccounts(rc.value.leaves)
@@ -264,16 +264,16 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
       trace "Accounts healing postponed", peer,
         nAccounts=env.nAccounts,
         covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len
+        nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+        nMissingAccountNodes=env.fetchAccounts.missingNodes.len
     return
 
   when extraTraceMessages:
     trace "Start accounts healing", peer,
       nAccounts=env.nAccounts,
       covered=buddy.coverageInfo(),
-      nCheckAccountNodes=env.checkAccountNodes.len,
-      nMissingAccountNodes=env.missingAccountNodes.len
+      nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+      nMissingAccountNodes=env.fetchAccounts.missingNodes.len
 
   # Update for changes since last visit
   buddy.updateMissingNodesList()
@@ -283,14 +283,15 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   var
     nodesMissing: seq[Blob]              # Nodes to process by this instance
     nLeaves = 0                          # For logging
-  if 0 < env.checkAccountNodes.len or env.missingAccountNodes.len == 0:
+  if env.fetchAccounts.checkNodes.len != 0 or
+     env.fetchAccounts.missingNodes.len == 0:
     let rc = buddy.fetchDanglingNodesList()
     if rc.isErr:
       error "Accounts healing failed => stop", peer,
         nAccounts=env.nAccounts,
         covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len,
+        nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+        nMissingAccountNodes=env.fetchAccounts.missingNodes.len,
         error=rc.error
       return
 
@@ -298,7 +299,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     nLeaves = rc.value.leaves.len
 
   # Check whether the trie is complete.
-  if nodesMissing.len == 0 and env.missingAccountNodes.len == 0:
+  if nodesMissing.len == 0 and env.fetchAccounts.missingNodes.len == 0:
     when extraTraceMessages:
       trace "Accounts healing complete", peer,
         nAccounts=env.nAccounts,
@@ -310,8 +311,8 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     return # nothing to do
 
   # Ok, clear global `env.missingAccountNodes` list and process `nodesMissing`.
-  nodesMissing = nodesMissing & env.missingAccountNodes
-  env.missingAccountNodes.setlen(0)
+  nodesMissing = nodesMissing & env.fetchAccounts.missingNodes
+  env.fetchAccounts.missingNodes.setlen(0)
 
   # Fetch nodes, merge it into database and feed back results
   while 0 < nodesMissing.len:
@@ -330,8 +331,8 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
       trace "Accounts healing loop", peer,
         nAccounts=env.nAccounts,
         covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len,
+        nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+        nMissingAccountNodes=env.fetchAccounts.missingNodes.len,
         nNodesMissing=nodesMissing.len,
         nLeaves
 
@@ -339,13 +340,14 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     let dd = block:
       let rc = await buddy.getTrieNodes(stateRoot, fetchNodes.mapIt(@[it]))
       if rc.isErr:
-        env.missingAccountNodes = env.missingAccountNodes & fetchNodes
+        env.fetchAccounts.missingNodes =
+          env.fetchAccounts.missingNodes & fetchNodes
         when extraTraceMessages:
           trace "Error fetching account nodes for healing", peer,
             nAccounts=env.nAccounts,
             covered=buddy.coverageInfo(),
-            nCheckAccountNodes=env.checkAccountNodes.len,
-            nMissingAccountNodes=env.missingAccountNodes.len,
+            nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+            nMissingAccountNodes=env.fetchAccounts.missingNodes.len,
             nNodesMissing=nodesMissing.len,
             nLeaves,
             error=rc.error
@@ -357,12 +359,14 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     block:
       let rc = ctx.data.snapDb.importRawNodes(peer, dd.nodes)
       if rc.isOk:
-        env.checkAccountNodes = env.checkAccountNodes & dd.leftOver.mapIt(it[0])
+        env.fetchAccounts.checkNodes =
+          env.fetchAccounts.checkNodes & dd.leftOver.mapIt(it[0])
       elif 0 < rc.error.len and rc.error[^1][0] < 0:
         # negative index => storage error
-        env.missingAccountNodes = env.missingAccountNodes & fetchNodes
+        env.fetchAccounts.missingNodes =
+          env.fetchAccounts.missingNodes & fetchNodes
       else:
-        env.missingAccountNodes = env.missingAccountNodes &
+        env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes &
           dd.leftOver.mapIt(it[0]) & rc.error.mapIt(dd.nodes[it[0]])
 
     # End while
@@ -371,8 +375,8 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     trace "Done accounts healing", peer,
       nAccounts=env.nAccounts,
       covered=buddy.coverageInfo(),
-      nCheckAccountNodes=env.checkAccountNodes.len,
-      nMissingAccountNodes=env.missingAccountNodes.len,
+      nCheckAccountNodes=env.fetchAccounts.checkNodes.len,
+      nMissingAccountNodes=env.fetchAccounts.missingNodes.len,
       nLeaves
 
 # ------------------------------------------------------------------------------
