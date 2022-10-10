@@ -66,11 +66,18 @@ task test, "Run tests":
 task test_rocksdb, "Run rocksdb tests":
   test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
+## Fluffy tasks
+
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 
-task lc_proxy, "Build light client proxy":
-  buildBinary "lc_proxy", "lc_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
+task fluffy_test, "Run fluffy tests":
+  # Need the nimbus_db_backend in state network tests as we need a Hexary to
+  # start from, even though it only uses the MemoryDb.
+  test "fluffy/tests/portal_spec_tests/mainnet", "all_fluffy_portal_spec_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:canonicalVerify=true"
+  # Running tests with a low `mergeBlockNumber` to make the tests faster.
+  # Using the real mainnet merge block number is not realistic for these tests.
+  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:canonicalVerify=true -d:mergeBlockNumber:38130"
 
 task fluffy_tools, "Build fluffy tools":
   buildBinary "portalcli", "fluffy/tools/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
@@ -83,16 +90,13 @@ task utp_test_app, "Build uTP test app":
 task utp_test, "Run uTP integration tests":
   test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR -d:chronosStrictException"
 
-task test_portal_testnet, "Build test_portal_testnet":
+task fluffy_test_portal_testnet, "Build test_portal_testnet":
   buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering -d:PREFER_BLST_SHA256=false"
 
-task testfluffy, "Run fluffy tests":
-  # Need the nimbus_db_backend in state network tests as we need a Hexary to
-  # start from, even though it only uses the MemoryDb.
-  test "fluffy/tests/portal_spec_tests/mainnet", "all_fluffy_portal_spec_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:canonicalVerify=true"
-  # Running tests with a low `mergeBlockNumber` to make the tests faster.
-  # Using the real mainnet merge block number is not realistic for these tests.
-  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:canonicalVerify=true -d:mergeBlockNumber:38130"
+## Light Client Proxy tasks
 
-task testlcproxy, "Run light proxy tests":
+task lc_proxy, "Build light client proxy":
+  buildBinary "lc_proxy", "lc_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
+
+task lc_proxy_test, "Run light proxy tests":
   test "lc_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"

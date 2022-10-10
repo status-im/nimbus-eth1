@@ -190,14 +190,11 @@ test-reproducibility:
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
 # Fluffy related targets
+
 # builds the fluffy client
 fluffy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
-
-lc-proxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim lc_proxy $(NIM_PARAMS) nimbus.nims
 
 # primitive reproducibility test
 fluffy-test-reproducibility:
@@ -211,7 +208,7 @@ fluffy-test-reproducibility:
 
 # builds and runs the fluffy test suite
 fluffy-test: | build deps
-	$(ENV_SCRIPT) nim testfluffy $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) nim fluffy_test $(NIM_PARAMS) nimbus.nims
 
 # builds the fluffy tools
 fluffy-tools: | build deps
@@ -227,15 +224,22 @@ utp-test: | build deps
 
 # Build fluffy test_portal_testnet
 fluffy-test-portal-testnet: | build deps
-	$(ENV_SCRIPT) nim test_portal_testnet $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) nim fluffy_test_portal_testnet $(NIM_PARAMS) nimbus.nims
+
+# Light Client Proxy related targets
+
+# Builds the lc proxy client
+lc-proxy: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim lc_proxy $(NIM_PARAMS) nimbus.nims
 
 # builds and runs the lc proxy test suite
 lc-proxy-test: | build deps
-	$(ENV_SCRIPT) nim testlcproxy $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) nim lc_proxy_test $(NIM_PARAMS) nimbus.nims
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,db/test_kvstore_rocksdb,test_rpc,all_fluffy_tests,portalcli,*.dSYM}
+	rm -rf build/{nimbus,fluffy,lc_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
