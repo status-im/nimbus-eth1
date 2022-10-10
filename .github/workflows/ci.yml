@@ -27,9 +27,6 @@ jobs:
           - os: windows
             cpu: amd64
             evmc: evmc
-          - os: windows
-            cpu: i386
-            evmc: evmc
           # vm2
           - os: linux
             cpu: amd64
@@ -39,9 +36,6 @@ jobs:
             evmc: nimvm2
           - os: windows
             cpu: amd64
-            evmc: nimvm2
-          - os: windows
-            cpu: i386
             evmc: nimvm2
           - os: macos
             cpu: amd64
@@ -113,13 +107,6 @@ jobs:
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
           fi
 
-          if [[ '${{ runner.os }}' == 'Windows' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
-            # on a real win7/i386, there is only 64k optimiser space for gcc
-            echo "ENABLE_VMLOWMEM=1" >> $GITHUB_ENV
-          else
-            echo "ENABLE_VMLOWMEM=0" >> $GITHUB_ENV
-          fi
-
       - name: Install build dependencies (Linux i386)
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
         run: |
@@ -169,17 +156,6 @@ jobs:
           echo "/usr/local/opt/ccache/libexec" >> ${GITHUB_PATH}
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
           bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
-
-      - name: MSYS2 (Windows i386)
-        if: runner.os == 'Windows' && matrix.target.cpu == 'i386'
-        uses: msys2/setup-msys2@v2
-        with:
-          path-type: inherit
-          msystem: MINGW32
-          install: >-
-            base-devel
-            git
-            mingw-w64-i686-toolchain
 
       - name: MSYS2 (Windows amd64)
         if: runner.os == 'Windows' && matrix.target.cpu == 'amd64'
