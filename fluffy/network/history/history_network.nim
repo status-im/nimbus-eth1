@@ -514,30 +514,26 @@ proc getBlock*(
 
   let accumulator = accumulatorOpt.unsafeGet()
 
-  let hashResponse = accumulator.getHeaderHashForBlockNumber(bn)
+  let epochDataRes = accumulator.getBlockEpochDataForBlockNumber(bn)
 
-  case hashResponse.kind
-  of BHash:
-    # we got header hash in current epoch accumulator, try to retrieve it from network
-    let blockResponse = await n.getBlock(hashResponse.blockHash)
-    return ok(blockResponse)
-  of HEpoch:
-    let digest = Digest(data: hashResponse.epochHash)
+  if epochDataRes.isOk():
+    let
+      epochData = epochDataRes.get()
+      digest = Digest(data: epochData.epochHash)
 
-    let epochOpt = await n.getEpochAccumulator(digest)
-
+      epochOpt = await n.getEpochAccumulator(digest)
     if epochOpt.isNone():
       return err("Cannot retrieve epoch accumulator for given block number")
 
     let
       epoch = epochOpt.unsafeGet()
-      blockHash = epoch[hashResponse.blockRelativeIndex].blockHash
+      blockHash = epoch[epochData.blockRelativeIndex].blockHash
 
     let maybeBlock = await n.getBlock(blockHash)
 
     return ok(maybeBlock)
-  of UnknownBlockNumber:
-    return err("Block number not included in master accumulator")
+  else:
+    return err(epochDataRes.error)
 
 proc getInitialMasterAccumulator*(
     n: HistoryNetwork):
@@ -615,18 +611,12 @@ proc verifyCanonicalChain(
   # epoch accumulators for it, and could just verify it with those. But the
   # idea here is that eventually this gets changed so that the proof is send
   # together with the header.
-  let proofOpt =
-    if header.inCurrentEpoch(accumulator):
-      none(seq[Digest])
-    else:
-      let proof = await n.buildProof(header)
-      if proof.isErr():
-        # Can't verify without master and epoch accumulators
-        return err("Cannot build proof: " & proof.error)
-      else:
-        some(proof.get())
-
-  return verifyHeader(accumulator, header, proofOpt)
+  let proof = await n.buildProof(header)
+  if proof.isOk():
+    return verifyHeader(accumulator, header, proof.get())
+  else:
+    # Can't verify without master and epoch accumulators
+    return err("Cannot build proof: " & proof.error)
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ByteList):

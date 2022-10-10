@@ -9,7 +9,8 @@
 
 import
   unittest2, stew/byteutils, stint,
-  ../network/history/history_content
+  ssz_serialization, ssz_serialization/[proofs, merkleization],
+  ../../../network/history/[history_content, accumulator]
 
 # According to test vectors:
 # https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md#history-network-keys

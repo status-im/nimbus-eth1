@@ -9,7 +9,7 @@
 
 import
   unittest2, stew/byteutils,
-  ../network/state/state_content
+  ../../../network/state/state_content
 
 # According to test vectors:
 # https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md#state-network-keys
