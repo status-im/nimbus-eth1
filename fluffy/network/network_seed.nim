@@ -151,7 +151,7 @@ proc breadthContentPropagate*(
     while true:
       let (keys, content) = await gossipQueue.popFirst()
 
-      await p.neighborhoodGossip(keys, content)
+      discard await p.neighborhoodGossip(keys, content)
 
   for i in 0 ..< concurrentGossips:
     gossipWorkers.add(gossipWorker(p))

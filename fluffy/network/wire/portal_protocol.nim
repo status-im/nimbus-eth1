@@ -1118,10 +1118,15 @@ proc getNClosestNodesWithRadius*(
   return nodesWithRadiuses
 
 proc neighborhoodGossip*(
-    p: PortalProtocol, contentKeys: ContentKeysList, content: seq[seq[byte]])
-    {.async.} =
+    p: PortalProtocol,
+    contentKeys: ContentKeysList,
+    content: seq[seq[byte]]): Future[int] {.async.} =
+  ## Returns number of peers to which content was gossiped
+
+  var numberOfGossipedNodes = 0
+
   if content.len() == 0:
-    return
+    return numberOfGossipedNodes
 
   var contentList = List[ContentInfo, contentKeysLimit].init(@[])
   for i, contentItem in content:
@@ -1133,7 +1138,7 @@ proc neighborhoodGossip*(
   # TODO: come up with something better?
   let contentIdOpt = p.toContentId(contentList[0].contentKey)
   if contentIdOpt.isNone():
-    return
+    return numberOfGossipedNodes
 
   let contentId = contentIdOpt.get()
 
@@ -1166,19 +1171,23 @@ proc neighborhoodGossip*(
 
   if gossipNodes.len >= 8: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    for node in gossipNodes[0..<min(gossipNodes.len, maxGossipNodes)]:
+    numberOfGossipedNodes = min(gossipNodes.len, maxGossipNodes)
+    for node in gossipNodes[0..<numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    for node in closestNodes[0..<min(closestNodes.len, maxGossipNodes)]:
+    numberOfGossipedNodes = min(closestNodes.len, maxGossipNodes)
+    for node in closestNodes[0..<numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
       # should really be the closest nodes in the DHT, and thus are most likely
       # going to be in range of the requested content.
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
+
+  return numberOfGossipedNodes
 
 proc adjustRadius(
     p: PortalProtocol,
