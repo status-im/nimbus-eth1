@@ -14,14 +14,21 @@ import
   ../../common/common_types,
   ./history_content
 
-export ssz_serialization, merkleization, proofs
+export ssz_serialization, merkleization, proofs, eth_types_rlp
 
 # Header Accumulator, as per specification:
 # https://github.com/ethereum/portal-network-specs/blob/master/history-network.md#the-header-accumulator
+# But with the adjustment to finish the accumulator at merge point.
 
 const
   epochSize* = 8192 # blocks
-  maxHistoricalEpochs = 131072 # 2^17
+  # Allow this to be adjusted at compile time. If more constants need to be
+  # adjusted we can add some presets file.
+  mergeBlockNumber* {.intdefine.}: uint64 = 15537394
+
+  # Note: This is like a ceil(mergeBlockNumber / epochSize)
+  # Could use ceilDiv(mergeBlockNumber, epochSize) in future versions
+  preMergeEpochs* = (mergeBlockNumber + epochSize - 1) div epochSize
 
 type
   HeaderRecord* = object
@@ -31,36 +38,39 @@ type
   EpochAccumulator* = List[HeaderRecord, epochSize]
 
   Accumulator* = object
-    historicalEpochs*: List[Bytes32, maxHistoricalEpochs]
+    historicalEpochs*: List[Bytes32, int(preMergeEpochs)]
     currentEpoch*: EpochAccumulator
 
-  BlockHashResultType* = enum
-    BHash, HEpoch, UnknownBlockNumber
+  FinishedAccumulator* = object
+    historicalEpochs*: List[Bytes32, int(preMergeEpochs)]
 
-  BlockHashResult* = object
-    case kind*: BlockHashResultType
-    of BHash:
-      blockHash*: BlockHash
-    of HEpoch:
-      epochHash*: Bytes32
-      epochIndex*: uint64
-      blockRelativeIndex*: uint64
-    of UnknownBlockNumber:
-      discard
+  BlockEpochData* = object
+    epochHash*: Bytes32
+    blockRelativeIndex*: uint64
 
 func init*(T: type Accumulator): T =
   Accumulator(
-    historicalEpochs:  List[Bytes32, maxHistoricalEpochs].init(@[]),
+    historicalEpochs: List[Bytes32, int(preMergeEpochs)].init(@[]),
     currentEpoch: EpochAccumulator.init(@[])
   )
 
-func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
+# TODO:
+# Could probably also make this work with TTD instead of merge block number.
+func updateAccumulator*(
+    a: var Accumulator, header: BlockHeader) =
+  doAssert(header.blockNumber.truncate(uint64) < mergeBlockNumber,
+    "No post merge blocks for header accumulator")
+
   let lastTotalDifficulty =
     if a.currentEpoch.len() == 0:
       0.stuint(256)
     else:
       a.currentEpoch[^1].totalDifficulty
 
+  # TODO: It is a bit annoying to require an extra header + update call to
+  # finish an epoch. However, if we were to move this after adding the
+  # `HeaderRecord`, there would be no way to get the current total difficulty,
+  # unless another field is introduced in the `Accumulator` object.
   if a.currentEpoch.len() == epochSize:
     let epochHash = hash_tree_root(a.currentEpoch)
 
@@ -75,6 +85,14 @@ func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
   let res = a.currentEpoch.add(headerRecord)
   doAssert(res, "Can't fail because of currentEpoch length check")
 
+func isFinished*(a: Accumulator): bool =
+  a.historicalEpochs.len() == (int)(preMergeEpochs)
+
+func finishAccumulator*(a: var Accumulator) =
+  let epochHash = hash_tree_root(a.currentEpoch)
+
+  doAssert(a.historicalEpochs.add(epochHash.data))
+
 func hash*(a: Accumulator): hashes.Hash =
   # TODO: This is used for the CountTable but it will be expensive.
   hash(hash_tree_root(a).data)
@@ -83,6 +101,9 @@ func buildAccumulator*(headers: seq[BlockHeader]): Accumulator =
   var accumulator: Accumulator
   for header in headers:
     updateAccumulator(accumulator, header)
+
+    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+      finishAccumulator(accumulator)
 
   accumulator
 
@@ -93,6 +114,9 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
   for header in headers:
     updateAccumulator(accumulator, header)
 
+    # TODO: By allowing updateAccumulator and finishAccumulator to return
+    # optionally the finished epoch accumulators we would avoid double
+    # hash_tree_root computations.
     if accumulator.currentEpoch.len() == epochSize:
       let
         rootHash = accumulator.currentEpoch.hash_tree_root()
@@ -103,25 +127,22 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 
       epochAccumulators.add((key, accumulator.currentEpoch))
 
+    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+      let
+        rootHash = accumulator.currentEpoch.hash_tree_root()
+        key = ContentKey(
+          contentType: epochAccumulator,
+          epochAccumulatorKey: EpochAccumulatorKey(
+            epochHash: rootHash))
+
+      epochAccumulators.add((key, accumulator.currentEpoch))
+
+      finishAccumulator(accumulator)
+
   epochAccumulators
 
 ## Calls and helper calls for building header proofs and verifying headers
 ## against the Accumulator and the header proofs.
-
-func inCurrentEpoch*(blockNumber: uint64, a: Accumulator): bool =
-  # Note:
-  # Block numbers start at 0, so historical epochs are set as:
-  # 0 -> 8191 -> len = 1 * 8192
-  # 8192 -> 16383 -> len = 2 * 8192
-  # ...
-  # A block number is in the current epoch if it is bigger than the last block
-  # number in the last historical epoch. Which is the same as being equal or
-  # bigger than current length of historical epochs * epochSize.
-  blockNumber >= uint64(a.historicalEpochs.len() * epochSize)
-
-func inCurrentEpoch*(header: BlockHeader, a: Accumulator): bool =
-  let blockNumber = header.blockNumber.truncate(uint64)
-  blockNumber.inCurrentEpoch(a)
 
 func getEpochIndex*(blockNumber: uint64): uint64 =
   blockNumber div epochSize
@@ -139,6 +160,12 @@ func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
   getHeaderRecordIndex(header.blockNumber.truncate(uint64), epochIndex)
 
+func isPreMerge*(blockNumber: uint64): bool =
+  blockNumber < mergeBlockNumber
+
+func isPreMerge*(header: BlockHeader): bool =
+  isPreMerge(header.blockNumber.truncate(uint64))
+
 func verifyProof*(
     a: Accumulator, header: BlockHeader, proof: openArray[Digest]): bool =
   let
@@ -154,42 +181,26 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
 func verifyHeader*(
-    accumulator: Accumulator, header: BlockHeader, proof: Option[seq[Digest]]):
+    a: Accumulator, header: BlockHeader, proof: openArray[Digest]):
     Result[void, string] =
-  if header.inCurrentEpoch(accumulator):
-    let blockNumber = header.blockNumber.truncate(uint64)
-    let relIndex = blockNumber - uint64(accumulator.historicalEpochs.len()) * epochSize
-
-    if relIndex > uint64(accumulator.currentEpoch.len() - 1):
-      return err("Blocknumber ahead of accumulator")
-
-    if accumulator.currentEpoch[relIndex].blockHash == header.blockHash():
+  if header.isPreMerge():
+    if a.verifyProof(header, proof):
       ok()
     else:
-      err("Header not part of canonical chain")
+      err("Proof verification failed")
   else:
-    if proof.isSome():
-      if accumulator.verifyProof(header, proof.get):
-        ok()
-      else:
-        err("Proof verification failed")
-    else:
-      err("Need proof to verify header")
+    err("Cannot verify post merge header with accumulator proof")
 
-func getHeaderHashForBlockNumber*(a: Accumulator, bn: UInt256): BlockHashResult=
+func getBlockEpochDataForBlockNumber*(
+    a: Accumulator, bn: UInt256): Result[BlockEpochData, string] =
   let blockNumber = bn.truncate(uint64)
-  if blockNumber.inCurrentEpoch(a):
-    let relIndex = blockNumber - uint64(a.historicalEpochs.len()) * epochSize
 
-    if relIndex > uint64(a.currentEpoch.len() - 1):
-      return BlockHashResult(kind: UnknownBlockNumber)
-
-    return BlockHashResult(kind: BHash, blockHash: a.currentEpoch[relIndex].blockHash)
-  else:
+  if blockNumber.isPreMerge:
     let epochIndex = getEpochIndex(blockNumber)
-    return BlockHashResult(
-      kind: HEpoch,
+
+    ok(BlockEpochData(
       epochHash: a.historicalEpochs[epochIndex],
-      epochIndex: epochIndex,
-      blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex)
-    )
+      blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex))
+      )
+  else:
+    err("Block number is post merge: " & $blockNumber)

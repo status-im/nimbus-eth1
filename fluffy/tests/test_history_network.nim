@@ -74,14 +74,25 @@ procSuite "History Content Network":
   let rng = newRng()
 
   asyncTest "Get Block by Number":
-    # enough headers for one historical epoch in the master accumulator
-    const lastBlockNumber = 9000
+    const
+      lastBlockNumber = mergeBlockNumber - 1
+
+      headersToTest = [
+        0,
+        epochSize - 1,
+        epochSize,
+        epochSize*2 - 1,
+        epochSize*2,
+        epochSize*3 - 1,
+        epochSize*3,
+        epochSize*3 + 1,
+        int(lastBlockNumber)]
 
     let
       historyNode1 = newHistoryNode(rng, 20302)
       historyNode2 = newHistoryNode(rng, 20303)
 
-      headers = createEmptyHeaders(0, lastBlockNumber)
+      headers = createEmptyHeaders(0, int(lastBlockNumber))
       masterAccumulator = buildAccumulator(headers)
       epochAccumulators = buildAccumulatorData(headers)
 
@@ -115,7 +126,7 @@ procSuite "History Content Network":
       (await historyNode1.portalProtocol().ping(historyNode2.localNode())).isOk()
       (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
 
-    for i in 0..lastBlockNumber:
+    for i in headersToTest:
       let blockResponse = await historyNode1.historyNetwork.getBlock(u256(i))
 
       check blockResponse.isOk()
@@ -132,7 +143,15 @@ procSuite "History Content Network":
     await historyNode2.stop()
 
   asyncTest "Offer - Maximum Content Keys in 1 Message":
+    # Need to provide enough headers to have 1 epoch accumulator "finalized" as
+    # else no headers with proofs can be generated.
+    const lastBlockNumber = epochSize
+
     let
+      headers = createEmptyHeaders(0, lastBlockNumber)
+      masterAccumulator = buildAccumulator(headers)
+      epochAccumulators = buildAccumulatorData(headers)
+
       historyNode1 = newHistoryNode(rng, 20302)
       historyNode2 = newHistoryNode(rng, 20303)
 
@@ -150,57 +169,65 @@ procSuite "History Content Network":
     let maxOfferedHistoryContent = getMaxOfferedContentKeys(
         uint32(len(historyProtocolId)), maxContentKeySize)
 
-    # one header too many to fit an offer message, talkReq with this amount of
-    # headers must fail
-    let headers = createEmptyHeaders(0, maxOfferedHistoryContent)
-    let masterAccumulator = buildAccumulator(headers)
-
     await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
     await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
 
-    let contentInfos = headersToContentInfo(headers)
+    # One of the nodes needs to have the epochAccumulator to build proofs from
+    # for the offered headers.
+    for (contentKey, epochAccumulator) in epochAccumulators:
+      let contentId = toContentId(contentKey)
+      historyNode2.portalProtocol().storeContent(
+        contentId, SSZ.encode(epochAccumulator))
 
-    # node 1 will offer content so it need to have it in its database
-    for ci in contentInfos:
-      let id = toContentId(ci.contentKey)
-      historyNode1.portalProtocol.storeContent(id, ci.content)
+    # This is one header more than maxOfferedHistoryContent
+    let contentInfos = headersToContentInfo(headers[0..maxOfferedHistoryContent])
 
-    let offerResultTooMany = await historyNode1.portalProtocol.offer(
-      historyNode2.localNode(),
-      contentInfos
-    )
+    # node 1 will offer the content so it needs to have it in its database
+    for contentInfo in contentInfos:
+      let id = toContentId(contentInfo.contentKey)
+      historyNode1.portalProtocol.storeContent(id, contentInfo.content)
 
-    # failing due timeout, as remote side must drop too large discv5 packets
-    check offerResultTooMany.isErr()
+    # Offering 1 content item too much which should result in a discv5 packet
+    # that is too large and thus not get any response.
+    block:
+      let offerResult = await historyNode1.portalProtocol.offer(
+        historyNode2.localNode(),
+        contentInfos
+      )
 
-    for ci in contentInfos:
-      let id = toContentId(ci.contentKey)
-      check historyNode2.containsId(id) == false
+      # Fail due timeout, as remote side must drop the too large discv5 packet
+      check offerResult.isErr()
 
-    # one content key less should make offer go through
-    let correctInfos = contentInfos[0..<len(contentInfos)-1]
-
-    let offerResultCorrect = await historyNode1.portalProtocol.offer(
-      historyNode2.localNode(),
-      correctInfos
-    )
-
-    check offerResultCorrect.isOk()
-
-    for i, ci in contentInfos:
-      let id = toContentId(ci.contentKey)
-      if i < len(contentInfos) - 1:
-        check historyNode2.containsId(id) == true
-      else:
+      for contentInfo in contentInfos:
+        let id = toContentId(contentInfo.contentKey)
         check historyNode2.containsId(id) == false
+
+    # One content key less should make offer be succesful and should result
+    # in the content being transferred and stored on the other node.
+    block:
+      let offerResult = await historyNode1.portalProtocol.offer(
+        historyNode2.localNode(),
+        contentInfos[0..<maxOfferedHistoryContent]
+      )
+
+      check offerResult.isOk()
+
+      for i, contentInfo in contentInfos:
+        let id = toContentId(contentInfo.contentKey)
+        if i < len(contentInfos) - 1:
+          check historyNode2.containsId(id) == true
+        else:
+          check historyNode2.containsId(id) == false
 
     await historyNode1.stop()
     await historyNode2.stop()
 
-  asyncTest "Offer - Headers with Historical Epochs":
+  asyncTest "Offer - Headers with Historical Epochs - Stopped at Epoch":
     const
-      lastBlockNumber = 9000
-      headersToTest = [0, epochSize - 1, lastBlockNumber]
+      # Needs one extra header currently due to the way that updateAccumulator
+      # works
+      lastBlockNumber = epochSize
+      headersToTest = [0, 1, lastBlockNumber div 2, lastBlockNumber - 1]
 
     let
       headers = createEmptyHeaders(0, lastBlockNumber)
@@ -251,14 +278,21 @@ procSuite "History Content Network":
     await historyNode1.stop()
     await historyNode2.stop()
 
-  asyncTest "Offer - Headers with No Historical Epochs":
+  asyncTest "Offer - Headers with No Historical Epochs - Stopped at Merge Block":
     const
-      lastBlockNumber = epochSize - 1
-      headersToTest = [0, lastBlockNumber]
+      lastBlockNumber = int(mergeBlockNumber - 1)
+      headersToTest = [
+        0,
+        1,
+        epochSize div 2,
+        epochSize - 1,
+        lastBlockNumber - 1,
+        lastBlockNumber]
 
     let
       headers = createEmptyHeaders(0, lastBlockNumber)
       masterAccumulator = buildAccumulator(headers)
+      epochAccumulators = buildAccumulatorData(headers)
 
       historyNode1 = newHistoryNode(rng, 20302)
       historyNode2 = newHistoryNode(rng, 20303)
@@ -269,6 +303,13 @@ procSuite "History Content Network":
 
       (await historyNode1.portalProtocol().ping(historyNode2.localNode())).isOk()
       (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
+
+    # Need to store the epochAccumulators, because else the headers can't be
+    # verified if being part of the canonical chain currently
+    for (contentKey, epochAccumulator) in epochAccumulators:
+      let contentId = toContentId(contentKey)
+      historyNode1.portalProtocol.storeContent(
+        contentId, SSZ.encode(epochAccumulator))
 
     # Need to run start to get the processContentLoop running
     historyNode1.start()

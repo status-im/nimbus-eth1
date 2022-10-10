@@ -11,7 +11,7 @@
 
 import
   unittest2, stew/byteutils,
-  ../network/header/header_content
+  ../../../network/header/header_content
 
 suite "Header Gossip ContentKey Encodings":
   test "BlockHeader":
