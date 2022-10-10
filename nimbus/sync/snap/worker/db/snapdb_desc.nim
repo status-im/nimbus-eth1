@@ -11,7 +11,7 @@
 import
   std/[sequtils, tables],
   chronicles,
-  eth/[common/eth_types, p2p],
+  eth/[common/eth_types, p2p, trie/db],
   ../../../../db/select_backend,
   ../../range_desc,
   "."/[bulk_storage, hexary_desc, hexary_error, hexary_import, hexary_paths,

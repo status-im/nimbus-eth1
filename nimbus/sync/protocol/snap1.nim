@@ -137,7 +137,7 @@ import
   std/options,
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, p2p/private/p2p_types],
+  eth/[common, p2p, p2p/private/p2p_types],
   nimcrypto/hash,
   stew/byteutils,
   ../../constants,

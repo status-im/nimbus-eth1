@@ -235,6 +235,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
       # client using authentication. This keeps it lower-risk initially.
       warn "Could not write JWT secret to data directory",
         jwtSecretPath
+      discard e
     return ok(newSecret)
 
   try:
@@ -245,7 +246,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
     let rc = key.fromHex(lines[0])
     if rc.isErr:
       return err(rc.error)
-    return ok(key.JwtSharedKey)
+    return ok(key)
   except IOError:
     return err(jwtKeyFileCannotOpen)
   except ValueError:

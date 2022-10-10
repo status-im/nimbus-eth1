@@ -19,7 +19,7 @@ import
   chronos,
   eth/[common/eth_types, p2p],
   stew/byteutils,
-  ".."/[protocol, sync_desc]
+  ".."/[protocol, sync_desc, types]
 
 {.push raises:[Defect].}
 

@@ -275,7 +275,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
-    if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.getTrieDB)
+    if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
     else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivotSetup()
   if tickerOK:

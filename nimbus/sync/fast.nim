@@ -12,10 +12,11 @@ import
   std/[sets, options, random, hashes, sequtils],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
-  "."/[protocol, types]
+  "."/[protocol, types],
+  ../p2p/chain
 
 {.push raises:[Defect].}
 
@@ -52,7 +53,7 @@ type
     workQueue: seq[WantedBlocks]
     endBlockNumber: BlockNumber
     finalizedBlock: BlockNumber # Block which was downloaded and verified
-    chain: AbstractChainDB
+    chain: Chain
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
@@ -240,6 +241,7 @@ proc obtainBlocksFromPeer(syncCtx: FastSyncCtx, peer: Peer) {.async.} =
     debug "Exception in getBestBlockNumber()", exc = e.name, err = e.msg
     # no need to exit here, because the context might still have blocks to fetch
     # from this peer
+    discard e
 
   while (let workItemIdx = syncCtx.availableWorkItem(); workItemIdx != -1 and
          peer.connectionState notin {Disconnecting, Disconnected}):
@@ -433,16 +435,16 @@ proc onPeerDisconnected(ctx: FastSyncCtx, p: Peer) =
   trace "peer disconnected ", peer = p
   ctx.trustedPeers.excl(p)
 
-proc new*(T: type FastSyncCtx; ethNode: EthereumNode): T
+proc new*(T: type FastSyncCtx; ethNode: EthereumNode; chain: Chain): T
     {.gcsafe, raises:[Defect,CatchableError].} =
   FastSyncCtx(
     # workQueue:           n/a
     # endBlockNumber:      n/a
     # hasOutOfOrderBlocks: n/a
-    chain:          ethNode.chain,
+    chain:          chain,
     peerPool:       ethNode.peerPool,
     trustedPeers:   initHashSet[Peer](),
-    finalizedBlock: ethNode.chain.getBestBlockHeader.blockNumber)
+    finalizedBlock: chain.db.getCanonicalHead().blockNumber)
 
 proc start*(ctx: FastSyncCtx) =
   ## Code for the fast blockchain sync procedure:

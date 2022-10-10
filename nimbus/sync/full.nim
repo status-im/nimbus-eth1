@@ -55,11 +55,12 @@ proc runMulti(buddy: FullBuddyRef) {.async.} =
 proc init*(
     T: type FullSyncRef;
     ethNode: EthereumNode;
+    chain: Chain;
     rng: ref HmacDrbgContext;
     maxPeers: int;
     enableTicker = false): T =
   new result
-  result.initSync(ethNode, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker)
   result.ctx.data.rng = rng
 
 proc start*(ctx: FullSyncRef) =

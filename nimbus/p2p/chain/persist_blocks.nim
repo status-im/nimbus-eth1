@@ -172,11 +172,7 @@ proc setCanonical*(c: Chain, blockHash: Hash256): ValidationResult
 
   setCanonical(c, header)
 
-# ------------------------------------------------------------------------------
-# Public `AbstractChainDB` overload method
-# ------------------------------------------------------------------------------
-
-method persistBlocks*(c: Chain; headers: openArray[BlockHeader];
+proc persistBlocks*(c: Chain; headers: openArray[BlockHeader];
                       bodies: openArray[BlockBody]): ValidationResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
   # Run the VM here

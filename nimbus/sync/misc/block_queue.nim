@@ -63,7 +63,7 @@ import
   eth/[common/eth_types, p2p],
   stew/[byteutils, interval_set, sorted_set],
   "../.."/[db/db_chain, utils],
-  ".."/[protocol, sync_desc]
+  ".."/[protocol, sync_desc, types]
 
 {.push raises:[Defect].}
 

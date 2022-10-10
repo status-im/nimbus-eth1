@@ -104,7 +104,7 @@ proc runTest(steps: Steps) =
 
   sealingEngine.start()
   rpcServer.start()
-  waitFor client.connect("localhost", Port(conf.rpcPort))
+  waitFor client.connect("localhost", conf.rpcPort)
 
   suite "Engine API tests":
     for i, step in steps.list:

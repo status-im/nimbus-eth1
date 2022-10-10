@@ -258,6 +258,7 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
 proc initSync*[S,W](
     dsc: RunnerSyncRef[S,W];
     node: EthereumNode;
+    chain: Chain,
     slots: int;
     noisy = false) =
   ## Constructor
@@ -266,7 +267,7 @@ proc initSync*[S,W](
   # rejected as long as its worker descriptor is registered.
   dsc.ctx = CtxRef[S](
     buddiesMax: max(1, slots + 1),
-    chain: node.chain)
+    chain: chain)
   dsc.pool = node.peerPool
   dsc.tickerOk = noisy
   dsc.buddies.init(dsc.ctx.buddiesMax)

@@ -18,8 +18,7 @@ import
   ../clique,
   ../validate,
   chronicles,
-  eth/common/chaindb,
-  eth/[common, trie/db],
+  eth/[common],
   stew/endians2,
   stint
 
@@ -43,7 +42,7 @@ type
     ArrowGlacier,
     MergeFork
 
-  Chain* = ref object of AbstractChainDB
+  Chain* = ref object of RootRef
     db: BaseChainDB
     forkIds: array[ChainFork, ForkID]
 
@@ -205,27 +204,6 @@ proc newChain*(db: BaseChainDB): Chain
   result.initChain(db, db.newClique, db.config.poaEngine)
 
 # ------------------------------------------------------------------------------
-# Public `AbstractChainDB` getter overload  methods
-# ------------------------------------------------------------------------------
-
-method genesisHash*(c: Chain): KeccakHash {.gcsafe.} =
-  ## Getter: `AbstractChainDB` overload method
-  c.blockZeroHash
-
-method genesisStateRoot*(c: Chain): KeccakHash {.gcsafe, base.} =
-  ## Getter: `AbstractChainDB` overloadable base method
-  c.blockZeroStateRoot
-
-method getBestBlockHeader*(c: Chain): BlockHeader
-                           {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Getter: `AbstractChainDB` overload method
-  c.db.getCanonicalHead()
-
-method getTrieDB*(c: Chain): TrieDatabaseRef {.gcsafe.} =
-  ## Getter: `AbstractChainDB` overload method
-  c.db.db
-
-# ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
 
@@ -263,6 +241,10 @@ proc currentBlock*(c: Chain): BlockHeader
   ## Ideally the block should be retrieved from the blockchain's internal cache.
   ## but now it's enough to retrieve it from database
   c.db.getCanonicalHead()
+
+func genesisHash*(c: Chain): Hash256 =
+  ## Getter
+  c.blockZeroHash
 
 # ------------------------------------------------------------------------------
 # Public `Chain` setters

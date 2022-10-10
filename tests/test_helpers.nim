@@ -287,7 +287,7 @@ proc setupEthNode*(
   var node = newEthereumNode(
     keypair, srvAddress,
     conf.networkId,
-    nil, conf.agentString,
+    conf.agentString,
     addAllCapabilities = false,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort)
 

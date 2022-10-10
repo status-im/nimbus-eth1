@@ -14,7 +14,13 @@
 ## Public descriptors
 
 import
-  eth/[common/eth_types, p2p]
+  eth/[common, p2p],
+  ../p2p/chain,
+  ../db/db_chain
+
+export
+  chain,
+  db_chain
 
 {.push raises: [Defect].}
 
@@ -40,7 +46,7 @@ type
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
     buddiesMax*: int        ## Max number of buddies
-    chain*: AbstractChainDB ## Block chain database (no need for `Peer`)
+    chain*: Chain           ## Block chain database (no need for `Peer`)
     poolMode*: bool         ## Activate `runPool()` workers if set `true`
     data*: S                ## Shared context for all worker peers
 

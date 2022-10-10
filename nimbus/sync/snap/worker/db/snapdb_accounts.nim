@@ -11,7 +11,7 @@
 import
   std/[algorithm, sequtils, strutils, tables],
   chronicles,
-  eth/[common/eth_types, p2p, rlp, trie/nibbles],
+  eth/[common, p2p, rlp, trie/nibbles, trie/db],
   stew/byteutils,
   ../../range_desc,
   "."/[bulk_storage, hexary_desc, hexary_error, hexary_import,

@@ -11,7 +11,7 @@
 import
   std/[algorithm, strutils, tables],
   chronicles,
-  eth/[common/eth_types, trie/db],
+  eth/[common, trie/db],
   ../../../../db/[kvstore_rocksdb, storage_types],
   ../../../types,
   ../../range_desc,
