@@ -31,5 +31,5 @@ proc portal_historyFindContentRaw(enr: Record, contentKey: string): tuple[
 proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_historyOffer(enr: Record, contentKey: string): bool
+proc portal_historyOffer(contentKey: string, content: string): int
 proc portal_historyRecursiveFindNodes(): seq[Record]

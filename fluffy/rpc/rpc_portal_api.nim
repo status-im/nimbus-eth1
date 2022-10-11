@@ -139,16 +139,15 @@ proc installPortalApiHandlers*(
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
   rpcServer.rpc("portal_" & network & "Offer") do(
-      enr: Record, contentKey: string) -> bool:
-    # Only allow 1 content key for now
+    contentKey: string, content: string) -> int:
+
     let
-      node = toNodeWithAddress(enr)
-      contentKeys = ContentKeysList(@[ByteList.init(hexToSeqByte(contentKey))])
-      accept = await p.offer(node, contentKeys)
-    if accept.isErr():
-      raise newException(ValueError, $accept.error)
-    else:
-      return true
+      ck = hexToSeqByte(contentKey)
+      ct = hexToSeqByte(content)
+      contentKeys = ContentKeysList(@[ByteList.init(ck)])
+      numberOfPeers = await p.neighborhoodGossip(contentKeys, @[ct])
+
+    return numberOfPeers
 
   rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()
