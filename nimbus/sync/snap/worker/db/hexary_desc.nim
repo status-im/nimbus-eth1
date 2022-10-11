@@ -12,7 +12,8 @@ import
   std/[algorithm, hashes, sequtils, sets, strutils, tables],
   eth/[common/eth_types, p2p, trie/nibbles],
   stint,
-  ../../range_desc
+  ../../range_desc,
+  ./hexary_error
 
 {.push raises: [Defect].}
 
@@ -136,7 +137,6 @@ type
   TrieNodeStat* = object
     ## Trie inspection report
     dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
-    leaves*: seq[NodeKey]           ## Paths to leave nodes (if any)
     level*: int                     ## Maximim nesting depth of dangling nodes
     stopped*: bool                  ## Potential loop detected if `true`
 
@@ -150,6 +150,10 @@ type
     ## Persistent database get() function. For read-only cacses, this function
     ## can be seen as the persistent alternative to `HexaryTreeDbRef`.
 
+  HexaryNodeReport* = object
+    ## Return code for single node operations
+    kind*: Option[NodeKind]
+    error*: HexaryDbError
 
 const
   EmptyNodeBlob* = seq[byte].default
@@ -286,12 +290,6 @@ proc ppDangling(a: seq[Blob]; maxItems = 30): string =
     andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
   "{" & q.join(",") & andMore & "}"
 
-proc ppLeaves(a: openArray[NodeKey]; db: HexaryTreeDbRef; maxItems=30): string =
-  let
-    q = a.mapIt(it.ppImpl(db))[0 ..< min(maxItems,a.len)]
-    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
-  "{" & q.join(",") & andMore & "}"
-
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
@@ -339,8 +337,7 @@ proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
   if a.stopped:
     result &= "stopped,"
   result &= $a.dangling.len & "," &
-    a.dangling.ppDangling(maxItems) & "," &
-    a.leaves.ppLeaves(db, maxItems) & ")"
+    a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)

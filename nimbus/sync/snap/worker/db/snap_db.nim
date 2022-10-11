@@ -140,9 +140,9 @@ proc mergeProofs(
     refs = @[root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
-    let rc = db.hexaryImport(rlpRec, nodes, refs)
-    if rc.isErr:
-      let error = rc.error
+    let report = db.hexaryImport(rlpRec, nodes, refs)
+    if report.error != NothingSerious:
+      let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error
       return err(error)
 
@@ -270,12 +270,12 @@ proc collectStorageSlots(
   ok(rcSlots)
 
 
-proc importStorageSlots*(
+proc importStorageSlots(
     ps: SnapDbSessionRef;     ## Re-usable session descriptor
     data: AccountSlots;       ## Account storage descriptor
     proof: SnapStorageProof;  ## Account storage proof
       ): Result[void,HexaryDbError]
-      {.gcsafe, raises: [Defect, RlpError,KeyError].} =
+      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Preocess storage slots for a particular storage root
   let
     stoRoot = data.account.storageRoot.to(NodeKey)
@@ -456,6 +456,11 @@ proc importStorages*(
   ## codes for the entries that could not be processed. If the slot ID is -1,
   ## the error returned is not related to a slot. If any, this -1 entry is
   ## always the last in the list.
+  ##
+  ## TODO:
+  ##   Reconsider how to handle the persistant storage trie, see
+  ##   github.com/status-im/nim-eth/issues/9#issuecomment-814573755
+  ##
   let
     nItems = data.storages.len
     sTop = nItems - 1
@@ -519,62 +524,77 @@ proc importStorages*(
 
 
 
-proc importRawNodes*(
+proc importRawAccountNodes*(
     ps: SnapDbSessionRef;      ## Re-usable session descriptor
     nodes: openArray[Blob];    ## Node records
     persistent = false;        ## store data on disk
-      ): Result[void,seq[(int,HexaryDbError)]] =
-  ## ...
-  var
-    errors: seq[(int,HexaryDbError)]
-    nodeID = -1
+      ): (int,seq[HexaryNodeReport]) =
+  ## Store data nodes given as argument `nodes` on the persistent database.
+  ##
+  ## If there was no serious error, the right entry of the return code tuple
+  ## contains a list of reports that correspond to the respective position on
+  ## the `nodes` argument list.
+  ##
+  ## Errors are summed up at the left entry of the return code tuple. If the
+  ## data could not be stored to disk, an additional entry is appended to the
+  ## right entry reports list of the return code tuple indication why this
+  ## happened.
+  ##
   let
+    peer = ps.peer
     db = ps.newHexaryTreeDbRef()
+  var
+    inx: int
+    errors = 0
+    report = newSeq[HexaryNodeReport](nodes.len + 1)
   try:
     # Import nodes
     for n,rec in nodes:
-      nodeID = n
-      let rc = db.hexaryImport(rec)
-      if rc.isErr:
-        let error = rc.error
-        trace "importRawNodes()", peer=ps.peer, item=n, nodes=nodes.len, error
-        errors.add (nodeID,error)
+      if 0 < rec.len: # otherwise ignore empty placeholder
+        inx = n
+        report[inx] = db.hexaryImport(rec)
+        if report[inx].error != NothingSerious:
+          errors.inc
+          trace "importRawNodes()", peer,
+           item=n, nodes=nodes.len, error=report[inx].error, errors
 
     # Store to disk
     if persistent and 0 < db.tab.len:
-      nodeID = -1
+      inx = nodes.len
       let rc = db.persistentAccounts(ps.base)
       if rc.isErr:
-        errors.add (nodeID,rc.error)
+        errors.inc
+        report[inx].error = rc.error
+      else:
+        report.setLen(nodes.len)
 
   except RlpError:
-    errors.add (nodeID,RlpEncoding)
+    report[inx].error = RlpEncoding
+    errors.inc
   except KeyError as e:
     raiseAssert "Not possible @ importAccounts: " & e.msg
   except OSError as e:
-    trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
-    errors.add (nodeID,RlpEncoding)
+    trace "Import exception", peer, name=($e.name), msg=e.msg, errors
+    report[inx].error = OSErrorException
+    errors.inc
 
-  if 0 < errors.len:
-    return err(errors)
+  if errors == 0:
+    trace "Raw nodes imported", peer, nodes=nodes.len, report=report.len
+  (errors, report)
 
-  trace "Raw nodes imported", peer=ps.peer, nodes=nodes.len
-  ok()
-
-proc importRawNodes*(
+proc importRawAccountNodes*(
     pv: SnapDbRef;               ## Base descriptor on `BaseChainDB`
     peer: Peer,                      ## For log messages, only
     nodes: openArray[Blob];          ## Node records
-      ): Result[void,seq[(int,HexaryDbError)]] =
+      ): (int,seq[HexaryNodeReport]) =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbSessionRef.init(
-    pv, Hash256(), peer).importRawNodes(nodes, persistent=true)
+    pv, Hash256(), peer).importRawAccountNodes(nodes, persistent=true)
 
 
 proc inspectAccountsTrie*(
     ps: SnapDbSessionRef;         ## Re-usable session descriptor
     pathList = seq[Blob].default; ## Starting nodes for search
-    maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
     persistent = false;           ## Read data from disk
     ignoreError = false;          ## Always return partial results if available
       ): Result[TrieNodeStat, HexaryDbError] =
@@ -588,9 +608,9 @@ proc inspectAccountsTrie*(
   noRlpExceptionOops("inspectAccountsTrie()"):
     if persistent:
       let getFn: HexaryGetFn = proc(key: Blob): Blob = ps.base.db.get(key)
-      stats = getFn.hexaryInspectTrie(ps.accRoot, pathList, maxLeafPaths)
+      stats = getFn.hexaryInspectTrie(ps.accRoot, pathList)
     else:
-      stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList, maxLeafPaths)
+      stats = ps.accDb.hexaryInspectTrie(ps.accRoot, pathList)
 
   block checkForError:
     let error = block:
@@ -601,14 +621,12 @@ proc inspectAccountsTrie*(
       else:
         break checkForError
     trace "Inspect account trie failed", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, leaves=stats.leaves.len,
-      maxleaves=maxLeafPaths, stoppedAt=stats.level, error
+      nDangling=stats.dangling.len, stoppedAt=stats.level, error
     return err(error)
 
   when extraTraceMessages:
     trace "Inspect account trie ok", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, leaves=stats.leaves.len,
-      maxleaves=maxLeafPaths, level=stats.level
+      nDangling=stats.dangling.len, level=stats.level
   return ok(stats)
 
 proc inspectAccountsTrie*(
@@ -616,13 +634,11 @@ proc inspectAccountsTrie*(
     peer: Peer;                   ## For log messages, only
     root: Hash256;                ## state root
     pathList = seq[Blob].default; ## Starting paths for search
-    maxLeafPaths = 0;             ## Record leaves with proper 32 bytes path
     ignoreError = false;          ## Always return partial results when avail.
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectAccountsTrie()` for persistent storage.
   SnapDbSessionRef.init(
-    pv, root, peer).inspectAccountsTrie(
-      pathList, maxLeafPaths, persistent=true, ignoreError)
+    pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
 
 
 proc getAccountNodeKey*(
@@ -761,7 +777,7 @@ proc prevChainDbKey*(
 # ------------------------------------------------------------------------------
 
 proc assignPrettyKeys*(ps: SnapDbSessionRef) =
-  ## Prepare foe pretty pringing/debugging. Run early enough this function
+  ## Prepare for pretty pringing/debugging. Run early enough this function
   ## sets the root key to `"$"`, for instance.
   noPpError("validate(1)"):
     # Make keys assigned in pretty order for printing
