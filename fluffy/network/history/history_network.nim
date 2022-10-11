@@ -768,7 +768,7 @@ proc validateContent(
 
   return true
 
-proc gossipDiscardPeers(
+proc neighborhoodGossipDiscardPeers(
     p: PortalProtocol,
     contentKeys: ContentKeysList,
     content: seq[seq[byte]]): Future[void] {.async.} =
@@ -785,7 +785,9 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.gossipDiscardPeers(contentKeys, contentItems)
+        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+          contentKeys, contentItems
+        )
 
   except CancelledError:
     trace "processContentLoop canceled"
