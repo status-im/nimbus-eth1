@@ -1,4 +1,3 @@
-
 # Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
@@ -38,7 +37,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/snap_db
+  ./db/snapdb_accounts
 
 {.push raises: [Defect].}
 

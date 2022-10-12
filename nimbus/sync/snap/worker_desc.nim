@@ -14,7 +14,7 @@ import
   stew/[byteutils, keyed_queue],
   "../.."/[constants, db/select_backend],
   ".."/[sync_desc, types],
-  ./worker/[com/com_error, db/snap_db, ticker],
+  ./worker/[com/com_error, db/snapdb_desc, ticker],
   ./range_desc
 
 {.push raises: [Defect].}

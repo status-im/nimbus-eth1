@@ -100,7 +100,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
-  ./db/[hexary_desc, snap_db]
+  ./db/[hexary_desc, hexary_error, snapdb_accounts]
 
 {.push raises: [Defect].}
 

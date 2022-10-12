@@ -18,7 +18,7 @@ import
   ".."/[protocol, sync_desc],
   ./worker/[heal_accounts, store_accounts, store_storages, ticker],
   ./worker/com/[com_error, get_block_header],
-  ./worker/db/snap_db,
+  ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
 
 const
