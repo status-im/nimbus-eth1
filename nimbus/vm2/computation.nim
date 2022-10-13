@@ -12,6 +12,7 @@ import
   ../constants, ../forks,
   ../db/accounts_cache,
   ../utils,
+  ../vm_async,
   ./code_stream,
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./memory,
@@ -136,6 +137,12 @@ template getStorage*(c: Computation, slot: UInt256): UInt256 =
     c.host.getStorage(c.msg.contractAddress, slot)
   else:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
+
+template hasStorage*(c: Computation, slot: UInt256): bool =
+  when evmc_enabled:
+    c.host.hasStorage(c.msg.contractAddress, slot)
+  else:
+    c.vmState.readOnlyStateDB.hasStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: EthAddress): UInt256 =
   when evmc_enabled:
@@ -300,6 +307,13 @@ proc writeContract*(c: Computation) =
 
 template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
+  c.continuation = proc() =
+    c.continuation = nil
+    after
+
+# Register an async operation to be performed before the continuation is called.
+template asyncChainTo*(c: Computation, asyncOperation: Vm2AsyncOperation, after: untyped) =
+  c.pendingAsyncOperation = asyncOperation
   c.continuation = proc() =
     c.continuation = nil
     after

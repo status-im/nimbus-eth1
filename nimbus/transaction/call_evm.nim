@@ -9,10 +9,11 @@
 import
   std/[options, times],
   chronicles,
+  chronos,
   eth/[common/eth_types_rlp, trie/db],
   stint,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
-  ".."/[db/db_chain, db/accounts_cache, chain_config],
+  ".."/[db/db_chain, db/accounts_cache, chain_config, vm_async],
   ./call_common
 
 type
@@ -177,8 +178,10 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB,
 
   hi
 
-proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
-  var call = CallParams(
+proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallParams =
+  # Is there a nice idiom for this kind of thing? Should I
+  # just be writing this as a bunch of assignment statements?
+  result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
     gasPrice:     tx.gasPrice,
@@ -190,11 +193,11 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
     input:        tx.payload
   )
   if tx.txType > TxLegacy:
-    shallowCopy(call.accessList, tx.accessList)
-  return runComputation(call).gasUsed
+    shallowCopy(result.accessList, tx.accessList)
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
-  var call = CallParams(
+proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
+                       fork: Fork, asyncFactory: AsyncOperationFactory): CallParams =
+  result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
     gasPrice:     tx.gasPrice,
@@ -207,7 +210,23 @@ proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, for
 
     noIntrinsic:  true, # Don't charge intrinsic gas.
     noRefund:     true, # Don't apply gas refund/burn rule.
+
+    asyncFactory: asyncFactory,
   )
   if tx.txType > TxLegacy:
-    shallowCopy(call.accessList, tx.accessList)
+    shallowCopy(result.accessList, tx.accessList)
+
+proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
+  let call = callParamsForTx(tx, sender, vmState, fork)
+  return runComputation(call).gasUsed
+
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
+                  fork: Fork, asyncFactory: AsyncOperationFactory): CallResult =
+  let call = callParamsForTest(tx, sender, vmState, fork, asyncFactory)
   runComputation(call)
+
+# FIXME-duplicatedForAsync
+proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
+                       fork: Fork, asyncFactory: AsyncOperationFactory): Future[CallResult] {.async.} =
+  let call = callParamsForTest(tx, sender, vmState, fork, asyncFactory)
+  return await asyncRunComputation(call)

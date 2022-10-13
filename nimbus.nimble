@@ -66,6 +66,9 @@ task test, "Run tests":
 task test_rocksdb, "Run rocksdb tests":
   test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
+task test_evm, "Run EVM tests":
+  test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 

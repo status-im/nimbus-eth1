@@ -14,6 +14,7 @@
 
 import
   ../../../errors,
+  ../../../vm_async,
   ../../code_stream,
   ../../computation,
   ../../memory,
@@ -163,10 +164,11 @@ const
 
   sloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, Load word from storage.
-    let (slot) = k.cpt.stack.popInt(1)
-    k.cpt.stack.push:
-      k.cpt.getStorage(slot)
-
+    let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
+    let (slot) = cpt.stack.popInt(1)
+    cpt.asyncChainTo(ifNecessaryGetStorage(slot)):
+      cpt.stack.push:
+        cpt.getStorage(slot)
 
   sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, EIP2929: Load word from storage for Berlin and later

@@ -8,9 +8,10 @@
 
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
+  chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/accounts_cache, forks],
+  ".."/[db/accounts_cache, forks, vm_async],
   ./host_types
 
 when defined(evmc_enabled):
@@ -35,6 +36,11 @@ type
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
+    # FIXME-whereDoesTheFactoryObjectBelong
+    # I don't really have a good understanding of what this CallParams object
+    # is. Is it reasonable for callers to specify the asyncFactory that
+    # they want here (so that it can be passed down to the Computation)?
+    asyncFactory*: AsyncOperationFactory # Used for lazy loading.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -160,6 +166,9 @@ proc setupHost(call: CallParams): TransactionHost =
 
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, cMsg, code)
+
+    host.computation.asyncFactory = call.asyncFactory # FIXME-whereDoesTheFactoryObjectBelong
+
     shallowCopy(host.code, code)
 
   else:
@@ -172,6 +181,7 @@ proc setupHost(call: CallParams): TransactionHost =
 
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, cMsg)
+    host.computation.asyncFactory = call.asyncFactory # FIXME-whereDoesTheFactoryObjectBelong
 
   return host
 
@@ -197,10 +207,12 @@ when defined(evmc_enabled):
       {.gcsafe.}:
         callResult.release(callResult)
 
-proc runComputation*(call: CallParams): CallResult =
-  let host = setupHost(call)
-  let c = host.computation
+# FIXME-awkwardFactoring: the factoring out of the pre and
+# post parts feels awkward to me, but for now I'd really like
+# not to have too much duplicated code between sync and async.
+# --Adam
 
+proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
   # Must come after `setupHost` for correct fork.
   if not call.noAccessList:
     initialAccessListEIP2929(call)
@@ -210,11 +222,13 @@ proc runComputation*(call: CallParams): CallResult =
     host.vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
-  when defined(evmc_enabled):
-    doExecEvmc(host, call)
-  else:
-    execComputation(host.computation)
-
+# FIXME-awkwardFactoring: I factored this out into a separate proc,
+# because it's a fairly coherent piece of logic that feels like it
+# clutters up the rest of finishRunningComputation. But I don't
+# like the name, which is a bad sign.
+proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
+  let c = host.computation
+  
   # EIP-3529: Reduction in refunds
   let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
                             5.GasInt
@@ -222,19 +236,23 @@ proc runComputation*(call: CallParams): CallResult =
                             2.GasInt
 
   # Calculated gas used, taking into account refund rules.
-  var gasRemaining: GasInt = 0
   if call.noRefund:
-    gasRemaining = c.gasMeter.gasRemaining
+    result = c.gasMeter.gasRemaining
   elif not c.shouldBurnGas:
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
-    gasRemaining = c.gasMeter.gasRemaining
+    result = c.gasMeter.gasRemaining
 
   # Refund for unused gas.
-  if gasRemaining > 0 and not call.noGasCharge:
+  if result > 0 and not call.noGasCharge:
     host.vmState.mutateStateDB:
-      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+      db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
+
+proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResult =
+  let c = host.computation
+  
+  let gasRemaining = calculateAndPossiblyRefundGas(host, call)
 
   result.isError = c.isError
   result.gasUsed = call.gasLimit - gasRemaining
@@ -244,3 +262,27 @@ proc runComputation*(call: CallParams): CallResult =
   shallowCopy(result.logEntries, c.logEntries)
   result.stack = c.stack
   result.memory = c.memory
+
+proc runComputation*(call: CallParams): CallResult =
+  let host = setupHost(call)
+  prepareToRunComputation(host, call)
+
+  when defined(evmc_enabled):
+    doExecEvmc(host, call)
+  else:
+    execComputation(host.computation)
+
+  finishRunningComputation(host, call)
+
+# FIXME-duplicatedForAsync
+proc asyncRunComputation*(call: CallParams): Future[CallResult] {.async.} =
+  let host = setupHost(call)
+  prepareToRunComputation(host, call)
+
+  # FIXME-asyncAndEvmc: I'm not sure what to do with EVMC at the moment.
+  # when defined(evmc_enabled):
+  #   doExecEvmc(host, call)
+  # else:
+  await asyncExecComputation(host.computation)
+
+  return finishRunningComputation(host, call)

@@ -11,10 +11,12 @@
 import
   tables, eth/common,
   options, json, sets,
+  chronos,
   ./stack,  ./memory, ./code_stream, ../forks,
   ./interpreter/[gas_costs, op_codes],
   # TODO - will be hidden at a lower layer
-  ../db/[db_chain, accounts_cache]
+  ../db/[db_chain, accounts_cache],
+  ../vm_async
 
 when defined(evmc_enabled):
   import
@@ -95,7 +97,10 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
+    pendingAsyncOperation*: Vm2AsyncOperation
     continuation*:          proc() {.gcsafe.}
+    # FIXME-whereDoesTheFactoryObjectBelong: is this the right object to put this on?
+    asyncFactory*:          AsyncOperationFactory
 
   Error* = ref object
     info*:                  string

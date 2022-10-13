@@ -15,6 +15,7 @@ import
     vm_types,
     forks,
     constants,
+    vm_async,
     vm_precompiles,
     transaction,
     db/db_chain,
@@ -43,7 +44,10 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: Fork, address: Pr
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
+    # FIXME-whereDoesTheFactoryObjectBelong
+    # Having to specify the asyncFactory here feels like clutter.
+    # Maybe just make it default to NoLazyDataSource?
+    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork, AsyncOperationFactory(lazyDataSource: NoLazyDataSource()))
 
     if expectedErr:
       check fixtureResult.isError

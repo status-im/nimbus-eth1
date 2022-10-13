@@ -17,6 +17,7 @@ import
   ../constants,
   ../utils,
   ../db/accounts_cache,
+  ./async_operations,
   ./code_stream,
   ./computation,
   ./interpreter/[op_dispatcher, gas_costs],
@@ -25,6 +26,7 @@ import
   ./state,
   ./types,
   chronicles,
+  chronos,
   eth/[common, keys],
   macros,
   options,
@@ -45,12 +47,14 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
+proc selectVM(c: Computation, fork: Fork, shouldPrepareTracer: bool) {.gcsafe.} =
   ## Op code execution handler main loop.
   var desc: Vm2Ctx
   desc.cpt = c
 
-  if c.tracingEnabled:
+  # It's important not to re-prepare the tracer after
+  # an async operation, only after a call/create.
+  if c.tracingEnabled and shouldPrepareTracer:
     c.prepareTracer()
 
   while true:
@@ -195,7 +199,7 @@ proc afterExec(c: Computation) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc executeOpcodes*(c: Computation) =
+proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
   let fork = c.fork
 
   block:
@@ -205,7 +209,7 @@ proc executeOpcodes*(c: Computation) =
     try:
       if not c.continuation.isNil:
         (c.continuation)()
-      c.selectVM(fork)
+      c.selectVM(fork, shouldPrepareTracer)
     except CatchableError as e:
       c.setError(
         &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
@@ -222,17 +226,25 @@ when vm_use_recursion:
       return
     c.executeOpcodes()
     while not c.continuation.isNil:
-      when evmc_enabled:
-        c.res = c.host.call(c.child[])
+      # If there's a continuation, then it's because there's either
+      # a child (i.e. call or create) or a pendingAsyncOperation.
+      if not c.pendingAsyncOperation.isNil:
+        let p = c.pendingAsyncOperation
+        c.pendingAsyncOperation = nil
+        waitFor(c.runAsyncOperation(p))
+        c.executeOpcodes(false)
       else:
-        execCallOrCreate(c.child)
-      c.child = nil
-      c.executeOpcodes()
+        when evmc_enabled:
+          c.res = c.host.call(c.child[])
+        else:
+          execCallOrCreate(c.child)
+        c.child = nil
+        c.executeOpcodes()
     c.afterExec()
 
 else:
   proc execCallOrCreate*(cParam: Computation) =
-    var (c, before) = (cParam, true)
+    var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:
         c.dispose()
@@ -243,15 +255,73 @@ else:
       while true:
         if before and c.beforeExec():
           break
-        c.executeOpcodes()
+        c.executeOpcodes(shouldPrepareTracer)
         if c.continuation.isNil:
           c.afterExec()
           break
-        (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
+        if not c.pendingAsyncOperation.isNil:
+          before = false
+          shouldPrepareTracer = false
+          let p = c.pendingAsyncOperation
+          c.pendingAsyncOperation = nil
+          # FIXME-areAsyncOperationsNecessaryDuringSynchronousExecution
+          # Are all the async operations going to be safe to ignore
+          # during synchronous execution? (e.g. Maybe we're doing
+          # on-demand data fetching during asynchronous execution,
+          # but when running synchronously maybe we're happy to just
+          # ignore that and assume that all the data has already been
+          # downloaded.) For now, I expect that during synchronous
+          # operation we'll set the lazyDataSource to NoLazyDataSource,
+          # and so the various pendingAsyncOperation values will all be
+          # simple no-ops. Which means that this waitFor here could
+          # be deleted. But I feel like I don't really properly
+          # understand yet what kinds of async operations we might
+          # have. --Adam
+          waitFor(c.runAsyncOperation(p))
+        else:
+          (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()
-      (before, c.parent, c) = (false, nil.Computation, c.parent)
+      (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
+
+# FIXME-duplicatedForAsync
+#
+# In the long run I'd like to make some clever macro/template to
+# eliminate the duplication between the synchronous and
+# asynchronous versions. But for now let's stick with this for
+# simplicity. 
+#
+# Also, I've based this on the recursive one (above), which I think
+# is okay because the "async" pragma is going to rewrite this whole
+# thing to use callbacks anyway. But maybe I'm wrong? It isn't hard
+# to write the async version of the iterative one, but this one is
+# a bit shorter and feels cleaner, so if it works just as well I'd
+# rather use this one. --Adam
+proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
+  defer: c.dispose()
+  if c.beforeExec():
+    return
+  c.executeOpcodes()
+  while not c.continuation.isNil:
+    # If there's a continuation, then it's because there's either
+    # a child (i.e. call or create) or a pendingAsyncOperation.
+    if not c.pendingAsyncOperation.isNil:
+      let p = c.pendingAsyncOperation
+      c.pendingAsyncOperation = nil
+      await c.runAsyncOperation(p)
+      c.executeOpcodes(false)
+    else:
+      when evmc_enabled:
+        # FIXME-asyncAndEvmc
+        # Note that this is NOT async. I'm not sure how/whether I
+        # can do EVMC asynchronously.
+        c.res = c.host.call(c.child[])
+      else:
+        await asyncExecCallOrCreate(c.child)
+      c.child = nil
+      c.executeOpcodes()
+  c.afterExec()
 
 # ------------------------------------------------------------------------------
 # End

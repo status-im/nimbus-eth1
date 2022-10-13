@@ -173,6 +173,7 @@ else:
     # <memPos> and <memLen> are provided by value and need not be captured
     var
       child = newComputation(c.vmState, childMsg)
+    child.asyncFactory = c.asyncFactory # FIXME-whereDoesTheFactoryObjectBelong
 
     c.chainTo(child):
       if not child.shouldBurnGas:
