@@ -135,10 +135,10 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
 
   if 0 < stoRange.data.storages.len:
     # Verify/process storages data and save it to disk
-    let (errors, report) = ctx.data.snapDb.importStorages(peer, stoRange.data)
-    if 0 < errors:
+    let report = ctx.data.snapDb.importStorages(peer, stoRange.data)
+    if 0 < report.len:
 
-      if stoRange.data.storages.len < report.len:
+      if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
         trace "Error writing storage slots to database", peer,
           nSlots=env.fetchStorage.len,
@@ -148,13 +148,11 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
         return
 
       # Push back error entries to be processed later
-      for n in 0 ..< report.len:
-        case report[n].error:
-        of NothingSerious:
-          discard
-        #of RootNodeMismatch, RightBoundaryProofFailed:
-        #  ???
-        else:
+      for w in report:
+        if w.slot.isSome:
+          let n = w.slot.unsafeGet
+          # if w.error in {RootNodeMismatch, RightBoundaryProofFailed}:
+          #   ???
           trace "Error processing storage slots", peer,
             nSlots=env.fetchStorage.len,
             nReq=req.len,

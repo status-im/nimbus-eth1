@@ -152,8 +152,9 @@ type
 
   HexaryNodeReport* = object
     ## Return code for single node operations
-    kind*: Option[NodeKind]
-    error*: HexaryDbError
+    slot*: Option[int]              ## May refer to indexed argument slots
+    kind*: Option[NodeKind]         ## Node type (if any)
+    error*: HexaryDbError           ## Error code, or `NothingSerious`
 
 const
   EmptyNodeBlob* = seq[byte].default

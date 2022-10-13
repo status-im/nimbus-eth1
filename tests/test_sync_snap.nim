@@ -87,14 +87,10 @@ var
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
-proc toStoDbRc(
-     report: (int,seq[HexaryNodeReport])
-       ): Result[void,seq[(int,HexaryDbError)]] =
+proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
   ## Kludge: map error report to (older version) return code
-  if report[0] != 0:
-    for n,w in report[1]:
-      if w.error != NothingSerious:
-        return err(@[(n,w.error)])
+  if r.len != 0:
+    return err(r.mapIt((it.slot.get(otherwise = -1),it.error)))
   ok()
 
 proc findFilePath(file: string;

@@ -230,74 +230,80 @@ proc importAccounts*(
 proc importRawAccountNodes*(
     ps: SnapDbAccountsRef;     ## Re-usable session descriptor
     nodes: openArray[Blob];    ## Node records
+    reportNodes = {Leaf};      ## Additional node types to report
     persistent = false;        ## store data on disk
-      ): (int,seq[HexaryNodeReport]) =
+      ): seq[HexaryNodeReport] =
   ## Store data nodes given as argument `nodes` on the persistent database.
   ##
-  ## If there was no serious error, the right entry of the return code tuple
-  ## contains a list of reports that correspond to the respective position on
-  ## the `nodes` argument list.
+  ## If there were an error when processing a particular argument `notes` item,
+  ## it will be reported with the return value providing argument slot/index,
+  ## node type, end error code.
   ##
-  ## Errors are summed up at the left entry of the return code tuple. If the
-  ## data could not be stored to disk, an additional entry is appended to the
-  ## right entry reports list of the return code tuple indication why this
-  ## happened.
+  ## If there was an error soring persistent data, the last report item will
+  ## have an error code, only.
+  ##
+  ## Additional node items might be reported if the node type is in the
+  ## argument set `reportNodes`. These reported items will have no error
+  ## code set (i.e. `NothingSerious`.)
   ##
   let
     peer = ps.peer
     db = HexaryTreeDbRef.init(ps)
+    nItems = nodes.len
   var
-    inx: int
-    errors = 0
-    report = newSeq[HexaryNodeReport](nodes.len + 1)
+    nErrors = 0
+    slot: Option[int]
   try:
     # Import nodes
     for n,rec in nodes:
       if 0 < rec.len: # otherwise ignore empty placeholder
-        inx = n
-        report[inx] = db.hexaryImport(rec)
-        if report[inx].error != NothingSerious:
-          errors.inc
-          trace "importRawNodes()", peer,
-           item=n, nodes=nodes.len, error=report[inx].error, errors
+        slot = some(n)
+        var rep = db.hexaryImport(rec)
+        if rep.error != NothingSerious:
+          rep.slot = slot
+          result.add rep
+          nErrors.inc
+          trace "Error importing account nodes", peer, inx=n, nItems,
+            error=rep.error, nErrors
+        elif rep.kind.isSome and rep.kind.unsafeGet in reportNodes:
+          rep.slot = slot
+          result.add rep
 
     # Store to disk
-    block storePersistent:
-      if persistent and 0 < db.tab.len:
-        inx = nodes.len
-        let rc = db.persistentAccounts(ps)
-        if rc.isErr:
-          errors.inc
-          report[inx].error = rc.error
-          break storePersistent
-      # Chop off last return list entry if everything is OK
-      report.setLen(nodes.len)
+    if persistent and 0 < db.tab.len:
+      slot = none(int)
+      let rc = db.persistentAccounts(ps)
+      if rc.isErr:
+        result.add HexaryNodeReport(slot: slot, error: rc.error)
 
   except RlpError:
-    report[inx].error = RlpEncoding
-    errors.inc
+    result.add HexaryNodeReport(slot: slot, error: RlpEncoding)
+    nErrors.inc
+    trace "Error importing account nodes", peer, slot, nItems,
+      error=RlpEncoding, nErrors
   except KeyError as e:
-    raiseAssert "Not possible @ importAccounts: " & e.msg
+    raiseAssert "Not possible @ importRawAccountNodes: " & e.msg
   except OSError as e:
-    trace "Import exception", peer, name=($e.name), msg=e.msg, errors
-    report[inx].error = OSErrorException
-    errors.inc
+    result.add HexaryNodeReport(slot: slot, error: OSErrorException)
+    nErrors.inc
+    trace "Import account nodes exception", peer, slot, nItems,
+      name=($e.name), msg=e.msg, nErrors
 
   when extraTraceMessages:
-    if errors == 0:
-      trace "Raw account nodes imported", peer,
-        nodes=nodes.len, report=report.len
-
-  (errors, report)
+    if nErrors == 0:
+      trace "Raw account nodes imported", peer, slot, nItems, report=result.len
 
 proc importRawAccountNodes*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     peer: Peer,                   ## For log messages, only
     nodes: openArray[Blob];       ## Node records
-      ): (int,seq[HexaryNodeReport]) =
+    reportNodes = {Leaf};         ## Additional node types to report
+      ): seq[HexaryNodeReport] =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, Hash256(), peer).importRawAccountNodes(nodes, persistent=true)
+    pv, Hash256(), peer).importRawAccountNodes(
+      nodes, reportNodes, persistent=true)
+
 
 proc inspectAccountsTrie*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor

@@ -162,22 +162,18 @@ proc importStorages*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
     persistent = false;        ## store data on disk
-      ): (int,seq[HexaryNodeReport]) =
+      ): seq[HexaryNodeReport] =
   ## Validate and import storage slots (using proofs as received with the snap
   ## message `StorageRanges`). This function accumulates data in a memory table
   ## which can be written to disk with the argument `persistent` set `true`. The
   ## memory table is held in the descriptor argument`ps`.
   ##
-  ## Note that the `peer` argument is for log messages, only.
+  ## If there were an error when processing a particular argument `data` item,
+  ## it will be reported with the return value providing argument slot/index
+  ## end error code.
   ##
-  ## If there was no serious error, the right entry of the return code tuple
-  ## contains a list of reports that correspond to the respective position on
-  ## the `data.storages` argument list.
-  ##
-  ## Errors are summed up at the left entry of the return code tuple. If the
-  ## data could not be stored to disk, an additional entry is appended to the
-  ## right entry reports list of the return code tuple indication why this
-  ## happened.
+  ## If there was an error soring persistent data, the last report item will
+  ## have an error code, only.
   ##
   ## TODO:
   ##   Reconsider how to handle the persistant storage trie, see
@@ -188,68 +184,58 @@ proc importStorages*(
     nItems = data.storages.len
     sTop = nItems - 1
   var
-    inx: int
-    errors = 0
-    report = newSeq[HexaryNodeReport](nItems + 1)
+    slot: Option[int]
   if 0 <= sTop:
     try:
       for n in 0 ..< sTop:
         # These ones never come with proof data
-        inx = n
-        let rc = ps.importStorageSlots(data.storages[inx], @[])
+        slot = some(n)
+        let rc = ps.importStorageSlots(data.storages[n], @[])
         if rc.isErr:
-          report[inx].error = rc.error
-          errors.inc
-          trace "Storage slots item fails", peer, inx, nItems,
-            slots=data.storages[inx].data.len, proofs=0,
-            error=report[inx].error, errors
+          result.add HexaryNodeReport(slot: slot, error: rc.error)
+          trace "Storage slots item fails", peer, inx=n, nItems,
+            slots=data.storages[n].data.len, proofs=0,
+            error=rc.error, nErrors=result.len
 
       # Final one might come with proof data
       block:
-        inx = sTop
-        let rc = ps.importStorageSlots(data.storages[inx], data.proof)
+        slot = some(sTop)
+        let rc = ps.importStorageSlots(data.storages[sTop], data.proof)
         if rc.isErr:
-          report[inx].error = rc.error
-          errors.inc
-          trace "Storage slots last item fails", peer, nItems,
-            slots=data.storages[inx].data.len, proofs=data.proof.len,
-            error=report[inx].error, errors
+          result.add HexaryNodeReport(slot: slot, error: rc.error)
+          trace "Storage slots last item fails", peer, inx=sTop, nItems,
+            slots=data.storages[sTop].data.len, proofs=data.proof.len,
+            error=rc.error, nErrors=result.len
 
       # Store to disk
-      block storePersistent:
-        if persistent and 0 < ps.hexaDb.tab.len:
-          inx = nItems
-          let rc = ps.hexaDb.persistentStorages(ps)
-          if rc.isErr:
-            errors.inc
-            report[inx].error = rc.error
-            break storePersistent
-        # Chop off last return list entry if everything is OK
-        report.setLen(nItems)
+      if persistent and 0 < ps.hexaDb.tab.len:
+        slot = none(int)
+        let rc = ps.hexaDb.persistentStorages(ps)
+        if rc.isErr:
+          result.add HexaryNodeReport(slot: slot, error: rc.error)
 
     except RlpError:
-      report[inx].error = RlpEncoding
-      errors.inc
+      result.add HexaryNodeReport(slot: slot, error: RlpEncoding)
+      trace "Storage slot node error", peer, slot, nItems,
+        slots=data.storages[sTop].data.len, proofs=data.proof.len,
+        error=RlpEncoding, nErrors=result.len
     except KeyError as e:
-      raiseAssert "Not possible @ importAccounts: " & e.msg
+      raiseAssert "Not possible @ importStorages: " & e.msg
     except OSError as e:
-      trace "Import Accounts exception", peer=ps.peer, name=($e.name),
-        msg=e.msg, errors
-      report[inx].error = OSErrorException
-      errors.inc
+      result.add HexaryNodeReport(slot: slot, error: OSErrorException)
+      trace "Import storage slots exception", peer, slot, nItems,
+        name=($e.name), msg=e.msg, nErrors=result.len
 
   when extraTraceMessages:
-    if errors == 0:
-      trace "Storage slots imported", peer=ps.peer,
+    if result.len == 0:
+      trace "Storage slots imported", peer, nItems,
         slots=data.storages.len, proofs=data.proof.len
-
-  (errors, report)
 
 proc importStorages*(
     pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
     peer: Peer,                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
-      ): (int,seq[HexaryNodeReport]) =
+      ): seq[HexaryNodeReport] =
   ## Variant of `importStorages()`
   SnapDbStorageSlotsRef.init(
     pv, peer=peer).importStorages(data, persistent=true)

@@ -359,32 +359,35 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
       env.fetchAccounts.checkNodes =
         env.fetchAccounts.checkNodes & dd.leftOver.mapIt(it[0])
 
-      let (_,report) = ctx.data.snapDb.importRawAccountNodes(peer, dd.nodes)
-      if dd.nodes.len < report.len:
+      let report = ctx.data.snapDb.importRawAccountNodes(peer, dd.nodes)
+      if 0 < report.len and report[^1].slot.isNone:
         # Storage error, just run the next lap
         env.fetchAccounts.missingNodes =
           env.fetchAccounts.missingNodes & fetchNodes
-
       else:
         # Filter out errors and leaf nodes
-        for n,w in report:
-          let nodePath = fetchNodes[n]
-          if w.error != NothingSerious or w.kind.isNone:
-            # error, try downloading again
-            env.fetchAccounts.missingNodes.add nodePath
+        for w in report:
+          if w.slot.isSome:
+            # Non-indexed entries appear typically at the end, though
+            let
+              n = w.slot.unsafeGet
+              nodePath = fetchNodes[n]
+            if w.error != NothingSerious or w.kind.isNone:
+              # error, try downloading again
+              env.fetchAccounts.missingNodes.add nodePath
 
-          elif w.kind.unsafeGet != Leaf:
-            # re-check this node
-            env.fetchAccounts.checkNodes.add nodePath
-
-          else:
-            # Node has been stored, double check
-            let (ok, key, acc) = buddy.kvAccountLeaf(nodePath, dd.nodes[n])
-            if ok:
-              # Update `uprocessed` registry and collect storage roots (if any)
-              buddy.registerAccountLeaf(key, acc)
-            else:
+            elif w.kind.unsafeGet != Leaf:
+              # re-check this node
               env.fetchAccounts.checkNodes.add nodePath
+
+            else:
+              # Node has been stored, double check
+              let (ok, key, acc) = buddy.kvAccountLeaf(nodePath, dd.nodes[n])
+              if ok:
+                # Update `uprocessed` registry, collect storage roots (if any)
+                buddy.registerAccountLeaf(key, acc)
+              else:
+                env.fetchAccounts.checkNodes.add nodePath
 
           # End `for`
 
