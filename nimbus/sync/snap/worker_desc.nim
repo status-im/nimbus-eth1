@@ -11,7 +11,7 @@
 import
   std/[hashes, sequtils, strutils],
   eth/[common/eth_types, p2p],
-  stew/[byteutils, keyed_queue],
+  stew/[byteutils, interval_set, keyed_queue],
   "../.."/[constants, db/select_backend],
   ".."/[sync_desc, types],
   ./worker/[com/com_error, db/snapdb_desc, ticker],
@@ -58,6 +58,9 @@ const
     ## all account ranges retrieved for all pivot state roots (see
     ## `coveredAccounts` in `CtxData`.)
 
+  maxStoragesFetch* = 128
+    ## Maximal number of storage tries to fetch with a signe message.
+
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
     ## an official limit but found on several implementations (e.g. geth.)
@@ -81,19 +84,22 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerSeenBlocks = KeyedQueue[array[32,byte],BlockNumber]
+  WorkerSeenBlocks = KeyedQueue[ByteArray32,BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  SnapSlotQueueItemRef* = ref object
-    ## Accounts storage request data.
-    q*: seq[AccountSlotsHeader]
-
-  SnapSlotsQueue* = KeyedQueueNV[SnapSlotQueueItemRef]
-    ## Handles list of storage data for re-fetch.
+  SnapSlotsQueue* = KeyedQueue[ByteArray32,SnapSlotQueueItemRef]
+    ## Handles list of storage slots data for fetch indexed by storage root.
     ##
-    ## This construct is the is a nested queue rather than a flat one because
-    ## only the first element of a `seq[AccountSlotsHeader]` queue can have an
-    ## effective sub-range specification (later ones will be ignored.)
+    ## Typically, storage data requests cover the full storage slots trie. If
+    ## there is only a partial list of slots to fetch, the queue entry is
+    ## stored left-most for easy access.
+
+  SnapSlotQueueItemRef* = ref object
+    ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
+    ## where the optional `subRange` interval has been replaced by an interval
+    ## range + healing support.
+    accHash*: Hash256                  ## Owner account, maybe unnecessary
+    slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
 
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
@@ -109,12 +115,18 @@ type
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     missingNodes*: seq[Blob]           ## Dangling links to fetch and merge
 
+  SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
+    ## Referenced object, so it can be made optional for the storage
+    ## batch list
+
+
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download
     fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
+    # vetoSlots*: SnapSlotsSet         ## Do not ask for these slots, again
     accountsDone*: bool                ## All accounts have been processed
 
     # Storage slots download
@@ -134,7 +146,6 @@ type
     errors*: ComErrorStatsRef          ## For error handling
     pivotFinder*: RootRef              ## Opaque object reference for sub-module
     pivotEnv*: SnapPivotRef            ## Environment containing state root
-    vetoSlots*: SnapSlotsSet           ## Do not ask for these slots, again
 
   CtxData* = object
     ## Globally shared data extension
@@ -170,6 +181,35 @@ proc hash*(a: SnapSlotQueueItemRef): Hash =
 proc hash*(a: Hash256): Hash =
   ## Table/KeyedQueue mixin
   a.data.hash
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
+  ## Append/prepend a slot header record into the batch queue.
+  let reqKey = fetchReq.storageRoot.data
+
+  if not q.hasKey(reqKey):
+    let reqData = SnapSlotQueueItemRef(accHash: fetchReq.accHash)
+
+    # Only add non-existing entries
+    if fetchReq.subRange.isNone:
+      # Append full range to the right of the list
+      discard q.append(reqKey, reqData)
+
+    else:
+      # Partial range, add healing support and interval
+      reqData.slots = SnapTrieRangeBatchRef()
+      for n in 0 ..< reqData.slots.unprocessed.len:
+        reqData.slots.unprocessed[n] = NodeTagRangeSet.init()
+      discard reqData.slots.unprocessed[0].merge(fetchReq.subRange.unsafeGet)
+      discard q.unshift(reqKey, reqData)
+
+proc merge*(q: var SnapSlotsQueue; reqList: openArray[AccountSlotsHeader]) =
+  ## Variant fof `merge()` for a list argument
+  for w in reqList:
+    q.merge w
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging helpers (will go away eventually)

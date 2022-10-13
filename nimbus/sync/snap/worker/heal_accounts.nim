@@ -155,8 +155,7 @@ proc kvAccountLeaf(
 proc registerAccountLeaf(
     buddy: SnapBuddyRef;
     accKey: NodeKey;
-    acc: Account;
-    slots: var seq[AccountSlotsHeader]) =
+    acc: Account) =
   let
     peer = buddy.peer
     env = buddy.data.pivotEnv
@@ -177,7 +176,7 @@ proc registerAccountLeaf(
   discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
 
   if acc.storageRoot != emptyRlpHash:
-    slots.add AccountSlotsHeader(
+    env.fetchStorage.merge AccountSlotsHeader(
       accHash:     Hash256(data: accKey.ByteArray32),
       storageRoot: acc.storageRoot)
 
@@ -308,7 +307,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
         nDoNodesMissing=0
     return # nothing to do
 
-  # Ok, clear global `env.missingNodes` list and process `doNodesMissing`.
+  # Ok, clear global `missingNodes` list and process `doNodesMissing`.
   doNodesMissing = doNodesMissing & env.fetchAccounts.missingNodes
   env.fetchAccounts.missingNodes.setlen(0)
 
@@ -367,8 +366,6 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
           env.fetchAccounts.missingNodes & fetchNodes
 
       else:
-        var withStorage: seq[AccountSlotsHeader]
-
         # Filter out errors and leaf nodes
         for n,w in report:
           let nodePath = fetchNodes[n]
@@ -384,17 +381,14 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
             # Node has been stored, double check
             let (ok, key, acc) = buddy.kvAccountLeaf(nodePath, dd.nodes[n])
             if ok:
-              # Update `uprocessed` registry and collect storage root (if any)
-              buddy.registerAccountLeaf(key, acc, withStorage)
+              # Update `uprocessed` registry and collect storage roots (if any)
+              buddy.registerAccountLeaf(key, acc)
             else:
               env.fetchAccounts.checkNodes.add nodePath
 
           # End `for`
 
-        if 0 < withStorage.len:
-          discard env.fetchStorage.append SnapSlotQueueItemRef(q: withStorage)
-
-    # End while
+    # End `while`
 
   when extraTraceMessages:
     trace "Done accounts healing", peer,

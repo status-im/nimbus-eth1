@@ -87,6 +87,16 @@ var
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
+proc toStoDbRc(
+     report: (int,seq[HexaryNodeReport])
+       ): Result[void,seq[(int,HexaryDbError)]] =
+  ## Kludge: map error report to (older version) return code
+  if report[0] != 0:
+    for n,w in report[1]:
+      if w.error != NothingSerious:
+        return err(@[(n,w.error)])
+  ok()
+
 proc findFilePath(file: string;
                   baseDir, repoDir: openArray[string]): Result[string,void] =
   for dir in baseDir:
@@ -434,8 +444,7 @@ proc storagesRunner(
                     Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
                   else:
                     OkStoDb
-        check dbDesc.importStorages(w.data, persistent) == expRc
-
+        check dbDesc.importStorages(w.data, persistent).toStoDbRc == expRc
 
 proc inspectionRunner(
     noisy = true;

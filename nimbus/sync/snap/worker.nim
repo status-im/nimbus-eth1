@@ -132,7 +132,7 @@ proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
 
-    # Pre-filled with thefirst range set with largest possible interval
+    # Pre-filled with the first range set with largest possible interval
     discard batch.unprocessed[0].merge(low(NodeTag),high(NodeTag))
 
     # Move covered account ranges (aka intervals) to the second set.

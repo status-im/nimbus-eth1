@@ -33,7 +33,7 @@ type
   #  proof*: SnapStorageProof
 
   GetStorageRanges* = object
-    leftOver*: seq[SnapSlotQueueItemRef]
+    leftOver*: seq[AccountSlotsHeader]
     data*: AccountStorageRange
 
 const
@@ -77,18 +77,6 @@ proc getStorageRangesReq(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc addLeftOver*(
-    dd: var GetStorageRanges;              ## Descriptor
-    accounts: seq[AccountSlotsHeader];     ## List of items to re-queue
-    forceNew = false;                      ## Begin new block regardless
-      ) =
-  ## Helper for maintaining the `leftOver` queue
-  if 0 < accounts.len:
-    if accounts[0].subRange.isSome or dd.leftOver.len == 0:
-      dd.leftOver.add SnapSlotQueueItemRef(q: accounts)
-    else:
-      dd.leftOver[^1].q = dd.leftOver[^1].q & accounts
 
 proc getStorageRanges*(
     buddy: SnapBuddyRef;
@@ -153,7 +141,7 @@ proc getStorageRanges*(
   for n in 0 ..< nSlots:
     # Empty data for a slot indicates missing data
     if snStoRanges.slots[n].len == 0:
-      dd.addLeftOver @[accounts[n]]
+      dd.leftOver.add accounts[n]
     else:
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
@@ -161,7 +149,7 @@ proc getStorageRanges*(
 
   # Complete the part that was not answered by the peer
   if nProof == 0:
-    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
+    dd.leftOver = dd.leftOver & accounts[nSlots ..< nAccounts] # empty slice ok
 
   # Ok, we have a proof now. What was it to be proved?
   elif snStoRanges.slots[^1].len == 0:
@@ -175,14 +163,14 @@ proc getStorageRanges*(
                else: accounts[0].subRange.unsafeGet.maxPt
       respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
     if respTop < reqTop:
-      dd.addLeftOver @[AccountSlotsHeader(
+      dd.leftOver.add AccountSlotsHeader(
         subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
         accHash:     accounts[nSlots-1].accHash,
-        storageRoot: accounts[nSlots-1].storageRoot)]
-    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
+        storageRoot: accounts[nSlots-1].storageRoot)
+    dd.leftOver = dd.leftOver & accounts[nSlots ..< nAccounts] # empty slice ok
 
   trace trSnapRecvReceived & "StorageRanges", peer, nAccounts, nSlots, nProof,
-    nLeftOver=dd.leftOver.foldl(a + b.q.len, 0), stateRoot
+    nLeftOver=dd.leftOver.len, stateRoot
 
   return ok(dd)
 

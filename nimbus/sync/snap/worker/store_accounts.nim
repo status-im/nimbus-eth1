@@ -174,11 +174,11 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
     # End registerConsumed
 
   # Store accounts on the storage TODO list.
-  discard env.fetchStorage.append SnapSlotQueueItemRef(q: dd.withStorage)
+  env.fetchStorage.merge dd.withStorage
 
   when extraTraceMessages:
-    let withStorage = dd.withStorage.len
-    trace "Done fetching accounts", peer, stateRoot, nAccounts, withStorage, iv
+    trace "Done fetching accounts", peer, stateRoot, nAccounts,
+      withStorage=dd.withStorage.len, iv
 
 # ------------------------------------------------------------------------------
 # End

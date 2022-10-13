@@ -31,12 +31,12 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
-  stew/keyed_queue,
+  stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
-  ./db/snapdb_storage_slots
+  ./db/[hexary_error, snapdb_storage_slots]
 
 {.push raises: [Defect].}
 
@@ -45,69 +45,49 @@ logScope:
 
 const
   extraTraceMessages = false or true
-    ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getNextSlotItem(buddy: SnapBuddyRef): Result[SnapSlotQueueItemRef,void] =
-  let env = buddy.data.pivotEnv
-  for w in env.fetchStorage.nextKeys:
-    # Make sure that this item was not fetched and rejected earlier
-    if w notin buddy.data.vetoSlots:
-      env.fetchStorage.del(w)
-      return ok(w)
-  err()
-
-proc fetchAndImportStorageSlots(
-    buddy: SnapBuddyRef;
-    reqSpecs: seq[AccountSlotsHeader];
-      ): Future[Result[seq[SnapSlotQueueItemRef],ComError]]
-      {.async.} =
-  ## Fetch storage slots data from the network, store it on disk and
-  ## return data to process in the next cycle.
+proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
     env = buddy.data.pivotEnv
-    stateRoot = env.stateHeader.stateRoot
-
-  # Get storage slots
-  var stoRange = block:
-    let rc = await buddy.getStorageRanges(stateRoot, reqSpecs)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
-
-  if 0 < stoRange.data.storages.len:
-    # Verify/process data and save to disk
-    block:
-      let rc = ctx.data.snapDb.importStorages(peer, stoRange.data)
-
+    (reqKey, reqData) = block:
+      let rc = env.fetchStorage.shift
       if rc.isErr:
-        # Push back parts of the error item
-        var once = false
-        for w in rc.error:
-          if 0 <= w[0]:
-            # Reset any partial requests to requesting the full interval. So
-            # all the storage slots are re-fetched completely for this account.
-            stoRange.addLeftOver(
-              @[AccountSlotsHeader(
-                accHash:     stoRange.data.storages[w[0]].account.accHash,
-                storageRoot: stoRange.data.storages[w[0]].account.storageRoot)],
-              forceNew = not once)
-            once = true
-        # Do not ask for the same entries again on this `peer`
-        if once:
-          buddy.data.vetoSlots.incl stoRange.leftOver[^1]
+        return
+      (rc.value.key, rc.value.data)
 
-        if rc.error[^1][0] < 0:
-          discard
-          # TODO: disk storage failed or something else happend, so what?
+  # Assemble first request
+  result.add AccountSlotsHeader(
+    accHash:     reqData.accHash,
+    storageRoot: Hash256(data: reqKey))
 
-  # Return the remaining part to be processed later
-  return ok(stoRange.leftOver)
+  # Check whether it comes with a sub-range
+  if not reqData.slots.isNil:
+    # Extract some interval and return single item request queue
+    for ivSet in reqData.slots.unprocessed:
+      let rc = ivSet.ge()
+      if rc.isOk:
+
+        # Extraxt interval => done
+        result[0].subRange = some rc.value
+        discard ivSet.reduce rc.value
+
+        # Puch back on batch queue unless it becomes empty
+        if not reqData.slots.unprocessed.isEmpty:
+          discard env.fetchStorage.unshift(reqKey, reqData)
+        return
+
+  # Append more full requests to returned list
+  while result.len < maxStoragesFetch:
+    let rc = env.fetchStorage.shift
+    if rc.isErr:
+      return
+    result.add AccountSlotsHeader(
+      accHash:     rc.value.data.accHash,
+      storageRoot: Hash256(data: rc.value.key))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -120,61 +100,75 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
-  var
-    once = true # for logging
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # a request queue for handling partioal replies and re-fetch issues. For
   # all practical puroses, this request queue should mostly be empty.
-  while true:
-    # Pull out the next request item from the queue
-    let req = block:
-      let rc = buddy.getNextSlotItem()
-      if rc.isErr:
-        return # currently nothing to do
-      rc.value
 
-    when extraTraceMessages:
-      if once:
-        once = false
-        trace "Start fetching storage slotss", peer,
-          nSlots=(1 + env.fetchStorage.len),
-          nVetoSlots=buddy.data.vetoSlots.len
+  # Pull out the next request list from the queue
+  let req = buddy.getNextSlotItems()
+  if req.len == 0:
+     return # currently nothing to do
 
-    block:
-      # Fetch and store account storage slots. On success, the `rc` value will
-      # contain a list of left-over items to be re-processed.
-      let rc = await buddy.fetchAndImportStorageSlots(req.q)
-      if rc.isErr:
-        # Save accounts/storage list to be processed later, then stop
-        discard env.fetchStorage.append req
-        let error = rc.error
-        if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
-          trace "Error fetching storage slots => stop", peer,
-            nSlots=(1 + env.fetchStorage.len),
-            nVetoSlots=buddy.data.vetoSlots.len,
-            error
-          discard
+  when extraTraceMessages:
+    trace "Start fetching storage slots", peer,
+      nSlots=env.fetchStorage.len,
+      nReq=req.len
+
+  # Get storages slots data from the network
+  var stoRange = block:
+    let rc = await buddy.getStorageRanges(stateRoot, req)
+    if rc.isErr:
+      let error = rc.error
+      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
+        trace "Error fetching storage slots => stop", peer,
+          nSlots=env.fetchStorage.len,
+          nReq=req.len,
+          error
+        discard
+      env.fetchStorage.merge req
+      return
+    rc.value
+
+  # Reset error counts for detecting repeated timeouts
+  buddy.data.errors.nTimeouts = 0
+
+  if 0 < stoRange.data.storages.len:
+    # Verify/process storages data and save it to disk
+    let (errors, report) = ctx.data.snapDb.importStorages(peer, stoRange.data)
+    if 0 < errors:
+
+      if stoRange.data.storages.len < report.len:
+        # Failed to store on database, not much that can be done here
+        trace "Error writing storage slots to database", peer,
+          nSlots=env.fetchStorage.len,
+          nReq=req.len,
+          error=report[^1].error
+        env.fetchStorage.merge req
         return
 
-      # Reset error counts for detecting repeated timeouts
-      buddy.data.errors.nTimeouts = 0
-
-      for qLo in rc.value:
-        # Handle queue left-overs for processing in the next cycle
-        if qLo.q[0].subRange.isSome and 0 < env.fetchStorage.len:
-          # Appending to last queue item is preferred over adding new item
-          let item = env.fetchStorage.first.value
-          item.q = item.q & qLo.q
+      # Push back error entries to be processed later
+      for n in 0 ..< report.len:
+        case report[n].error:
+        of NothingSerious:
+          discard
+        #of RootNodeMismatch, RightBoundaryProofFailed:
+        #  ???
         else:
-          # Put back as-is.
-          discard env.fetchStorage.append qLo
-    # End while
+          trace "Error processing storage slots", peer,
+            nSlots=env.fetchStorage.len,
+            nReq=req.len,
+            nReqInx=n,
+            error=report[n].error
+          # Reset any partial requests to requesting the full interval. So
+          # all the storage slots are re-fetched completely for this account.
+          env.fetchStorage.merge AccountSlotsHeader(
+            accHash:     stoRange.data.storages[n].account.accHash,
+            storageRoot: stoRange.data.storages[n].account.storageRoot)
 
   when extraTraceMessages:
     trace "Done fetching storage slots", peer,
-      nSlots=env.fetchStorage.len,
-      nVetoSlots=buddy.data.vetoSlots.len
+      nSlots=env.fetchStorage.len
 
 # ------------------------------------------------------------------------------
 # End
