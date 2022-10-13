@@ -29,20 +29,20 @@ proc installPortalApiHandlers*(
   ## will look something similar as what exists here now:
   ## https://github.com/ethereum/portal-network-specs/pull/88
 
-  rpcServer.rpc("portal_" & network & "_nodeInfo") do() -> NodeInfo:
+  rpcServer.rpc("portal_" & network & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
 
-  rpcServer.rpc("portal_" & network & "_routingTableInfo") do() -> RoutingTableInfo:
+  rpcServer.rpc("portal_" & network & "RoutingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)
 
-  rpcServer.rpc("portal_" & network & "_lookupEnr") do(nodeId: NodeId) -> Record:
+  rpcServer.rpc("portal_" & network & "LookupEnr") do(nodeId: NodeId) -> Record:
     let lookup = await p.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
 
-  rpcServer.rpc("portal_" & network & "_addEnrs") do(enrs: seq[Record]) -> bool:
+  rpcServer.rpc("portal_" & network & "AddEnrs") do(enrs: seq[Record]) -> bool:
     for enr in enrs:
       let nodeRes = newNode(enr)
       if nodeRes.isOk():
@@ -52,7 +52,7 @@ proc installPortalApiHandlers*(
 
     return true
 
-  rpcServer.rpc("portal_" & network & "_ping") do(
+  rpcServer.rpc("portal_" & network & "Ping") do(
       enr: Record) -> tuple[seqNum: uint64, customPayload: string]:
     let
       node = toNodeWithAddress(enr)
@@ -64,7 +64,7 @@ proc installPortalApiHandlers*(
       let p = pong.get()
       return (p.enrSeq, p.customPayload.asSeq().toHex())
 
-  rpcServer.rpc("portal_" & network & "_findNodes") do(
+  rpcServer.rpc("portal_" & network & "FindNodes") do(
       enr: Record, distances: seq[uint16]) -> seq[Record]:
     let
       node = toNodeWithAddress(enr)
@@ -78,7 +78,7 @@ proc installPortalApiHandlers*(
   # according to spec, no k:v pair at all?
   # Note: `*_findContentRaw` is actually `*_findContent` call according to
   # WIP Portal JSON-RPC API specification. Not sure about the best naming here.
-  rpcServer.rpc("portal_" & network & "_findContentRaw") do(
+  rpcServer.rpc("portal_" & network & "FindContentRaw") do(
       enr: Record, contentKey: string) -> tuple[
         connectionId: Option[string],
         content: Option[string],
@@ -116,7 +116,7 @@ proc installPortalApiHandlers*(
               records.get(), node, enrsResultLimit).map(
                 proc(n: Node): Record = n.record)))
 
-  rpcServer.rpc("portal_" & network & "_findContent") do(
+  rpcServer.rpc("portal_" & network & "FindContent") do(
       enr: Record, contentKey: string) -> tuple[
         content: Option[string], enrs: Option[seq[Record]]]:
     let
@@ -138,18 +138,17 @@ proc installPortalApiHandlers*(
           none(string),
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
-  rpcServer.rpc("portal_" & network & "_offer") do(
-      enr: Record, contentKey: string) -> bool:
-    # Only allow 1 content key for now
-    let
-      node = toNodeWithAddress(enr)
-      contentKeys = ContentKeysList(@[ByteList.init(hexToSeqByte(contentKey))])
-      accept = await p.offer(node, contentKeys)
-    if accept.isErr():
-      raise newException(ValueError, $accept.error)
-    else:
-      return true
+  rpcServer.rpc("portal_" & network & "Offer") do(
+    contentKey: string, content: string) -> int:
 
-  rpcServer.rpc("portal_" & network & "_recursiveFindNodes") do() -> seq[Record]:
+    let
+      ck = hexToSeqByte(contentKey)
+      ct = hexToSeqByte(content)
+      contentKeys = ContentKeysList(@[ByteList.init(ck)])
+      numberOfPeers = await p.neighborhoodGossip(contentKeys, @[ct])
+
+    return numberOfPeers
+
+  rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()
     return discovered.map(proc(n: Node): Record = n.record)

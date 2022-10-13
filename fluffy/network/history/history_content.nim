@@ -38,7 +38,7 @@ type
     blockHash*: BlockHash
 
   EpochAccumulatorKey* = object
-    epochHash*: Digest
+    epochHash*: Digest # TODO: Perhaps this should be called epochRoot in the spec instead
 
   MasterAccumulatorKeyType* = enum
     latest = 0x00 # An SSZ Union None

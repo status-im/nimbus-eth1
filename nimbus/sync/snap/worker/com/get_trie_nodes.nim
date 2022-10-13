@@ -1,3 +1,6 @@
+# Nimbus
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed and distributed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
@@ -11,7 +14,7 @@ import
   eth/[common/eth_types, p2p],
   "../../.."/[protocol, protocol/trace_config],
   ../../worker_desc,
-  ./get_error
+  ./com_error
 
 {.push raises: [Defect].}
 
