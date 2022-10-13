@@ -30,6 +30,7 @@ type
     ComAccountsMaxTooLarge
     ComAccountsMinTooSmall
     ComEmptyAccountsArguments
+    ComEmptyPartialRange
     ComEmptyRequestArguments
     ComMissingProof
     ComNetworkProblem
@@ -80,6 +81,7 @@ proc stopAfterSeriousComError*(
 
   of ComEmptyAccountsArguments,
      ComEmptyRequestArguments,
+     ComEmptyPartialRange,
      ComInspectDbFailed,
      ComImportAccountsFailed,
      ComNoDataForProof,

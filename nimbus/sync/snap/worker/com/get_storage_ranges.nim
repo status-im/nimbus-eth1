@@ -85,7 +85,7 @@ proc addLeftOver*(
       ) =
   ## Helper for maintaining the `leftOver` queue
   if 0 < accounts.len:
-    if accounts[0].firstSlot != Hash256() or dd.leftOver.len == 0:
+    if accounts[0].subRange.isSome or dd.leftOver.len == 0:
       dd.leftOver.add SnapSlotQueueItemRef(q: accounts)
     else:
       dd.leftOver[^1].q = dd.leftOver[^1].q & accounts
@@ -106,14 +106,9 @@ proc getStorageRanges*(
     peer = buddy.peer
   var
     nAccounts = accounts.len
-    maybeIv = none(NodeTagRange)
 
   if nAccounts == 0:
     return err(ComEmptyAccountsArguments)
-  if accounts[0].firstSlot != Hash256():
-    # Set up for range
-    maybeIv = some(NodeTagRange.new(
-      accounts[0].firstSlot.to(NodeTag), high(NodeTag)))
 
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetStorageRanges", peer,
@@ -121,7 +116,7 @@ proc getStorageRanges*(
 
   let snStoRanges = block:
     let rc = await buddy.getStorageRangesReq(
-      stateRoot, accounts.mapIt(it.accHash), maybeIv)
+      stateRoot, accounts.mapIt(it.accHash), accounts[0].subRange)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
@@ -153,7 +148,7 @@ proc getStorageRanges*(
   # Assemble return structure for given peer response
   var dd = GetStorageRanges(data: AccountStorageRange(proof: snStoRanges.proof))
 
-  # Filter `slots` responses:
+  # Filter remaining `slots` responses:
   # * Accounts for empty ones go back to the `leftOver` list.
   for n in 0 ..< nSlots:
     # Empty data for a slot indicates missing data
@@ -162,33 +157,32 @@ proc getStorageRanges*(
     else:
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
-        data: snStoRanges.slots[n])
+        data:    snStoRanges.slots[n])
 
   # Complete the part that was not answered by the peer
   if nProof == 0:
     dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
+
+  # Ok, we have a proof now. What was it to be proved?
+  elif snStoRanges.slots[^1].len == 0:
+    return err(ComNoDataForProof) # Now way to prove an empty node set
+
   else:
-    if snStoRanges.slots[^1].len == 0:
-      # `dd.data.storages.len == 0` => `snStoRanges.slots[^1].len == 0` as
-      # it was confirmed that `0 < nSlots == snStoRanges.slots.len`
-      return err(ComNoDataForProof)
-
-    # If the storage data for the last account comes with a proof, then it is
-    # incomplete. So record the missing part on the `dd.leftOver` list.
-    let top = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
-
-    # Contrived situation with `top==high()`: any right proof will be useless
-    # so it is just ignored (i.e. `firstSlot` is zero in first slice.)
-    if top < high(NodeTag):
+    # If the storage data for the last account comes with a proof, then the data
+    # set is incomplete. So record the missing part on the `dd.leftOver` list.
+    let
+      reqTop = if accounts[0].subRange.isNone: high(NodeTag)
+               else: accounts[0].subRange.unsafeGet.maxPt
+      respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+    if respTop < reqTop:
       dd.addLeftOver @[AccountSlotsHeader(
-        firstSlot:   (top + 1.u256).to(Hash256),
+        subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
         accHash:     accounts[nSlots-1].accHash,
         storageRoot: accounts[nSlots-1].storageRoot)]
     dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
 
-  let nLeftOver = dd.leftOver.foldl(a + b.q.len, 0)
-  trace trSnapRecvReceived & "StorageRanges", peer,
-    nAccounts, nSlots, nProof, nLeftOver, stateRoot
+  trace trSnapRecvReceived & "StorageRanges", peer, nAccounts, nSlots, nProof,
+    nLeftOver=dd.leftOver.foldl(a + b.q.len, 0), stateRoot
 
   return ok(dd)
 

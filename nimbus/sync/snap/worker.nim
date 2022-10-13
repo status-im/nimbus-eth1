@@ -132,7 +132,7 @@ proc init(T: type SnapAccountRanges; ctx: SnapCtxRef): T =
     # in the second range set.
 
     # Pre-filled with thefirst range set with largest possible interval
-    discard result[0].merge(FullNodeTagRange)
+    discard result[0].merge(low(NodeTag),high(NodeTag))
 
     # Move covered account ranges (aka intervals) to the second set.
     for iv in ctx.data.coveredAccounts.increasing:
@@ -406,9 +406,11 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   else:
     # Snapshot sync processing. Note that *serialSync => accountsDone*.
-    await buddy.storeStorages() # always pre-clean the queue
     await buddy.storeAccounts()
+    if buddy.ctrl.stopped: return
+
     await buddy.storeStorages()
+    if buddy.ctrl.stopped: return
 
     # If the current database is not complete yet
     if 0 < env.fetchAccounts[0].chunks or
@@ -419,6 +421,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       # negotiated another, newer pivot.
       if env == ctx.data.pivotTable.lastValue.value:
         await buddy.healAccountsDb()
+        if buddy.ctrl.stopped: return
 
       # TODO: use/apply storage healer
 

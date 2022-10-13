@@ -90,9 +90,8 @@ proc fetchAndImportStorageSlots(
         var once = false
         for w in rc.error:
           if 0 <= w[0]:
-            # Reset any partial requests by not copying the `firstSlot` field.
-            # So all the storage slots are re-fetched completely for this
-            # account.
+            # Reset any partial requests to requesting the full interval. So
+            # all the storage slots are re-fetched completely for this account.
             stoRange.addLeftOver(
               @[AccountSlotsHeader(
                 accHash:     stoRange.data.storages[w[0]].account.accHash,
@@ -138,9 +137,9 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
     when extraTraceMessages:
       if once:
         once = false
-        let nAccounts = 1 + env.fetchStorage.len
         trace "Start fetching storage slotss", peer,
-          nAccounts, nVetoSlots=buddy.data.vetoSlots.len
+          nSlots=(1 + env.fetchStorage.len),
+          nVetoSlots=buddy.data.vetoSlots.len
 
     block:
       # Fetch and store account storage slots. On success, the `rc` value will
@@ -151,7 +150,10 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
         discard env.fetchStorage.append req
         let error = rc.error
         if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
-          trace "Error fetching storage slots => stop", peer, error
+          trace "Error fetching storage slots => stop", peer,
+            nSlots=(1 + env.fetchStorage.len),
+            nVetoSlots=buddy.data.vetoSlots.len,
+            error
           discard
         return
 
@@ -160,7 +162,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
 
       for qLo in rc.value:
         # Handle queue left-overs for processing in the next cycle
-        if qLo.q[0].firstSlot == Hash256() and 0 < env.fetchStorage.len:
+        if qLo.q[0].subRange.isSome and 0 < env.fetchStorage.len:
           # Appending to last queue item is preferred over adding new item
           let item = env.fetchStorage.first.value
           item.q = item.q & qLo.q
@@ -170,7 +172,9 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
     # End while
 
   when extraTraceMessages:
-    trace "Done fetching storage slots", peer, nAccounts=env.fetchStorage.len
+    trace "Done fetching storage slots", peer,
+      nSlots=env.fetchStorage.len,
+      nVetoSlots=buddy.data.vetoSlots.len
 
 # ------------------------------------------------------------------------------
 # End
