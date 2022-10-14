@@ -110,7 +110,8 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   let iv = block:
     let rc = buddy.getUnprocessed()
     if rc.isErr:
-      trace "Currently no unprocessed accounts", peer, stateRoot
+      when extraTraceMessages:
+        trace "Currently no unprocessed accounts", peer, stateRoot
       return
     rc.value
 
