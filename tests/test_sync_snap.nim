@@ -25,8 +25,9 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/db/[hexary_desc, hexary_inspect,
-                                 rocky_bulk_load, snap_db,],
+  ../nimbus/sync/snap/worker/db/[
+    hexary_desc, hexary_error, hexary_inspect, rocky_bulk_load,
+    snapdb_accounts, snapdb_desc, snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -86,6 +87,12 @@ var
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
+proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
+  ## Kludge: map error report to (older version) return code
+  if r.len != 0:
+    return err(r.mapIt((it.slot.get(otherwise = -1),it.error)))
+  ok()
+
 proc findFilePath(file: string;
                   baseDir, repoDir: openArray[string]): Result[string,void] =
   for dir in baseDir:
@@ -115,11 +122,8 @@ proc pp(rc: Result[Account,HexaryDbError]): string =
 proc pp(rc: Result[Hash256,HexaryDbError]): string =
   if rc.isErr: $rc.error else: $rc.value.to(NodeTag)
 
-proc pp(
-    rc: Result[TrieNodeStat,HexaryDbError];
-    db: SnapDbSessionRef
-      ): string =
-  if rc.isErr: $rc.error else: rc.value.pp(db.getAcc)
+proc pp(rc: Result[TrieNodeStat,HexaryDbError]; db: SnapDbBaseRef): string =
+  if rc.isErr: $rc.error else: rc.value.pp(db.hexaDb)
 
 proc ppKvPc(w: openArray[(string,int)]): string =
   w.mapIt(&"{it[0]}={it[1]}%").join(", ")
@@ -284,21 +288,21 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
     var
-      desc: SnapDbSessionRef
+      desc: SnapDbAccountsRef
       accKeys: seq[Hash256]
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
         dbBase = if persistent: SnapDbRef.init(db.cdb[0])
                  else: SnapDbRef.init(newMemoryDB())
-        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
+        dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
       for n,w in accountsList:
         check dbDesc.importAccounts(w.base, w.data, persistent) == OkHexDb
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
                    else: SnapDbRef.init(newMemoryDB())
-      desc = SnapDbSessionRef.init(dbBase, root, peer)
+      desc = SnapDbAccountsRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
       let
@@ -419,17 +423,15 @@ proc storagesRunner(
     let
       dbBase = if persistent: SnapDbRef.init(db.cdb[0])
                else: SnapDbRef.init(newMemoryDB())
-    var
-      desc = SnapDbSessionRef.init(dbBase, root, peer)
 
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
-        let desc = SnapDbSessionRef.init(dbBase, root, peer)
+        let desc = SnapDbAccountsRef.init(dbBase, root, peer)
         check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
+        dbDesc = SnapDbStorageSlotsRef.init(dbBase, peer=peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -438,8 +440,7 @@ proc storagesRunner(
                     Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
                   else:
                     OkStoDb
-        check dbDesc.importStorages(w.data, persistent) == expRc
-
+        check dbDesc.importStorages(w.data, persistent).toStoDbRc == expRc
 
 proc inspectionRunner(
     noisy = true;
@@ -467,17 +468,17 @@ proc inspectionRunner(
   suite &"SyncSnap: inspect {fileInfo} lists for {info} for healing":
     let
       memBase = SnapDbRef.init(newMemoryDB())
-      memDesc = SnapDbSessionRef.init(memBase, Hash256(), peer)
+      memDesc = SnapDbAccountsRef.init(memBase, Hash256(), peer)
     var
       singleStats: seq[(int,TrieNodeStat)]
       accuStats: seq[(int,TrieNodeStat)]
       perBase,altBase: SnapDbRef
-      perDesc,altDesc: SnapDbSessionRef
+      perDesc,altDesc: SnapDbAccountsRef
     if persistent:
       perBase = SnapDbRef.init(db.cdb[0])
-      perDesc = SnapDbSessionRef.init(perBase, Hash256(), peer)
+      perDesc = SnapDbAccountsRef.init(perBase, Hash256(), peer)
       altBase = SnapDbRef.init(db.cdb[1])
-      altDesc = SnapDbSessionRef.init(altBase, Hash256(), peer)
+      altDesc = SnapDbAccountsRef.init(altBase, Hash256(), peer)
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for in-memory-db":
@@ -486,17 +487,17 @@ proc inspectionRunner(
         let
           root = accList[0].root
           rootKey = root.to(NodeKey)
-          desc = SnapDbSessionRef.init(memBase, root, peer)
+          desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
           check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
           dangling = rc.value.dangling
-          keys = desc.getAcc.hexaryInspectToKeys(
+          keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
-        singleStats.add (desc.getAcc.tab.len,rc.value)
+        singleStats.add (desc.hexaDb.tab.len,rc.value)
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for persistent db":
@@ -511,14 +512,14 @@ proc inspectionRunner(
             root = accList[0].root
             rootKey = root.to(NodeKey)
             dbBase = SnapDbRef.init(db.cdb[2+n])
-            desc = SnapDbSessionRef.init(dbBase, root, peer)
+            desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
             check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
             dangling = rc.value.dangling
-            keys = desc.getAcc.hexaryInspectToKeys(
+            keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
@@ -538,10 +539,10 @@ proc inspectionRunner(
         check rc.isOk
         let
           dangling = rc.value.dangling
-          keys = desc.getAcc.hexaryInspectToKeys(
+          keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
-        accuStats.add (desc.getAcc.tab.len,rc.value)
+        accuStats.add (desc.hexaDb.tab.len,rc.value)
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for persistent db":
@@ -561,7 +562,7 @@ proc inspectionRunner(
           check rc.isOk
           let
             dangling = rc.value.dangling
-            keys = desc.getAcc.hexaryInspectToKeys(
+            keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
           check accuStats[n][1] == rc.value
@@ -573,7 +574,7 @@ proc inspectionRunner(
       else:
         let
           cscBase = SnapDbRef.init(newMemoryDB())
-          cscDesc = SnapDbSessionRef.init(cscBase, Hash256(), peer)
+          cscDesc = SnapDbAccountsRef.init(cscBase, Hash256(), peer)
         var
           cscStep: Table[NodeKey,(int,seq[Blob])]
         for n,accList in inspectList:

@@ -210,7 +210,6 @@ proc hexaryInspectTrie*(
     db: HexaryTreeDbRef;           ## Database
     root: NodeKey;                 ## State root
     paths: seq[Blob];              ## Starting paths for search
-    maxLeafPaths = 0;              ## Record leaves with proper 32 bytes path
     stopAtLevel = 32;              ## Instead of loop detector
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,KeyError]} =
@@ -218,22 +217,19 @@ proc hexaryInspectTrie*(
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. The references for these nodes are collected and
   ## returned.
-  ## * At most `maxLeafPaths` leaf node references are collected along the way.
   ## * Search list `paths` argument entries that do not refer to a hexary node
   ##   are ignored.
   ## * For any search list `paths` argument entry, this function stops if
   ##   the search depth exceeds `stopAtLevel` levels of linked sub-nodes.
-  ## * Argument `paths` list entries that do not refer to a valid node are
-  ##   silently ignored.
+  ## * Argument `paths` list entries and partial paths on the way that do not
+  ##   refer to a valid extension or branch type node are silently ignored.
   ##
   let rootKey = root.to(RepairKey)
   if not db.tab.hasKey(rootKey):
     return TrieNodeStat()
 
   # Initialise TODO list
-  var
-    leafSlots = maxLeafPaths
-    reVisit = newTable[RepairKey,NibblesSeq]()
+  var reVisit = newTable[RepairKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[rootKey] = EmptyNibbleRange
   else:
@@ -269,12 +265,8 @@ proc hexaryInspectTrie*(
             child = node.bLink[n]
           db.processLink(stats=result, inspect=again, parent, trail, child)
       of Leaf:
-        if 0 < leafSlots:
-          let trail = parentTrail & node.lPfx
-          if trail.len == 64:
-            result.leaves.add trail.getBytes.convertTo(NodeKey)
-            leafSlots.dec
-        # Done with this link
+        # Ooops, forget node and key
+        discard
 
       # End `for`
 
@@ -287,7 +279,6 @@ proc hexaryInspectTrie*(
     getFn: HexaryGetFn;            ## Database abstraction
     rootKey: NodeKey;              ## State root
     paths: seq[Blob];              ## Starting paths for search
-    maxLeafPaths = 0;              ## Record leaves with proper 32 bytes path
     stopAtLevel = 32;              ## Instead of loop detector
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,RlpError,KeyError]} =
@@ -303,9 +294,7 @@ proc hexaryInspectTrie*(
     return TrieNodeStat()
 
   # Initialise TODO list
-  var
-    leafSlots = maxLeafPaths
-    reVisit = newTable[NodeKey,NibblesSeq]()
+  var reVisit = newTable[NodeKey,NibblesSeq]()
   if paths.len == 0:
     reVisit[rootKey] = EmptyNibbleRange
   else:
@@ -343,11 +332,6 @@ proc hexaryInspectTrie*(
             trail = parentTrail & xPfx
             child = nodeRlp.listElem(1)
           getFn.processLink(stats=result, inspect=again, parent, trail, child)
-        elif 0 < leafSlots:
-          let trail = parentTrail & xPfx
-          if trail.len == 64:
-            result.leaves.add trail.getBytes.convertTo(NodeKey)
-            leafSlots.dec
       of 17:
         for n in 0 ..< 16:
           let

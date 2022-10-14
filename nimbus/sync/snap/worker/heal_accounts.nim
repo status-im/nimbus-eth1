@@ -16,127 +16,138 @@
 ## ::
 ##      START with {state-root}
 ##        |
-##        |       +------------------------------------------------+
-##        |       |                                                |
-##        v       v                                                |
-##      <inspect-accounts-trie> --> {missing-account-nodes}        |
-##        |                             |                          |
-##        v                             v                          |
-##      {leaf-nodes}                <get-trie-nodes-via-snap/1>    |
-##        |                             |                          |
-##        v                             v                          |
-##      <update-accounts-batch>     <merge-nodes-into-database>    |
-##        |                             |                          |
-##        v                             v                          |
-##      {storage-roots}             {check-account-nodes} ---------+
+##        |   +--------------------------------+
+##        |   |                                |
+##        v   v                                |
+##      <inspect-trie>                         |
+##        |                                    |
+##        |   +--------------------------+     |
+##        |   |   +--------------------+ |     |
+##        |   |   |                    | |     |
+##        v   v   v                    | |     |
+##      {missing-nodes}                | |     |
+##        |                            | |     |
+##        v                            | |     |
+##      <get-trie-nodes-via-snap/1> ---+ |     |
+##        |                              |     |
+##        v                              |     |
+##      <merge-nodes-into-database> -----+     |
+##        |                 |                  |
+##        v                 v                  |
+##      {leaf-nodes}      {check-nodes} -------+
 ##        |
-##        v
-##      <update-storage-processor-batch>
+##        v                                 \
+##      <update-accounts-batch>             |
+##        |                                 |  similar actions for single leaf
+##        v                                  \ nodes that otherwise would be
+##      {storage-roots}                      / done for account hash ranges in
+##        |                                 |  the function storeAccounts()
+##        v                                 |
+##      <update-storage-processor-batch>    /
 ##
 ## Legend:
-## * `<..>` some action, process, etc.
-## * `{..}` some data set, list, or queue etc.
+## * `<..>`: some action, process, etc.
+## * `{missing-nodes}`: list implemented as `env.fetchAccounts.missingNodes`
+## * `(state-root}`: implicit argument for `getAccountNodeKey()` when
+##   the argument list is empty
+## * `{leaf-nodes}`: list is optimised out
+## * `{check-nodes}`: list implemented as `env.fetchAccounts.checkNodes`
+## * `{storage-roots}`: list implemented as `env.fetchStorage`
 ##
 ## Discussion of flow chart
 ## ------------------------
-## * Input nodes for `<inspect-accounts-trie>` are checked for dangling child
-##   node links which in turn are collected as output.
+## * Input nodes for `<inspect-trie>` are checked for dangling child node
+##   links which in turn are collected as output.
 ##
-## * Nodes of the `{missing-account-nodes}` list are fetched from the network
-##   and merged into the accounts trie database. Successfully processed nodes
-##   are collected in the `{check-account-nodes}` list which is fed back into
-##   the `<inspect-accounts-trie>` process.
+## * Nodes of the `{missing-nodes}` list are fetched from the network and
+##   merged into the persistent accounts trie database.
+##   + Successfully merged non-leaf nodes are collected in the `{check-nodes}`
+##     list which is fed back into the `<inspect-trie>` process.
+##   + Successfully merged leaf nodes are processed as single entry accounts
+##     node ranges.
 ##
 ## * If there is a problem with a node travelling from the source list
-##   `{missing-account-nodes}` towards the target list `{check-account-nodes}`,
-##   this problem node will simply held back in the source list.
+##   `{missing-nodes}` towards either target list `{leaf-nodes}` or
+##   `{check-nodes}`, this problem node will fed back to the `{missing-nodes}`
+##   source list.
 ##
-##   In order to avoid unnecessary stale entries, the `{missing-account-nodes}`
-##   list is regularly checked for whether nodes are still missing or some
-##   other process has done the magic work of merging some of then into the
+## * In order to avoid double processing, the `{missing-nodes}` list is
+##   regularly checked for whether nodes are still missing or some other
+##   process has done the magic work of merging some of then into the
 ##   trie database.
 ##
 ## Competing with other trie algorithms
 ## ------------------------------------
-## * Healing runs (semi-)parallel to processing `GetAccountRange` network
-##   messages from the `snap/1` protocol. This is more network bandwidth
-##   efficient in comparison with the healing algorithm. Here, leaf nodes are
-##   transferred wholesale while with the healing algorithm, only the top node
-##   of a sub-trie can be transferred at once (but for multiple sub-tries).
+## * Healing runs (semi-)parallel to processing *GetAccountRange* network
+##   messages from the `snap/1` protocol (see `storeAccounts()`). Considering
+##   network bandwidth, the *GetAccountRange* message processing is way more
+##   efficient in comparison with the healing algorithm as there are no
+##   intermediate trie nodes involved.
 ##
 ## * The healing algorithm visits all nodes of a complete trie unless it is
 ##   stopped in between.
 ##
 ## * If a trie node is missing, it can be fetched directly by the healing
 ##   algorithm or one can wait for another process to do the job. Waiting for
-##   other processes to do the job also applies to problem nodes as indicated
-##   in the last bullet item of the previous chapter.
+##   other processes to do the job also applies to problem nodes (and vice
+##   versa.)
 ##
-## * Network bandwidth can be saved if nodes are fetched by a more efficient
-##   process (if that is available.) This suggests that fetching missing trie
-##   nodes by the healing algorithm should kick in very late when the trie
-##   database is nearly complete.
+## * Network bandwidth can be saved if nodes are fetched by the more efficient
+##   *GetAccountRange* message processing (if that is available.) This suggests
+##   that fetching missing trie nodes by the healing algorithm should kick in
+##   very late when the trie database is nearly complete.
 ##
-## * Healing applies to a trie database associated with the currently latest
-##   *state root*, which may change occasionally. It suggests to start the
-##   healing algorithm very late altogether (not fetching nodes, only) because
-##   most trie databases will never be completed by healing.
-##
+## * Healing applies to a hexary trie database associated with the currently
+##   latest *state root*, where tha latter may change occasionally. This
+##   suggests to start the healing algorithm very late at a time when most of
+##   the accounts have been updated by any *state root*, already. There is a
+##   good chance that the healing algorithm detects and activates account data
+##   from previous *state roots* that have not changed.
 
 import
   std/sequtils,
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, trie/trie_defs],
+  eth/[common/eth_types, p2p, trie/nibbles, trie/trie_defs, rlp],
   stew/[interval_set, keyed_queue],
    ../../../utils/prettify,
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
-  ./com/get_trie_nodes,
-  ./db/snap_db
+  ./com/[com_error, get_trie_nodes],
+  ./db/[hexary_desc, hexary_error, snapdb_accounts]
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-heal"
 
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
-# Helpers
+# Private logging helpers
 # ------------------------------------------------------------------------------
 
-proc coverageInfo(buddy: SnapBuddyRef): string =
-  ## Logging helper ...
+proc healingCtx(buddy: SnapBuddyRef): string =
   let
     ctx = buddy.ctx
     env = buddy.data.pivotEnv
-  env.fetchAccounts.emptyFactor.toPC(0) &
-    "/" &
-    ctx.data.coveredAccounts.fullFactor.toPC(0)
-
-proc getCoveringLeafRangeSet(buddy: SnapBuddyRef; pt: NodeTag): LeafRangeSet =
-  ## Helper ...
-  let env = buddy.data.pivotEnv
-  for ivSet in env.fetchAccounts:
-    if 0 < ivSet.covered(pt,pt):
-      return ivSet
-
-proc commitLeafAccount(buddy: SnapBuddyRef; ivSet: LeafRangeSet; pt: NodeTag) =
-  ## Helper ...
-  discard ivSet.reduce(pt,pt)
-  discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
+  "[" &
+    "nAccounts=" & $env.nAccounts & "," &
+    ("covered=" & env.fetchAccounts.unprocessed.emptyFactor.toPC(0) & "/" &
+        ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
+    "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
+    "nMissingNodes=" & $env.fetchAccounts.missingNodes.len & "]"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc updateMissingNodesList(buddy: SnapBuddyRef) =
-  ## Check whether previously missing nodes from the `missingAccountNodes` list
-  ## have been magically added to the database since it was checked last time.
-  ## These nodes will me moved to `checkAccountNodes` for further processing.
+  ## Check whether previously missing nodes from the `missingNodes` list
+  ## have been magically added to the database since it was checked last
+  ## time. These nodes will me moved to `checkNodes` for further processing.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -145,97 +156,155 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
   var
     nodes: seq[Blob]
 
-  for accKey in env.missingAccountNodes:
+  when extraTraceMessages:
+    trace "Start accounts healing", peer, ctx=buddy.healingCtx()
+
+  for accKey in env.fetchAccounts.missingNodes:
     let rc = ctx.data.snapDb.getAccountNodeKey(peer, stateRoot, accKey)
     if rc.isOk:
       # Check nodes for dangling links
-      env.checkAccountNodes.add acckey
+      env.fetchAccounts.checkNodes.add accKey
     else:
       # Node is still missing
       nodes.add acckey
 
-  env.missingAccountNodes = nodes
+  env.fetchAccounts.missingNodes = nodes
 
 
-proc mergeIsolatedAccounts(
-    buddy: SnapBuddyRef;
-    paths: openArray[NodeKey];
-      ): seq[AccountSlotsHeader] =
-  ## Process leaves found with nodes inspection, returns a list of
-  ## storage slots for these nodes.
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-    env = buddy.data.pivotEnv
-    stateRoot = env.stateHeader.stateRoot
-
-  # Remove reported leaf paths from the accounts interval
-  for accKey in paths:
-    let
-      pt = accKey.to(NodeTag)
-      ivSet = buddy.getCoveringLeafRangeSet(pt)
-    if not ivSet.isNil:
-      let
-        rc = ctx.data.snapDb.getAccountData(peer, stateRoot, accKey)
-        accountHash = Hash256(data: accKey.ByteArray32)
-      if rc.isOk:
-        let storageRoot = rc.value.storageRoot
-        when extraTraceMessages:
-          let stRootStr = if storageRoot != emptyRlpHash: $storageRoot
-                          else: "emptyRlpHash"
-          trace "Registered isolated persistent account", peer, accountHash,
-            storageRoot=stRootStr
-        if storageRoot != emptyRlpHash:
-          result.add AccountSlotsHeader(
-            accHash:     accountHash,
-            storageRoot: storageRoot)
-        buddy.commitLeafAccount(ivSet, pt)
-        env.nAccounts.inc
-        continue
-
-      when extraTraceMessages:
-        let error = rc.error
-        trace "Get persistent account problem", peer, accountHash, error
-
-
-proc fetchDanglingNodesList(
-    buddy: SnapBuddyRef
-      ): Result[TrieNodeStat,HexaryDbError] =
+proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
   ## Starting with a given set of potentially dangling account nodes
-  ## `checkAccountNodes`, this set is filtered and processed. The outcome
-  ## is fed back to the vey same list `checkAccountNodes`
+  ## `checkNodes`, this set is filtered and processed. The outcome is
+  ## fed back to the vey same list `checkNodes`
   let
     ctx = buddy.ctx
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
-
-    maxLeaves = if env.checkAccountNodes.len == 0: 0
-                else: maxHealingLeafPaths
 
     rc = ctx.data.snapDb.inspectAccountsTrie(
-      peer, stateRoot, env.checkAccountNodes, maxLeaves)
+      peer, stateRoot, env.fetchAccounts.checkNodes)
 
   if rc.isErr:
+    when extraTraceMessages:
+      error "Accounts healing failed => stop", peer,
+        ctx=buddy.healingCtx(), error=rc.error
     # Attempt to switch peers, there is not much else we can do here
     buddy.ctrl.zombie = true
-    return err(rc.error)
+    return
 
   # Global/env batch list to be replaced by by `rc.value.leaves` return value
-  env.checkAccountNodes.setLen(0)
+  env.fetchAccounts.checkNodes.setLen(0)
+  env.fetchAccounts.missingNodes =
+    env.fetchAccounts.missingNodes & rc.value.dangling
 
-  # Store accounts leaves on the storage batch list.
-  let withStorage = buddy.mergeIsolatedAccounts(rc.value.leaves)
-  if 0 < withStorage.len:
-    discard env.fetchStorage.append SnapSlotQueueItemRef(q: withStorage)
+  true
+
+
+proc getMissingNodesFromNetwork(
+    buddy: SnapBuddyRef;
+      ): Future[seq[Blob]]
+      {.async.} =
+  ##  Extract from `missingNodes` the next batch of nodes that need
+  ## to be merged it into the database
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    env = buddy.data.pivotEnv
+    stateRoot = env.stateHeader.stateRoot
+
+    nMissingNodes = env.fetchAccounts.missingNodes.len
+    inxLeft = max(0, nMissingNodes - maxTrieNodeFetch)
+
+  # There is no point in processing too many nodes at the same time. So leave
+  # the rest on the `missingNodes` queue to be handled later.
+  let fetchNodes = env.fetchAccounts.missingNodes[inxLeft ..< nMissingNodes]
+  env.fetchAccounts.missingNodes.setLen(inxLeft)
+
+  # Fetch nodes from the network. Note that the remainder of the `missingNodes`
+  # list might be used by another process that runs semi-parallel.
+  let rc = await buddy.getTrieNodes(stateRoot, fetchNodes.mapIt(@[it]))
+  if rc.isOk:
+    # Register unfetched missing nodes for the next pass
+    env.fetchAccounts.missingNodes =
+      env.fetchAccounts.missingNodes & rc.value.leftOver.mapIt(it[0])
+    return rc.value.nodes
+
+  # Restore missing nodes list now so that a task switch in the error checker
+  # allows other processes to access the full `missingNodes` list.
+  env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & fetchNodes
+
+  let error = rc.error
+  if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
+    discard
     when extraTraceMessages:
-      trace "Accounts healing storage nodes", peer,
-        nAccounts=env.nAccounts,
-        covered=buddy.coverageInfo(),
-        nWithStorage=withStorage.len,
-        nDangling=rc.value.dangling
+      trace "Error fetching account nodes for healing => stop", peer,
+        ctx=buddy.healingCtx(), error
+  else:
+    discard
+    when extraTraceMessages:
+      trace "Error fetching account nodes for healing", peer,
+        ctx=buddy.healingCtx(), error
 
-  return ok(rc.value)
+  return @[]
+
+
+proc kvAccountLeaf(
+    buddy: SnapBuddyRef;
+    partialPath: Blob;
+    node: Blob;
+      ): (bool,NodeKey,Account)
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Read leaf node from persistent database (if any)
+  let
+    peer = buddy.peer
+    env = buddy.data.pivotEnv
+
+    nodeRlp = rlpFromBytes node
+    (_,prefix) = hexPrefixDecode partialPath
+    (_,segment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
+    nibbles = prefix & segment
+  if nibbles.len == 64:
+    let data = nodeRlp.listElem(1).toBytes
+    return (true, nibbles.getBytes.convertTo(NodeKey), rlp.decode(data,Account))
+
+  when extraTraceMessages:
+    trace "Isolated node path for healing => ignored", peer,
+      ctx=buddy.healingCtx()
+
+
+proc registerAccountLeaf(
+    buddy: SnapBuddyRef;
+    accKey: NodeKey;
+    acc: Account) =
+  ## Process single account node as would be done with an interval by
+  ## the `storeAccounts()` functoon
+  let
+    peer = buddy.peer
+    env = buddy.data.pivotEnv
+    pt = accKey.to(NodeTag)
+
+  # Find range set (from list) containing `pt`
+  var ivSet: NodeTagRangeSet
+  block foundCoveringRange:
+    for w in env.fetchAccounts.unprocessed:
+      if 0 < w.covered(pt,pt):
+        ivSet = w
+        break foundCoveringRange
+    return # already processed, forget this account leaf
+
+  # Register this isolated leaf node that was added
+  env.nAccounts.inc
+  discard ivSet.reduce(pt,pt)
+  discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
+
+  # Update storage slots batch
+  if acc.storageRoot != emptyRlpHash:
+    env.fetchStorage.merge AccountSlotsHeader(
+      accHash:     Hash256(data: accKey.ByteArray32),
+      storageRoot: acc.storageRoot)
+
+  when extraTraceMessages:
+    trace "Isolated node for healing", peer, ctx=buddy.healingCtx(), accKey=pt
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -247,7 +316,6 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     ctx = buddy.ctx
     peer = buddy.peer
     env = buddy.data.pivotEnv
-    stateRoot = env.stateHeader.stateRoot
 
   # Only start healing if there is some completion level, already.
   #
@@ -261,119 +329,68 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   if env.nAccounts == 0 or
      ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
     when extraTraceMessages:
-      trace "Accounts healing postponed", peer,
-        nAccounts=env.nAccounts,
-        covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len
+      trace "Accounts healing postponed", peer, ctx=buddy.healingCtx()
     return
-
-  when extraTraceMessages:
-    trace "Start accounts healing", peer,
-      nAccounts=env.nAccounts,
-      covered=buddy.coverageInfo(),
-      nCheckAccountNodes=env.checkAccountNodes.len,
-      nMissingAccountNodes=env.missingAccountNodes.len
 
   # Update for changes since last visit
   buddy.updateMissingNodesList()
 
-  # If `checkAccountNodes` is empty, healing is at the very start or
-  # was postponed in which case `missingAccountNodes` is non-empty.
-  var
-    nodesMissing: seq[Blob]              # Nodes to process by this instance
-    nLeaves = 0                          # For logging
-  if 0 < env.checkAccountNodes.len or env.missingAccountNodes.len == 0:
-    let rc = buddy.fetchDanglingNodesList()
-    if rc.isErr:
-      error "Accounts healing failed => stop", peer,
-        nAccounts=env.nAccounts,
-        covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len,
-        error=rc.error
+  # If `checkNodes` is empty, healing is at the very start or was
+  # postponed in which case `missingNodes` is non-empty.
+  if env.fetchAccounts.checkNodes.len != 0 or
+     env.fetchAccounts.missingNodes.len == 0:
+    if not buddy.appendMoreDanglingNodesToMissingNodesList():
       return
 
-    nodesMissing = rc.value.dangling
-    nLeaves = rc.value.leaves.len
-
   # Check whether the trie is complete.
-  if nodesMissing.len == 0 and env.missingAccountNodes.len == 0:
-    when extraTraceMessages:
-      trace "Accounts healing complete", peer,
-        nAccounts=env.nAccounts,
-        covered=buddy.coverageInfo(),
-        nCheckAccountNodes=0,
-        nMissingAccountNodes=0,
-        nNodesMissing=0,
-        nLeaves
+  if env.fetchAccounts.missingNodes.len == 0:
+    trace "Accounts healing complete", peer, ctx=buddy.healingCtx()
     return # nothing to do
 
-  # Ok, clear global `env.missingAccountNodes` list and process `nodesMissing`.
-  nodesMissing = nodesMissing & env.missingAccountNodes
-  env.missingAccountNodes.setlen(0)
+  # Get next batch of nodes that need to be merged it into the database
+  let nodesData = await buddy.getMissingNodesFromNetwork()
+  if nodesData.len == 0:
+    return
 
-  # Fetch nodes, merge it into database and feed back results
-  while 0 < nodesMissing.len:
-    var fetchNodes: seq[Blob]
-    # There is no point in processing too many nodes at the same time. So
-    # leave the rest on the `nodesMissing` queue for a moment.
-    if maxTrieNodeFetch < nodesMissing.len:
-      let inxLeft = nodesMissing.len - maxTrieNodeFetch
-      fetchNodes = nodesMissing[inxLeft ..< nodesMissing.len]
-      nodesMissing.setLen(inxLeft)
-    else:
-      fetchNodes = nodesMissing
-      nodesMissing.setLen(0)
-
-    when extraTraceMessages:
-      trace "Accounts healing loop", peer,
-        nAccounts=env.nAccounts,
-        covered=buddy.coverageInfo(),
-        nCheckAccountNodes=env.checkAccountNodes.len,
-        nMissingAccountNodes=env.missingAccountNodes.len,
-        nNodesMissing=nodesMissing.len,
-        nLeaves
-
-    # Fetch nodes from the network
-    let dd = block:
-      let rc = await buddy.getTrieNodes(stateRoot, fetchNodes.mapIt(@[it]))
-      if rc.isErr:
-        env.missingAccountNodes = env.missingAccountNodes & fetchNodes
-        when extraTraceMessages:
-          trace "Error fetching account nodes for healing", peer,
-            nAccounts=env.nAccounts,
-            covered=buddy.coverageInfo(),
-            nCheckAccountNodes=env.checkAccountNodes.len,
-            nMissingAccountNodes=env.missingAccountNodes.len,
-            nNodesMissing=nodesMissing.len,
-            nLeaves,
-            error=rc.error
-        # Just run the next lap
-        continue
-      rc.value
-
-    # Store to disk and register left overs for the next pass
-    block:
-      let rc = ctx.data.snapDb.importRawNodes(peer, dd.nodes)
-      if rc.isOk:
-        env.checkAccountNodes = env.checkAccountNodes & dd.leftOver.mapIt(it[0])
-      elif 0 < rc.error.len and rc.error[^1][0] < 0:
-        # negative index => storage error
-        env.missingAccountNodes = env.missingAccountNodes & fetchNodes
-      else:
-        env.missingAccountNodes = env.missingAccountNodes &
-          dd.leftOver.mapIt(it[0]) & rc.error.mapIt(dd.nodes[it[0]])
-
-    # End while
+  # Store nodes to disk
+  let report = ctx.data.snapDb.importRawAccountNodes(peer, nodesData)
+  if 0 < report.len and report[^1].slot.isNone:
+    # Storage error, just run the next lap (not much else that can be done)
+    error "Accounts healing, error updating persistent database", peer,
+      ctx=buddy.healingCtx(), nNodes=nodesData.len, error=report[^1].error
+    env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodesData
+    return
 
   when extraTraceMessages:
-    trace "Done accounts healing", peer,
-      nAccounts=env.nAccounts,
-      covered=buddy.coverageInfo(),
-      nCheckAccountNodes=env.checkAccountNodes.len,
-      nMissingAccountNodes=env.missingAccountNodes.len,
-      nLeaves
+    trace "Accounts healing, nodes merged into database", peer,
+      ctx=buddy.healingCtx(), nNodes=nodesData.len
+
+  # Filter out error and leaf nodes
+  for w in report:
+    if w.slot.isSome: # non-indexed entries appear typically at the end, though
+      let
+        inx = w.slot.unsafeGet
+        nodePath = nodesData[inx]
+
+      if w.error != NothingSerious or w.kind.isNone:
+        # error, try downloading again
+        env.fetchAccounts.missingNodes.add nodePath
+
+      elif w.kind.unsafeGet != Leaf:
+        # re-check this node
+        env.fetchAccounts.checkNodes.add nodePath
+
+      else:
+        # Node has been stored, double check
+        let (isLeaf, key, acc) = buddy.kvAccountLeaf(nodePath, nodesData[inx])
+        if isLeaf:
+          # Update `uprocessed` registry, collect storage roots (if any)
+          buddy.registerAccountLeaf(key, acc)
+        else:
+          env.fetchAccounts.checkNodes.add nodePath
+
+  when extraTraceMessages:
+    trace "Accounts healing job done", peer, ctx=buddy.healingCtx()
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,4 +1,3 @@
-
 # Nimbus
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
@@ -38,7 +37,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/snap_db
+  ./db/snapdb_accounts
 
 {.push raises: [Defect].}
 
@@ -55,26 +54,26 @@ const
 
 proc withMaxLen(
     buddy: SnapBuddyRef;
-    iv: LeafRange;
+    iv: NodeTagRange;
     maxlen: UInt256;
-      ): LeafRange =
+      ): NodeTagRange =
   ## Reduce accounts interval to maximal size
   if 0 < iv.len and iv.len <= maxLen:
     iv
   else:
-    LeafRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
+    NodeTagRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
+proc getUnprocessed(buddy: SnapBuddyRef): Result[NodeTagRange,void] =
   ## Fetch an interval from one of the account range lists.
   let
     env = buddy.data.pivotEnv
     accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
 
-  for ivSet in env.fetchAccounts:
+  for ivSet in env.fetchAccounts.unprocessed:
     let rc = ivSet.ge()
     if rc.isOk:
       let iv = buddy.withMaxLen(rc.value, accountRangeMax)
@@ -83,15 +82,15 @@ proc getUnprocessed(buddy: SnapBuddyRef): Result[LeafRange,void] =
 
   err()
 
-proc putUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc putUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts[1].merge(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].merge(iv)
 
-proc delUnprocessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc delUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts[1].reduce(iv)
+  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].reduce(iv)
 
-proc markGloballyProcessed(buddy: SnapBuddyRef; iv: LeafRange) =
+proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   ## Shortcut
   discard buddy.ctx.data.coveredAccounts.merge(iv)
 
@@ -111,7 +110,8 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   let iv = block:
     let rc = buddy.getUnprocessed()
     if rc.isErr:
-      trace "Currently no unprocessed accounts", peer, stateRoot
+      when extraTraceMessages:
+        trace "Currently no unprocessed accounts", peer, stateRoot
       return
     rc.value
 
@@ -175,11 +175,11 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
     # End registerConsumed
 
   # Store accounts on the storage TODO list.
-  discard env.fetchStorage.append SnapSlotQueueItemRef(q: dd.withStorage)
+  env.fetchStorage.merge dd.withStorage
 
   when extraTraceMessages:
-    let withStorage = dd.withStorage.len
-    trace "Done fetching accounts", peer, stateRoot, nAccounts, withStorage, iv
+    trace "Done fetching accounts", peer, stateRoot, nAccounts,
+      withStorage=dd.withStorage.len, iv
 
 # ------------------------------------------------------------------------------
 # End
