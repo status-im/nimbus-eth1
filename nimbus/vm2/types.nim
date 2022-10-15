@@ -64,6 +64,7 @@ type
     DisableState
     DisableStateDiff
     EnableAccount
+    DisableReturnData
 
   TransactionTracer* = object
     trace*: JsonNode
