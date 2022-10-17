@@ -15,7 +15,7 @@ import
   ../db/select_backend,
   ../p2p/chain,
   ./snap/[worker, worker_desc],
-  "."/[sync_desc, sync_sched, protocol]
+  "."/[protocol, sync_desc, sync_sched]
 
 {.push raises: [Defect].}
 
@@ -67,6 +67,8 @@ proc init*(
   result.ctx.chain = chain # explicitely override
   result.ctx.data.rng = rng
   result.ctx.data.dbBackend = dbBackend
+  # Required to have been initialised via `addCapability()`
+  doAssert not result.ctx.ethWireCtx.isNil
 
 proc start*(ctx: SnapSyncRef) =
   doAssert ctx.startSync()

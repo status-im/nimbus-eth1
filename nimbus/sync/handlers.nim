@@ -3,6 +3,7 @@ import
   eth/[common, p2p, trie/db],
   ./types,
   ./protocol/eth/eth_types,
+  ./protocol/trace_config, # gossip noise control
   ../db/db_chain,
   ../p2p/chain,
   ../utils/tx_pool
@@ -12,6 +13,7 @@ type
     db: BaseChainDB
     chain: Chain
     txPool: TxPoolRef
+    disablePool: bool
 
 proc new*(_: type EthWireRef, chain: Chain, txPool: TxPoolRef): EthWireRef =
   EthWireRef(
@@ -20,8 +22,14 @@ proc new*(_: type EthWireRef, chain: Chain, txPool: TxPoolRef): EthWireRef =
     txPool: txPool
   )
 
+proc notEnabled(name: string) =
+  debug "Wire handler method is disabled", meth = name
+
 proc notImplemented(name: string) =
   debug "Wire handler method not implemented", meth = name
+
+method poolEnabled*(ctx: EthWireRef; ena: bool) =
+  ctx.disablePool = not ena
 
 method getStatus*(ctx: EthWireRef): EthState {.gcsafe.} =
   let
@@ -113,10 +121,15 @@ method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader] {
       result.add foundBlock
 
 method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction]) {.gcsafe.} =
-  ctx.txPool.jobAddTxs(txs)
+  if ctx.disablePool:
+    when trMissingOrDisabledGossipOk:
+      notEnabled("handleAnnouncedTxs")
+  else:
+    ctx.txPool.jobAddTxs(txs)
 
 method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) {.gcsafe.} =
-  notImplemented("handleAnnouncedTxsHashes")
+  when trMissingOrDisabledGossipOk:
+    notImplemented("handleAnnouncedTxsHashes")
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt) {.gcsafe.} =
   notImplemented("handleNewBlock")

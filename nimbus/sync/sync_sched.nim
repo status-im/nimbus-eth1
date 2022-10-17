@@ -74,7 +74,7 @@ import
   chronos,
   eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
-  ./sync_desc
+  "."/[handlers, sync_desc]
 
 {.push raises: [Defect].}
 
@@ -266,6 +266,7 @@ proc initSync*[S,W](
   # are full. The effect is that a re-connect on the latest zombie will be
   # rejected as long as its worker descriptor is registered.
   dsc.ctx = CtxRef[S](
+    ethWireCtx: cast[EthWireRef](node.protocolState protocol.eth),
     buddiesMax: max(1, slots + 1),
     chain: chain)
   dsc.pool = node.peerPool

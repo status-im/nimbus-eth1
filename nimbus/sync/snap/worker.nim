@@ -9,13 +9,13 @@
 # except according to those terms.
 
 import
-  std/[hashes, math, options, sets],
+  std/[hashes, math, options, sets, strutils],
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ".."/[protocol, sync_desc],
+  ".."/[handlers, protocol, sync_desc],
   ./worker/[heal_accounts, store_accounts, store_storages, ticker],
   ./worker/com/[com_error, get_block_header],
   ./worker/db/snapdb_desc,
@@ -273,6 +273,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
+  noExceptionOops("worker.setup()"):
+    ctx.ethWireCtx.poolEnabled(false)
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
