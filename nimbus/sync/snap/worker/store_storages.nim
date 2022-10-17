@@ -104,10 +104,16 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
         if reqData.slots.unprocessed.isEmpty:
           env.fetchStorage.del(reqKey)
 
+        when extraTraceMessages:
+          trace "Prepare fetching partial storage slots", peer,
+            nStorageQueue=env.fetchStorage.len, subRange=rc.value,
+            account=reqData.accHash.to(NodeTag)
+
         return @[AccountSlotsHeader(
           accHash:     reqData.accHash,
           storageRoot: reqKey.to(Hash256),
           subRange:    some rc.value)]
+
     # Oops, empty range set? Remove range and move item to the right end
     reqData.slots = nil
     discard env.fetchStorage.lruFetch(reqKey)
@@ -124,7 +130,7 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
        ctx.data.snapDb.haveStorageSlotsData(peer, it.accHash, it.storageRoot):
       kvp.data.inherit = true
       when extraTraceMessages:
-        trace "Inheriting fetching storage slots", peer,
+        trace "Inheriting storage slots", peer,
           nStorageQueue=env.fetchStorage.len, account=it.accHash.to(NodeTag)
       continue
 
@@ -173,13 +179,13 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
   # Reset error counts for detecting repeated timeouts
   buddy.data.errors.nTimeouts = 0
 
+  var gotStorage = stoRange.data.storages.len
+
   when extraTraceMessages:
-    trace "Fetch storage slots", peer,
+    trace "Fetched storage slots", peer, gotStorage,
       nReq=req.len, nStorageQueue=env.fetchStorage.len
 
-  var gotStorage = stoRange.data.storages.len
   if 0 < gotStorage:
-
     # Verify/process storages data and save it to disk
     let report = ctx.data.snapDb.importStorageSlots(peer, stoRange.data)
     if 0 < report.len:

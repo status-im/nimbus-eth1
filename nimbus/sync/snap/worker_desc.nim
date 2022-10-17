@@ -58,7 +58,11 @@ const
     ## all account ranges retrieved for all pivot state roots (see
     ## `coveredAccounts` in `CtxData`.)
 
-  maxStoragesFetch* = 128
+  healSlorageSlotsTrigger* = 0.70
+    ## Consider per account storage slost healing if this particular sub-trie
+    ## has reached this factor of completeness
+
+  maxStoragesFetch* = 512
     ## Maximal number of storage tries to fetch with a single message.
 
   maxStoragesHeal* = 32
@@ -97,6 +101,9 @@ type
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
 
+  SnapSlotsQueuePair* = KeyedQueuePair[NodeKey,SnapSlotQueueItemRef]
+    ## Key-value return code from `SnapSlotsQueue` handler
+
   SnapSlotQueueItemRef* = ref object
     ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
     ## where the optional `subRange` interval has been replaced by an interval
@@ -134,6 +141,7 @@ type
 
     # Storage slots download
     fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
+    # vetoSlots*: SnapSlotsSet         ## Do not ask for these slots, again
     serialSync*: bool                  ## Done with storage, block sync next
 
     # Info
@@ -189,6 +197,17 @@ proc hash*(a: Hash256): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
+proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
+  ## Append/prepend a queue item record into the batch queue.
+  if not q.hasKey(kvp.key):
+    # Only add non-existing entries
+    if kvp.data.slots.isNil:
+      # Append full range to the right of the list
+      discard q.append(kvp.key, kvp.data)
+    else:
+      # Partial range, add healing support and interval
+      discard q.unshift(kvp.key, kvp.data)
+
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
   let reqKey = fetchReq.storageRoot.to(NodeKey)
@@ -209,7 +228,9 @@ proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
       discard reqData.slots.unprocessed[0].merge(fetchReq.subRange.unsafeGet)
       discard q.unshift(reqKey, reqData)
 
-proc merge*(q: var SnapSlotsQueue; reqList: openArray[AccountSlotsHeader]) =
+proc merge*(
+    q: var SnapSlotsQueue;
+    reqList: openArray[SnapSlotsQueuePair|AccountSlotsHeader]) =
   ## Variant fof `merge()` for a list argument
   for w in reqList:
     q.merge w

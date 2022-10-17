@@ -150,6 +150,7 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
   ## time. These nodes will me moved to `checkNodes` for further processing.
   let
     ctx = buddy.ctx
+    db = ctx.data.snapDb
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
@@ -160,7 +161,7 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
     trace "Start accounts healing", peer, ctx=buddy.healingCtx()
 
   for accKey in env.fetchAccounts.missingNodes:
-    let rc = ctx.data.snapDb.getAccountsNodeKey(peer, stateRoot, accKey)
+    let rc = db.getAccountsNodeKey(peer, stateRoot, accKey)
     if rc.isOk:
       # Check nodes for dangling links
       env.fetchAccounts.checkNodes.add accKey
@@ -177,12 +178,12 @@ proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
   ## fed back to the vey same list `checkNodes`
   let
     ctx = buddy.ctx
+    db = ctx.data.snapDb
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
 
-    rc = ctx.data.snapDb.inspectAccountsTrie(
-      peer, stateRoot, env.fetchAccounts.checkNodes)
+    rc = db.inspectAccountsTrie(peer, stateRoot, env.fetchAccounts.checkNodes)
 
   if rc.isErr:
     when extraTraceMessages:
@@ -190,7 +191,7 @@ proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
         ctx=buddy.healingCtx(), error=rc.error
     # Attempt to switch peers, there is not much else we can do here
     buddy.ctrl.zombie = true
-    return
+    return false
 
   # Global/env batch list to be replaced by by `rc.value.leaves` return value
   env.fetchAccounts.checkNodes.setLen(0)
@@ -257,7 +258,6 @@ proc kvAccountLeaf(
   ## Read leaf node from persistent database (if any)
   let
     peer = buddy.peer
-    env = buddy.data.pivotEnv
 
     nodeRlp = rlpFromBytes node
     (_,prefix) = hexPrefixDecode partialPath
@@ -277,7 +277,7 @@ proc registerAccountLeaf(
     accKey: NodeKey;
     acc: Account) =
   ## Process single account node as would be done with an interval by
-  ## the `storeAccounts()` functoon
+  ## the `storeAccounts()` function
   let
     peer = buddy.peer
     env = buddy.data.pivotEnv
@@ -304,7 +304,8 @@ proc registerAccountLeaf(
       storageRoot: acc.storageRoot)
 
   when extraTraceMessages:
-    trace "Isolated node for healing", peer, ctx=buddy.healingCtx(), accKey=pt
+    trace "Isolated account for healing", peer,
+      ctx=buddy.healingCtx(), accKey=pt
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -314,6 +315,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
     ctx = buddy.ctx
+    db = ctx.data.snapDb
     peer = buddy.peer
     env = buddy.data.pivotEnv
 
@@ -353,7 +355,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     return
 
   # Store nodes to disk
-  let report = ctx.data.snapDb.importRawAccountsNodes(peer, nodesData)
+  let report = db.importRawAccountsNodes(peer, nodesData)
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
     error "Accounts healing, error updating persistent database", peer,

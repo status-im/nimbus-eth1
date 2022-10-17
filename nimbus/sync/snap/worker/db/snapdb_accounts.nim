@@ -336,6 +336,8 @@ proc inspectAccountsTrie*(
         break checkForError
     trace "Inspect account trie failed", peer, nPathList=pathList.len,
       nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    if ignoreError:
+      return ok(stats)
     return err(error)
 
   when extraTraceMessages:
@@ -355,7 +357,7 @@ proc inspectAccountsTrie*(
     pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
 
 
-proc getAccountNodeKey*(
+proc getAccountsNodeKey*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
@@ -377,9 +379,9 @@ proc getAccountsNodeKey*(
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
       ): Result[NodeKey,HexaryDbError] =
-  ## Variant of `inspectAccountsPath()` for persistent storage.
+  ## Variant of `getAccountsNodeKey()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, root, peer).getAccountNodeKey(path, persistent=true)
+    pv, root, peer).getAccountsNodeKey(path, persistent=true)
 
 
 proc getAccountsData*(

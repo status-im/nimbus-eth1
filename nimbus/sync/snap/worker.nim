@@ -16,7 +16,8 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[handlers, protocol, sync_desc],
-  ./worker/[heal_accounts, store_accounts, store_storages, ticker],
+  ./worker/[heal_accounts, heal_storages, store_accounts, store_storages,
+            ticker],
   ./worker/com/[com_error, get_block_header],
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
@@ -424,7 +425,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       await buddy.healAccountsDb()
       if buddy.ctrl.stopped: return
 
-      # TODO: use/apply storage healer
+      await buddy.healStoragesDb()
+      if buddy.ctrl.stopped: return
 
       # Check whether accounts might be complete.
       if env.fetchStorage.len == 0:
