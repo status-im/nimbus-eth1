@@ -42,7 +42,6 @@ type
 
   ContentDB* = ref object
     kv: KvStoreRef
-    kvPermanent: KvStoreRef
     maxSize: uint32
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
@@ -61,14 +60,6 @@ type
       furthestStoredElementDistance*: UInt256
       fractionOfDeletedContent*: float64
       numOfDeletedElements*: int64
-
-  DbKey* = enum
-    kLatestAccumulator
-
-# Note: Might eventually evolve in DbKey Prefix + actual key, but for now this
-# is enough
-func subkey*(kind: DbKey): array[1, byte] =
-  [byte ord(kind)]
 
 func xorDistance(
   a: openArray[byte],
@@ -128,21 +119,8 @@ proc new*(
     array[32, byte], RowInfo
   ).get()
 
-  # Using a whole new db for the "permanent" (meaning: non pruned) data, as else
-  # it might intervene with the pruning mechanism of the regular db. Might put
-  # them together in the future though.
-  let dbPerm =
-    if inMemory:
-      SqStoreRef.init("", "fluffy-test-perm", inMemory = true).expect(
-        "working database (out of memory?)")
-    else:
-      SqStoreRef.init(path, "fluffy-perm").expectDb()
-
-  let kvPermanentStore = kvStore dbPerm.openKvStore("kv_permanent").expectDb()
-
   ContentDB(
     kv: kvStore,
-    kvPermanent: kvPermanentStore,
     maxSize: maxSize,
     sizeStmt: getSizeStmt,
     vacStmt: vacStmt,
@@ -188,18 +166,6 @@ proc del(db: ContentDB, key: openArray[byte]) =
 proc getSszDecoded*(
     db: ContentDB, key: openArray[byte], T: type auto): Option[T] =
   db.kv.getSszDecoded(key, T)
-
-## Public permanent kvstore calls
-
-proc getPermanent*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
-  db.kvPermanent.get(key)
-
-proc putPermanent*(db: ContentDB, key, value: openArray[byte]) =
-  db.kvPermanent.put(key, value).expectDb()
-
-proc getPermanentSszDecoded*(
-    db: ContentDB, key: openArray[byte], T: type auto): Option[T] =
-  db.kvPermanent.getSszDecoded(key, T)
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a

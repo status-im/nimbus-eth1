@@ -25,13 +25,8 @@ proc toContentId(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest(contentKey.asSeq())
   some(readUintBE[256](idHash.data))
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentIdOpt = contentKey.toContentId()
-  if contentIdOpt.isSome():
-    (contentIdOpt, db.get(contentIdOpt.get()))
-  else:
-    (contentIdOpt, none(seq[byte]))
+proc dbGetHandler(db: ContentDB, contentId: ContentId): Option[seq[byte]] =
+  db.get(contentId)
 
 proc initPortalProtocol(
     rng: ref HmacDrbgContext,

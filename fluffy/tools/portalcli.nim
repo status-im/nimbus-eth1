@@ -198,11 +198,9 @@ proc testContentIdHandler(contentKey: ByteList): Option[ContentId] =
   let idHash = sha256.digest("test")
   some(readUintBE[256](idHash.data))
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentId = contentKey.toContentId()
-
-  (some(contentId), db.get(contentId))
+proc dbGetHandler(db: ContentDB, contentId: ContentId):
+    Option[seq[byte]] =
+  db.get(contentId)
 
 proc run(config: PortalCliConf) =
   let

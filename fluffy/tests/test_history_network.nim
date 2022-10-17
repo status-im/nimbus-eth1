@@ -21,14 +21,15 @@ type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork
 
-proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
+proc newHistoryNode(rng: ref HmacDrbgContext, port: int,
+    accumulator: FinishedAccumulator): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
     streamManager = StreamManager.new(node)
-    hn = HistoryNetwork.new(node, db, streamManager)
+    historyNetwork = HistoryNetwork.new(node, db, streamManager, accumulator)
 
-  return HistoryNode(discoveryProtocol: node, historyNetwork: hn)
+  return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
 
 proc portalProtocol(hn: HistoryNode): PortalProtocol =
   hn.historyNetwork.portalProtocol
@@ -89,21 +90,13 @@ procSuite "History Content Network":
         int(lastBlockNumber)]
 
     let
-      historyNode1 = newHistoryNode(rng, 20302)
-      historyNode2 = newHistoryNode(rng, 20303)
-
       headers = createEmptyHeaders(0, int(lastBlockNumber))
-      masterAccumulator = buildAccumulator(headers)
+      masterAccumulator = buildAccumulator(headers).get()
       epochAccumulators = buildAccumulatorData(headers)
+      historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
+      historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
-    # Note:
-    # Both nodes start with the same master accumulator, but only node 2 has all
-    # headers and all epoch accumulators.
-    # node 2 requires the master accumulator to do the block number to block
-    # hash mapping.
-    await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-    await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-
+    # Only node 2 stores all headers and all epoch accumulators.
     for h in headers:
       let
         headerHash = h.blockHash()
@@ -143,17 +136,16 @@ procSuite "History Content Network":
     await historyNode2.stop()
 
   asyncTest "Offer - Maximum Content Keys in 1 Message":
-    # Need to provide enough headers to have 1 epoch accumulator "finalized" as
-    # else no headers with proofs can be generated.
-    const lastBlockNumber = epochSize
+    # Need to provide enough headers to have the accumulator "finished".
+    const lastBlockNumber = int(mergeBlockNumber - 1)
 
     let
       headers = createEmptyHeaders(0, lastBlockNumber)
-      masterAccumulator = buildAccumulator(headers)
+      masterAccumulator = buildAccumulator(headers).get()
       epochAccumulators = buildAccumulatorData(headers)
 
-      historyNode1 = newHistoryNode(rng, 20302)
-      historyNode2 = newHistoryNode(rng, 20303)
+      historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
+      historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
     check:
       historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
@@ -168,9 +160,6 @@ procSuite "History Content Network":
 
     let maxOfferedHistoryContent = getMaxOfferedContentKeys(
         uint32(len(historyProtocolId)), maxContentKeySize)
-
-    await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-    await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
 
     # One of the nodes needs to have the epochAccumulator to build proofs from
     # for the offered headers.
@@ -222,62 +211,6 @@ procSuite "History Content Network":
     await historyNode1.stop()
     await historyNode2.stop()
 
-  asyncTest "Offer - Headers with Historical Epochs - Stopped at Epoch":
-    const
-      # Needs one extra header currently due to the way that updateAccumulator
-      # works
-      lastBlockNumber = epochSize
-      headersToTest = [0, 1, lastBlockNumber div 2, lastBlockNumber - 1]
-
-    let
-      headers = createEmptyHeaders(0, lastBlockNumber)
-      masterAccumulator = buildAccumulator(headers)
-      epochAccumulators = buildAccumulatorData(headers)
-
-      historyNode1 = newHistoryNode(rng, 20302)
-      historyNode2 = newHistoryNode(rng, 20303)
-
-    check:
-      historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
-      historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
-
-      (await historyNode1.portalProtocol().ping(historyNode2.localNode())).isOk()
-      (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
-
-    # Need to store the epochAccumulators, because else the headers can't be
-    # verified if being part of the canonical chain currently
-    for (contentKey, epochAccumulator) in epochAccumulators:
-      let contentId = toContentId(contentKey)
-      historyNode1.portalProtocol.storeContent(
-        contentId, SSZ.encode(epochAccumulator))
-
-    # Need to run start to get the processContentLoop running
-    historyNode1.start()
-    historyNode2.start()
-
-    await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-    await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-
-    let contentInfos = headersToContentInfo(headers)
-
-    for header in headersToTest:
-      let id = toContentId(contentInfos[header].contentKey)
-      historyNode1.portalProtocol.storeContent(id, contentInfos[header].content)
-
-      let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(),
-        contentInfos[header..header]
-      )
-
-      check offerResult.isOk()
-
-    for header in headersToTest:
-      let id = toContentId(contentInfos[header].contentKey)
-      check historyNode2.containsId(id) == true
-
-    await historyNode1.stop()
-    await historyNode2.stop()
-
   asyncTest "Offer - Headers with No Historical Epochs - Stopped at Merge Block":
     const
       lastBlockNumber = int(mergeBlockNumber - 1)
@@ -291,11 +224,11 @@ procSuite "History Content Network":
 
     let
       headers = createEmptyHeaders(0, lastBlockNumber)
-      masterAccumulator = buildAccumulator(headers)
+      masterAccumulator = buildAccumulator(headers).get()
       epochAccumulators = buildAccumulatorData(headers)
 
-      historyNode1 = newHistoryNode(rng, 20302)
-      historyNode2 = newHistoryNode(rng, 20303)
+      historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
+      historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
     check:
       historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
@@ -314,9 +247,6 @@ procSuite "History Content Network":
     # Need to run start to get the processContentLoop running
     historyNode1.start()
     historyNode2.start()
-
-    await historyNode1.historyNetwork.initMasterAccumulator(some(masterAccumulator))
-    await historyNode2.historyNetwork.initMasterAccumulator(some(masterAccumulator))
 
     let contentInfos = headersToContentInfo(headers)
 

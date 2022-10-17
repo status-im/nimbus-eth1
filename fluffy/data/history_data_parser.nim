@@ -33,14 +33,6 @@ type
     # Fix in nim-json-serialization or should I overload something here?
     number*: int
 
-  AccumulatorData = object
-    accumulatorHash: string
-    maxBlockNumber: int
-    accumulator: string
-
-  AccumulatorObject = object
-    accumulator: AccumulatorData
-
   EpochAccumulatorObject = object
     epochAccumulator: string
 
@@ -60,7 +52,7 @@ proc readJsonType*(dataFile: string, T: type): Result[T, string] =
   ok(decoded)
 
 iterator blockHashes*(blockData: BlockDataTable): BlockHash =
-  for k,v in blockData:
+  for k, v in blockData:
     var blockHash: BlockHash
     try:
       blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
@@ -119,7 +111,7 @@ func readBlockData*(
 
 iterator blocks*(
     blockData: BlockDataTable, verify = false): seq[(ContentKey, seq[byte])] =
-  for k,v in blockData:
+  for k, v in blockData:
     let res = readBlockData(k, v, verify)
 
     if res.isOk():
@@ -180,7 +172,7 @@ func readHeaderData*(
 
 iterator headers*(
     blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
-  for k,v in blockData:
+  for k, v in blockData:
     let res = readHeaderData(k, v, verify)
 
     if res.isOk():
@@ -200,19 +192,19 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
-proc readAccumulator*(dataFile: string): Result[Accumulator, string] =
-  let res = ? readJsonType(dataFile, AccumulatorObject)
 
-  let encodedAccumulator =
-    try:
-      res.accumulator.accumulator.hexToSeqByte()
-    except ValueError as e:
-      return err("Invalid hex data for accumulator: " & e.msg)
+proc toString*(v: IoErrorCode): string =
+  try: ioErrorMsg(v)
+  except Exception as e: raiseAssert e.msg
+
+proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
 
   try:
-    ok(SSZ.decode(encodedAccumulator, Accumulator))
+    ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
   except SszError as e:
-    err("Decoding accumulator failed: " & e.msg)
+    err("Failed decoding accumulator: " & e.msg)
+
 
 proc readEpochAccumulator*(dataFile: string): Result[EpochAccumulator, string] =
   let res = ? readJsonType(dataFile, EpochAccumulatorObject)

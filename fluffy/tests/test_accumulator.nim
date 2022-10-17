@@ -16,7 +16,6 @@ import
   ../network/history/[history_content, accumulator]
 
 func buildProof(
-    accumulator: Accumulator,
     epochAccumulators: seq[(ContentKey, EpochAccumulator)],
     header: BlockHeader):
     Result[seq[Digest], string] =
@@ -56,13 +55,17 @@ suite "Header Accumulator":
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
     let
-      accumulator = buildAccumulator(headers)
+      accumulatorRes = buildAccumulator(headers)
       epochAccumulators = buildAccumulatorData(headers)
+
+    check accumulatorRes.isOk()
+
+    let accumulator = accumulatorRes.get()
 
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(accumulator, epochAccumulators, header)
+        let proof = buildProof(epochAccumulators, header)
         check:
           proof.isOk()
           verifyHeader(accumulator, header, proof.get()).isOk()
@@ -74,7 +77,7 @@ suite "Header Accumulator":
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof(accumulator, epochAccumulators, headers[i])
+        let proof = buildProof( epochAccumulators, headers[i])
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
@@ -92,6 +95,19 @@ suite "Header Accumulator":
       for i in headersToTest:
         check verifyHeader(accumulator, headers[i], proof).isErr()
 
+  test "Header Accumulator - Not Finished":
+    # Less headers than needed to finish the accumulator
+    const amount = mergeBlockNumber - 1
+
+    var headers: seq[BlockHeader]
+    for i in 0..<amount:
+      headers.add(BlockHeader(
+        blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+
+    let accumulatorRes = buildAccumulator(headers)
+
+    check accumulatorRes.isErr()
+
   test "Header BlockNumber to EpochAccumulator Root":
     # Note: This test assumes at least 3 epochs
     const amount = mergeBlockNumber
@@ -105,7 +121,9 @@ suite "Header Accumulator":
       headers.add(header)
       headerHashes.add(header.blockHash())
 
-    let accumulator = buildAccumulator(headers)
+    let accumulatorRes = buildAccumulator(headers)
+    check accumulatorRes.isOk()
+    let accumulator = accumulatorRes.get()
 
     # Valid response for block numbers in epoch 0
     block:

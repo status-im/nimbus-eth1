@@ -28,18 +28,29 @@ proc loadCompileTimeBootstrapNodes(
     macros.error "Failed to load bootstrap nodes metadata at '" &
       path & "': " & err.msg
 
+# Need to use std/io readFile because:
+# https://github.com/status-im/nim-stew/issues/145
+proc loadEncodedAccumulator(path: string): string =
+    try:
+      return readFile(path).string
+    except IOError as err:
+      macros.error "Failed to read finished accumulator at '" &
+        path & "': " & err.msg
+
 const
   # TODO: Change this from our local repo to an eth-client repo if/when this
   # gets created for the Portal networks.
   portalNetworksDir =
     currentSourcePath.parentDir.replace('\\', '/') / "network_data"
+
+  # TODO: Using a repo for test vectors for now, as it is something to test
+  # against, but at the same time could also go in a network metadata repo.
+  portalTestDir =
+    currentSourcePath.parentDir.parentDir.replace('\\', '/') / "vendor" / "portal-spec-tests" / "tests"
   # Note:
   # For now it gets called testnet0 but this Portal network serves Eth1 mainnet
   # data. Giving the actual Portal (test)networks different names might not be
   # that useful as there is no way to distinguish the networks currently.
-  # Additionally, sub-networks like history network pass the eth1 network
-  # information in their requests, potentially supporting many eth1 networks
-  # over a single Portal Network.
   #
   # When more config data is required per Portal network, a metadata object can
   # be created, but right now only bootstrap nodes can be different.
@@ -48,3 +59,6 @@ const
   # rlp.rawData() in the enr code.
   testnet0BootstrapNodes* = loadCompileTimeBootstrapNodes(
     portalNetworksDir / "testnet0" / "bootstrap_nodes.txt")
+
+  finishedAccumulator* = loadEncodedAccumulator(
+    portalTestDir / "mainnet" / "accumulator" / "finished_accumulator.ssz")
