@@ -24,9 +24,11 @@ import
 # ------------------------------------------------------------------------------
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
-  if c.mergeForkBlock.isSome and number >= c.mergeForkBlock.get:
-    return MergeFork
-  if number >= c.arrowGlacierBlock: ArrowGlacier
+  if number >= c.cancunBlock: Cancun
+  elif number >= c.shanghaiBlock: Shanghai
+  elif number >= c.mergeForkBlock: MergeFork
+  elif number >= c.grayGlacierBlock: GrayGlacier
+  elif number >= c.arrowGlacierBlock: ArrowGlacier
   elif number >= c.londonBlock: London
   elif number >= c.berlinBlock: Berlin
   elif number >= c.muirGlacierBlock: MuirGlacier

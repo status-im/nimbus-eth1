@@ -28,8 +28,10 @@ const
     (blockNumber: 12964999'u64, id: (crc: 0x0eb440f6'u32, nextFork: 12965000'u64)), # Last Berlin block
     (blockNumber: 12965000'u64, id: (crc: 0xb715077d'u32, nextFork: 13773000'u64)), # First London block
     (blockNumber: 13772999'u64, id: (crc: 0xb715077d'u32, nextFork: 13773000'u64)), # Last London block
-    (blockNumber: 13773000'u64, id: (crc: 0x20c327fc'u32, nextFork: 0'u64)),        # First Arrow Glacier block
-    (blockNumber: 20000000'u64, id: (crc: 0x20c327fc'u32, nextFork: 0'u64)),        # Future Arrow Glacier block
+    (blockNumber: 13773000'u64, id: (crc: 0x20c327fc'u32, nextFork: 15050000'u64)), # First Arrow Glacier block
+    (blockNumber: 15049999'u64, id: (crc: 0x20c327fc'u32, nextFork: 15050000'u64)), # Last Arrow Glacier block
+    (blockNumber: 15050000'u64, id: (crc: 0xf0afd0e3'u32, nextFork: 0'u64)),        # First Gray Glacier block
+    (blockNumber: 20000000'u64, id: (crc: 0xf0afd0e3'u32, nextFork: 0'u64)),        # Future Gray Glacier block
   ]
 
   RopstenNetIDs = [

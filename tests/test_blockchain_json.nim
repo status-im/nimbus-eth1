@@ -147,7 +147,7 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.berlinBlock         = number[FkBerlin]
     c.londonBlock         = number[FkLondon]
     c.arrowGlacierBlock   = number[FkLondon]
-    c.mergeForkBlock      = some(number[FkParis])
+    c.mergeForkBlock      = number[FkParis]
 
   c.terminalTotalDifficulty = none(UInt256)
   case network
@@ -254,8 +254,8 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   deepCopy(result, preminedBlock)
   let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
-  if ttdReached and chainDB.config.mergeForkBlock.isNone:
-    chainDB.config.mergeForkBlock = some(preminedBlock.header.blockNumber)
+  if ttdReached and chainDB.config.mergeForkBlock == high(BlockNumber):
+    chainDB.config.mergeForkBlock = preminedBlock.header.blockNumber
 
   if ttdReached:
     baseHeaderForImport.prevRandao = preminedBlock.header.prevRandao
@@ -327,13 +327,13 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
   for idx, testBlock in tester.blocks:
     if testBlock.goodBlock:
-      #try:
+      try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
             testBlock, chainDB, checkSeal, validation = false)
 
         let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
-        if ttdReached and chainDB.config.mergeForkBlock.isNone:
-          chainDB.config.mergeForkBlock = some(preminedBlock.header.blockNumber)
+        if ttdReached and chainDB.config.mergeForkBlock == high(BlockNumber):
+          chainDB.config.mergeForkBlock = preminedBlock.header.blockNumber
 
         # manually validating
         let res = chainDB.validateHeaderAndKinship(
@@ -346,8 +346,8 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
             debugEcho "error message: ", res.error
             debugEcho "ttdReached: ", ttdReached
 
-      #except:
-        #debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
+      except:
+        debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
 
     else:
       var noError = true

@@ -40,7 +40,10 @@ type
     Berlin,
     London,
     ArrowGlacier,
-    MergeFork
+    GrayGlacier,
+    MergeFork,
+    Shanghai,
+    Cancun
 
   Chain* = ref object of RootRef
     db: BaseChainDB
@@ -107,7 +110,10 @@ func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
     toNextFork(c.berlinBlock),
     toNextFork(c.londonBlock),
     toNextFork(c.arrowGlacierBlock),
-    toNextFork(c.mergeForkBlock)
+    toNextFork(c.grayGlacierBlock),
+    toNextFork(c.mergeForkBlock),
+    toNextFork(c.shanghaiBlock),
+    toNextFork(c.cancunBlock),
   ]
 
   if fork == high(ChainFork):
