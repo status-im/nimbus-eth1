@@ -48,7 +48,8 @@ import
   ncli/e2store,
   ../seed_db,
   ../../premix/[downloader, parser],
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, accumulator],
+  ../data/history_data_parser
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
@@ -66,7 +67,7 @@ proc defaultDataDir*(): string =
 const
   defaultDataDirDesc = defaultDataDir()
   defaultBlockFileName = "eth-block-data"
-  defaultAccumulatorFileName = "eth-accumulator.json"
+  defaultAccumulatorFileName = "mainnet-master-accumulator.ssz"
 
 type
   ExporterCmd* = enum
@@ -157,13 +158,13 @@ type
         name: "end-epoch" .}: uint64
     of exportAccumulatorData:
       accumulatorFileName* {.
-        desc: "File to which the serialized accumulator data is written"
+        desc: "File to which the serialized accumulator is written"
         defaultValue: defaultAccumulatorFileName
         defaultValueDesc: $defaultAccumulatorFileName
         name: "accumulator-file-name" .}: string
     of printAccumulatorData:
-      accumulatorFileNameVerify* {.
-        desc: "File to which the serialized accumulator data is written"
+      accumulatorFileNamePrint* {.
+        desc: "File from which the serialized accumulator is read"
         defaultValue: defaultAccumulatorFileName
         defaultValueDesc: $defaultAccumulatorFileName
         name: "accumulator-file-name" .}: string
@@ -366,10 +367,6 @@ const
   ExecutionBlockHeaderRecord = [byte 0xFF, 0x00]
   MasterAccumulatorRecord = [byte 0xFE, 0x00]
 
-proc toString(v: IoErrorCode): string =
-  try: ioErrorMsg(v)
-  except Exception as e: raiseAssert e.msg
-
 when isMainModule:
   {.pop.}
   let config = ExporterConf.load()
@@ -485,7 +482,7 @@ when isMainModule:
 
     # Lets first check if the accumulator file already exists before starting
     # to build it.
-    let accumulatorFile = dataDir / &"mainnet-master-accumulator.e2s"
+    let accumulatorFile = dataDir / config.accumulatorFileName
     if isFile(accumulatorFile):
       notice "Not building accumulator, file already exists",
         file = accumulatorFile
@@ -499,93 +496,91 @@ when isMainModule:
         fatal "Required epoch headers file does not exist", file
         quit 1
 
-    var accumulator: Accumulator
-    for i in 0..<preMergeEpochs:
-      let file = dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+    proc buildAccumulator(dataDir: string):
+        Result[FinishedAccumulator, string] =
+      var accumulator: Accumulator
+      for i in 0..<preMergeEpochs:
+        let file =
+          try: dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+          except ValueError as e: raiseAssert e.msg
 
-      let fh = openFile(file, {OpenFlags.Read}).expect("Readable file")
-      defer: discard closeFile(fh)
+        let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
+        defer: discard closeFile(fh)
 
-      var data: seq[byte]
-      var count = 0'u64
-      while true:
-        let header = readRecord(fh, data).valueOr:
-          break
+        var data: seq[byte]
+        var count = 0'u64
+        while true:
+          let header = readRecord(fh, data).valueOr:
+            break
 
-        if header.typ == ExecutionBlockHeaderRecord:
-          let blockHeader =
-            try:
-              rlp.decode(data, BlockHeader)
-            except RlpError as e:
-              fatal "Invalid block header", error = e.msg, file = file
+          if header.typ == ExecutionBlockHeaderRecord:
+            let blockHeader =
+              try:
+                rlp.decode(data, BlockHeader)
+              except RlpError as e:
+                return err("Invalid block header in " & file & ": " & e.msg)
+
+            # Quick sanity check
+            if blockHeader.blockNumber.truncate(uint64) != i*epochSize + count:
+              fatal "Incorrect block headers in file", file = file,
+                blockNumber = blockHeader.blockNumber,
+                expectedBlockNumber = i*epochSize + count
               quit 1
 
-          # Quick sanity check
-          if blockHeader.blockNumber.truncate(uint64) != i*epochSize + count:
-            fatal "Incorrect block headers in file", file = file,
-              blockNumber = blockHeader.blockNumber,
-              expectedBlockNumber = i*epochSize + count
-            quit 1
+            updateAccumulator(accumulator, blockHeader)
 
-          updateAccumulator(accumulator, blockHeader)
+            if count == epochSize - 1:
+              info "Updated an epoch", epoch = i
+            count.inc()
 
-          if count == epochSize - 1:
-            info "Updated an epoch", epoch = i
-          count.inc()
+            if blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+              let finishedAccumulator = finishAccumulator(accumulator)
+              # TODO: Should get in the finishAccumulator but can't right now.
+              # accumulator.currentEpoch = EpochAccumulator.init(@[])
+              info "Updated last epoch, finished building master accumulator",
+                epoch = i
+              return ok(finishedAccumulator)
+          else:
+            warn "Skipping record, not a block header", typ = toHex(header.typ)
 
-          if blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
-            finishAccumulator(accumulator)
-            # TODO: Should get in the finishAccumulator but can't right now.
-            accumulator.currentEpoch = EpochAccumulator.init(@[])
-            info "Updated last epoch, finished building master accumulator",
-              epoch = i
-            break
-        else:
-          warn "Skipping record, not a block header", typ = toHex(header.typ)
+      err("Not enough headers provided to finish the accumulator")
 
-    let fh = openFile(
-      accumulatorFile, {OpenFlags.Write, OpenFlags.Create}).expect(
-        "Permission to write and create file")
-    defer: discard closeFile(fh)
+    let accumulatorRes = buildAccumulator(dataDir)
+    if accumulatorRes.isErr():
+      fatal "Could not build accumulator", error = accumulatorRes.error
+      quit 1
+    let accumulator = accumulatorRes.get()
 
-    let res = fh.appendRecord(MasterAccumulatorRecord, SSZ.encode(accumulator))
+    let res = io2.writeFile(accumulatorFile, SSZ.encode(accumulator))
     if res.isErr():
-      error "Failed writing accumulator to file", file = accumulatorFile, error = res.error
+      error "Failed writing accumulator to file",
+        file = accumulatorFile, error = res.error
+      quit 1
     else:
-      notice "Succesfully wrote master accumulator to file", file = accumulatorFile
+      notice "Succesfully wrote master accumulator to file",
+        file = accumulatorFile
 
   of ExporterCmd.printAccumulatorData:
-    let accumulatorFile = dataDir / &"mainnet-master-accumulator.e2s"
+    let file = dataDir / config.accumulatorFileNamePrint
 
-    let fh = openFile(accumulatorFile, {OpenFlags.Read}).expect("Readable file")
-    defer: discard closeFile(fh)
-
-    var data: seq[byte]
-    let header = readRecord(fh, data).valueOr:
-      fatal "No record found"
+    let res = readAccumulator(file)
+    if res.isErr():
+      fatal "Failed reading accumulator from file", error = res.error, file
       quit 1
 
-    if header.typ == MasterAccumulatorRecord:
-      let accumulator =
-        try:
-          SSZ.decode(data, Accumulator)
-        except SszError as e:
-          fatal "Invalid accumulator", error = e.msg, file = accumulatorFile
-          quit 1
+    let
+      accumulator = res.get()
+      accumulatorRoot = hash_tree_root(accumulator)
 
-      let accumulatorRoot = hash_tree_root(accumulator)
-      info "Accumulator decoded successfully",
-        root = accumulatorRoot
+    info "Accumulator decoded successfully",
+      root = accumulatorRoot
 
-      echo "Master Accumulator:"
-      echo "-------------------"
-      echo &"Root: {accumulatorRoot}"
-      echo ""
-      echo "Historical Epochs:"
-      echo "------------------"
-      echo "Epoch Root"
-      for i, root in accumulator.historicalEpochs:
-        echo &"{i.uint64:05} 0x{root.toHex()}"
-    else:
-      fatal "Record is not an accumulator", typ = toHex(header.typ)
-      quit 1
+    echo "Master Accumulator:"
+    echo "-------------------"
+    echo &"Root: {accumulatorRoot}"
+    echo ""
+    echo "Historical Epochs:"
+    echo "------------------"
+    echo "Epoch Root"
+    for i, root in accumulator.historicalEpochs:
+      echo &"{i.uint64:05} 0x{root.toHex()}"

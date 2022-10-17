@@ -108,7 +108,23 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     stateNetwork = StateNetwork.new(d, db, streamManager,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
-    historyNetwork = HistoryNetwork.new(d, db, streamManager,
+    accumulator =
+      # Building an accumulator from header epoch files takes > 2m30s and is
+      # thus not really a viable option at start-up.
+      # Options are:
+      # - Start with baked-in accumulator
+      # - Start with file containing SSZ encoded accumulator
+      if config.accumulatorFile.isSome():
+        readAccumulator(string config.accumulatorFile.get()).expect(
+          "Need a file with a valid SSZ encoded accumulator")
+      else:
+        # Get it from binary file containing SSZ encoded accumulator
+        try:
+          SSZ.decode(finishedAccumulator, FinishedAccumulator)
+        except SszError as err:
+          raiseAssert "Invalid baked-in accumulator: " & err.msg
+
+    historyNetwork = HistoryNetwork.new(d, db, streamManager, accumulator,
       bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
 
   # TODO: If no new network key is generated then we should first check if an
@@ -148,18 +164,6 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.start()
   historyNetwork.start()
-
-  let accumulator =
-    if config.accumulatorDataFile.isSome():
-      some(buildAccumulator(string config.accumulatorDataFile.get()).expect(
-        "Need a valid data file to build the master accumulator locally"))
-    elif config.accumulatorFile.isSome():
-      some(readAccumulator(string config.accumulatorFile.get()).expect(
-        "Need a valid accumulator file to store the master accumulator locally"))
-    else:
-      none(Accumulator)
-
-  waitFor historyNetwork.initMasterAccumulator(accumulator)
   stateNetwork.start()
 
   runForever()

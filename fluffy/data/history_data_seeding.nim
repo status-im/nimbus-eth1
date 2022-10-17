@@ -18,7 +18,7 @@ export results
 
 ### Helper calls to seed the local database and/or the network
 
-proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
+proc buildAccumulator*(dataFile: string): Result[FinishedAccumulator, string] =
   let blockData = ? readJsonType(dataFile, BlockDataTable)
 
   var headers: seq[BlockHeader]
@@ -31,7 +31,7 @@ proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
     let header = ? v.readBlockHeader()
     headers[header.blockNumber.truncate(int)] = header
 
-  ok(buildAccumulator(headers))
+  buildAccumulator(headers)
 
 proc buildAccumulatorData*(
     dataFile: string):

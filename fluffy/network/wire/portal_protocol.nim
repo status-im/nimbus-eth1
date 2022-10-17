@@ -132,8 +132,8 @@ type
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
   DbGetHandler* =
-    proc(contentDB: ContentDB, contentKey: ByteList):
-      (Option[ContentId], Option[seq[byte]]) {.raises: [Defect], gcsafe.}
+    proc(contentDB: ContentDB, contentId: ContentId):
+      Option[seq[byte]] {.raises: [Defect], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
@@ -313,7 +313,14 @@ proc handleFindContent(
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-  let (contentIdOpt, contentOpt) = p.dbGet(p.contentDB, fc.contentKey)
+  let contentIdOpt = p.toContentId(fc.contentKey)
+  if contentIdOpt.isNone:
+    # Return empty response when content key validation fails
+    # TODO: Better would be to return no message at all? Needs changes on
+    # discv5 layer.
+    return @[]
+
+  let contentOpt = p.dbGet(p.contentDB, contentIdOpt.get())
   if contentOpt.isSome():
     let content = contentOpt.get()
     if content.len <= maxPayloadSize:
@@ -324,7 +331,7 @@ proc handleFindContent(
 
       encodeMessage(ContentMessage(
         contentMessageType: connectionIdType, connectionId: connectionId))
-  elif contentIdOpt.isSome():
+  else:
     # Don't have the content, send closest neighbours to content id.
     let
       closestNodes = p.routingTable.neighbours(
@@ -333,14 +340,6 @@ proc handleFindContent(
     portal_content_enrs_packed.observe(enrs.len().int64)
 
     encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
-  else:
-    # Return empty response when:
-    # a. content key validation fails
-    # b. it is a special case such as "latest accumulator"
-    # TODO: Better would be to return no message at all for a, needs changes on
-    # discv5 layer.
-    # TODO: Better would be to have a specific protocol message for b.
-    @[]
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)

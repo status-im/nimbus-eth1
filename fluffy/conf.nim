@@ -117,18 +117,10 @@ type
       defaultValueDesc: "none"
       name: "netkey-unsafe" .}: Option[PrivateKey]
 
-    accumulatorDataFile* {.
-      desc:
-        "Build the master accumulator snapshot from a data file containing " &
-        "blocks instead of getting it from peers on the network."
-      defaultValue: none(InputFile)
-      defaultValueDesc: "none"
-      name: "accumulator-data-file" .}: Option[InputFile]
-
     accumulatorFile* {.
       desc:
-        "Get the master accumulator snapshot from a file containing a " &
-        "pre-build master accumulator."
+        "Get the master accumulator snapshot from a file containing an " &
+        "pre-build SSZ encoded master accumulator."
       defaultValue: none(InputFile)
       defaultValueDesc: "none"
       name: "accumulator-file" .}: Option[InputFile]

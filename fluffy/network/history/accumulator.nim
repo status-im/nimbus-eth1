@@ -8,7 +8,6 @@
 {.push raises: [Defect].}
 
 import
-  std/hashes,
   eth/common/eth_types_rlp,
   ssz_serialization, ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
@@ -22,13 +21,24 @@ export ssz_serialization, merkleization, proofs, eth_types_rlp
 
 const
   epochSize* = 8192 # blocks
-  # Allow this to be adjusted at compile time. If more constants need to be
-  # adjusted we can add some presets file.
+  # Allow this to be adjusted at compile time fir testing. If more constants
+  # need to be adjusted we can add some presets file.
   mergeBlockNumber* {.intdefine.}: uint64 = 15537394
 
   # Note: This is like a ceil(mergeBlockNumber / epochSize)
   # Could use ceilDiv(mergeBlockNumber, epochSize) in future versions
   preMergeEpochs* = (mergeBlockNumber + epochSize - 1) div epochSize
+
+  # TODO:
+  # Currently disabled, because of testing issues, but could be used as value to
+  # double check on at merge block.
+  # TODO: Could also be used as value to actual finish the accumulator, instead
+  # of `mergeBlockNumber`, but:
+  # - Still need to store the actual `mergeBlockNumber` and run-time somewhere
+  # as it allows for each pre vs post merge block header checking.
+  # - Can't limit `historicalEpochs` SSZ list at `preMergeEpochs` value.
+  # - Should probably be stated in the portal network specs.
+  # TERMINAL_TOTAL_DIFFICULTY = u256"58750000000000000000000"
 
 type
   HeaderRecord* = object
@@ -54,8 +64,6 @@ func init*(T: type Accumulator): T =
     currentEpoch: EpochAccumulator.init(@[])
   )
 
-# TODO:
-# Could probably also make this work with TTD instead of merge block number.
 func updateAccumulator*(
     a: var Accumulator, header: BlockHeader) =
   doAssert(header.blockNumber.truncate(uint64) < mergeBlockNumber,
@@ -85,27 +93,25 @@ func updateAccumulator*(
   let res = a.currentEpoch.add(headerRecord)
   doAssert(res, "Can't fail because of currentEpoch length check")
 
-func isFinished*(a: Accumulator): bool =
-  a.historicalEpochs.len() == (int)(preMergeEpochs)
-
-func finishAccumulator*(a: var Accumulator) =
+func finishAccumulator*(a: var Accumulator): FinishedAccumulator =
+  # doAssert(a.currentEpoch[^2].totalDifficulty < TERMINAL_TOTAL_DIFFICULTY)
+  # doAssert(a.currentEpoch[^1].totalDifficulty >= TERMINAL_TOTAL_DIFFICULTY)
   let epochHash = hash_tree_root(a.currentEpoch)
 
   doAssert(a.historicalEpochs.add(epochHash.data))
 
-func hash*(a: Accumulator): hashes.Hash =
-  # TODO: This is used for the CountTable but it will be expensive.
-  hash(hash_tree_root(a).data)
+  FinishedAccumulator(historicalEpochs: a.historicalEpochs)
 
-func buildAccumulator*(headers: seq[BlockHeader]): Accumulator =
+func buildAccumulator*(
+    headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
   var accumulator: Accumulator
   for header in headers:
     updateAccumulator(accumulator, header)
 
     if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
-      finishAccumulator(accumulator)
+      return ok(finishAccumulator(accumulator))
 
-  accumulator
+  err("Not enough headers provided to finish the accumulator")
 
 func buildAccumulatorData*(headers: seq[BlockHeader]):
     seq[(ContentKey, EpochAccumulator)] =
@@ -137,7 +143,7 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 
       epochAccumulators.add((key, accumulator.currentEpoch))
 
-      finishAccumulator(accumulator)
+      discard finishAccumulator(accumulator)
 
   epochAccumulators
 
@@ -167,7 +173,7 @@ func isPreMerge*(header: BlockHeader): bool =
   isPreMerge(header.blockNumber.truncate(uint64))
 
 func verifyProof*(
-    a: Accumulator, header: BlockHeader, proof: openArray[Digest]): bool =
+    a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]): bool =
   let
     epochIndex = getEpochIndex(header)
     epochAccumulatorHash = Digest(data: a.historicalEpochs[epochIndex])
@@ -181,7 +187,7 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
 func verifyHeader*(
-    a: Accumulator, header: BlockHeader, proof: openArray[Digest]):
+    a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]):
     Result[void, string] =
   if header.isPreMerge():
     if a.verifyProof(header, proof):
@@ -192,7 +198,7 @@ func verifyHeader*(
     err("Cannot verify post merge header with accumulator proof")
 
 func getBlockEpochDataForBlockNumber*(
-    a: Accumulator, bn: UInt256): Result[BlockEpochData, string] =
+    a: FinishedAccumulator, bn: UInt256): Result[BlockEpochData, string] =
   let blockNumber = bn.truncate(uint64)
 
   if blockNumber.isPreMerge:

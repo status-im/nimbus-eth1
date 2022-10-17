@@ -40,6 +40,7 @@ type
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+    accumulator*: FinishedAccumulator
     processContentLoop: Future[void]
 
   Block* = (BlockHeader, BlockBody)
@@ -65,8 +66,6 @@ func getEncodedKeyForContent(
     of receipts:
       ContentKey(contentType: cType, receiptsKey: contentKeyType)
     of epochAccumulator:
-      raiseAssert("Not implemented")
-    of masterAccumulator:
       raiseAssert("Not implemented")
 
   return encodeKey(contentKey)
@@ -255,12 +254,6 @@ proc get(
     db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Option[T] =
   db.getSszDecoded(contentId, T)
 
-proc getAccumulator(db: ContentDB): Option[Accumulator] =
-  db.getPermanentSszDecoded(subkey(kLatestAccumulator), Accumulator)
-
-proc putAccumulator*(db: ContentDB, value: openArray[byte]) =
-  db.putPermanent(subkey(kLatestAccumulator), value)
-
 proc getContentFromDb(
     n: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
   if n.portalProtocol.inRange(contentId):
@@ -268,20 +261,9 @@ proc getContentFromDb(
   else:
     none(T)
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) {.raises: [Defect], gcsafe.} =
-  let keyOpt = decode(contentKey)
-  if keyOpt.isNone():
-    return (none(ContentId), none(seq[byte]))
-
-  let key = keyOpt.get()
-
-  case key.contentType:
-  of masterAccumulator:
-    (none(ContentId), db.getPermanent(subkey(kLatestAccumulator)))
-  else:
-    let contentId = key.toContentId()
-    (some(contentId), db.get(contentId))
+proc dbGetHandler(db: ContentDB, contentId: ContentId):
+    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
+  db.get(contentId)
 
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
@@ -504,18 +486,7 @@ proc getEpochAccumulator(
 proc getBlock*(
     n: HistoryNetwork, bn: UInt256):
     Future[Result[Option[Block], string]] {.async.} =
-
-  # TODO for now checking accumulator only in db, we could also ask our
-  # peers for it.
-  let accumulatorOpt = n.contentDB.getAccumulator()
-
-  if accumulatorOpt.isNone():
-    return err("Master accumulator not found in database")
-
-  let accumulator = accumulatorOpt.unsafeGet()
-
-  let epochDataRes = accumulator.getBlockEpochDataForBlockNumber(bn)
-
+  let epochDataRes = n.accumulator.getBlockEpochDataForBlockNumber(bn)
   if epochDataRes.isOk():
     let
       epochData = epochDataRes.get()
@@ -535,51 +506,12 @@ proc getBlock*(
   else:
     return err(epochDataRes.error)
 
-proc getInitialMasterAccumulator*(
-    n: HistoryNetwork):
-    Future[bool] {.async.} =
-  let
-    contentKey = ContentKey(
-      contentType: masterAccumulator,
-      masterAccumulatorKey: MasterAccumulatorKey(accumulaterKeyType: latest))
-    keyEncoded = encode(contentKey)
-
-  let nodes = await n.portalProtocol.queryRandom()
-
-  var hashes: CountTable[Accumulator]
-
-  for node in nodes:
-    # TODO: Could make concurrent
-    let foundContentRes = await n.portalProtocol.findContent(node, keyEncoded)
-    if foundContentRes.isOk():
-      let foundContent = foundContentRes.get()
-      if foundContent.kind == Content:
-        let masterAccumulator =
-          try:
-            SSZ.decode(foundContent.content, Accumulator)
-          except SszError:
-            continue
-        hashes.inc(masterAccumulator)
-        let (accumulator, count) = hashes.largest()
-
-        if count > 1: # Should be increased eventually
-          n.contentDB.putAccumulator(foundContent.content)
-          return true
-
-  # Could not find a common accumulator from all the queried nodes
-  return false
-
 proc buildProof*(n: HistoryNetwork, header: BlockHeader):
     Future[Result[seq[Digest], string]] {.async.} =
   # Note: Temporarily needed proc until proofs are send over with headers.
-  let accumulatorOpt = n.contentDB.getAccumulator()
-  if accumulatorOpt.isNone():
-    return err("Master accumulator not found in database")
-
   let
-    accumulator = accumulatorOpt.get()
     epochIndex = getEpochIndex(header)
-    epochHash = Digest(data: accumulator.historicalEpochs[epochIndex])
+    epochHash = Digest(data: n.accumulator.historicalEpochs[epochIndex])
 
     epochAccumulatorOpt = await n.getEpochAccumulator(epochHash)
 
@@ -600,20 +532,13 @@ proc verifyCanonicalChain(
   when not canonicalVerify:
     return ok()
 
-  let accumulatorOpt = n.contentDB.getAccumulator()
-  if accumulatorOpt.isNone():
-    # Should acquire a master accumulator first
-    return err("Cannot accept any data without a master accumulator")
-
-  let accumulator = accumulatorOpt.get()
-
   # Note: It is a bit silly to build a proof, as we still need to request the
   # epoch accumulators for it, and could just verify it with those. But the
   # idea here is that eventually this gets changed so that the proof is send
   # together with the header.
   let proof = await n.buildProof(header)
   if proof.isOk():
-    return verifyHeader(accumulator, header, proof.get())
+    return verifyHeader(n.accumulator, header, proof.get())
   else:
     # Can't verify without master and epoch accumulators
     return err("Cannot build proof: " & proof.error)
@@ -691,15 +616,10 @@ proc validateContent(
       return true
   of epochAccumulator:
     # Check first if epochHash is part of master accumulator
-    let masterAccumulator = n.contentDB.getAccumulator()
-    if masterAccumulator.isNone():
-      error "Cannot accept any data without a master accumulator"
-      return false
-
     let epochHash = key.epochAccumulatorKey.epochHash
-
-    if not masterAccumulator.get().historicalEpochs.contains(epochHash.data):
-      warn "Offered epoch accumulator is not part of master accumulator"
+    if not n.accumulator.historicalEpochs.contains(epochHash.data):
+      warn "Offered epoch accumulator is not part of master accumulator",
+        epochHash
       return false
 
     let epochAccumulator =
@@ -708,6 +628,7 @@ proc validateContent(
       except SszError:
         warn "Failed decoding epoch accumulator"
         return false
+
     # Next check the hash tree root, as this is probably more expensive
     let hash = hash_tree_root(epochAccumulator)
     if hash != epochHash:
@@ -715,32 +636,29 @@ proc validateContent(
       return false
     else:
       return true
-  of masterAccumulator:
-    # Don't allow a master accumulator to be offered, we only request it.
-    warn "Node does not accept master accumulators through offer/accept"
-    return false
 
 proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
+    accumulator: FinishedAccumulator,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+  let
+    contentQueue = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
 
-  let cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    stream = streamManager.registerNewStream(contentQueue)
+    portalProtocol = PortalProtocol.new(
+      baseProtocol, historyProtocolId, contentDB,
+      toContentIdHandler, dbGetHandler, stream, bootstrapRecords,
+      config = portalConfig)
 
-  let s = streamManager.registerNewStream(cq)
-
-  let portalProtocol = PortalProtocol.new(
-    baseProtocol, historyProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler, s, bootstrapRecords,
-    config = portalConfig)
-
-  return HistoryNetwork(
+  HistoryNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
-    contentQueue: cq
+    contentQueue: contentQueue,
+    accumulator: accumulator
   )
 
 proc validateContent(
@@ -794,28 +712,11 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
 
 proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
-    protocolId = n.portalProtocol.protocolId
+    protocolId = n.portalProtocol.protocolId,
+    accumulatorRoot = hash_tree_root(n.accumulator)
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
-
-proc initMasterAccumulator*(
-    n: HistoryNetwork,
-    accumulator: Option[Accumulator]) {.async.} =
-  if accumulator.isSome():
-    n.contentDB.putAccumulator(SSZ.encode(accumulator.get()))
-    info "Successfully retrieved master accumulator from local data"
-  else:
-    while true:
-      if await n.getInitialMasterAccumulator():
-        info "Successfully retrieved master accumulator from the network"
-        return
-      else:
-        warn "Could not retrieve initial master accumulator from the network"
-        when not canonicalVerify:
-          return
-        else:
-          await sleepAsync(2.seconds)
 
 proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()

@@ -29,13 +29,9 @@ type StateNetwork* = ref object
 func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
   toContentId(contentKey)
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentIdOpt = contentKey.toContentId()
-  if contentIdOpt.isSome():
-    (contentIdOpt, db.get(contentIdOpt.get()))
-  else:
-    (contentIdOpt, none(seq[byte]))
+proc dbGetHandler(db: ContentDB, contentId: ContentId):
+    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
+  db.get(contentId)
 
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
