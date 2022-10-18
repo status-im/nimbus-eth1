@@ -23,13 +23,12 @@ type
   ByteArray32* = array[32,byte]
     ## Used for 32 byte database keys
 
-  NodeTag* = ##\
-    ## Trie leaf item, account hash etc.
-    distinct UInt256
-
   NodeKey* = distinct ByteArray32
     ## Hash key without the hash wrapper (as opposed to `NodeTag` which is a
     ## number)
+
+  NodeTag* = distinct UInt256
+    ## Trie leaf item, account hash etc.
 
   NodeTagRange* = Interval[NodeTag,UInt256]
     ## Interval `[minPt,maxPt]` of` NodeTag` elements, can be managed in an
@@ -93,6 +92,10 @@ proc to*(hash: Hash256; T: type NodeKey): T =
   ## Syntactic sugar
   hash.data.NodeKey
 
+proc to*(key: NodeKey; T: type Hash256): T =
+  ## Syntactic sugar
+  T(data: key.ByteArray32)
+
 proc to*(key: NodeKey; T: type Blob): T =
   ## Syntactic sugar
   key.ByteArray32.toSeq
@@ -100,6 +103,15 @@ proc to*(key: NodeKey; T: type Blob): T =
 proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
   ## Syntactic sugar
   n.u256.T
+
+
+proc hash*(a: NodeKey): Hash =
+  ## Table/KeyedQueue mixin
+  a.ByteArray32.hash
+
+proc `==`*(a, b: NodeKey): bool =
+  ## Table/KeyedQueue mixin
+  a.ByteArray32 == b.ByteArray32
 
 # ------------------------------------------------------------------------------
 # Public constructors

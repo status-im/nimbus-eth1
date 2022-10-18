@@ -59,7 +59,10 @@ const
     ## `coveredAccounts` in `CtxData`.)
 
   maxStoragesFetch* = 128
-    ## Maximal number of storage tries to fetch with a signe message.
+    ## Maximal number of storage tries to fetch with a single message.
+
+  maxStoragesHeal* = 32
+    ## Maximal number of storage tries to to heal in a single batch run.
 
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
@@ -84,10 +87,10 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerSeenBlocks = KeyedQueue[ByteArray32,BlockNumber]
+  WorkerSeenBlocks = KeyedQueue[NodeKey,BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  SnapSlotsQueue* = KeyedQueue[ByteArray32,SnapSlotQueueItemRef]
+  SnapSlotsQueue* = KeyedQueue[NodeKey,SnapSlotQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
@@ -100,6 +103,7 @@ type
     ## range + healing support.
     accHash*: Hash256                  ## Owner account, maybe unnecessary
     slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
+    inherit*: bool                     ## mark this trie seen already
 
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
@@ -126,7 +130,6 @@ type
 
     # Accounts download
     fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
-    # vetoSlots*: SnapSlotsSet         ## Do not ask for these slots, again
     accountsDone*: bool                ## All accounts have been processed
 
     # Storage slots download
@@ -188,7 +191,7 @@ proc hash*(a: Hash256): Hash =
 
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
-  let reqKey = fetchReq.storageRoot.data
+  let reqKey = fetchReq.storageRoot.to(NodeKey)
 
   if not q.hasKey(reqKey):
     let reqData = SnapSlotQueueItemRef(accHash: fetchReq.accHash)
@@ -217,30 +220,31 @@ proc merge*(q: var SnapSlotsQueue; reqList: openArray[AccountSlotsHeader]) =
 
 proc pp*(ctx: SnapCtxRef; bh: BlockHash): string =
   ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.to(Hash256).data)
+  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
   if rc.isOk:
     return "#" & $rc.value
   "%" & $bh.to(Hash256).data.toHex
 
 proc pp*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber): string =
   ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.to(Hash256).data)
+  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
   if rc.isOk:
     return "#" & $rc.value
-  "#" & $ctx.data.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
+  "#" & $ctx.data.seenBlock.lruAppend(bh.Hash256.to(NodeKey), bn, seenBlocksMax)
 
 proc pp*(ctx: SnapCtxRef; bhn: HashOrNum): string =
   if not bhn.isHash:
     return "#" & $bhn.number
-  let rc = ctx.data.seenBlock.lruFetch(bhn.hash.data)
+  let rc = ctx.data.seenBlock.lruFetch(bhn.hash.to(NodeKey))
   if rc.isOk:
     return "%" & $rc.value
   return "%" & $bhn.hash.data.toHex
 
 proc seen*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
-  if not ctx.data.seenBlock.lruFetch(bh.to(Hash256).data).isOk:
-    discard ctx.data.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
+  if not ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey)).isOk:
+    discard ctx.data.seenBlock.lruAppend(
+      bh.Hash256.to(NodeKey), bn, seenBlocksMax)
 
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:

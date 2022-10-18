@@ -11,20 +11,33 @@
 ## Fetch accounts stapshot
 ## =======================
 ##
-## Worker items state diagram:
+## Flow chart for storage slots download
+## -------------------------------------
 ## ::
-##   unprocessed slot requests | peer workers + storages database update
-##   ===================================================================
+##   {missing-storage-slots} <-----------------+
+##     |                                       |
+##     v                                       |
+##   <fetch-storage-slots-from-network>        |
+##     |                                       |
+##     v                                       |
+##   {storage-slots}                           |
+##     |                                       |
+##     v                                       |
+##   <merge-to-persistent-database>            |
+##     |              |                        |
+##     v              v                        |
+##   {completed}    {partial}                  |
+##     |              |                        |
+##     |              +------------------------+
+##     v
+##   <done-for-this-account>
 ##
-##        +-----------------------------------------------+
-##        |                                               |
-##        v                                               |
-##   <unprocessed> ------------+-------> <worker-0> ------+
-##                             |                          |
-##                             +-------> <worker-1> ------+
-##                             |                          |
-##                             +-------> <worker-2> ------+
-##                             :                          :
+## Legend:
+## * `<..>`: some action, process, etc.
+## * `{missing-storage-slots}`: list implemented as `env.fetchStorage`
+## * `(storage-slots}`: list is optimised out
+## * `{completed}`: list is optimised out
+## * `{partial}`: list is optimised out
 ##
 
 import
@@ -36,7 +49,7 @@ import
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
-  ./db/[hexary_error, snapdb_storage_slots]
+  ./db/snapdb_storage_slots
 
 {.push raises: [Defect].}
 
@@ -51,43 +64,76 @@ const
 # ------------------------------------------------------------------------------
 
 proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
+  ## Get list of work item from the batch queue.
+  ##
+  ## * If the storage slots requested come with an explicit sub-range of slots
+  ##   (i.e. not an implied complete list), then the result has only on work
+  ##   item. An explicit list of slots is only calculated if there was a queue
+  ##   item with a partially completed slots download.
+  ##
+  ## * Otherwise, a list of at most `maxStoragesFetch` work items is returned.
+  ##   These work items are checked for that there was no trace of a previously
+  ##   installed (probably partial) storage trie on the database (e.g. inherited
+  ##   from an earlier state root pivot.)
+  ##
+  ##   If there is an indication that the storage trie may have some data
+  ##   already it is ignored here and marked `inherit` so that it will be
+  ##   picked up by the healing process.
   let
+    ctx = buddy.ctx
+    peer = buddy.peer
     env = buddy.data.pivotEnv
+
     (reqKey, reqData) = block:
-      let rc = env.fetchStorage.shift
+      let rc = env.fetchStorage.first # peek
       if rc.isErr:
         return
       (rc.value.key, rc.value.data)
 
-  # Assemble first request
-  result.add AccountSlotsHeader(
-    accHash:     reqData.accHash,
-    storageRoot: Hash256(data: reqKey))
-
-  # Check whether it comes with a sub-range
-  if not reqData.slots.isNil:
-    # Extract some interval and return single item request queue
+  # Assemble first request which might come with a sub-range.
+  while not reqData.slots.isNil:
+    # Extract first interval and return single item request queue
     for ivSet in reqData.slots.unprocessed:
       let rc = ivSet.ge()
       if rc.isOk:
 
-        # Extraxt interval => done
-        result[0].subRange = some rc.value
+        # Extraxt this interval from the range set
         discard ivSet.reduce rc.value
 
-        # Puch back on batch queue unless it becomes empty
-        if not reqData.slots.unprocessed.isEmpty:
-          discard env.fetchStorage.unshift(reqKey, reqData)
-        return
+        # Delete from batch queue if the range set becomes empty
+        if reqData.slots.unprocessed.isEmpty:
+          env.fetchStorage.del(reqKey)
 
-  # Append more full requests to returned list
-  while result.len < maxStoragesFetch:
-    let rc = env.fetchStorage.shift
-    if rc.isErr:
-      return
-    result.add AccountSlotsHeader(
-      accHash:     rc.value.data.accHash,
-      storageRoot: Hash256(data: rc.value.key))
+        return @[AccountSlotsHeader(
+          accHash:     reqData.accHash,
+          storageRoot: reqKey.to(Hash256),
+          subRange:    some rc.value)]
+    # Oops, empty range set? Remove range and move item to the right end
+    reqData.slots = nil
+    discard env.fetchStorage.lruFetch(reqKey)
+
+  # So there are no partial ranges (aka `slots`) anymore. Assemble maximal
+  # request queue.
+  for kvp in env.fetchStorage.nextPairs:
+    let it = AccountSlotsHeader(
+      accHash:     kvp.data.accHash,
+      storageRoot: kvp.key.to(Hash256))
+
+    # Verify whether a storage sub-trie exists, already
+    if kvp.data.inherit or
+       ctx.data.snapDb.haveStorageSlotsData(peer, it.accHash, it.storageRoot):
+      kvp.data.inherit = true
+      when extraTraceMessages:
+        trace "Inheriting fetching storage slots", peer,
+          nStorageQueue=env.fetchStorage.len, account=it.accHash.to(NodeTag)
+      continue
+
+    result.add it
+    env.fetchStorage.del(kvp.key) # ok to delete this item from batch queue
+
+    # Maximal number of items to fetch
+    if maxStoragesFetch <= result.len:
+      break
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -110,63 +156,72 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
   if req.len == 0:
      return # currently nothing to do
 
-  when extraTraceMessages:
-    trace "Start fetching storage slots", peer,
-      nSlots=env.fetchStorage.len,
-      nReq=req.len
-
   # Get storages slots data from the network
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req)
     if rc.isErr:
+      env.fetchStorage.merge req
+
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
-        trace "Error fetching storage slots => stop", peer,
-          nSlots=env.fetchStorage.len,
-          nReq=req.len,
-          error
         discard
-      env.fetchStorage.merge req
+        trace "Error fetching storage slots => stop", peer,
+          nReq=req.len, nStorageQueue=env.fetchStorage.len, error
       return
     rc.value
 
   # Reset error counts for detecting repeated timeouts
   buddy.data.errors.nTimeouts = 0
 
-  if 0 < stoRange.data.storages.len:
+  when extraTraceMessages:
+    trace "Fetch storage slots", peer,
+      nReq=req.len, nStorageQueue=env.fetchStorage.len
+
+  var gotStorage = stoRange.data.storages.len
+  if 0 < gotStorage:
+
     # Verify/process storages data and save it to disk
-    let report = ctx.data.snapDb.importStorages(peer, stoRange.data)
+    let report = ctx.data.snapDb.importStorageSlots(peer, stoRange.data)
     if 0 < report.len:
+
+      # Update local statistics counter
+      gotStorage.dec(report.len)
 
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
-        trace "Error writing storage slots to database", peer,
-          nSlots=env.fetchStorage.len,
-          nReq=req.len,
-          error=report[^1].error
         env.fetchStorage.merge req
+
+        gotStorage.inc
+        error "Error writing storage slots to database", peer, gotStorage,
+          nReq=req.len, nStorageQueue=env.fetchStorage.len,
+          error=report[^1].error
         return
 
       # Push back error entries to be processed later
       for w in report:
-        if w.slot.isSome:
-          let n = w.slot.unsafeGet
-          # if w.error in {RootNodeMismatch, RightBoundaryProofFailed}:
-          #   ???
-          trace "Error processing storage slots", peer,
-            nSlots=env.fetchStorage.len,
-            nReq=req.len,
-            nReqInx=n,
-            error=report[n].error
-          # Reset any partial requests to requesting the full interval. So
-          # all the storage slots are re-fetched completely for this account.
-          env.fetchStorage.merge AccountSlotsHeader(
-            accHash:     stoRange.data.storages[n].account.accHash,
-            storageRoot: stoRange.data.storages[n].account.storageRoot)
+        # All except the last item always index to a node argument. The last
+        # item has been checked for, already.
+        let inx = w.slot.get
+
+        # if w.error in {RootNodeMismatch, RightBoundaryProofFailed}:
+        #   ???
+
+        # Reset any partial requests to requesting the full interval. So
+        # all the storage slots are re-fetched completely for this account.
+        env.fetchStorage.merge AccountSlotsHeader(
+          accHash:     stoRange.data.storages[inx].account.accHash,
+          storageRoot: stoRange.data.storages[inx].account.storageRoot)
+
+        trace "Error processing storage slots", peer, gotStorage,
+          nReqInx=inx, nReq=req.len, nStorageQueue=env.fetchStorage.len,
+          error=report[inx].error
+
+    # Update statistics
+    env.nStorage.inc(gotStorage)
 
   when extraTraceMessages:
-    trace "Done fetching storage slots", peer,
-      nSlots=env.fetchStorage.len
+    trace "Done fetching storage slots", peer, gotStorage,
+      nStorageQueue=env.fetchStorage.len
 
 # ------------------------------------------------------------------------------
 # End

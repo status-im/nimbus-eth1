@@ -110,7 +110,7 @@ import
   chronos,
   eth/[common/eth_types, p2p, trie/nibbles, trie/trie_defs, rlp],
   stew/[interval_set, keyed_queue],
-   ../../../utils/prettify,
+  ../../../utils/prettify,
   ../../sync_desc,
   ".."/[range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
@@ -160,7 +160,7 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
     trace "Start accounts healing", peer, ctx=buddy.healingCtx()
 
   for accKey in env.fetchAccounts.missingNodes:
-    let rc = ctx.data.snapDb.getAccountNodeKey(peer, stateRoot, accKey)
+    let rc = ctx.data.snapDb.getAccountsNodeKey(peer, stateRoot, accKey)
     if rc.isOk:
       # Check nodes for dangling links
       env.fetchAccounts.checkNodes.add accKey
@@ -353,7 +353,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
     return
 
   # Store nodes to disk
-  let report = ctx.data.snapDb.importRawAccountNodes(peer, nodesData)
+  let report = ctx.data.snapDb.importRawAccountsNodes(peer, nodesData)
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
     error "Accounts healing, error updating persistent database", peer,

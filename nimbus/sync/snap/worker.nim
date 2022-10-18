@@ -414,16 +414,15 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     await buddy.storeStorages()
     if buddy.ctrl.stopped: return
 
+    # Pivot might have changed, so restart with the latest one
+    if env != ctx.data.pivotTable.lastValue.value: return
+
     # If the current database is not complete yet
     if 0 < env.fetchAccounts.unprocessed[0].chunks or
        0 < env.fetchAccounts.unprocessed[1].chunks:
 
-      # Healing applies to the latest pivot only. The pivot might have changed
-      # in the background (while netwoking) due to a new peer worker that has
-      # negotiated another, newer pivot.
-      if env == ctx.data.pivotTable.lastValue.value:
-        await buddy.healAccountsDb()
-        if buddy.ctrl.stopped: return
+      await buddy.healAccountsDb()
+      if buddy.ctrl.stopped: return
 
       # TODO: use/apply storage healer
 

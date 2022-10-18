@@ -146,9 +146,10 @@ type
     repairKeyGen*: uint64           ## Unique tmp key generator
     keyPp*: HexaryPpFn              ## For debugging, might go away
 
-  HexaryGetFn* = proc(key: Blob): Blob {.gcsafe.}
-    ## Persistent database get() function. For read-only cacses, this function
-    ## can be seen as the persistent alternative to `HexaryTreeDbRef`.
+  HexaryGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
+    ## Persistent database `get()` function. For read-only cases, this function
+    ## can be seen as the persistent alternative to ``tab[]` on a
+    ## `HexaryTreeDbRef` descriptor.
 
   HexaryNodeReport* = object
     ## Return code for single node operations
@@ -357,17 +358,9 @@ proc newRepairKey*(db: HexaryTreeDbRef): RepairKey =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hash*(a: NodeKey): Hash =
-  ## Tables mixin
-  a.ByteArray32.hash
-
 proc hash*(a: RepairKey): Hash =
   ## Tables mixin
   a.ByteArray33.hash
-
-proc `==`*(a, b: NodeKey): bool =
-  ## Tables mixin
-  a.ByteArray32 == b.ByteArray32
 
 proc `==`*(a, b: RepairKey): bool =
   ## Tables mixin
