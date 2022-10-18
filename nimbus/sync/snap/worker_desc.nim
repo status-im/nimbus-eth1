@@ -198,27 +198,59 @@ proc hash*(a: Hash256): Hash =
 
 proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
   ## Append/prepend a queue item record into the batch queue.
-  if not q.hasKey(kvp.key):
+  let
+    reqKey = kvp.key
+    rc = q.eq(reqKey)
+  if rc.isOk:
+    # Entry exists already
+    let qData = rc.value
+    if not qData.slots.isNil:
+      # So this entry is not maximal and can be extended
+      if kvp.data.slots.isNil:
+        # Remove restriction for this entry and move it to the right end
+        qData.slots = nil
+        discard q.lruFetch(reqKey)
+      else:
+        # Merge argument intervals into target set
+        for ivSet in kvp.data.slots.unprocessed:
+          for iv in ivSet.increasing:
+            discard qData.slots.unprocessed[0].reduce(iv)
+            discard qData.slots.unprocessed[1].merge(iv)
+  else:
     # Only add non-existing entries
     if kvp.data.slots.isNil:
       # Append full range to the right of the list
-      discard q.append(kvp.key, kvp.data)
+      discard q.append(reqKey, kvp.data)
     else:
       # Partial range, add healing support and interval
-      discard q.unshift(kvp.key, kvp.data)
+      discard q.unshift(reqKey, kvp.data)
 
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
-  let reqKey = fetchReq.storageRoot.to(NodeKey)
-
-  if not q.hasKey(reqKey):
+  let
+    reqKey = fetchReq.storageRoot.to(NodeKey)
+    rc = q.eq(reqKey)
+  if rc.isOk:
+    # Entry exists already
+    let qData = rc.value
+    if not qData.slots.isNil:
+      # So this entry is not maximal and can be extended
+      if fetchReq.subRange.isNone:
+        # Remove restriction for this entry and move it to the right end
+        qData.slots = nil
+        discard q.lruFetch(reqKey)
+      else:
+        # Merge argument interval into target set
+        let iv = fetchReq.subRange.unsafeGet
+        discard qData.slots.unprocessed[0].reduce(iv)
+        discard qData.slots.unprocessed[1].merge(iv)
+  else:
     let reqData = SnapSlotQueueItemRef(accHash: fetchReq.accHash)
 
     # Only add non-existing entries
     if fetchReq.subRange.isNone:
       # Append full range to the right of the list
       discard q.append(reqKey, reqData)
-
     else:
       # Partial range, add healing support and interval
       reqData.slots = SnapTrieRangeBatchRef()
