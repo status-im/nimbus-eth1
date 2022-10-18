@@ -206,14 +206,8 @@ proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
     err("Failed decoding accumulator: " & e.msg)
 
 
-proc readEpochAccumulator*(dataFile: string): Result[EpochAccumulator, string] =
-  let res = ? readJsonType(dataFile, EpochAccumulatorObject)
-
-  let encodedAccumulator =
-    try:
-      res.epochAccumulator.hexToSeqByte()
-    except ValueError as e:
-      return err("Invalid hex data for accumulator: " & e.msg)
+proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulator))

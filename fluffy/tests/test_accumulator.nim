@@ -13,15 +13,15 @@ import
   unittest2, stint,
   eth/common/eth_types_rlp,
   ../data/history_data_parser,
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, accumulator],
+  ./test_helpers
 
 func buildProof(
-    epochAccumulators: seq[(ContentKey, EpochAccumulator)],
-    header: BlockHeader):
+    epochAccumulators: seq[EpochAccumulator], header: BlockHeader):
     Result[seq[Digest], string] =
   let
     epochIndex = getEpochIndex(header)
-    epochAccumulator = epochAccumulators[epochIndex][1]
+    epochAccumulator = epochAccumulators[epochIndex]
 
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
     gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
@@ -54,13 +54,9 @@ suite "Header Accumulator":
       headers.add(BlockHeader(
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
-    let
-      accumulatorRes = buildAccumulator(headers)
-      epochAccumulators = buildAccumulatorData(headers)
-
+    let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
-
-    let accumulator = accumulatorRes.get()
+    let (accumulator, epochAccumulators) = accumulatorRes.get()
 
     block: # Test valid headers
       for i in headersToTest:

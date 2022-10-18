@@ -8,7 +8,8 @@
 import
   std/os,
   testutils/unittests, chronos,
-  eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
   eth/rlp,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -89,10 +90,12 @@ procSuite "History Content Network":
         epochSize*3 + 1,
         int(lastBlockNumber)]
 
+    let headers = createEmptyHeaders(0, int(lastBlockNumber))
+    let accumulatorRes = buildAccumulatorData(headers)
+    check accumulatorRes.isOk()
+
     let
-      headers = createEmptyHeaders(0, int(lastBlockNumber))
-      masterAccumulator = buildAccumulator(headers).get()
-      epochAccumulators = buildAccumulatorData(headers)
+      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -107,8 +110,15 @@ procSuite "History Content Network":
         headerEncoded = rlp.encode(h)
       historyNode2.portalProtocol().storeContent(contentId, headerEncoded)
 
-    for (contentKey, epochAccumulator) in epochAccumulators:
-      let contentId = toContentId(contentKey)
+    # Need to store the epoch accumulators to be able to do the block to hash
+    # mapping
+    for epochAccumulator in epochAccumulators:
+      let
+        rootHash = epochAccumulator.hash_tree_root()
+        contentKey = ContentKey(
+          contentType: ContentType.epochAccumulator,
+          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash))
+        contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
         contentId, SSZ.encode(epochAccumulator))
 
@@ -139,11 +149,12 @@ procSuite "History Content Network":
     # Need to provide enough headers to have the accumulator "finished".
     const lastBlockNumber = int(mergeBlockNumber - 1)
 
-    let
-      headers = createEmptyHeaders(0, lastBlockNumber)
-      masterAccumulator = buildAccumulator(headers).get()
-      epochAccumulators = buildAccumulatorData(headers)
+    let headers = createEmptyHeaders(0, lastBlockNumber)
+    let accumulatorRes = buildAccumulatorData(headers)
+    check accumulatorRes.isOk()
 
+    let
+      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -163,8 +174,13 @@ procSuite "History Content Network":
 
     # One of the nodes needs to have the epochAccumulator to build proofs from
     # for the offered headers.
-    for (contentKey, epochAccumulator) in epochAccumulators:
-      let contentId = toContentId(contentKey)
+    for epochAccumulator in epochAccumulators:
+      let
+        rootHash = epochAccumulator.hash_tree_root()
+        contentKey = ContentKey(
+          contentType: ContentType.epochAccumulator,
+          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash))
+        contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
         contentId, SSZ.encode(epochAccumulator))
 
@@ -222,11 +238,12 @@ procSuite "History Content Network":
         lastBlockNumber - 1,
         lastBlockNumber]
 
-    let
-      headers = createEmptyHeaders(0, lastBlockNumber)
-      masterAccumulator = buildAccumulator(headers).get()
-      epochAccumulators = buildAccumulatorData(headers)
+    let headers = createEmptyHeaders(0, lastBlockNumber)
+    let accumulatorRes = buildAccumulatorData(headers)
+    check accumulatorRes.isOk()
 
+    let
+      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -239,8 +256,13 @@ procSuite "History Content Network":
 
     # Need to store the epochAccumulators, because else the headers can't be
     # verified if being part of the canonical chain currently
-    for (contentKey, epochAccumulator) in epochAccumulators:
-      let contentId = toContentId(contentKey)
+    for epochAccumulator in epochAccumulators:
+      let
+        rootHash = epochAccumulator.hash_tree_root()
+        contentKey = ContentKey(
+          contentType: ContentType.epochAccumulator,
+          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash))
+        contentId = toContentId(contentKey)
       historyNode1.portalProtocol.storeContent(
         contentId, SSZ.encode(epochAccumulator))
 

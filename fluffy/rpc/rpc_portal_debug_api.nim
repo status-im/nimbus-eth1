@@ -64,21 +64,20 @@ proc installPortalDebugApiHandlers*(
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateAccumulatorData") do(
-      dataFile: string) -> bool:
-    let res = await p.propagateAccumulatorData(dataFile)
-    if res.isOk():
-      return true
-    else:
-      raise newException(ValueError, $res.error)
-
   rpcServer.rpc("portal_" & network & "_propagateEpochAccumulator") do(
       dataFile: string) -> bool:
     let res = await p.propagateEpochAccumulator(dataFile)
     if res.isOk():
       return true
     else:
-      echo $res.error
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulators") do(
+      path: string) -> bool:
+    let res = await p.propagateEpochAccumulators(path)
+    if res.isOk():
+      return true
+    else:
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_storeContentInNodeRange") do(

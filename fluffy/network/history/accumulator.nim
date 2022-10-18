@@ -102,51 +102,6 @@ func finishAccumulator*(a: var Accumulator): FinishedAccumulator =
 
   FinishedAccumulator(historicalEpochs: a.historicalEpochs)
 
-func buildAccumulator*(
-    headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
-  var accumulator: Accumulator
-  for header in headers:
-    updateAccumulator(accumulator, header)
-
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
-      return ok(finishAccumulator(accumulator))
-
-  err("Not enough headers provided to finish the accumulator")
-
-func buildAccumulatorData*(headers: seq[BlockHeader]):
-    seq[(ContentKey, EpochAccumulator)] =
-  var accumulator: Accumulator
-  var epochAccumulators: seq[(ContentKey, EpochAccumulator)]
-  for header in headers:
-    updateAccumulator(accumulator, header)
-
-    # TODO: By allowing updateAccumulator and finishAccumulator to return
-    # optionally the finished epoch accumulators we would avoid double
-    # hash_tree_root computations.
-    if accumulator.currentEpoch.len() == epochSize:
-      let
-        rootHash = accumulator.currentEpoch.hash_tree_root()
-        key = ContentKey(
-          contentType: epochAccumulator,
-          epochAccumulatorKey: EpochAccumulatorKey(
-            epochHash: rootHash))
-
-      epochAccumulators.add((key, accumulator.currentEpoch))
-
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
-      let
-        rootHash = accumulator.currentEpoch.hash_tree_root()
-        key = ContentKey(
-          contentType: epochAccumulator,
-          epochAccumulatorKey: EpochAccumulatorKey(
-            epochHash: rootHash))
-
-      epochAccumulators.add((key, accumulator.currentEpoch))
-
-      discard finishAccumulator(accumulator)
-
-  epochAccumulators
-
 ## Calls and helper calls for building header proofs and verifying headers
 ## against the Accumulator and the header proofs.
 

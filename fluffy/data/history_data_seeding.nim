@@ -8,6 +8,7 @@
 {.push raises: [Defect].}
 
 import
+  std/[strformat, os],
   stew/results, chronos, chronicles,
   eth/common/eth_types,
   ../network/wire/portal_protocol,
@@ -17,38 +18,6 @@ import
 export results
 
 ### Helper calls to seed the local database and/or the network
-
-proc buildAccumulator*(dataFile: string): Result[FinishedAccumulator, string] =
-  let blockData = ? readJsonType(dataFile, BlockDataTable)
-
-  var headers: seq[BlockHeader]
-  # Len of headers from blockdata + genesis header
-  headers.setLen(blockData.len() + 1)
-
-  headers[0] = getGenesisHeader()
-
-  for k, v in blockData.pairs:
-    let header = ? v.readBlockHeader()
-    headers[header.blockNumber.truncate(int)] = header
-
-  buildAccumulator(headers)
-
-proc buildAccumulatorData*(
-    dataFile: string):
-    Result[seq[(ContentKey, EpochAccumulator)], string] =
-  let blockData = ? readJsonType(dataFile, BlockDataTable)
-
-  var headers: seq[BlockHeader]
-  # Len of headers from blockdata + genesis header
-  headers.setLen(blockData.len() + 1)
-
-  headers[0] = getGenesisHeader()
-
-  for k, v in blockData.pairs:
-    let header = ? v.readBlockHeader()
-    headers[header.blockNumber.truncate(int)] = header
-
-  ok(buildAccumulatorData(headers))
 
 proc historyStore*(
     p: PortalProtocol, dataFile: string, verify = false):
@@ -62,32 +31,12 @@ proc historyStore*(
 
   ok()
 
-proc propagateAccumulatorData*(
-    p: PortalProtocol, dataFile: string):
-    Future[Result[void, string]] {.async.} =
-  ## Propagate all epoch accumulators created when building the accumulator
-  ## from the block headers.
-  ## dataFile holds block data
-  let epochAccumulators = buildAccumulatorData(dataFile)
-  if epochAccumulators.isErr():
-    return err(epochAccumulators.error)
-  else:
-    for (key, epochAccumulator) in epochAccumulators.get():
-      let content = SSZ.encode(epochAccumulator)
-
-      p.storeContent(
-        history_content.toContentId(key), content)
-      discard await p.neighborhoodGossip(
-        ContentKeysList(@[encode(key)]), @[content])
-
-    return ok()
-
 proc propagateEpochAccumulator*(
-    p: PortalProtocol, dataFile: string):
+    p: PortalProtocol, file: string):
     Future[Result[void, string]] {.async.} =
   ## Propagate a specific epoch accumulator into the network.
-  ## dataFile holds the SSZ serialized epoch accumulator
-  let epochAccumulatorRes = readEpochAccumulator(dataFile)
+  ## file holds the SSZ serialized epoch accumulator.
+  let epochAccumulatorRes = readEpochAccumulator(file)
   if epochAccumulatorRes.isErr():
     return err(epochAccumulatorRes.error)
   else:
@@ -99,12 +48,34 @@ proc propagateEpochAccumulator*(
         epochAccumulatorKey: EpochAccumulatorKey(
           epochHash: rootHash))
 
+      # Note: The file actually holds the SSZ encoded accumulator, but we need
+      # to decode as we need the root for the content key.
+      encodedAccumulator = SSZ.encode(accumulator)
+    info "Gossiping epoch accumulator", rootHash
+
     p.storeContent(
-      history_content.toContentId(key), SSZ.encode(accumulator))
+      history_content.toContentId(key), encodedAccumulator)
     discard await p.neighborhoodGossip(
-      ContentKeysList(@[encode(key)]), @[SSZ.encode(accumulator)])
+      ContentKeysList(@[encode(key)]), @[encodedAccumulator])
 
     return ok()
+
+proc propagateEpochAccumulators*(
+    p: PortalProtocol, path: string):
+    Future[Result[void, string]] {.async.} =
+  ## Propagate all epoch accumulators created when building the accumulator
+  ## from the block headers.
+  ## path is a directory that holds all SSZ encoded epoch accumulator files.
+  for i in 0..<preMergeEpochs:
+    let file =
+      try: path / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+      except ValueError as e: raiseAssert e.msg
+
+    let res = await p.propagateEpochAccumulator(file)
+    if res.isErr():
+      return err(res.error)
+
+  return ok()
 
 proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false):
