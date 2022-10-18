@@ -17,7 +17,6 @@ import
   ../constants,
   ../utils,
   ../db/accounts_cache,
-  ./async_operations,
   ./code_stream,
   ./computation,
   ./interpreter/[op_dispatcher, gas_costs],
@@ -231,7 +230,12 @@ when vm_use_recursion:
       if not c.pendingAsyncOperation.isNil:
         let p = c.pendingAsyncOperation
         c.pendingAsyncOperation = nil
-        waitFor(c.runAsyncOperation(p))
+        # This should never actually be called, because in synchronous
+        # mode every async operation should be an already-resolved
+        # Future. But we can check, just in case. (Or should we just
+        # make this an assertion?)
+        if not p.finished():
+          waitFor(p)
         c.executeOpcodes(false)
       else:
         when evmc_enabled:
@@ -264,20 +268,9 @@ else:
           shouldPrepareTracer = false
           let p = c.pendingAsyncOperation
           c.pendingAsyncOperation = nil
-          # FIXME-areAsyncOperationsNecessaryDuringSynchronousExecution
-          # Are all the async operations going to be safe to ignore
-          # during synchronous execution? (e.g. Maybe we're doing
-          # on-demand data fetching during asynchronous execution,
-          # but when running synchronously maybe we're happy to just
-          # ignore that and assume that all the data has already been
-          # downloaded.) For now, I expect that during synchronous
-          # operation we'll set the lazyDataSource to NoLazyDataSource,
-          # and so the various pendingAsyncOperation values will all be
-          # simple no-ops. Which means that this waitFor here could
-          # be deleted. But I feel like I don't really properly
-          # understand yet what kinds of async operations we might
-          # have. --Adam
-          waitFor(c.runAsyncOperation(p))
+          # See the comment above, in the recursive execCallOrCreate.
+          if not p.finished():
+            waitFor(p)
         else:
           (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
@@ -309,7 +302,7 @@ proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
     if not c.pendingAsyncOperation.isNil:
       let p = c.pendingAsyncOperation
       c.pendingAsyncOperation = nil
-      await c.runAsyncOperation(p)
+      await p
       c.executeOpcodes(false)
     else:
       when evmc_enabled:

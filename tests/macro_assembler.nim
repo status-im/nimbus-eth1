@@ -6,7 +6,7 @@ import
 import
   options, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/vm_async,
+  ../nimbus/vm2/[async_operations, types],
   ../nimbus/vm_internals, ../nimbus/forks,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[transaction, chain_config, genesis, vm_types, vm_state],
@@ -268,10 +268,10 @@ proc generateVMProxy(boa: Assembler, shouldBeAsync: bool): VMProxy =
         let asyncFactory =
           AsyncOperationFactory(
             lazyDataSource:
-            if len(boa.initialStorage) == 0:
-              NoLazyDataSource()
-            else:
-              FakeLazyDataSource(fakePairs: boa.initialStorage))
+              if len(boa.initialStorage) == 0:
+                noLazyDataSource()
+              else:
+                fakeLazyDataSource(boa.initialStorage))
         `runVMProcName`(`vmState`, `chainDB`, boa, asyncFactory)
   (vmProxySym, vmProxyProc)
 

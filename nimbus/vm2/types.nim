@@ -11,12 +11,12 @@
 import
   tables, eth/common,
   options, json, sets,
-  chronos,
+  chronos, stint,
+  json_rpc/rpcclient,
   ./stack,  ./memory, ./code_stream, ../forks,
   ./interpreter/[gas_costs, op_codes],
   # TODO - will be hidden at a lower layer
-  ../db/[db_chain, accounts_cache],
-  ../vm_async
+  ../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
   import
@@ -98,7 +98,7 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
-    pendingAsyncOperation*: Vm2AsyncOperation
+    pendingAsyncOperation*: Future[void]
     continuation*:          proc() {.gcsafe.}
 
   Error* = ref object
@@ -130,3 +130,9 @@ type
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
+
+  LazyDataSource* = ref object of RootObj
+    ifNecessaryGetStorage*: proc(c: Computation, slot: UInt256): Future[void] {.gcsafe.}
+  
+  AsyncOperationFactory* = ref object of RootObj
+    lazyDataSource*: LazyDataSource
