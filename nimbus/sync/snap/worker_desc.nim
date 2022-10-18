@@ -141,7 +141,6 @@ type
 
     # Storage slots download
     fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
-    # vetoSlots*: SnapSlotsSet         ## Do not ask for these slots, again
     serialSync*: bool                  ## Done with storage, block sync next
 
     # Info

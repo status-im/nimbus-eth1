@@ -168,14 +168,6 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     # Append per-state root environment to LRU queue
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
-    # Debugging, will go away
-    block:
-      let ivSet = env.fetchAccounts.unprocessed[0].clone
-      for iv in env.fetchAccounts.unprocessed[1].increasing:
-        doAssert ivSet.merge(iv) == iv.len
-      doAssert ivSet.chunks == 1
-      doAssert ivSet.total == 0
-
 
 proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Helper, negotiate pivot unless present
@@ -234,7 +226,7 @@ else:
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, wSum, wSqSum: float
       count = 0
     for kvp in ctx.data.pivotTable.nextPairs:
 
@@ -254,6 +246,18 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSum += sLen
         sSqSum += sLen * sLen
 
+        # Storage mean filling for that account
+        if 0 < kvp.data.fetchStorage.len:
+          var stoAve: float
+          for stoKvp in kvp.data.fetchStorage.nextPairs:
+            if stoKvp.data.slots.isNil:
+              stoAve += 1.0
+            else:
+              stoAve += stoKvp.data.slots.unprocessed.fullFactor
+          stoAve /= kvp.data.fetchStorage.len.float
+          wSum += stoAve
+          wSqSum += stoAve * stoAve
+
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
       pivotBlock = if env.isNil: none(BlockNumber)
@@ -266,7 +270,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       nQueues:       ctx.data.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nStorage:      meanStdDev(sSum, sSqSum, count),
-      accountsFill:  (accFill[0], accFill[1], accCoverage))
+      accountsFill:  (accFill[0], accFill[1], accCoverage),
+      storageQueue:  meanStdDev(wSum, wSqSum, count))
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
