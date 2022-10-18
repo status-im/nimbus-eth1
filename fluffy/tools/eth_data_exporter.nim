@@ -358,14 +358,11 @@ const
   # Using the e2s format to store data, but without the specific structure
   # like in an era file, as we currently don't really need that.
   # See: https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
-  # Added two types for now, with numbers not formally specified.
-  # Might remove the `MasterAccumulatorRecord` as it is a bit silly for just one
-  # record and could just be stored directly as *.ssz.
+  # Added one type for now, with numbers not formally specified.
   # Note:
   # Snappy compression for `ExecutionBlockHeaderRecord` only helps for the
   # first ~1M (?) block headers, after that there is no gain so we don't do it.
   ExecutionBlockHeaderRecord = [byte 0xFF, 0x00]
-  MasterAccumulatorRecord = [byte 0xFE, 0x00]
 
 when isMainModule:
   {.pop.}
@@ -411,9 +408,9 @@ when isMainModule:
       # Downloading headers from JSON RPC endpoint
       info "Requesting epoch headers", epoch
       var headers: seq[BlockHeader]
-      for j in 0..<8192'u64:
+      for j in 0..<epochSize.uint64:
         debug "Requesting block", number = j
-        let header = client.downloadHeader(epoch*8192 + j)
+        let header = client.downloadHeader(epoch*epochSize + j)
         headers.add(header)
 
       let fh = ? openFile(file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
@@ -421,12 +418,11 @@ when isMainModule:
 
       info "Writing headers to file", file
       for header in headers:
-
         discard ? fh.appendRecord(ExecutionBlockHeaderRecord, rlp.encode(header))
 
       ok()
 
-    # TODO: Could make the requests concurrent per epoch.
+    # TODO: Could make the JSON-RPC requests concurrent per epoch.
     # Batching would also be nice but our json-rpc does not support that:
     # https://geth.ethereum.org/docs/rpc/batch
     for i in config.startEpoch..config.endEpoch:
@@ -535,8 +531,6 @@ when isMainModule:
 
             if blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
               let finishedAccumulator = finishAccumulator(accumulator)
-              # TODO: Should get in the finishAccumulator but can't right now.
-              # accumulator.currentEpoch = EpochAccumulator.init(@[])
               info "Updated last epoch, finished building master accumulator",
                 epoch = i
               return ok(finishedAccumulator)
