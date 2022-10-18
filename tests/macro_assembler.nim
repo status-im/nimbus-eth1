@@ -444,20 +444,22 @@ proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
   signTransaction(unsignedTx, privateKey, chainId, false)
 
 proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): bool =
+  vmState.asyncFactory = asyncFactory
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, chainDB.config.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork, asyncFactory)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
   verifyAsmResult(vmState, chainDB, boa, asmResult)
 
 # FIXME-duplicatedForAsync
 proc asyncRunVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): Future[bool] {.async.} =
+  vmState.asyncFactory = asyncFactory
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, chainDB.config.chainId)
-  let asmResult = await asyncTestCallEvm(tx, tx.getSender, vmState, boa.fork, asyncFactory)
+  let asmResult = await asyncTestCallEvm(tx, tx.getSender, vmState, boa.fork)
   return verifyAsmResult(vmState, chainDB, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =

@@ -11,7 +11,7 @@ import
   chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/accounts_cache, forks, vm_async],
+  ".."/[db/accounts_cache, forks],
   ./host_types
 
 when defined(evmc_enabled):
@@ -36,11 +36,6 @@ type
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
-    # FIXME-whereDoesTheFactoryObjectBelong
-    # I don't really have a good understanding of what this CallParams object
-    # is. Is it reasonable for callers to specify the asyncFactory that
-    # they want here (so that it can be passed down to the Computation)?
-    asyncFactory*: AsyncOperationFactory # Used for lazy loading.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -167,8 +162,6 @@ proc setupHost(call: CallParams): TransactionHost =
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, cMsg, code)
 
-    host.computation.asyncFactory = call.asyncFactory # FIXME-whereDoesTheFactoryObjectBelong
-
     shallowCopy(host.code, code)
 
   else:
@@ -181,7 +174,6 @@ proc setupHost(call: CallParams): TransactionHost =
 
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, cMsg)
-    host.computation.asyncFactory = call.asyncFactory # FIXME-whereDoesTheFactoryObjectBelong
 
   return host
 

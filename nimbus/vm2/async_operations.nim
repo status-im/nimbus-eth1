@@ -74,15 +74,15 @@ method ifNecessaryFetchStorageSlot*(f: NoLazyDataSource, c: Computation, slot: U
 
 # Gotta find the place where we're creating a Computation without setting
 # its asyncFactory in the first place, but this is fine for now.
-proc asyncFactoryForComputation*(c: Computation): AsyncOperationFactory =
+proc asyncFactory*(c: Computation): AsyncOperationFactory =
   # Does Nim have an "ifNil" macro/template?
-  if isNil(c.asyncFactory):
+  if isNil(c.vmState.asyncFactory):
     AsyncOperationFactory(lazyDataSource: NoLazyDataSource())
   else:
-    c.asyncFactory
+    c.vmState.asyncFactory
 
 proc runAsyncOperation*(c: Computation, o: Vm2AsyncOperation): Future[void] =
-  let lds = asyncFactoryForComputation(c).lazyDataSource
+  let lds = asyncFactory(c).lazyDataSource
   case o.kind:
   of aokGetStorage:
     return ifNecessaryFetchStorageSlot(lds, c, o.slot)

@@ -57,6 +57,7 @@ type
     gasCosts*      : GasCosts
     fork*          : Fork
     minerAddress*  : EthAddress
+    asyncFactory*  : AsyncOperationFactory
 
   TracerFlags* {.pure.} = enum
     EnableTracing
@@ -99,8 +100,6 @@ type
       parent*, child*:      Computation
     pendingAsyncOperation*: Vm2AsyncOperation
     continuation*:          proc() {.gcsafe.}
-    # FIXME-whereDoesTheFactoryObjectBelong: is this the right object to put this on?
-    asyncFactory*:          AsyncOperationFactory
 
   Error* = ref object
     info*:                  string

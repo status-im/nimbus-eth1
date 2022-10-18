@@ -13,7 +13,7 @@ import
   eth/[common/eth_types_rlp, trie/db],
   stint,
   ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
-  ".."/[db/db_chain, db/accounts_cache, chain_config, vm_async],
+  ".."/[db/db_chain, db/accounts_cache, chain_config],
   ./call_common
 
 type
@@ -195,8 +195,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
-                       fork: Fork, asyncFactory: AsyncOperationFactory): CallParams =
+proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallParams =
   result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
@@ -210,8 +209,6 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
 
     noIntrinsic:  true, # Don't charge intrinsic gas.
     noRefund:     true, # Don't apply gas refund/burn rule.
-
-    asyncFactory: asyncFactory,
   )
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
@@ -220,13 +217,11 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   let call = callParamsForTx(tx, sender, vmState, fork)
   return runComputation(call).gasUsed
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
-                  fork: Fork, asyncFactory: AsyncOperationFactory): CallResult =
-  let call = callParamsForTest(tx, sender, vmState, fork, asyncFactory)
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
+  let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)
 
 # FIXME-duplicatedForAsync
-proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
-                       fork: Fork, asyncFactory: AsyncOperationFactory): Future[CallResult] {.async.} =
-  let call = callParamsForTest(tx, sender, vmState, fork, asyncFactory)
+proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Future[CallResult] {.async.} =
+  let call = callParamsForTest(tx, sender, vmState, fork)
   return await asyncRunComputation(call)
