@@ -9,7 +9,8 @@ import
   stew/shims/net,
   eth/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
-  eth/p2p/discoveryv5/protocol as discv5_protocol
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  ../network/history/accumulator
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
@@ -43,3 +44,31 @@ proc genByteSeq*(length: int): seq[byte] =
     resultSeq[i] = byte(i)
     inc i
   return resultSeq
+
+func buildAccumulator*(
+    headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
+  var accumulator: Accumulator
+  for header in headers:
+    updateAccumulator(accumulator, header)
+
+    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+      return ok(finishAccumulator(accumulator))
+
+  err("Not enough headers provided to finish the accumulator")
+
+func buildAccumulatorData*(headers: seq[BlockHeader]):
+    Result[(FinishedAccumulator, seq[EpochAccumulator]), string] =
+  var accumulator: Accumulator
+  var epochAccumulators: seq[EpochAccumulator]
+  for header in headers:
+    updateAccumulator(accumulator, header)
+
+    if accumulator.currentEpoch.len() == epochSize:
+      epochAccumulators.add(accumulator.currentEpoch)
+
+    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+      epochAccumulators.add(accumulator.currentEpoch)
+
+      return ok((finishAccumulator(accumulator), epochAccumulators))
+
+  err("Not enough headers provided to finish the accumulator")

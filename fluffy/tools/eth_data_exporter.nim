@@ -162,6 +162,10 @@ type
         defaultValue: defaultAccumulatorFileName
         defaultValueDesc: $defaultAccumulatorFileName
         name: "accumulator-file-name" .}: string
+      writeEpochAccumulators* {.
+        desc: "Write also the SSZ encoded epoch accumulators to specific files"
+        defaultValue: false
+        name: "write-epoch-accumulators" .}: bool
     of printAccumulatorData:
       accumulatorFileNamePrint* {.
         desc: "File from which the serialized accumulator is read"
@@ -492,7 +496,7 @@ when isMainModule:
         fatal "Required epoch headers file does not exist", file
         quit 1
 
-    proc buildAccumulator(dataDir: string):
+    proc buildAccumulator(dataDir: string, writeEpochAccumulators = false):
         Result[FinishedAccumulator, string] =
       var accumulator: Accumulator
       for i in 0..<preMergeEpochs:
@@ -525,6 +529,22 @@ when isMainModule:
 
             updateAccumulator(accumulator, blockHeader)
 
+            # Note: writing away of epoch accumulators occurs 1 iteration before
+            # updating the epoch accumulator, as the latter happens when passed
+            # a header for the next epoch (or on finishing the epoch).
+            if writeEpochAccumulators:
+              if accumulator.currentEpoch.len() == epochSize or
+                blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+                  let file =
+                    try: dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+                    except ValueError as e: raiseAssert e.msg
+                  let res = io2.writeFile(file, SSZ.encode(accumulator.currentEpoch))
+                  if res.isErr():
+                    error "Failed writing epoch accumulator to file",
+                      file, error = res.error
+                  else:
+                    notice "Succesfully wrote epoch accumulator to file", file
+
             if count == epochSize - 1:
               info "Updated an epoch", epoch = i
             count.inc()
@@ -539,7 +559,7 @@ when isMainModule:
 
       err("Not enough headers provided to finish the accumulator")
 
-    let accumulatorRes = buildAccumulator(dataDir)
+    let accumulatorRes = buildAccumulator(dataDir, config.writeEpochAccumulators)
     if accumulatorRes.isErr():
       fatal "Could not build accumulator", error = accumulatorRes.error
       quit 1
