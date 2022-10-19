@@ -15,29 +15,12 @@ import
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ".."/[handlers, protocol, sync_desc],
+  ".."/[handlers, misc/best_pivot, protocol, sync_desc],
   ./worker/[heal_accounts, heal_storages, store_accounts, store_storages,
             ticker],
   ./worker/com/[com_error, get_block_header],
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
-
-const
-  usePivot2ok = false or true
-
-when usePivot2ok:
-  import
-    ../misc/best_pivot
-  type
-    PivotCtxRef = BestPivotCtxRef
-    PivotWorkerRef = BestPivotWorkerRef
-else:
-  import
-    ../../p2p/chain/chain_desc,
-    ../misc/snap_pivot
-  type
-    PivotCtxRef = SnapPivotCtxRef
-    PivotWorkerRef = SnapPivotWorkerRef
 
 {.push raises: [Defect].}
 
@@ -71,38 +54,21 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # Private helpers: integration of pivot finder
 # ------------------------------------------------------------------------------
 
-proc pivot(ctx: SnapCtxRef): PivotCtxRef =
+proc pivot(ctx: SnapCtxRef): BestPivotCtxRef =
   # Getter
-  ctx.data.pivotFinderCtx.PivotCtxRef
+  ctx.data.pivotFinderCtx.BestPivotCtxRef
 
-proc `pivot=`(ctx: SnapCtxRef; val: PivotCtxRef) =
+proc `pivot=`(ctx: SnapCtxRef; val: BestPivotCtxRef) =
   # Setter
   ctx.data.pivotFinderCtx = val
 
-proc pivot(buddy: SnapBuddyRef): PivotWorkerRef =
+proc pivot(buddy: SnapBuddyRef): BestPivotWorkerRef =
   # Getter
-  buddy.data.pivotFinder.PivotWorkerRef
+  buddy.data.pivotFinder.BestPivotWorkerRef
 
-proc `pivot=`(buddy: SnapBuddyRef; val: PivotWorkerRef) =
+proc `pivot=`(buddy: SnapBuddyRef; val: BestPivotWorkerRef) =
   # Setter
   buddy.data.pivotFinder = val
-
-# --------------------
-
-proc pivotSetup(ctx: SnapCtxRef) =
-  when usePivot2ok:
-    ctx.pivot = PivotCtxRef.init(ctx.data.rng)
-  else:
-    ctx.pivot = PivotCtxRef.init(ctx, ctx.chain.Chain)
-
-proc pivotRelease(ctx: SnapCtxRef) =
-  ctx.pivot = nil
-
-proc pivotStart(buddy: SnapBuddyRef) =
-  buddy.pivot = PivotWorkerRef.init(buddy.ctx.pivot, buddy.ctrl, buddy.peer)
-
-proc pivotStop(buddy: SnapBuddyRef) =
-  buddy.pivot.clear()
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -169,7 +135,7 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
 
-proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
+proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Helper, negotiate pivot unless present
   if buddy.pivot.pivotHeader.isOk:
     return true
@@ -213,14 +179,6 @@ proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
     return true
-
-# Syntactic sugar
-when usePivot2ok:
-  template updateSinglePivot(buddy: SnapBuddyRef): auto =
-    buddy.updatePivotImpl()
-else:
-  template updateMultiPivot(buddy: SnapBuddyRef): auto =
-    buddy.updatePivotImpl()
 
 
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
@@ -283,7 +241,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
     else: SnapDbRef.init(ctx.data.dbBackend)
-  ctx.pivotSetup()
+  ctx.pivot = BestPivotCtxRef.init(ctx.data.rng)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
@@ -292,7 +250,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
-  ctx.pivotRelease()
+  ctx.pivot = nil
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stop()
     ctx.data.ticker = nil
@@ -305,7 +263,8 @@ proc start*(buddy: SnapBuddyRef): bool =
   if peer.supports(protocol.snap) and
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    buddy.pivotStart()
+    buddy.pivot = BestPivotWorkerRef.init(
+      buddy.ctx.pivot, buddy.ctrl, buddy.peer)
     buddy.data.errors = ComErrorStatsRef()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
@@ -317,7 +276,7 @@ proc stop*(buddy: SnapBuddyRef) =
     ctx = buddy.ctx
     peer = buddy.peer
   buddy.ctrl.stopped = true
-  buddy.pivotStop()
+  buddy.pivot.clear()
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stopBuddy()
 
@@ -337,16 +296,15 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  when usePivot2ok:
-    # Run alternative pivot finder. This one harmonises difficulties of at
-    # least two peers. The can only be one instance active/unfinished of the
-    # `pivot2Exec()` functions.
-    let peer = buddy.peer
-    if not await buddy.updateSinglePivot():
-      # Wait if needed, then return => repeat
-      if not buddy.ctrl.stopped:
-        await sleepAsync(2.seconds)
-      return
+  let peer = buddy.peer
+  # This pivot finder one harmonises assigned difficulties of at least two
+  # peers. There can only be one  `pivot2Exec()` instance active/unfinished
+  # (which is wrapped into the helper function `updateSinglePivot()`.)
+  if not await buddy.updateSinglePivot():
+    # Wait if needed, then return => repeat
+    if not buddy.ctrl.stopped:
+      await sleepAsync(2.seconds)
+    return
 
   buddy.ctrl.multiOk = true
 
@@ -393,9 +351,6 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-
-  when not usePivot2ok:
-    discard await buddy.updateMultiPivot()
 
   # Set up current state root environment for accounts snapshot
   let env = block:

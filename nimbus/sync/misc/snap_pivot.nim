@@ -9,6 +9,9 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Note: This module is currently unused (not used anymore)
+
+
 ## This module fetches and tracks the canonical chain head of each connected
 ## peer.  (Or in future, each peer we care about; we won't poll them all so
 ## often.)
