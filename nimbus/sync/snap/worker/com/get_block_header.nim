@@ -11,7 +11,7 @@
 import
   std/options,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   "../../.."/[protocol, types],
   ../../worker_desc,
   ./com_error

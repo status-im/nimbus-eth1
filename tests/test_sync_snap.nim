@@ -15,7 +15,7 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[common/eth_types, p2p, rlp, trie/db],
+  eth/[common, p2p, rlp, trie/db],
   rocksdb,
   stint,
   stew/[byteutils, results],

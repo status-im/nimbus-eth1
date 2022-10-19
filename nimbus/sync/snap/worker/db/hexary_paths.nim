@@ -12,7 +12,7 @@
 
 import
   std/[tables],
-  eth/[common/eth_types_rlp, trie/nibbles],
+  eth/[common, trie/nibbles],
   ../../range_desc,
   ./hexary_desc
 

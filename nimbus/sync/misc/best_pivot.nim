@@ -17,7 +17,7 @@ import
   std/[hashes, options, sets],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stew/byteutils,
   ".."/[protocol, sync_desc, types]
 

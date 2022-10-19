@@ -18,7 +18,7 @@ import
   std/sequtils,
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, trie/nibbles, trie/trie_defs, rlp],
+  eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
   stew/[interval_set, keyed_queue],
   ../../../utils/prettify,
   ../../sync_desc,

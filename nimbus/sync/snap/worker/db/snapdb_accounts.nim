@@ -461,7 +461,7 @@ proc nextAccountsChainDbKey*(
     accHash: Hash256;
       ): Result[Hash256,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
-  ## argument account.
+  ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accHash.to(NodeKey)
                       .hexaryPath(ps.root, ps.getFn)

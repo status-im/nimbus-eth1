@@ -13,7 +13,7 @@
 import
   std/[options, sequtils],
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[range_desc, worker_desc],
   ./com_error

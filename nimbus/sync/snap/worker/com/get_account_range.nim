@@ -15,7 +15,7 @@
 import
   std/sequtils,
   chronos,
-  eth/[common/eth_types, p2p, trie/trie_defs],
+  eth/[common, p2p, trie/trie_defs],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[range_desc, worker_desc],

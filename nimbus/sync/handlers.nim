@@ -28,7 +28,7 @@ proc notEnabled(name: string) =
 proc notImplemented(name: string) =
   debug "Wire handler method not implemented", meth = name
 
-method poolEnabled*(ctx: EthWireRef; ena: bool) =
+proc poolEnabled*(ctx: EthWireRef; ena: bool) =
   ctx.disablePool = not ena
 
 method getStatus*(ctx: EthWireRef): EthState {.gcsafe.} =

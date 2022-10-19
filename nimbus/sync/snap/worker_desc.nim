@@ -10,7 +10,7 @@
 
 import
   std/[hashes, sequtils, strutils],
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stew/[byteutils, interval_set, keyed_queue],
   "../.."/[constants, db/select_backend],
   ".."/[sync_desc, types],

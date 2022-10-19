@@ -253,7 +253,7 @@ p2pProtocol snap1(version = 1,
     proc getAccountRange(peer: Peer, rootHash: Hash256, origin: Hash256,
                          limit: Hash256, responseBytes: uint64) =
       trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
-        accountRange=(origin,limit), stateRoot=($rootHash), responseBytes
+        accountRange=[origin,limit], stateRoot=($rootHash), responseBytes
 
       trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer, sent=0
       await response.send(@[], @[])
