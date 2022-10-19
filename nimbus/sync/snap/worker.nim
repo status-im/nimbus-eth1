@@ -246,17 +246,15 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSum += sLen
         sSqSum += sLen * sLen
 
-        # Storage mean filling for that account
-        if 0 < kvp.data.fetchStorage.len:
-          var stoAve: float
-          for stoKvp in kvp.data.fetchStorage.nextPairs:
-            if stoKvp.data.slots.isNil:
-              stoAve += 1.0
-            else:
-              stoAve += stoKvp.data.slots.unprocessed.fullFactor
-          stoAve /= kvp.data.fetchStorage.len.float
-          wSum += stoAve
-          wSqSum += stoAve * stoAve
+        # Storage queue size for that account
+        var stoFill: float
+        for stoKvp in kvp.data.fetchStorage.nextPairs:
+          if stoKvp.data.slots.isNil:
+            stoFill += 1.0
+          else:
+            stoFill += stoKvp.data.slots.unprocessed.fullFactor
+        wSum += stoFill
+        wSqSum += stoFill * stoFill
 
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)

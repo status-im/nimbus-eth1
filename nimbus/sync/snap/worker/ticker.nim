@@ -107,8 +107,7 @@ proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
   let data = t.statsCb()
 
-  if data != t.lastStats or
-     t.lastTick + tickerLogSuppressMax < t.tick:
+  if data != t.lastStats or t.lastTick + tickerLogSuppressMax < t.tick:
     t.lastStats = data
     t.lastTick = t.tick
     var
@@ -118,8 +117,8 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       accCov = data.accountsFill[0].toPC(1) &
          "(" & data.accountsFill[1].toPC(1) & ")" &
          "/" & data.accountsFill[2].toPC(0)
-      stoQue = data.storageQueue[0].toPC(1) &
-         "(" & data.storageQueue[1].toPC(1) & ")"
+      stoQue = data.storageQueue[0].uint64.toSI &
+         "(" & data.storageQueue[1].uint64.toSI & ")"
       buddies = t.nBuddies
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
