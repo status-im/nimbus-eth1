@@ -62,7 +62,7 @@ const
     ## Consider per account storage slost healing if this particular sub-trie
     ## has reached this factor of completeness
 
-  maxStoragesFetch* = 512
+  maxStoragesFetch* = 5 * 1024
     ## Maximal number of storage tries to fetch with a single message.
 
   maxStoragesHeal* = 32
@@ -144,8 +144,8 @@ type
     serialSync*: bool                  ## Done with storage, block sync next
 
     # Info
-    nAccounts*: uint64                 ## Number of accounts imported
-    nStorage*: uint64                  ## Number of storage spaces imported
+    nAccounts*: uint64                 ## Imported # of accounts
+    nStorage*: uint64                  ## Imported # of account storage tries
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root

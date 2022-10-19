@@ -216,9 +216,6 @@ proc registerStorageSlotsLeaf(
   # Register this isolated leaf node that was added
   discard ivSet.reduce(pt,pt)
 
-  # Update statistics
-  env.nStorage.inc
-
   when extraTraceMessages:
     trace "Isolated storage slot for healing",
       peer, ctx=buddy.healingCtx(kvp), slotKey=pt
@@ -388,7 +385,9 @@ proc healStoragesDb*(buddy: SnapBuddyRef) {.async.} =
     let
       kvp = toBeHealed[n]
       isComplete = await buddy.healingIsComplete(kvp)
-    if not isComplete:
+    if isComplete:
+      env.nStorage.inc
+    else:
       env.fetchStorage.merge kvp
 
     if buddy.ctrl.stopped:

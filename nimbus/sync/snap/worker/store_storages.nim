@@ -72,7 +72,7 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
   ##   item with a partially completed slots download.
   ##
   ## * Otherwise, a list of at most `maxStoragesFetch` work items is returned.
-  ##   These work items are checked for that there was no trace of a previously
+  ##   These work items were checked for that there was no trace of a previously
   ##   installed (probably partial) storage trie on the database (e.g. inherited
   ##   from an earlier state root pivot.)
   ##
@@ -183,21 +183,21 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
 
   when extraTraceMessages:
     trace "Fetched storage slots", peer, gotStorage,
-      nReq=req.len, nStorageQueue=env.fetchStorage.len
+      nLeftOvers=stoRange.leftOver.len, nReq=req.len,
+      nStorageQueue=env.fetchStorage.len
 
   if 0 < gotStorage:
     # Verify/process storages data and save it to disk
     let report = ctx.data.snapDb.importStorageSlots(peer, stoRange.data)
-    if 0 < report.len:
 
-      # Update local statistics counter
-      gotStorage.dec(report.len)
+    if 0 < report.len:
+      let topStoRange = stoRange.data.storages.len - 1
 
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
         env.fetchStorage.merge req
+        gotStorage.dec(report.len - 1) # for logging only
 
-        gotStorage.inc
         error "Error writing storage slots to database", peer, gotStorage,
           nReq=req.len, nStorageQueue=env.fetchStorage.len,
           error=report[^1].error
@@ -212,18 +212,36 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
         # if w.error in {RootNodeMismatch, RightBoundaryProofFailed}:
         #   ???
 
-        # Reset any partial requests to requesting the full interval. So
-        # all the storage slots are re-fetched completely for this account.
+        # Reset any partial result (which would be the last entry) to
+        # requesting the full interval. So all the storage slots are
+        # re-fetched completely for this account.
         env.fetchStorage.merge AccountSlotsHeader(
           accHash:     stoRange.data.storages[inx].account.accHash,
           storageRoot: stoRange.data.storages[inx].account.storageRoot)
+
+        # Last entry might be partial
+        if inx == topStoRange:
+          # No partial result processing anymore to consider
+          stoRange.data.proof = @[]
+
+        # Update local statistics counter for `nStorage` counter update
+        gotStorage.dec
 
         trace "Error processing storage slots", peer, gotStorage,
           nReqInx=inx, nReq=req.len, nStorageQueue=env.fetchStorage.len,
           error=report[inx].error
 
     # Update statistics
+    if gotStorage == 1 and
+       req[0].subRange.isSome and
+       env.fetchStorage.hasKey req[0].storageRoot.to(NodeKey):
+      # Successful partial request, but not completely done with yet.
+      gotStorage = 0
+
     env.nStorage.inc(gotStorage)
+
+  # Return unprocessed left overs to batch queue
+  env.fetchStorage.merge stoRange.leftOver
 
   when extraTraceMessages:
     trace "Done fetching storage slots", peer, gotStorage,
