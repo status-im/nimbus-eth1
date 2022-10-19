@@ -33,7 +33,6 @@ type
     ## Session descriptor
     xDb: HexaryTreeDbRef             ## Hexary database
     base: SnapDbRef                  ## Back reference to common parameters
-    peer*: Peer                      ## For log messages
     root*: NodeKey                   ## Session DB root node key
 
 # ------------------------------------------------------------------------------
@@ -126,7 +125,6 @@ proc init*(
     peer: Peer = nil) =
   ## Session base constructor
   ps.base = pv
-  ps.peer = peer
   ps.root = root
   ps.xDb = HexaryTreeDbRef.init(pv)
 
@@ -137,7 +135,7 @@ proc init*(
     peer: Peer = nil): T =
   ## Variant of session base constructor
   new result
-  result.init(ps.base, root, peer)
+  result.init(ps.base, root)
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -173,6 +171,7 @@ proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
 
 proc mergeProofs*(
     ps: SnapDbBaseRef;        ## Session database
+    peer: Peer;               ## For log messages
     root: NodeKey;            ## Root for checking nodes
     proof: seq[Blob];         ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
@@ -183,7 +182,6 @@ proc mergeProofs*(
   ## trie at a later stage and used for validating account data.
   let
     db = ps.hexaDb
-    peer = ps.peer
   var
     nodes: HashSet[RepairKey]
     refs = @[root.to(RepairKey)].toHashSet

@@ -24,6 +24,7 @@ logScope:
 
 type
   SnapDbAccountsRef* = ref object of SnapDbBaseRef
+    peer: Peer            ## For log messages
     getFn: HexaryGetFn    ## Persistent database `get()` closure
 
 const
@@ -140,8 +141,9 @@ proc init*(
   ## Constructor, starts a new accounts session.
   let db = pv.kvDb
   new result
-  result.init(pv, root.to(NodeKey), peer)
-  result.getFn = proc(key: Blob): Blob = db.get(key)
+  result.init(pv, root.to(NodeKey))
+  result.peer = peer
+  result.getFn = proc(key: openArray[byte]): Blob = db.get(key)
 
 proc dup*(
     ps: SnapDbAccountsRef;
@@ -182,7 +184,7 @@ proc importAccounts*(
   var accounts: seq[RLeafSpecs]
   try:
     if 0 < data.proof.len:
-      let rc = ps.mergeProofs(ps.root, data.proof)
+      let rc = ps.mergeProofs(ps.peer, ps.root, data.proof)
       if rc.isErr:
         return err(rc.error)
     block:
@@ -227,7 +229,7 @@ proc importAccounts*(
     pv, root, peer).importAccounts(base, data, persistent=true)
 
 
-proc importRawAccountNodes*(
+proc importRawAccountsNodes*(
     ps: SnapDbAccountsRef;     ## Re-usable session descriptor
     nodes: openArray[Blob];    ## Node records
     reportNodes = {Leaf};      ## Additional node types to report
@@ -293,7 +295,7 @@ proc importRawAccountNodes*(
     if nErrors == 0:
       trace "Raw account nodes imported", peer, slot, nItems, report=result.len
 
-proc importRawAccountNodes*(
+proc importRawAccountsNodes*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     peer: Peer,                   ## For log messages, only
     nodes: openArray[Blob];       ## Node records
@@ -301,7 +303,7 @@ proc importRawAccountNodes*(
       ): seq[HexaryNodeReport] =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, Hash256(), peer).importRawAccountNodes(
+    pv, Hash256(), peer).importRawAccountsNodes(
       nodes, reportNodes, persistent=true)
 
 
@@ -334,6 +336,8 @@ proc inspectAccountsTrie*(
         break checkForError
     trace "Inspect account trie failed", peer, nPathList=pathList.len,
       nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    if ignoreError:
+      return ok(stats)
     return err(error)
 
   when extraTraceMessages:
@@ -353,7 +357,7 @@ proc inspectAccountsTrie*(
     pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
 
 
-proc getAccountNodeKey*(
+proc getAccountsNodeKey*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
@@ -369,18 +373,18 @@ proc getAccountNodeKey*(
     return ok(rc.value)
   err(NodeNotFound)
 
-proc getAccountNodeKey*(
+proc getAccountsNodeKey*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     peer: Peer;                   ## For log messages, only
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
       ): Result[NodeKey,HexaryDbError] =
-  ## Variant of `inspectAccountsPath()` for persistent storage.
+  ## Variant of `getAccountsNodeKey()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, root, peer).getAccountNodeKey(path, persistent=true)
+    pv, root, peer).getAccountsNodeKey(path, persistent=true)
 
 
-proc getAccountData*(
+proc getAccountsData*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: NodeKey;                ## Account to visit
     persistent = false;           ## Read data from disk
@@ -404,14 +408,15 @@ proc getAccountData*(
 
   return ok(acc)
 
-proc getAccountData*(
+proc getAccountsData*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer,                   ## For log messages, only
-    root: Hash256;                ## state root
+    peer: Peer;                   ## For log messages, only
+    root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
       ): Result[Account,HexaryDbError] =
-  ## Variant of `getAccount()` for persistent storage.
-  SnapDbAccountsRef.init(pv, root, peer).getAccountData(path, persistent=true)
+  ## Variant of `getAccountsData()` for persistent storage.
+  SnapDbAccountsRef.init(
+    pv, root, peer).getAccountsData(path, persistent=true)
 
 # ------------------------------------------------------------------------------
 # Public functions: additional helpers
@@ -439,16 +444,16 @@ proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
         accounts[item.accHash.to(NodeTag)] = item
     result = toSeq(accounts.keys).sorted(cmp).mapIt(accounts[it])
 
-proc getChainDbAccount*(
+proc getAccountsChainDb*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256
+    accHash: Hash256;
       ): Result[Account,HexaryDbError] =
   ## Fetch account via `BaseChainDB`
-  ps.getAccountData(accHash.to(NodeKey),persistent=true)
+  ps.getAccountsData(accHash.to(NodeKey),persistent=true)
 
-proc nextChainDbKey*(
+proc nextAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256
+    accHash: Hash256;
       ): Result[Hash256,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
   ## argument account.
@@ -462,9 +467,9 @@ proc nextChainDbKey*(
 
   err(AccountNotFound)
 
-proc prevChainDbKey*(
+proc prevAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256
+    accHash: Hash256;
       ): Result[Hash256,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one before to the
   ## argument account.

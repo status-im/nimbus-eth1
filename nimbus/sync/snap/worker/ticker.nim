@@ -27,9 +27,9 @@ type
   TickerStats* = object
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
-    nStorage*: (float,float)           ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
-    accCoverage*: float                ## as factor
+    nStorage*: (float,float)           ## mean and standard deviation
+    storageQueue*: (float,float)       ## mean and standard deviation
     nQueues*: int
 
   TickerStatsUpdater* =
@@ -107,17 +107,18 @@ proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
   let data = t.statsCb()
 
-  if data != t.lastStats or
-     t.lastTick + tickerLogSuppressMax < t.tick:
+  if data != t.lastStats or t.lastTick + tickerLogSuppressMax < t.tick:
     t.lastStats = data
     t.lastTick = t.tick
     var
-      nAcc, nStore, bulk: string
+      nAcc, nSto, bulk: string
       pivot = "n/a"
     let
       accCov = data.accountsFill[0].toPC(1) &
          "(" & data.accountsFill[1].toPC(1) & ")" &
          "/" & data.accountsFill[2].toPC(0)
+      stoQue = data.storageQueue[0].uint64.toSI &
+         "(" & data.storageQueue[1].uint64.toSI & ")"
       buddies = t.nBuddies
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
@@ -126,10 +127,10 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
       nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
-      nStore = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
+      nSto = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
 
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, nStore, mem
+      tick, buddies, pivot, nAcc, accCov, nSto, stoQue, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

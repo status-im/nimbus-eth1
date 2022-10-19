@@ -321,16 +321,16 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # need to check for additional records only on either end of a range.
       var keySet = packed.accounts.mapIt(it.accHash).toHashSet
       for w in accountsList:
-        var key = desc.prevChainDbKey(w.data.accounts[0].accHash)
+        var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accHash)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
-          let newKey = desc.prevChainDbKey(key.value)
+          let newKey = desc.prevAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
-        key = desc.nextChainDbKey(w.data.accounts[^1].accHash)
+        key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accHash)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
-          let newKey = desc.nextChainDbKey(key.value)
+          let newKey = desc.nextAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
       accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
@@ -346,9 +346,9 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         count.inc
         let
           pfx = $count & "#"
-          byChainDB = desc.getChainDbAccount(accHash)
-          byNextKey = desc.nextChainDbKey(accHash)
-          byPrevKey = desc.prevChainDbKey(accHash)
+          byChainDB = desc.getAccountsChainDb(accHash)
+          byNextKey = desc.nextAccountsChainDbKey(accHash)
+          byPrevKey = desc.prevAccountsChainDbKey(accHash)
         noisy.say "*** find",
           "<", count, "> byChainDb=", byChainDB.pp
         check byChainDB.isOk
@@ -431,7 +431,7 @@ proc storagesRunner(
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = SnapDbStorageSlotsRef.init(dbBase, peer=peer)
+        dbDesc = SnapDbStorageSlotsRef.init(dbBase,Hash256(),Hash256(),peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -440,7 +440,7 @@ proc storagesRunner(
                     Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
                   else:
                     OkStoDb
-        check dbDesc.importStorages(w.data, persistent).toStoDbRc == expRc
+        check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
 
 proc inspectionRunner(
     noisy = true;

@@ -115,9 +115,6 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
       return
     rc.value
 
-  when extraTraceMessages:
-    trace "Start fetching accounts", peer, stateRoot, iv
-
   # Process received accounts and stash storage slots to fetch later
   let dd = block:
     let rc = await buddy.getAccountRange(stateRoot, iv)
@@ -126,15 +123,20 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
-          trace "Error fetching accounts => stop", peer, error
+          trace "Error fetching accounts => stop", peer,
+            stateRoot, req=iv.len, error
       return
     # Reset error counts for detecting repeated timeouts
     buddy.data.errors.nTimeouts = 0
     rc.value
 
   let
-    nAccounts = dd.data.accounts.len
-    nStorage = dd.withStorage.len
+    gotAccounts = dd.data.accounts.len
+    gotStorage = dd.withStorage.len
+
+  when extraTraceMessages:
+    trace "Fetched accounts", peer, gotAccounts, gotStorage,
+      stateRoot, req=iv.len, got=dd.consumed
 
   block:
     let rc = ctx.data.snapDb.importAccounts(peer, stateRoot, iv.minPt, dd.data)
@@ -144,13 +146,12 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
       buddy.ctrl.zombie = true
       when extraTraceMessages:
         let error = ComImportAccountsFailed
-        trace "Accounts import failed => stop", peer, stateRoot,
-          range=dd.consumed, nAccounts, nStorage, error
+        trace "Accounts import failed => stop", peer, gotAccounts, gotStorage,
+          stateRoot, req=iv.len, got=dd.consumed, error
       return
 
   # Statistics
-  env.nAccounts.inc(nAccounts)
-  env.nStorage.inc(nStorage)
+  env.nAccounts.inc(gotAccounts)
 
   # Register consumed intervals on the accumulator over all state roots
   buddy.markGloballyProcessed(dd.consumed)
@@ -178,8 +179,8 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   env.fetchStorage.merge dd.withStorage
 
   when extraTraceMessages:
-    trace "Done fetching accounts", peer, stateRoot, nAccounts,
-      withStorage=dd.withStorage.len, iv
+    trace "Done fetching accounts", peer, gotAccounts, gotStorage,
+      stateRoot, req=iv.len, got=dd.consumed
 
 # ------------------------------------------------------------------------------
 # End

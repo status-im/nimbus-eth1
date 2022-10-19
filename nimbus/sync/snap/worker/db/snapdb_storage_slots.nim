@@ -9,12 +9,13 @@
 # except according to those terms.
 
 import
-  std/[tables],
+  std/tables,
   chronicles,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p, rlp, trie/db],
   ../../../protocol,
   ../../range_desc,
-  "."/[bulk_storage, hexary_desc, hexary_error, hexary_interpolate, snapdb_desc]
+  "."/[bulk_storage, hexary_desc, hexary_error, hexary_import, hexary_inspect,
+       hexary_interpolate, hexary_paths, snapdb_desc]
 
 {.push raises: [Defect].}
 
@@ -25,8 +26,13 @@ const
   extraTraceMessages = false or true
 
 type
+  GetAccFn = proc(accHash: Hash256, key: openArray[byte]): Blob {.gcsafe.}
+    ## The `get()` function for the storage trie depends on the current account
+
   SnapDbStorageSlotsRef* = ref object of SnapDbBaseRef
-    accHash*: Hash256                ## Accounts address hash (curr.unused)
+    peer: Peer             ## For log messages
+    accHash: Hash256       ## Accounts address hash (curr.unused)
+    getAccFn: GetAccFn     ## Persistent database `get()` closure
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -37,6 +43,11 @@ proc to(h: Hash256; T: type NodeKey): T =
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
+
+proc getAccCls(ps: SnapDbStorageSlotsRef; accHash: Hash256): HexaryGetFn =
+  ## Fix `accHash` argument in `GetAccFn` closure => `HexaryGetFn`
+  result = proc(key: openArray[byte]): Blob = ps.getAccFn(accHash,key)
+
 
 template noKeyError(info: static[string]; code: untyped) =
   try:
@@ -56,11 +67,21 @@ template noRlpExceptionOops(info: static[string]; code: untyped) =
   except Exception as e:
     raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
+template noGenericExOrKeyError(info: static[string]; code: untyped) =
+  try:
+    code
+  except KeyError as e:
+    raiseAssert "Not possible (" & info & "): " & e.msg
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc persistentStorages(
+proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
       ): Result[void,HexaryDbError]
@@ -116,7 +137,7 @@ proc importStorageSlots(
   var
     slots: seq[RLeafSpecs]
   if 0 < proof.len:
-    let rc = tmpDb.mergeProofs(root, proof)
+    let rc = tmpDb.mergeProofs(ps.peer, root, proof)
     if rc.isErr:
       return err(rc.error)
   block:
@@ -145,20 +166,27 @@ proc importStorageSlots(
 proc init*(
     T: type SnapDbStorageSlotsRef;
     pv: SnapDbRef;
-    account = Hash256();
-    root = Hash256();
+    account: Hash256;
+    root: Hash256;
     peer: Peer = nil
       ): T =
   ## Constructor, starts a new accounts session.
+  let db = pv.kvDb
+
   new result
-  result.init(pv, root.to(NodeKey), peer)
+  result.init(pv, root.to(NodeKey))
+  result.peer = peer
   result.accHash = account
+
+  # At the moment, the resulting `getAccFn()` is independent of `accHash`
+  result.getAccFn = proc(accHash: Hash256, key: openArray[byte]): Blob =
+                        db.get(key)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc importStorages*(
+proc importStorageSlots*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
     persistent = false;        ## store data on disk
@@ -210,7 +238,7 @@ proc importStorages*(
       # Store to disk
       if persistent and 0 < ps.hexaDb.tab.len:
         slot = none(int)
-        let rc = ps.hexaDb.persistentStorages(ps)
+        let rc = ps.hexaDb.persistentStorageSlots(ps)
         if rc.isErr:
           result.add HexaryNodeReport(slot: slot, error: rc.error)
 
@@ -231,14 +259,236 @@ proc importStorages*(
       trace "Storage slots imported", peer, nItems,
         slots=data.storages.len, proofs=data.proof.len
 
-proc importStorages*(
+proc importStorageSlots*(
     pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
-    peer: Peer,                ## For log messages, only
+    peer: Peer;                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
       ): seq[HexaryNodeReport] =
   ## Variant of `importStorages()`
   SnapDbStorageSlotsRef.init(
-    pv, peer=peer).importStorages(data, persistent=true)
+    pv, Hash256(), Hash256(), peer).importStorageSlots(data, persistent=true)
+
+
+proc importRawStorageSlotsNodes*(
+    ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
+    nodes: openArray[Blob];    ## Node records
+    reportNodes = {Leaf};      ## Additional node types to report
+    persistent = false;        ## store data on disk
+      ): seq[HexaryNodeReport] =
+  ## Store data nodes given as argument `nodes` on the persistent database.
+  ##
+  ## If there were an error when processing a particular argument `notes` item,
+  ## it will be reported with the return value providing argument slot/index,
+  ## node type, end error code.
+  ##
+  ## If there was an error soring persistent data, the last report item will
+  ## have an error code, only.
+  ##
+  ## Additional node items might be reported if the node type is in the
+  ## argument set `reportNodes`. These reported items will have no error
+  ## code set (i.e. `NothingSerious`.)
+  ##
+  let
+    peer = ps.peer
+    db = HexaryTreeDbRef.init(ps)
+    nItems = nodes.len
+  var
+    nErrors = 0
+    slot: Option[int]
+  try:
+    # Import nodes
+    for n,rec in nodes:
+      if 0 < rec.len: # otherwise ignore empty placeholder
+        slot = some(n)
+        var rep = db.hexaryImport(rec)
+        if rep.error != NothingSerious:
+          rep.slot = slot
+          result.add rep
+          nErrors.inc
+          trace "Error importing storage slots nodes", peer, inx=n, nItems,
+            error=rep.error, nErrors
+        elif rep.kind.isSome and rep.kind.unsafeGet in reportNodes:
+          rep.slot = slot
+          result.add rep
+
+    # Store to disk
+    if persistent and 0 < db.tab.len:
+      slot = none(int)
+      let rc = db.persistentStorageSlots(ps)
+      if rc.isErr:
+        result.add HexaryNodeReport(slot: slot, error: rc.error)
+
+  except RlpError:
+    result.add HexaryNodeReport(slot: slot, error: RlpEncoding)
+    nErrors.inc
+    trace "Error importing storage slots nodes", peer, slot, nItems,
+      error=RlpEncoding, nErrors
+  except KeyError as e:
+    raiseAssert "Not possible @ importRawSorageSlotsNodes: " & e.msg
+  except OSError as e:
+    result.add HexaryNodeReport(slot: slot, error: OSErrorException)
+    nErrors.inc
+    trace "Import storage slots nodes exception", peer, slot, nItems,
+      name=($e.name), msg=e.msg, nErrors
+
+  when extraTraceMessages:
+    if nErrors == 0:
+      trace "Raw storage slots nodes imported", peer, slot, nItems,
+        report=result.len
+
+proc importRawStorageSlotsNodes*(
+    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    peer: Peer,                   ## For log messages, only
+    accHash: Hash256;             ## Account key
+    nodes: openArray[Blob];       ## Node records
+    reportNodes = {Leaf};         ## Additional node types to report
+      ): seq[HexaryNodeReport] =
+  ## Variant of `importRawNodes()` for persistent storage.
+  SnapDbStorageSlotsRef.init(
+    pv, accHash, Hash256(), peer).importRawStorageSlotsNodes(
+      nodes, reportNodes, persistent=true)
+
+
+proc inspectStorageSlotsTrie*(
+    ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
+    pathList = seq[Blob].default; ## Starting nodes for search
+    persistent = false;           ## Read data from disk
+    ignoreError = false;          ## Always return partial results if available
+      ): Result[TrieNodeStat, HexaryDbError] =
+  ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
+  ## the hexary trie which have at least one node key reference missing in
+  ## the trie database. Argument `pathSet` list entries that do not refer to a
+  ## valid node are silently ignored.
+  ##
+  let peer = ps.peer
+  var stats: TrieNodeStat
+  noRlpExceptionOops("inspectStorageSlotsTrie()"):
+    if persistent:
+      stats = ps.getAccCls(ps.accHash).hexaryInspectTrie(ps.root, pathList)
+    else:
+      stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
+
+  block checkForError:
+    let error = block:
+      if stats.stopped:
+        TrieLoopAlert
+      elif stats.level == 0:
+        TrieIsEmpty
+      else:
+        break checkForError
+    trace "Inspect storage slots trie failed", peer, nPathList=pathList.len,
+      nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    if ignoreError:
+      return ok(stats)
+    return err(error)
+
+  when extraTraceMessages:
+    trace "Inspect storage slots trie ok", peer, nPathList=pathList.len,
+      nDangling=stats.dangling.len, level=stats.level
+  return ok(stats)
+
+proc inspectStorageSlotsTrie*(
+    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    peer: Peer;                   ## For log messages, only
+    accHash: Hash256;             ## Account key
+    root: Hash256;                ## state root
+    pathList = seq[Blob].default; ## Starting paths for search
+    ignoreError = false;          ## Always return partial results when avail.
+      ): Result[TrieNodeStat, HexaryDbError] =
+  ## Variant of `inspectStorageSlotsTrieTrie()` for persistent storage.
+  SnapDbStorageSlotsRef.init(
+    pv, accHash, root, peer).inspectStorageSlotsTrie(
+      pathList, persistent=true, ignoreError)
+
+
+proc getStorageSlotsNodeKey*(
+    ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
+    path: Blob;                   ## Partial node path
+    persistent = false;           ## Read data from disk
+      ): Result[NodeKey,HexaryDbError] =
+  ## For a partial node path argument `path`, return the raw node key.
+  var rc: Result[NodeKey,void]
+  noRlpExceptionOops("inspectAccountsPath()"):
+    if persistent:
+      rc = ps.getAccCls(ps.accHash).hexaryInspectPath(ps.root, path)
+    else:
+      rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
+  if rc.isOk:
+    return ok(rc.value)
+  err(NodeNotFound)
+
+proc getStorageSlotsNodeKey*(
+    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    peer: Peer;                   ## For log messages, only
+    accHash: Hash256;             ## Account key
+    root: Hash256;                ## state root
+    path: Blob;                   ## Partial node path
+      ): Result[NodeKey,HexaryDbError] =
+  ## Variant of `getStorageSlotsNodeKey()` for persistent storage.
+  SnapDbStorageSlotsRef.init(
+    pv, accHash, root, peer).getStorageSlotsNodeKey(path, persistent=true)
+
+
+proc getStorageSlotsData*(
+    ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
+    path: NodeKey;             ## Account to visit
+    persistent = false;        ## Read data from disk
+      ): Result[Account,HexaryDbError] =
+  ## Fetch storage slots data.
+  ##
+  ## Caveat: There is no unit test yet
+  let peer = ps.peer
+  var acc: Account
+
+  noRlpExceptionOops("getStorageSlotsData()"):
+    var leaf: Blob
+    if persistent:
+      leaf = path.hexaryPath(ps.root, ps.getAccCls(ps.accHash)).leafData
+    else:
+      leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
+
+    if leaf.len == 0:
+      return err(AccountNotFound)
+    acc = rlp.decode(leaf,Account)
+
+  return ok(acc)
+
+proc getStorageSlotsData*(
+    pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
+    peer: Peer,                ## For log messages, only
+    accHash: Hash256;          ## Account key
+    root: Hash256;             ## state root
+    path: NodeKey;             ## Account to visit
+      ): Result[Account,HexaryDbError] =
+  ## Variant of `getStorageSlotsData()` for persistent storage.
+  SnapDbStorageSlotsRef.init(
+    pv, accHash, root, peer).getStorageSlotsData(path, persistent=true)
+
+
+proc haveStorageSlotsData*(
+    ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
+    persistent = false;        ## Read data from disk
+      ): bool =
+  ## Return `true` if there is at least one intermediate hexary node for this
+  ## accounts storage slots trie.
+  ##
+  ## Caveat: There is no unit test yet
+  noGenericExOrKeyError("haveStorageSlotsData()"):
+    if persistent:
+      let getFn = ps.getAccCls(ps.accHash)
+      return 0 < ps.root.ByteArray32.getFn().len
+    else:
+      return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))
+
+proc haveStorageSlotsData*(
+    pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
+    peer: Peer,                ## For log messages, only
+    accHash: Hash256;          ## Account key
+    root: Hash256;             ## state root
+      ): bool =
+  ## Variant of `haveStorageSlotsData()` for persistent storage.
+  SnapDbStorageSlotsRef.init(
+    pv, accHash, root, peer).haveStorageSlotsData(persistent=true)
 
 # ------------------------------------------------------------------------------
 # End

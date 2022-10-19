@@ -9,14 +9,15 @@
 # except according to those terms.
 
 import
-  std/[hashes, math, options, sets],
+  std/[hashes, math, options, sets, strutils],
   chronicles,
   chronos,
   eth/[common/eth_types, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ".."/[protocol, sync_desc],
-  ./worker/[heal_accounts, store_accounts, store_storages, ticker],
+  ".."/[handlers, protocol, sync_desc],
+  ./worker/[heal_accounts, heal_storages, store_accounts, store_storages,
+            ticker],
   ./worker/com/[com_error, get_block_header],
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
@@ -167,14 +168,6 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     # Append per-state root environment to LRU queue
     discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
-    # Debugging, will go away
-    block:
-      let ivSet = env.fetchAccounts.unprocessed[0].clone
-      for iv in env.fetchAccounts.unprocessed[1].increasing:
-        doAssert ivSet.merge(iv) == iv.len
-      doAssert ivSet.chunks == 1
-      doAssert ivSet.total == 0
-
 
 proc updatePivotImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Helper, negotiate pivot unless present
@@ -233,7 +226,7 @@ else:
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, wSum, wSqSum: float
       count = 0
     for kvp in ctx.data.pivotTable.nextPairs:
 
@@ -253,6 +246,16 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSum += sLen
         sSqSum += sLen * sLen
 
+        # Storage queue size for that account
+        var stoFill: float
+        for stoKvp in kvp.data.fetchStorage.nextPairs:
+          if stoKvp.data.slots.isNil:
+            stoFill += 1.0
+          else:
+            stoFill += stoKvp.data.slots.unprocessed.fullFactor
+        wSum += stoFill
+        wSqSum += stoFill * stoFill
+
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
       pivotBlock = if env.isNil: none(BlockNumber)
@@ -265,7 +268,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       nQueues:       ctx.data.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nStorage:      meanStdDev(sSum, sSqSum, count),
-      accountsFill:  (accFill[0], accFill[1], accCoverage))
+      accountsFill:  (accFill[0], accFill[1], accCoverage),
+      storageQueue:  meanStdDev(wSum, wSqSum, count))
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -273,6 +277,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
+  noExceptionOops("worker.setup()"):
+    ctx.ethWireCtx.poolEnabled(false)
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
@@ -412,18 +418,18 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     await buddy.storeStorages()
     if buddy.ctrl.stopped: return
 
+    # Pivot might have changed, so restart with the latest one
+    if env != ctx.data.pivotTable.lastValue.value: return
+
     # If the current database is not complete yet
     if 0 < env.fetchAccounts.unprocessed[0].chunks or
        0 < env.fetchAccounts.unprocessed[1].chunks:
 
-      # Healing applies to the latest pivot only. The pivot might have changed
-      # in the background (while netwoking) due to a new peer worker that has
-      # negotiated another, newer pivot.
-      if env == ctx.data.pivotTable.lastValue.value:
-        await buddy.healAccountsDb()
-        if buddy.ctrl.stopped: return
+      await buddy.healAccountsDb()
+      if buddy.ctrl.stopped: return
 
-      # TODO: use/apply storage healer
+      await buddy.healStoragesDb()
+      if buddy.ctrl.stopped: return
 
       # Check whether accounts might be complete.
       if env.fetchStorage.len == 0:

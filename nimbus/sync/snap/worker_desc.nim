@@ -58,8 +58,15 @@ const
     ## all account ranges retrieved for all pivot state roots (see
     ## `coveredAccounts` in `CtxData`.)
 
-  maxStoragesFetch* = 128
-    ## Maximal number of storage tries to fetch with a signe message.
+  healSlorageSlotsTrigger* = 0.70
+    ## Consider per account storage slost healing if this particular sub-trie
+    ## has reached this factor of completeness
+
+  maxStoragesFetch* = 5 * 1024
+    ## Maximal number of storage tries to fetch with a single message.
+
+  maxStoragesHeal* = 32
+    ## Maximal number of storage tries to to heal in a single batch run.
 
   maxTrieNodeFetch* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is nor
@@ -84,15 +91,18 @@ const
     ## Internal size of LRU cache (for debugging)
 
 type
-  WorkerSeenBlocks = KeyedQueue[ByteArray32,BlockNumber]
+  WorkerSeenBlocks = KeyedQueue[NodeKey,BlockNumber]
     ## Temporary for pretty debugging, `BlockHash` keyed lru cache
 
-  SnapSlotsQueue* = KeyedQueue[ByteArray32,SnapSlotQueueItemRef]
+  SnapSlotsQueue* = KeyedQueue[NodeKey,SnapSlotQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
+
+  SnapSlotsQueuePair* = KeyedQueuePair[NodeKey,SnapSlotQueueItemRef]
+    ## Key-value return code from `SnapSlotsQueue` handler
 
   SnapSlotQueueItemRef* = ref object
     ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
@@ -100,6 +110,7 @@ type
     ## range + healing support.
     accHash*: Hash256                  ## Owner account, maybe unnecessary
     slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
+    inherit*: bool                     ## mark this trie seen already
 
   SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
@@ -126,7 +137,6 @@ type
 
     # Accounts download
     fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
-    # vetoSlots*: SnapSlotsSet         ## Do not ask for these slots, again
     accountsDone*: bool                ## All accounts have been processed
 
     # Storage slots download
@@ -134,8 +144,8 @@ type
     serialSync*: bool                  ## Done with storage, block sync next
 
     # Info
-    nAccounts*: uint64                 ## Number of accounts imported
-    nStorage*: uint64                  ## Number of storage spaces imported
+    nAccounts*: uint64                 ## Imported # of accounts
+    nStorage*: uint64                  ## Imported # of account storage tries
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -186,18 +196,61 @@ proc hash*(a: Hash256): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
+proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
+  ## Append/prepend a queue item record into the batch queue.
+  let
+    reqKey = kvp.key
+    rc = q.eq(reqKey)
+  if rc.isOk:
+    # Entry exists already
+    let qData = rc.value
+    if not qData.slots.isNil:
+      # So this entry is not maximal and can be extended
+      if kvp.data.slots.isNil:
+        # Remove restriction for this entry and move it to the right end
+        qData.slots = nil
+        discard q.lruFetch(reqKey)
+      else:
+        # Merge argument intervals into target set
+        for ivSet in kvp.data.slots.unprocessed:
+          for iv in ivSet.increasing:
+            discard qData.slots.unprocessed[0].reduce(iv)
+            discard qData.slots.unprocessed[1].merge(iv)
+  else:
+    # Only add non-existing entries
+    if kvp.data.slots.isNil:
+      # Append full range to the right of the list
+      discard q.append(reqKey, kvp.data)
+    else:
+      # Partial range, add healing support and interval
+      discard q.unshift(reqKey, kvp.data)
+
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
-  let reqKey = fetchReq.storageRoot.data
-
-  if not q.hasKey(reqKey):
+  let
+    reqKey = fetchReq.storageRoot.to(NodeKey)
+    rc = q.eq(reqKey)
+  if rc.isOk:
+    # Entry exists already
+    let qData = rc.value
+    if not qData.slots.isNil:
+      # So this entry is not maximal and can be extended
+      if fetchReq.subRange.isNone:
+        # Remove restriction for this entry and move it to the right end
+        qData.slots = nil
+        discard q.lruFetch(reqKey)
+      else:
+        # Merge argument interval into target set
+        let iv = fetchReq.subRange.unsafeGet
+        discard qData.slots.unprocessed[0].reduce(iv)
+        discard qData.slots.unprocessed[1].merge(iv)
+  else:
     let reqData = SnapSlotQueueItemRef(accHash: fetchReq.accHash)
 
     # Only add non-existing entries
     if fetchReq.subRange.isNone:
       # Append full range to the right of the list
       discard q.append(reqKey, reqData)
-
     else:
       # Partial range, add healing support and interval
       reqData.slots = SnapTrieRangeBatchRef()
@@ -206,7 +259,9 @@ proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
       discard reqData.slots.unprocessed[0].merge(fetchReq.subRange.unsafeGet)
       discard q.unshift(reqKey, reqData)
 
-proc merge*(q: var SnapSlotsQueue; reqList: openArray[AccountSlotsHeader]) =
+proc merge*(
+    q: var SnapSlotsQueue;
+    reqList: openArray[SnapSlotsQueuePair|AccountSlotsHeader]) =
   ## Variant fof `merge()` for a list argument
   for w in reqList:
     q.merge w
@@ -217,30 +272,31 @@ proc merge*(q: var SnapSlotsQueue; reqList: openArray[AccountSlotsHeader]) =
 
 proc pp*(ctx: SnapCtxRef; bh: BlockHash): string =
   ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.to(Hash256).data)
+  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
   if rc.isOk:
     return "#" & $rc.value
   "%" & $bh.to(Hash256).data.toHex
 
 proc pp*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber): string =
   ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.to(Hash256).data)
+  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
   if rc.isOk:
     return "#" & $rc.value
-  "#" & $ctx.data.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
+  "#" & $ctx.data.seenBlock.lruAppend(bh.Hash256.to(NodeKey), bn, seenBlocksMax)
 
 proc pp*(ctx: SnapCtxRef; bhn: HashOrNum): string =
   if not bhn.isHash:
     return "#" & $bhn.number
-  let rc = ctx.data.seenBlock.lruFetch(bhn.hash.data)
+  let rc = ctx.data.seenBlock.lruFetch(bhn.hash.to(NodeKey))
   if rc.isOk:
     return "%" & $rc.value
   return "%" & $bhn.hash.data.toHex
 
 proc seen*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber) =
   ## Register for pretty printing
-  if not ctx.data.seenBlock.lruFetch(bh.to(Hash256).data).isOk:
-    discard ctx.data.seenBlock.lruAppend(bh.to(Hash256).data, bn, seenBlocksMax)
+  if not ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey)).isOk:
+    discard ctx.data.seenBlock.lruAppend(
+      bh.Hash256.to(NodeKey), bn, seenBlocksMax)
 
 proc pp*(a: MDigest[256]; collapse = true): string =
   if not collapse:
