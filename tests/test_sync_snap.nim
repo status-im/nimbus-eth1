@@ -442,16 +442,24 @@ proc storagesRunner(
                     OkStoDb
         check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
 
-    test &"Inspecting {storagesList.len} storages lists":
+    test &"Inspecting {storagesList.len} imported storages lists sub-tries":
+      let ignore = knownFailures.toTable
       for n,w in storagesList:
+        let
+          testId = fileInfo & "#" & $n
+          errInx = if ignore.hasKey(testId): ignore[testId][0][0]
+                   else: high(int)
         for m in 0 ..< w.data.storages.len:
           let
             accHash = w.data.storages[m].account.accHash
             root = w.data.storages[m].account.storageRoot
             dbDesc = SnapDbStorageSlotsRef.init(dbBase, accHash, root, peer)
             rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
-          # ok => level > 0 and not stopped
-          check rc.isOk
+          if m == errInx:
+            check rc == Result[TrieNodeStat,HexaryDbError].err(TrieIsEmpty)
+          else:
+            check rc.isOk # ok => level > 0 and not stopped
+
 
 proc inspectionRunner(
     noisy = true;
@@ -1119,7 +1127,7 @@ when isMainModule:
   #   value is mostly ignored but carried through.
   #
   # * `Proof`: There is a list of hexary nodes which allow to build a partial
-  #   Patricia-Mercle trie starting at the state root with all the account
+  #   Patricia-Merkle trie starting at the state root with all the account
   #   leaves. There are enough nodes that show that there is no account before
   #   the least account (which is currently ignored.)
   #
@@ -1139,10 +1147,7 @@ when isMainModule:
   #    * Load/accumulate accounts (needs some unique sorting)
   #    * Build/complete hexary trie for accounts
   #    * Save/bulk-store hexary trie on disk. If rocksdb is available, data
-  #      are bulk stored via sst. An additional data set is stored in a table
-  #      with key prefix 200 using transactional `put()` (for time comparison.)
-  #      If there is no rocksdb, standard transactional `put()` is used, only
-  #      (no key prefix 200 storage.)
+  #      are bulk stored via sst.
   #
   # 3. Traverse trie nodes stored earlier. The accounts from test 2 are
   #    re-visted using the account hash as access path.
