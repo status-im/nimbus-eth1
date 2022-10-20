@@ -12,7 +12,7 @@
 import
   std/[options, sequtils],
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[range_desc, worker_desc],

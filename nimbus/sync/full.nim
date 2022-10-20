@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],

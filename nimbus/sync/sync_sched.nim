@@ -62,7 +62,7 @@
 ##
 ##
 ## Additional import files needed when using this template:
-## * eth/[common/eth_types, p2p]
+## * eth/[common, p2p]
 ## * chronicles
 ## * chronos
 ## * stew/[interval_set, sorted_set],
@@ -72,7 +72,7 @@
 import
   std/hashes,
   chronos,
-  eth/[common/eth_types, p2p, p2p/peer_pool, p2p/private/p2p_types],
+  eth/[common, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
 

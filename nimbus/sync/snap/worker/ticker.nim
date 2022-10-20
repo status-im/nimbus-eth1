@@ -13,7 +13,7 @@ import
   std/[strformat, strutils, times],
   chronos,
   chronicles,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stint,
   ../../../utils/prettify,
   ../../misc/timer_helper

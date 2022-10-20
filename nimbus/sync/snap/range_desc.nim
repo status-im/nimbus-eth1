@@ -185,6 +185,7 @@ proc isEmpty*(lrs: openArray[NodeTagRangeSet]): bool =
   for ivSet in lrs:
     if 0 < ivSet.total or 0 < ivSet.chunks:
       return false
+  true
 
 proc isFull*(lrs: NodeTagRangeSet): bool =
   ## Returns `true` if the argument set `lrs` contains of the single

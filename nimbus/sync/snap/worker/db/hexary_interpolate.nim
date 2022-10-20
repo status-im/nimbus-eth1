@@ -16,7 +16,7 @@
 
 import
   std/[sequtils, sets, strutils, tables],
-  eth/[common/eth_types, trie/nibbles],
+  eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]

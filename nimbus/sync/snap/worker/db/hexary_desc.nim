@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, hashes, sequtils, sets, strutils, tables],
-  eth/[common/eth_types, p2p, trie/nibbles],
+  eth/[common, p2p, trie/nibbles],
   stint,
   ../../range_desc,
   ./hexary_error

@@ -9,11 +9,11 @@
 # except according to those terms.
 
 import
-  std/[hashes, sequtils, strutils],
-  eth/[common/eth_types, p2p],
-  stew/[byteutils, interval_set, keyed_queue],
-  "../.."/[constants, db/select_backend],
-  ".."/[sync_desc, types],
+  std/hashes,
+  eth/[common, p2p],
+  stew/[interval_set, keyed_queue],
+  ../../db/select_backend,
+  ../sync_desc,
   ./worker/[com/com_error, db/snapdb_desc, ticker],
   ./range_desc
 
@@ -85,15 +85,7 @@ const
     ## If set `true`, new peers will not change the pivot even if the
     ## negotiated pivot would be newer. This should be the default.
 
-  # -------
-
-  seenBlocksMax = 500
-    ## Internal size of LRU cache (for debugging)
-
 type
-  WorkerSeenBlocks = KeyedQueue[NodeKey,BlockNumber]
-    ## Temporary for pretty debugging, `BlockHash` keyed lru cache
-
   SnapSlotsQueue* = KeyedQueue[NodeKey,SnapSlotQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
@@ -159,7 +151,6 @@ type
 
   CtxData* = object
     ## Globally shared data extension
-    seenBlock: WorkerSeenBlocks        ## Temporary, debugging, pretty logs
     rng*: ref HmacDrbgContext          ## Random generator
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
     pivotTable*: SnapPivotTable        ## Per state root environment
@@ -265,59 +256,6 @@ proc merge*(
   ## Variant fof `merge()` for a list argument
   for w in reqList:
     q.merge w
-
-# ------------------------------------------------------------------------------
-# Public functions, debugging helpers (will go away eventually)
-# ------------------------------------------------------------------------------
-
-proc pp*(ctx: SnapCtxRef; bh: BlockHash): string =
-  ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
-  if rc.isOk:
-    return "#" & $rc.value
-  "%" & $bh.to(Hash256).data.toHex
-
-proc pp*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber): string =
-  ## Pretty printer for debugging
-  let rc = ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey))
-  if rc.isOk:
-    return "#" & $rc.value
-  "#" & $ctx.data.seenBlock.lruAppend(bh.Hash256.to(NodeKey), bn, seenBlocksMax)
-
-proc pp*(ctx: SnapCtxRef; bhn: HashOrNum): string =
-  if not bhn.isHash:
-    return "#" & $bhn.number
-  let rc = ctx.data.seenBlock.lruFetch(bhn.hash.to(NodeKey))
-  if rc.isOk:
-    return "%" & $rc.value
-  return "%" & $bhn.hash.data.toHex
-
-proc seen*(ctx: SnapCtxRef; bh: BlockHash; bn: BlockNumber) =
-  ## Register for pretty printing
-  if not ctx.data.seenBlock.lruFetch(bh.Hash256.to(NodeKey)).isOk:
-    discard ctx.data.seenBlock.lruAppend(
-      bh.Hash256.to(NodeKey), bn, seenBlocksMax)
-
-proc pp*(a: MDigest[256]; collapse = true): string =
-  if not collapse:
-    a.data.mapIt(it.toHex(2)).join.toLowerAscii
-  elif a == EMPTY_ROOT_HASH:
-    "EMPTY_ROOT_HASH"
-  elif a == EMPTY_UNCLE_HASH:
-    "EMPTY_UNCLE_HASH"
-  elif a == EMPTY_SHA3:
-    "EMPTY_SHA3"
-  elif a == ZERO_HASH256:
-    "ZERO_HASH256"
-  else:
-    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
-
-proc pp*(bh: BlockHash): string =
-  "%" & bh.Hash256.pp
-
-proc pp*(bn: BlockNumber): string =
-  if bn == high(BlockNumber): "#high"
-  else: "#" & $bn
 
 # ------------------------------------------------------------------------------
 # End

@@ -11,11 +11,11 @@
 import
   std/[algorithm, sequtils, strutils, tables],
   chronicles,
-  eth/[common, p2p, rlp, trie/nibbles, trie/db],
+  eth/[common, p2p, rlp, trie/nibbles],
   stew/byteutils,
   ../../range_desc,
-  "."/[bulk_storage, hexary_desc, hexary_error, hexary_import,
-       hexary_interpolate, hexary_inspect, hexary_paths, snapdb_desc]
+  "."/[hexary_desc, hexary_error, hexary_import, hexary_interpolate,
+       hexary_inspect, hexary_paths, snapdb_desc, snapdb_persistent]
 
 {.push raises: [Defect].}
 
@@ -24,8 +24,8 @@ logScope:
 
 type
   SnapDbAccountsRef* = ref object of SnapDbBaseRef
-    peer: Peer            ## For log messages
-    getFn: HexaryGetFn    ## Persistent database `get()` closure
+    peer: Peer               ## For log messages
+    getClsFn: AccountsGetFn  ## Persistent database `get()` closure
 
 const
   extraTraceMessages = false or true
@@ -40,6 +40,11 @@ proc to(h: Hash256; T: type NodeKey): T =
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
 
+proc getFn(ps: SnapDbAccountsRef): HexaryGetFn =
+  ## Derive from `GetClsFn` closure => `HexaryGetFn`. There reason for that
+  ## seemingly redundant mapping is that here is space for additional localised
+  ## and locked parameters as done with the `StorageSlotsGetFn`.
+  return proc(key: openArray[byte]): Blob = ps.getClsFn(key)
 
 template noKeyError(info: static[string]; code: untyped) =
   try:
@@ -70,10 +75,10 @@ proc persistentAccounts(
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
-    let rc = db.bulkStorageAccounts(ps.kvDb)
+    let rc = db.persistentAccountsPut(ps.kvDb)
     if rc.isErr: return rc
   else:
-    let rc = db.bulkStorageAccountsRocky(ps.rockDb)
+    let rc = db.persistentAccountsPut(ps.rockDb)
     if rc.isErr: return rc
   ok()
 
@@ -143,7 +148,7 @@ proc init*(
   new result
   result.init(pv, root.to(NodeKey))
   result.peer = peer
-  result.getFn = proc(key: openArray[byte]): Blob = db.get(key)
+  result.getClsFn = db.persistentAccountsGetFn()
 
 proc dup*(
     ps: SnapDbAccountsRef;
@@ -456,7 +461,7 @@ proc nextAccountsChainDbKey*(
     accHash: Hash256;
       ): Result[Hash256,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
-  ## argument account.
+  ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accHash.to(NodeKey)
                       .hexaryPath(ps.root, ps.getFn)

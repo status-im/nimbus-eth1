@@ -12,7 +12,7 @@ import
   std/[options],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   ".."/[protocol, sync_desc],
   ../misc/[best_pivot, block_queue],
   ./ticker

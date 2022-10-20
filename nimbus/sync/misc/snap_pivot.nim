@@ -62,10 +62,10 @@
 ## the current best block disappears and be able to reduce block number.
 
 import
-  std/bitops,
+  std/[bitops, sequtils, strutils],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p, p2p/private/p2p_types],
+  eth/[common, p2p, p2p/private/p2p_types],
   "../.."/[constants, genesis, p2p/chain/chain_desc],
   ".."/[protocol, sync_desc, types],
   ../snap/worker_desc
@@ -170,6 +170,29 @@ static:
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
+proc pp(a: MDigest[256]; collapse = true): string =
+  if not collapse:
+    a.data.mapIt(it.toHex(2)).join.toLowerAscii
+  elif a == EMPTY_ROOT_HASH:
+    "EMPTY_ROOT_HASH"
+  elif a == EMPTY_UNCLE_HASH:
+    "EMPTY_UNCLE_HASH"
+  elif a == EMPTY_SHA3:
+    "EMPTY_SHA3"
+  elif a == ZERO_HASH256:
+    "ZERO_HASH256"
+  else:
+    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
+
+proc pp(bh: BlockHash): string =
+  "%" & $bh.Hash256.pp
+
+proc pp(bn: BlockNumber): string =
+  "#" & $bn
+
+proc pp(bhn: HashOrNum): string =
+  if bhn.isHash: bhn.hash.pp else: bhn.number.pp
+
 proc traceSyncLocked(
     sp: SnapPivotWorkerRef;
     num: BlockNumber;
@@ -178,7 +201,7 @@ proc traceSyncLocked(
   ## Trace messages when peer canonical head is confirmed or updated.
   let
     peer = sp.peer
-    bestBlock = sp.global.ctx.pp(hash, num)
+    bestBlock = num.pp
   if sp.syncMode != SyncLocked:
     debug "Now tracking chain head of peer", peer,
       bestBlock
@@ -207,7 +230,7 @@ proc lockSyncStateAndFetch(sp: SnapPivotWorkerRef; header: BlockHeader) =
     peer = sp.peer
     stateRoot = header.stateRoot
     hash = header.blockHash.BlockHash
-    thisBlock = sp.global.ctx.pp(hash, header.blockNumber)
+    thisBlock = header.blockNumber.pp
 
   sp.traceSyncLocked(header.blockNumber, hash)
   sp.bestNumber = header.blockNumber
@@ -456,7 +479,6 @@ proc peerSyncChainEmptyReply(sp: SnapPivotWorkerRef; request: BlocksRequest) =
       if lowestAbsent == 0.toBlockNumber: lowestAbsent
       else: lowestAbsent - 1.toBlockNumber
     sp.bestHash = default(typeof(sp.bestHash))
-    sp.global.ctx.seen(sp.bestHash,sp.bestNumber)
 
 
 proc peerSyncChainNonEmptyReply(
@@ -514,7 +536,6 @@ proc peerSyncChainNonEmptyReply(
   if highestPresent > sp.bestNumber:
     sp.bestNumber = highestPresent
     sp.bestHash = headers[highestIndex].blockHash.BlockHash
-    sp.global.ctx.seen(sp.bestHash,sp.bestNumber)
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -584,7 +605,7 @@ proc pivotNegotiate*(
   let request = sp.peerSyncChainRequest
   trace trEthSendSendingGetBlockHeaders, peer,
     count=request.maxResults,
-    startBlock=sp.global.ctx.pp(request.startBlock), step=request.traceStep
+    startBlock=request.startBlock.pp, step=request.traceStep
 
   inc sp.global.stats.ok.getBlockHeaders
   var reply: Option[protocol.blockHeadersObj]

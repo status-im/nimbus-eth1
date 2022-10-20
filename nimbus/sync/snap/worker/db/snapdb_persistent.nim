@@ -9,28 +9,28 @@
 # except according to those terms.
 
 import
-  std/[algorithm, strutils, tables],
+  std/[algorithm, tables],
   chronicles,
   eth/[common, trie/db],
-  ../../../../db/[kvstore_rocksdb, storage_types],
-  ../../../types,
+  ../../../../db/kvstore_rocksdb,
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, rocky_bulk_load]
+  "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
 {.push raises: [Defect].}
 
 logScope:
   topics = "snap-db"
 
-const
-  RockyBulkCache = "accounts.sst"
+type
+  AccountsGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
+    ## The `get()` function for the accounts trie
+
+  StorageSlotsGetFn* = proc(acc: Hash256, key: openArray[byte]): Blob {.gcsafe.}
+    ## The `get()` function for the storage trie depends on the current account
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc to(tag: NodeTag; T: type RepairKey): T =
-  tag.to(NodeKey).to(RepairKey)
 
 proc convertTo(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use
@@ -40,46 +40,33 @@ proc convertTo(key: RepairKey; T: type NodeTag): T =
   ## Might be lossy, check before use
   UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
 
-# ------------------------------------------------------------------------------
-# Private helpers for bulk load testing
-# ------------------------------------------------------------------------------
+proc toAccountsKey(a: RepairKey): ByteArray32 =
+  a.convertTo(NodeKey).toAccountsKey
 
-proc chainDbKey(a: RepairKey): ByteArray32 =
-  a.convertTo(NodeKey).ByteArray32
-
-proc storagesKey(a: NodeKey): ByteArray33 =
-  a.ByteArray32.slotHashToSlotKey.data
-
-proc storagesKey(a: RepairKey): ByteArray33 =
-  a.convertTo(NodeKey).storagesKey
-
-template toOpenArray*(k: ByteArray32): openArray[byte] =
-  k.toOpenArray(0, 31)
-
-template toOpenArray*(k: NodeKey): openArray[byte] =
-  k.ByteArray32.toOpenArray
-
-template toOpenArray*(k: ByteArray33): openArray[byte] =
-  k.toOpenArray(0, 32)
+proc toStorageSlotsKey(a: RepairKey): ByteArray33 =
+  a.convertTo(NodeKey).toStorageSlotsKey
 
 # ------------------------------------------------------------------------------
-# Public helperd
+# Public functions: get
 # ------------------------------------------------------------------------------
 
-proc bulkStorageClearRockyCacheFile*(rocky: RocksStoreRef): bool =
-  if not rocky.isNil:
-    # A cache file might hang about from a previous crash
-    try:
-      discard rocky.clearCacheFile(RockyBulkCache)
-      return true
-    except OSError as e:
-      error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
+proc persistentAccountsGetFn*(db: TrieDatabaseRef): AccountsGetFn =
+  return proc(key: openArray[byte]): Blob =
+    var nodeKey: NodeKey
+    if nodeKey.init(key):
+      return db.get(nodeKey.toAccountsKey.toOpenArray)
 
+proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
+  return proc(accHash: Hash256; key: openArray[byte]): Blob =
+    var nodeKey: NodeKey
+    if nodeKey.init(key):
+      return db.get(nodeKey.toStorageSlotsKey.toOpenArray)
+      
 # ------------------------------------------------------------------------------
-# Public bulk store examples
+# Public functions: store/put
 # ------------------------------------------------------------------------------
 
-proc bulkStorageAccounts*(
+proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
@@ -92,10 +79,10 @@ proc bulkStorageAccounts*(
       let error = UnresolvedRepairNode
       trace "Unresolved node in repair table", error
       return err(error)
-    base.put(key.chainDbKey.toOpenArray, value.convertTo(Blob))
+    base.put(key.toAccountsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
-proc bulkStorageStorages*(
+proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
@@ -108,11 +95,11 @@ proc bulkStorageStorages*(
       let error = UnresolvedRepairNode
       trace "Unresolved node in repair table", error
       return err(error)
-    base.put(key.storagesKey.toOpenArray, value.convertTo(Blob))
+    base.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
 
 
-proc bulkStorageAccountsRocky*(
+proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryDbError]
@@ -147,7 +134,7 @@ proc bulkStorageAccountsRocky*(
     let
       nodeKey = nodeTag.to(NodeKey)
       data = db.tab[nodeKey.to(RepairKey)].convertTo(Blob)
-    if not bulker.add(nodeKey.toOpenArray, data):
+    if not bulker.add(nodeKey.toAccountsKey.toOpenArray, data):
       let error = AddBulkItemFailed
       trace "Rocky hexary bulk load failure",
         n, len=db.tab.len, error, info=bulker.lastError()
@@ -161,7 +148,7 @@ proc bulkStorageAccountsRocky*(
   ok()
 
 
-proc bulkStorageStoragesRocky*(
+proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryDbError]
@@ -196,7 +183,7 @@ proc bulkStorageStoragesRocky*(
     let
       nodeKey = nodeTag.to(NodeKey)
       data = db.tab[nodeKey.to(RepairKey)].convertTo(Blob)
-    if not bulker.add(nodeKey.storagesKey.toOpenArray, data):
+    if not bulker.add(nodeKey.toStorageSlotsKey.toOpenArray, data):
       let error = AddBulkItemFailed
       trace "Rocky hexary bulk load failure",
         n, len=db.tab.len, error, info=bulker.lastError()

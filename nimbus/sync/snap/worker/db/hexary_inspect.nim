@@ -11,7 +11,7 @@
 import
   std/[hashes, sequtils, sets, tables],
   chronicles,
-  eth/[common/eth_types_rlp, trie/nibbles],
+  eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_paths]

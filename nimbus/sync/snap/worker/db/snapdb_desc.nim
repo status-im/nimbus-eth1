@@ -11,16 +11,19 @@
 import
   std/[sequtils, tables],
   chronicles,
-  eth/[common/eth_types, p2p, trie/db],
-  ../../../../db/select_backend,
+  eth/[common, p2p, trie/db],
+  ../../../../db/[select_backend, storage_types],
   ../../range_desc,
-  "."/[bulk_storage, hexary_desc, hexary_error, hexary_import, hexary_paths,
-       rocky_bulk_load]
+  "."/[hexary_desc, hexary_error, hexary_import, hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
 logScope:
   topics = "snap-db"
+
+const
+  RockyBulkCache* = "accounts.sst"
+    ## Name of temporary file to accomodate SST records for `rocksdb`
 
 type
   SnapDbRef* = ref object
@@ -81,6 +84,19 @@ proc pp*(a: NodeTag; ps: SnapDbBaseRef): string =
   a.to(NodeKey).pp(ps)
 
 # ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+proc clearRockyCacheFile(rocky: RocksStoreRef): bool =
+  if not rocky.isNil:
+    # A cache file might hang about from a previous crash
+    try:
+      discard rocky.clearCacheFile(RockyBulkCache)
+      return true
+    except OSError as e:
+      error "Cannot clear rocksdb cache", exception=($e.name), msg=e.msg
+
+# ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
@@ -97,7 +113,7 @@ proc init*(
       ): T =
   ## Variant of `init()` allowing bulk import on rocksdb backend
   result = T(db: db.trieDB, rocky: db.rocksStoreRef)
-  if not result.rocky.bulkStorageClearRockyCacheFile():
+  if not result.rocky.clearRockyCacheFile():
     result.rocky = nil
 
 proc init*(
@@ -156,6 +172,22 @@ proc kvDb*(ps: SnapDbBaseRef): TrieDatabaseRef =
 proc kvDb*(pv: SnapDbRef): TrieDatabaseRef =
   ## Getter, low level access to underlying persistent key-value DB
   pv.db
+
+# ------------------------------------------------------------------------------
+# Public functions, select sub-tables for persistent storage
+# ------------------------------------------------------------------------------
+
+proc toAccountsKey*(a: NodeKey): ByteArray32 =
+  a.ByteArray32
+
+proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
+  a.ByteArray32.slotHashToSlotKey.data
+
+template toOpenArray*(k: ByteArray32): openArray[byte] =
+  k.toOpenArray(0, 31)
+
+template toOpenArray*(k: ByteArray33): openArray[byte] =
+  k.toOpenArray(0, 32)
 
 # ------------------------------------------------------------------------------
 # Public functions
