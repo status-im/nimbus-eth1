@@ -43,6 +43,18 @@ proc newBaseChainDB*(
   result.config    = params.config
   result.genesis   = params.genesis
 
+proc newBaseChainDB*(
+       db: TrieDatabaseRef,
+       config: ChainConfig,
+       pruneTrie: bool = true,
+       id: NetworkId = MainNet): BaseChainDB =
+
+  new(result)
+  result.db = db
+  result.pruneTrie = pruneTrie
+  result.networkId = id
+  result.config    = config
+
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
