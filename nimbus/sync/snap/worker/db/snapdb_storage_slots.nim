@@ -11,11 +11,11 @@
 import
   std/tables,
   chronicles,
-  eth/[common, p2p, rlp, trie/db],
+  eth/[common, p2p, rlp],
   ../../../protocol,
   ../../range_desc,
-  "."/[bulk_storage, hexary_desc, hexary_error, hexary_import, hexary_inspect,
-       hexary_interpolate, hexary_paths, snapdb_desc]
+  "."/[hexary_desc, hexary_error, hexary_import, hexary_inspect,
+       hexary_interpolate, hexary_paths, snapdb_desc, snapdb_persistent]
 
 {.push raises: [Defect].}
 
@@ -26,13 +26,10 @@ const
   extraTraceMessages = false or true
 
 type
-  GetAccFn = proc(accHash: Hash256, key: openArray[byte]): Blob {.gcsafe.}
-    ## The `get()` function for the storage trie depends on the current account
-
   SnapDbStorageSlotsRef* = ref object of SnapDbBaseRef
-    peer: Peer             ## For log messages
-    accHash: Hash256       ## Accounts address hash (curr.unused)
-    getAccFn: GetAccFn     ## Persistent database `get()` closure
+    peer: Peer                  ## For log messages
+    accHash: Hash256            ## Accounts address hash (curr.unused)
+    getClsFn: StorageSlotsGetFn ## Persistent database `get()` closure
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -44,9 +41,9 @@ proc to(h: Hash256; T: type NodeKey): T =
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
 
-proc getAccCls(ps: SnapDbStorageSlotsRef; accHash: Hash256): HexaryGetFn =
-  ## Fix `accHash` argument in `GetAccFn` closure => `HexaryGetFn`
-  result = proc(key: openArray[byte]): Blob = ps.getAccFn(accHash,key)
+proc getFn(ps: SnapDbStorageSlotsRef; accHash: Hash256): HexaryGetFn =
+  ## Lock `accHash` argument into `GetClsFn` closure => `HexaryGetFn`
+  return proc(key: openArray[byte]): Blob = ps.getClsFn(accHash,key)
 
 
 template noKeyError(info: static[string]; code: untyped) =
@@ -88,10 +85,10 @@ proc persistentStorageSlots(
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
-    let rc = db.bulkStorageStorages(ps.kvDb)
+    let rc = db.persistentStorageSlotsPut(ps.kvDb)
     if rc.isErr: return rc
   else:
-    let rc = db.bulkStorageStoragesRocky(ps.rockDb)
+    let rc = db.persistentStorageSlotsPut(ps.rockDb)
     if rc.isErr: return rc
   ok()
 
@@ -177,10 +174,7 @@ proc init*(
   result.init(pv, root.to(NodeKey))
   result.peer = peer
   result.accHash = account
-
-  # At the moment, the resulting `getAccFn()` is independent of `accHash`
-  result.getAccFn = proc(accHash: Hash256, key: openArray[byte]): Blob =
-                        db.get(key)
+  result.getClsFn = db.persistentStorageSlotsGetFn()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -364,7 +358,7 @@ proc inspectStorageSlotsTrie*(
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
-      stats = ps.getAccCls(ps.accHash).hexaryInspectTrie(ps.root, pathList)
+      stats = ps.getFn(ps.accHash).hexaryInspectTrie(ps.root, pathList)
     else:
       stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
 
@@ -410,7 +404,7 @@ proc getStorageSlotsNodeKey*(
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("inspectAccountsPath()"):
     if persistent:
-      rc = ps.getAccCls(ps.accHash).hexaryInspectPath(ps.root, path)
+      rc = ps.getFn(ps.accHash).hexaryInspectPath(ps.root, path)
     else:
       rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
   if rc.isOk:
@@ -443,7 +437,7 @@ proc getStorageSlotsData*(
   noRlpExceptionOops("getStorageSlotsData()"):
     var leaf: Blob
     if persistent:
-      leaf = path.hexaryPath(ps.root, ps.getAccCls(ps.accHash)).leafData
+      leaf = path.hexaryPath(ps.root, ps.getFn(ps.accHash)).leafData
     else:
       leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
 
@@ -475,7 +469,7 @@ proc haveStorageSlotsData*(
   ## Caveat: There is no unit test yet
   noGenericExOrKeyError("haveStorageSlotsData()"):
     if persistent:
-      let getFn = ps.getAccCls(ps.accHash)
+      let getFn = ps.getFn(ps.accHash)
       return 0 < ps.root.ByteArray32.getFn().len
     else:
       return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))

@@ -442,6 +442,17 @@ proc storagesRunner(
                     OkStoDb
         check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
 
+    test &"Inspecting {storagesList.len} storages lists":
+      for n,w in storagesList:
+        for m in 0 ..< w.data.storages.len:
+          let
+            accHash = w.data.storages[m].account.accHash
+            root = w.data.storages[m].account.storageRoot
+            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accHash, root, peer)
+            rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
+          # ok => level > 0 and not stopped
+          check rc.isOk
+
 proc inspectionRunner(
     noisy = true;
     persistent = true;
