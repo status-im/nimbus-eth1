@@ -1,6 +1,6 @@
 import
   std/[os, parseopt, strutils],
-  eth/p2p, stint, ../nimbus/config
+  eth/common, stint, ../nimbus/config
 
 from ../nimbus/chain_config import
   MainNet,

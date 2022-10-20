@@ -8,7 +8,7 @@
 import
   std/[sequtils, algorithm],
   stew/[byteutils], eth/trie/[hexary, db],
-  eth/[common, rlp, p2p], chronicles,
+  eth/[common, rlp], chronicles,
   ".."/[errors, constants, utils, chain_config],
   "."/storage_types
 

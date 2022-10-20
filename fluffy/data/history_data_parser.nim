@@ -11,8 +11,6 @@ import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], chronicles,
   eth/[rlp, common/eth_types],
-  # TODO: `NetworkId` should not be in these private types
-  eth/p2p/private/p2p_types,
   ../../nimbus/[chain_config, genesis],
   ../network/history/[history_content, accumulator]
 

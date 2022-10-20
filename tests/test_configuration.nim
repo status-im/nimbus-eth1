@@ -1,7 +1,7 @@
 import
   std/[os],
   pkg/[unittest2],
-  eth/[p2p, common, keys],
+  eth/[common, keys],
   stew/byteutils,
   ../nimbus/[config, chain_config, context],
   ./test_helpers

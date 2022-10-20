@@ -34,7 +34,7 @@ import
   ../nimbus/p2p/chain,
   ./replay/[undump_blocks, pp],
   chronicles,
-  eth/[common, p2p, trie/db],
+  eth/[common, trie/db],
   stew/results,
   unittest2
 
