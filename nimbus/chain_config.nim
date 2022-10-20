@@ -273,7 +273,7 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
 
   template validateFork(forkName: untyped, nextBlock: untyped) =
     let fork = astToStr(forkName)
-    cg.config.forkName = cc.config.forkName.get(nextBlock)    
+    cg.config.forkName = cc.config.forkName.get(nextBlock)
     if cg.config.forkName > nextBlock:
       error "Forks can't be assigned out of order", fork=fork
       return false
@@ -549,3 +549,6 @@ proc `==`*(a, b: ChainConfig): bool =
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
   a[] == b[]
+
+proc isLondon*(c: ChainConfig, number: BlockNumber): bool {.inline.} =
+  number >= c.londonBlock
