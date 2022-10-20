@@ -9,7 +9,7 @@
 
 import
   std/[os, json, strutils, times],
-  eth/[common, trie/db, p2p], stew/byteutils,
+  eth/[common, trie/db], stew/byteutils,
   ../../../nimbus/db/db_chain,
   ../../../nimbus/[genesis, chain_config, conf_utils],
   ../sim_utils,

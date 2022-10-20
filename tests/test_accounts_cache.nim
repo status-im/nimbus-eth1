@@ -17,7 +17,7 @@ import
   ../nimbus/vm_state,
   ../nimbus/vm_types,
   ./replay/undump_blocks,
-  eth/[common, p2p, trie/db],
+  eth/[common, trie/db],
   unittest2
 
 type

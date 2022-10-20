@@ -22,7 +22,7 @@ import
     confutils/std/net
   ],
   stew/shims/net as stewNet,
-  eth/[p2p, common, net/nat, p2p/bootnodes],
+  eth/[common, net/nat, p2p/bootnodes, p2p/enode],
   "."/[db/select_backend, chain_config,
     constants, vm_compile_info, version
   ]

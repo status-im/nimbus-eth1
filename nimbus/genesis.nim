@@ -1,6 +1,6 @@
 import
   std/tables,
-  eth/[common, rlp, p2p],
+  eth/[common, rlp],
   chronicles, eth/trie/[db, trie_defs],
   ./db/[db_chain, state_db],
   "."/[constants, chain_config, forks, p2p/gaslimit]
