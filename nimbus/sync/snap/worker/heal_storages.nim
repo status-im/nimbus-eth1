@@ -386,7 +386,7 @@ proc healStoragesDb*(buddy: SnapBuddyRef) {.async.} =
       kvp = toBeHealed[n]
       isComplete = await buddy.healingIsComplete(kvp)
     if isComplete:
-      env.nStorage.inc
+      env.nSlotLists.inc
     else:
       env.fetchStorage.merge kvp
 

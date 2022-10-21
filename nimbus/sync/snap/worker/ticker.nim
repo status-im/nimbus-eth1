@@ -28,7 +28,7 @@ type
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
-    nStorage*: (float,float)           ## mean and standard deviation
+    nSlotLists*: (float,float)         ## mean and standard deviation
     storageQueue*: (float,float)       ## mean and standard deviation
     nQueues*: int
 
@@ -126,8 +126,10 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
-      nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
-      nSto = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
+      nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
+              &"({(data.nAccounts[1]+0.5).int64})")
+      nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
+              &"({(data.nSlotLists[1]+0.5).int64})")
 
     info "Snap sync statistics",
       tick, buddies, pivot, nAcc, accCov, nSto, stoQue, mem

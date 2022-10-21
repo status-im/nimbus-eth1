@@ -137,7 +137,7 @@ type
 
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
-    nStorage*: uint64                  ## Imported # of account storage tries
+    nSlotLists*: uint64                ## Imported # of account storage tries
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root

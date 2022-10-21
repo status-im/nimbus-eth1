@@ -95,28 +95,31 @@ proc persistentStorageSlots(
 
 proc collectStorageSlots(
     peer: Peer;
-    slots: seq[SnapStorage];
+    slotLists: seq[SnapStorage];
       ): Result[seq[RLeafSpecs],HexaryDbError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Similar to `collectAccounts()`
   var rcSlots: seq[RLeafSpecs]
 
-  if slots.len != 0:
+  if slotLists.len != 0:
     # Add initial account
     rcSlots.add RLeafSpecs(
-      pathTag: slots[0].slotHash.to(NodeTag),
-      payload: slots[0].slotData)
+      pathTag: slotLists[0].slotHash.to(NodeTag),
+      payload: slotLists[0].slotData)
 
     # Veify & add other accounts
-    for n in 1 ..< slots.len:
-      let nodeTag = slots[n].slotHash.to(NodeTag)
+    for n in 1 ..< slotLists.len:
+      let nodeTag = slotLists[n].slotHash.to(NodeTag)
 
       if nodeTag <= rcSlots[^1].pathTag:
         let error = SlotsNotSrictlyIncreasing
-        trace "collectStorageSlots()", peer, item=n, slots=slots.len, error
+        trace "collectStorageSlots()", peer, item=n,
+          nSlotLists=slotLists.len, error
         return err(error)
 
-      rcSlots.add RLeafSpecs(pathTag: nodeTag, payload: slots[n].slotData)
+      rcSlots.add RLeafSpecs(
+        pathTag: nodeTag,
+        payload: slotLists[n].slotData)
 
   ok(rcSlots)
 
@@ -206,52 +209,52 @@ proc importStorageSlots*(
     nItems = data.storages.len
     sTop = nItems - 1
   var
-    slot: Option[int]
+    itemInx: Option[int]
   if 0 <= sTop:
     try:
       for n in 0 ..< sTop:
         # These ones never come with proof data
-        slot = some(n)
+        itemInx = some(n)
         let rc = ps.importStorageSlots(data.storages[n], @[])
         if rc.isErr:
-          result.add HexaryNodeReport(slot: slot, error: rc.error)
-          trace "Storage slots item fails", peer, inx=n, nItems,
-            slots=data.storages[n].data.len, proofs=0,
+          result.add HexaryNodeReport(slot: itemInx, error: rc.error)
+          trace "Storage slots item fails", peer, itemInx=n, nItems,
+            nSlots=data.storages[n].data.len, proofs=0,
             error=rc.error, nErrors=result.len
 
       # Final one might come with proof data
       block:
-        slot = some(sTop)
+        itemInx = some(sTop)
         let rc = ps.importStorageSlots(data.storages[sTop], data.proof)
         if rc.isErr:
-          result.add HexaryNodeReport(slot: slot, error: rc.error)
-          trace "Storage slots last item fails", peer, inx=sTop, nItems,
-            slots=data.storages[sTop].data.len, proofs=data.proof.len,
+          result.add HexaryNodeReport(slot: itemInx, error: rc.error)
+          trace "Storage slots last item fails", peer, itemInx=sTop, nItems,
+            nSlots=data.storages[sTop].data.len, proofs=data.proof.len,
             error=rc.error, nErrors=result.len
 
       # Store to disk
       if persistent and 0 < ps.hexaDb.tab.len:
-        slot = none(int)
+        itemInx = none(int)
         let rc = ps.hexaDb.persistentStorageSlots(ps)
         if rc.isErr:
-          result.add HexaryNodeReport(slot: slot, error: rc.error)
+          result.add HexaryNodeReport(slot: itemInx, error: rc.error)
 
     except RlpError:
-      result.add HexaryNodeReport(slot: slot, error: RlpEncoding)
-      trace "Storage slot node error", peer, slot, nItems,
-        slots=data.storages[sTop].data.len, proofs=data.proof.len,
+      result.add HexaryNodeReport(slot: itemInx, error: RlpEncoding)
+      trace "Storage slot node error", peer, itemInx, nItems,
+        nSlots=data.storages[sTop].data.len, proofs=data.proof.len,
         error=RlpEncoding, nErrors=result.len
     except KeyError as e:
       raiseAssert "Not possible @ importStorages: " & e.msg
     except OSError as e:
-      result.add HexaryNodeReport(slot: slot, error: OSErrorException)
-      trace "Import storage slots exception", peer, slot, nItems,
+      result.add HexaryNodeReport(slot: itemInx, error: OSErrorException)
+      trace "Import storage slots exception", peer, itemInx, nItems,
         name=($e.name), msg=e.msg, nErrors=result.len
 
   when extraTraceMessages:
     if result.len == 0:
       trace "Storage slots imported", peer, nItems,
-        slots=data.storages.len, proofs=data.proof.len
+        nSlotLists=data.storages.len, proofs=data.proof.len
 
 proc importStorageSlots*(
     pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
@@ -363,22 +366,21 @@ proc inspectStorageSlotsTrie*(
       stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
 
   block checkForError:
-    let error = block:
-      if stats.stopped:
-        TrieLoopAlert
-      elif stats.level == 0:
-        TrieIsEmpty
-      else:
-        break checkForError
-    trace "Inspect storage slots trie failed", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    var error = TrieIsEmpty
+    if stats.stopped:
+      error = TrieLoopAlert
+      trace "Inspect storage slots trie failed", peer, nPathList=pathList.len,
+        nDangling=stats.dangling.len, stoppedAt=stats.level
+    elif 0 < stats.level:
+      break checkForError
     if ignoreError:
       return ok(stats)
     return err(error)
 
-  when extraTraceMessages:
-    trace "Inspect storage slots trie ok", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, level=stats.level
+  #when extraTraceMessages:
+  #  trace "Inspect storage slots trie ok", peer, nPathList=pathList.len,
+  #    nDangling=stats.dangling.len, level=stats.level
+
   return ok(stats)
 
 proc inspectStorageSlotsTrie*(

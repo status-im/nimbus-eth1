@@ -106,7 +106,7 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
 
         when extraTraceMessages:
           trace "Prepare fetching partial storage slots", peer,
-            nStorage=env.nStorage, nStorageQueue=env.fetchStorage.len,
+            nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
             nToProcess=1, subRange=rc.value, account=reqData.accHash.to(NodeTag)
 
         return @[AccountSlotsHeader(
@@ -140,7 +140,7 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
       break
 
   when extraTraceMessages:
-    trace "Fetch account storage slots", peer, nStorage=env.nStorage,
+    trace "Fetch account storage slots", peer, nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, nToProcess=result.len, nInherit
 
 
@@ -171,7 +171,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
         trace "Error fetching storage slots => stop", peer,
-          nStorage=env.nStorage, nReq=req.len,
+          nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return
     rc.value
@@ -183,7 +183,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
 
   #when extraTraceMessages:
   #  trace "Fetched storage slots", peer,
-  #    nStorage=env.nStorage, nSlotLists=gotSlotLists, nReq=req.len,
+  #    nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
   #    nStorageQueue=env.fetchStorage.len, nLeftOvers=stoRange.leftOver.len
 
   if 0 < gotSlotLists:
@@ -199,7 +199,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
         gotSlotLists.dec(report.len - 1) # for logging only
 
         error "Error writing storage slots to database", peer,
-          nStorage=env.nStorage, nSlotLists=gotSlotLists, nReq=req.len,
+          nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[^1].error
         return
 
@@ -224,10 +224,10 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
           # No partial result processing anymore to consider
           stoRange.data.proof = @[]
 
-        # Update local statistics counter for `nStorage` counter update
+        # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        trace "Error processing storage slots", peer, nStorage=env.nStorage,
+        trace "Error processing storage slots", peer, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[inx].error
 
@@ -238,7 +238,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
       # Successful partial request, but not completely done with yet.
       gotSlotLists = 0
 
-    env.nStorage.inc(gotSlotLists)
+    env.nSlotLists.inc(gotSlotLists)
 
   # Return unprocessed left overs to batch queue
   env.fetchStorage.merge stoRange.leftOver
@@ -258,7 +258,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
     var loopCount = 1 + (env.fetchStorage.len - 1) div maxStoragesFetch
 
     when extraTraceMessages:
-      trace "Start fetching storage slots", peer, nStorage=env.nStorage,
+      trace "Start fetching storage slots", peer, nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, loopCount
 
     while 0 < loopCount and
@@ -268,7 +268,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
       await buddy.storeStoragesSingleBatch()
 
     when extraTraceMessages:
-      trace "Done fetching storage slots", peer, nStorage=env.nStorage,
+      trace "Done fetching storage slots", peer, nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, loopCount
 
 # ------------------------------------------------------------------------------
