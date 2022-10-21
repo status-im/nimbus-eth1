@@ -40,25 +40,31 @@
 ##
 ##   The argument `last` is set `true` if the last entry is reached.
 ##
-##   Note that this function does not run in `async` mode.
+##   Note:
+##   + This function does not run in `async` mode.
+##   + The flag `buddy.ctx.poolMode` has priority over the flag
+##     `buddy.ctrl.multiOk` which controls `runSingle()` and `runMulti()`.
 ##
 ##
 ## *runSingle(buddy: BuddyRef[S,W]) {.async.}*
 ##   This worker peer method is invoked if the peer-local flag
 ##   `buddy.ctrl.multiOk` is set `false` which is the default mode. This flag
 ##   is updated by the worker peer when deemed appropriate.
-##   * For all workers, there can be only one `runSingle()` function active
+##   + For all workers, there can be only one `runSingle()` function active
 ##     simultaneously for all worker peers.
-##   * There will be no `runMulti()` function active for the same worker peer
+##   + There will be no `runMulti()` function active for the same worker peer
 ##     simultaneously
-##   * There will be no `runPool()` iterator active simultaneously.
+##   + There will be no `runPool()` iterator active simultaneously.
 ##
 ##   Note that this function runs in `async` mode.
+##
 ##
 ## *runMulti(buddy: BuddyRef[S,W]) {.async.}*
 ##   This worker peer method is invoked if the `buddy.ctrl.multiOk` flag is
 ##   set `true` which is typically done after finishing `runSingle()`. This
 ##   instance can be simultaneously active for all worker peers.
+##
+##   Note that this function runs in `async` mode.
 ##
 ##
 ## Additional import files needed when using this template:
@@ -77,6 +83,10 @@ import
   "."/[handlers, sync_desc]
 
 {.push raises: [Defect].}
+
+static:
+  # type `EthWireRef` is needed in `initSync()`
+  type silenceUnusedhandlerComplaint = EthWireRef # dummy directive
 
 type
   ActiveBuddies[S,W] = ##\
@@ -274,7 +284,7 @@ proc initSync*[S,W](
   dsc.buddies.init(dsc.ctx.buddiesMax)
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Set up syncing. This call should come early.
+  ## Set up `PeerObserver` handlers and start syncing.
   mixin runSetup
   # Initialise sub-systems
   if dsc.ctx.runSetup(dsc.tickerOk):
@@ -291,10 +301,10 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
     return true
 
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =
-  ## Stop syncing
+  ## Stop syncing and free peer handlers .
   mixin runRelease
-  dsc.pool.delObserver(dsc)
   dsc.ctx.runRelease()
+  dsc.pool.delObserver(dsc)
 
 # ------------------------------------------------------------------------------
 # End

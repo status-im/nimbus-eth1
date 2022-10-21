@@ -133,12 +133,12 @@ proc healingCtx(buddy: SnapBuddyRef): string =
   let
     ctx = buddy.ctx
     env = buddy.data.pivotEnv
-  "[" &
+  "{" &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & env.fetchAccounts.unprocessed.emptyFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
     "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
-    "nMissingNodes=" & $env.fetchAccounts.missingNodes.len & "]"
+    "nMissingNodes=" & $env.fetchAccounts.missingNodes.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions

@@ -29,7 +29,7 @@ type
   #  slotData*: Blob
   #
   # SnapStorageRanges* = object
-  #  slots*: seq[seq[SnapStorage]]
+  #  slotLists*: seq[seq[SnapStorage]]
   #  proof*: SnapStorageProof
 
   GetStorageRanges* = object
@@ -111,16 +111,16 @@ proc getStorageRanges*(
       trace trSnapRecvTimeoutWaiting & "for reply to GetStorageRanges", peer,
         nAccounts
       return err(ComResponseTimeout)
-    if nAccounts < rc.value.get.slots.len:
+    if nAccounts < rc.value.get.slotLists.len:
       # Ooops, makes no sense
       return err(ComTooManyStorageSlots)
     rc.value.get
 
   let
-    nSlots = snStoRanges.slots.len
+    nSlotLists = snStoRanges.slotLists.len
     nProof = snStoRanges.proof.len
 
-  if nSlots == 0:
+  if nSlotLists == 0:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getstorageranges-0x02:
     #
     # Notes:
@@ -130,7 +130,7 @@ proc getStorageRanges*(
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
     trace trSnapRecvReceived & "empty StorageRanges", peer,
-      nAccounts, nSlots, nProof, stateRoot, firstAccount=accounts[0].accHash
+      nAccounts, nSlotLists, nProof, stateRoot, firstAccount=accounts[0].accHash
     return err(ComNoStorageForAccounts)
 
   # Assemble return structure for given peer response
@@ -138,21 +138,22 @@ proc getStorageRanges*(
 
   # Filter remaining `slots` responses:
   # * Accounts for empty ones go back to the `leftOver` list.
-  for n in 0 ..< nSlots:
+  for n in 0 ..< nSlotLists:
     # Empty data for a slot indicates missing data
-    if snStoRanges.slots[n].len == 0:
+    if snStoRanges.slotLists[n].len == 0:
       dd.leftOver.add accounts[n]
     else:
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
-        data:    snStoRanges.slots[n])
+        data:    snStoRanges.slotLists[n])
 
   # Complete the part that was not answered by the peer
   if nProof == 0:
-    dd.leftOver = dd.leftOver & accounts[nSlots ..< nAccounts] # empty slice ok
+    # assigning empty slice is ok
+    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
 
   # Ok, we have a proof now. What was it to be proved?
-  elif snStoRanges.slots[^1].len == 0:
+  elif snStoRanges.slotLists[^1].len == 0:
     return err(ComNoDataForProof) # Now way to prove an empty node set
 
   else:
@@ -165,12 +166,13 @@ proc getStorageRanges*(
     if respTop < reqTop:
       dd.leftOver.add AccountSlotsHeader(
         subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
-        accHash:     accounts[nSlots-1].accHash,
-        storageRoot: accounts[nSlots-1].storageRoot)
-    dd.leftOver = dd.leftOver & accounts[nSlots ..< nAccounts] # empty slice ok
+        accHash:     accounts[nSlotLists-1].accHash,
+        storageRoot: accounts[nSlotLists-1].storageRoot)
+    # assigning empty slice isa ok
+    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
 
-  trace trSnapRecvReceived & "StorageRanges", peer, nAccounts, nSlots, nProof,
-    nLeftOver=dd.leftOver.len, stateRoot
+  trace trSnapRecvReceived & "StorageRanges", peer, nAccounts, nSlotLists,
+    nProof, nLeftOver=dd.leftOver.len, stateRoot
 
   return ok(dd)
 

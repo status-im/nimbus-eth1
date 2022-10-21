@@ -200,7 +200,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         uSum += fill
         uSqSum += fill * fill
 
-        let sLen = kvp.data.nStorage.float
+        let sLen = kvp.data.nSlotLists.float
         sSum += sLen
         sSqSum += sLen * sLen
 
@@ -225,7 +225,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       pivotBlock:    pivotBlock,
       nQueues:       ctx.data.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
-      nStorage:      meanStdDev(sSum, sSqSum, count),
+      nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
       storageQueue:  meanStdDev(wSum, wSqSum, count))
 
@@ -341,6 +341,11 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
           # Check whether storage slots are complete
           if env.fetchStorage.len == 0:
             env.serialSync = true
+
+      if extraTraceMessages:
+        trace "Checked for pivot DB completeness",
+          nAccounts=env.nAccounts, accountsDone=env.accountsDone,
+          nSlotLists=env.nSlotLists, storageDone=env.serialSync
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
