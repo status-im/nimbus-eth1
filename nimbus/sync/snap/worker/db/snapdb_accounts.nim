@@ -332,22 +332,21 @@ proc inspectAccountsTrie*(
       stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
 
   block checkForError:
-    let error = block:
-      if stats.stopped:
-        TrieLoopAlert
-      elif stats.level == 0:
-        TrieIsEmpty
-      else:
-        break checkForError
-    trace "Inspect account trie failed", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    var error = TrieIsEmpty
+    if stats.stopped:
+      error = TrieLoopAlert
+      trace "Inspect account trie failed", peer, nPathList=pathList.len,
+        nDangling=stats.dangling.len, stoppedAt=stats.level, error
+    elif 0 < stats.level:
+      break checkForError
     if ignoreError:
       return ok(stats)
     return err(error)
 
-  when extraTraceMessages:
-    trace "Inspect account trie ok", peer, nPathList=pathList.len,
-      nDangling=stats.dangling.len, level=stats.level
+  #when extraTraceMessages:
+  #  trace "Inspect account trie ok", peer, nPathList=pathList.len,
+  #    nDangling=stats.dangling.len, level=stats.level
+
   return ok(stats)
 
 proc inspectAccountsTrie*(
