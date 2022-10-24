@@ -53,6 +53,12 @@ proc selectVM(c: Computation, fork: Fork, shouldPrepareTracer: bool) {.gcsafe.} 
 
   # It's important not to re-prepare the tracer after
   # an async operation, only after a call/create.
+  #
+  # That is, tracingEnabled is checked in many places, and
+  # indicates something like, "Do we want tracing to be
+  # enabled?", whereas shouldPrepareTracer is more like,
+  # "Are we at a spot right now where we want to re-initialize
+  # the tracer?"
   if c.tracingEnabled and shouldPrepareTracer:
     c.prepareTracer()
 

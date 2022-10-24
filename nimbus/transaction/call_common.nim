@@ -214,10 +214,6 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
     host.vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
-# FIXME-awkwardFactoring: I factored this out into a separate proc,
-# because it's a fairly coherent piece of logic that feels like it
-# clutters up the rest of finishRunningComputation. But I don't
-# like the name, which is a bad sign.
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
   let c = host.computation
   

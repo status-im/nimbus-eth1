@@ -21,18 +21,15 @@ import
 
 
 # Used in synchronous mode.
-# FIXME: is there some way to make this a singleton,
-# so that we don't bother creating a new one each time,
-# without ruining the gcsafeness?
 proc noLazyDataSource*(): LazyDataSource =
   LazyDataSource(
     ifNecessaryGetStorage: (proc(c: Computation, slot: UInt256): Future[void] {.async.} =
-      # FIXME-areAsyncOperationsNecessaryDuringSynchronousExecution 
       discard
     )
   )
 
-# Used in asynchronous mode.
+# Will be used in asynchronous on-demand-data-fetching mode, once
+# that is implemented.
 proc realLazyDataSource*(client: RpcClient): LazyDataSource =
   LazyDataSource(
     ifNecessaryGetStorage: (proc(c: Computation, slot: UInt256): Future[void] {.async.} =
@@ -54,8 +51,12 @@ proc realLazyDataSource*(client: RpcClient): LazyDataSource =
       let res = await client.eth_getStorageAt(address, quantity, blockId)
       echo("Fetched slot " & $(slot) & ", result is " & $(res))
       let v = res  # will res be the actual value, or do I need to convert or something?
-      c.vmState.mutateStateDB:
-        db.setStorage(c.msg.contractAddress, slot, UInt256.fromBytesBE(v))
+      
+      # Before implementing this, see the note from Zahary here:
+      # https://github.com/status-im/nimbus-eth1/pull/1260#discussion_r999669139
+      # 
+      # c.vmState.mutateStateDB:
+      #   db.setStorage(c.msg.contractAddress, slot, UInt256.fromBytesBE(v))
     )
   )
 
