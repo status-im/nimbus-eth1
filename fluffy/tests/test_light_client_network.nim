@@ -14,7 +14,7 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/light_client/[light_client_network, light_client_content],
+  ../network/beacon_light_client/[light_client_network, light_client_content],
   ../../nimbus/constants,
   ../content_db,
   ./test_helpers,

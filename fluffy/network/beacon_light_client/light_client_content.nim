@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Nimbus - Portal Network
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -24,7 +24,7 @@ type
     lightClientFinalityUpdate = 0x02
     lightClientOptimisticUpdate = 0x03
 
-  # TODO Consider how we will gossip boostraps?
+  # TODO Consider how we will gossip bootstraps?
   # In normal LC operation node trust only one offered bootstrap, therefore offers
   # of any other bootstraps would be rejected.
   LightClientBootstrapKey* = object
@@ -48,10 +48,11 @@ type
     of lightClientOptimisticUpdate:
       lightClientOptimisticUpdateKey*: LightClientOptimisticUpdateKey
 
-  # Interal object to prepend forkdigest to bootstrap
-  ForkedLCBootsrap = object
-    fd: ForkDigest
-    bs: altair.LightClientBootstrap
+  # Object internal to light_client_content module, which represent what will be
+  # published on the wire
+  ForkedLightClientBootstrap = object
+    forkDigest: ForkDigest
+    bootstrap: altair.LightClientBootstrap
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -78,15 +79,13 @@ proc decodeBootstrap(
       altair.LightClientBootstrap
     )
     return ok(decoded)
-  except MalformedSszError as exc:
-    return err(exc.msg)
-  except SszSizeMismatchError as exc:
+  except SszError as exc:
     return err(exc.msg)
 
 proc encodeBootstrapForked*(
     fork: ForkDigest,
     bs: altair.LightClientBootstrap): seq[byte] =
-  SSZ.encode(ForkedLCBootsrap(fd: fork, bs: bs))
+  SSZ.encode(ForkedLightClientBootstrap(forkDigest: fork, bootstrap: bs))
 
 proc decodeBootstrapForked*(
     forks: ForkDigests,
