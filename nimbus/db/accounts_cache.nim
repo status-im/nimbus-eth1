@@ -212,36 +212,11 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
 
   acc.originalStorage[slot] = result
 
-# FIXME-duplicatedBecauseHowCanWeTellApartZeroFromUnfetched
-proc hasOriginalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): bool =
-  # share the same original storage between multiple
-  # versions of account
-  if acc.originalStorage.isNil:
-    acc.originalStorage = newTable[UInt256, UInt256]()
-  else:
-    acc.originalStorage[].withValue(slot, val) do:
-      return true
-
-  # Not in the original values cache - go to the DB.
-  let
-    slotAsKey = createTrieKeyFromSlot slot
-    accountTrie = getAccountTrie(db, acc)
-    foundRecord = accountTrie.get(slotAsKey)
-
-  return foundRecord.len > 0
-
 proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
     result = acc.originalStorageValue(slot, db)
-
-# FIXME-duplicatedBecauseHowCanWeTellApartZeroFromUnfetched
-proc hasStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): bool =
-  acc.overlayStorage.withValue(slot, val) do:
-    return true
-  do:
-    result = acc.hasOriginalStorageValue(slot, db)
 
 proc kill(acc: RefAccount) =
   acc.flags.excl IsAlive
@@ -371,17 +346,6 @@ proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256
   if acc.isNil:
     return
   acc.storageValue(slot, ac.db)
-
-# FIXME-duplicatedBecauseHowCanWeTellApartZeroFromUnfetched
-# I'm a bit confused about why getStorage in this file (above) just returns the
-# UInt256 value, whereas the one in state_db.nim returns (UInt256, bool). Maybe
-# the point is that for an AccountsCache, there's a difference between "not in
-# the cache" versus "doesn't exist at all, even in the underlying storage"?
-proc hasStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool {.inline.} =
-  let acc = ac.getAccount(address, false)
-  if acc.isNil:
-    return false
-  acc.hasStorageValue(slot, ac.db)
 
 proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
@@ -609,7 +573,6 @@ proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
-proc hasStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}

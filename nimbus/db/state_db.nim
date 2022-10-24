@@ -186,10 +186,6 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc hasStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): bool =
-  let (_, b) = getStorage(db, address, slot)
-  b
-
 proc setNonce*(db: AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
   var account = db.getAccount(address)
   if newNonce != account.nonce:
@@ -281,7 +277,6 @@ proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.borrow.}
-proc hasStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

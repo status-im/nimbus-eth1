@@ -138,12 +138,6 @@ template getStorage*(c: Computation, slot: UInt256): UInt256 =
   else:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
-template hasStorage*(c: Computation, slot: UInt256): bool =
-  when evmc_enabled:
-    c.host.hasStorage(c.msg.contractAddress, slot)
-  else:
-    c.vmState.readOnlyStateDB.hasStorage(c.msg.contractAddress, slot)
-
 template getBalance*(c: Computation, address: EthAddress): UInt256 =
   when evmc_enabled:
     c.host.getBalance(address)

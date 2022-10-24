@@ -110,12 +110,6 @@ proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
   var key = toEvmc(key)
   UInt256.fromEvmc ctx.host.get_storage(ctx.context, address, key.addr)
 
-proc hasStorage*(ctx: HostContext, address: EthAddress, key: UInt256): bool =
-  # FIXME-asyncAndEvmc
-  # This is obviously wrong; I'm just not sure what to do.
-  # Can I get this information from the EVMC interface?
-  return false
-
 proc setStorage*(ctx: HostContext, address: EthAddress,
                  key, value: UInt256): evmc_storage_status {.inline.} =
   var

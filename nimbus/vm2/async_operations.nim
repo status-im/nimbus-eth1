@@ -36,7 +36,11 @@ proc noLazyDataSource*(): LazyDataSource =
 proc realLazyDataSource*(client: RpcClient): LazyDataSource =
   LazyDataSource(
     ifNecessaryGetStorage: (proc(c: Computation, slot: UInt256): Future[void] {.async.} =
-      if c.hasStorage(slot): return  # already have it, no need to fetch
+      # TODO: find some way to check whether we already have it.
+      # This is WRONG, but good enough for now, considering this
+      # code is unused except in a few tests. I'm working on
+      # doing this properly.
+      if not c.getStorage(slot).isZero: return
 
       # FIXME-onDemandStorageNotImplementedYet
       # (I sketched in this code, but haven't actually tried running it yet.)
@@ -59,7 +63,8 @@ proc realLazyDataSource*(client: RpcClient): LazyDataSource =
 proc fakeLazyDataSource*(fakePairs: seq[tuple[key, val: array[32, byte]]]): LazyDataSource =
   LazyDataSource(
     ifNecessaryGetStorage: (proc(c: Computation, slot: UInt256): Future[void] {.async.} =
-      if c.hasStorage(slot): return  # already have it, no need to fetch
+      # See the comment above.
+      if not c.getStorage(slot).isZero: return
 
       # FIXME-writeAutomatedTestsToShowThatItCanRunConcurrently
 
