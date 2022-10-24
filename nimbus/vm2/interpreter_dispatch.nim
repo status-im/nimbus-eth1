@@ -236,12 +236,7 @@ when vm_use_recursion:
       if not c.pendingAsyncOperation.isNil:
         let p = c.pendingAsyncOperation
         c.pendingAsyncOperation = nil
-        # This should never actually be called, because in synchronous
-        # mode every async operation should be an already-resolved
-        # Future. But we can check, just in case. (Or should we just
-        # make this an assertion?)
-        if not p.finished():
-          waitFor(p)
+        doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
         c.executeOpcodes(false)
       else:
         when evmc_enabled:
@@ -274,9 +269,7 @@ else:
           shouldPrepareTracer = false
           let p = c.pendingAsyncOperation
           c.pendingAsyncOperation = nil
-          # See the comment above, in the recursive execCallOrCreate.
-          if not p.finished():
-            waitFor(p)
+          doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
         else:
           (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
