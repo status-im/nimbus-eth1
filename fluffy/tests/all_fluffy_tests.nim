@@ -16,4 +16,6 @@ import
   ./test_history_network,
   ./test_content_db,
   ./test_discovery_rpc,
-  ./test_bridge_parser
+  ./test_bridge_parser,
+  ./test_light_client_content,
+  ./test_light_client_network
