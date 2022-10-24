@@ -54,10 +54,17 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-store"
 
 const
   extraTraceMessages = false or true
+
+# ------------------------------------------------------------------------------
+# Private logging helpers
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Storage slots range " & info
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -108,7 +115,7 @@ proc getNextSlotItems(
             env.fetchStorage.del(reqKey)
 
           when extraTraceMessages:
-            trace "Prepare fetching partial storage slots", peer,
+            trace logTxt "prepare fetching partial", peer,
               nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
               nToProcess=1, subRange=rc.value,
               account=reqData.accHash.to(NodeTag)
@@ -150,7 +157,7 @@ proc getNextSlotItems(
       break
 
   when extraTraceMessages:
-    trace "Fetch account storage slots", peer, nSlotLists=env.nSlotLists,
+    trace logTxt "fetch", peer, nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, nToProcess=result.len, nInherit
 
 
@@ -183,7 +190,7 @@ proc storeStoragesSingleBatch(
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
-        trace "Error fetching storage slots => stop", peer,
+        trace logTxt "fetching error => stop", peer,
           nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return
@@ -195,7 +202,7 @@ proc storeStoragesSingleBatch(
   var gotSlotLists = stoRange.data.storages.len
 
   #when extraTraceMessages:
-  #  trace "Fetched storage slots", peer,
+  #  trace logTxt "fetched", peer,
   #    nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
   #    nStorageQueue=env.fetchStorage.len, nLeftOvers=stoRange.leftOver.len
 
@@ -211,7 +218,7 @@ proc storeStoragesSingleBatch(
         env.fetchStorage.merge req
         gotSlotLists.dec(report.len - 1) # for logging only
 
-        error "Error writing storage slots to database", peer,
+        error logTxt "import failed", peer,
           nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[^1].error
         return
@@ -240,7 +247,7 @@ proc storeStoragesSingleBatch(
         # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        trace "Error processing storage slots", peer, nSlotLists=env.nSlotLists,
+        trace logTxt "processing error", peer, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[inx].error
 
@@ -283,7 +290,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
       subRangeLoopCount.inc
 
     when extraTraceMessages:
-      trace "Start fetching storage slots", peer, nSlotLists=env.nSlotLists,
+      trace logTxt "start", peer, nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, fullRangeLoopCount,
         subRangeLoopCount
 
@@ -302,7 +309,7 @@ proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
       await buddy.storeStoragesSingleBatch(noSubRange = false)
 
     when extraTraceMessages:
-      trace "Done fetching storage slots", peer, nSlotLists=env.nSlotLists,
+      trace logTxt "done", peer, nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, fullRangeLoopCount,
         subRangeLoopCount
 

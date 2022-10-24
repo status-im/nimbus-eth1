@@ -129,6 +129,9 @@ const
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
+template logTxt(info: static[string]): static[string] =
+  "Accounts healing " & info
+
 proc healingCtx(buddy: SnapBuddyRef): string =
   let
     ctx = buddy.ctx
@@ -157,9 +160,6 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
   var
     nodes: seq[Blob]
 
-  when extraTraceMessages:
-    trace "Start accounts healing", peer, ctx=buddy.healingCtx()
-
   for accKey in env.fetchAccounts.missingNodes:
     let rc = db.getAccountsNodeKey(peer, stateRoot, accKey)
     if rc.isOk:
@@ -187,7 +187,7 @@ proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
 
   if rc.isErr:
     when extraTraceMessages:
-      error "Accounts healing failed => stop", peer,
+      error logTxt "failed => stop", peer,
         ctx=buddy.healingCtx(), error=rc.error
     # Attempt to switch peers, there is not much else we can do here
     buddy.ctrl.zombie = true
@@ -238,12 +238,12 @@ proc getMissingNodesFromNetwork(
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
     discard
     when extraTraceMessages:
-      trace "Error fetching account nodes for healing => stop", peer,
+      trace logTxt "error fetching nodes => stop", peer,
         ctx=buddy.healingCtx(), error
   else:
     discard
     when extraTraceMessages:
-      trace "Error fetching account nodes for healing", peer,
+      trace logTxt "error fetching nodes", peer,
         ctx=buddy.healingCtx(), error
 
   return @[]
@@ -268,8 +268,8 @@ proc kvAccountLeaf(
     return (true, nibbles.getBytes.convertTo(NodeKey), rlp.decode(data,Account))
 
   when extraTraceMessages:
-    trace "Isolated node path for healing => ignored", peer,
-      ctx=buddy.healingCtx()
+    trace logTxt "non-leaf node path", peer,
+      ctx=buddy.healingCtx(), nNibbles=nibbles.len
 
 
 proc registerAccountLeaf(
@@ -304,7 +304,7 @@ proc registerAccountLeaf(
       storageRoot: acc.storageRoot)
 
   when extraTraceMessages:
-    trace "Isolated account for healing", peer,
+    trace logTxt "single node", peer,
       ctx=buddy.healingCtx(), accKey=pt
 
 # ------------------------------------------------------------------------------
@@ -330,9 +330,12 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   #
   if env.nAccounts == 0 or
      ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
-    when extraTraceMessages:
-      trace "Accounts healing postponed", peer, ctx=buddy.healingCtx()
+    #when extraTraceMessages:
+    #  trace logTxt "postponed", peer, ctx=buddy.healingCtx()
     return
+
+  when extraTraceMessages:
+    trace logTxt "started", peer, ctx=buddy.healingCtx()
 
   # Update for changes since last visit
   buddy.updateMissingNodesList()
@@ -346,7 +349,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
 
   # Check whether the trie is complete.
   if env.fetchAccounts.missingNodes.len == 0:
-    trace "Accounts healing complete", peer, ctx=buddy.healingCtx()
+    trace logTxt "complete", peer, ctx=buddy.healingCtx()
     return # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
@@ -358,13 +361,13 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   let report = db.importRawAccountsNodes(peer, nodesData)
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
-    error "Accounts healing, error updating persistent database", peer,
+    error logTxt "error updating persistent database", peer,
       ctx=buddy.healingCtx(), nNodes=nodesData.len, error=report[^1].error
     env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodesData
     return
 
   when extraTraceMessages:
-    trace "Accounts healing, nodes merged into database", peer,
+    trace logTxt "nodes merged into database", peer,
       ctx=buddy.healingCtx(), nNodes=nodesData.len
 
   # Filter out error and leaf nodes
@@ -392,7 +395,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
           env.fetchAccounts.checkNodes.add nodePath
 
   when extraTraceMessages:
-    trace "Accounts healing job done", peer, ctx=buddy.healingCtx()
+    trace logTxt "job done", peer, ctx=buddy.healingCtx()
 
 # ------------------------------------------------------------------------------
 # End

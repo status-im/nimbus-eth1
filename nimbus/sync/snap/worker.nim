@@ -184,7 +184,7 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, wSum, wSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
       count = 0
     for kvp in ctx.data.pivotTable.nextPairs:
 
@@ -204,20 +204,12 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSum += sLen
         sSqSum += sLen * sLen
 
-        # Storage queue size for that account
-        var stoFill: float
-        for stoKvp in kvp.data.fetchStorage.nextPairs:
-          if stoKvp.data.slots.isNil:
-            stoFill += 1.0
-          else:
-            stoFill += stoKvp.data.slots.unprocessed.fullFactor
-        wSum += stoFill
-        wSqSum += stoFill * stoFill
-
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
       pivotBlock = if env.isNil: none(BlockNumber)
                    else: some(env.stateHeader.blockNumber)
+      stoQuLen = if env.isNil: none(uint64)
+                 else: some(env.fetchStorage.len.uint64)
       accCoverage = ctx.data.coveredAccounts.fullFactor
       accFill = meanStdDev(uSum, uSqSum, count)
 
@@ -227,7 +219,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
-      storageQueue:  meanStdDev(wSum, wSqSum, count))
+      nStorageQueue: stoQuLen)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions

@@ -29,7 +29,7 @@ type
     nAccounts*: (float,float)          ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
     nSlotLists*: (float,float)         ## mean and standard deviation
-    storageQueue*: (float,float)       ## mean and standard deviation
+    nStorageQueue*: Option[uint64]
     nQueues*: int
 
   TickerStatsUpdater* =
@@ -113,12 +113,11 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     var
       nAcc, nSto, bulk: string
       pivot = "n/a"
+      nStoQue = "n/a"
     let
-      accCov = data.accountsFill[0].toPC(1) &
-         "(" & data.accountsFill[1].toPC(1) & ")" &
+      accCov = data.accountsFill[0].toPC(0) &
+         "(" & data.accountsFill[1].toPC(0) & ")" &
          "/" & data.accountsFill[2].toPC(0)
-      stoQue = data.storageQueue[0].uint64.toSI &
-         "(" & data.storageQueue[1].uint64.toSI & ")"
       buddies = t.nBuddies
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
@@ -131,8 +130,11 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
               &"({(data.nSlotLists[1]+0.5).int64})")
 
+    if data.nStorageQueue.isSome:
+      nStoQue = $data.nStorageQueue.unsafeGet
+
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, nSto, stoQue, mem
+      tick, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

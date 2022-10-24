@@ -39,6 +39,9 @@ const
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
+template logTxt(info: static[string]): static[string] =
+  "Storage slots healing " & info
+
 proc healingCtx(
     buddy: SnapBuddyRef;
     kvp: SnapSlotsQueuePair;
@@ -46,7 +49,7 @@ proc healingCtx(
   let
     slots = kvp.data.slots
   "{" &
-    "covered=" & slots.unprocessed.emptyFactor.toPC(0) &
+    "covered=" & slots.unprocessed.emptyFactor.toPC(0) & "," &
     "nCheckNodes=" & $slots.checkNodes.len & "," &
     "nMissingNodes=" & $slots.missingNodes.len & "}"
 
@@ -96,10 +99,6 @@ proc updateMissingNodesList(
   var
     nodes: seq[Blob]
 
-  when extraTraceMessages:
-    trace "Start storage slots healing", peer, ctx=buddy.healingCtx(kvp),
-      nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len
-
   for slotKey in slots.missingNodes:
     let rc = db.getStorageSlotsNodeKey(peer, accHash, storageRoot, slotKey)
     if rc.isOk:
@@ -133,8 +132,8 @@ proc appendMoreDanglingNodesToMissingNodesList(
 
   if rc.isErr:
     when extraTraceMessages:
-      error "Storage slots healing failed => stop", peer,
-        ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+      error logTxt "failed => stop", peer,
+        itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, error=rc.error
     # Attempt to switch peers, there is not much else we can do here
     buddy.ctrl.zombie = true
@@ -188,14 +187,14 @@ proc getMissingNodesFromNetwork(
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
     discard
     when extraTraceMessages:
-      trace "Error fetching storage slots nodes for healing => stop", peer,
-        ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+      trace logTxt "error fetching nodes => stop", peer,
+        itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, error
   else:
     discard
     when extraTraceMessages:
-      trace "Error fetching storage slots nodes for healing", peer,
-        ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+      trace logTxt "error fetching nodes", peer,
+        itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, error
 
   return @[]
@@ -221,9 +220,9 @@ proc kvStorageSlotsLeaf(
     return (true, nibbles.getBytes.convertTo(NodeKey))
 
   when extraTraceMessages:
-    trace "Isolated node path for healing => ignored", peer,
-      ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
-      nStorageQueue=env.fetchStorage.len
+    trace logTxt "non-leaf node path", peer,
+      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+      nStorageQueue=env.fetchStorage.len, nNibbles=nibbles.len
 
 
 proc registerStorageSlotsLeaf(
@@ -251,8 +250,8 @@ proc registerStorageSlotsLeaf(
   discard ivSet.reduce(pt,pt)
 
   when extraTraceMessages:
-    trace "Isolated storage slot for healing", peer,
-      ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+    trace logTxt "single node", peer,
+      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, slotKey=pt
 
 # ------------------------------------------------------------------------------
@@ -274,6 +273,10 @@ proc storageSlotsHealing(
     accHash = kvp.data.accHash
     slots = kvp.data.slots
 
+  when extraTraceMessages:
+    trace logTxt "started", peer, itCtx=buddy.healingCtx(kvp),
+      nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len
+
   # Update for changes since last visit
   buddy.updateMissingNodesList(kvp)
 
@@ -284,7 +287,7 @@ proc storageSlotsHealing(
 
   # Check whether the trie is complete.
   if slots.missingNodes.len == 0:
-    trace "Storage slots healing complete", peer, ctx=buddy.healingCtx(kvp)
+    trace logTxt "complete", peer, itCtx=buddy.healingCtx(kvp)
     return true
 
   # Get next batch of nodes that need to be merged it into the database
@@ -296,16 +299,16 @@ proc storageSlotsHealing(
   let report = db.importRawStorageSlotsNodes(peer, accHash, nodesData)
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
-    error "Storage slots healing, error updating persistent database", peer,
-      ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+    error logTxt "error updating persistent database", peer,
+      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, nNodes=nodesData.len,
       error=report[^1].error
     slots.missingNodes = slots.missingNodes & nodesData
     return false
 
   when extraTraceMessages:
-    trace "Storage slots healing, nodes merged into database", peer,
-      ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+    trace logTxt "nodes merged into database", peer,
+      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, nNodes=nodesData.len
 
   # Filter out error and leaf nodes
@@ -334,8 +337,8 @@ proc storageSlotsHealing(
           slots.checkNodes.add nodePath
 
   when extraTraceMessages:
-    trace "Storage slots healing job done", peer,
-      ctx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
+    trace logTxt "job done", peer,
+      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len
 
 
@@ -363,7 +366,7 @@ proc healingIsComplete(
 
     if rc.isErr:
       # Oops, not much we can do here (looping trie?)
-      error "Problem inspecting storage trie", peer,
+      error logTxt "problem inspecting storage trie", peer,
         nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
         storageRoot, error=rc.error
       return false
@@ -436,7 +439,7 @@ proc healStoragesDb*(buddy: SnapBuddyRef) {.async.} =
   let nHealerQueue = toBeHealed.len
   if 0 < nHealerQueue:
     when extraTraceMessages:
-      trace "Processing storage healing items", peer,
+      trace logTxt "processing", peer,
         nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
         nHealerQueue, nAcceptedAsIs
 
@@ -455,11 +458,15 @@ proc healStoragesDb*(buddy: SnapBuddyRef) {.async.} =
         env.fetchStorage.merge toBeHealed[n+1 ..< toBeHealed.len]
         break
 
-  when extraTraceMessages:
-    if 0 < nHealerQueue or 0 < nAcceptedAsIs:
-      trace "Done storage healing items", peer,
+    when extraTraceMessages:
+      trace logTxt "done", peer,
         nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
         nHealerQueue, nAcceptedAsIs
+
+  elif 0 < nAcceptedAsIs:
+    trace logTxt "work items", peer,
+      nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
+      nHealerQueue, nAcceptedAsIs
 
 # ------------------------------------------------------------------------------
 # End
