@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, strutils],
+  std/[atomics, json, os, strutils],
   chronicles, chronicles/chronos_tools, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
@@ -40,14 +40,32 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
+type OnHeaderCallback* = proc (s: cstring) {.cdecl, raises: [], gcsafe.}
+
+var optimisticHeaderCallback : OnHeaderCallback = nil
+var finalizedHeaderCallback : OnHeaderCallback = nil
+proc setOptimisticHeaderCallback*(cb: OnHeaderCallback) {.exportc, dynlib.} =
+  optimisticHeaderCallback = cb
+  echo "optimistic header callback set"
+
+proc setFinalizedHeaderCallback*(cb: OnHeaderCallback) {.exportc, dynlib.} =
+  finalizedHeaderCallback = cb
+  echo "finalized header callback set"
+
+
+
+proc run(config: VerifiedProxyConf) {.raises: [CatchableError], gcsafe.} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
-  setupLogging(config.logLevel, config.logStdout, none(OutFile))
+  {.gcsafe.}:
+    setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
-  notice "Launching Nimbus verified proxy",
-    version = fullVersionStr, cmdParams = commandLineParams(), config
+    try:
+      notice "Launching Nimbus verified proxy",
+        version = fullVersionStr, cmdParams = getCLIParams(), config
+    except Exception:
+      notice "getCLIParams() exception"
 
   let
     metadata = loadEth2Network(config.eth2Network)
@@ -163,6 +181,13 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       when lcDataFork > LightClientDataFork.None:
         info "New LC finalized header",
           finalized_header = shortLog(forkyHeader)
+        if finalizedHeaderCallback != nil:
+          notice "### Invoking finalizedHeaderCallback"
+          try:
+            finalizedHeaderCallback(Json.encode(finalizedHeader))
+          except SerializationError as e:
+            notice "finalizedHeaderCallback exception"
+
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
@@ -171,6 +196,13 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
+      if optimisticHeaderCallback != nil:
+        try:
+          notice "### Invoking optimisticHeaderCallback"
+          optimisticHeaderCallback(Json.encode(optimisticHeader))
+        except SerializationError as e:
+            notice "optimisticHeaderCallback exception"
+
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
@@ -249,10 +281,88 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   while true:
     poll()
 
-when isMainModule:
+proc quit*() {.exportc, dynlib.} = 
+  echo "Quitting"
+
+proc NimMain() {.importc.}
+
+var initialized: Atomic[bool]
+
+proc initLib() =
+   if not initialized.exchange(true):
+     NimMain() # Every Nim library needs to call `NimMain` once exactly
+   when declared(setupForeignThreadGc): setupForeignThreadGc()
+   when declared(nimGC_setStackBottom):
+     var locals {.volatile, noinit.}: pointer
+     locals = addr(locals)
+     nimGC_setStackBottom(locals)
+
+
+proc parseConfigAndRun*(configJson: cstring) {.gcsafe.} =
+  let str = $configJson
+  try:
+    let jsonNode = parseJson(str)
+
+    let rpcAddr = jsonNode["RpcAddress"].getStr()
+    let myConfig = VerifiedProxyConf(
+      rpcAddress: ValidIpAddress.init(rpcAddr), 
+      listenAddress: defaultListenAddress, 
+      eth2Network: some(jsonNode["Eth2Network"].getStr()), 
+      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
+      web3Url: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
+      rpcPort: Port(jsonNode["RpcPort"].getInt()),
+      logLevel: jsonNode["LogLevel"].getStr(),
+      maxPeers: 160,
+      nat: NatConfig(hasExtIp: false, nat: NatAny),
+      logStdout: StdoutLogKind.Auto,
+      dataDir: OutDir(defaultVerifiedProxyDataDir()),
+      tcpPort: Port(defaultEth2TcpPort),
+      udpPort: Port(defaultEth2TcpPort),
+      agentString: "nimbus",
+      discv5Enabled: true,
+    )
+
+    run(myConfig)
+  except Exception as err:
+    echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
+
+type Context = object
+  thread: Thread[ptr Context]
+  configJson: cstring
+  stop: bool
+  onOptimisticHeader: OnHeaderCallback
+  onFinalizedHeader: OnHeaderCallback
+
+proc runContext(ctx: ptr Context) {.thread.} =
+  parseConfigAndRun(ctx.configJson)
+
+  #[let node = parseConfigAndRun(ctx.configJson)
+
+  while not ctx[].stop: # and node.running:
+    let timeout = sleepAsync(100.millis)
+    waitFor timeout
+
+  # do cleanup
+  node.stop()]#
+
+proc startLightClientProxy*(configJson: cstring, onOptimisticHeader: OnHeaderCallback, onFinalizedHeader: OnHeaderCallback): ptr Context {.exportc, dynlib.} =
+  initLib()
+
+  let ctx = createShared(Context, 1)
+  ctx.configJson = cast[cstring](allocShared0(len(configJson) + 1))
+  ctx.onOptimisticHeader = onOptimisticHeader
+  ctx.onFinalizedHeader = onFinalizedHeader
+  copyMem(ctx.configJson, configJson, len(configJson))
+
+  try:
+    createThread(ctx.thread, runContext, ctx)
+  except Exception as err:
+    echo "Exception when attempting to invoke createThread ", getCurrentExceptionMsg(), err.getStackTrace() 
+  return ctx
+
+when isMainModule and appType != "lib":
   {.pop.}
   var config = makeBannerAndConfig(
     "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
   {.push raises: [].}
-
   run(config)

@@ -86,6 +86,7 @@ FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 	nimbus \
 	fluffy \
 	nimbus_verified_proxy \
+	libverifproxy \
 	test \
 	test-reproducibility \
 	clean \
@@ -299,9 +300,31 @@ evmstate_test: | build deps evmstate
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
+# Shared library for verified proxy
+OS = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS)))
+  SHAREDLIBEXT = dylib
+else
+ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
+  SHAREDLIBEXT = dll
+else
+  SHAREDLIBEXT = so
+endif
+endif
+
+VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+
+libverifproxy: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim --version && \
+		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --header:verifproxy.h --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
+	cp nimcache/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+	cp vendor/nimbus-build-system/vendor/Nim-csources-v1/c_code/nimbase.h $(VERIF_PROXY_OUT_PATH)/
+	echo -e $(BUILD_END_MSG) "build/$@"
+
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
