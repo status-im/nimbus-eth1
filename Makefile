@@ -70,6 +70,7 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	nimbus \
 	fluffy \
 	nimbus_verified_proxy \
+	libverifproxy \
 	test \
 	test-reproducibility \
 	clean \
@@ -272,9 +273,69 @@ evmstate_test: | build deps evmstate
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
+# Shared library for verified proxy
+OS = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS)))
+  SHAREDLIBEXT = a
+else
+ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
+  SHAREDLIBEXT = lib
+else
+  SHAREDLIBEXT = a
+endif
+endif
+
+VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+VERIFPROXY_OBJS = $(shell find nimcache/libverifproxy -name "*.o")
+LIBNATPMP_OBJS = $(shell find vendor/nim-nat-traversal/vendor/libnatpmp-upstream -name "*.o")
+LIBMINIUPNPC_OBJS = $(shell find vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc -name "*.o")
+LIBBACKTRACE_OBJS = $(shell find vendor/nim-libbacktrace/vendor/libbacktrace-upstream -name "*.o")
+LIBBACKTRACE_WRAPPER_OBJS = vendor/nim-libbacktrace/libbacktrace_wrapper.o
+ALL_OBJS = $(VERIFPROXY_OBJS) $(LIBNATPMP_OBJS) $(LIBMINIUPNPC_OBJS) $(LIBBACKTRACE_WRAPPER_OBJS) $(LIBBACKTRACE_OBJS)
+
+libverifproxy-objs: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c --noLinking:on --gc:boehm -d:"libp2p_pki_schemes=secp256k1" --header:verifproxy.h --noMain:on --nimcache:nimcache/libverifproxy -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim && \
+	mkdir -p build/libverifproxy && \
+	find nimcache/libverifproxy -name "*.o" | xargs -I {} cp {} $(VERIF_PROXY_OUT_PATH) && \
+  find vendor/nim-nat-traversal/vendor/libnatpmp-upstream -name "*.o" | xargs -I {} cp {} $(VERIF_PROXY_OUT_PATH) && \
+  find vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc -name "*.o" | xargs -I {} cp {} $(VERIF_PROXY_OUT_PATH) && \
+	find vendor/nim-libbacktrace/vendor/libbacktrace-upstream -name "*.o" | xargs -I {} cp {} $(VERIF_PROXY_OUT_PATH) && \
+  cp vendor/nim-libbacktrace/libbacktrace_wrapper.o $(VERIF_PROXY_OUT_PATH) && \
+	cp nimcache/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)
+	# echo ${ALL_OBJS} | tr ' ' '\n' > build/libverifproxy-objs/objs.lst
+	echo -e $(BUILD_END_MSG) "build/$@"
+	
+	
+
+
+# gc:markAndSweep: exception "URL hostname is missing"
+# vendor/nim-json-rpc/json_rpc/rpcproxy.nim(99) start
+# vendor/nim-chronos/chronos/asyncfutures2.nim(369) futureContinue
+
+# gc:refc: SIGSEGV
+
+# gc:boehm: ok
+
+# gc:go: Error: system module needs: unsureAsgnRef during compilation
+libverifproxy: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim --version && \
+		$(ENV_SCRIPT) nim c --app:staticLib -d:"libp2p_pki_schemes=secp256k1" --opt:size --gc:boehm --header:verifproxy.h --noMain:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
+	cp nimcache/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+	cp vendor/nimbus-build-system/vendor/Nim-csources-v1/c_code/nimbase.h $(VERIF_PROXY_OUT_PATH)/
+	echo -e $(BUILD_END_MSG) "build/$@"
+
+
+
+libverifproxy-source: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -c --genScript:on --noLinking:on -d:"libp2p_pki_schemes=secp256k1" --header:verifproxy.h --noMain:on --nimcache:nimcache/libverifproxy -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
+	echo -e $(BUILD_END_MSG) "build/$@"
+
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)

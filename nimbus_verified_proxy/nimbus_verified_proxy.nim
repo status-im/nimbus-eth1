@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, strutils],
+  std/[json, os, strutils],
   chronicles, chronicles/chronos_tools, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
@@ -40,14 +40,29 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
+type OnHeaderCallback* = proc (s: cstring) {.cdecl.}
+
+var optimisticHeaderCallback : OnHeaderCallback = nil
+var finalizedHeaderCallback : OnHeaderCallback = nil
+proc setOptimisticHeaderCallback*(cb: OnHeaderCallback) {.exportc.} =
+  optimisticHeaderCallback = cb
+  echo "optimistic header callback set"
+
+proc setFinalizedHeaderCallback*(cb: OnHeaderCallback) {.exportc.} =
+  finalizedHeaderCallback = cb
+  echo "finalized header callback set"
+
+
+proc run(config: VerifiedProxyConf) {.raises: [CatchableError, Exception].} =
+  # echo "startLightClient inside nimbus-light-client"
+
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Nimbus verified proxy",
-    version = fullVersionStr, cmdParams = commandLineParams(), config
+    version = fullVersionStr, cmdParams = getCLIParams(), config
 
   let
     metadata = loadEth2Network(config.eth2Network)
@@ -153,6 +168,14 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       when lcDataFork > LightClientDataFork.None:
         info "New LC finalized header",
           finalized_header = shortLog(forkyHeader)
+        if finalizedHeaderCallback != nil:
+            notice "### Invoking finalizedHeaderCallback"
+            {.gcsafe.}:
+              try:
+                finalizedHeaderCallback(Json.encode(finalizedHeader))
+              except Exception as e:
+                notice "finalizedHeaderCallback exception"
+
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
@@ -161,6 +184,14 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
+      if optimisticHeaderCallback != nil:
+        notice "### Invoking optimisticHeaderCallback"
+        {.gcsafe.}:
+          try:
+            optimisticHeaderCallback(Json.encode(optimisticHeader))
+          except Exception:
+            notice "optimisticHeaderCallback exception"
+
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
@@ -239,10 +270,88 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   while true:
     poll()
 
-when isMainModule:
-  {.pop.}
-  var config = makeBannerAndConfig(
-    "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
-  {.push raises: [].}
+proc testEcho*() {.exportc.} =
+  echo "in testEcho"
 
-  run(config)
+proc quit*() {.exportc.} = 
+  echo "Quitting"
+
+# template createConfig(clientId: string, ConfType: type, configFilePath: string): untyped =
+#   echo "### inside createConfig"
+#   let
+#     version = clientId & "\p" & copyrights & "\p\p" &
+#       "eth2 specification v" & SPEC_VERSION & "\p\p" &
+#       nimBanner
+
+#   # TODO for some reason, copyrights are printed when doing `--help`
+#   {.push warning[ProveInit]: off.}
+#   let config = try:
+#     echo "### inside createConfig before load"
+#     ConfType.load(
+#       version = version, # but a short version string makes more sense...
+#       copyrightBanner = clientId,
+#       secondarySources = proc (config: ConfType, sources: auto) =
+#         sources.addConfigFile(Toml, InputFile(configFilePath))
+#     )
+#   except CatchableError as err:
+#     # We need to log to stderr here, because logging hasn't been configured yet
+#     stderr.write "Failure while loading the configuration:\n"
+#     stderr.write err.msg
+#     stderr.write "\n"
+
+#     if err[] of ConfigurationError and
+#        err.parent != nil and
+#        err.parent[] of TomlFieldReadingError:
+#       let fieldName = ((ref TomlFieldReadingError)(err.parent)).field
+#       if fieldName in ["web3-url", "bootstrap-node",
+#                        "direct-peer", "validator-monitor-pubkey"]:
+#         stderr.write "Since the '" & fieldName & "' option is allowed to " &
+#                      "have more than one value, please make sure to supply " &
+#                      "a properly formatted TOML array\n"
+#     quit 1
+#   {.pop.}
+#   config
+
+proc NimMain() {.importc.}
+proc startProxyViaJson*(configJson: cstring) {.exportc.} =
+  echo "startLcViaJson"
+  NimMain()
+  echo "startLcViaJson 1"
+  let str = $configJson
+  echo "startLcViaJson 2"
+  echo "startLcViaJson 3 ", str
+  try:
+    let jsonNode = parseJson(str)
+
+    let rpcAddr = jsonNode["RpcAddress"].getStr()
+    let config = VerifiedProxyConf(
+      rpcAddress: ValidIpAddress.init(rpcAddr), 
+      listenAddress: defaultListenAddress, 
+      eth2Network: some(jsonNode["Eth2Network"].getStr()), 
+      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
+      web3Url: parseCmdArg(ValidatedWeb3Url, jsonNode["Web3Url"].getStr()),
+      rpcPort: Port(jsonNode["RpcPort"].getInt()),
+      logLevel: jsonNode["LogLevel"].getStr(),
+      maxPeers: 160,
+      nat: NatConfig(hasExtIp: false, nat: NatAny),
+      logStdout: StdoutLogKind.Auto,
+      dataDir: OutDir(defaultVerifiedProxyDataDir()),
+      tcpPort: Port(defaultEth2TcpPort),
+      udpPort: Port(defaultEth2TcpPort),
+      agentString: "nimbus",
+      discv5Enabled: true,
+    )
+
+    run(config)
+  except Exception as err:
+    echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace() 
+
+# when isMainModule:
+#   let configFileStr = "config.toml"
+#   {.pop.}
+#   var config = createConfig("Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf, configFileStr)
+
+#   {.push raises: [Defect].}
+
+#   echo "inside nimbus-light-client before run"
+#   run(config)
