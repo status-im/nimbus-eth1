@@ -402,7 +402,7 @@ proc healingIsComplete(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healStoragesDb*(buddy: SnapBuddyRef) {.async.} =
+proc healStorageSlots*(buddy: SnapBuddyRef) {.async.} =
   ## Fetching and merging missing slorage slots trie database nodes.
   let
     ctx = buddy.ctx

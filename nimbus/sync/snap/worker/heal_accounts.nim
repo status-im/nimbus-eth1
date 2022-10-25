@@ -319,7 +319,7 @@ proc registerAccountLeaf(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
+proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
     ctx = buddy.ctx

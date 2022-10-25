@@ -42,7 +42,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-store"
+  topics = "snap-range"
 
 const
   extraTraceMessages = false or true
@@ -105,7 +105,7 @@ proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
   ## Fetch accounts and store them in the database.
   let
     ctx = buddy.ctx

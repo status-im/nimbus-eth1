@@ -16,9 +16,9 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[handlers, misc/best_pivot, protocol, sync_desc],
-  ./worker/[heal_accounts, heal_storages, store_accounts, store_storages,
-            ticker],
-  ./worker/com/[com_error, get_block_header],
+  ./worker/[heal_accounts, heal_storage_slots,
+            range_fetch_accounts, range_fetch_storage_slots, ticker],
+  ./worker/com/com_error,
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
 
@@ -352,10 +352,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   else:
     # Snapshot sync processing. Note that *serialSync => accountsDone*.
-    await buddy.storeAccounts()
+    await buddy.rangeFetchAccounts()
     if buddy.ctrl.stopped: return
 
-    await buddy.storeStorages()
+    await buddy.rangeFetchStorageSlots()
     if buddy.ctrl.stopped: return
 
     # Pivot might have changed, so restart with the latest one
@@ -365,10 +365,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     if 0 < env.fetchAccounts.unprocessed[0].chunks or
        0 < env.fetchAccounts.unprocessed[1].chunks:
 
-      await buddy.healAccountsDb()
+      await buddy.healAccounts()
       if buddy.ctrl.stopped: return
 
-      await buddy.healStoragesDb()
+      await buddy.healStorageSlots()
       if buddy.ctrl.stopped: return
 
       # Check whether accounts might be complete.

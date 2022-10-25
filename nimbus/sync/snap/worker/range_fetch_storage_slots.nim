@@ -54,7 +54,7 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-store"
+  topics = "snap-range"
 
 const
   extraTraceMessages = false or true
@@ -266,7 +266,7 @@ proc storeStoragesSingleBatch(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
+proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
   ## Fetch some account storage slots and store them in the database. If left
   ## anlone (e.t. no patallel activated processes) this function tries to fetch
   ## each work item on the queue at least once.For partial partial slot range
