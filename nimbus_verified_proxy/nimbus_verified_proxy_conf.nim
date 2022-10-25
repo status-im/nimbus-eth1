@@ -205,7 +205,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     discv5Enabled: pc.discv5Enabled,
     directPeers: pc.directPeers,
     trustedBlockRoot: pc.trustedBlockRoot,
-    web3Urls: @[],
+    web3Urls: @[EngineApiUrlConfigValue(url: pc.web3url.web3Url)],
     jwtSecret: none(InputFile),
     stopAtEpoch: 0
   )

@@ -101,8 +101,11 @@ if not defined(windows):
 --threads:on
 --opt:speed
 --excessiveStackTrace:on
-# enable metric collection
---define:metrics
+# enable metric collection 
+# (commented away for now due nimbus_verified proxy error: "metrics error:
+# Adding a new combination of label values from another thread than the one
+# in which the collector was created is not allowed")
+#--define:metrics
 # for heap-usage-by-instance-type metrics and object base-type strings
 --define:nimTypeNames
 

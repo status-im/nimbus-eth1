@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, strutils],
+  std/[atomics, json, os, strutils],
   chronicles, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
@@ -26,6 +26,8 @@ import
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
+type OnHeaderCallback* = proc (s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
+
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   if networkMetadata.eth1Network.isSome():
     let
@@ -39,14 +41,22 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
+proc run*(config: VerifiedProxyConf, callbacks: varargs[OnHeaderCallback]) {.raises: [CatchableError], gcsafe.} =
+  var headerCallback: OnHeaderCallback
+  if len(callbacks) == 1:
+    headerCallback = callbacks[0]
+
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
-  setupLogging(config.logLevel, config.logStdout, none(OutFile))
+  {.gcsafe.}:
+    setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
-  notice "Launching Nimbus verified proxy",
-    version = fullVersionStr, cmdParams = commandLineParams(), config
+    try:
+      notice "Launching Nimbus verified proxy",
+        version = fullVersionStr, cmdParams = getCLIParams(), config
+    except Exception:
+      notice "getCLIParams() exception"
 
   let
     metadata = loadEth2Network(config.eth2Network)
@@ -167,6 +177,13 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       when lcDataFork > LightClientDataFork.None:
         info "New LC finalized header",
           finalized_header = shortLog(forkyHeader)
+        if headerCallback != nil:
+          notice "### Invoking finalizedHeaderCallback"
+          try:
+            headerCallback(Json.encode(forkyHeader), 0)
+          except SerializationError as e:
+            notice "finalizedHeaderCallback exception"
+
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
@@ -175,6 +192,13 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyHeader)
         optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
+        if headerCallback != nil:
+          try:
+            notice "### Invoking optimisticHeaderCallback"
+            headerCallback(Json.encode(forkyHeader), 1)
+          except SerializationError as e:
+              notice "optimisticHeaderCallback exception"
+
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
@@ -253,10 +277,9 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   while true:
     poll()
 
-when isMainModule:
+when isMainModule and appType != "lib":
   {.pop.}
   var config = makeBannerAndConfig(
     "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
   {.push raises: [].}
-
   run(config)
