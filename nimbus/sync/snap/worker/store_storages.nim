@@ -117,11 +117,10 @@ proc getNextSlotItems(
           when extraTraceMessages:
             trace logTxt "prepare fetching partial", peer,
               nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
-              nToProcess=1, subRange=rc.value,
-              account=reqData.accHash.to(NodeTag)
+              nToProcess=1, subRange=rc.value, account=reqData.accKey
 
           return @[AccountSlotsHeader(
-            accHash:     reqData.accHash,
+            accHash:     reqData.accKey.to(Hash256),
             storageRoot: reqKey.to(Hash256),
             subRange:    some rc.value)]
 
@@ -139,12 +138,13 @@ proc getNextSlotItems(
       break
 
     let it = AccountSlotsHeader(
-      accHash:     kvp.data.accHash,
+      accHash:     kvp.data.accKey.to(Hash256),
       storageRoot: kvp.key.to(Hash256))
 
     # Verify whether a storage sub-trie exists, already
     if kvp.data.inherit or
-       ctx.data.snapDb.haveStorageSlotsData(peer, it.accHash, it.storageRoot):
+       ctx.data.snapDb.haveStorageSlotsData(
+         peer, it.accHash.to(NodeKey), it.storageRoot):
       kvp.data.inherit = true
       nInherit.inc # update for logging
       continue

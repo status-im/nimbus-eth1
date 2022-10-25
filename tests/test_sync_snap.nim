@@ -431,7 +431,8 @@ proc storagesRunner(
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = SnapDbStorageSlotsRef.init(dbBase,Hash256(),Hash256(),peer)
+        dbDesc = SnapDbStorageSlotsRef.init(
+          dbBase, Hash256().to(NodeKey), Hash256(), peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -451,9 +452,9 @@ proc storagesRunner(
                    else: high(int)
         for m in 0 ..< w.data.storages.len:
           let
-            accHash = w.data.storages[m].account.accHash
+            accKey = w.data.storages[m].account.accHash.to(NodeKey)
             root = w.data.storages[m].account.storageRoot
-            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accHash, root, peer)
+            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accKey, root, peer)
             rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
           if m == errInx:
             check rc == Result[TrieNodeStat,HexaryDbError].err(TrieIsEmpty)
@@ -512,7 +513,7 @@ proc inspectionRunner(
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling
+          dangling = rc.value.dangling.mapIt(it.partialPath)
           keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
@@ -537,7 +538,7 @@ proc inspectionRunner(
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
-            dangling = rc.value.dangling
+            dangling = rc.value.dangling.mapIt(it.partialPath)
             keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
@@ -557,7 +558,7 @@ proc inspectionRunner(
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling
+          dangling = rc.value.dangling.mapIt(it.partialPath)
           keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
@@ -580,7 +581,7 @@ proc inspectionRunner(
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
-            dangling = rc.value.dangling
+            dangling = rc.value.dangling.mapIt(it.partialPath)
             keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
@@ -611,8 +612,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.toHashSet
-            cascaded = rc.value.dangling.toHashSet
+            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -643,8 +644,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.toHashSet
-            cascaded = rc.value.dangling.toHashSet
+            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len

@@ -127,17 +127,19 @@ proc hexaryImport*(
 
 proc hexaryImport*(
     db: HexaryTreeDbRef;                ## Contains node table
-    recData: Blob;                      ## Node to add
+    rec: NodeSpecs;                     ## Expected key and value data pair
       ): HexaryNodeReport
       {.gcsafe, raises: [Defect, RlpError, KeyError].} =
-  ## Ditto without referece checks
-  if recData.len == 0:
+  ## Ditto without referece checks but expected node key argument.
+  if rec.data.len == 0:
     return HexaryNodeReport(error: RlpNonEmptyBlobExpected)
+  if rec.nodeKey != rec.data.digestTo(NodeKey):
+    return HexaryNodeReport(error: ExpectedNodeKeyDiffers)
+
   let
-    nodeKey = recData.digestTo(NodeKey)
-    repairKey = nodeKey.to(RepairKey) # for repair table
+    repairKey = rec.nodeKey.to(RepairKey) # for repair table
   var
-    rlp = recData.rlpFromBytes
+    rlp = rec.data.rlpFromBytes
     blobs = newSeq[Blob](2)         # temporary, cache
     links: array[16,RepairKey]      # reconstruct branch node
     blob16: Blob                    # reconstruct branch node
@@ -203,7 +205,7 @@ proc hexaryImport*(
   if not db.tab.hasKey(repairKey):
     db.tab[repairKey] = rNode
 
-  elif db.tab[repairKey].convertTo(Blob) != recData:
+  elif db.tab[repairKey].convertTo(Blob) != rec.data:
     return HexaryNodeReport(error: DifferentNodeValueExists)
 
   HexaryNodeReport(kind: some(rNode.kind))

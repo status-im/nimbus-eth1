@@ -235,10 +235,10 @@ proc importAccounts*(
 
 
 proc importRawAccountsNodes*(
-    ps: SnapDbAccountsRef;     ## Re-usable session descriptor
-    nodes: openArray[Blob];    ## Node records
-    reportNodes = {Leaf};      ## Additional node types to report
-    persistent = false;        ## store data on disk
+    ps: SnapDbAccountsRef;       ## Re-usable session descriptor
+    nodes: openArray[NodeSpecs]; ## List of `(key,data)` records
+    reportNodes = {Leaf};        ## Additional node types to report
+    persistent = false;          ## store data on disk
       ): seq[HexaryNodeReport] =
   ## Store data nodes given as argument `nodes` on the persistent database.
   ##
@@ -263,7 +263,7 @@ proc importRawAccountsNodes*(
   try:
     # Import nodes
     for n,rec in nodes:
-      if 0 < rec.len: # otherwise ignore empty placeholder
+      if 0 < rec.data.len: # otherwise ignore empty placeholder
         slot = some(n)
         var rep = db.hexaryImport(rec)
         if rep.error != NothingSerious:
@@ -303,7 +303,7 @@ proc importRawAccountsNodes*(
 proc importRawAccountsNodes*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     peer: Peer,                   ## For log messages, only
-    nodes: openArray[Blob];       ## Node records
+    nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
       ): seq[HexaryNodeReport] =
   ## Variant of `importRawNodes()` for persistent storage.
@@ -368,7 +368,7 @@ proc getAccountsNodeKey*(
       ): Result[NodeKey,HexaryDbError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
-  noRlpExceptionOops("inspectAccountsPath()"):
+  noRlpExceptionOops("getAccountsNodeKey()"):
     if persistent:
       rc = ps.getFn.hexaryInspectPath(ps.root, path)
     else:
