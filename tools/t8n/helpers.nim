@@ -102,6 +102,12 @@ func getChainConfig*(network: string): ChainConfig =
   of "ArrowGlacierToMergeAtDiffC0000":
     c.assignNumber(FkParis, H)
     c.terminalTotalDifficulty = some(0xC0000.u256)
+  of "Shanghai":
+    c.assignNumber(FkShanghai, Zero)
+    c.terminalTotalDifficulty = some(0.u256)
+  of "Cancun":
+    c.assignNumber(FkCancun, Zero)
+    c.terminalTotalDifficulty = some(0.u256)
   else:
     raise newError(ErrorConfig, "unsupported network " & network)
 

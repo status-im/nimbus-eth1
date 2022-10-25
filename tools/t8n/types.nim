@@ -26,6 +26,8 @@ type
     ArrowGlacier
     GrayGlacier
     Merged
+    Shanghai
+    Cancun
 
   LogLevel* = enum
     Silent
