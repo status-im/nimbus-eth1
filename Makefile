@@ -245,10 +245,19 @@ t8n: | build deps
 t8n_test: | build deps t8n
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
 
+# builds evm state test tool
+evmstate: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled=off "tools/evmstate/$@.nim"
+
+# builds and runs evm state tool test suite
+evmstate_test: | build deps evmstate
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) "tools/evmstate/$@.nim"
+
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,fluffy,lc_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
+	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
