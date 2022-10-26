@@ -21,7 +21,7 @@ export ssz_serialization, merkleization, proofs, eth_types_rlp
 
 const
   epochSize* = 8192 # blocks
-  # Allow this to be adjusted at compile time fir testing. If more constants
+  # Allow this to be adjusted at compile time for testing. If more constants
   # need to be adjusted we can add some presets file.
   mergeBlockNumber* {.intdefine.}: uint64 = 15537394
 
@@ -30,8 +30,9 @@ const
   preMergeEpochs* = (mergeBlockNumber + epochSize - 1) div epochSize
 
   # TODO:
-  # Currently disabled, because of testing issues, but could be used as value to
-  # double check on at merge block.
+  # Currently disabled, because issue when testing with other
+  # `mergeBlockNumber`, but it could be used as value to double check on at
+  # merge block.
   # TODO: Could also be used as value to actual finish the accumulator, instead
   # of `mergeBlockNumber`, but:
   # - Still need to store the actual `mergeBlockNumber` and run-time somewhere
@@ -145,6 +146,7 @@ func verifyHeader*(
     a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]):
     Result[void, string] =
   if header.isPreMerge():
+    # TODO: This can fail as the proof is not necessarily the right size.
     if a.verifyProof(header, proof):
       ok()
     else:

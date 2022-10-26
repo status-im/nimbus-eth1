@@ -22,16 +22,6 @@ logScope:
 
 export accumulator
 
-# TODO: To currently verify if content is from the canonical chain it is
-# required to download the right epoch accunulator, which is ~0.5 MB. This is
-# too much, at least for the local testnet tests. This needs to be improved
-# by adding the proofs to the block header content. Another independent
-# improvement would be to have a content cache (LRU or so). The latter would
-# probably help mostly for the local testnet tests.
-# For now, we disable this verification default until further improvements are
-# made.
-const canonicalVerify* {.booldefine.} = false
-
 const
   historyProtocolId* = [byte 0x50, 0x0B]
 
@@ -67,13 +57,21 @@ func getEncodedKeyForContent(
       ContentKey(contentType: cType, receiptsKey: contentKeyType)
     of epochAccumulator:
       raiseAssert("Not implemented")
+    of blockHeaderWithProof:
+      ContentKey(contentType: cType, blockHeaderWithProofKey: contentKeyType)
 
   return encodeKey(contentKey)
 
-func decodeRlp*(bytes: openArray[byte], T: type): Result[T, string] =
+func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   try:
-    ok(rlp.decode(bytes, T))
+    ok(rlp.decode(input, T))
   except RlpError as e:
+    err(e.msg)
+
+func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(SSZ.decode(input, T))
+  except SszError as e:
     err(e.msg)
 
 ## Calls to go from SSZ decoded types to RLP fully decoded types
@@ -182,11 +180,7 @@ proc validateBlockBodyBytes*(
     bytes: openArray[byte], txRoot, ommersHash: KeccakHash):
     Result[BlockBody, string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let body =
-    try:
-      SSZ.decode(bytes, BlockBodySSZ)
-    except SszError as e:
-      return err("Failed to decode block body: " & e.msg)
+  let body = ? decodeSsz(bytes, BlockBodySSZ)
 
   ? validateBlockBody(body, txRoot, ommersHash)
 
@@ -205,11 +199,7 @@ proc validateReceiptsBytes*(
     bytes: openArray[byte],
     receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let receipts =
-    try:
-      SSZ.decode(bytes, ReceiptsSSZ)
-    except SszError as e:
-      return err("Failed to decode receipts: " & e.msg)
+  let receipts = ? decodeSsz(bytes, ReceiptsSSZ)
 
   ? validateReceipts(receipts, receiptsRoot)
 
@@ -220,7 +210,13 @@ proc validateReceiptsBytes*(
 proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Option[T] =
   let contentFromDB = db.get(contentId)
   if contentFromDB.isSome():
-    let res = decodeRlp(contentFromDB.get(), T)
+    let headerWithProof =
+      try:
+        SSZ.decode(contentFromDB.get(), BlockHeaderWithProof)
+      except SszError as e:
+        raiseAssert(e.msg)
+
+    let res = decodeRlp(headerWithProof.header.asSeq(), T)
     if res.isErr():
       raiseAssert(res.error)
     else:
@@ -277,6 +273,67 @@ const requestRetries = 4
 # ongoing requests are cancelled after the receival of the first response,
 # however that response is not yet validated at that moment.
 
+func verifyHeader(
+    n: HistoryNetwork, header: BlockHeader, proof: openArray[Digest]):
+    Result[void, string] =
+  verifyHeader(n.accumulator, header, proof)
+
+proc getVerifiedBlockHeader*(
+    n: HistoryNetwork, hash: BlockHash):
+    Future[Option[BlockHeader]] {.async.} =
+  let (keyEncoded, contentId) =
+    getEncodedKeyForContent(blockHeaderWithProof, hash)
+
+  # Note: This still requests a BlockHeaderWithProof from the database, as that
+  # is what is stored. But the proof doesn't need to be checked as everthing
+  # should get checked before storing.
+  let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
+
+  if headerFromDb.isSome():
+    info "Fetched block header from database", hash, contentKey = keyEncoded
+    return headerFromDb
+
+  for i in 0..<requestRetries:
+    let headerContentLookup =
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
+    if headerContentLookup.isNone():
+      warn "Failed fetching block header with proof from the network",
+        hash, contentKey = keyEncoded
+      return none(BlockHeader)
+
+    let headerContent = headerContentLookup.unsafeGet()
+
+    let headerWithProofRes = decodeSsz(headerContent.content, BlockHeaderWithProof)
+    if headerWithProofRes.isErr():
+      warn "Failed decoding header with proof", err = headerWithProofRes.error
+      return none(BlockHeader)
+
+    let headerWithProof = headerWithProofRes.get()
+
+    let res = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash)
+    if res.isOk():
+      let isCanonical = n.verifyHeader(res.get(), headerWithProof.proof.asSeq())
+
+      if isCanonical.isOk():
+        info "Fetched block header from the network", hash, contentKey = keyEncoded
+        # Content is valid, it can be propagated to interested peers
+        n.portalProtocol.triggerPoke(
+          headerContent.nodesInterestedInContent,
+          keyEncoded,
+          headerContent.content
+        )
+
+        n.portalProtocol.storeContent(contentId, headerContent.content)
+
+        return some(res.get())
+    else:
+      warn "Validation of block header failed", err = res.error, hash, contentKey = keyEncoded
+
+  # Headers were requested `requestRetries` times and all failed on validation
+  return none(BlockHeader)
+
+# TODO: To be deprecated or not? Should there be the case for requesting a
+# block header without proofs?
 proc getBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
@@ -367,7 +424,10 @@ proc getBlock*(
     Future[Option[Block]] {.async.} =
   debug "Trying to retrieve block with hash", hash
 
-  let headerOpt = await n.getBlockHeader(hash)
+  # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
+  # proofs are not necessiarly needed, in order to avoid having to inject
+  # also the original type into the network.
+  let headerOpt = await n.getVerifiedBlockHeader(hash)
   if headerOpt.isNone():
     warn "Failed to get header when getting block with hash", hash
     # Cannot validate block without header.
@@ -506,43 +566,6 @@ proc getBlock*(
   else:
     return err(epochDataRes.error)
 
-proc buildProof*(n: HistoryNetwork, header: BlockHeader):
-    Future[Result[seq[Digest], string]] {.async.} =
-  # Note: Temporarily needed proc until proofs are send over with headers.
-  let
-    epochIndex = getEpochIndex(header)
-    epochHash = Digest(data: n.accumulator.historicalEpochs[epochIndex])
-
-    epochAccumulatorOpt = await n.getEpochAccumulator(epochHash)
-
-  if epochAccumulatorOpt.isNone():
-    return err("Epoch accumulator not found")
-
-  let
-    epochAccumulator = epochAccumulatorOpt.get()
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-    # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
-
-  return epochAccumulator.build_proof(gIndex)
-
-proc verifyCanonicalChain(
-    n: HistoryNetwork, header: BlockHeader):
-    Future[Result[void, string]] {.async.} =
-  when not canonicalVerify:
-    return ok()
-
-  # Note: It is a bit silly to build a proof, as we still need to request the
-  # epoch accumulators for it, and could just verify it with those. But the
-  # idea here is that eventually this gets changed so that the proof is send
-  # together with the header.
-  let proof = await n.buildProof(header)
-  if proof.isOk():
-    return verifyHeader(n.accumulator, header, proof.get())
-  else:
-    # Can't verify without master and epoch accumulators
-    return err("Cannot build proof: " & proof.error)
-
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ByteList):
     Future[bool] {.async.} =
@@ -555,6 +578,11 @@ proc validateContent(
 
   case key.contentType:
   of blockHeader:
+    # Note: For now we still accept regular block header type to remain
+    # compatible with the current specs. However, a verification is done by
+    # basically requesting the header with proofs from somewhere else.
+    # This all doesn't make much sense aside from compatibility and should
+    # eventually be removed.
     let validateResult =
       validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash)
     if validateResult.isErr():
@@ -563,57 +591,45 @@ proc validateContent(
 
     let header = validateResult.get()
 
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
+    let res = await n.getVerifiedBlockHeader(key.blockHeaderKey.blockHash)
+    if res.isNone():
+      warn "Block header failed canonical verification"
       return false
     else:
       return true
-  of blockBody:
-    let headerOpt = await n.getBlockHeader(key.blockBodyKey.blockHash)
 
-    if headerOpt.isNone():
-      warn "Cannot find the header, no way to validate the block body"
+  of blockBody:
+    let res = await n.getVerifiedBlockHeader(key.blockBodyKey.blockHash)
+    if res.isNone():
+      warn "Block body Failed canonical verification"
       return false
 
-    let header = headerOpt.get()
+    let header = res.get()
     let validationResult =
       validateBlockBodyBytes(content, header.txRoot, header.ommersHash)
 
     if validationResult.isErr():
       warn "Failed validating block body", error = validationResult.error
       return false
-
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
-      return false
     else:
       return true
-  of receipts:
-    let headerOpt = await n.getBlockHeader(key.receiptsKey.blockHash)
 
-    if headerOpt.isNone():
-      warn "Cannot find the header, no way to validate the receipts"
+  of receipts:
+    let res = await n.getVerifiedBlockHeader(key.receiptsKey.blockHash)
+    if res.isNone():
+      warn "Receipts failed canonical verification"
       return false
 
-    let header = headerOpt.get()
+    let header = res.get()
     let validationResult =
       validateReceiptsBytes(content, header.receiptRoot)
 
     if validationResult.isErr():
       warn "Failed validating receipts", error = validationResult.error
       return false
-
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
-      return false
     else:
       return true
+
   of epochAccumulator:
     # Check first if epochHash is part of master accumulator
     let epochHash = key.epochAccumulatorKey.epochHash
@@ -633,6 +649,30 @@ proc validateContent(
     let hash = hash_tree_root(epochAccumulator)
     if hash != epochHash:
       warn "Epoch accumulator has invalid root hash"
+      return false
+    else:
+      return true
+
+  of blockHeaderWithProof:
+    let headerWithProofRes = decodeSsz(content, BlockHeaderWithProof)
+    if headerWithProofRes.isErr():
+      warn "Failed decoding header with proof", err = headerWithProofRes.error
+      return false
+
+    let headerWithProof = headerWithProofRes.get()
+
+    let validateResult = validateBlockHeaderBytes(
+      headerWithProof.header.asSeq(), key.blockHeaderWithProofKey.blockHash)
+    if validateResult.isErr():
+      warn "Invalid block header offered", error = validateResult.error
+      return false
+
+    let header = validateResult.get()
+
+    let isCanonical = n.verifyHeader(header, headerWithProof.proof.asSeq())
+    if isCanonical.isErr():
+      warn "Failed on check if header is part of canonical chain",
+        error = isCanonical.error
       return false
     else:
       return true

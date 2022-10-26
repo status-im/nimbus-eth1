@@ -49,8 +49,17 @@ proc installPortalDebugApiHandlers*(
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
-      dataFile: string) -> bool:
-    let res = await p.historyPropagateHeaders(dataFile)
+      dataDir: string) -> bool:
+    let res = await p.historyPropagateHeadersWithProof(dataDir)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
+      epochHeadersFile: string, epochAccumulatorFile: string) -> bool:
+    let res = await p.historyPropagateHeadersWithProof(
+      epochHeadersFile, epochAccumulatorFile)
     if res.isOk():
       return true
     else:

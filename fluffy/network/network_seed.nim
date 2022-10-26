@@ -250,7 +250,6 @@ proc offerContentInNodeRange*(
   else:
     return err(offerResult.error)
 
-
 proc storeContentInNodeRange*(
     p: PortalProtocol,
     seedDbPath: string,

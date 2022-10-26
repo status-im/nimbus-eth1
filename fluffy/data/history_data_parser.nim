@@ -11,6 +11,7 @@ import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], chronicles,
   eth/[rlp, common/eth_types],
+  ncli/e2store,
   ../../nimbus/[chain_config, genesis],
   ../network/history/[history_content, accumulator]
 
@@ -30,9 +31,6 @@ type
     # uint64, but then it expects a string for some reason.
     # Fix in nim-json-serialization or should I overload something here?
     number*: int
-
-  EpochAccumulatorObject = object
-    epochAccumulator: string
 
   BlockDataTable* = Table[string, BlockData]
 
@@ -190,6 +188,14 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
+type
+  # In the core code of Fluffy the `EpochAccumulator` type is solely used, as
+  # `hash_tree_root` is done either once or never on this object after
+  # serialization.
+  # However for the generation of the proofs for all the headers in an epoch, it
+  # needs to be run many times and the cached version of the SSZ list is
+  # obviously much faster, so this second type is added for this usage.
+  EpochAccumulatorCached* = HashList[HeaderRecord, epochSize]
 
 proc toString*(v: IoErrorCode): string =
   try: ioErrorMsg(v)
@@ -211,3 +217,44 @@ proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
     ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
   except SszError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
+
+proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+
+  try:
+    ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
+  except SszError as e:
+    err("Decoding epoch accumulator failed: " & e.msg)
+
+const
+  # Using the e2s format to store data, but without the specific structure
+  # like in an era file, as we currently don't really need that.
+  # See: https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
+  # Added one type for now, with numbers not formally specified.
+  # Note:
+  # Snappy compression for `ExecutionBlockHeaderRecord` only helps for the
+  # first ~1M (?) block headers, after that there is no gain so we don't do it.
+  ExecutionBlockHeaderRecord* = [byte 0xFF, 0x00]
+
+proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
+  let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
+  defer: discard closeFile(fh)
+
+  var data: seq[byte]
+  var blockHeaders: seq[BlockHeader]
+  while true:
+    let header = readRecord(fh, data).valueOr:
+      break
+
+    if header.typ == ExecutionBlockHeaderRecord:
+      let blockHeader =
+        try:
+          rlp.decode(data, BlockHeader)
+        except RlpError as e:
+          return err("Invalid block header in " & file & ": " & e.msg)
+
+      blockHeaders.add(blockHeader)
+    else:
+      warn "Skipping record, not a block header", typ = toHex(header.typ)
+
+  ok(blockHeaders)

@@ -32,6 +32,7 @@ type
     blockBody = 0x01
     receipts = 0x02
     epochAccumulator = 0x03
+    blockHeaderWithProof = 0x04
 
   BlockKey* = object
     blockHash*: BlockHash
@@ -49,6 +50,8 @@ type
       receiptsKey*: BlockKey
     of epochAccumulator:
       epochAccumulatorKey*: EpochAccumulatorKey
+    of blockHeaderWithProof:
+      blockHeaderWithProofKey*: BlockKey
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -86,6 +89,8 @@ func `$`*(x: ContentKey): string =
   of epochAccumulator:
     let key = x.epochAccumulatorKey
     res.add("epochHash: " & $key.epochHash)
+  of blockHeaderWithProof:
+    res.add($x.blockHeaderWithProofKey)
 
   res.add(")")
 
@@ -114,3 +119,12 @@ type
 
   ReceiptByteList* = List[byte, MAX_RECEIPT_LENGTH] # RLP data
   ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
+
+ # TODO:
+  # - Change proof to be a SSZ vector instead of List? This would be safer
+  # at deserialization / proof verification.
+  # - Proof could also be an SSZ Union, with `None` and `AccumulatorProof` types
+  BlockHeaderProof* = List[Digest, 15]
+  BlockHeaderWithProof* = object
+    header*: ByteList # RLP data
+    proof*: BlockHeaderProof
