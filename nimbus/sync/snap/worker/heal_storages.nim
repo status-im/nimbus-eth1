@@ -69,7 +69,7 @@ proc acceptWorkItemAsIs(
       peer = buddy.peer
       db = ctx.data.snapDb
       accKey = kvp.data.accKey
-      storageRoot = kvp.key.to(Hash256)
+      storageRoot = kvp.key
 
       rc = db.inspectStorageSlotsTrie(peer, accKey, storageRoot)
 
@@ -94,7 +94,7 @@ proc updateMissingNodesList(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     accKey = kvp.data.accKey
-    storageRoot = kvp.key.to(Hash256)
+    storageRoot = kvp.key
     slots = kvp.data.slots
 
   for w in slots.missingNodes:
@@ -120,11 +120,10 @@ proc appendMoreDanglingNodesToMissingNodesList(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     accKey = kvp.data.accKey
-    storageRoot = kvp.key.to(Hash256)
+    storageRoot = kvp.key
     slots = kvp.data.slots
 
-    rc = db.inspectStorageSlotsTrie(
-      peer, accKey, storageRoot, slots.checkNodes)
+    rc = db.inspectStorageSlotsTrie(peer, accKey, storageRoot, slots.checkNodes)
 
   if rc.isErr:
     when extraTraceMessages:
@@ -154,7 +153,7 @@ proc getMissingNodesFromNetwork(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     accKey = kvp.data.accKey
-    storageRoot = kvp.key.to(Hash256)
+    storageRoot = kvp.key
     slots = kvp.data.slots
 
     nMissingNodes = slots.missingNodes.len
@@ -368,7 +367,7 @@ proc healingIsComplete(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     accKey = kvp.data.accKey
-    storageRoot = kvp.key.to(Hash256)
+    storageRoot = kvp.key
 
   # Check whether this work item can be completely inherited
   if kvp.data.inherit:

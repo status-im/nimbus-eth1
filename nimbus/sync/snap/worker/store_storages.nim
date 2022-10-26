@@ -120,8 +120,8 @@ proc getNextSlotItems(
               nToProcess=1, subRange=rc.value, account=reqData.accKey
 
           return @[AccountSlotsHeader(
-            accHash:     reqData.accKey.to(Hash256),
-            storageRoot: reqKey.to(Hash256),
+            accKey:      reqData.accKey,
+            storageRoot: reqKey,
             subRange:    some rc.value)]
 
       # Oops, empty range set? Remove range and move item to the right end
@@ -138,13 +138,12 @@ proc getNextSlotItems(
       break
 
     let it = AccountSlotsHeader(
-      accHash:     kvp.data.accKey.to(Hash256),
-      storageRoot: kvp.key.to(Hash256))
+      accKey:      kvp.data.accKey,
+      storageRoot: kvp.key)
 
     # Verify whether a storage sub-trie exists, already
     if kvp.data.inherit or
-       ctx.data.snapDb.haveStorageSlotsData(
-         peer, it.accHash.to(NodeKey), it.storageRoot):
+       ctx.data.snapDb.haveStorageSlotsData(peer, it.accKey, it.storageRoot):
       kvp.data.inherit = true
       nInherit.inc # update for logging
       continue
@@ -236,7 +235,7 @@ proc storeStoragesSingleBatch(
         # requesting the full interval. So all the storage slots are
         # re-fetched completely for this account.
         env.fetchStorage.merge AccountSlotsHeader(
-          accHash:     stoRange.data.storages[inx].account.accHash,
+          accKey:      stoRange.data.storages[inx].account.accKey,
           storageRoot: stoRange.data.storages[inx].account.storageRoot)
 
         # Last entry might be partial
@@ -254,7 +253,7 @@ proc storeStoragesSingleBatch(
     # Update statistics
     if gotSlotLists == 1 and
        req[0].subRange.isSome and
-       env.fetchStorage.hasKey req[0].storageRoot.to(NodeKey):
+       env.fetchStorage.hasKey req[0].storageRoot:
       # Successful partial request, but not completely done with yet.
       gotSlotLists = 0
 

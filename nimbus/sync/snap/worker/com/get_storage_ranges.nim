@@ -104,7 +104,7 @@ proc getStorageRanges*(
 
   let snStoRanges = block:
     let rc = await buddy.getStorageRangesReq(
-      stateRoot, accounts.mapIt(it.accHash), accounts[0].subRange)
+      stateRoot, accounts.mapIt(it.accKey.to(Hash256)), accounts[0].subRange)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
@@ -130,7 +130,7 @@ proc getStorageRanges*(
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
     trace trSnapRecvReceived & "empty StorageRanges", peer,
-      nAccounts, nSlotLists, nProof, stateRoot, firstAccount=accounts[0].accHash
+      nAccounts, nSlotLists, nProof, stateRoot, firstAccount=accounts[0].accKey
     return err(ComNoStorageForAccounts)
 
   # Assemble return structure for given peer response
@@ -166,7 +166,7 @@ proc getStorageRanges*(
     if respTop < reqTop:
       dd.leftOver.add AccountSlotsHeader(
         subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
-        accHash:     accounts[nSlotLists-1].accHash,
+        accKey:      accounts[nSlotLists-1].accKey,
         storageRoot: accounts[nSlotLists-1].storageRoot)
     # assigning empty slice isa ok
     dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]

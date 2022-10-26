@@ -308,7 +308,7 @@ proc registerAccountLeaf(
   # Update storage slots batch
   if acc.storageRoot != emptyRlpHash:
     env.fetchStorage.merge AccountSlotsHeader(
-      accHash:     Hash256(data: accKey.ByteArray32),
+      acckey:      accKey,
       storageRoot: acc.storageRoot)
 
   when extraTraceMessages:

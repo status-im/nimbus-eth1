@@ -86,14 +86,14 @@ const
     ## negotiated pivot would be newer. This should be the default.
 
 type
-  SnapSlotsQueue* = KeyedQueue[NodeKey,SnapSlotsQueueItemRef]
+  SnapSlotsQueue* = KeyedQueue[Hash256,SnapSlotsQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
 
-  SnapSlotsQueuePair* = KeyedQueuePair[NodeKey,SnapSlotsQueueItemRef]
+  SnapSlotsQueuePair* = KeyedQueuePair[Hash256,SnapSlotsQueueItemRef]
     ## Key-value return code from `SnapSlotsQueue` handler
 
   SnapSlotsQueueItemRef* = ref object
@@ -219,7 +219,7 @@ proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
   let
-    reqKey = fetchReq.storageRoot.to(NodeKey)
+    reqKey = fetchReq.storageRoot
     rc = q.eq(reqKey)
   if rc.isOk:
     # Entry exists already
@@ -236,7 +236,7 @@ proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
         discard qData.slots.unprocessed[0].reduce(iv)
         discard qData.slots.unprocessed[1].merge(iv)
   else:
-    let reqData = SnapSlotsQueueItemRef(accKey: fetchReq.accHash.to(NodeKey))
+    let reqData = SnapSlotsQueueItemRef(accKey: fetchReq.accKey)
 
     # Only add non-existing entries
     if fetchReq.subRange.isNone:

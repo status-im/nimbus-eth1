@@ -98,7 +98,7 @@ proc collectAccounts(
   var rcAcc: seq[RLeafSpecs]
 
   if acc.len != 0:
-    let pathTag0 = acc[0].accHash.to(NodeTag)
+    let pathTag0 = acc[0].accKey.to(NodeTag)
 
     # Verify lower bound
     if pathTag0 < base:
@@ -122,7 +122,7 @@ proc collectAccounts(
 
     # Veify & add other accounts
     for n in 1 ..< acc.len:
-      let nodeTag = acc[n].accHash.to(NodeTag)
+      let nodeTag = acc[n].accKey.to(NodeTag)
 
       if nodeTag <= rcAcc[^1].pathTag:
         let error = AccountsNotSrictlyIncreasing
@@ -445,45 +445,45 @@ proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
     var accounts: Table[NodeTag,PackedAccount]
     for accList in acc:
       for item in accList:
-        accounts[item.accHash.to(NodeTag)] = item
+        accounts[item.accKey.to(NodeTag)] = item
     result = toSeq(accounts.keys).sorted(cmp).mapIt(accounts[it])
 
 proc getAccountsChainDb*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256;
+    accKey: NodeKey;
       ): Result[Account,HexaryDbError] =
   ## Fetch account via `BaseChainDB`
-  ps.getAccountsData(accHash.to(NodeKey),persistent=true)
+  ps.getAccountsData(accKey, persistent = true)
 
 proc nextAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256;
-      ): Result[Hash256,HexaryDbError] =
+    accKey: NodeKey;
+      ): Result[NodeKey,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
   ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
-    let path = accHash.to(NodeKey)
-                      .hexaryPath(ps.root, ps.getFn)
-                      .next(ps.getFn)
-                      .getNibbles
+    let path = accKey
+               .hexaryPath(ps.root, ps.getFn)
+               .next(ps.getFn)
+               .getNibbles
     if 64 == path.len:
-      return ok(path.getBytes.convertTo(Hash256))
+      return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
 
   err(AccountNotFound)
 
 proc prevAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
-    accHash: Hash256;
-      ): Result[Hash256,HexaryDbError] =
+    accKey: NodeKey;
+      ): Result[NodeKey,HexaryDbError] =
   ## Fetch the account path on the `BaseChainDB`, the one before to the
   ## argument account.
   noRlpExceptionOops("getChainDbAccount()"):
-    let path = accHash.to(NodeKey)
-                      .hexaryPath(ps.root, ps.getFn)
-                      .prev(ps.getFn)
-                      .getNibbles
+    let path = accKey
+               .hexaryPath(ps.root, ps.getFn)
+               .prev(ps.getFn)
+               .getNibbles
     if 64 == path.len:
-      return ok(path.getBytes.convertTo(Hash256))
+      return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
 
   err(AccountNotFound)
 

@@ -60,13 +60,13 @@ type
 
   PackedAccount* = object
     ## In fact, the `snap/1` driver returns the `Account` structure which is
-    ## unwanted overhead, gere.
-    accHash*: Hash256
+    ## unwanted overhead, here.
+    accKey*: NodeKey
     accBlob*: Blob
 
   AccountSlotsHeader* = object
     ## Storage root header
-    accHash*: Hash256               ## Owner account, maybe unnecessary
+    accKey*: NodeKey                ## Owner account, maybe unnecessary
     storageRoot*: Hash256           ## Start of storage tree
     subRange*: Option[NodeTagRange] ## Sub-range of slot range covered
 
