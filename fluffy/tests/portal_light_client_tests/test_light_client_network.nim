@@ -13,50 +13,11 @@ import
   eth/rlp,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
-  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/beacon_light_client/[light_client_network, light_client_content],
-  ../../nimbus/constants,
-  ../content_db,
-  ./test_helpers,
-  ./light_client_data/light_client_test_data
-
-type LightClientNode = ref object
-  discoveryProtocol*: discv5_protocol.Protocol
-  lightClientNetwork*: LightClientNetwork
-
-proc getTestForkDigests(): ForkDigests =
-  return ForkDigests(
-    phase0: ForkDigest([0'u8, 0, 0, 1]),
-    altair: ForkDigest([0'u8, 0, 0, 2]),
-    bellatrix: ForkDigest([0'u8, 0, 0, 3]),
-    capella: ForkDigest([0'u8, 0, 0, 4]),
-    sharding: ForkDigest([0'u8, 0, 0, 5])
-  )
-
-proc newLCNode(rng: ref HmacDrbgContext, port: int): LightClientNode =
-  let
-    node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
-    db = ContentDB.new("", uint32.high, inMemory = true)
-    streamManager = StreamManager.new(node)
-    hn = LightClientNetwork.new(node, db, streamManager, getTestForkDigests())
-
-  return LightClientNode(discoveryProtocol: node, lightClientNetwork: hn)
-
-proc portalProtocol(hn: LightClientNode): PortalProtocol =
-  hn.lightClientNetwork.portalProtocol
-
-proc localNode(hn: LightClientNode): Node =
-  hn.discoveryProtocol.localNode
-
-proc start(hn: LightClientNode) =
-  hn.lightClientNetwork.start()
-
-proc stop(hn: LightClientNode) {.async.} =
-  hn.lightClientNetwork.stop()
-  await hn.discoveryProtocol.closeWait()
-
-proc containsId(hn: LightClientNode, contentId: ContentId): bool =
-  return hn.lightClientNetwork.contentDB.get(contentId).isSome()
+  ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/beacon_light_client/[light_client_network, light_client_content],
+  ../../../nimbus/constants,
+  ../../content_db,
+  "."/[light_client_test_data, light_client_test_helpers]
 
 procSuite "Light client Content Network":
   let rng = newRng()

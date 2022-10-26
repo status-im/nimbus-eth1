@@ -9,7 +9,7 @@
 
 import
   std/[options, tables],
-  stew/[results, arrayops], chronos, chronicles,
+  stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
@@ -45,7 +45,7 @@ proc dbGetHandler(db: ContentDB, contentId: ContentId):
 
 proc getLightClientBootstrap*(
     l: LightClientNetwork,
-    trustedRoot: Digest): Future[results.Opt[altair.LightClientBootstrap]] {.async.}=
+    trustedRoot: Digest): Future[results.Opt[altair.LightClientBootstrap]] {.async.} =
   let
     bk = LightClientBootstrapKey(blockHash: trustedRoot)
     ck = ContentKey(
@@ -72,6 +72,25 @@ proc getLightClientBootstrap*(
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
     return Opt.some(decodingResult.get())
+
+proc getLightClientUpdatesByRange*(
+    l: LightClientNetwork,
+    startPeriod: uint64,
+    count: uint64): Future[results.Opt[seq[altair.LightClientUpdate]]] {.async.} =
+  # TODO: Not implemented!
+  return Opt.none(seq[altair.LightClientUpdate])
+
+proc getLightClientFinalityUpdate*(
+    l: LightClientNetwork
+  ): Future[results.Opt[altair.LightClientFinalityUpdate]] {.async.} =
+  # TODO: Not implemented!
+  return Opt.none(altair.LightClientFinalityUpdate)
+
+proc getLightClientOptimisticUpdate*(
+    l: LightClientNetwork
+  ): Future[results.Opt[altair.LightClientOptimisticUpdate]] {.async.} =
+  # TODO: Not implemented!
+  return Opt.none(altair.LightClientOptimisticUpdate)
 
 proc new*(
     T: type LightClientNetwork,
