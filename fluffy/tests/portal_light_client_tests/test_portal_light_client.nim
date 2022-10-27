@@ -93,7 +93,7 @@ procSuite "Portal Light client":
       bootstrapContentId, encodeBootstrapForked(forkDigests.altair, bootstrap)
     )
 
-    let lc = createLightClient(
+    let lc = LightClient.new(
       lcNode1.lightClientNetwork,
       rng,
       metadata.cfg,

@@ -48,7 +48,8 @@ func optimisticHeader*(lightClient: LightClient): Opt[BeaconBlockHeader] =
   else:
     err()
 
-proc createLightClient(
+proc new*(
+    T: type LightClient,
     network: LightClientNetwork,
     rng: ref HmacDrbgContext,
     dumpEnabled: bool,
@@ -57,8 +58,7 @@ proc createLightClient(
     forkDigests: ref ForkDigests,
     getBeaconTime: GetBeaconTimeFn,
     genesis_validators_root: Eth2Digest,
-    finalizationMode: LightClientFinalizationMode
-): LightClient =
+    finalizationMode: LightClientFinalizationMode): T =
   let lightClient = LightClient(
     network: network,
     cfg: cfg,
@@ -132,19 +132,20 @@ proc createLightClient(
 
   lightClient
 
-proc createLightClient*(
+proc new*(
+    T: type LightClient,
     network: LightClientNetwork,
     rng: ref HmacDrbgContext,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
     getBeaconTime: GetBeaconTimeFn,
     genesis_validators_root: Eth2Digest,
-    finalizationMode: LightClientFinalizationMode
-): LightClient =
-  createLightClient(
+    finalizationMode: LightClientFinalizationMode): T =
+  LightClient.new(
     network, rng,
     dumpEnabled = false, dumpDirInvalid = ".", dumpDirIncoming = ".",
-    cfg, forkDigests, getBeaconTime, genesis_validators_root, finalizationMode)
+    cfg, forkDigests, getBeaconTime, genesis_validators_root, finalizationMode
+  )
 
 proc start*(lightClient: LightClient) =
   notice "Starting light client",
