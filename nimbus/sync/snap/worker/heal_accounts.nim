@@ -158,6 +158,7 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
 
+  var delayed: seq[NodeSpecs]
   for w in env.fetchAccounts.missingNodes:
     let rc = db.getAccountsNodeKey(peer, stateRoot, w.partialPath)
     if rc.isOk:
@@ -165,7 +166,10 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
       env.fetchAccounts.checkNodes.add w.partialPath
     else:
       # Node is still missing
-      env.fetchAccounts.missingNodes.add w
+      delayed.add w
+
+  # Must not modify sequence while looping over it
+  env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & delayed
 
 
 proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =

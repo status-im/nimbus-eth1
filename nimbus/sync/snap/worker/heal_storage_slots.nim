@@ -97,6 +97,7 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
+  var delayed: seq[NodeSpecs]
   for w in slots.missingNodes:
     let rc = db.getStorageSlotsNodeKey(peer, accKey, storageRoot, w.partialPath)
     if rc.isOk:
@@ -104,7 +105,10 @@ proc updateMissingNodesList(
       slots.checkNodes.add w.partialPath
     else:
       # Node is still missing
-      slots.missingNodes.add w
+      delayed.add w
+
+  # Must not modify sequence while looping over it
+  slots.missingNodes = slots.missingNodes & delayed
 
 
 proc appendMoreDanglingNodesToMissingNodesList(
