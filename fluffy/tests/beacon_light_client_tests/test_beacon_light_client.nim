@@ -19,7 +19,7 @@ import
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[
     light_client_content,
-    portal_light_client
+    beacon_light_client
   ],
   "."/[light_client_test_data, light_client_test_helpers]
 

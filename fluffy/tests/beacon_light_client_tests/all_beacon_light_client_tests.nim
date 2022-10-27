@@ -10,4 +10,4 @@
 import
   ./test_light_client_content,
   ./test_light_client_network,
-  ./test_portal_light_client
+  ./test_beacon_light_client

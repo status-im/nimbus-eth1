@@ -1,4 +1,4 @@
-# beacon_chain
+# beacon hain light client
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -14,7 +14,7 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  "."/[light_client_network, portal_light_client_manager]
+  "."/[light_client_network, beacon_light_client_manager]
 
 export LightClientFinalizationMode
 
