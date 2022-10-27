@@ -54,16 +54,26 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-range"
 
 const
   extraTraceMessages = false or true
 
 # ------------------------------------------------------------------------------
+# Private logging helpers
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Storage slots range " & info
+
+# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
+proc getNextSlotItems(
+    buddy: SnapBuddyRef;
+    noSubRange = false;
+      ): seq[AccountSlotsHeader] =
   ## Get list of work item from the batch queue.
   ##
   ## * If the storage slots requested come with an explicit sub-range of slots
@@ -84,50 +94,56 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
     peer = buddy.peer
     env = buddy.data.pivotEnv
 
-    (reqKey, reqData) = block:
+  # Assemble first request which might come with a sub-range.
+  if not noSubRange:
+    let (reqKey, reqData) = block:
       let rc = env.fetchStorage.first # peek
       if rc.isErr:
         return
       (rc.value.key, rc.value.data)
+    while not reqData.slots.isNil:
+      # Extract first interval and return single item request queue
+      for ivSet in reqData.slots.unprocessed:
+        let rc = ivSet.ge()
+        if rc.isOk:
 
-  # Assemble first request which might come with a sub-range.
-  while not reqData.slots.isNil:
-    # Extract first interval and return single item request queue
-    for ivSet in reqData.slots.unprocessed:
-      let rc = ivSet.ge()
-      if rc.isOk:
+          # Extraxt this interval from the range set
+          discard ivSet.reduce rc.value
 
-        # Extraxt this interval from the range set
-        discard ivSet.reduce rc.value
+          # Delete from batch queue if the range set becomes empty
+          if reqData.slots.unprocessed.isEmpty:
+            env.fetchStorage.del(reqKey)
 
-        # Delete from batch queue if the range set becomes empty
-        if reqData.slots.unprocessed.isEmpty:
-          env.fetchStorage.del(reqKey)
+          when extraTraceMessages:
+            trace logTxt "prepare fetching partial", peer,
+              nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
+              nToProcess=1, subRange=rc.value, account=reqData.accKey
 
-        when extraTraceMessages:
-          trace "Prepare fetching partial storage slots", peer,
-            nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
-            nToProcess=1, subRange=rc.value, account=reqData.accHash.to(NodeTag)
+          return @[AccountSlotsHeader(
+            accKey:      reqData.accKey,
+            storageRoot: reqKey,
+            subRange:    some rc.value)]
 
-        return @[AccountSlotsHeader(
-          accHash:     reqData.accHash,
-          storageRoot: reqKey.to(Hash256),
-          subRange:    some rc.value)]
+      # Oops, empty range set? Remove range and move item to the right end
+      reqData.slots = nil
+      discard env.fetchStorage.lruFetch(reqKey)
 
-    # Oops, empty range set? Remove range and move item to the right end
-    reqData.slots = nil
-    discard env.fetchStorage.lruFetch(reqKey)
-
-  # So there are no partial slot ranges anymore. Assemble maximal request queue.
+  # Done with partial slot ranges. Assemble maximal request queue.
   var nInherit = 0
-  for kvp in env.fetchStorage.nextPairs:
+  for kvp in env.fetchStorage.prevPairs:
+    if not kvp.data.slots.isNil:
+      # May happen when `noSubRange` is `true`. As the queue is read from the
+      # right end and all the partial slot ranges are on the left there will
+      # be no more non-partial slot ranges on the queue. So this loop is done.
+      break
+
     let it = AccountSlotsHeader(
-      accHash:     kvp.data.accHash,
-      storageRoot: kvp.key.to(Hash256))
+      accKey:      kvp.data.accKey,
+      storageRoot: kvp.key)
 
     # Verify whether a storage sub-trie exists, already
     if kvp.data.inherit or
-       ctx.data.snapDb.haveStorageSlotsData(peer, it.accHash, it.storageRoot):
+       ctx.data.snapDb.haveStorageSlotsData(peer, it.accKey, it.storageRoot):
       kvp.data.inherit = true
       nInherit.inc # update for logging
       continue
@@ -140,11 +156,14 @@ proc getNextSlotItems(buddy: SnapBuddyRef): seq[AccountSlotsHeader] =
       break
 
   when extraTraceMessages:
-    trace "Fetch account storage slots", peer, nSlotLists=env.nSlotLists,
+    trace logTxt "fetch", peer, nSlotLists=env.nSlotLists,
       nStorageQueue=env.fetchStorage.len, nToProcess=result.len, nInherit
 
 
-proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
+proc storeStoragesSingleBatch(
+    buddy: SnapBuddyRef;
+    noSubRange = false;
+      ) {.async.} =
   ## Fetch account storage slots and store them in the database.
   let
     ctx = buddy.ctx
@@ -170,7 +189,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
-        trace "Error fetching storage slots => stop", peer,
+        trace logTxt "fetching error => stop", peer,
           nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return
@@ -182,7 +201,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
   var gotSlotLists = stoRange.data.storages.len
 
   #when extraTraceMessages:
-  #  trace "Fetched storage slots", peer,
+  #  trace logTxt "fetched", peer,
   #    nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
   #    nStorageQueue=env.fetchStorage.len, nLeftOvers=stoRange.leftOver.len
 
@@ -198,7 +217,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
         env.fetchStorage.merge req
         gotSlotLists.dec(report.len - 1) # for logging only
 
-        error "Error writing storage slots to database", peer,
+        error logTxt "import failed", peer,
           nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[^1].error
         return
@@ -216,7 +235,7 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
         # requesting the full interval. So all the storage slots are
         # re-fetched completely for this account.
         env.fetchStorage.merge AccountSlotsHeader(
-          accHash:     stoRange.data.storages[inx].account.accHash,
+          accKey:      stoRange.data.storages[inx].account.accKey,
           storageRoot: stoRange.data.storages[inx].account.storageRoot)
 
         # Last entry might be partial
@@ -227,14 +246,14 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
         # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        trace "Error processing storage slots", peer, nSlotLists=env.nSlotLists,
+        trace logTxt "processing error", peer, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[inx].error
 
     # Update statistics
     if gotSlotLists == 1 and
        req[0].subRange.isSome and
-       env.fetchStorage.hasKey req[0].storageRoot.to(NodeKey):
+       env.fetchStorage.hasKey req[0].storageRoot:
       # Successful partial request, but not completely done with yet.
       gotSlotLists = 0
 
@@ -247,29 +266,51 @@ proc storeStoragesSingleBatch(buddy: SnapBuddyRef) {.async.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc storeStorages*(buddy: SnapBuddyRef) {.async.} =
-  ## Fetch account storage slots and store them in the database.
+proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
+  ## Fetch some account storage slots and store them in the database. If left
+  ## anlone (e.t. no patallel activated processes) this function tries to fetch
+  ## each work item on the queue at least once.For partial partial slot range
+  ## items this means in case of success that the outstanding range has become
+  ## at least smaller.
   let
     env = buddy.data.pivotEnv
     peer = buddy.peer
 
   if 0 < env.fetchStorage.len:
     # Run at most the minimum number of times to get the batch queue cleaned up.
-    var loopCount = 1 + (env.fetchStorage.len - 1) div maxStoragesFetch
+    var
+      fullRangeLoopCount = 1 + (env.fetchStorage.len - 1) div maxStoragesFetch
+      subRangeLoopCount = 0
+
+    # Add additional counts for partial slot range items
+    for reqData in env.fetchStorage.nextValues:
+      if reqData.slots.isNil:
+        break
+      subRangeLoopCount.inc
 
     when extraTraceMessages:
-      trace "Start fetching storage slots", peer, nSlotLists=env.nSlotLists,
-        nStorageQueue=env.fetchStorage.len, loopCount
+      trace logTxt "start", peer, nSlotLists=env.nSlotLists,
+        nStorageQueue=env.fetchStorage.len, fullRangeLoopCount,
+        subRangeLoopCount
 
-    while 0 < loopCount and
+    # Processing the full range will implicitely handle inheritable storage
+    # slots first wich each batch item (see `getNextSlotItems()`.)
+    while 0 < fullRangeLoopCount and
           0 < env.fetchStorage.len and
           not buddy.ctrl.stopped:
-      loopCount.dec
-      await buddy.storeStoragesSingleBatch()
+      fullRangeLoopCount.dec
+      await buddy.storeStoragesSingleBatch(noSubRange = true)
+
+    while 0 < subRangeLoopCount and
+          0 < env.fetchStorage.len and
+          not buddy.ctrl.stopped:
+      subRangeLoopCount.dec
+      await buddy.storeStoragesSingleBatch(noSubRange = false)
 
     when extraTraceMessages:
-      trace "Done fetching storage slots", peer, nSlotLists=env.nSlotLists,
-        nStorageQueue=env.fetchStorage.len, loopCount
+      trace logTxt "done", peer, nSlotLists=env.nSlotLists,
+        nStorageQueue=env.fetchStorage.len, fullRangeLoopCount,
+        subRangeLoopCount
 
 # ------------------------------------------------------------------------------
 # End

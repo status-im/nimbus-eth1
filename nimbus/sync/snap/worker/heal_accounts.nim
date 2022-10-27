@@ -129,6 +129,9 @@ const
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
+template logTxt(info: static[string]): static[string] =
+  "Accounts healing " & info
+
 proc healingCtx(buddy: SnapBuddyRef): string =
   let
     ctx = buddy.ctx
@@ -154,22 +157,15 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
-  var
-    nodes: seq[Blob]
 
-  when extraTraceMessages:
-    trace "Start accounts healing", peer, ctx=buddy.healingCtx()
-
-  for accKey in env.fetchAccounts.missingNodes:
-    let rc = db.getAccountsNodeKey(peer, stateRoot, accKey)
+  for w in env.fetchAccounts.missingNodes:
+    let rc = db.getAccountsNodeKey(peer, stateRoot, w.partialPath)
     if rc.isOk:
       # Check nodes for dangling links
-      env.fetchAccounts.checkNodes.add accKey
+      env.fetchAccounts.checkNodes.add w.partialPath
     else:
       # Node is still missing
-      nodes.add acckey
-
-  env.fetchAccounts.missingNodes = nodes
+      env.fetchAccounts.missingNodes.add w
 
 
 proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
@@ -187,7 +183,7 @@ proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
 
   if rc.isErr:
     when extraTraceMessages:
-      error "Accounts healing failed => stop", peer,
+      error logTxt "failed => stop", peer,
         ctx=buddy.healingCtx(), error=rc.error
     # Attempt to switch peers, there is not much else we can do here
     buddy.ctrl.zombie = true
@@ -203,9 +199,9 @@ proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
 
 proc getMissingNodesFromNetwork(
     buddy: SnapBuddyRef;
-      ): Future[seq[Blob]]
+      ): Future[seq[NodeSpecs]]
       {.async.} =
-  ##  Extract from `missingNodes` the next batch of nodes that need
+  ## Extract from `missingNodes` the next batch of nodes that need
   ## to be merged it into the database
   let
     ctx = buddy.ctx
@@ -221,14 +217,27 @@ proc getMissingNodesFromNetwork(
   let fetchNodes = env.fetchAccounts.missingNodes[inxLeft ..< nMissingNodes]
   env.fetchAccounts.missingNodes.setLen(inxLeft)
 
+  # Initalise for `getTrieNodes()` for fetching nodes from the network
+  var
+    nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
+    pathList: seq[seq[Blob]]     # Function argument for `getTrieNodes()`
+  for w in fetchNodes:
+    pathList.add @[w.partialPath]
+    nodeKey[w.partialPath] = w.nodeKey
+
   # Fetch nodes from the network. Note that the remainder of the `missingNodes`
   # list might be used by another process that runs semi-parallel.
-  let rc = await buddy.getTrieNodes(stateRoot, fetchNodes.mapIt(@[it]))
+  let rc = await buddy.getTrieNodes(stateRoot, pathList)
   if rc.isOk:
     # Register unfetched missing nodes for the next pass
-    env.fetchAccounts.missingNodes =
-      env.fetchAccounts.missingNodes & rc.value.leftOver.mapIt(it[0])
-    return rc.value.nodes
+    for w in rc.value.leftOver:
+      env.fetchAccounts.missingNodes.add NodeSpecs(
+        partialPath: w[0],
+        nodeKey:     nodeKey[w[0]])
+    return rc.value.nodes.mapIt(NodeSpecs(
+      partialPath: it.partialPath,
+      nodeKey:     nodeKey[it.partialPath],
+      data:        it.data))
 
   # Restore missing nodes list now so that a task switch in the error checker
   # allows other processes to access the full `missingNodes` list.
@@ -238,12 +247,12 @@ proc getMissingNodesFromNetwork(
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
     discard
     when extraTraceMessages:
-      trace "Error fetching account nodes for healing => stop", peer,
+      trace logTxt "error fetching nodes => stop", peer,
         ctx=buddy.healingCtx(), error
   else:
     discard
     when extraTraceMessages:
-      trace "Error fetching account nodes for healing", peer,
+      trace logTxt "error fetching nodes", peer,
         ctx=buddy.healingCtx(), error
 
   return @[]
@@ -251,16 +260,15 @@ proc getMissingNodesFromNetwork(
 
 proc kvAccountLeaf(
     buddy: SnapBuddyRef;
-    partialPath: Blob;
-    node: Blob;
+    node: NodeSpecs;
       ): (bool,NodeKey,Account)
       {.gcsafe, raises: [Defect,RlpError]} =
-  ## Read leaf node from persistent database (if any)
+  ## Re-read leaf node from persistent database (if any)
   let
     peer = buddy.peer
 
-    nodeRlp = rlpFromBytes node
-    (_,prefix) = hexPrefixDecode partialPath
+    nodeRlp = rlpFromBytes node.data
+    (_,prefix) = hexPrefixDecode node.partialPath
     (_,segment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
     nibbles = prefix & segment
   if nibbles.len == 64:
@@ -268,8 +276,8 @@ proc kvAccountLeaf(
     return (true, nibbles.getBytes.convertTo(NodeKey), rlp.decode(data,Account))
 
   when extraTraceMessages:
-    trace "Isolated node path for healing => ignored", peer,
-      ctx=buddy.healingCtx()
+    trace logTxt "non-leaf node path", peer,
+      ctx=buddy.healingCtx(), nNibbles=nibbles.len
 
 
 proc registerAccountLeaf(
@@ -300,18 +308,18 @@ proc registerAccountLeaf(
   # Update storage slots batch
   if acc.storageRoot != emptyRlpHash:
     env.fetchStorage.merge AccountSlotsHeader(
-      accHash:     Hash256(data: accKey.ByteArray32),
+      acckey:      accKey,
       storageRoot: acc.storageRoot)
 
   when extraTraceMessages:
-    trace "Isolated account for healing", peer,
+    trace logTxt "single node", peer,
       ctx=buddy.healingCtx(), accKey=pt
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
+proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
     ctx = buddy.ctx
@@ -330,9 +338,12 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
   #
   if env.nAccounts == 0 or
      ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
-    when extraTraceMessages:
-      trace "Accounts healing postponed", peer, ctx=buddy.healingCtx()
+    #when extraTraceMessages:
+    #  trace logTxt "postponed", peer, ctx=buddy.healingCtx()
     return
+
+  when extraTraceMessages:
+    trace logTxt "started", peer, ctx=buddy.healingCtx()
 
   # Update for changes since last visit
   buddy.updateMissingNodesList()
@@ -346,37 +357,37 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
 
   # Check whether the trie is complete.
   if env.fetchAccounts.missingNodes.len == 0:
-    trace "Accounts healing complete", peer, ctx=buddy.healingCtx()
+    trace logTxt "complete", peer, ctx=buddy.healingCtx()
     return # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
-  let nodesData = await buddy.getMissingNodesFromNetwork()
-  if nodesData.len == 0:
+  let nodeSpecs = await buddy.getMissingNodesFromNetwork()
+  if nodeSpecs.len == 0:
     return
 
-  # Store nodes to disk
-  let report = db.importRawAccountsNodes(peer, nodesData)
+  # Store nodes onto disk
+  let report = db.importRawAccountsNodes(peer, nodeSpecs)
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
-    error "Accounts healing, error updating persistent database", peer,
-      ctx=buddy.healingCtx(), nNodes=nodesData.len, error=report[^1].error
-    env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodesData
+    error logTxt "error updating persistent database", peer,
+      ctx=buddy.healingCtx(), nNodes=nodeSpecs.len, error=report[^1].error
+    env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodeSpecs
     return
 
   when extraTraceMessages:
-    trace "Accounts healing, nodes merged into database", peer,
-      ctx=buddy.healingCtx(), nNodes=nodesData.len
+    trace logTxt "merged into database", peer,
+      ctx=buddy.healingCtx(), nNodes=nodeSpecs.len
 
   # Filter out error and leaf nodes
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let
         inx = w.slot.unsafeGet
-        nodePath = nodesData[inx]
+        nodePath = nodeSpecs[inx].partialPath
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
-        env.fetchAccounts.missingNodes.add nodePath
+        env.fetchAccounts.missingNodes.add nodeSpecs[inx]
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
@@ -384,7 +395,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
 
       else:
         # Node has been stored, double check
-        let (isLeaf, key, acc) = buddy.kvAccountLeaf(nodePath, nodesData[inx])
+        let (isLeaf, key, acc) = buddy.kvAccountLeaf(nodeSpecs[inx])
         if isLeaf:
           # Update `uprocessed` registry, collect storage roots (if any)
           buddy.registerAccountLeaf(key, acc)
@@ -392,7 +403,7 @@ proc healAccountsDb*(buddy: SnapBuddyRef) {.async.} =
           env.fetchAccounts.checkNodes.add nodePath
 
   when extraTraceMessages:
-    trace "Accounts healing job done", peer, ctx=buddy.healingCtx()
+    trace logTxt "job done", peer, ctx=buddy.healingCtx()
 
 # ------------------------------------------------------------------------------
 # End

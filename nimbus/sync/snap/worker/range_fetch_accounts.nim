@@ -42,11 +42,18 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-range"
 
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
+
+# ------------------------------------------------------------------------------
+# Private logging helpers
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Accounts range " & info
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -98,7 +105,7 @@ proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
   ## Fetch accounts and store them in the database.
   let
     ctx = buddy.ctx
@@ -111,7 +118,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
     let rc = buddy.getUnprocessed()
     if rc.isErr:
       when extraTraceMessages:
-        trace "Currently no unprocessed accounts", peer, stateRoot
+        trace logTxt "currently all processed", peer, stateRoot
       return
     rc.value
 
@@ -123,7 +130,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
-          trace "Error fetching accounts => stop", peer,
+          trace logTxt "fetching error => stop", peer,
             stateRoot, req=iv.len, error
       return
     # Reset error counts for detecting repeated timeouts
@@ -135,7 +142,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
     gotStorage = dd.withStorage.len
 
   when extraTraceMessages:
-    trace "Fetched accounts", peer, gotAccounts, gotStorage,
+    trace logTxt "fetched", peer, gotAccounts, gotStorage,
       stateRoot, req=iv.len, got=dd.consumed
 
   block:
@@ -145,9 +152,8 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
       buddy.putUnprocessed(iv)
       buddy.ctrl.zombie = true
       when extraTraceMessages:
-        let error = ComImportAccountsFailed
-        trace "Accounts import failed => stop", peer, gotAccounts, gotStorage,
-          stateRoot, req=iv.len, got=dd.consumed, error
+        trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
+          stateRoot, req=iv.len, got=dd.consumed, error=rc.error
       return
 
   # Statistics
@@ -179,7 +185,7 @@ proc storeAccounts*(buddy: SnapBuddyRef) {.async.} =
   env.fetchStorage.merge dd.withStorage
 
   when extraTraceMessages:
-    trace "Done fetching accounts", peer, gotAccounts, gotStorage,
+    trace logTxt "done", peer, gotAccounts, gotStorage,
       stateRoot, req=iv.len, got=dd.consumed
 
 # ------------------------------------------------------------------------------

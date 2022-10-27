@@ -25,7 +25,7 @@ type
   AccountsGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
     ## The `get()` function for the accounts trie
 
-  StorageSlotsGetFn* = proc(acc: Hash256, key: openArray[byte]): Blob {.gcsafe.}
+  StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob {.gcsafe.}
     ## The `get()` function for the storage trie depends on the current account
 
 # ------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ proc persistentAccountsGetFn*(db: TrieDatabaseRef): AccountsGetFn =
       return db.get(nodeKey.toAccountsKey.toOpenArray)
 
 proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
-  return proc(accHash: Hash256; key: openArray[byte]): Blob =
+  return proc(accKey: NodeKey; key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       return db.get(nodeKey.toStorageSlotsKey.toOpenArray)

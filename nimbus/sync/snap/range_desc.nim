@@ -37,6 +37,19 @@ type
   NodeTagRangeSet* = IntervalSetRef[NodeTag,UInt256]
     ## Managed structure to handle non-adjacent `NodeTagRange` intervals
 
+  NodeSpecs* = object
+    ## Multi purpose descriptor for a hexary trie node:
+    ## * Missing node specs. If the `data` argument is empty, the `partialPath`
+    ##   refers to a missoing node entry. The `nodeKey` is another way of
+    ##   writing the node hash and used to verify that a potential data `Blob`
+    ##   is acceptable as node data.
+    ## * Node data. If the `data` argument is non-empty, the `partialPath`
+    ##   fields can/will be used as function argument for various functions
+    ##   when healing.
+    partialPath*: Blob             ## Compact encoded partial path nibbles
+    nodeKey*: NodeKey              ## Derived from node hash
+    data*: Blob                    ## Node data (might not be present)
+
   PackedAccountRange* = object
     ## Re-packed version of `SnapAccountRange`. The reason why repacking is
     ## needed is that the `snap/1` protocol uses another RLP encoding than is
@@ -47,13 +60,13 @@ type
 
   PackedAccount* = object
     ## In fact, the `snap/1` driver returns the `Account` structure which is
-    ## unwanted overhead, gere.
-    accHash*: Hash256
+    ## unwanted overhead, here.
+    accKey*: NodeKey
     accBlob*: Blob
 
   AccountSlotsHeader* = object
     ## Storage root header
-    accHash*: Hash256               ## Owner account, maybe unnecessary
+    accKey*: NodeKey                ## Owner account, maybe unnecessary
     storageRoot*: Hash256           ## Start of storage tree
     subRange*: Option[NodeTagRange] ## Sub-range of slot range covered
 
@@ -254,13 +267,16 @@ proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
 # Public functions: printing & pretty printing
 # ------------------------------------------------------------------------------
 
-proc `$`*(nt: NodeTag): string =
-  if nt == high(NodeTag):
+proc `$`*(nodeTag: NodeTag): string =
+  if nodeTag == high(NodeTag):
     "high(NodeTag)"
-  elif nt == 0.u256.NodeTag:
+  elif nodeTag == 0.u256.NodeTag:
     "0"
   else:
-    nt.to(Hash256).data.toHex
+    nodeTag.to(Hash256).data.toHex
+
+proc `$`*(nodeKey: NodeKey): string =
+  $nodeKey.to(NodeTag)
 
 proc leafRangePp*(a, b: NodeTag): string =
   ## Needed for macro generated DSL files like `snap.nim` because the
