@@ -115,7 +115,7 @@ proc getNextSlotItems(
             env.fetchStorage.del(reqKey)
 
           when extraTraceMessages:
-            trace logTxt "prepare fetching partial", peer,
+            trace logTxt "prepare fetch partial", peer,
               nSlotLists=env.nSlotLists, nStorageQueue=env.fetchStorage.len,
               nToProcess=1, subRange=rc.value, account=reqData.accKey
 
@@ -189,7 +189,7 @@ proc storeStoragesSingleBatch(
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
-        trace logTxt "fetching error => stop", peer,
+        trace logTxt "fetch error => stop", peer,
           nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return

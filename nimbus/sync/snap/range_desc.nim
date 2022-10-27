@@ -118,6 +118,10 @@ proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
   n.u256.T
 
 
+proc digestTo*(data: Blob; T: type NodeKey): T =
+  keccakHash(data).data.T
+
+
 proc hash*(a: NodeKey): Hash =
   ## Table/KeyedQueue mixin
   a.ByteArray32.hash
@@ -292,6 +296,26 @@ proc `$`*(a, b: NodeTag): string =
 
 proc `$`*(iv: NodeTagRange): string =
   leafRangePp(iv.minPt, iv.maxPt)
+
+proc `$`*(n: NodeSpecs): string =
+  ## Prints `(path,key,node-hash)`
+  let nHash = if n.data.len == 0: NodeKey.default
+              else: n.data.digestTo(NodeKey)
+  result = "("
+  if n.partialPath.len != 0:
+    result &= n.partialPath.toHex
+  result &= ","
+  if n.nodeKey != NodeKey.default:
+    result &= $n.nodeKey
+    if n.nodeKey != nHash:
+      result &= "(!)"
+  result &= ","
+  if nHash != NodeKey.default:
+    if n.nodeKey != nHash:
+      result &= $nHash
+    else:
+      result &= "ditto"
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # End

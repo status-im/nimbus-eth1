@@ -248,7 +248,7 @@ proc importStorageSlots*(
       raiseAssert "Not possible @ importStorages: " & e.msg
     except OSError as e:
       result.add HexaryNodeReport(slot: itemInx, error: OSErrorException)
-      trace "Import storage slots exception", peer, itemInx, nItems,
+      error "Import storage slots exception", peer, itemInx, nItems,
         name=($e.name), msg=e.msg, nErrors=result.len
 
   when extraTraceMessages:
@@ -295,10 +295,10 @@ proc importRawStorageSlotsNodes*(
     slot: Option[int]
   try:
     # Import nodes
-    for n,rec in nodes:
-      if 0 < rec.data.len: # otherwise ignore empty placeholder
+    for n,node in nodes:
+      if 0 < node.data.len: # otherwise ignore empty placeholder
         slot = some(n)
-        var rep = db.hexaryImport(rec)
+        var rep = db.hexaryImport(node)
         if rep.error != NothingSerious:
           rep.slot = slot
           result.add rep
@@ -326,7 +326,7 @@ proc importRawStorageSlotsNodes*(
   except OSError as e:
     result.add HexaryNodeReport(slot: slot, error: OSErrorException)
     nErrors.inc
-    trace "Import storage slots nodes exception", peer, slot, nItems,
+    error "Import storage slots nodes exception", peer, slot, nItems,
       name=($e.name), msg=e.msg, nErrors
 
   when extraTraceMessages:

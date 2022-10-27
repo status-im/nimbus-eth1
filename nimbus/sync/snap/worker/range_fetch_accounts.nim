@@ -130,7 +130,7 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
-          trace logTxt "fetching error => stop", peer,
+          trace logTxt "fetch error => stop", peer,
             stateRoot, req=iv.len, error
       return
     # Reset error counts for detecting repeated timeouts
