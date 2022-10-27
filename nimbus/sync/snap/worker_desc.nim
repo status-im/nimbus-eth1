@@ -45,6 +45,12 @@ const
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
     ## `coveredAccounts` in `CtxData`.)
+    ##
+    ## A small value of this constant leads to early healing. This produces
+    ## stray leaf account records so fragmenting larger intervals of missing
+    ## account ranges. This in turn leads to smaller but more range requests
+    ## over the network. More requests might be a disadvantage if peers only
+    ## serve a maximum number requests (rather than data.)
 
   healSlorageSlotsTrigger* = 0.70
     ## Consider per account storage slost healing if this particular sub-trie

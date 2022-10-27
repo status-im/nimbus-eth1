@@ -216,10 +216,10 @@ proc importAccounts*(
     error "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
 
-  when extraTraceMessages:
-    trace "Accounts and proofs ok", peer=ps.peer,
-      root=ps.root.ByteArray32.toHex,
-      proof=data.proof.len, base, accounts=data.accounts.len
+  #when extraTraceMessages:
+  #  trace "Accounts imported", peer=ps.peer,
+  #    root=ps.root.ByteArray32.toHex,
+  #    proof=data.proof.len, base, accounts=data.accounts.len
   ok()
 
 proc importAccounts*(

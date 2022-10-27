@@ -251,10 +251,10 @@ proc importStorageSlots*(
       error "Import storage slots exception", peer, itemInx, nItems,
         name=($e.name), msg=e.msg, nErrors=result.len
 
-  when extraTraceMessages:
-    if result.len == 0:
-      trace "Storage slots imported", peer, nItems,
-        nSlotLists=data.storages.len, proofs=data.proof.len
+  #when extraTraceMessages:
+  #  if result.len == 0:
+  #    trace "Storage slots imported", peer, nItems,
+  #      nSlotLists=data.storages.len, proofs=data.proof.len
 
 proc importStorageSlots*(
     pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`

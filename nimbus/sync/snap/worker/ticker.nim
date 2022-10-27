@@ -39,15 +39,15 @@ type
     ## Account fetching state that is shared among all peers.
     nBuddies:  int
     lastStats: TickerStats
-    lastTick:  uint64
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
-    tick:      uint64 # more than 5*10^11y before wrap when ticking every sec
+    started:   Time
+    visited:   Time
 
 const
   tickerStartDelay = chronos.milliseconds(100)
   tickerLogInterval = chronos.seconds(1)
-  tickerLogSuppressMax = 100
+  tickerLogSuppressMax = initDuration(seconds = 100)
 
 # ------------------------------------------------------------------------------
 # Private functions: pretty printing
@@ -105,11 +105,13 @@ template noFmtError(info: static[string]; code: untyped) =
 proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
-  let data = t.statsCb()
+  let
+    data = t.statsCb()
+    now = getTime().utc.toTime
 
-  if data != t.lastStats or t.lastTick + tickerLogSuppressMax < t.tick:
+  if data != t.lastStats or tickerLogSuppressMax < (now - t.visited):
     t.lastStats = data
-    t.lastTick = t.tick
+    t.visited = now
     var
       nAcc, nSto, bulk: string
       pivot = "n/a"
@@ -119,7 +121,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
          "(" & data.accountsFill[1].toPC(0) & ")" &
          "/" & data.accountsFill[2].toPC(0)
       buddies = t.nBuddies
-      tick = t.tick.toSI
+
+      # With `int64`, there are more than 29*10^10 years range for seconds
+      up = (now - t.started).inSeconds.uint64.toSI
       mem = getTotalMem().uint.toSI
 
     noFmtError("runLogTicker"):
@@ -134,9 +138,8 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       nStoQue = $data.nStorageQueue.unsafeGet
 
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+      up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
 
-  t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 
@@ -156,6 +159,8 @@ proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
   #debug "Started ticker"
   t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay), runLogTicker, t)
+  if t.started == Time.default:
+    t.started = getTime().utc.toTime
 
 proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally

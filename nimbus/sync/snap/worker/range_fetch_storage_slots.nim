@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Fetch accounts stapshot
-## =======================
+## Fetch storage slots
+## ===================
 ##
 ## Flow chart for storage slots download
 ## -------------------------------------
@@ -38,6 +38,17 @@
 ## * `(storage-slots}`: list is optimised out
 ## * `{completed}`: list is optimised out
 ## * `{partial}`: list is optimised out
+##
+## Discussion
+## ----------
+## Handling storage slots can be seen as an generalisation of handling account
+## ranges (see `range_fetch_accounts` module.) Contrary to the situation with
+## accounts, storage slots are typically downloaded in the size of a full list
+## that can be expanded to a full hexary trie for the given storage root.
+##
+## Only in rare cases a storage slots list is incomplete, a partial hexary
+## trie. In that case, the list of storage slots is processed as described
+## for accounts (see `range_fetch_accounts` module.)
 ##
 
 import
@@ -170,6 +181,7 @@ proc storeStoragesSingleBatch(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # a request queue for handling partioal replies and re-fetch issues. For
@@ -182,14 +194,14 @@ proc storeStoragesSingleBatch(
 
   # Get storages slots data from the network
   var stoRange = block:
-    let rc = await buddy.getStorageRanges(stateRoot, req)
+    let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
       env.fetchStorage.merge req
 
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
-        trace logTxt "fetch error => stop", peer,
+        trace logTxt "fetch error => stop", peer, pivot,
           nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return
@@ -201,7 +213,7 @@ proc storeStoragesSingleBatch(
   var gotSlotLists = stoRange.data.storages.len
 
   #when extraTraceMessages:
-  #  trace logTxt "fetched", peer,
+  #  trace logTxt "fetched", peer, pivot,
   #    nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
   #    nStorageQueue=env.fetchStorage.len, nLeftOvers=stoRange.leftOver.len
 
@@ -217,7 +229,7 @@ proc storeStoragesSingleBatch(
         env.fetchStorage.merge req
         gotSlotLists.dec(report.len - 1) # for logging only
 
-        error logTxt "import failed", peer,
+        error logTxt "import failed", peer, pivot,
           nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[^1].error
         return
@@ -246,7 +258,7 @@ proc storeStoragesSingleBatch(
         # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        trace logTxt "processing error", peer, nSlotLists=env.nSlotLists,
+        trace logTxt "processing error", peer, pivot, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[inx].error
 

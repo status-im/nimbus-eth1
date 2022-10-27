@@ -158,12 +158,13 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
         if extraTraceMessages:
           trace "No need to change snap pivot", peer,
             pivot=("#" & $rc.value.stateHeader.blockNumber),
+            stateRoot=rc.value.stateHeader.stateRoot,
             multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
         return true
 
     buddy.appendPivotEnv(header)
 
-    trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
+    info "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
     return true

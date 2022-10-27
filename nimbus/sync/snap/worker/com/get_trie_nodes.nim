@@ -37,6 +37,7 @@ proc getTrieNodesReq(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
     paths: seq[seq[Blob]];
+    pivot: string;
       ): Future[Result[Option[SnapTrieNodes],void]]
       {.async.} =
   let
@@ -46,7 +47,7 @@ proc getTrieNodesReq(
     return ok(reply)
 
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetByteCodes reply", peer,
+    trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
       error=e.msg
     return err()
 
@@ -56,8 +57,9 @@ proc getTrieNodesReq(
 
 proc getTrieNodes*(
     buddy: SnapBuddyRef;
-    stateRoot: Hash256;
-    paths: seq[seq[Blob]],
+    stateRoot: Hash256;         ## Current DB base (see `pivot` for logging)
+    paths: seq[seq[Blob]];      ## Nodes to fetch
+    pivot: string;              ## For logging, instead of `stateRoot`
       ): Future[Result[GetTrieNodes,ComError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the trie nodes requested
@@ -72,15 +74,15 @@ proc getTrieNodes*(
   let nTotal = paths.mapIt(it.len).foldl(a+b, 0)
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetTrieNodes", peer,
+    trace trSnapSendSending & "GetTrieNodes", peer, pivot,
       nPaths, nTotal, bytesLimit=snapRequestBytesLimit
 
   let trieNodes = block:
-    let rc = await buddy.getTrieNodesReq(stateRoot, paths)
+    let rc = await buddy.getTrieNodesReq(stateRoot, paths, pivot)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for reply to GetTrieNodes", peer, nPaths
+      trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nPaths
       return err(ComResponseTimeout)
     let blobs = rc.value.get.nodes
     if nTotal < blobs.len:
@@ -104,7 +106,7 @@ proc getTrieNodes*(
     #   nodes.
     # * The responding node is allowed to return less data than requested
     #   (serving QoS limits), but the node must return at least one trie node.
-    trace trSnapRecvReceived & "empty TrieNodes", peer, nPaths, nNodes
+    trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nPaths, nNodes
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
@@ -153,7 +155,7 @@ proc getTrieNodes*(
         if 0 < pushBack.len:
           dd.leftOver.add paths[n][0] & pushBack
 
-  trace trSnapRecvReceived & "TrieNodes", peer,
+  trace trSnapRecvReceived & "TrieNodes", peer, pivot,
     nPaths, nNodes, nLeftOver=dd.leftOver.len
 
   return ok(dd)

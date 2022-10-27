@@ -137,6 +137,7 @@ proc healingCtx(buddy: SnapBuddyRef): string =
     ctx = buddy.ctx
     env = buddy.data.pivotEnv
   "{" &
+    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & env.fetchAccounts.unprocessed.emptyFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
@@ -212,6 +213,7 @@ proc getMissingNodesFromNetwork(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes = env.fetchAccounts.missingNodes.len
     inxLeft = max(0, nMissingNodes - maxTrieNodeFetch)
@@ -231,7 +233,7 @@ proc getMissingNodesFromNetwork(
 
   # Fetch nodes from the network. Note that the remainder of the `missingNodes`
   # list might be used by another process that runs semi-parallel.
-  let rc = await buddy.getTrieNodes(stateRoot, pathList)
+  let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
