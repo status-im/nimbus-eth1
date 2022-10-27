@@ -13,7 +13,7 @@ import
   chronos,
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  ../../worker_desc,
   ./com_error
 
 {.push raises: [Defect].}
@@ -27,7 +27,7 @@ type
 
   GetTrieNodes* = object
     leftOver*: seq[seq[Blob]]
-    nodes*: seq[NodeSpecs] ## `nodeKey` field unused with `NodeSpecs`
+    nodes*: seq[Blob]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -108,7 +108,7 @@ proc getTrieNodes*(
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
-  var dd = GetTrieNodes()
+  var dd = GetTrieNodes(nodes: trieNodes)
 
   # For each request group/sub-sequence, analyse the results
   var nInx = 0
@@ -120,10 +120,6 @@ proc getTrieNodes*(
       if pathLen < 2:
         if trieNodes[nInx].len == 0:
           dd.leftOver.add paths[n]
-        else:
-          dd.nodes.add NodeSpecs(
-            partialPath: paths[n][0],
-            data:        trieNodes[nInx])
         nInx.inc
         if nInx < nNodes:
           continue
@@ -131,25 +127,21 @@ proc getTrieNodes*(
         dd.leftOver = dd.leftOver & paths[n+1 ..< nPaths]
         break loop
 
-      # Storage request for account followed by storage slot paths
+      # Storage request for account
       if 1 < pathLen:
         var pushBack: seq[Blob]
         for i in 1 ..< pathLen:
           if trieNodes[nInx].len == 0:
             pushBack.add paths[n][i]
-          else:
-            dd.nodes.add NodeSpecs(
-              partialPath: paths[n][i],
-              data:        trieNodes[nInx])
-          nInx.inc
-          if nInx < nNodes:
-            continue
-          # all the rest needs to be re-processed
-          #
-          # add:              account & pushBack & rest  ...
-          dd.leftOver.add paths[n][0] & pushBack & paths[n][i+1 ..< pathLen]
-          dd.leftOver = dd.leftOver & paths[n+1 ..< nPaths]
-          break loop
+            nInx.inc
+            if nInx < nNodes:
+              continue
+            # all the rest needs to be re-processed
+            #
+            # add:              account & pushBack & rest  ...
+            dd.leftOver.add paths[n][0] & pushBack & paths[n][i+1 ..< pathLen]
+            dd.leftOver = dd.leftOver & paths[n+1 ..< nPaths]
+            break loop
         if 0 < pushBack.len:
           dd.leftOver.add paths[n][0] & pushBack
 

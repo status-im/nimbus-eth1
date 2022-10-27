@@ -40,6 +40,18 @@ const
     ##
     ##   Note that 128 is the magic distance for snapshots used by *Geth*.
 
+  backPivotBlockDistance* = 64
+    ## When a pivot header is found, move pivot back `backPivotBlockDistance`
+    ## blocks so that the pivot is guaranteed to have some distance from the
+    ## chain head.
+    ##
+    ## Set `backPivotBlockDistance` to zero for disabling this feature.
+
+  backPivotBlockThreshold* = backPivotBlockDistance + minPivotBlockDistance
+    ## Ignore `backPivotBlockDistance` unless the current block number is
+    ## larger than this constant (which must be at least
+    ## `backPivotBlockDistance`.)
+
   healAccountsTrigger* = 0.95
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
@@ -74,25 +86,25 @@ const
     ## negotiated pivot would be newer. This should be the default.
 
 type
-  SnapSlotsQueue* = KeyedQueue[Hash256,SnapSlotsQueueItemRef]
+  SnapSlotsQueue* = KeyedQueue[NodeKey,SnapSlotQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
 
-  SnapSlotsQueuePair* = KeyedQueuePair[Hash256,SnapSlotsQueueItemRef]
+  SnapSlotsQueuePair* = KeyedQueuePair[NodeKey,SnapSlotQueueItemRef]
     ## Key-value return code from `SnapSlotsQueue` handler
 
-  SnapSlotsQueueItemRef* = ref object
+  SnapSlotQueueItemRef* = ref object
     ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
     ## where the optional `subRange` interval has been replaced by an interval
     ## range + healing support.
-    accKey*: NodeKey                   ## Owner account
+    accHash*: Hash256                  ## Owner account, maybe unnecessary
     slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
     inherit*: bool                     ## mark this trie seen already
 
-  SnapSlotsSet* = HashSet[SnapSlotsQueueItemRef]
+  SnapSlotsSet* = HashSet[SnapSlotQueueItemRef]
     ## Ditto but without order, to be used as veto set
 
   SnapAccountRanges* = array[2,NodeTagRangeSet]
@@ -104,7 +116,7 @@ type
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapAccountRanges    ## Range of slots not covered, yet
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
-    missingNodes*: seq[NodeSpecs]      ## Dangling links to fetch and merge
+    missingNodes*: seq[Blob]           ## Dangling links to fetch and merge
 
   SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
     ## Referenced object, so it can be made optional for the storage
@@ -157,12 +169,13 @@ type
 
 static:
   doAssert healAccountsTrigger < 1.0 # larger values make no sense
+  doAssert backPivotBlockDistance <= backPivotBlockThreshold
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hash*(a: SnapSlotsQueueItemRef): Hash =
+proc hash*(a: SnapSlotQueueItemRef): Hash =
   ## Table/KeyedQueue mixin
   cast[pointer](a).hash
 
@@ -206,7 +219,7 @@ proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
   ## Append/prepend a slot header record into the batch queue.
   let
-    reqKey = fetchReq.storageRoot
+    reqKey = fetchReq.storageRoot.to(NodeKey)
     rc = q.eq(reqKey)
   if rc.isOk:
     # Entry exists already
@@ -223,7 +236,7 @@ proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
         discard qData.slots.unprocessed[0].reduce(iv)
         discard qData.slots.unprocessed[1].merge(iv)
   else:
-    let reqData = SnapSlotsQueueItemRef(accKey: fetchReq.accKey)
+    let reqData = SnapSlotQueueItemRef(accHash: fetchReq.accHash)
 
     # Only add non-existing entries
     if fetchReq.subRange.isNone:

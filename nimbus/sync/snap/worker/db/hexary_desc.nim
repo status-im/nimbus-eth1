@@ -136,7 +136,7 @@ type
 
   TrieNodeStat* = object
     ## Trie inspection report
-    dangling*: seq[NodeSpecs]       ## Referes to nodes with incomplete refs
+    dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
     level*: int                     ## Maximim nesting depth of dangling nodes
     stopped*: bool                  ## Potential loop detected if `true`
 
@@ -284,11 +284,11 @@ proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
   except Exception as e:
     result &= " ! Ooops ppImpl(): name=" & $e.name & " msg=" & e.msg
 
-proc ppDangling(a: seq[NodeSpecs]; maxItems = 30): string =
+proc ppDangling(a: seq[Blob]; maxItems = 30): string =
   proc ppBlob(w: Blob): string =
     w.mapIt(it.toHex(2)).join.toLowerAscii
   let
-    q = a.mapIt(it.partialPath.ppBlob)[0 ..< min(maxItems,a.len)]
+    q = a.mapIt(it.ppBlob)[0 ..< min(maxItems,a.len)]
     andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
   "{" & q.join(",") & andMore & "}"
 

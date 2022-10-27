@@ -125,9 +125,6 @@ proc pp(rc: Result[Hash256,HexaryDbError]): string =
 proc pp(rc: Result[TrieNodeStat,HexaryDbError]; db: SnapDbBaseRef): string =
   if rc.isErr: $rc.error else: rc.value.pp(db.hexaDb)
 
-proc pp(a: NodeKey; collapse = true): string =
-  a.to(Hash256).pp(collapse)
-
 proc ppKvPc(w: openArray[(string,int)]): string =
   w.mapIt(&"{it[0]}={it[1]}%").join(", ")
 
@@ -292,7 +289,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
     var
       desc: SnapDbAccountsRef
-      accKeys: seq[NodeKey]
+      accKeys: seq[Hash256]
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
@@ -322,36 +319,36 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # of proof nodes, typically before the `lowerBound` of each block. As
       # there is a list of account ranges (that were merged for testing), one
       # need to check for additional records only on either end of a range.
-      var keySet = packed.accounts.mapIt(it.accKey).toHashSet
+      var keySet = packed.accounts.mapIt(it.accHash).toHashSet
       for w in accountsList:
-        var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accKey)
+        var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accHash)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
           let newKey = desc.prevAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
-        key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accKey)
+        key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accHash)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
           let newKey = desc.nextAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
       accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
-                             .mapIt(it.to(NodeKey))
+                             .mapIt(it.to(Hash256))
       check packed.accounts.len <= accKeys.len
 
     test &"Revisiting {accKeys.len} items stored items on BaseChainDb":
       var
         nextAccount = accKeys[0]
-        prevAccount: NodeKey
+        prevAccount: Hash256
         count = 0
-      for accKey in accKeys:
+      for accHash in accKeys:
         count.inc
         let
           pfx = $count & "#"
-          byChainDB = desc.getAccountsChainDb(accKey)
-          byNextKey = desc.nextAccountsChainDbKey(accKey)
-          byPrevKey = desc.prevAccountsChainDbKey(accKey)
+          byChainDB = desc.getAccountsChainDb(accHash)
+          byNextKey = desc.nextAccountsChainDbKey(accHash)
+          byPrevKey = desc.prevAccountsChainDbKey(accHash)
         noisy.say "*** find",
           "<", count, "> byChainDb=", byChainDB.pp
         check byChainDB.isOk
@@ -359,18 +356,18 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
         # `nextAccount` value is still the old one and will be different from
         # the account in the next for-loop cycle (if any.)
-        check pfx & accKey.pp(false) == pfx & nextAccount.pp(false)
+        check pfx & accHash.pp(false) == pfx & nextAccount.pp(false)
         if byNextKey.isOk:
           nextAccount = byNextKey.value
         else:
-          nextAccount = NodeKey.default
+          nextAccount = Hash256.default
 
         # Check `prev` traversal funcionality
-        if prevAccount != NodeKey.default:
+        if prevAccount != Hash256.default:
           check byPrevKey.isOk
           if byPrevKey.isOk:
             check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
-        prevAccount = accKey
+        prevAccount = accHash
 
       # Hexary trie memory database dump. These are key value pairs for
       # ::
@@ -434,8 +431,7 @@ proc storagesRunner(
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = SnapDbStorageSlotsRef.init(
-          dbBase, Hash256().to(NodeKey), Hash256(), peer)
+        dbDesc = SnapDbStorageSlotsRef.init(dbBase,Hash256(),Hash256(),peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -455,9 +451,9 @@ proc storagesRunner(
                    else: high(int)
         for m in 0 ..< w.data.storages.len:
           let
-            accKey = w.data.storages[m].account.accKey
+            accHash = w.data.storages[m].account.accHash
             root = w.data.storages[m].account.storageRoot
-            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accKey, root, peer)
+            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accHash, root, peer)
             rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
           if m == errInx:
             check rc == Result[TrieNodeStat,HexaryDbError].err(TrieIsEmpty)
@@ -516,7 +512,7 @@ proc inspectionRunner(
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling.mapIt(it.partialPath)
+          dangling = rc.value.dangling
           keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
@@ -541,7 +537,7 @@ proc inspectionRunner(
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
-            dangling = rc.value.dangling.mapIt(it.partialPath)
+            dangling = rc.value.dangling
             keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
@@ -561,7 +557,7 @@ proc inspectionRunner(
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling.mapIt(it.partialPath)
+          dangling = rc.value.dangling
           keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
@@ -584,7 +580,7 @@ proc inspectionRunner(
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
-            dangling = rc.value.dangling.mapIt(it.partialPath)
+            dangling = rc.value.dangling
             keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
@@ -615,8 +611,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
+            accumulated = r0.value.dangling.toHashSet
+            cascaded = rc.value.dangling.toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -647,8 +643,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
+            accumulated = r0.value.dangling.toHashSet
+            cascaded = rc.value.dangling.toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -1158,7 +1154,7 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
@@ -1168,7 +1164,7 @@ when isMainModule:
         false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_storage_xx
     let knownFailures = @[
       ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),

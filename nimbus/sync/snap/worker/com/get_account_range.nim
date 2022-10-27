@@ -77,19 +77,19 @@ proc getAccountRange*(
       return err(ComResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
-      consumed:    iv,
-      data:        PackedAccountRange(
-        proof:     snAccRange.proof,
-        accounts:  snAccRange.accounts
+      consumed:   iv,
+      data:       PackedAccountRange(
+        proof:    snAccRange.proof,
+        accounts: snAccRange.accounts
           # Re-pack accounts data
           .mapIt(PackedAccount(
-            accKey:  it.accHash.to(NodeKey),
+            accHash: it.acchash,
             accBlob: it.accBody.encode))),
-      withStorage: snAccRange.accounts
+      withStorage:    snAccRange.accounts
         # Collect accounts with non-empty storage
         .filterIt(it.accBody.storageRoot != emptyRlpHash).mapIt(
           AccountSlotsHeader(
-            accKey:      it.accHash.to(NodeKey),
+            accHash:     it.accHash,
             storageRoot: it.accBody.storageRoot)))
   let
     nAccounts = dd.data.accounts.len
@@ -120,8 +120,8 @@ proc getAccountRange*(
     return ok(dd)
 
   let (accMinPt, accMaxPt) = (
-    dd.data.accounts[0].accKey.to(NodeTag),
-    dd.data.accounts[^1].accKey.to(NodeTag))
+    dd.data.accounts[0].accHash.to(NodeTag),
+    dd.data.accounts[^1].accHash.to(NodeTag))
 
   if nProof == 0:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#accountrange-0x01
@@ -154,7 +154,7 @@ proc getAccountRange*(
     if 1 < nAccounts:
       # Geth always seems to allow the last account to be larger than the
       # limit (seen with Geth/v1.10.18-unstable-4b309c70-20220517.)
-      if iv.maxPt < dd.data.accounts[^2].accKey.to(NodeTag):
+      if iv.maxPt < dd.data.accounts[^2].accHash.to(NodeTag):
         # The segcond largest should not excceed the top one requested.
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
           nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, accMaxPt),

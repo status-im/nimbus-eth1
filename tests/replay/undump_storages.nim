@@ -51,9 +51,6 @@ proc toByteSeq(s: string): seq[byte] =
 proc fromHex(T: type Hash256; s: string): T =
   result.data = ByteArray32.fromHex(s)
 
-proc fromHex(T: type NodeKey; s: string): T =
-  ByteArray32.fromHex(s).T
-
 proc fromHex(T: type NodeTag; s: string): T =
   UInt256.fromBytesBE(ByteArray32.fromHex(s)).T
 
@@ -72,9 +69,6 @@ proc dumpStorages*(
   proc ppStr(hash: Hash256): string =
     hash.data.mapIt(it.toHex(2)).join.toLowerAscii
 
-  proc ppStr(key: NodeKey): string =
-    key.ByteArray32.mapIt(it.toHex(2)).join.toLowerAscii
-
   result = "storages " & $data.storages.len & " " & $data.proof.len & "\n"
   result &= root.ppStr & "\n"
 
@@ -82,7 +76,7 @@ proc dumpStorages*(
     let slots = data.storages[n]
     result &= "# -- " & $n & " --\n"
     result &= "slots " & $slots.data.len & "\n"
-    result &= slots.account.accKey.ppStr & "\n"
+    result &= slots.account.accHash.ppStr & "\n"
     result &= slots.account.storageRoot.ppStr & "\n"
 
     for i in 0 ..< slots.data.len:
@@ -170,8 +164,8 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
     of UndumpSlotsAccount:
       if flds.len == 1:
         data.data.storages.add AccountSlots(
-          account: AccountSlotsHeader(
-          accKey:  NodeKey.fromHex(flds[0])))
+          account:   AccountSlotsHeader(
+            accHash: Hash256.fromHex(flds[0])))
         state = UndumpSlotsRoot
         continue
       state = UndumpError

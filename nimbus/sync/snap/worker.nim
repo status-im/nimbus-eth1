@@ -16,9 +16,9 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[handlers, misc/best_pivot, protocol, sync_desc],
-  ./worker/[heal_accounts, heal_storage_slots,
-            range_fetch_accounts, range_fetch_storage_slots, ticker],
-  ./worker/com/com_error,
+  ./worker/[heal_accounts, heal_storages, store_accounts, store_storages,
+            ticker],
+  ./worker/com/[com_error, get_block_header],
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
 
@@ -161,6 +161,18 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
             multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
         return true
 
+    when 0 < backPivotBlockDistance:
+      # Backtrack, do not use the very latest pivot header
+      if backPivotBlockThreshold.toBlockNumber < header.blockNumber:
+        let
+          backNum = header.blockNumber - backPivotBlockDistance.toBlockNumber
+          rc = await buddy.getBlockHeader(backNum)
+        if rc.isErr:
+          if rc.error in {ComNoHeaderAvailable, ComTooManyHeaders}:
+            buddy.ctrl.zombie = true
+          return false
+        header = rc.value
+
     buddy.appendPivotEnv(header)
 
     trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
@@ -172,7 +184,7 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
 proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, wSum, wSqSum: float
       count = 0
     for kvp in ctx.data.pivotTable.nextPairs:
 
@@ -192,12 +204,20 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
         sSum += sLen
         sSqSum += sLen * sLen
 
+        # Storage queue size for that account
+        var stoFill: float
+        for stoKvp in kvp.data.fetchStorage.nextPairs:
+          if stoKvp.data.slots.isNil:
+            stoFill += 1.0
+          else:
+            stoFill += stoKvp.data.slots.unprocessed.fullFactor
+        wSum += stoFill
+        wSqSum += stoFill * stoFill
+
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
       pivotBlock = if env.isNil: none(BlockNumber)
                    else: some(env.stateHeader.blockNumber)
-      stoQuLen = if env.isNil: none(uint64)
-                 else: some(env.fetchStorage.len.uint64)
       accCoverage = ctx.data.coveredAccounts.fullFactor
       accFill = meanStdDev(uSum, uSqSum, count)
 
@@ -207,7 +227,7 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
-      nStorageQueue: stoQuLen)
+      storageQueue:  meanStdDev(wSum, wSqSum, count))
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -352,10 +372,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   else:
     # Snapshot sync processing. Note that *serialSync => accountsDone*.
-    await buddy.rangeFetchAccounts()
+    await buddy.storeAccounts()
     if buddy.ctrl.stopped: return
 
-    await buddy.rangeFetchStorageSlots()
+    await buddy.storeStorages()
     if buddy.ctrl.stopped: return
 
     # Pivot might have changed, so restart with the latest one
@@ -365,10 +385,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     if 0 < env.fetchAccounts.unprocessed[0].chunks or
        0 < env.fetchAccounts.unprocessed[1].chunks:
 
-      await buddy.healAccounts()
+      await buddy.healAccountsDb()
       if buddy.ctrl.stopped: return
 
-      await buddy.healStorageSlots()
+      await buddy.healStoragesDb()
       if buddy.ctrl.stopped: return
 
       # Check whether accounts might be complete.

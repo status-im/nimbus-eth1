@@ -49,9 +49,6 @@ proc toByteSeq(s: string): seq[byte] =
 proc fromHex(T: type Hash256; s: string): T =
   result.data = ByteArray32.fromHex(s)
 
-proc fromHex(T: type NodeKey; s: string): T =
-  ByteArray32.fromHex(s).T
-
 proc fromHex(T: type NodeTag; s: string): T =
   UInt256.fromBytesBE(ByteArray32.fromHex(s)).T
 
@@ -71,16 +68,13 @@ proc dumpAccounts*(
   proc ppStr(hash: Hash256): string =
     hash.data.mapIt(it.toHex(2)).join.toLowerAscii
 
-  proc ppStr(key: NodeKey): string =
-    key.ByteArray32.mapIt(it.toHex(2)).join.toLowerAscii
-
   result = "accounts " & $data.accounts.len & " " & $data.proof.len & "\n"
 
   result &= root.ppStr & "\n"
   result &= base.to(Hash256).ppStr & "\n"
 
   for n in 0 ..< data.accounts.len:
-    result &= data.accounts[n].accKey.ppStr & " "
+    result &= data.accounts[n].accHash.ppStr & " "
     result &= data.accounts[n].accBlob.ppStr & "\n"
 
   if 0 < data.proof.len:
@@ -165,7 +159,7 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
     of UndumpAccountList:
       if flds.len == 2:
         data.data.accounts.add PackedAccount(
-          accKey: NodeKey.fromHex(flds[0]),
+          accHash: Hash256.fromHex(flds[0]),
           accBlob: flds[1].toByteSeq)
         nAccounts.dec
         if 0 < nAccounts:

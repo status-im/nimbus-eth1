@@ -125,15 +125,13 @@ proc processLink(
     if not child.isNodeKey:
       # Oops -- caught in the middle of a repair process? Just register
       # this node
-      stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+      stats.dangling.add trail.hexPrefixEncode(isLeaf = false)
+
     elif db.tab.hasKey(child):
       inspect[child] = trail
+
     else:
-      stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+      stats.dangling.add trail.hexPrefixEncode(isLeaf = false)
 
 proc processLink(
     getFn: HexaryGetFn;
@@ -152,17 +150,15 @@ proc processLink(
     if childBlob.len != 32:
       # Oops -- that is wrong, although the only sensible action is to
       # register the node and otherwise ignore it
-      stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+      stats.dangling.add trail.hexPrefixEncode(isLeaf = false)
+
     else:
-      let childKey = childBlob.convertTo(NodeKey)
+      let childKey =  childBlob.convertTo(NodeKey)
       if 0 < child.toBytes.getFn().len:
         inspect[childKey] = trail
+
       else:
-        stats.dangling.add NodeSpecs(
-          partialPath: trail.hexPrefixEncode(isLeaf = false),
-          nodeKey:     parent)
+        stats.dangling.add trail.hexPrefixEncode(isLeaf = false)
 
 # ------------------------------------------------------------------------------
 # Public functions
