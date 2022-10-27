@@ -161,18 +161,6 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
             multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
         return true
 
-    when 0 < backPivotBlockDistance:
-      # Backtrack, do not use the very latest pivot header
-      if backPivotBlockThreshold.toBlockNumber < header.blockNumber:
-        let
-          backNum = header.blockNumber - backPivotBlockDistance.toBlockNumber
-          rc = await buddy.getBlockHeader(backNum)
-        if rc.isErr:
-          if rc.error in {ComNoHeaderAvailable, ComTooManyHeaders}:
-            buddy.ctrl.zombie = true
-          return false
-        header = rc.value
-
     buddy.appendPivotEnv(header)
 
     trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),

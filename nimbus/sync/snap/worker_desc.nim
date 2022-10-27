@@ -40,18 +40,6 @@ const
     ##
     ##   Note that 128 is the magic distance for snapshots used by *Geth*.
 
-  backPivotBlockDistance* = 64
-    ## When a pivot header is found, move pivot back `backPivotBlockDistance`
-    ## blocks so that the pivot is guaranteed to have some distance from the
-    ## chain head.
-    ##
-    ## Set `backPivotBlockDistance` to zero for disabling this feature.
-
-  backPivotBlockThreshold* = backPivotBlockDistance + minPivotBlockDistance
-    ## Ignore `backPivotBlockDistance` unless the current block number is
-    ## larger than this constant (which must be at least
-    ## `backPivotBlockDistance`.)
-
   healAccountsTrigger* = 0.95
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
@@ -169,7 +157,6 @@ type
 
 static:
   doAssert healAccountsTrigger < 1.0 # larger values make no sense
-  doAssert backPivotBlockDistance <= backPivotBlockThreshold
 
 # ------------------------------------------------------------------------------
 # Public functions
