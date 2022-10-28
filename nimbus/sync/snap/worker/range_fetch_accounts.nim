@@ -135,9 +135,10 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
         when extraTraceMessages:
           trace logTxt "fetch error => stop", peer, pivot, reqLen=iv.len, error
       return
-    # Reset error counts for detecting repeated timeouts
-    buddy.data.errors.nTimeouts = 0
     rc.value
+
+  # Reset error counts for detecting repeated timeouts, network errors, etc.
+  buddy.data.errors.resetComError()
 
   let
     gotAccounts = dd.data.accounts.len

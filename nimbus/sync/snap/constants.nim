@@ -77,6 +77,26 @@ const
     ## `comErrorsTimeoutMax` consecutive errors, the worker will be degraded
     ## as zombie.
 
+  comErrorsTimeoutSleepMSecs* = 5000
+    ## Wait/suspend for this many seconds after a timeout error if there are
+    ## not more than `comErrorsTimeoutMax` errors in a row (maybe some other
+    ## network or no-data errors mixed in.) Set 0 to disable.
+
+
+  comErrorsNetworkMax* = 5
+    ## Similar to `comErrorsTimeoutMax` but for network errors.
+
+  comErrorsNetworkSleepMSecs* = 5000
+    ## Similar to `comErrorsTimeoutSleepSecs` but for network errors.
+    ## Set 0 to disable.
+
+  comErrorsNoDataMax* = 3
+    ## Similar to `comErrorsTimeoutMax` but for missing data errors.
+
+  comErrorsNoDataSleepMSecs* = 0
+    ## Similar to `comErrorsTimeoutSleepSecs` but for missing data errors.
+    ## Set 0 to disable.
+
 static:
   doAssert healAccountsTrigger < 1.0 # larger values make no sense
 

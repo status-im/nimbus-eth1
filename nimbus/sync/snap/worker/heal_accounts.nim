@@ -235,6 +235,9 @@ proc getMissingNodesFromNetwork(
   # list might be used by another process that runs semi-parallel.
   let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
+    # Reset error counts for detecting repeated timeouts, network errors, etc.
+    buddy.data.errors.resetComError()
+
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
       env.fetchAccounts.missingNodes.add NodeSpecs(

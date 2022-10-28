@@ -195,6 +195,9 @@ proc getMissingNodesFromNetwork(
     req = @[accKey.to(Blob)] & fetchNodes.mapIt(it.partialPath)
     rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
   if rc.isOk:
+    # Reset error counts for detecting repeated timeouts, network errors, etc.
+    buddy.data.errors.resetComError()
+
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
       for n in 1 ..< w.len:

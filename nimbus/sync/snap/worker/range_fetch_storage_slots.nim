@@ -207,8 +207,8 @@ proc storeStoragesSingleBatch(
       return
     rc.value
 
-  # Reset error counts for detecting repeated timeouts
-  buddy.data.errors.nTimeouts = 0
+  # Reset error counts for detecting repeated timeouts, network errors, etc.
+  buddy.data.errors.resetComError()
 
   var gotSlotLists = stoRange.data.storages.len
 
