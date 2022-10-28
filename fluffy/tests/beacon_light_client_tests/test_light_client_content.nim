@@ -9,12 +9,11 @@
 
 import
   unittest2,
-  stew/byteutils,
   stint,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
-  ../network/beacon_light_client/light_client_content,
-  ./light_client_data/light_client_test_data
+  ../../network/beacon_light_client/light_client_content,
+  ./light_client_test_data
 
 suite "Test light client contentEncodings":
   var forks: ForkDigests

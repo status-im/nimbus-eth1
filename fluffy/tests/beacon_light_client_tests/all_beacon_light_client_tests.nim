@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -8,12 +8,6 @@
 {. warning[UnusedImport]:off .}
 
 import
-  ./test_portal_wire_protocol,
-  ./test_state_distance,
-  ./test_state_network,
-  ./test_accumulator,
-  ./test_history_validation,
-  ./test_history_network,
-  ./test_content_db,
-  ./test_discovery_rpc,
-  ./test_bridge_parser
+  ./test_light_client_content,
+  ./test_light_client_network,
+  ./test_beacon_light_client
