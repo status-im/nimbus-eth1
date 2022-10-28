@@ -97,6 +97,7 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
+  var delayed: seq[NodeSpecs]
   for w in slots.missingNodes:
     let rc = db.getStorageSlotsNodeKey(peer, accKey, storageRoot, w.partialPath)
     if rc.isOk:
@@ -104,7 +105,10 @@ proc updateMissingNodesList(
       slots.checkNodes.add w.partialPath
     else:
       # Node is still missing
-      slots.missingNodes.add w
+      delayed.add w
+
+  # Must not modify sequence while looping over it
+  slots.missingNodes = slots.missingNodes & delayed
 
 
 proc appendMoreDanglingNodesToMissingNodesList(
@@ -197,13 +201,13 @@ proc getMissingNodesFromNetwork(
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
     discard
     when extraTraceMessages:
-      trace logTxt "error fetching nodes => stop", peer,
+      trace logTxt "fetch nodes error => stop", peer,
         itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, error
   else:
     discard
     when extraTraceMessages:
-      trace logTxt "error fetching nodes", peer,
+      trace logTxt "fetch nodes error", peer,
         itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, error
 
@@ -227,11 +231,6 @@ proc kvStorageSlotsLeaf(
     nibbles = prefix & segment
   if nibbles.len == 64:
     return (true, nibbles.getBytes.convertTo(NodeKey))
-
-  when extraTraceMessages:
-    trace logTxt "non-leaf node path", peer,
-      itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
-      nStorageQueue=env.fetchStorage.len, nNibbles=nibbles.len
 
 
 proc registerStorageSlotsLeaf(
@@ -321,6 +320,7 @@ proc storageSlotsHealing(
       nStorageQueue=env.fetchStorage.len, nNodes=nodeSpecs.len
 
   # Filter out error and leaf nodes
+  var nLeafNodes = 0 # for logging
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let
@@ -342,13 +342,14 @@ proc storageSlotsHealing(
         if isLeaf:
           # Update `uprocessed` registry, collect storage roots (if any)
           buddy.registerStorageSlotsLeaf(kvp, slotKey)
+          nLeafNodes.inc
         else:
           slots.checkNodes.add nodePath
 
   when extraTraceMessages:
     trace logTxt "job done", peer,
       itCtx=buddy.healingCtx(kvp), nSlotLists=env.nSlotLists,
-      nStorageQueue=env.fetchStorage.len
+      nStorageQueue=env.fetchStorage.len, nLeafNodes
 
 
 proc healingIsComplete(

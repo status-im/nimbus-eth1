@@ -213,7 +213,7 @@ proc importAccounts*(
   except KeyError as e:
     raiseAssert "Not possible @ importAccounts: " & e.msg
   except OSError as e:
-    trace "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
+    error "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
 
   when extraTraceMessages:
@@ -262,10 +262,10 @@ proc importRawAccountsNodes*(
     slot: Option[int]
   try:
     # Import nodes
-    for n,rec in nodes:
-      if 0 < rec.data.len: # otherwise ignore empty placeholder
+    for n,node in nodes:
+      if 0 < node.data.len: # otherwise ignore empty placeholder
         slot = some(n)
-        var rep = db.hexaryImport(rec)
+        var rep = db.hexaryImport(node)
         if rep.error != NothingSerious:
           rep.slot = slot
           result.add rep
@@ -293,7 +293,7 @@ proc importRawAccountsNodes*(
   except OSError as e:
     result.add HexaryNodeReport(slot: slot, error: OSErrorException)
     nErrors.inc
-    trace "Import account nodes exception", peer, slot, nItems,
+    error "Import account nodes exception", peer, slot, nItems,
       name=($e.name), msg=e.msg, nErrors
 
   when extraTraceMessages:

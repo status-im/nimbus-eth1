@@ -116,7 +116,6 @@ proc processLink(
     db: HexaryTreeDbRef;
     stats: var TrieNodeStat;
     inspect: TableRef[RepairKey,NibblesSeq];
-    parent: NodeKey;
     trail: NibblesSeq;
     child: RepairKey;
       ) {.gcsafe, raises: [Defect,KeyError]} =
@@ -126,35 +125,29 @@ proc processLink(
       # Oops -- caught in the middle of a repair process? Just register
       # this node
       stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+        partialPath: trail.hexPrefixEncode(isLeaf = false))
     elif db.tab.hasKey(child):
       inspect[child] = trail
     else:
       stats.dangling.add NodeSpecs(
         partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+        nodeKey:     child.convertTo(NodeKey))
 
 proc processLink(
     getFn: HexaryGetFn;
     stats: var TrieNodeStat;
     inspect: TableRef[NodeKey,NibblesSeq];
-    parent: NodeKey;
     trail: NibblesSeq;
     child: Rlp;
       ) {.gcsafe, raises: [Defect,RlpError,KeyError]} =
   ## Ditto
   if not child.isEmpty:
-    let
-      #parentKey = parent.convertTo(NodeKey)
-      childBlob = child.toBytes
-
+    let childBlob = child.toBytes
     if childBlob.len != 32:
       # Oops -- that is wrong, although the only sensible action is to
       # register the node and otherwise ignore it
       stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false),
-        nodeKey:     parent)
+        partialPath: trail.hexPrefixEncode(isLeaf = false))
     else:
       let childKey = childBlob.convertTo(NodeKey)
       if 0 < child.toBytes.getFn().len:
@@ -162,7 +155,7 @@ proc processLink(
       else:
         stats.dangling.add NodeSpecs(
           partialPath: trail.hexPrefixEncode(isLeaf = false),
-          nodeKey:     parent)
+          nodeKey:     childKey)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -261,13 +254,13 @@ proc hexaryInspectTrie*(
         let
           trail = parentTrail & node.ePfx
           child = node.eLink
-        db.processLink(stats=result, inspect=again, parent, trail, child)
+        db.processLink(stats=result, inspect=again, trail, child)
       of Branch:
         for n in 0 ..< 16:
           let
             trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
             child = node.bLink[n]
-          db.processLink(stats=result, inspect=again, parent, trail, child)
+          db.processLink(stats=result, inspect=again, trail, child)
       of Leaf:
         # Ooops, forget node and key
         discard
@@ -335,13 +328,13 @@ proc hexaryInspectTrie*(
           let
             trail = parentTrail & xPfx
             child = nodeRlp.listElem(1)
-          getFn.processLink(stats=result, inspect=again, parent, trail, child)
+          getFn.processLink(stats=result, inspect=again, trail, child)
       of 17:
         for n in 0 ..< 16:
           let
             trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
             child = nodeRlp.listElem(n)
-          getFn.processLink(stats=result, inspect=again, parent, trail, child)
+          getFn.processLink(stats=result, inspect=again, trail, child)
       else:
         # Ooops, forget node and key
         discard

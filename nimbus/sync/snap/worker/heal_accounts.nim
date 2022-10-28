@@ -158,6 +158,7 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
 
+  var delayed: seq[NodeSpecs]
   for w in env.fetchAccounts.missingNodes:
     let rc = db.getAccountsNodeKey(peer, stateRoot, w.partialPath)
     if rc.isOk:
@@ -165,7 +166,10 @@ proc updateMissingNodesList(buddy: SnapBuddyRef) =
       env.fetchAccounts.checkNodes.add w.partialPath
     else:
       # Node is still missing
-      env.fetchAccounts.missingNodes.add w
+      delayed.add w
+
+  # Must not modify sequence while looping over it
+  env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & delayed
 
 
 proc appendMoreDanglingNodesToMissingNodesList(buddy: SnapBuddyRef): bool =
@@ -247,12 +251,12 @@ proc getMissingNodesFromNetwork(
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
     discard
     when extraTraceMessages:
-      trace logTxt "error fetching nodes => stop", peer,
+      trace logTxt "fetch nodes error => stop", peer,
         ctx=buddy.healingCtx(), error
   else:
     discard
     when extraTraceMessages:
-      trace logTxt "error fetching nodes", peer,
+      trace logTxt "fetch nodes error", peer,
         ctx=buddy.healingCtx(), error
 
   return @[]
@@ -310,10 +314,6 @@ proc registerAccountLeaf(
     env.fetchStorage.merge AccountSlotsHeader(
       acckey:      accKey,
       storageRoot: acc.storageRoot)
-
-  when extraTraceMessages:
-    trace logTxt "single node", peer,
-      ctx=buddy.healingCtx(), accKey=pt
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -379,6 +379,7 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
       ctx=buddy.healingCtx(), nNodes=nodeSpecs.len
 
   # Filter out error and leaf nodes
+  var nLeafNodes = 0 # for logging
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let
@@ -399,11 +400,12 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
         if isLeaf:
           # Update `uprocessed` registry, collect storage roots (if any)
           buddy.registerAccountLeaf(key, acc)
+          nLeafNodes.inc
         else:
           env.fetchAccounts.checkNodes.add nodePath
 
   when extraTraceMessages:
-    trace logTxt "job done", peer, ctx=buddy.healingCtx()
+    trace logTxt "job done", peer, ctx=buddy.healingCtx(), nLeafNodes
 
 # ------------------------------------------------------------------------------
 # End

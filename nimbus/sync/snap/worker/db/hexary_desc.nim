@@ -378,9 +378,6 @@ proc isZero*[T: NodeTag|NodeKey|RepairKey](a: T): bool =
 proc isNodeKey*(a: RepairKey): bool =
   a.ByteArray33[0] == 0
 
-proc digestTo*(data: Blob; T: type NodeKey): T =
-  keccakHash(data).data.T
-
 proc convertTo*(data: Blob; T: type NodeKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.init(data)
