@@ -10,13 +10,8 @@
 
 import
   chronos,
-  ../../../sync_desc
-
-const
-  comErrorsTimeoutMax* = 2
-    ## Maximal number of non-resonses accepted in a row. If there are more than
-    ## `comErrorsTimeoutMax` consecutive errors, the worker will be degraded
-    ## as zombie.
+  ../../../sync_desc,
+  ../../constants
 
 type
   ComErrorStatsRef* = ref object

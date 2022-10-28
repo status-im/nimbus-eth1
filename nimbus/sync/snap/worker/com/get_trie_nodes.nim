@@ -13,7 +13,7 @@ import
   chronos,
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
 {.push raises: [Defect].}

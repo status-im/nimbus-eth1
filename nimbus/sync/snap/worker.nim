@@ -20,7 +20,7 @@ import
             range_fetch_accounts, range_fetch_storage_slots, ticker],
   ./worker/com/com_error,
   ./worker/db/snapdb_desc,
-  "."/[range_desc, worker_desc]
+  "."/[constants, range_desc, worker_desc]
 
 {.push raises: [Defect].}
 
@@ -121,7 +121,7 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     ctx = buddy.ctx
     minNumber = block:
       let rc = ctx.data.pivotTable.lastValue
-      if rc.isOk: rc.value.stateHeader.blockNumber + minPivotBlockDistance
+      if rc.isOk: rc.value.stateHeader.blockNumber + pivotBlockDistanceMin
       else: 1.toBlockNumber
 
   # Check whether the new header follows minimum depth requirement. This is
@@ -151,7 +151,7 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
     var header = buddy.pivot.pivotHeader.value
 
     # Check whether there is no environment change needed
-    when noPivotEnvChangeIfComplete:
+    when pivotEnvStopChangingIfComplete:
       let rc = ctx.data.pivotTable.lastValue
       if rc.isOk and rc.value.serialSync:
         # No neede to change

@@ -58,7 +58,7 @@ import
   stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
   ./db/snapdb_storage_slots
 
@@ -92,10 +92,10 @@ proc getNextSlotItems(
   ##   item. An explicit list of slots is only calculated if there was a queue
   ##   item with a partially completed slots download.
   ##
-  ## * Otherwise, a list of at most `maxStoragesFetch` work items is returned.
-  ##   These work items were checked for that there was no trace of a previously
-  ##   installed (probably partial) storage trie on the database (e.g. inherited
-  ##   from an earlier state root pivot.)
+  ## * Otherwise, a list of at most `snapStoragesSlotsFetchMax` work items is
+  ##   returned. These work items were checked for that there was no trace of a
+  ##   previously installed (probably partial) storage trie on the database
+  ##   (e.g. inherited from an earlier state root pivot.)
   ##
   ##   If there is an indication that the storage trie may have some data
   ##   already it is ignored here and marked `inherit` so that it will be
@@ -163,7 +163,7 @@ proc getNextSlotItems(
     env.fetchStorage.del(kvp.key) # ok to delete this item from batch queue
 
     # Maximal number of items to fetch
-    if maxStoragesFetch <= result.len:
+    if snapStoragesSlotsFetchMax <= result.len:
       break
 
   when extraTraceMessages:
@@ -291,7 +291,8 @@ proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
   if 0 < env.fetchStorage.len:
     # Run at most the minimum number of times to get the batch queue cleaned up.
     var
-      fullRangeLoopCount = 1 + (env.fetchStorage.len - 1) div maxStoragesFetch
+      fullRangeLoopCount =
+        1 + (env.fetchStorage.len - 1) div snapStoragesSlotsFetchMax
       subRangeLoopCount = 0
 
     # Add additional counts for partial slot range items

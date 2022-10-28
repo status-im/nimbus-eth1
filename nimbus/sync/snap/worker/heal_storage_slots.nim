@@ -32,7 +32,7 @@ import
   stew/[interval_set, keyed_queue],
   ../../../utils/prettify,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
   ./db/[hexary_desc, hexary_error, snapdb_storage_slots]
 
@@ -174,7 +174,7 @@ proc getMissingNodesFromNetwork(
     slots = kvp.data.slots
 
     nMissingNodes = slots.missingNodes.len
-    inxLeft = max(0, nMissingNodes - maxTrieNodeFetch)
+    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.
@@ -455,7 +455,7 @@ proc healStorageSlots*(buddy: SnapBuddyRef) {.async.} =
 
     # Add to local batch to be processed, below
     toBeHealed.add kvp
-    if maxStoragesHeal <= toBeHealed.len:
+    if healStoragesSlotsBatchMax <= toBeHealed.len:
       break
 
   # Run against local batch

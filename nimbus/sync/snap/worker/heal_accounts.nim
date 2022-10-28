@@ -112,7 +112,7 @@ import
   stew/[interval_set, keyed_queue],
   ../../../utils/prettify,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
   ./db/[hexary_desc, hexary_error, snapdb_accounts]
 
@@ -216,7 +216,7 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes = env.fetchAccounts.missingNodes.len
-    inxLeft = max(0, nMissingNodes - maxTrieNodeFetch)
+    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.

@@ -18,7 +18,7 @@ import
   eth/[common, p2p, trie/trie_defs],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
 {.push raises: [Defect].}
