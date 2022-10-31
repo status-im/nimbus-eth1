@@ -72,9 +72,10 @@ type
 
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
-    ## be incomplete and tthe `proof` is needed for proving validity.
+    ## be incomplete and the `proof` is needed for proving validity.
     storages*: seq[AccountSlots]    ## List of accounts and storage data
     proof*: SnapStorageProof        ## Boundary proofs for last entry
+    base*: NodeTag                  ## Lower limit for last entry w/proof
 
   AccountSlots* = object
     ## Account storage descriptor

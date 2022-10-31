@@ -94,7 +94,8 @@ proc persistentStorageSlots(
 
 
 proc collectStorageSlots(
-    peer: Peer;
+    peer: Peer;               ## for log messages
+    base: NodeTag;            ## before or at first account entry in `data`
     slotLists: seq[SnapStorage];
       ): Result[seq[RLeafSpecs],HexaryDbError]
       {.gcsafe, raises: [Defect, RlpError].} =
@@ -102,6 +103,15 @@ proc collectStorageSlots(
   var rcSlots: seq[RLeafSpecs]
 
   if slotLists.len != 0:
+    let pathTag0 = slotLists[0].slotHash.to(NodeTag)
+
+    # Verify lower bound
+    if pathTag0 < base:
+      let error = LowerBoundAfterFirstEntry
+      trace "collectStorageSlots()", peer, base, item=0,
+        nSlotLists=slotLists.len, error
+      return err(error)
+
     # Add initial account
     rcSlots.add RLeafSpecs(
       pathTag: slotLists[0].slotHash.to(NodeTag),
@@ -126,30 +136,43 @@ proc collectStorageSlots(
 
 proc importStorageSlots(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
+    base: NodeTag;             ## before or at first account entry in `data`
     data: AccountSlots;        ## Account storage descriptor
     proof: SnapStorageProof;   ## Account storage proof
       ): Result[void,HexaryDbError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Preocess storage slots for a particular storage root
   let
-    root = data.account.storageRoot.to(NodeKey)
-    tmpDb = SnapDbBaseRef.init(ps, ps.root, ps.peer)
+    tmpDb = SnapDbBaseRef.init(ps, data.account.storageRoot.to(NodeKey))
   var
     slots: seq[RLeafSpecs]
   if 0 < proof.len:
-    let rc = tmpDb.mergeProofs(ps.peer, root, proof)
+    let rc = tmpDb.mergeProofs(ps.peer, proof)
     if rc.isErr:
       return err(rc.error)
   block:
-    let rc = ps.peer.collectStorageSlots(data.data)
+    let rc = ps.peer.collectStorageSlots(base, data.data)
     if rc.isErr:
       return err(rc.error)
     slots = rc.value
-  block:
+  if 0 < slots.len:
     let rc = tmpDb.hexaDb.hexaryInterpolate(
-      root, slots, bootstrap = (proof.len == 0))
+      tmpDb.root, slots, bootstrap = (proof.len == 0))
     if rc.isErr:
       return err(rc.error)
+  # Verify that `base` is to the left of the first storage slot and there is
+  # nothing in between. Without proof, there can only be a complete set/list
+  # of storage slots. There must be a proof for an empty list.
+  if 0 < proof.len:
+    let rc = block:
+      if 0 < slots.len:
+        tmpDb.verifyLowerBound(ps.peer, base, slots[0].pathTag)
+      else:
+        tmpDb.verifyNoMoreRight(ps.peer, base)
+    if rc.isErr:
+      return err(rc.error)
+  elif slots.len == 0:
+    return err(LowerBoundProofError)
 
   # Commit to main descriptor
   for k,v in tmpDb.hexaDb.tab.pairs:
@@ -213,9 +236,10 @@ proc importStorageSlots*(
   if 0 <= sTop:
     try:
       for n in 0 ..< sTop:
-        # These ones never come with proof data
+        # These ones always come without proof data => `NodeTag.default`
         itemInx = some(n)
-        let rc = ps.importStorageSlots(data.storages[n], @[])
+        let rc = ps.importStorageSlots(
+          NodeTag.default, data.storages[n], @[])
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
           trace "Storage slots item fails", peer, itemInx=n, nItems,
@@ -225,7 +249,8 @@ proc importStorageSlots*(
       # Final one might come with proof data
       block:
         itemInx = some(sTop)
-        let rc = ps.importStorageSlots(data.storages[sTop], data.proof)
+        let rc = ps.importStorageSlots(
+          data.base, data.storages[sTop], data.proof)
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
           trace "Storage slots last item fails", peer, itemInx=sTop, nItems,

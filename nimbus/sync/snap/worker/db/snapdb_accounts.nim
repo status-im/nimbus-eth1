@@ -97,23 +97,12 @@ proc collectAccounts(
   ## can be used for validating the argument account data.
   var rcAcc: seq[RLeafSpecs]
 
-  if acc.len != 0:
+  if 0 < acc.len:
     let pathTag0 = acc[0].accKey.to(NodeTag)
 
     # Verify lower bound
     if pathTag0 < base:
-      let error = HexaryDbError.AccountSmallerThanBase
-      trace "collectAccounts()", peer, base, accounts=acc.len, error
-      return err(error)
-
-    # Add base for the records (no payload). Note that the assumption
-    # holds: `rcAcc[^1].tag <= base`
-    if base < pathTag0:
-      rcAcc.add RLeafSpecs(pathTag: base)
-
-    # Check for the case that accounts are appended
-    elif 0 < rcAcc.len and pathTag0 <= rcAcc[^1].pathTag:
-      let error = HexaryDbError.AccountsNotSrictlyIncreasing
+      let error = LowerBoundAfterFirstEntry
       trace "collectAccounts()", peer, base, accounts=acc.len, error
       return err(error)
 
@@ -189,7 +178,7 @@ proc importAccounts*(
   var accounts: seq[RLeafSpecs]
   try:
     if 0 < data.proof.len:
-      let rc = ps.mergeProofs(ps.peer, ps.root, data.proof)
+      let rc = ps.mergeProofs(ps.peer, data.proof)
       if rc.isErr:
         return err(rc.error)
     block:
@@ -197,11 +186,24 @@ proc importAccounts*(
       if rc.isErr:
         return err(rc.error)
       accounts = rc.value
-    block:
+    if 0 < accounts.len:
       let rc = ps.hexaDb.hexaryInterpolate(
         ps.root, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
         return err(rc.error)
+    # Verify that `base` is to the left of the first account and there is
+    # nothing in between. Without proof, there can only be a complete set/list
+    # of accounts. There must be a proof for an empty list.
+    if 0 < data.proof.len:
+      let rc = block:
+        if 0 < accounts.len:
+          ps.verifyLowerBound(ps.peer, base, accounts[0].pathTag)
+        else:
+          ps.verifyNoMoreRight(ps.peer, base)
+      if rc.isErr:
+        return err(rc.error)
+    elif 0 < data.proof.len:
+      return err(LowerBoundProofError)
 
     if persistent and 0 < ps.hexaDb.tab.len:
       let rc = ps.hexaDb.persistentAccounts(ps)

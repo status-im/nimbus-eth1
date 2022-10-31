@@ -29,7 +29,7 @@ proc pp(w: Blob; db: HexaryTreeDbRef): string =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc getNibblesImpl(path: XPath; start = 0): NibblesSeq =
+proc getNibblesImpl(path: XPath|RPath; start = 0): NibblesSeq =
   ## Re-build the key path
   for n in start ..< path.path.len:
     let it = path.path[n]
@@ -63,16 +63,26 @@ proc toExtensionNode(
       {.gcsafe, raises: [Defect,RlpError]} =
   XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
 
-# not now  ...
-when false:
-  proc `[]`(path: XPath; n: int): XPathStep =
-    path.path[n]
 
-  proc `[]`(path: XPath; s: Slice[int]): XPath =
-    XPath(path: path.path[s.a .. s.b], tail: path.getNibbles(s.b+1))
+proc `<=`(a, b: NibblesSeq): bool =
+  ## Compare nibbles, different lengths are padded to the right with zeros
+  let abMin = min(a.len, b.len)
+  for n in 0 ..< abMin:
+    if a[n] < b[n]:
+      return true
+    if b[n] < a[n]:
+      return false
+    # otherwise a[n] == b[n]
 
-  proc len(path: XPath): int =
-    path.path.len
+  # Assuming zero for missing entries
+  if b.len < a.len:
+    for n in abMin + 1 ..< a.len:
+      if 0 < a[n]:
+        return false
+  true
+
+proc `<`(a, b: NibblesSeq): bool =
+  not (b <= a)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -171,6 +181,48 @@ proc pathExtend(
 
     # end while
   # notreached
+
+
+proc completeLeast(
+    path: RPath;
+    key: RepairKey;
+    db: HexaryTreeDbRef;
+    pathLenMax = 64;
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError].} =
+  ## Extend path using least nodes without recursion.
+  result.path = path.path
+  if db.tab.hasKey(key):
+    var
+      key = key
+      node = db.tab[key]
+
+    while result.path.len < pathLenMax:
+      case node.kind:
+      of Leaf:
+        result.path.add RPathStep(key: key, node: node, nibble: -1)
+        return # done
+
+      of Extension:
+        block useExtensionLink:
+          let newKey = node.eLink
+          if not newkey.isZero and db.tab.hasKey(newKey):
+            result.path.add RPathStep(key: key, node: node, nibble: -1)
+            key = newKey
+            node = db.tab[key]
+            break useExtensionLink
+          return # Oops, no way
+
+      of Branch:
+        block findBranchLink:
+          for inx in 0 .. 15:
+            let newKey = node.bLink[inx]
+            if not newkey.isZero and db.tab.hasKey(newKey):
+              result.path.add RPathStep(key: key, node: node, nibble: inx.int8)
+              key = newKey
+              node = db.tab[key]
+              break findBranchLink
+          return # Oops, no way
 
 
 proc pathLeast(
@@ -357,7 +409,7 @@ proc pathMost(
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc getNibbles*(path: XPath; start = 0): NibblesSeq =
+proc getNibbles*(path: XPath|RPath; start = 0): NibblesSeq =
   ## Re-build the key path
   path.getNibblesImpl(start)
 
@@ -433,6 +485,117 @@ proc hexaryPath*(
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryPath`.
   XPath(tail: partialPath).pathExtend(root.to(Blob), getFn)
+
+
+proc right*(
+    path: RPath;
+    db: HexaryTreeDbRef;
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Extends the maximally extended argument nodes `path` to the right (with
+  ## path value not decreasing). This is similar to `next()`, only that the
+  ## algorithm does not backtrack if there are dangling links in between.
+  ##
+  ## This code is intended be used for verifying a left-bound proof.
+
+  # Some easy cases
+  if path.path.len == 0:
+    return RPath() # error
+  if path.path[^1].node.kind == Leaf:
+    return path
+
+  var rPath = path
+  while 0 < rPath.path.len:
+    let top = rPath.path[^1]
+    if top.node.kind != Branch or
+       top.nibble < 0 or
+       rPath.tail.len == 0:
+      return RPath() # error
+
+    let topLink = top.node.bLink[top.nibble]
+    if topLink.isZero or not db.tab.hasKey(topLink):
+      return RPath() # error
+
+    let nextNibble = rPath.tail[0].int8
+    if nextNibble < 15:
+      let
+        nextNode = db.tab[topLink]
+        rPathLen = rPath.path.len # in case of backtracking
+      case nextNode.kind
+      of Leaf:
+        if rPath.tail <= nextNode.lPfx:
+          return rPath.completeLeast(topLink, db)
+      of Extension:
+        if rPath.tail <= nextNode.ePfx:
+          return rPath.completeLeast(topLink, db)
+      of Branch:
+        # Step down and complete with a branch link on the child node
+        rPath.path = rPath.path & RPathStep(
+          key:    topLink,
+          node:   nextNode,
+          nibble: nextNibble)
+
+      # Find the next item to the right of the new top entry
+      let step = rPath.path[^1]
+      for inx in (step.nibble + 1) .. 15:
+        let link = step.node.bLink[inx]
+        if not link.isZero:
+          rPath.path[^1].nibble = inx.int8
+          return rPath.completeLeast(link, db)
+
+      # Restore `rPath` and backtrack
+      rPath.path.setLen(rPathLen)
+
+    # Pop `Branch` node on top and append nibble to `tail`
+    rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
+    rPath.path.setLen(rPath.path.len - 1)
+
+  # Pathological case: nfffff.. for n < f
+  var step = path.path[0]
+  for inx in (step.nibble + 1) .. 15:
+    let link = step.node.bLink[inx]
+    if not link.isZero:
+      step.nibble = inx.int8
+      rPath.path = @[step]
+      return rPath.completeLeast(link, db)
+
+  RPath() # error
+
+
+proc rightStop*(
+    path: RPath;
+    db: HexaryTreeDbRef;
+      ): bool
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Returns `true` if the maximally extended argument nodes `path` is the
+  ## rightmost on the hexary trie database. It verifies that there is no more
+  ## leaf entry to the right of the argument `path`.
+  ##
+  ## This code is intended be used for verifying a left-bound proof.
+  if 0 < path.path.len and 0 < path.tail.len:
+    let top = path.path[^1]
+    if top.node.kind == Branch and 0 <= top.nibble:
+
+      let topLink = top.node.bLink[top.nibble]
+      if not topLink.isZero and db.tab.hasKey(topLink):
+        let
+          nextNibble = path.tail[0]
+          nextNode = db.tab[topLink]
+
+        case nextNode.kind
+        of Leaf:
+          return nextNode.lPfx < path.tail
+
+        of Extension:
+          return nextNode.ePfx < path.tail
+
+        of Branch:
+          # Step down and verify that there is no branch link
+          for inx in nextNibble .. 15:
+            if not nextNode.bLink[inx].isZero:
+              return false
+          return true
+
 
 proc next*(
     path: XPath;
