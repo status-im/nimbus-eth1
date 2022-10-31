@@ -223,6 +223,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
     else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivot = BestPivotCtxRef.init(ctx.data.rng)
+  ctx.pivot.pivotRelaxedMode(enable = true)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
