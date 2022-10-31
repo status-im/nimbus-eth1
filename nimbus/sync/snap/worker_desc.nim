@@ -56,6 +56,13 @@ type
     ## Referenced object, so it can be made optional for the storage
     ## batch list
 
+  SnapHealingState* = enum
+    ## State of healing process. The `HealerRunning` state indicates that
+    ## dangling and/or missing nodes have been temprarily removed from the
+    ## batch queue while processing.
+    HealerIdle
+    HealerRunning
+    HealerDone
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
@@ -63,11 +70,11 @@ type
 
     # Accounts download
     fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
-    accountsDone*: bool                ## All accounts have been processed
+    accountsState*: SnapHealingState   ## All accounts have been processed
 
     # Storage slots download
     fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
-    serialSync*: bool                  ## Done with storage, block sync next
+    storageDone*: bool                 ## Done with storage, block sync next
 
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
