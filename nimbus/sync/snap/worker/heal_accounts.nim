@@ -321,34 +321,17 @@ proc registerAccountLeaf(
       storageRoot: acc.storageRoot)
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Private functions: do the healing for one round
 # ------------------------------------------------------------------------------
 
-proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
-  ## Fetching and merging missing account trie database nodes.
+proc accountsHealingImpl(buddy: SnapBuddyRef): Future[int] {.async.} =
+  ## Fetching and merging missing account trie database nodes. It returns the
+  ## number of nodes fetched from the network, and -1 upon error.
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
     peer = buddy.peer
     env = buddy.data.pivotEnv
-
-  # Only start healing if there is some completion level, already.
-  #
-  # We check against the global coverage factor, i.e. a measure for how
-  # much of the total of all accounts have been processed. Even if the trie
-  # database for the current pivot state root is sparsely filled, there
-  # is a good chance that it can inherit some unchanged sub-trie from an
-  # earlier pivor state root download. The healing process then works like
-  # sort of glue.
-  #
-  if env.nAccounts == 0 or
-     ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
-    #when extraTraceMessages:
-    #  trace logTxt "postponed", peer, ctx=buddy.healingCtx()
-    return
-
-  when extraTraceMessages:
-    trace logTxt "started", peer, ctx=buddy.healingCtx()
 
   # Update for changes since last visit
   buddy.updateMissingNodesList()
@@ -358,17 +341,17 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
   if env.fetchAccounts.checkNodes.len != 0 or
      env.fetchAccounts.missingNodes.len == 0:
     if not buddy.appendMoreDanglingNodesToMissingNodesList():
-      return
+      return 0
 
   # Check whether the trie is complete.
   if env.fetchAccounts.missingNodes.len == 0:
     trace logTxt "complete", peer, ctx=buddy.healingCtx()
-    return # nothing to do
+    return 0 # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
   let nodeSpecs = await buddy.getMissingNodesFromNetwork()
   if nodeSpecs.len == 0:
-    return
+    return 0
 
   # Store nodes onto disk
   let report = db.importRawAccountsNodes(peer, nodeSpecs)
@@ -377,11 +360,7 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
     error logTxt "error updating persistent database", peer,
       ctx=buddy.healingCtx(), nNodes=nodeSpecs.len, error=report[^1].error
     env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodeSpecs
-    return
-
-  when extraTraceMessages:
-    trace logTxt "merged into database", peer,
-      ctx=buddy.healingCtx(), nNodes=nodeSpecs.len
+    return -1
 
   # Filter out error and leaf nodes
   var nLeafNodes = 0 # for logging
@@ -410,7 +389,54 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
           env.fetchAccounts.checkNodes.add nodePath
 
   when extraTraceMessages:
-    trace logTxt "job done", peer, ctx=buddy.healingCtx(), nLeafNodes
+    trace logTxt "merged into database", peer,
+      ctx=buddy.healingCtx(), nNodes=nodeSpecs.len, nLeafNodes
+
+  return nodeSpecs.len
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
+  ## Fetching and merging missing account trie database nodes.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+    env = buddy.data.pivotEnv
+
+  # Only start healing if there is some completion level, already.
+  #
+  # We check against the global coverage factor, i.e. a measure for how
+  # much of the total of all accounts have been processed. Even if the trie
+  # database for the current pivot state root is sparsely filled, there
+  # is a good chance that it can inherit some unchanged sub-trie from an
+  # earlier pivor state root download. The healing process then works like
+  # sort of glue.
+  #
+  if env.nAccounts == 0 or
+     ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
+    #when extraTraceMessages:
+    #  trace logTxt "postponed", peer, ctx=buddy.healingCtx()
+    return
+
+  when extraTraceMessages:
+    trace logTxt "started", peer, ctx=buddy.healingCtx()
+
+  var
+    nNodesFetched = 0
+    nFetchLoop = 0
+  # Stop after `snapAccountsHealBatchFetchMax` nodes have been fetched
+  while nNodesFetched < snapAccountsHealBatchFetchMax:
+    var nNodes = await buddy.accountsHealingImpl()
+    if nNodes <= 0:
+      break
+    nNodesFetched.inc(nNodes)
+    nFetchLoop.inc
+
+  when extraTraceMessages:
+    trace logTxt "job done", peer, ctx=buddy.healingCtx(),
+      nNodesFetched, nFetchLoop
 
 # ------------------------------------------------------------------------------
 # End

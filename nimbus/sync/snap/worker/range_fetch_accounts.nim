@@ -50,6 +50,12 @@ const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
 
+  numChunksMax = 2000
+    ## Bound for `numChunks()` (some fancy number)
+
+  addToFetchLoopMax = 4
+    ## Add some extra when calculating number of fetch/store rounds
+
 # ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
@@ -60,6 +66,12 @@ template logTxt(info: static[string]): static[string] =
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc numChunks(buddy: SnapBuddyRef): int =
+  var total = 0u64
+  for ivSet in buddy.data.pivotEnv.fetchAccounts.unprocessed:
+    total += ivSet.chunks.uint64
+  min(numChunksMax.uint64, total).int
 
 proc withMaxLen(
     buddy: SnapBuddyRef;
@@ -104,11 +116,12 @@ proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
   discard buddy.ctx.data.coveredAccounts.merge(iv)
 
 # ------------------------------------------------------------------------------
-# Public functions
+#  Private functions: do the account fetching for one round
 # ------------------------------------------------------------------------------
 
-proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
-  ## Fetch accounts and store them in the database.
+proc accountsRagefetchImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
+  ## Fetch accounts and store them in the database. Returns true while more
+  ## data can probably be fetched.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -187,9 +200,35 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
   # Store accounts on the storage TODO list.
   env.fetchStorage.merge dd.withStorage
 
-  when extraTraceMessages:
-    trace logTxt "done", peer, gotAccounts, gotStorage,
-      pivot, reqLen=iv.len, gotLen=dd.consumed.len
+  return true
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
+  ## Fetch accounts and store them in the database.
+  let numChunks = buddy.numChunks()
+  if 0 < numChunks:
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
+      env = buddy.data.pivotEnv
+      pivot = "#" & $env.stateHeader.blockNumber # for logging
+
+      nFetchLoopMax = max(ctx.buddiesMax + 1, numChunks) + addToFetchLoopMax
+
+    when extraTraceMessages:
+      trace logTxt "start", peer, pivot, nFetchLoopMax
+
+    var nFetchAccounts = 0
+    while nFetchAccounts < nFetchLoopMax:
+      if not await buddy.accountsRagefetchImpl():
+        break
+      nFetchAccounts.inc
+
+    when extraTraceMessages:
+      trace logTxt "done", peer, pivot, nFetchAccounts, nFetchLoopMax
 
 # ------------------------------------------------------------------------------
 # End

@@ -37,6 +37,9 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
+  snapStoragesSlotsFetchMax* = 2 * 1024
+    ## Maximal number of storage tries to fetch with a single message.
+
   snapTrieNodeFetchMax* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is not
     ## an official limit but found on several implementations (e.g. Geth.)
@@ -44,8 +47,9 @@ const
     ## Resticting the fetch list length early allows to better paralellise
     ## healing.
 
-  snapStoragesSlotsFetchMax* = 2 * 1024
-    ## Maximal number of storage tries to fetch with a single message.
+  snapAccountsHealBatchFetchMax* = 5 * snapTrieNodeFetchMax
+    ## Keap on gloing in healing task up until this many nodes have been
+    ## fetched from the network or some error contition therminates the task.
 
   # --------------
 
