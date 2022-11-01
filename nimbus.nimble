@@ -66,6 +66,9 @@ task test, "Run tests":
 task test_rocksdb, "Run rocksdb tests":
   test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
+task test_evm, "Run EVM tests":
+  test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+
 ## Fluffy tasks
 
 task fluffy, "Build fluffy":

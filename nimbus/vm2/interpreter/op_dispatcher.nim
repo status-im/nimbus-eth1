@@ -98,7 +98,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     # Wrap innner case/switch into outer case/switch
     let branchStmt = block:
       case op
-      of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
+      of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
         quote do:
           `forkCaseSubExpr`
           if not `k`.cpt.continuation.isNil:
@@ -135,7 +135,7 @@ template genLowMemDispatcher*(fork: Fork; op: Op; k: Vm2Ctx) =
     handleOtherDirective(fork, op, k)
 
   case c.instr
-  of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
+  of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
     if not k.cpt.continuation.isNil:
       break
   of Return, Revert, SelfDestruct:

@@ -21,6 +21,7 @@ import
   ./state,
   ./types,
   chronicles,
+  chronos,
   eth/common,
   eth/common/eth_types,
   options,
@@ -46,13 +47,17 @@ proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
     db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
 
 
-proc execComputation*(c: Computation) =
+# FIXME-awkwardFactoring: the factoring out of the pre and
+# post parts feels awkward to me, but for now I'd really like
+# not to have too much duplicated code between sync and async.
+# --Adam
+
+proc preExecComputation(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
 
-  c.execCallOrCreate()
-
+proc postExecComputation(c: Computation) =
   if c.isSuccess:
     if c.fork < FkLondon:
       # EIP-3529: Reduction in refunds
@@ -62,3 +67,14 @@ proc execComputation*(c: Computation) =
     c.vmState.touchedAccounts.incl c.touchedAccounts
 
   c.vmState.status = c.isSuccess
+
+proc execComputation*(c: Computation) =
+  c.preExecComputation()
+  c.execCallOrCreate()
+  c.postExecComputation()
+
+# FIXME-duplicatedForAsync
+proc asyncExecComputation*(c: Computation): Future[void] {.async.} =
+  c.preExecComputation()
+  await c.asyncExecCallOrCreate()
+  c.postExecComputation()

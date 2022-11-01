@@ -21,6 +21,7 @@ import
   ./transaction_tracer,
   ./types,
   chronicles,
+  chronos,
   eth/[common, keys],
   options,
   sets
@@ -300,6 +301,13 @@ proc writeContract*(c: Computation) =
 
 template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
+  c.continuation = proc() =
+    c.continuation = nil
+    after
+
+# Register an async operation to be performed before the continuation is called.
+template asyncChainTo*(c: Computation, asyncOperation: Future[void], after: untyped) =
+  c.pendingAsyncOperation = asyncOperation
   c.continuation = proc() =
     c.continuation = nil
     after

@@ -6,10 +6,15 @@ import
 import
   options, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
+  ../nimbus/vm2/[async_operations, types],
   ../nimbus/vm_internals, ../nimbus/forks,
-  ../nimbus/transaction/call_evm,
+  ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[transaction, chain_config, genesis, vm_types, vm_state],
   ../nimbus/utils/difficulty
+
+# Need to exclude ServerCommand because it contains something
+# called Stop that interferes with the EVM operation named Stop.
+import chronos except ServerCommand
 
 export byteutils
 {.experimental: "dynamicBindSym".}
@@ -28,8 +33,11 @@ type
 
   Assembler* = object
     title*: string
+    chainDBIdentName*: string
+    vmStateIdentName*: string
     stack*: seq[VMWord]
     memory*: seq[VMWord]
+    initialStorage*: seq[Storage]
     storage*: seq[Storage]
     code*: seq[byte]
     logs*: seq[Log]
@@ -39,6 +47,10 @@ type
     data*: seq[byte]
     output*: seq[byte]
     fork*: Fork
+
+  ConcurrencyTest* = object
+    title*: string
+    assemblers*: seq[Assembler]
 
 const
   idToOpcode = CacheTable"NimbusMacroAssembler"
@@ -80,6 +92,16 @@ proc parseStorage(list: NimNode): seq[Storage] =
   list.expectKind nnkStmtList
   for val in list:
     result.add validateStorage(val)
+
+proc parseStringLiteral(node: NimNode): string =
+  let strNode = node[0]
+  strNode.expectKind(nnkStrLit)
+  strNode.strVal
+
+proc parseIdent(node: NimNode): string =
+  let identNode = node[0]
+  identNode.expectKind(nnkIdent)
+  identNode.strVal
 
 proc parseSuccess(list: NimNode): bool =
   list.expectKind nnkStmtList
@@ -180,21 +202,114 @@ proc parseGasUsed(gas: NimNode): GasInt =
   gas[0].expectKind(nnkIntLit)
   result = gas[0].intVal
 
-proc generateVMProxy(boa: Assembler): NimNode =
+proc parseAssembler(list: NimNode): Assembler =
+  result.success = true
+  result.fork = FkFrontier
+  result.gasUsed = -1
+  list.expectKind nnkStmtList
+  for callSection in list:
+    callSection.expectKind(nnkCall)
+    let label = callSection[0].strVal
+    let body  = callSection[1]
+    case label.normalize
+    of "title": result.title = parseStringLiteral(body)
+    of "vmstate": result.vmStateIdentName = parseIdent(body)
+    of "chaindb": result.chainDBIdentName = parseIdent(body)
+    of "code"  : result.code = parseCode(body)
+    of "memory": result.memory = parseVMWords(body)
+    of "stack" : result.stack = parseVMWords(body)
+    of "storage": result.storage = parseStorage(body)
+    of "initialstorage": result.initialStorage = parseStorage(body)
+    of "logs": result.logs = parseLogs(body)
+    of "success": result.success = parseSuccess(body)
+    of "data": result.data = parseData(body)
+    of "output": result.output = parseData(body)
+    of "fork": result.fork = parseFork(body)
+    of "gasused": result.gasUsed = parseGasUsed(body)
+    else: error("unknown section '" & label & "'", callSection[0])
+
+proc parseAssemblers(list: NimNode): seq[Assembler] =
+  result = @[]
+  list.expectKind nnkStmtList
+  for callSection in list:
+    # Should we do something with the label? Or is the
+    # assembler's "title" section good enough?
+    # let label = callSection[0].strVal
+    let body  = callSection[1]
+    result.add parseAssembler(body)
+
+proc parseConcurrencyTest(list: NimNode): ConcurrencyTest =
+  list.expectKind nnkStmtList
+  for callSection in list:
+    callSection.expectKind(nnkCall)
+    let label = callSection[0].strVal
+    let body  = callSection[1]
+    case label.normalize
+    of "title": result.title = parseStringLiteral(body)
+    of "assemblers": result.assemblers = parseAssemblers(body)
+    else: error("unknown section '" & label & "'", callSection[0])
+
+type VMProxy = tuple[sym: NimNode, pr: NimNode]
+
+proc generateVMProxy(boa: Assembler, shouldBeAsync: bool): VMProxy =
   let
-    vmProxy = genSym(nskProc, "vmProxy")
-    chainDB = ident("chainDB")
-    vmState = ident("vmState")
-    title = boa.title
+    vmProxySym = genSym(nskProc, "asyncVMProxy")
+    chainDB = ident(if boa.chainDBIdentName == "": "chainDB" else: boa.chainDBIdentName)
+    vmState = ident(if boa.vmStateIdentName == "": "vmState" else: boa.vmStateIdentName)
     body = newLitFixed(boa)
+    returnType = if shouldBeAsync:
+                   quote do: Future[bool]
+                 else:
+                   quote do: bool
+    runVMProcName = ident(if shouldBeAsync: "asyncRunVM" else: "runVM")
+    vmProxyProc = quote do:
+      proc `vmProxySym`(): `returnType` =
+        let boa = `body`
+        let asyncFactory =
+          AsyncOperationFactory(
+            lazyDataSource:
+              if len(boa.initialStorage) == 0:
+                noLazyDataSource()
+              else:
+                fakeLazyDataSource(boa.initialStorage))
+        `runVMProcName`(`vmState`, `chainDB`, boa, asyncFactory)
+  (vmProxySym, vmProxyProc)
+
+proc generateAssemblerTest(boa: Assembler): NimNode =
+  let
+    (vmProxySym, vmProxyProc) = generateVMProxy(boa, false)
+    title: string = boa.title
 
   result = quote do:
     test `title`:
-      proc `vmProxy`(): bool =
-        let boa = `body`
-        runVM(`vmState`, `chainDB`, boa)
+      `vmProxyProc`
       {.gcsafe.}:
-        check `vmProxy`()
+        check `vmProxySym`()
+
+  when defined(macro_assembler_debug):
+    echo result.toStrLit.strVal
+
+type
+  AsyncVMProxyTestProc* = proc(): Future[bool]
+
+proc generateConcurrencyTest(t: ConcurrencyTest): NimNode =
+  let
+    vmProxies: seq[VMProxy] = t.assemblers.map(proc(boa: Assembler): VMProxy = generateVMProxy(boa, true))
+    vmProxyProcs: seq[NimNode] = vmProxies.map(proc(x: VMProxy): NimNode = x.pr)
+    vmProxySyms: seq[NimNode] = vmProxies.map(proc(x: VMProxy): NimNode = x.sym)
+    title: string = t.title
+
+  let runVMProxy = quote do:
+    {.gcsafe.}:
+      let procs: seq[AsyncVMProxyTestProc] = @(`vmProxySyms`)
+      let futures: seq[Future[bool]] = procs.map(proc(s: AsyncVMProxyTestProc): Future[bool] = s())
+      waitFor(allFutures(futures))
+
+  # Is there a way to use "quote" (or something like it) to splice
+  # in a statement list?
+  let stmtList = newStmtList(vmProxyProcs)
+  stmtList.add(runVMProxy)
+  result = newCall("test", newStrLitNode(title), stmtList)
 
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal
@@ -220,26 +335,9 @@ proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
 
   (vmState, db)
 
-proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler): bool =
-  const codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
-  let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
+const codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
 
-  vmState.mutateStateDB:
-    db.setCode(codeAddress, boa.code)
-    db.setBalance(codeAddress, 1_000_000.u256)
-
-  let unsignedTx = Transaction(
-    txType: TxLegacy,
-    nonce: 0,
-    gasPrice: 1.GasInt,
-    gasLimit: 500_000_000.GasInt,
-    to: codeAddress.some,
-    value: 500.u256,
-    payload: boa.data
-  )
-  let tx = signTransaction(unsignedTx, privateKey, chainDB.config.chainId, false)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
-
+proc verifyAsmResult(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asmResult: CallResult): bool =
   if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
@@ -332,30 +430,43 @@ proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler): bool =
 
   result = true
 
+proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
+  let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
+  let unsignedTx = Transaction(
+    txType: TxLegacy,
+    nonce: 0,
+    gasPrice: 1.GasInt,
+    gasLimit: 500_000_000.GasInt,
+    to: codeAddress.some,
+    value: 500.u256,
+    payload: boaData
+  )
+  signTransaction(unsignedTx, privateKey, chainId, false)
+
+proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): bool =
+  vmState.asyncFactory = asyncFactory
+  vmState.mutateStateDB:
+    db.setCode(codeAddress, boa.code)
+    db.setBalance(codeAddress, 1_000_000.u256)
+  let tx = createSignedTx(boa.data, chainDB.config.chainId)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
+  verifyAsmResult(vmState, chainDB, boa, asmResult)
+
+# FIXME-duplicatedForAsync
+proc asyncRunVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): Future[bool] {.async.} =
+  vmState.asyncFactory = asyncFactory
+  vmState.mutateStateDB:
+    db.setCode(codeAddress, boa.code)
+    db.setBalance(codeAddress, 1_000_000.u256)
+  let tx = createSignedTx(boa.data, chainDB.config.chainId)
+  let asmResult = await asyncTestCallEvm(tx, tx.getSender, vmState, boa.fork)
+  return verifyAsmResult(vmState, chainDB, boa, asmResult)
+
 macro assembler*(list: untyped): untyped =
-  var boa = Assembler(success: true, fork: FkFrontier, gasUsed: -1)
-  list.expectKind nnkStmtList
-  for callSection in list:
-    callSection.expectKind(nnkCall)
-    let label = callSection[0].strVal
-    let body  = callSection[1]
-    case label.normalize
-    of "title":
-      let title = body[0]
-      title.expectKind(nnkStrLit)
-      boa.title = title.strVal
-    of "code"  : boa.code = parseCode(body)
-    of "memory": boa.memory = parseVMWords(body)
-    of "stack" : boa.stack = parseVMWords(body)
-    of "storage": boa.storage = parseStorage(body)
-    of "logs": boa.logs = parseLogs(body)
-    of "success": boa.success = parseSuccess(body)
-    of "data": boa.data = parseData(body)
-    of "output": boa.output = parseData(body)
-    of "fork": boa.fork = parseFork(body)
-    of "gasused": boa.gasUsed = parseGasUsed(body)
-    else: error("unknown section '" & label & "'", callSection[0])
-  result = boa.generateVMProxy()
+  result = parseAssembler(list).generateAssemblerTest()
+
+macro concurrentAssemblers*(list: untyped): untyped =
+  result = parseConcurrencyTest(list).generateConcurrencyTest()
 
 macro evmByteCode*(list: untyped): untyped =
   list.expectKind nnkStmtList
