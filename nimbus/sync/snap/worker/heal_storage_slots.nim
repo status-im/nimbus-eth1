@@ -11,8 +11,18 @@
 ## Heal storage DB:
 ## ================
 ##
-## This module works similar to `heal_accounts` applied to each
-## per-account storage slots hexary trie.
+## This module works similar to `heal_accounts` applied to each per-account
+## storage slots hexary trie. These per-account trie work items  are stored in
+## the list `env.fetchStorage`.
+##
+## There is one additional short cut for speeding up processing. If a
+## per-account storage slots hexary trie is marked inheritable, it will be
+## checked whether it is complete and can be used wholesale.
+##
+## Inheritable tries appear after a pivot state root change. Typically, not all
+## account data have changed and so the same  per-account storage slots are
+## valid.
+##
 
 import
   std/sequtils,
@@ -22,7 +32,7 @@ import
   stew/[interval_set, keyed_queue],
   ../../../utils/prettify,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
   ./db/[hexary_desc, hexary_error, snapdb_storage_slots]
 
@@ -47,8 +57,10 @@ proc healingCtx(
     kvp: SnapSlotsQueuePair;
       ): string =
   let
+    env = buddy.data.pivotEnv
     slots = kvp.data.slots
   "{" &
+    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "covered=" & slots.unprocessed.emptyFactor.toPC(0) & "," &
     "nCheckNodes=" & $slots.checkNodes.len & "," &
     "nMissingNodes=" & $slots.missingNodes.len & "}"
@@ -158,10 +170,11 @@ proc getMissingNodesFromNetwork(
     env = buddy.data.pivotEnv
     accKey = kvp.data.accKey
     storageRoot = kvp.key
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
     slots = kvp.data.slots
 
     nMissingNodes = slots.missingNodes.len
-    inxLeft = max(0, nMissingNodes - maxTrieNodeFetch)
+    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.
@@ -180,8 +193,11 @@ proc getMissingNodesFromNetwork(
   # list might be used by another process that runs semi-parallel.
   let
     req = @[accKey.to(Blob)] & fetchNodes.mapIt(it.partialPath)
-    rc = await buddy.getTrieNodes(storageRoot, @[req])
+    rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
   if rc.isOk:
+    # Reset error counts for detecting repeated timeouts, network errors, etc.
+    buddy.data.errors.resetComError()
+
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
       for n in 1 ..< w.len:
@@ -418,7 +434,7 @@ proc healStorageSlots*(buddy: SnapBuddyRef) {.async.} =
   for kvp in env.fetchStorage.nextPairs:
 
     # Marked items indicate that a partial sub-trie existsts which might have
-    # been inherited from an earlier state root.
+    # been inherited from an earlier storage root.
     if not kvp.data.inherit:
       let slots = kvp.data.slots
 
@@ -442,7 +458,7 @@ proc healStorageSlots*(buddy: SnapBuddyRef) {.async.} =
 
     # Add to local batch to be processed, below
     toBeHealed.add kvp
-    if maxStoragesHeal <= toBeHealed.len:
+    if healStoragesSlotsBatchMax <= toBeHealed.len:
       break
 
   # Run against local batch

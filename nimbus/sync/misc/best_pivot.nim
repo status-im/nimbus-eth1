@@ -30,7 +30,7 @@ const
   extraTraceMessages = false or true
     ## Additional trace commands
 
-  minPeersToStartSync = 2
+  pivotMinPeersToStartSync* = 2
     ## Wait for consensus of at least this number of peers before syncing.
 
 type
@@ -39,6 +39,7 @@ type
     rng: ref HmacDrbgContext    ## Random generator
     untrusted: seq[Peer]        ## Clean up list
     trusted: HashSet[Peer]      ## Peers ready for delivery
+    relaxedMode: bool           ## Not using strictly `trusted` set
 
   BestPivotWorkerRef* = ref object of RootRef
     ## Data for this peer only
@@ -242,13 +243,30 @@ proc clear*(bp: BestPivotWorkerRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc pivotRelaxedMode*(ctx: BestPivotCtxRef; enable = false) =
+  ## Controls relaxed mode. In relaxed mode, the *best header* is fetched
+  ## from the network and used as pivot if its block number is large enough.
+  ## Otherwise, the default is to find at least `pivotMinPeersToStartSync`
+  ## peers (this one included) that agree on a minimum pivot.
+  ctx.relaxedMode = enable
+
 proc pivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
   ## Returns cached block header if available and the buddy `peer` is trusted.
+  ## In relaxed mode (see `pivotRelaxedMode()`), also lesser trusted pivots
+  ## are returned.
   if bp.header.isSome and
-     bp.peer notin bp.global.untrusted and
-     minPeersToStartSync <= bp.global.trusted.len and
-     bp.peer in bp.global.trusted:
-    return ok(bp.header.unsafeGet)
+     bp.peer notin bp.global.untrusted:
+
+    if pivotMinPeersToStartSync <= bp.global.trusted.len and
+       bp.peer in bp.global.trusted:
+      return ok(bp.header.unsafeGet)
+
+    if bp.global.relaxedMode:
+      when extraTraceMessages:
+        trace "Returning not fully trusted pivot", peer=bp.peer,
+           trusted=bp.global.trusted.len, untrusted=bp.global.untrusted.len
+      return ok(bp.header.unsafeGet)
+
   err()
 
 proc pivotNegotiate*(
@@ -260,6 +278,10 @@ proc pivotNegotiate*(
   ## the beginning of a running worker peer. If the function returns `true`,
   ## the current `buddy` can be used for syncing and the function
   ## `bestPivotHeader()` will succeed returning a `BlockHeader`.
+  ##
+  ## In relaxed mode (see `pivotRelaxedMode()`), negotiation stopps when there
+  ## is a *best header*. It caches the best header and returns `true` it the
+  ## block number is large enough.
   ##
   ## Ackn: nim-eth/eth/p2p/blockchain_sync.nim: `startSyncWithPeer()`
   ##
@@ -291,9 +313,14 @@ proc pivotNegotiate*(
       trace "Useless peer, best number too low", peer,
         trusted=bp.global.trusted.len, runState=bp.ctrl.state,
         minNumber, bestNumber
+      return false
     bp.header = some(rc.value)
 
-  if minPeersToStartSync <= bp.global.trusted.len:
+  # No further negotiation if in relaxed mode
+  if bp.global.relaxedMode:
+    return true
+
+  if pivotMinPeersToStartSync <= bp.global.trusted.len:
     # We have enough trusted peers. Validate new peer against trusted
     let rc = bp.getRandomTrustedPeer()
     if rc.isOK:
@@ -311,10 +338,11 @@ proc pivotNegotiate*(
       if not rx.error:
         # Other peer is dead
         bp.global.trusted.excl rc.value
+    return false
 
   # If there are no trusted peers yet, assume this very peer is trusted,
   # but do not finish initialisation until there are more peers.
-  elif bp.global.trusted.len == 0:
+  if bp.global.trusted.len == 0:
     bp.global.trusted.incl peer
     when extraTraceMessages:
       let bestHeader =
@@ -322,75 +350,75 @@ proc pivotNegotiate*(
         else: "nil"
       trace "Assume initial trusted peer", peer,
         trusted=bp.global.trusted.len, runState=bp.ctrl.state, bestHeader
+    return false
 
-  elif bp.global.trusted.len == 1 and bp.peer in bp.global.trusted:
+  if bp.global.trusted.len == 1 and bp.peer in bp.global.trusted:
     # Ignore degenerate case, note that `trusted.len < minPeersToStartSync`
+    return false
+
+  # At this point we have some "trusted" candidates, but they are not
+  # "trusted" enough. We evaluate `peer` against all other candidates. If
+  # one of the candidates disagrees, we swap it for `peer`. If all candidates
+  # agree, we add `peer` to trusted set. The peers in the set will become
+  # "fully trusted" (and sync will start) when the set is big enough
+  var
+    agreeScore = 0
+    otherPeer: Peer
+    deadPeers: HashSet[Peer]
+  when extraTraceMessages:
+    trace "Trust scoring peer", peer,
+      trusted=bp.global.trusted.len, runState=bp.ctrl.state
+  for p in bp.global.trusted:
+    if peer == p:
+      inc agreeScore
+    else:
+      let rc = await bp.agreesOnChain(p)
+      if rc.isOk:
+        inc agreeScore
+      elif bp.ctrl.stopped:
+        # Beware of terminated session
+        return false
+      elif rc.error:
+        otherPeer = p
+      else:
+        # `Other` peer is dead
+        deadPeers.incl p
+
+  # Normalise
+  if 0 < deadPeers.len:
+    bp.global.trusted = bp.global.trusted - deadPeers
+    if bp.global.trusted.len == 0 or
+       bp.global.trusted.len == 1 and bp.peer in bp.global.trusted:
+      return false
+
+  # Check for the number of peers that disagree
+  case bp.global.trusted.len - agreeScore:
+  of 0:
+    bp.global.trusted.incl peer # best possible outcome
+    when extraTraceMessages:
+      trace "Agreeable trust score for peer", peer,
+        trusted=bp.global.trusted.len, runState=bp.ctrl.state
+  of 1:
+    bp.global.trusted.excl otherPeer
+    bp.global.trusted.incl peer
+    when extraTraceMessages:
+      trace "Other peer no longer trusted", peer,
+        otherPeer, trusted=bp.global.trusted.len, runState=bp.ctrl.state
+  else:
+    when extraTraceMessages:
+      trace "Peer not trusted", peer,
+        trusted=bp.global.trusted.len, runState=bp.ctrl.state
     discard
 
-  else:
-    # At this point we have some "trusted" candidates, but they are not
-    # "trusted" enough. We evaluate `peer` against all other candidates. If
-    # one of the candidates disagrees, we swap it for `peer`. If all candidates
-    # agree, we add `peer` to trusted set. The peers in the set will become
-    # "fully trusted" (and sync will start) when the set is big enough
-    var
-      agreeScore = 0
-      otherPeer: Peer
-      deadPeers: HashSet[Peer]
+  # Evaluate status, finally
+  if pivotMinPeersToStartSync <= bp.global.trusted.len:
     when extraTraceMessages:
-      trace "Trust scoring peer", peer,
-        trusted=bp.global.trusted.len, runState=bp.ctrl.state
-    for p in bp.global.trusted:
-      if peer == p:
-        inc agreeScore
-      else:
-        let rc = await bp.agreesOnChain(p)
-        if rc.isOk:
-          inc agreeScore
-        elif bp.ctrl.stopped:
-          # Beware of terminated session
-          return false
-        elif rc.error:
-          otherPeer = p
-        else:
-          # `Other` peer is dead
-          deadPeers.incl p
-
-    # Normalise
-    if 0 < deadPeers.len:
-      bp.global.trusted = bp.global.trusted - deadPeers
-      if bp.global.trusted.len == 0 or
-         bp.global.trusted.len == 1 and bp.peer in bp.global.trusted:
-        return false
-
-    # Check for the number of peers that disagree
-    case bp.global.trusted.len - agreeScore:
-    of 0:
-      bp.global.trusted.incl peer # best possible outcome
-      when extraTraceMessages:
-        trace "Agreeable trust score for peer", peer,
-          trusted=bp.global.trusted.len, runState=bp.ctrl.state
-    of 1:
-      bp.global.trusted.excl otherPeer
-      bp.global.trusted.incl peer
-      when extraTraceMessages:
-        trace "Other peer no longer trusted", peer,
-          otherPeer, trusted=bp.global.trusted.len, runState=bp.ctrl.state
-    else:
-      when extraTraceMessages:
-        trace "Peer not trusted", peer,
-          trusted=bp.global.trusted.len, runState=bp.ctrl.state
-      discard
-
-    # Evaluate status, finally
-    if minPeersToStartSync <= bp.global.trusted.len:
-      when extraTraceMessages:
-        let bestHeader =
-          if bp.header.isSome: "#" & $bp.header.get.blockNumber
-          else: "nil"
-        trace "Peer trusted now", peer,
-          trusted=bp.global.trusted.len, runState=bp.ctrl.state, bestHeader
-      return true
+      let bestHeader =
+        if bp.header.isSome: "#" & $bp.header.get.blockNumber
+        else: "nil"
+      trace "Peer trusted now", peer,
+        trusted=bp.global.trusted.len, runState=bp.ctrl.state, bestHeader
+    return true
 
 # ------------------------------------------------------------------------------
 # End

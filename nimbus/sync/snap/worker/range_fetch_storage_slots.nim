@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Fetch accounts stapshot
-## =======================
+## Fetch storage slots
+## ===================
 ##
 ## Flow chart for storage slots download
 ## -------------------------------------
@@ -39,6 +39,17 @@
 ## * `{completed}`: list is optimised out
 ## * `{partial}`: list is optimised out
 ##
+## Discussion
+## ----------
+## Handling storage slots can be seen as an generalisation of handling account
+## ranges (see `range_fetch_accounts` module.) Contrary to the situation with
+## accounts, storage slots are typically downloaded in the size of a full list
+## that can be expanded to a full hexary trie for the given storage root.
+##
+## Only in rare cases a storage slots list is incomplete, a partial hexary
+## trie. In that case, the list of storage slots is processed as described
+## for accounts (see `range_fetch_accounts` module.)
+##
 
 import
   chronicles,
@@ -47,7 +58,7 @@ import
   stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
   ./db/snapdb_storage_slots
 
@@ -81,10 +92,10 @@ proc getNextSlotItems(
   ##   item. An explicit list of slots is only calculated if there was a queue
   ##   item with a partially completed slots download.
   ##
-  ## * Otherwise, a list of at most `maxStoragesFetch` work items is returned.
-  ##   These work items were checked for that there was no trace of a previously
-  ##   installed (probably partial) storage trie on the database (e.g. inherited
-  ##   from an earlier state root pivot.)
+  ## * Otherwise, a list of at most `snapStoragesSlotsFetchMax` work items is
+  ##   returned. These work items were checked for that there was no trace of a
+  ##   previously installed (probably partial) storage trie on the database
+  ##   (e.g. inherited from an earlier state root pivot.)
   ##
   ##   If there is an indication that the storage trie may have some data
   ##   already it is ignored here and marked `inherit` so that it will be
@@ -152,7 +163,7 @@ proc getNextSlotItems(
     env.fetchStorage.del(kvp.key) # ok to delete this item from batch queue
 
     # Maximal number of items to fetch
-    if maxStoragesFetch <= result.len:
+    if snapStoragesSlotsFetchMax <= result.len:
       break
 
   when extraTraceMessages:
@@ -170,6 +181,7 @@ proc storeStoragesSingleBatch(
     peer = buddy.peer
     env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # a request queue for handling partioal replies and re-fetch issues. For
@@ -182,26 +194,26 @@ proc storeStoragesSingleBatch(
 
   # Get storages slots data from the network
   var stoRange = block:
-    let rc = await buddy.getStorageRanges(stateRoot, req)
+    let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
       env.fetchStorage.merge req
 
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         discard
-        trace logTxt "fetch error => stop", peer,
+        trace logTxt "fetch error => stop", peer, pivot,
           nSlotLists=env.nSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error
       return
     rc.value
 
-  # Reset error counts for detecting repeated timeouts
-  buddy.data.errors.nTimeouts = 0
+  # Reset error counts for detecting repeated timeouts, network errors, etc.
+  buddy.data.errors.resetComError()
 
   var gotSlotLists = stoRange.data.storages.len
 
   #when extraTraceMessages:
-  #  trace logTxt "fetched", peer,
+  #  trace logTxt "fetched", peer, pivot,
   #    nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
   #    nStorageQueue=env.fetchStorage.len, nLeftOvers=stoRange.leftOver.len
 
@@ -217,7 +229,7 @@ proc storeStoragesSingleBatch(
         env.fetchStorage.merge req
         gotSlotLists.dec(report.len - 1) # for logging only
 
-        error logTxt "import failed", peer,
+        error logTxt "import failed", peer, pivot,
           nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[^1].error
         return
@@ -246,7 +258,7 @@ proc storeStoragesSingleBatch(
         # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        trace logTxt "processing error", peer, nSlotLists=env.nSlotLists,
+        trace logTxt "processing error", peer, pivot, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
           nStorageQueue=env.fetchStorage.len, error=report[inx].error
 
@@ -279,7 +291,8 @@ proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
   if 0 < env.fetchStorage.len:
     # Run at most the minimum number of times to get the batch queue cleaned up.
     var
-      fullRangeLoopCount = 1 + (env.fetchStorage.len - 1) div maxStoragesFetch
+      fullRangeLoopCount =
+        1 + (env.fetchStorage.len - 1) div snapStoragesSlotsFetchMax
       subRangeLoopCount = 0
 
     # Add additional counts for partial slot range items

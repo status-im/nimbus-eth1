@@ -161,7 +161,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
     discard dsc.buddies.lruFetch(peer.hash)
 
     # Allow task switch
-    await sleepAsync(50.milliseconds)
+    await sleepAsync(1.milliseconds)
     if worker.ctrl.stopped:
       break
 

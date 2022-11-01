@@ -12,20 +12,20 @@ import
   std/[hashes, math, options, sets, strutils],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ".."/[handlers, misc/best_pivot, protocol, sync_desc],
   ./worker/[heal_accounts, heal_storage_slots,
             range_fetch_accounts, range_fetch_storage_slots, ticker],
   ./worker/com/com_error,
-  ./worker/db/snapdb_desc,
-  "."/[range_desc, worker_desc]
+  ./worker/db/[snapdb_check, snapdb_desc],
+  "."/[constants, range_desc, worker_desc]
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-sync"
+  topics = "snap-buddy"
 
 const
   extraTraceMessages = false or true
@@ -121,7 +121,7 @@ proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
     ctx = buddy.ctx
     minNumber = block:
       let rc = ctx.data.pivotTable.lastValue
-      if rc.isOk: rc.value.stateHeader.blockNumber + minPivotBlockDistance
+      if rc.isOk: rc.value.stateHeader.blockNumber + pivotBlockDistanceMin
       else: 1.toBlockNumber
 
   # Check whether the new header follows minimum depth requirement. This is
@@ -151,19 +151,20 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
     var header = buddy.pivot.pivotHeader.value
 
     # Check whether there is no environment change needed
-    when noPivotEnvChangeIfComplete:
+    when pivotEnvStopChangingIfComplete:
       let rc = ctx.data.pivotTable.lastValue
-      if rc.isOk and rc.value.serialSync:
+      if rc.isOk and rc.value.storageDone:
         # No neede to change
         if extraTraceMessages:
           trace "No need to change snap pivot", peer,
             pivot=("#" & $rc.value.stateHeader.blockNumber),
+            stateRoot=rc.value.stateHeader.stateRoot,
             multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
         return true
 
     buddy.appendPivotEnv(header)
 
-    trace "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
+    info "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
     return true
@@ -222,6 +223,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
     else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivot = BestPivotCtxRef.init(ctx.data.rng)
+  ctx.pivot.pivotRelaxedMode(enable = true)
   if tickerOK:
     ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
   else:
@@ -309,23 +311,31 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
 
     let rc = ctx.data.pivotTable.lastValue
     if rc.isOk:
-      # Check whether accounts and storage might be complete.
-      let env = rc.value
-      if not env.serialSync:
+
+      # Check whether last pivot accounts and storage are complete.
+      let
+        env = rc.value
+        peer = buddy.peer
+        pivot = "#" & $env.stateHeader.blockNumber # for logging
+
+      if not env.storageDone:
+
         # Check whether accounts download is complete
-        block checkAccountsComplete:
-          for ivSet in env.fetchAccounts.unprocessed:
-            if ivSet.chunks != 0:
-              break checkAccountsComplete
-          env.accountsDone = true
-          # Check whether storage slots are complete
-          if env.fetchStorage.len == 0:
-            env.serialSync = true
+        if env.fetchAccounts.unprocessed.isEmpty():
+
+          # FIXME: This check might not be needed. It will visit *every* node
+          #        in the hexary trie for checking the account leaves.
+          if buddy.checkAccountsTrieIsComplete(env):
+            env.accountsState = HealerDone
+
+            # Check whether storage slots are complete
+            if env.fetchStorage.len == 0:
+              env.storageDone = true
 
       if extraTraceMessages:
-        trace "Checked for pivot DB completeness",
-          nAccounts=env.nAccounts, accountsDone=env.accountsDone,
-          nSlotLists=env.nSlotLists, storageDone=env.serialSync
+        trace "Checked for pivot DB completeness", peer, pivot,
+          nAccounts=env.nAccounts, accountsState=env.accountsState,
+          nSlotLists=env.nSlotLists, storageDone=env.storageDone
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
@@ -338,44 +348,85 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     peer = buddy.peer
 
   # Set up current state root environment for accounts snapshot
-  let env = block:
-    let rc = ctx.data.pivotTable.lastValue
-    if rc.isErr:
-      return # nothing to do
-    rc.value
+  let
+    env = block:
+      let rc = ctx.data.pivotTable.lastValue
+      if rc.isErr:
+        return # nothing to do
+      rc.value
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
 
   buddy.data.pivotEnv = env
 
-  if env.serialSync:
-    trace "Snap serial sync -- not implemented yet", peer
+  # Full sync processsing based on current snapshot
+  # -----------------------------------------------
+  if env.storageDone:
+    if not buddy.checkAccountsTrieIsComplete(env):
+      error "Ooops, all accounts fetched but DvnB still incomplete", peer, pivot
+
+      if not buddy.checkStorageSlotsTrieIsComplete(env):
+        error "Ooops, all storages fetched but DB still incomplete", peer, pivot
+
+    trace "Snap full sync -- not implemented yet", peer, pivot
     await sleepAsync(5.seconds)
+    return
 
-  else:
-    # Snapshot sync processing. Note that *serialSync => accountsDone*.
-    await buddy.rangeFetchAccounts()
-    if buddy.ctrl.stopped: return
+  # Snapshot sync processing
+  # ------------------------
 
-    await buddy.rangeFetchStorageSlots()
-    if buddy.ctrl.stopped: return
+  template runAsync(code: untyped) =
+    await code
+    if buddy.ctrl.stopped:
+      # To be disconnected from peer.
+      return
+    if env != ctx.data.pivotTable.lastValue.value:
+      # Pivot has changed, so restart with the latest one
+      return
 
-    # Pivot might have changed, so restart with the latest one
-    if env != ctx.data.pivotTable.lastValue.value: return
+  # If this is a new pivot, the previous one can be partially cleaned up.
+  # There is no point in keeping some older space consuming state data any
+  # longer.
+  block:
+    let rc = ctx.data.pivotTable.beforeLastValue
+    if rc.isOk:
+      let nFetchStorage = rc.value.fetchStorage.len
+      if 0 < nFetchStorage:
+        trace "Cleaning up previous pivot", peer, pivot, nFetchStorage
+        rc.value.fetchStorage.clear()
+        rc.value.fetchAccounts.checkNodes.setLen(0)
+        rc.value.fetchAccounts.missingNodes.setLen(0)
 
-    # If the current database is not complete yet
-    if 0 < env.fetchAccounts.unprocessed[0].chunks or
-       0 < env.fetchAccounts.unprocessed[1].chunks:
+  if env.accountsState != HealerDone:
+    runAsync buddy.rangeFetchAccounts()
+    runAsync buddy.rangeFetchStorageSlots()
 
-      await buddy.healAccounts()
-      if buddy.ctrl.stopped: return
+    # Can only run a single accounts healer instance at a time. This instance
+    # will clear the batch queue so there is nothing to do for another process.
+    if env.accountsState == HealerIdle:
+      env.accountsState = HealerRunning
+      runAsync buddy.healAccounts()
+      env.accountsState = HealerIdle
 
-      await buddy.healStorageSlots()
-      if buddy.ctrl.stopped: return
+      # Some additional storage slots might have been popped up
+      runAsync buddy.rangeFetchStorageSlots()
 
-      # Check whether accounts might be complete.
-      if env.fetchStorage.len == 0:
-        # Possibly done but some buddies might wait for an account range to be
-        # received from the network. So we need to sync.
-        buddy.ctx.poolMode = true
+  runAsync buddy.healStorageSlots()
+
+  # Debugging log: analyse pivot against database
+  discard buddy.checkAccountsListOk(env)
+  discard buddy.checkStorageSlotsTrieIsComplete(env)
+
+  # Check whether there are more accounts to fetch.
+  #
+  # Note that some other process might have temporarily borrowed from the
+  # `fetchAccounts.unprocessed` list. Whether we are done can only be decided
+  # if only a single buddy is active. S be it.
+  if env.fetchAccounts.unprocessed.isEmpty():
+
+    # Check whether pivot download is complete.
+    if env.fetchStorage.len == 0:
+      trace "Running pool mode for verifying completeness", peer, pivot
+      buddy.ctx.poolMode = true
 
 # ------------------------------------------------------------------------------
 # End

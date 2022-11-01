@@ -18,7 +18,7 @@ import
   eth/[common, p2p, trie/trie_defs],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
 {.push raises: [Defect].}
@@ -40,6 +40,7 @@ proc getAccountRangeReq(
     buddy: SnapBuddyRef;
     root: Hash256;
     iv: NodeTagRange;
+    pivot: string;
       ): Future[Result[Option[SnapAccountRange],void]] {.async.} =
   let
     peer = buddy.peer
@@ -48,7 +49,7 @@ proc getAccountRangeReq(
       root, iv.minPt.to(Hash256), iv.maxPt.to(Hash256), snapRequestBytesLimit)
     return ok(reply)
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetAccountRange reply", peer,
+    trace trSnapRecvError & "waiting for GetAccountRange reply", peer, pivot,
       error=e.msg
     return err()
 
@@ -58,22 +59,23 @@ proc getAccountRangeReq(
 
 proc getAccountRange*(
     buddy: SnapBuddyRef;
-    stateRoot: Hash256;
-    iv: NodeTagRange;
+    stateRoot: Hash256;         ## Current DB base (see `pivot` for logging)
+    iv: NodeTagRange;           ## Range to be fetched
+    pivot: string;              ## For logging, instead of `stateRoot`
       ): Future[Result[GetAccountRange,ComError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   let
     peer = buddy.peer
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetAccountRange", peer,
-      accRange=iv, stateRoot, bytesLimit=snapRequestBytesLimit
+    trace trSnapSendSending & "GetAccountRange", peer, pivot,
+      accRange=iv, bytesLimit=snapRequestBytesLimit
 
   var dd = block:
-    let rc = await buddy.getAccountRangeReq(stateRoot, iv)
+    let rc = await buddy.getAccountRangeReq(stateRoot, iv, pivot)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for reply to GetAccountRange", peer
+      trace trSnapRecvTimeoutWaiting & "for AccountRange", peer, pivot
       return err(ComResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
@@ -108,15 +110,15 @@ proc getAccountRange*(
     #   any) account after limitHash must be provided.
     if nProof == 0:
       # Maybe try another peer
-      trace trSnapRecvReceived & "empty AccountRange", peer,
-        nAccounts, nProof, accRange="n/a", reqRange=iv, stateRoot
+      trace trSnapRecvReceived & "empty AccountRange", peer, pivot,
+        nAccounts, nProof, accRange="n/a", reqRange=iv
       return err(ComNoAccountsForStateRoot)
 
     # So there is no data, otherwise an account beyond the interval end
     # `iv.maxPt` would have been returned.
     dd.consumed = NodeTagRange.new(iv.minPt, high(NodeTag))
-    trace trSnapRecvReceived & "terminal AccountRange", peer,
-      nAccounts, nProof, accRange=dd.consumed, reqRange=iv, stateRoot
+    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot,
+      nAccounts, nProof, accRange=dd.consumed, reqRange=iv
     return ok(dd)
 
   let (accMinPt, accMaxPt) = (
@@ -133,15 +135,15 @@ proc getAccountRange*(
     #   across both.
     if 0.to(NodeTag) < iv.minPt:
       trace trSnapRecvProtocolViolation & "proof-less AccountRange", peer,
-        nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, accMaxPt),
-        reqRange=iv, stateRoot
+        pivot, nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, accMaxPt),
+        reqRange=iv
       return err(ComMissingProof)
 
   if accMinPt < iv.minPt:
     # Not allowed
     trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
-      nAccounts, nProof, accRange=NodeTagRange.new(accMinPt, accMaxPt),
-      reqRange=iv, stateRoot
+      pivot, nAccounts, nProof, accRange=NodeTagRange.new(accMinPt, accMaxPt),
+      reqRange=iv
     return err(ComAccountsMinTooSmall)
 
   if iv.maxPt < accMaxPt:
@@ -157,13 +159,13 @@ proc getAccountRange*(
       if iv.maxPt < dd.data.accounts[^2].accKey.to(NodeTag):
         # The segcond largest should not excceed the top one requested.
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
-          nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, accMaxPt),
-          reqRange=iv, stateRoot
+          pivot, nAccounts, nProof,
+          accRange=NodeTagRange.new(iv.minPt, accMaxPt), reqRange=iv
         return err(ComAccountsMaxTooLarge)
 
   dd.consumed = NodeTagRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
-  trace trSnapRecvReceived & "AccountRange", peer,
-    nAccounts, nProof, accRange=dd.consumed, reqRange=iv, stateRoot
+  trace trSnapRecvReceived & "AccountRange", peer, pivot,
+    nAccounts, nProof, accRange=dd.consumed, reqRange=iv
 
   return ok(dd)
 

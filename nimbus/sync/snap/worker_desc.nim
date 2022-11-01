@@ -19,60 +19,6 @@ import
 
 {.push raises: [Defect].}
 
-const
-  snapRequestBytesLimit* = 2 * 1024 * 1024
-    ## Soft bytes limit to request in `snap` protocol calls.
-
-  minPivotBlockDistance* = 128
-    ## The minimal depth of two block headers needed to activate a new state
-    ## root pivot.
-    ##
-    ## Effects on assembling the state via `snap/1` protocol:
-    ##
-    ## * A small value of this constant increases the propensity to update the
-    ##   pivot header more often. This is so because each new peer negoiates a
-    ##   pivot block number at least the current one.
-    ##
-    ## * A large value keeps the current pivot more stable but some experiments
-    ##   suggest that the `snap/1` protocol is answered only for later block
-    ##   numbers (aka pivot blocks.) So a large value tends to keep the pivot
-    ##   farther away from the chain head.
-    ##
-    ##   Note that 128 is the magic distance for snapshots used by *Geth*.
-
-  healAccountsTrigger* = 0.95
-    ## Apply accounts healing if the global snap download coverage factor
-    ## exceeds this setting. The global coverage factor is derived by merging
-    ## all account ranges retrieved for all pivot state roots (see
-    ## `coveredAccounts` in `CtxData`.)
-
-  healSlorageSlotsTrigger* = 0.70
-    ## Consider per account storage slost healing if this particular sub-trie
-    ## has reached this factor of completeness
-
-  maxStoragesFetch* = 5 * 1024
-    ## Maximal number of storage tries to fetch with a single message.
-
-  maxStoragesHeal* = 32
-    ## Maximal number of storage tries to to heal in a single batch run.
-
-  maxTrieNodeFetch* = 1024
-    ## Informal maximal number of trie nodes to fetch at once. This is nor
-    ## an official limit but found on several implementations (e.g. geth.)
-    ##
-    ## Resticting the fetch list length early allows to better paralellise
-    ## healing.
-
-  maxHealingLeafPaths* = 1024
-    ## Retrieve this many leave nodes with proper 32 bytes path when inspecting
-    ## for dangling nodes. This allows to run healing paralell to accounts or
-    ## storage download without requestinng an account/storage slot found by
-    ## healing again with the download.
-
-  noPivotEnvChangeIfComplete* = true
-    ## If set `true`, new peers will not change the pivot even if the
-    ## negotiated pivot would be newer. This should be the default.
-
 type
   SnapSlotsQueue* = KeyedQueue[Hash256,SnapSlotsQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
@@ -110,6 +56,13 @@ type
     ## Referenced object, so it can be made optional for the storage
     ## batch list
 
+  SnapHealingState* = enum
+    ## State of healing process. The `HealerRunning` state indicates that
+    ## dangling and/or missing nodes have been temprarily removed from the
+    ## batch queue while processing.
+    HealerIdle
+    HealerRunning
+    HealerDone
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
@@ -117,11 +70,11 @@ type
 
     # Accounts download
     fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
-    accountsDone*: bool                ## All accounts have been processed
+    accountsState*: SnapHealingState   ## All accounts have been processed
 
     # Storage slots download
     fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
-    serialSync*: bool                  ## Done with storage, block sync next
+    storageDone*: bool                 ## Done with storage, block sync next
 
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
@@ -154,9 +107,6 @@ type
 
   SnapCtxRef* = CtxRef[CtxData]
     ## Extended global descriptor
-
-static:
-  doAssert healAccountsTrigger < 1.0 # larger values make no sense
 
 # ------------------------------------------------------------------------------
 # Public functions
