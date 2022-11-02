@@ -14,15 +14,12 @@ import
   eth/p2p/discoveryv5/random2,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  ./light_client_network
+  "."/[light_client_network, light_client_content]
 
 from beacon_chain/consensus_object_pools/block_pools_types import BlockError
 
 logScope:
   topics = "lcman"
-
-# https://github.com/ethereum/consensus-specs/blob/v1.2.0/specs/altair/light-client/p2p-interface.md#configuration
-const MAX_REQUEST_LIGHT_CLIENT_UPDATES* = 128
 
 type
   Nothing = object

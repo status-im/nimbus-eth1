@@ -26,12 +26,53 @@ suite "Test light client contentEncodings":
   test "Light client bootstrap correct":
     let
       bootstrap = SSZ.decode(bootStrapBytes, altair.LightClientBootstrap)
-      encodedForked = encodeBootstrapForked(forks.altair, bootstrap)
+      encodedForked = encodeForked(altair.LightClientBootstrap, forks.altair, bootstrap)
       decodedResult = decodeBootstrapForked(forks, encodedForked)
 
     check:
       decodedResult.isOk()
       decodedResult.get() == bootstrap
+
+  test "Light client update correct":
+    let
+      update = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      encodedForked = encodeForked(altair.LightClientUpdate, forks.altair, update)
+      decodedResult = decodeLightClientUpdateForked(forks, encodedForked)
+
+    check:
+      decodedResult.isOk()
+      decodedResult.get() == update
+
+  test "Light client update list correct":
+    let
+      update = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      updateList = @[update, update]
+      encodedForked = encodeLightClientUpdatesForked(forks.altair, updateList)
+      decodedForked = decodeLightClientUpdatesForked(forks, encodedForked)
+
+    check:
+      decodedForked.isOk()
+      decodedForked.get() == updateList
+
+  test "Light client finality update correct":
+    let
+      update = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      encodedForked = encodeForked(altair.LightClientFinalityUpdate, forks.altair, update)
+      decodedResult = decodeLightClientFinalityUpdateForked(forks, encodedForked)
+
+    check:
+      decodedResult.isOk()
+      decodedResult.get() == update
+
+  test "Light client optimistic update correct":
+    let
+      update = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+      encodedForked = encodeForked(altair.LightClientOptimisticUpdate, forks.altair, update)
+      decodedResult = decodeLightClientOptimisticUpdateForked(forks, encodedForked)
+
+    check:
+      decodedResult.isOk()
+      decodedResult.get() == update
 
   test "Light client bootstrap failures":
     let
@@ -45,6 +86,3 @@ suite "Test light client contentEncodings":
       decodeBootstrapForked(forks, @[]).isErr()
       decodeBootstrapForked(forks, encodedTooEarlyFork).isErr()
       decodeBootstrapForked(forks, encodedUnknownFork).isErr()
-
-
-
