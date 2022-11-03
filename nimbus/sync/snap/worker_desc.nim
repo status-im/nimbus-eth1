@@ -73,7 +73,8 @@ type
     accountsState*: SnapHealingState   ## All accounts have been processed
 
     # Storage slots download
-    fetchStorage*: SnapSlotsQueue      ## Fetch storage for these accounts
+    fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts
+    fetchStoragePart*: SnapSlotsQueue  ## Partial storage trie to com[plete
     storageDone*: bool                 ## Done with storage, block sync next
 
     # Info

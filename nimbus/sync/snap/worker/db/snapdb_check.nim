@@ -61,7 +61,10 @@ proc storageSlotsCtx(
       ): string =
   let
     ctx = buddy.ctx
-    rc = env.fetchStorage.eq(storageRoot)
+    rc = block:
+      let rcx = env.fetchStorageFull.eq(storageRoot)
+      if rcx.isOk: rcx
+      else: env.fetchStoragePart.eq(storageRoot)
   if rc.isErr:
     return "n/a"
   let
@@ -221,8 +224,8 @@ proc checkStorageSlotsTrieIsComplete*(
     return rc.value
 
   when extraTraceMessages:
-    debug logTxt "atorage slots health check failed", peer,
-      nStoQueue=env.fetchStorage.len,
+    let nStoQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+    debug logTxt "atorage slots health check failed", peer, nStoQueue,
       ctx=buddy.storageSlotsCtx(storageRoot, env), error=rc.error
 
 proc checkStorageSlotsTrieIsComplete*(
@@ -240,8 +243,9 @@ proc checkStorageSlotsTrieIsComplete*(
 
   for (accKey,accData,error) in buddy.accountsWalk(env):
     if error != NothingSerious:
-      error logTxt "atorage slots accounts loop stopped", peer,
-        nStoQueue=env.fetchStorage.len, accounts, incomplete, complete, error
+      let nStoQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+      error logTxt "atorage slots accounts loop stopped", peer, nStoQueue,
+        accounts, incomplete, complete, error
       return false
 
     accounts.inc
@@ -256,8 +260,9 @@ proc checkStorageSlotsTrieIsComplete*(
       incomplete.inc
 
   when extraTraceMessages:
+    let nStoQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
     debug logTxt "storage slots report", peer, ctx=buddy.accountsCtx(env),
-      nStoQueue=env.fetchStorage.len, accounts, incomplete, complete
+      nStoQueue, accounts, incomplete, complete
 
   0 < accounts and incomplete == 0
 

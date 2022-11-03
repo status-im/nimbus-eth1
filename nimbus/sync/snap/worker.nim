@@ -198,7 +198,8 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
       pivotBlock = if env.isNil: none(BlockNumber)
                    else: some(env.stateHeader.blockNumber)
       stoQuLen = if env.isNil: none(uint64)
-                 else: some(env.fetchStorage.len.uint64)
+                 else: some(env.fetchStorageFull.len.uint64 +
+                            env.fetchStoragePart.len.uint64)
       accCoverage = ctx.data.coveredAccounts.fullFactor
       accFill = meanStdDev(uSum, uSqSum, count)
 
@@ -329,7 +330,8 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
             env.accountsState = HealerDone
 
             # Check whether storage slots are complete
-            if env.fetchStorage.len == 0:
+            if env.fetchStorageFull.len == 0 and
+               env.fetchStoragePart.len == 0:
               env.storageDone = true
 
       if extraTraceMessages:
@@ -389,12 +391,14 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   block:
     let rc = ctx.data.pivotTable.beforeLastValue
     if rc.isOk:
-      let nFetchStorage = rc.value.fetchStorage.len
+      let nFetchStorage =
+        rc.value.fetchStorageFull.len + rc.value.fetchStoragePart.len
       if 0 < nFetchStorage:
         trace "Cleaning up previous pivot", peer, pivot, nFetchStorage
-        rc.value.fetchStorage.clear()
-        rc.value.fetchAccounts.checkNodes.setLen(0)
-        rc.value.fetchAccounts.missingNodes.setLen(0)
+        rc.value.fetchStorageFull.clear()
+        rc.value.fetchStoragePart.clear()
+      rc.value.fetchAccounts.checkNodes.setLen(0)
+      rc.value.fetchAccounts.missingNodes.setLen(0)
 
   if env.accountsState != HealerDone:
     runAsync buddy.rangeFetchAccounts()
@@ -424,7 +428,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   if env.fetchAccounts.unprocessed.isEmpty():
 
     # Check whether pivot download is complete.
-    if env.fetchStorage.len == 0:
+    if env.fetchStorageFull.len == 0 and
+       env.fetchStoragePart.len == 0:
       trace "Running pool mode for verifying completeness", peer, pivot
       buddy.ctx.poolMode = true
 

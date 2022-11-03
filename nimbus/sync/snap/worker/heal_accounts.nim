@@ -52,7 +52,8 @@
 ##   the argument list is empty
 ## * `{leaf-nodes}`: list is optimised out
 ## * `{check-nodes}`: list implemented as `env.fetchAccounts.checkNodes`
-## * `{storage-roots}`: list implemented as `env.fetchStorage`
+## * `{storage-roots}`: list implemented as pair of queues
+##   `env.fetchStorageFull` and `env.fetchStoragePart`
 ##
 ## Discussion of flow chart
 ## ------------------------
@@ -323,7 +324,7 @@ proc registerAccountLeaf(
 
   # Update storage slots batch
   if acc.storageRoot != emptyRlpHash:
-    env.fetchStorage.merge AccountSlotsHeader(
+    env.fetchStorageFull.merge AccountSlotsHeader(
       acckey:      accKey,
       storageRoot: acc.storageRoot)
 

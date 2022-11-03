@@ -195,7 +195,7 @@ proc accountsRangefetchImpl(
       buddy.delUnprocessed(dd.consumed, env)
 
   # Store accounts on the storage TODO list.
-  env.fetchStorage.merge dd.withStorage
+  env.fetchStorageFull.merge dd.withStorage
 
   return true
 
