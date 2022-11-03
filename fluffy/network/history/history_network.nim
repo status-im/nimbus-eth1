@@ -274,7 +274,7 @@ const requestRetries = 4
 # however that response is not yet validated at that moment.
 
 func verifyHeader(
-    n: HistoryNetwork, header: BlockHeader, proof: openArray[Digest]):
+    n: HistoryNetwork, header: BlockHeader, proof: BlockHeaderProof):
     Result[void, string] =
   verifyHeader(n.accumulator, header, proof)
 
@@ -312,7 +312,7 @@ proc getVerifiedBlockHeader*(
 
     let res = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash)
     if res.isOk():
-      let isCanonical = n.verifyHeader(res.get(), headerWithProof.proof.asSeq())
+      let isCanonical = n.verifyHeader(res.get(), headerWithProof.proof)
 
       if isCanonical.isOk():
         info "Fetched block header from the network", hash, contentKey = keyEncoded
@@ -669,7 +669,7 @@ proc validateContent(
 
     let header = validateResult.get()
 
-    let isCanonical = n.verifyHeader(header, headerWithProof.proof.asSeq())
+    let isCanonical = n.verifyHeader(header, headerWithProof.proof)
     if isCanonical.isErr():
       warn "Failed on check if header is part of canonical chain",
         error = isCanonical.error

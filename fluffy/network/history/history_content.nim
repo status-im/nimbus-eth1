@@ -121,10 +121,8 @@ type
   ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
 
  # TODO:
-  # - Change proof to be a SSZ vector instead of List? This would be safer
-  # at deserialization / proof verification.
   # - Proof could also be an SSZ Union, with `None` and `AccumulatorProof` types
-  BlockHeaderProof* = List[Digest, 15]
+  BlockHeaderProof* = array[15, Digest]
   BlockHeaderWithProof* = object
     header*: ByteList # RLP data
     proof*: BlockHeaderProof

@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  eth/common/eth_types_rlp,
+  eth/rlp, eth/common/eth_types_rlp,
   ssz_serialization, ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
   ./history_content
@@ -47,6 +47,14 @@ type
     totalDifficulty*: UInt256
 
   EpochAccumulator* = List[HeaderRecord, epochSize]
+
+  # In the core code of Fluffy the `EpochAccumulator` type is solely used, as
+  # `hash_tree_root` is done either once or never on this object after
+  # serialization.
+  # However for the generation of the proofs for all the headers in an epoch, it
+  # needs to be run many times and the cached version of the SSZ list is
+  # obviously much faster, so this second type is added for this usage.
+  EpochAccumulatorCached* = HashList[HeaderRecord, epochSize]
 
   Accumulator* = object
     historicalEpochs*: List[Bytes32, int(preMergeEpochs)]
@@ -128,7 +136,7 @@ func isPreMerge*(blockNumber: uint64): bool =
 func isPreMerge*(header: BlockHeader): bool =
   isPreMerge(header.blockNumber.truncate(uint64))
 
-func verifyProof*(
+func verifyProof(
     a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]): bool =
   let
     epochIndex = getEpochIndex(header)
@@ -143,16 +151,45 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
 func verifyHeader*(
-    a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]):
+    a: FinishedAccumulator, header: BlockHeader, proof: BlockHeaderProof):
     Result[void, string] =
   if header.isPreMerge():
-    # TODO: This can fail as the proof is not necessarily the right size.
+    # Note: The proof is typed with correct depth, so no check on this is
+    # required here.
     if a.verifyProof(header, proof):
       ok()
     else:
       err("Proof verification failed")
   else:
     err("Cannot verify post merge header with accumulator proof")
+
+func buildProof*(
+    header: BlockHeader,
+    epochAccumulator: EpochAccumulator | EpochAccumulatorCached):
+    Result[BlockHeaderProof, string] =
+  doAssert(header.isPreMerge(), "Must be pre merge header")
+
+  let
+    epochIndex = getEpochIndex(header)
+    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+
+    # TODO: Implement more generalized `get_generalized_index`
+    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+
+  var proof: BlockHeaderProof
+  ? epochAccumulator.build_proof(gIndex, proof)
+
+  ok(proof)
+
+func buildHeaderWithProof*(
+    header: BlockHeader,
+    epochAccumulator: EpochAccumulator | EpochAccumulatorCached):
+    Result[BlockHeaderWithProof, string] =
+  let proof = ? buildProof(header, epochAccumulator)
+
+  ok(BlockHeaderWithProof(
+    header: ByteList.init(rlp.encode(header)),
+    proof: proof))
 
 func getBlockEpochDataForBlockNumber*(
     a: FinishedAccumulator, bn: UInt256): Result[BlockEpochData, string] =

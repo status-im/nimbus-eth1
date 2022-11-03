@@ -73,6 +73,15 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 
   err("Not enough headers provided to finish the accumulator")
 
+func buildProof*(
+    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]):
+    Result[BlockHeaderProof, string] =
+  let epochIndex = getEpochIndex(header)
+  doAssert(epochIndex < uint64(epochAccumulators.len()))
+  let epochAccumulator = epochAccumulators[epochIndex]
+
+  buildProof(header, epochAccumulator)
+
 func buildHeaderWithProof*(
     header: BlockHeader,
     epochAccumulators: seq[EpochAccumulator]):
@@ -81,23 +90,11 @@ func buildHeaderWithProof*(
   ## Returns the block header with the proof
   if header.isPreMerge():
     let epochIndex = getEpochIndex(header)
-
-    # TODO: Avoid this assert with some master and epoch accumulators combined
-    # object?
     doAssert(epochIndex < uint64(epochAccumulators.len()))
-    let
-      epochAccumulator = epochAccumulators[epochIndex]
-      headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
+    let epochAccumulator = epochAccumulators[epochIndex]
 
-      gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
+    buildHeaderWithProof(header, epochAccumulator)
 
-      proof = ? epochAccumulator.build_proof(gIndex)
-
-      content = BlockHeaderWithProof(
-        header: ByteList.init(rlp.encode(header)),
-        proof: BlockHeaderProof.init(proof))
-
-    ok(content)
   else:
     err("Cannot build accumulator proof for post merge header")
 

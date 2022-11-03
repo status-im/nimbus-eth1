@@ -188,15 +188,6 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
-type
-  # In the core code of Fluffy the `EpochAccumulator` type is solely used, as
-  # `hash_tree_root` is done either once or never on this object after
-  # serialization.
-  # However for the generation of the proofs for all the headers in an epoch, it
-  # needs to be run many times and the cached version of the SSZ list is
-  # obviously much faster, so this second type is added for this usage.
-  EpochAccumulatorCached* = HashList[HeaderRecord, epochSize]
-
 proc toString*(v: IoErrorCode): string =
   try: ioErrorMsg(v)
   except Exception as e: raiseAssert e.msg

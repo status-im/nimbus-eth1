@@ -16,18 +16,6 @@ import
   ../network/history/[history_content, accumulator],
   ./test_helpers
 
-func buildProof(
-    epochAccumulators: seq[EpochAccumulator], header: BlockHeader):
-    Result[seq[Digest], string] =
-  let
-    epochIndex = getEpochIndex(header)
-    epochAccumulator = epochAccumulators[epochIndex]
-
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
-
-  return epochAccumulator.build_proof(gIndex)
-
 suite "Header Accumulator":
   test "Header Accumulator Canonical Verification":
     const
@@ -61,19 +49,20 @@ suite "Header Accumulator":
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(epochAccumulators, header)
+        let proof = buildProof(header, epochAccumulators)
         check:
           proof.isOk()
           verifyHeader(accumulator, header, proof.get()).isOk()
 
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
+      var proof: BlockHeaderProof
       let header = BlockHeader(blockNumber: mergeBlockNumber.stuint(256))
-      check verifyHeader(accumulator, header, @[]).isErr()
+      check verifyHeader(accumulator, header, proof).isErr()
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof( epochAccumulators, headers[i])
+        let proof = buildProof(headers[i], epochAccumulators)
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
@@ -83,10 +72,7 @@ suite "Header Accumulator":
         check verifyHeader(accumulator, header, proof.get()).isErr()
 
     block: # Test invalid proofs
-      var proof: seq[Digest]
-      for i in 0..14:
-        var digest: Digest
-        proof.add(digest)
+      var proof: BlockHeaderProof
 
       for i in headersToTest:
         check verifyHeader(accumulator, headers[i], proof).isErr()

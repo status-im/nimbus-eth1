@@ -15,7 +15,7 @@ import
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../data/[history_data_seeding, history_data_parser],
-  ../network/history/history_content,
+  ../network/history/[history_content, accumulator],
   ../seed_db
 
 type
@@ -38,6 +38,24 @@ type
       defaultValue: 7000
       desc: "Port of the JSON-RPC service of the bootstrap (first) node"
       name: "base-rpc-port" .}: uint16
+
+proc buildHeadersWithProof*(
+    blockHeaders: seq[BlockHeader],
+    epochAccumulator: EpochAccumulatorCached):
+    Result[seq[(seq[byte], seq[byte])], string] =
+  var blockHeadersWithProof: seq[(seq[byte], seq[byte])]
+  for header in blockHeaders:
+    if header.isPreMerge():
+      let
+        content = ? buildHeaderWithProof(header, epochAccumulator)
+        contentKey = ContentKey(
+          contentType: blockHeaderWithProof,
+          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
+
+      blockHeadersWithProof.add(
+        (encode(contentKey).asSeq(), SSZ.encode(content)))
+
+  ok(blockHeadersWithProof)
 
 proc connectToRpcServers(config: PortalTestnetConf):
     Future[seq[RpcClient]] {.async.} =
