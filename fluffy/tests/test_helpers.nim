@@ -75,7 +75,7 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
 
 func buildProof*(
     header: BlockHeader, epochAccumulators: seq[EpochAccumulator]):
-    Result[BlockHeaderProof, string] =
+    Result[AccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochAccumulators.len()))
   let epochAccumulator = epochAccumulators[epochIndex]

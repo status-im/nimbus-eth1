@@ -150,8 +150,8 @@ func verifyProof(
 
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
 
-func verifyHeader*(
-    a: FinishedAccumulator, header: BlockHeader, proof: BlockHeaderProof):
+func verifyAccumulatorProof*(
+    a: FinishedAccumulator, header: BlockHeader, proof: AccumulatorProof):
     Result[void, string] =
   if header.isPreMerge():
     # Note: The proof is typed with correct depth, so no check on this is
@@ -163,10 +163,19 @@ func verifyHeader*(
   else:
     err("Cannot verify post merge header with accumulator proof")
 
+func verifyHeader*(
+    a: FinishedAccumulator, header: BlockHeader, proof: BlockHeaderProof):
+    Result[void, string] =
+  case proof.proofType:
+  of BlockHeaderProofType.accumulatorProof:
+    a.verifyAccumulatorProof(header, proof.accumulatorProof)
+  of BlockHeaderProofType.none:
+    err("cannot verify header without proof")
+
 func buildProof*(
     header: BlockHeader,
     epochAccumulator: EpochAccumulator | EpochAccumulatorCached):
-    Result[BlockHeaderProof, string] =
+    Result[AccumulatorProof, string] =
   doAssert(header.isPreMerge(), "Must be pre merge header")
 
   let
@@ -176,7 +185,7 @@ func buildProof*(
     # TODO: Implement more generalized `get_generalized_index`
     gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
 
-  var proof: BlockHeaderProof
+  var proof: AccumulatorProof
   ? epochAccumulator.build_proof(gIndex, proof)
 
   ok(proof)
@@ -189,7 +198,7 @@ func buildHeaderWithProof*(
 
   ok(BlockHeaderWithProof(
     header: ByteList.init(rlp.encode(header)),
-    proof: proof))
+    proof: BlockHeaderProof.init(proof)))
 
 func getBlockEpochDataForBlockNumber*(
     a: FinishedAccumulator, bn: UInt256): Result[BlockEpochData, string] =

@@ -120,9 +120,22 @@ type
   ReceiptByteList* = List[byte, MAX_RECEIPT_LENGTH] # RLP data
   ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
 
- # TODO:
-  # - Proof could also be an SSZ Union, with `None` and `AccumulatorProof` types
-  BlockHeaderProof* = array[15, Digest]
+  AccumulatorProof* = array[15, Digest]
+
+  BlockHeaderProofType* = enum
+    none = 0x00 # An SSZ Union None
+    accumulatorProof = 0x01
+
+  BlockHeaderProof* = object
+    case proofType*: BlockHeaderProofType
+    of none:
+      discard
+    of accumulatorProof:
+      accumulatorProof*: AccumulatorProof
+
   BlockHeaderWithProof* = object
     header*: ByteList # RLP data
     proof*: BlockHeaderProof
+
+func init*(T: type BlockHeaderProof, proof: AccumulatorProof): T =
+  BlockHeaderProof(proofType: accumulatorProof, accumulatorProof: proof)

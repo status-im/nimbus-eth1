@@ -52,13 +52,13 @@ suite "Header Accumulator":
         let proof = buildProof(header, epochAccumulators)
         check:
           proof.isOk()
-          verifyHeader(accumulator, header, proof.get()).isOk()
+          verifyAccumulatorProof(accumulator, header, proof.get()).isOk()
 
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
-      var proof: BlockHeaderProof
+      var proof: AccumulatorProof
       let header = BlockHeader(blockNumber: mergeBlockNumber.stuint(256))
-      check verifyHeader(accumulator, header, proof).isErr()
+      check verifyAccumulatorProof(accumulator, header, proof).isErr()
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
@@ -69,13 +69,13 @@ suite "Header Accumulator":
         let header = BlockHeader(
           blockNumber: i.stuint(256), difficulty: 2.stuint(256))
 
-        check verifyHeader(accumulator, header, proof.get()).isErr()
+        check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
     block: # Test invalid proofs
-      var proof: BlockHeaderProof
+      var proof: AccumulatorProof
 
       for i in headersToTest:
-        check verifyHeader(accumulator, headers[i], proof).isErr()
+        check verifyAccumulatorProof(accumulator, headers[i], proof).isErr()
 
   test "Header Accumulator - Not Finished":
     # Less headers than needed to finish the accumulator
