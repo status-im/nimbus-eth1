@@ -83,6 +83,7 @@ template logTxt(info: static[string]): static[string] =
 
 proc getNextSlotItems(
     buddy: SnapBuddyRef;
+    env: SnapPivotRef;
     noSubRange = false;
       ): seq[AccountSlotsHeader] =
   ## Get list of work item from the batch queue.
@@ -103,7 +104,6 @@ proc getNextSlotItems(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.data.pivotEnv
 
   # Assemble first request which might come with a sub-range.
   if not noSubRange:
@@ -173,13 +173,13 @@ proc getNextSlotItems(
 
 proc storeStoragesSingleBatch(
     buddy: SnapBuddyRef;
+    env: SnapPivotRef;
     noSubRange = false;
       ) {.async.} =
   ## Fetch account storage slots and store them in the database.
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
@@ -188,7 +188,7 @@ proc storeStoragesSingleBatch(
   # all practical puroses, this request queue should mostly be empty.
 
   # Pull out the next request list from the queue
-  let req = buddy.getNextSlotItems()
+  let req = buddy.getNextSlotItems(env, noSubRange)
   if req.len == 0:
      return # currently nothing to do
 
@@ -260,7 +260,7 @@ proc storeStoragesSingleBatch(
 
         trace logTxt "processing error", peer, pivot, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
-          nStorageQueue=env.fetchStorage.len, error=report[inx].error
+          nStorageQueue=env.fetchStorage.len, error=w.error
 
     # Update statistics
     if gotSlotLists == 1 and
@@ -310,20 +310,22 @@ proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
     # slots first wich each batch item (see `getNextSlotItems()`.)
     while 0 < fullRangeLoopCount and
           0 < env.fetchStorage.len and
-          not buddy.ctrl.stopped:
+          buddy.ctrl.running and
+          env == buddy.data.pivotEnv:
       fullRangeLoopCount.dec
-      await buddy.storeStoragesSingleBatch(noSubRange = true)
+      await buddy.storeStoragesSingleBatch(env, noSubRange = true)
 
     while 0 < subRangeLoopCount and
           0 < env.fetchStorage.len and
-          not buddy.ctrl.stopped:
+          buddy.ctrl.running and
+          env == buddy.data.pivotEnv:
       subRangeLoopCount.dec
-      await buddy.storeStoragesSingleBatch(noSubRange = false)
+      await buddy.storeStoragesSingleBatch(env, noSubRange = false)
 
     when extraTraceMessages:
       trace logTxt "done", peer, nSlotLists=env.nSlotLists,
         nStorageQueue=env.fetchStorage.len, fullRangeLoopCount,
-        subRangeLoopCount
+        subRangeLoopCount, runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------
 # End

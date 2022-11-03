@@ -73,7 +73,7 @@ proc running*(ctrl: BuddyCtrlRef): bool =
 
 proc stopped*(ctrl: BuddyCtrlRef): bool =
   ## Getter, if `true`, if `ctrl.state()` is not `Running`
-  ctrl.runState in {Stopped, ZombieStop, ZombieRun}
+  ctrl.runState != Running
 
 proc zombie*(ctrl: BuddyCtrlRef): bool =
   ## Getter, `true` if `ctrl.state()` is `Zombie` (i.e. not `running()` and
