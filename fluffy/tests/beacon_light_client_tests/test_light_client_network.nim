@@ -64,3 +64,57 @@ procSuite "Light client Content Network":
 
     await lcNode1.stop()
     await lcNode2.stop()
+
+  asyncTest "Get latest optimistic and finality updates":
+    let
+      lcNode1 = newLCNode(rng, 20302)
+      lcNode2 = newLCNode(rng, 20303)
+      forks = getTestForkDigests()
+
+    check:
+      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+
+    let
+      finalityUpdate = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      optimisticUpdate = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+
+      finalityUpdateKey = ContentKey(
+        contentType: lightClientFinalityUpdate,
+        lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
+      )
+      finalityUdpateId = toContentId(encode(finalityUpdateKey))
+
+      optimistUpdateKey = ContentKey(
+        contentType: lightClientOptimisticUpdate,
+        lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
+      )
+
+      optimisticUpdateId = toContentId(encode(optimistUpdateKey))
+
+
+    # This silently assumes that peer stores only one latest update, under
+    # the contentId coresponding to latest update content key
+    lcNode2.portalProtocol().storeContent(
+      finalityUdpateId, encodeFinalityUpdateForked(forks.altair, finalityUpdate)
+    )
+
+    lcNode2.portalProtocol().storeContent(
+      optimisticUpdateId, encodeOptimisticUpdateForked(forks.altair, optimisticUpdate)
+    )
+
+    let
+      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate()
+      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate()
+
+    check:
+      finalityResult.isOk()
+      optimisticResult.isOk()
+      finalityResult.get() == finalityUpdate
+      optimisticResult.get() == optimisticUpdate
+
+    await lcNode1.stop()
+    await lcNode2.stop()

@@ -80,17 +80,67 @@ proc getLightClientUpdatesByRange*(
   # TODO: Not implemented!
   return Opt.none(seq[altair.LightClientUpdate])
 
+proc getLatestUpdate( l: LightClientNetwork, optimistic: bool):Future[results.Opt[seq[byte]]] {.async.} =
+  let ck =
+    if optimistic:
+      ContentKey(
+        contentType: lightClientOptimisticUpdate,
+        lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
+      )
+    else:
+      ContentKey(
+        contentType: lightClientFinalityUpdate,
+        lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
+      )
+
+  let
+    keyEncoded = encode(ck)
+    contentID = toContentId(keyEncoded)
+    updateLooukup = await l.portalProtocol.contentLookup(keyEncoded, contentId)
+
+  if updateLooukup.isNone():
+    warn "Failed fetching update from the network", contentKey = keyEncoded
+    return Opt.none(seq[byte])
+
+  return ok(updateLooukup.get().content)
+
+# TODO: Currently both getLightClientFinalityUpdate and getLightClientOptimisticUpdate
+# are implemented in naive way as finding first peer with any of those updates
+# and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
     l: LightClientNetwork
   ): Future[results.Opt[altair.LightClientFinalityUpdate]] {.async.} =
-  # TODO: Not implemented!
-  return Opt.none(altair.LightClientFinalityUpdate)
+  let lookupResult = await l.getLatestUpdate(optimistic = false)
+
+  if lookupResult.isErr:
+    return Opt.none(altair.LightClientFinalityUpdate)
+
+  let
+    finalityUpdate = lookupResult.get()
+    decodingResult = decodeLightClientFinalityUpdateForked(l.forkDigests, finalityUpdate)
+
+  if decodingResult.isErr:
+    return Opt.none(altair.LightClientFinalityUpdate)
+  else:
+    return Opt.some(decodingResult.get())
 
 proc getLightClientOptimisticUpdate*(
     l: LightClientNetwork
   ): Future[results.Opt[altair.LightClientOptimisticUpdate]] {.async.} =
-  # TODO: Not implemented!
-  return Opt.none(altair.LightClientOptimisticUpdate)
+
+  let lookupResult = await l.getLatestUpdate(optimistic = true)
+
+  if lookupResult.isErr:
+    return Opt.none(altair.LightClientOptimisticUpdate)
+
+  let
+    optimimsticUpdate = lookupResult.get()
+    decodingResult = decodeLightClientOptimisticUpdateForked(l.forkDigests, optimimsticUpdate)
+
+  if decodingResult.isErr:
+    return Opt.none(altair.LightClientOptimisticUpdate)
+  else:
+    return Opt.some(decodingResult.get())
 
 proc new*(
     T: type LightClientNetwork,
