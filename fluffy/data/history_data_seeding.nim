@@ -10,7 +10,7 @@
 import
   std/[strformat, os],
   stew/results, chronos, chronicles,
-  eth/common/eth_types,
+  eth/common/eth_types, eth/rlp,
   ../network/wire/portal_protocol,
   ../network/history/[history_content, accumulator],
   ./history_data_parser
@@ -149,6 +149,62 @@ proc historyPropagateBlock*(
     return ok()
   else:
     return err(blockDataTable.error)
+
+proc historyPropagateHeadersWithProof*(
+    p: PortalProtocol, epochHeadersFile: string, epochAccumulatorFile: string):
+    Future[Result[void, string]] {.async.} =
+  let res = readBlockHeaders(epochHeadersFile)
+  if res.isErr():
+    return err(res.error)
+
+  let blockHeaders = res.get()
+
+  let epochAccumulatorRes = readEpochAccumulatorCached(epochAccumulatorFile)
+  if epochAccumulatorRes.isErr():
+    return err(res.error)
+
+  let epochAccumulator = epochAccumulatorRes.get()
+  for header in blockHeaders:
+    if header.isPreMerge():
+      let headerWithProof = buildHeaderWithProof(header, epochAccumulator)
+      if headerWithProof.isErr:
+        return err(headerWithProof.error)
+
+      let
+        content = headerWithProof.get()
+        contentKey = ContentKey(
+          contentType: blockHeaderWithProof,
+          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
+        contentId = history_content.toContentId(contentKey)
+        encodedContent = SSZ.encode(content)
+
+      p.storeContent(contentId, encodedContent)
+
+      let keys = ContentKeysList(@[encode(contentKey)])
+      discard await p.neighborhoodGossip(keys, @[encodedContent])
+
+  return ok()
+
+proc historyPropagateHeadersWithProof*(
+    p: PortalProtocol, dataDir: string):
+    Future[Result[void, string]] {.async.} =
+  for i in 0..<preMergeEpochs:
+    let
+      epochHeadersfile =
+        try: dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+        except ValueError as e: raiseAssert e.msg
+      epochAccumulatorFile =
+        try: dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+        except ValueError as e: raiseAssert e.msg
+
+    let res = await p.historyPropagateHeadersWithProof(
+      epochHeadersfile, epochAccumulatorFile)
+    if res.isOk():
+      info "Finished gossiping 1 epoch of headers with proof", i
+    else:
+      return err(res.error)
+
+  return ok()
 
 proc historyPropagateHeaders*(
     p: PortalProtocol, dataFile: string, verify = false):

@@ -139,8 +139,7 @@ proc installPortalApiHandlers*(
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
   rpcServer.rpc("portal_" & network & "Offer") do(
-    contentKey: string, content: string) -> int:
-
+      contentKey: string, content: string) -> int:
     let
       ck = hexToSeqByte(contentKey)
       ct = hexToSeqByte(content)

@@ -61,4 +61,4 @@ const
     portalNetworksDir / "testnet0" / "bootstrap_nodes.txt")
 
   finishedAccumulator* = loadEncodedAccumulator(
-    portalTestDir / "mainnet" / "accumulator" / "finished_accumulator.ssz")
+    portalTestDir / "mainnet" / "history" / "accumulator" / "finished_accumulator.ssz")

@@ -7,10 +7,10 @@
 
 import
   stew/shims/net,
-  eth/keys,
+  eth/[keys, rlp],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/history/accumulator
+  ../network/history/[accumulator, history_content]
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
@@ -72,3 +72,39 @@ func buildAccumulatorData*(headers: seq[BlockHeader]):
       return ok((finishAccumulator(accumulator), epochAccumulators))
 
   err("Not enough headers provided to finish the accumulator")
+
+func buildProof*(
+    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]):
+    Result[AccumulatorProof, string] =
+  let epochIndex = getEpochIndex(header)
+  doAssert(epochIndex < uint64(epochAccumulators.len()))
+  let epochAccumulator = epochAccumulators[epochIndex]
+
+  buildProof(header, epochAccumulator)
+
+func buildHeaderWithProof*(
+    header: BlockHeader,
+    epochAccumulators: seq[EpochAccumulator]):
+    Result[BlockHeaderWithProof, string] =
+  ## Construct the accumulator proof for a specific header.
+  ## Returns the block header with the proof
+  if header.isPreMerge():
+    let epochIndex = getEpochIndex(header)
+    doAssert(epochIndex < uint64(epochAccumulators.len()))
+    let epochAccumulator = epochAccumulators[epochIndex]
+
+    buildHeaderWithProof(header, epochAccumulator)
+
+  else:
+    err("Cannot build accumulator proof for post merge header")
+
+func buildHeadersWithProof*(
+    headers: seq[BlockHeader],
+    epochAccumulators: seq[EpochAccumulator]):
+    Result[seq[BlockHeaderWithProof], string] =
+  var headersWithProof: seq[BlockHeaderWithProof]
+  for header in headers:
+    headersWithProof.add(
+      ? buildHeaderWithProof(header, epochAccumulators))
+
+  ok(headersWithProof)
