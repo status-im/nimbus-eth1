@@ -51,6 +51,15 @@ const
     ## Keap on gloing in healing task up until this many nodes have been
     ## fetched from the network or some error contition therminates the task.
 
+  snapNewBuddyStoragesSlotsQuPrioThresh* = 5_000
+    ## For a new worker, prioritise processing the storage slots queue over
+    ## processing accounts if the queue has more than this many items.
+
+  snapAccountsBuddyStoragesSlotsQuPrioThresh* = 30_000
+    ## For a running worker processing accounts, stop processing accounts
+    ## and switch to processing the storage slots queue if the queue has
+    ## more than this many items.
+  
   # --------------
 
   healAccountsTrigger* = 0.95

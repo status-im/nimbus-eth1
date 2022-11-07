@@ -38,17 +38,14 @@ type
     slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
     inherit*: bool                     ## mark this trie seen already
 
-  SnapSlotsSet* = HashSet[SnapSlotsQueueItemRef]
-    ## Ditto but without order, to be used as veto set
-
-  SnapAccountRanges* = array[2,NodeTagRangeSet]
-    ## Pair of account hash range lists. The first entry must be processed
-    ## first. This allows to coordinate peers working on different state roots
-    ## to avoid ovelapping accounts as long as they fetch from the first entry.
+  SnapTodoRanges* = array[2,NodeTagRangeSet]
+    ## Pair of node range lists. The first entry must be processed first. This
+    ## allows to coordinate peers working on different state roots to avoid
+    ## ovelapping accounts as long as they fetch from the first entry.
 
   SnapTrieRangeBatch* = object
     ## `NodeTag` ranges to fetch, healing support
-    unprocessed*: SnapAccountRanges    ## Range of slots not covered, yet
+    unprocessed*: SnapTodoRanges       ## Range of slots not covered, yet
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     missingNodes*: seq[NodeSpecs]      ## Dangling links to fetch and merge
 
@@ -122,7 +119,57 @@ proc hash*(a: Hash256): Hash =
   a.data.hash
 
 # ------------------------------------------------------------------------------
-# Public helpers
+# Public helpers: SnapTodoRanges
+# ------------------------------------------------------------------------------
+
+proc init*(q: var SnapTodoRanges) =
+  ## Populate node range sets with maximal range in the first range set
+  q[0] = NodeTagRangeSet.init()
+  q[1] = NodeTagRangeSet.init()
+  discard q[0].merge(low(NodeTag),high(NodeTag))
+
+
+proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
+  ## Unconditionally merge the node range into the account ranges list
+  discard q[0].reduce(iv)
+  discard q[1].merge(iv)
+
+proc merge*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
+  ## Variant of `merge()`
+  q.merge NodeTagRange.new(minPt, maxPt)
+
+
+proc reduce*(q: var SnapTodoRanges; iv: NodeTagRange) =
+  ## Unconditionally remove the node range from the account ranges list
+  discard q[0].reduce(iv)
+  discard q[1].reduce(iv)
+
+proc reduce*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
+  ## Variant of `reduce()`
+  q.reduce NodeTagRange.new(minPt, maxPt)
+
+
+proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
+  ## Fetch interval from node ranges with maximal size `maxLen`
+
+  # Swap batch queues if the first one is empty
+  if q[0].isEmpty:
+    swap(q[0], q[1])
+
+  # Fetch from first range list
+  let rc = q[0].ge()
+  if rc.isErr:
+    return err()
+
+  let
+    val = rc.value
+    iv = if 0 < val.len and val.len <= maxLen: val # val.len==0 => 2^256
+         else: NodeTagRange.new(val.minPt, val.minPt + (maxLen - 1.u256))
+  discard q[0].reduce(iv)
+  ok(iv)
+
+# ------------------------------------------------------------------------------
+# Public helpers: SlotsQueue
 # ------------------------------------------------------------------------------
 
 proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =

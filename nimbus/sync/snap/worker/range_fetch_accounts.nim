@@ -37,7 +37,7 @@ import
   stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
   ./db/snapdb_accounts
 
@@ -58,21 +58,6 @@ template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc withMaxLen(
-    buddy: SnapBuddyRef;
-    iv: NodeTagRange;
-    maxlen: UInt256;
-      ): NodeTagRange =
-  ## Reduce accounts interval to maximal size
-  if 0 < iv.len and iv.len <= maxLen:
-    iv
-  else:
-    NodeTagRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
-
-# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
@@ -83,40 +68,7 @@ proc getUnprocessed(
   ## Fetch an interval from one of the account range lists.
   let accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
 
-  ## Swap batch queues if the first is empty
-  if 0 == env.fetchAccounts.unprocessed[0].chunks and
-     0 < env.fetchAccounts.unprocessed[1].chunks:
-    swap(env.fetchAccounts.unprocessed[0], env.fetchAccounts.unprocessed[1])
-
-  for ivSet in env.fetchAccounts.unprocessed:
-    let rc = ivSet.ge()
-    if rc.isOk:
-      let iv = buddy.withMaxLen(rc.value, accountRangeMax)
-      discard ivSet.reduce(iv)
-      return ok(iv)
-
-  err()
-
-proc putUnprocessed(
-    buddy: SnapBuddyRef;
-    iv: NodeTagRange;
-    env: SnapPivotRef;
-      ) =
-  ## Shortcut
-  discard env.fetchAccounts.unprocessed[1].merge(iv)
-
-proc delUnprocessed(
-    buddy: SnapBuddyRef;
-    iv: NodeTagRange;
-    env: SnapPivotRef;
-       ) =
-  ## Shortcut
-  for ivSet in env.fetchAccounts.unprocessed:
-    discard ivSet.reduce(iv)
-
-proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
-  ## Shortcut
-  discard buddy.ctx.data.coveredAccounts.merge(iv)
+  env.fetchAccounts.unprocessed.fetch accountRangeMax
 
 # ------------------------------------------------------------------------------
 #  Private functions: do the account fetching for one round
@@ -147,7 +99,7 @@ proc accountsRangefetchImpl(
   let dd = block:
     let rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
-      buddy.putUnprocessed(iv, env) # fail => interval back to pool
+      env.fetchAccounts.unprocessed.merge iv # fail => interval back to pool
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
@@ -170,12 +122,13 @@ proc accountsRangefetchImpl(
     let rc = ctx.data.snapDb.importAccounts(peer, stateRoot, iv.minPt, dd.data)
     if rc.isErr:
       # Bad data, just try another peer
-      buddy.putUnprocessed(iv, env)
+      env.fetchAccounts.unprocessed.merge iv # fail => interval back to pool
       buddy.ctrl.zombie = true
       when extraTraceMessages:
         let gotLen = if 0 < dd.data.accounts.len:
-                       (dd.data.accounts[^1].accKey.to(NodeTag) -
-                        dd.data.accounts[0].accKey.to(NodeTag))
+                       NodeTagRange.new(
+                         dd.data.accounts[0].accKey.to(NodeTag),
+                         dd.data.accounts[^1].accKey.to(NodeTag)).len
                      else:
                        0.u256
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
@@ -187,19 +140,19 @@ proc accountsRangefetchImpl(
 
   if dd.data.accounts.len == 0:
     # Register consumed intervals on the accumulator over all state roots
-    buddy.markGloballyProcessed iv
+    discard buddy.ctx.data.coveredAccounts.merge iv
 
   else:
     let topAccTag = dd.data.accounts[^1].accKey.to(NodeTag)
 
     # Register consumed intervals on the accumulator over all state roots
-    buddy.markGloballyProcessed NodeTagRange.new(iv.minPt, topAccTag)
+    discard buddy.ctx.data.coveredAccounts.merge(iv.minPt, topAccTag)
 
     # Correct consumed/bulk-imported accounts range
     if topAccTag < iv.maxPt:
-      buddy.putUnprocessed(NodeTagRange.new(topAccTag+1.u256, iv.maxPt), env)
+      env.fetchAccounts.unprocessed.merge(topAccTag + 1.u256, iv.maxPt)
     elif iv.maxPt < topAccTag:
-      buddy.delUnprocessed(NodeTagRange.new(iv.maxPt, topAccTag), env)
+      env.fetchAccounts.unprocessed.reduce(iv.maxPt, topAccTag)
 
   # Store accounts on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
@@ -228,6 +181,10 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
           env == buddy.data.pivotEnv:
       nFetchAccounts.inc
       if not await buddy.accountsRangefetchImpl(env):
+        break
+      # Clean up storage slots queue first it it becomes too large
+      let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+      if snapAccountsBuddyStoragesSlotsQuPrioThresh < nStoQu:
         break
 
     when extraTraceMessages:

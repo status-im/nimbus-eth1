@@ -77,35 +77,38 @@ proc `pivot=`(buddy: SnapBuddyRef; val: BestPivotWorkerRef) =
 proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
   ## Returns a pair of account hash range lists with the full range of hashes
   ## smartly spread across the mutually disjunct interval sets.
-  for n in 0 ..< batch.unprocessed.len:
-    batch.unprocessed[n] = NodeTagRangeSet.init()
+  batch.unprocessed.init()
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
-  if ctx.data.coveredAccounts.total == 0 and
-     ctx.data.coveredAccounts.chunks == 1:
-    # All (i.e. 100%) of accounts hashes are covered by completed range fetch
-    # processes for all pivot environments. Do a random split distributing the
-    # full accounts hash range across the pair of range sats.
-    var nodeKey: NodeKey
-    ctx.data.rng[].generate(nodeKey.ByteArray32)
-
-    let partition = nodeKey.to(NodeTag)
-    discard batch.unprocessed[0].merge(partition, high(NodeTag))
-    if low(NodeTag) < partition:
-      discard batch.unprocessed[1].merge(low(NodeTag), partition - 1.u256)
+  if ctx.data.coveredAccounts.isFull:
+    # All of accounts hashes are covered by completed range fetch processes
+    # for all pivot environments. Do a random split distributing the full
+    # accounts hash range across the pair of range sets.
+    for _ in 0 .. 5:
+      var nodeKey: NodeKey
+      ctx.data.rng[].generate(nodeKey.ByteArray32)
+      let top = nodeKey.to(NodeTag)
+      if low(NodeTag) < top and top < high(NodeTag):
+        # Move covered account ranges (aka intervals) to the second set.
+        batch.unprocessed.merge NodeTagRange.new(low(NodeTag), top)
+        break
+      # Otherwise there is a full single range in `unprocessed[0]`
   else:
     # Not all account hashes are covered, yet. So keep the uncovered
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
-
-    # Pre-filled with the first range set with largest possible interval
-    discard batch.unprocessed[0].merge(low(NodeTag),high(NodeTag))
-
-    # Move covered account ranges (aka intervals) to the second set.
     for iv in ctx.data.coveredAccounts.increasing:
-      discard batch.unprocessed[0].reduce(iv)
-      discard batch.unprocessed[1].merge(iv)
+      # Move covered account ranges (aka intervals) to the second set.
+      batch.unprocessed.merge(iv)
+
+  if batch.unprocessed[0].isEmpty:
+    doAssert batch.unprocessed[1].isFull
+  elif batch.unprocessed[1].isEmpty:
+    doAssert batch.unprocessed[0].isFull
+  else:
+    doAssert((batch.unprocessed[0].total - 1) +
+             batch.unprocessed[1].total == high(UInt256))
 
 
 proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
@@ -400,6 +403,11 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
       rc.value.fetchAccounts.checkNodes.setLen(0)
       rc.value.fetchAccounts.missingNodes.setLen(0)
 
+  # Clean up storage slots queue first it it becomes too large
+  let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+  if snapNewBuddyStoragesSlotsQuPrioThresh < nStoQu:
+    runAsync buddy.rangeFetchStorageSlots()
+
   if env.accountsState != HealerDone:
     runAsync buddy.rangeFetchAccounts()
     runAsync buddy.rangeFetchStorageSlots()
@@ -416,10 +424,6 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   runAsync buddy.healStorageSlots()
 
-  # Debugging log: analyse pivot against database
-  discard buddy.checkAccountsListOk(env)
-  discard buddy.checkStorageSlotsTrieIsComplete(env)
-
   # Check whether there are more accounts to fetch.
   #
   # Note that some other process might have temporarily borrowed from the
@@ -427,11 +431,19 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # if only a single buddy is active. S be it.
   if env.fetchAccounts.unprocessed.isEmpty():
 
+    # Debugging log: analyse pivot against database
+    warn "Analysing accounts database -- might be slow", peer, pivot
+    discard buddy.checkAccountsListOk(env)
+
     # Check whether pivot download is complete.
     if env.fetchStorageFull.len == 0 and
        env.fetchStoragePart.len == 0:
       trace "Running pool mode for verifying completeness", peer, pivot
       buddy.ctx.poolMode = true
+
+    # Debugging log: analyse pivot against database
+    warn "Analysing storage slots database -- might be slow", peer, pivot
+    discard buddy.checkStorageSlotsTrieIsComplete(env)
 
 # ------------------------------------------------------------------------------
 # End
