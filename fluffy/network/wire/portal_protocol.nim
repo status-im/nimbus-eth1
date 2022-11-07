@@ -136,7 +136,7 @@ type
   DbGetHandler* =
     proc(contentKey: ByteList): Result[seq[byte], DbError] {.raises: [Defect], gcsafe.}
 
-  PortalStoreHandler* =
+  DbStoreHandler* =
     proc(
       contentKey: ByteList,
       contentId: ContentId,
@@ -167,7 +167,7 @@ type
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
-    portalStore*: PortalStoreHandler
+    portalStore*: DbStoreHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -1192,41 +1192,6 @@ proc neighborhoodGossip*(
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
     return numberOfGossipedNodes
-
-proc adjustRadius(
-    p: PortalProtocol,
-    fractionOfDeletedContent: float64,
-    furthestElementInDbDistance: UInt256) =
-
-  if fractionOfDeletedContent == 0.0:
-    # even though pruning was triggered no content was deleted, it could happen
-    # in pathological case of really small database with really big values.
-    # log it as error as it should not happenn
-    error "Database pruning attempt resulted in no content deleted"
-    return
-
-  # we need to invert fraction as our Uin256 implementation does not support
-  # multiplication by float
-  let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
-
-  let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
-
-  # Chose larger value to avoid situation, where furthestElementInDbDistance
-  # is super close to local id, so local radius would end up too small
-  # to accept any more data to local database
-  # If scaledRadius radius will be larger it will still contain all elements
-  let newRadius = max(scaledRadius, furthestElementInDbDistance)
-
-  debug "Database pruned",
-    oldRadius = p.dataRadius,
-    newRadius = newRadius,
-    furthestDistanceInDb = furthestElementInDbDistance,
-    fractionOfDeletedContent = fractionOfDeletedContent
-
-  # both scaledRadius and furthestElementInDbDistance are smaller than current
-  # dataRadius, so the radius will constantly decrease through the node
-  # life time
-  p.dataRadius = newRadius
 
 proc storeContent*(
     p: PortalProtocol,

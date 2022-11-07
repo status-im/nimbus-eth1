@@ -74,7 +74,7 @@ proc createGetHandler*(db: ContentDB, toId: ToContentIdHandler): DbGetHandler =
       return ok(maybeContent.unsafeGet())
   )
 
-proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): PortalStoreHandler =
+proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): DbStoreHandler =
   return (proc(
       contentKey: ByteList,
       contentId: ContentId,

@@ -80,7 +80,6 @@ procSuite "History Content Network":
   let rng = newRng()
 
   asyncTest "Get Block by Number":
-    echo "start test"
     const
       lastBlockNumber = mergeBlockNumber - 1
 
