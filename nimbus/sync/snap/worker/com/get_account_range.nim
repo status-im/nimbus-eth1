@@ -28,7 +28,6 @@ logScope:
 
 type
   GetAccountRange* = object
-    consumed*: NodeTagRange               ## Real accounts interval covered
     data*: PackedAccountRange             ## Re-packed reply data
     withStorage*: seq[AccountSlotsHeader] ## Accounts with non-idle storage root
 
@@ -79,7 +78,6 @@ proc getAccountRange*(
       return err(ComResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
-      consumed:    iv,
       data:        PackedAccountRange(
         proof:     snAccRange.proof,
         accounts:  snAccRange.accounts
@@ -115,9 +113,8 @@ proc getAccountRange*(
       return err(ComNoAccountsForStateRoot)
 
     # So there is no data and a proof.
-    dd.consumed = NodeTagRange.new(iv.minPt, high(NodeTag))
-    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot,
-      nAccounts, nProof, accRange=dd.consumed, reqRange=iv
+    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot, nAccounts,
+      nProof, accRange=NodeTagRange.new(iv.minPt, high(NodeTag)), reqRange=iv
     return ok(dd)
 
   let (accMinPt, accMaxPt) = (
@@ -142,15 +139,14 @@ proc getAccountRange*(
       # Geth always seems to allow the last account to be larger than the
       # limit (seen with Geth/v1.10.18-unstable-4b309c70-20220517.)
       if iv.maxPt < dd.data.accounts[^2].accKey.to(NodeTag):
-        # The segcond largest should not excceed the top one requested.
+        # The second largest should not excceed the top one requested.
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
           pivot, nAccounts, nProof,
           accRange=NodeTagRange.new(iv.minPt, accMaxPt), reqRange=iv
         return err(ComAccountsMaxTooLarge)
 
-  dd.consumed = NodeTagRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
-  trace trSnapRecvReceived & "AccountRange", peer, pivot,
-    nAccounts, nProof, accRange=dd.consumed, reqRange=iv
+  trace trSnapRecvReceived & "AccountRange", peer, pivot, nAccounts, nProof,
+    accRange=NodeTagRange.new(accMinPt, accMaxPt), reqRange=iv
 
   return ok(dd)
 

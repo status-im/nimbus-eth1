@@ -173,26 +173,33 @@ proc accountsRangefetchImpl(
       buddy.putUnprocessed(iv, env)
       buddy.ctrl.zombie = true
       when extraTraceMessages:
+        let gotLen = if 0 < dd.data.accounts.len:
+                       (dd.data.accounts[^1].accKey.to(NodeTag) -
+                        dd.data.accounts[0].accKey.to(NodeTag))
+                     else:
+                       0.u256
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
-          pivot, reqLen=iv.len, gotLen=dd.consumed.len, error=rc.error
+          pivot, reqLen=iv.len, gotLen, error=rc.error
       return
 
   # Statistics
   env.nAccounts.inc(gotAccounts)
 
-  # Register consumed intervals on the accumulator over all state roots
-  buddy.markGloballyProcessed(dd.consumed)
+  if dd.data.accounts.len == 0:
+    # Register consumed intervals on the accumulator over all state roots
+    buddy.markGloballyProcessed iv
 
-  # Register consumed/bulk-imported accounts range
-  block:
-    doAssert dd.consumed.minPt == iv.minPt
-    # Try case where `dd.consumed` < `iv`, restore some unprocessed range
-    let rc = iv - dd.consumed
-    if rc.isOk:
-      buddy.putUnprocessed(rc.value, env)
-    else:
-      # Otherwise `dd.consumed` might exceed `iv`
-      buddy.delUnprocessed(dd.consumed, env)
+  else:
+    let topAccTag = dd.data.accounts[^1].accKey.to(NodeTag)
+
+    # Register consumed intervals on the accumulator over all state roots
+    buddy.markGloballyProcessed NodeTagRange.new(iv.minPt, topAccTag)
+
+    # Correct consumed/bulk-imported accounts range
+    if topAccTag < iv.maxPt:
+      buddy.putUnprocessed(NodeTagRange.new(topAccTag+1.u256, iv.maxPt), env)
+    elif iv.maxPt < topAccTag:
+      buddy.delUnprocessed(NodeTagRange.new(iv.maxPt, topAccTag), env)
 
   # Store accounts on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
