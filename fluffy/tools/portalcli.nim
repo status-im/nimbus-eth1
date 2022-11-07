@@ -15,7 +15,8 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../content_db,
-  ../network/wire/[portal_protocol, portal_stream],
+  ../network/content_db_callbacks,
+  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_content, history_network]
 
 const
@@ -230,9 +231,11 @@ proc run(config: PortalCliConf) =
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
     stream = sm.registerNewStream(cq)
-    portal = PortalProtocol.new(d, config.protocolId, db,
-      testContentIdHandler, dbGetHandler, stream,
+    portal = PortalProtocol.new(d, config.protocolId,
+      testContentIdHandler, createGetHandler(db, testContentIdHandler), stream,
       bootstrapRecords = bootstrapRecords)
+
+  portal.portalStore = createStoreHandler(db, defaultRadiusConfig, portal)
 
   if config.metricsEnabled:
     let

@@ -79,14 +79,6 @@ declareHistogram portal_content_enrs_packed,
   "Portal wire protocol amount of enrs packed in a content message",
   labels = ["protocol_id"], buckets = enrsBuckets
 
-declareCounter portal_pruning_counter,
-  "Number of pruning event which happened during node lifetime",
-  labels = ["protocol_id"]
-
-declareGauge portal_pruning_deleted_elements,
-  "Number of elements delted in last pruning",
-  labels = ["protocol_id"]
-
 logScope:
   topics = "portal_wire"
 
@@ -128,12 +120,27 @@ const
   concurrentOffers = 50
 
 type
+  DbErrorKind* = enum
+    InvalidContentKey, NoKeyInDb
+
+  DbError* = object
+    case kind*: DbErrorKind
+    of InvalidContentKey:
+      discard
+    of NoKeyInDb:
+      contentId*: ContentId
+
   ToContentIdHandler* =
     proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
 
   DbGetHandler* =
-    proc(contentDB: ContentDB, contentId: ContentId):
-      Option[seq[byte]] {.raises: [Defect], gcsafe.}
+    proc(contentKey: ByteList): Result[seq[byte], DbError] {.raises: [Defect], gcsafe.}
+
+  PortalStoreHandler* =
+    proc(
+      contentKey: ByteList,
+      contentId: ContentId,
+      content: seq[byte]) {.raises: [Defect], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
@@ -158,9 +165,9 @@ type
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
-    contentDB*: ContentDB
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
+    portalStore*: PortalStoreHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -313,33 +320,35 @@ proc handleFindContent(
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-  let contentIdOpt = p.toContentId(fc.contentKey)
-  if contentIdOpt.isNone:
-    # Return empty response when content key validation fails
-    # TODO: Better would be to return no message at all? Needs changes on
-    # discv5 layer.
-    return @[]
+  let contentResult = p.dbGet(fc.contentKey)
 
-  let contentOpt = p.dbGet(p.contentDB, contentIdOpt.get())
-  if contentOpt.isSome():
-    let content = contentOpt.get()
+  if contentResult.isErr:
+    let err = contentResult.error
+
+    case err.kind
+    of InvalidContentKey:
+      # Return empty response when content key validation fails
+      # TODO: Better would be to return no message at all? Needs changes on
+      # discv5 layer.
+      return @[]
+    of NoKeyInDb:
+      # Don't have the content, send closest neighbours to content id.
+      let
+        closestNodes = p.routingTable.neighbours(
+          NodeId(err.contentId), seenOnly = true)
+        enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+
+      portal_content_enrs_packed.observe(enrs.len().int64)
+      return encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
+  else:
+    let content = contentResult.get()
     if content.len <= maxPayloadSize:
-      encodeMessage(ContentMessage(
+      return encodeMessage(ContentMessage(
         contentMessageType: contentType, content: ByteList(content)))
     else:
       let connectionId = p.stream.addContentRequest(srcId, content)
-
-      encodeMessage(ContentMessage(
+      return encodeMessage(ContentMessage(
         contentMessageType: connectionIdType, connectionId: connectionId))
-  else:
-    # Don't have the content, send closest neighbours to content id.
-    let
-      closestNodes = p.routingTable.neighbours(
-        NodeId(contentIdOpt.get()), seenOnly = true)
-      enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
-    portal_content_enrs_packed.observe(enrs.len().int64)
-
-    encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
@@ -350,16 +359,20 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # want any of the content? Reply with empty bitlist and a connectionId of
   # all zeroes but don't actually allow an uTP connection?
   for i, contentKey in o.contentKeys:
-    let contentIdOpt = p.toContentId(contentKey)
-    if contentIdOpt.isSome():
-      let contentId = contentIdOpt.get()
-      if p.inRange(contentId):
-        if not p.contentDB.contains(contentId):
+    let contentResult = p.dbGet(contentKey)
+
+    # Only error case is interesting, as if we have content in db then the bit
+    # should stay 0
+    if contentResult.isErr:
+      let error = contentResult.error
+      case error.kind
+      of NoKeyInDb:
+        if p.inRange(error.contentId):
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
-    else:
-      # Return empty response when content key validation fails
-      return @[]
+      of InvalidContentKey:
+        # Return empty response when content key validation fails
+        return @[]
 
   let connectionId =
     if contentKeysBitList.countOnes() != 0:
@@ -440,7 +453,6 @@ proc getInitialRadius(rc: RadiusConfig): UInt256 =
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
-    contentDB: ContentDB,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     stream: PortalStream,
@@ -458,7 +470,6 @@ proc new*(T: type PortalProtocol,
       baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits,
       baseProtocol.rng, distanceCalculator),
     baseProtocol: baseProtocol,
-    contentDB: contentDB,
     toContentId: toContentId,
     dbGet: dbGet,
     radiusConfig: config.radiusConfig,
@@ -799,28 +810,24 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     of Database:
       for i, b in m.contentKeys:
         if b:
-          let contentIdOpt = p.toContentId(o.contentKeys[i])
-          if contentIdOpt.isSome():
-            let
-              contentId = contentIdOpt.get()
-              maybeContent = p.contentDB.get(contentId)
+          let contentResult = p.dbGet(o.contentKeys[i])
 
-            var output = memoryOutput()
-            if maybeContent.isSome():
-              let content = maybeContent.get()
+          var output = memoryOutput()
+          if contentResult.isOk():
+            let content = contentResult.get()
 
-              output.write(toBytes(content.lenu32, Leb128).toOpenArray())
-              output.write(content)
-            else:
-              # When data turns out missing, add a 0 size varint
-              output.write(toBytes(0'u8, Leb128).toOpenArray())
+            output.write(toBytes(content.lenu32, Leb128).toOpenArray())
+            output.write(content)
+          else:
+            # When data turns out missing, add a 0 size varint
+            output.write(toBytes(0'u8, Leb128).toOpenArray())
 
-            let dataWritten = await socket.write(output.getOutput)
-            if dataWritten.isErr:
-              debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
-              # No point in trying to continue writing data
-              socket.close()
-              return err("Error writing requested data")
+          let dataWritten = await socket.write(output.getOutput)
+          if dataWritten.isErr:
+            debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
+            # No point in trying to continue writing data
+            socket.close()
+            return err("Error writing requested data")
 
     debug "Content successfully offered", contentKeys = contentKeys
 
@@ -1221,33 +1228,13 @@ proc adjustRadius(
   # life time
   p.dataRadius = newRadius
 
-proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) =
-  # always re-check that key is in node range, to make sure that invariant that
-  # all keys in database are always in node range hold.
-  # TODO current silent assumption is that both contentDb and portalProtocol are
-  # using the same xor distance function
-  if p.inRange(key):
-    case p.radiusConfig.kind:
-    of Dynamic:
-      # In case of dynamic radius setting we obey storage limits and adjust
-      # radius to store network fraction corresponding to those storage limits.
-      let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
-      if res.kind == DbPruned:
-        portal_pruning_counter.inc(labelValues = [$p.protocolId])
-        portal_pruning_deleted_elements.set(
-          res.numOfDeletedElements.int64,
-          labelValues = [$p.protocolId]
-        )
-
-        p.adjustRadius(
-          res.fractionOfDeletedContent,
-          res.furthestStoredElementDistance
-        )
-    of Static:
-      # If the config is set statically, radius is not adjusted, and is kept
-      # constant thorugh node life time, also database max size is disabled
-      # so we will effectivly store fraction of the network
-      p.contentDB.put(key, content)
+proc storeContent*(
+    p: PortalProtocol,
+    contentKey: ByteList,
+    contentId: ContentId,
+    content: seq[byte]) =
+  if p.portalStore != nil:
+    p.portalStore(contentKey, contentId, content)
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are

@@ -26,8 +26,9 @@ proc historyStore*(
 
   for b in blocks(blockData, verify):
     for value in b:
+      let encKey = history_content.encode(value[0])
       # Note: This is the slowest part due to the hashing that takes place.
-      p.storeContent(history_content.toContentId(value[0]), value[1])
+      p.storeContent(encKey, history_content.toContentId(encKey), value[1])
 
   ok()
 
@@ -47,14 +48,17 @@ proc propagateEpochAccumulator*(
         contentType: epochAccumulator,
         epochAccumulatorKey: EpochAccumulatorKey(
           epochHash: rootHash))
-
+      encKey = history_content.encode(key)
       # Note: The file actually holds the SSZ encoded accumulator, but we need
       # to decode as we need the root for the content key.
       encodedAccumulator = SSZ.encode(accumulator)
     info "Gossiping epoch accumulator", rootHash
 
     p.storeContent(
-      history_content.toContentId(key), encodedAccumulator)
+      encKey,
+      history_content.toContentId(encKey),
+      encodedAccumulator
+    )
     discard await p.neighborhoodGossip(
       ContentKeysList(@[encode(key)]), @[encodedAccumulator])
 
@@ -111,8 +115,10 @@ proc historyPropagate*(
         if value[1].len() > 0:
           info "Seeding block content into the network", contentKey = value[0]
           # Note: This is the slowest part due to the hashing that takes place.
-          let contentId = history_content.toContentId(value[0])
-          p.storeContent(contentId, value[1])
+          let
+            encKey = history_content.encode(value[0])
+            contentId = history_content.toContentId(encKey)
+          p.storeContent(encKey, contentId, value[1])
 
           await gossipQueue.addLast(
             (ContentKeysList(@[encode(value[0])]), value[1]))
@@ -141,8 +147,10 @@ proc historyPropagateBlock*(
 
     for value in blockData:
       info "Seeding block content into the network", contentKey = value[0]
-      let contentId = history_content.toContentId(value[0])
-      p.storeContent(contentId, value[1])
+      let
+        encKey = history_content.encode(value[0])
+        contentId = history_content.toContentId(encKey)
+      p.storeContent(encKey, contentId, value[1])
 
       discard await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), @[value[1]])
 
@@ -175,10 +183,11 @@ proc historyPropagateHeadersWithProof*(
         contentKey = ContentKey(
           contentType: blockHeaderWithProof,
           blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
-        contentId = history_content.toContentId(contentKey)
+        encKey = history_content.encode(contentKey)
+        contentId = history_content.toContentId(encKey)
         encodedContent = SSZ.encode(content)
 
-      p.storeContent(contentId, encodedContent)
+      p.storeContent(encKey, contentId, encodedContent)
 
       let keys = ContentKeysList(@[encode(contentKey)])
       discard await p.neighborhoodGossip(keys, @[encodedContent])
@@ -229,8 +238,10 @@ proc historyPropagateHeaders*(
   if blockData.isOk():
     for header in headers(blockData.get(), verify):
       info "Seeding header content into the network", contentKey = header[0]
-      let contentId = history_content.toContentId(header[0])
-      p.storeContent(contentId, header[1])
+      let
+        encKey = history_content.encode(header[0])
+        contentId = history_content.toContentId(encKey)
+      p.storeContent(encKey, contentId, header[1])
 
       await gossipQueue.addLast(
         (ContentKeysList(@[encode(header[0])]), header[1]))

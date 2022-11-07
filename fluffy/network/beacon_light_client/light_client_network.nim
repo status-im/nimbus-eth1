@@ -14,6 +14,7 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   ../../content_db,
+  ../content_db_callbacks,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/light_client_content
@@ -156,9 +157,11 @@ proc new*(
     stream = streamManager.registerNewStream(contentQueue)
 
     portalProtocol = PortalProtocol.new(
-      baseProtocol, lightClientProtocolId, contentDB,
-      toContentIdHandler, dbGetHandler, stream, bootstrapRecords,
+      baseProtocol, lightClientProtocolId,
+      toContentIdHandler, createGetHandler(contentDB, toContentIdHandler), stream, bootstrapRecords,
       config = portalConfig)
+
+  portalProtocol.portalStore = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   LightClientNetwork(
     portalProtocol: portalProtocol,
@@ -190,7 +193,7 @@ proc validateContent(
 
       let contentId = contentIdOpt.get()
 
-      n.portalProtocol.storeContent(contentId, contentItem)
+      n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
 

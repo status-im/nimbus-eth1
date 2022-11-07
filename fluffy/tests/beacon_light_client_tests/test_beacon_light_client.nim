@@ -90,7 +90,9 @@ procSuite "Portal Light client":
       bootstrapContentId = toContentId(bootstrapContentKeyEncoded)
 
     lcNode2.portalProtocol().storeContent(
-      bootstrapContentId, encodeBootstrapForked(forkDigests.altair, bootstrap)
+      bootstrapContentKeyEncoded,
+      bootstrapContentId,
+      encodeBootstrapForked(forkDigests.altair, bootstrap)
     )
 
     let lc = LightClient.new(

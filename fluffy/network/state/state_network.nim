@@ -10,6 +10,7 @@ import
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
+  ../content_db_callbacks,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_distance
@@ -58,7 +59,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
     # TODO Add poke when working on state network
     # TODO When working on state network, make it possible to pass different
     # distance functions to store content
-    n.portalProtocol.storeContent(contentId, contentResult.content)
+    n.portalProtocol.storeContent(keyEncoded, contentId, contentResult.content)
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
@@ -80,10 +81,12 @@ proc new*(
   let s = streamManager.registerNewStream(cq)
 
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, stateProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler, s,
+    baseProtocol, stateProtocolId,
+    toContentIdHandler, createGetHandler(contentDB, toContentIdHandler), s,
     bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
+
+  portalProtocol.portalStore = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   return StateNetwork(
     portalProtocol: portalProtocol,
