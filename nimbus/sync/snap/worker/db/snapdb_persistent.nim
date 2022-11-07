@@ -40,7 +40,7 @@ proc convertTo(key: RepairKey; T: type NodeTag): T =
   ## Might be lossy, check before use
   UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
 
-proc toAccountsKey(a: RepairKey): ByteArray32 =
+proc toAccountsKey(a: RepairKey): ByteArray33 =
   a.convertTo(NodeKey).toAccountsKey
 
 proc toStorageSlotsKey(a: RepairKey): ByteArray33 =

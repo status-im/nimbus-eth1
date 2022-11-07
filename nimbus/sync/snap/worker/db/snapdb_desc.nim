@@ -177,11 +177,11 @@ proc kvDb*(pv: SnapDbRef): TrieDatabaseRef =
 # Public functions, select sub-tables for persistent storage
 # ------------------------------------------------------------------------------
 
-proc toAccountsKey*(a: NodeKey): ByteArray32 =
-  a.ByteArray32
+proc toAccountsKey*(a: NodeKey): ByteArray33 =
+  a.ByteArray32.snapSyncAccountKey.data
 
 proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
-  a.ByteArray32.slotHashToSlotKey.data
+  a.ByteArray32.snapSyncStorageSlotKey.data
 
 template toOpenArray*(k: ByteArray32): openArray[byte] =
   k.toOpenArray(0, 31)
