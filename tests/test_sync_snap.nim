@@ -66,6 +66,7 @@ let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
   OkHexDb = Result[void,HexaryDbError].ok()
   OkStoDb = Result[void,seq[(int,HexaryDbError)]].ok()
+  OkImport = Result[seq[NodeSpecs],HexaryDbError].ok(@[])
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -300,7 +301,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
                  else: SnapDbRef.init(newMemoryDB())
         dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
       for n,w in accountsList:
-        check dbDesc.importAccounts(w.base, w.data, persistent) == OkHexDb
+        check dbDesc.importAccounts(w.base, w.data, persistent) == OkImport
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
@@ -313,7 +314,9 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         packed = PackedAccountRange(
           accounts: accountsList.mapIt(it.data.accounts).sortMerge,
           proof:    accountsList.mapIt(it.data.proof).flatten)
-      check desc.importAccounts(lowerBound, packed, true) == OkHexDb
+      # Merging intervals will produce gaps, so the result is expected OK but
+      # different from `OkImport`
+      check desc.importAccounts(lowerBound, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
@@ -430,7 +433,7 @@ proc storagesRunner(
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
         let desc = SnapDbAccountsRef.init(dbBase, root, peer)
-        check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
+        check desc.importAccounts(w.base, w.data, persistent) == OkImport
 
     test &"Merging {storagesList.len} storages lists":
       let
@@ -512,7 +515,7 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
+          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
@@ -537,7 +540,7 @@ proc inspectionRunner(
             dbBase = SnapDbRef.init(db.cdb[2+n])
             desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
+            check desc.importAccounts(w.base, w.data, persistent) == OkImport
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
@@ -557,7 +560,7 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = memDesc.dup(root,Peer())
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
+          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
@@ -580,7 +583,7 @@ proc inspectionRunner(
             rootSet = [rootKey].toHashSet
             desc = perDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
+            check desc.importAccounts(w.base, w.data, persistent) == OkImport
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
@@ -607,7 +610,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent=false) == OkHexDb
+            check desc.importAccounts(w.base,w.data,persistent=false)==OkImport
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
@@ -639,7 +642,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent) == OkHexDb
+            check desc.importAccounts(w.base,w.data,persistent) == OkImport
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let

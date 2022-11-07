@@ -244,7 +244,10 @@ proc storeStoragesSingleBatch(
 
         # Last entry might be partial
         if inx == topStoRange:
-          # No partial result processing anymore to consider
+          # Forget about partial result processing if the last partial entry
+          # was reported because
+          # * either there was an error processing it
+          # * or there were some gaps reprored as dangling links
           stoRange.data.proof = @[]
 
         # Update local statistics counter for `nSlotLists` counter update
@@ -253,7 +256,7 @@ proc storeStoragesSingleBatch(
         let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
         error logTxt "processing error", peer, pivot, nSlotLists=env.nSlotLists,
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
-          nStorageQueue, error=w.error
+          nStorageQueue, nDangling=w.dangling.len, error=w.error
 
     # Update statistics
     if gotSlotLists == 1 and

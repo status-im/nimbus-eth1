@@ -57,6 +57,19 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
+proc dumpUnprocessed(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ): string =
+  ## Debugging ...
+  let
+    peer = buddy.peer
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    moan = proc(overlap: UInt256; iv: NodeTagRange) =
+      trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
+
+  env.fetchAccounts.unprocessed.dump(moan, 5)
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -113,49 +126,59 @@ proc accountsRangefetchImpl(
   let
     gotAccounts = dd.data.accounts.len
     gotStorage = dd.withStorage.len
+    processed = NodeTagRangeSet.init()
 
   #when extraTraceMessages:
   #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
   #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
+  # Now, as we fully own the scheduler the original interval can savely be
+  # placed back for a moment -- to be corrected below.
+  env.fetchAccounts.unprocessed.merge iv
+
+  # Processed accounts hashes are set up as a set of intervals which is needed
+  # if the data range returned from the network contains holes.
+  if 0 < dd.data.accounts.len:
+    discard processed.merge(iv.minPt, dd.data.accounts[^1].accKey.to(NodeTag))
+  else:
+    discard processed.merge iv
+
   block:
-    let rc = ctx.data.snapDb.importAccounts(peer, stateRoot, iv.minPt, dd.data)
+    # No left boundary check needed. If there is a gap, the partial path for
+    # that gap is returned by the import function to be registered, below.
+    let rc = ctx.data.snapDb.importAccounts(
+      peer, stateRoot, iv.minPt, dd.data, noBaseBoundCheck = true)
     if rc.isErr:
       # Bad data, just try another peer
-      env.fetchAccounts.unprocessed.merge iv # fail => interval back to pool
       buddy.ctrl.zombie = true
       when extraTraceMessages:
-        let gotLen = if 0 < dd.data.accounts.len:
-                       NodeTagRange.new(
-                         dd.data.accounts[0].accKey.to(NodeTag),
-                         dd.data.accounts[^1].accKey.to(NodeTag)).len
-                     else:
-                       0.u256
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
-          pivot, reqLen=iv.len, gotLen, error=rc.error
+          pivot, reqLen=iv.len, gotLen=processed.total, error=rc.error
       return
+    for w in rc.value:
+      # Punch holes into the consumed range if the range returned from the
+      # network contains holes.
+      discard processed.reduce(
+        w.partialPath.min(NodeKey).to(NodeTag),
+        w.partialPath.max(NodeKey).to(Nodetag))
 
   # Statistics
   env.nAccounts.inc(gotAccounts)
 
-  if dd.data.accounts.len == 0:
-    # Register consumed intervals on the accumulator over all state roots
-    discard buddy.ctx.data.coveredAccounts.merge iv
+  for w in processed.increasing:
+    # Remove the processed range from the batch of unprocessed ones.
+    env.fetchAccounts.unprocessed.reduce w
+    # Register consumed intervals on the accumulator over all state roots.
+    discard buddy.ctx.data.coveredAccounts.merge w
 
-  else:
-    let topAccTag = dd.data.accounts[^1].accKey.to(NodeTag)
-
-    # Register consumed intervals on the accumulator over all state roots
-    discard buddy.ctx.data.coveredAccounts.merge(iv.minPt, topAccTag)
-
-    # Correct consumed/bulk-imported accounts range
-    if topAccTag < iv.maxPt:
-      env.fetchAccounts.unprocessed.merge(topAccTag + 1.u256, iv.maxPt)
-    elif iv.maxPt < topAccTag:
-      env.fetchAccounts.unprocessed.reduce(iv.maxPt, topAccTag)
-
-  # Store accounts on the storage TODO list.
+  # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
+
+  when extraTraceMessages:
+    trace logTxt "range done", peer, pivot,
+      nCheckNodes=env.fetchAccounts.checkNodes.len,
+      nMissingNodes=env.fetchAccounts.missingNodes.len,
+      unprocessed=buddy.dumpUnprocessed(env)
 
   return true
 
@@ -182,6 +205,7 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
       nFetchAccounts.inc
       if not await buddy.accountsRangefetchImpl(env):
         break
+
       # Clean up storage slots queue first it it becomes too large
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
       if snapAccountsBuddyStoragesSlotsQuPrioThresh < nStoQu:

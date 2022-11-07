@@ -155,6 +155,7 @@ type
     ## Return code for single node operations
     slot*: Option[int]              ## May refer to indexed argument slots
     kind*: Option[NodeKind]         ## Node type (if any)
+    dangling*: seq[NodeSpecs]       ## Missing inner sub-tries
     error*: HexaryDbError           ## Error code, or `NothingSerious`
 
 const
