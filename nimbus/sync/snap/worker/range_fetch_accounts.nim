@@ -126,24 +126,24 @@ proc accountsRangefetchImpl(
   let
     gotAccounts = dd.data.accounts.len
     gotStorage = dd.withStorage.len
-    processed = NodeTagRangeSet.init()
 
   #when extraTraceMessages:
   #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
   #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
-  # Now, as we fully own the scheduler the original interval can savely be
+  # Now, as we fully own the scheduler and the original interval can savely be
   # placed back for a moment -- to be corrected below.
   env.fetchAccounts.unprocessed.merge iv
 
   # Processed accounts hashes are set up as a set of intervals which is needed
   # if the data range returned from the network contains holes.
+  let processed = NodeTagRangeSet.init()
   if 0 < dd.data.accounts.len:
     discard processed.merge(iv.minPt, dd.data.accounts[^1].accKey.to(NodeTag))
   else:
     discard processed.merge iv
 
-  block:
+  let dangling = block:
     # No left boundary check needed. If there is a gap, the partial path for
     # that gap is returned by the import function to be registered, below.
     let rc = ctx.data.snapDb.importAccounts(
@@ -155,16 +155,18 @@ proc accountsRangefetchImpl(
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
           pivot, reqLen=iv.len, gotLen=processed.total, error=rc.error
       return
-    for w in rc.value:
-      # Punch holes into the consumed range if the range returned from the
-      # network contains holes.
-      discard processed.reduce(
-        w.partialPath.min(NodeKey).to(NodeTag),
-        w.partialPath.max(NodeKey).to(Nodetag))
+    rc.value
 
   # Statistics
   env.nAccounts.inc(gotAccounts)
 
+  # Punch holes into the reproted range from the network if it contains holes.
+  for w in dangling:
+    discard processed.reduce(
+      w.partialPath.min(NodeKey).to(NodeTag),
+      w.partialPath.max(NodeKey).to(Nodetag))
+
+  # Update book keeping
   for w in processed.increasing:
     # Remove the processed range from the batch of unprocessed ones.
     env.fetchAccounts.unprocessed.reduce w
@@ -175,10 +177,10 @@ proc accountsRangefetchImpl(
   env.fetchStorageFull.merge dd.withStorage
 
   when extraTraceMessages:
-    trace logTxt "range done", peer, pivot,
+    trace logTxt "request done", peer, pivot,
       nCheckNodes=env.fetchAccounts.checkNodes.len,
       nMissingNodes=env.fetchAccounts.missingNodes.len,
-      unprocessed=buddy.dumpUnprocessed(env)
+      imported=processed.dump(), unprocessed=buddy.dumpUnprocessed(env)
 
   return true
 

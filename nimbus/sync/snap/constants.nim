@@ -62,7 +62,7 @@ const
   
   # --------------
 
-  healAccountsTrigger* = 0.95
+  healAccountsTrigger* = 0.99
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
@@ -85,7 +85,7 @@ const
 
   # --------------
 
-  comErrorsTimeoutMax* = 4
+  comErrorsTimeoutMax* = 3
     ## Maximal number of non-resonses accepted in a row. If there are more than
     ## `comErrorsTimeoutMax` consecutive errors, the worker will be degraded
     ## as zombie.

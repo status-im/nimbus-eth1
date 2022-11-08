@@ -210,7 +210,8 @@ proc storeStoragesSingleBatch(
 
   if 0 < gotSlotLists:
     # Verify/process storages data and save it to disk
-    let report = ctx.data.snapDb.importStorageSlots(peer, stoRange.data)
+    let report = ctx.data.snapDb.importStorageSlots(
+      peer, stoRange.data, noBaseBoundCheck = true)
 
     if 0 < report.len:
       let topStoRange = stoRange.data.storages.len - 1

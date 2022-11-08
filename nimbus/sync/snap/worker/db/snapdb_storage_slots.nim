@@ -317,7 +317,7 @@ proc importStorageSlots*(
   ## Variant of `importStorages()`
   SnapDbStorageSlotsRef.init(
     pv,  Hash256().to(NodeKey), Hash256(), peer).importStorageSlots(
-      data, persistent = true)
+      data, persistent = true, noBaseBoundCheck)
 
 
 proc importRawStorageSlotsNodes*(

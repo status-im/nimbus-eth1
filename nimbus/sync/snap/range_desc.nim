@@ -350,23 +350,29 @@ proc dump*(
     printRangesMax = high(int);
       ): string =
   ## Dump/anlalyse range sets
-  let
-    cache = NodeTagRangeSet.init()
   var
+    cache: NodeTagRangeSet
     ivTotal = 0.u256
     ivCarry = false
 
-  for ivSet in ranges:
-    if ivSet.total == 0.u256 and 0 < ivSet.chunks:
+  if ranges.len == 1:
+    cache = ranges[0]
+    ivTotal = cache.total
+    if ivTotal == 0.u256 and 0 < cache.chunks:
       ivCarry = true
-    elif ivTotal <= high(UInt256) - ivSet.total:
-      ivTotal += ivSet.total
-    else:
-      ivCarry = true
-    for iv in ivSet.increasing():
-      let n = cache.merge(iv)
-      if n != iv.len and not moan.isNil:
-        moan(iv.len - n, iv)
+  else:
+    cache = NodeTagRangeSet.init()
+    for ivSet in ranges:
+      if ivSet.total == 0.u256 and 0 < ivSet.chunks:
+        ivCarry = true
+      elif ivTotal <= high(UInt256) - ivSet.total:
+        ivTotal += ivSet.total
+      else:
+        ivCarry = true
+      for iv in ivSet.increasing():
+        let n = cache.merge(iv)
+        if n != iv.len and not moan.isNil:
+          moan(iv.len - n, iv)
 
   if 0 == cache.total and 0 < cache.chunks:
     result = "2^256"
@@ -379,10 +385,19 @@ proc dump*(
     elif ivTotal != cache.total:
       result &= ":" & $ivTotal
 
-  result &= ":" &
-    toSeq(cache.increasing).mapIt($it)[0 ..< printRangesMax].join(",")
-  if printRangesMax < cache.chunks:
+  result &= ":"
+  if cache.chunks <= printRangesMax:
+    result &= toSeq(cache.increasing).mapIt($it).join(",")
+  else:
+    result &= toSeq(cache.increasing).mapIt($it)[0 ..< printRangesMax].join(",")
     result &= " " & $(cache.chunks - printRangesMax) & " more .."
+
+proc dump*(
+    range: NodeTagRangeSet;
+    printRangesMax = high(int);
+      ): string =
+  ## Ditto
+  [range].dump(nil, printRangesMax)
 
 # ------------------------------------------------------------------------------
 # End

@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[algorithm, sequtils, strutils, tables],
+  std/[algorithm, sequtils, tables],
   chronicles,
   eth/[common, p2p, rlp, trie/nibbles],
   stew/byteutils,
@@ -278,11 +278,10 @@ proc importAccounts*(
     error "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
 
-  when extraTraceMessages:
-    trace "Accounts imported", peer=ps.peer, root=ps.root.ByteArray32.toHex,
-      proof=data.proof.len, base, accounts=data.accounts.len,
-      top=accounts[^1].pathTag, danglingLen=dangling.len,
-      dangling="[" & dangling.mapIt(it.partialPath.toHex).join(",") & "]"
+  #when extraTraceMessages:
+  #  trace "Accounts imported", peer=ps.peer, root=ps.root.ByteArray32.toHex,
+  #    proof=data.proof.len, base, accounts=data.accounts.len,
+  #    top=accounts[^1].pathTag, danglingLen=dangling.len
 
   ok(dangling)
 
