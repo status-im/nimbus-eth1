@@ -60,7 +60,7 @@ proc propagateEpochAccumulator*(
       encodedAccumulator
     )
     discard await p.neighborhoodGossip(
-      ContentKeysList(@[encode(key)]), @[encodedAccumulator])
+      ContentKeysList(@[encKey]), @[encodedAccumulator])
 
     return ok()
 

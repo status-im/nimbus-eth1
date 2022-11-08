@@ -16,7 +16,7 @@ import
   bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
-  ".."/../[content_db, seed_db],
+  ../../seed_db,
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
@@ -120,21 +120,13 @@ const
   concurrentOffers = 50
 
 type
-  DbErrorKind* = enum
-    InvalidContentKey, NoKeyInDb
-
-  DbError* = object
-    case kind*: DbErrorKind
-    of InvalidContentKey:
-      discard
-    of NoKeyInDb:
-      contentId*: ContentId
-
   ToContentIdHandler* =
-    proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
+    proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [Defect], gcsafe.}
 
   DbGetHandler* =
-    proc(contentKey: ByteList): Result[seq[byte], DbError] {.raises: [Defect], gcsafe.}
+    proc(
+      contentKey: ByteList,
+      contentId: ContentId): results.Opt[seq[byte]] {.raises: [Defect], gcsafe.}
 
   DbStoreHandler* =
     proc(
@@ -167,7 +159,7 @@ type
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
-    portalStore*: DbStoreHandler
+    dbPut*: DbStoreHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -320,35 +312,35 @@ proc handleFindContent(
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-  let contentResult = p.dbGet(fc.contentKey)
+  let contentIdResult = p.toContentId(fc.contentKey)
 
-  if contentResult.isErr:
-    let err = contentResult.error
+  if contentIdResult.isErr:
+    # Return empty response when content key validation fails
+    # TODO: Better would be to return no message at all? Needs changes on
+    # discv5 layer.
+    return @[]
 
-    case err.kind
-    of InvalidContentKey:
-      # Return empty response when content key validation fails
-      # TODO: Better would be to return no message at all? Needs changes on
-      # discv5 layer.
-      return @[]
-    of NoKeyInDb:
-      # Don't have the content, send closest neighbours to content id.
-      let
-        closestNodes = p.routingTable.neighbours(
-          NodeId(err.contentId), seenOnly = true)
-        enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+  let contentResult = p.dbGet(fc.contentKey, contentIdResult.get())
 
-      portal_content_enrs_packed.observe(enrs.len().int64)
-      return encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
-  else:
+  if contentResult.isOk():
     let content = contentResult.get()
     if content.len <= maxPayloadSize:
-      return encodeMessage(ContentMessage(
+      encodeMessage(ContentMessage(
         contentMessageType: contentType, content: ByteList(content)))
     else:
       let connectionId = p.stream.addContentRequest(srcId, content)
-      return encodeMessage(ContentMessage(
+
+      encodeMessage(ContentMessage(
         contentMessageType: connectionIdType, connectionId: connectionId))
+  else:
+    # Don't have the content, send closest neighbours to content id.
+    let
+      closestNodes = p.routingTable.neighbours(
+        NodeId(contentIdResult.get()), seenOnly = true)
+      enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
+    portal_content_enrs_packed.observe(enrs.len().int64)
+
+    encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
 proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
@@ -359,20 +351,16 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # want any of the content? Reply with empty bitlist and a connectionId of
   # all zeroes but don't actually allow an uTP connection?
   for i, contentKey in o.contentKeys:
-    let contentResult = p.dbGet(contentKey)
-
-    # Only error case is interesting, as if we have content in db then the bit
-    # should stay 0
-    if contentResult.isErr:
-      let error = contentResult.error
-      case error.kind
-      of NoKeyInDb:
-        if p.inRange(error.contentId):
+    let contentIdResult = p.toContentId(contentKey)
+    if contentIdResult.isOk():
+      let contentId = contentIdResult.get()
+      if p.inRange(contentId):
+        if p.dbGet(contentKey, contentId).isErr:
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
-      of InvalidContentKey:
-        # Return empty response when content key validation fails
-        return @[]
+    else:
+      # Return empty response when content key validation fails
+      return @[]
 
   let connectionId =
     if contentKeysBitList.countOnes() != 0:
@@ -810,24 +798,30 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     of Database:
       for i, b in m.contentKeys:
         if b:
-          let contentResult = p.dbGet(o.contentKeys[i])
+          let
+            contentKey = o.contentKeys[i]
+            contentIdResult = p.toContentId(contentKey)
+          if contentIdResult.isOk():
+            let
+              contentId = contentIdResult.get()
+              contentResult = p.dbGet(contentKey, contentId)
 
-          var output = memoryOutput()
-          if contentResult.isOk():
-            let content = contentResult.get()
+            var output = memoryOutput()
+            if contentResult.isOk():
+              let content = contentResult.get()
 
-            output.write(toBytes(content.lenu32, Leb128).toOpenArray())
-            output.write(content)
-          else:
-            # When data turns out missing, add a 0 size varint
-            output.write(toBytes(0'u8, Leb128).toOpenArray())
+              output.write(toBytes(content.lenu32, Leb128).toOpenArray())
+              output.write(content)
+            else:
+              # When data turns out missing, add a 0 size varint
+              output.write(toBytes(0'u8, Leb128).toOpenArray())
 
-          let dataWritten = await socket.write(output.getOutput)
-          if dataWritten.isErr:
-            debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
-            # No point in trying to continue writing data
-            socket.close()
-            return err("Error writing requested data")
+            let dataWritten = await socket.write(output.getOutput)
+            if dataWritten.isErr:
+              debug "Error writing requested data", error = dataWritten.error, contentKeys = contentKeys
+              # No point in trying to continue writing data
+              socket.close()
+              return err("Error writing requested data")
 
     debug "Content successfully offered", contentKeys = contentKeys
 
@@ -1198,8 +1192,8 @@ proc storeContent*(
     contentKey: ByteList,
     contentId: ContentId,
     content: seq[byte]) =
-  if p.portalStore != nil:
-    p.portalStore(contentKey, contentId, content)
+  doAssert(p.dbPut != nil)
+  p.dbPut(contentKey, contentId, content)
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are

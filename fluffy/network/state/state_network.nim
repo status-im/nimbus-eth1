@@ -10,7 +10,6 @@ import
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
-  ../content_db_callbacks,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   ./state_content,
   ./state_distance
@@ -27,7 +26,7 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   toContentId(contentKey)
 
 proc dbGetHandler(db: ContentDB, contentId: ContentId):
@@ -82,11 +81,11 @@ proc new*(
 
   let portalProtocol = PortalProtocol.new(
     baseProtocol, stateProtocolId,
-    toContentIdHandler, createGetHandler(contentDB, toContentIdHandler), s,
+    toContentIdHandler, createGetHandler(contentDB), s,
     bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
 
-  portalProtocol.portalStore = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   return StateNetwork(
     portalProtocol: portalProtocol,

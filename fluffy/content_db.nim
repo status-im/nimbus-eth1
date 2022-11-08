@@ -9,10 +9,14 @@
 
 import
   std/[options, heapqueue],
+  chronicles,
+  metrics,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint,
-  ./network/state/state_content
+  stew/results,
+  ./network/state/state_content,
+  "."/network/wire/[portal_protocol, portal_protocol_config]
 
 export kvstore_sqlite3
 
@@ -28,6 +32,14 @@ export kvstore_sqlite3
 # content key fields are required to access the data.
 # 3. Or databases are created per network (and kvstores pre content type) and
 # thus depending on the network the right db needs to be selected.
+
+declareCounter portal_pruning_counter,
+  "Number of pruning event which happened during node lifetime",
+  labels = ["protocol_id"]
+
+declareGauge portal_pruning_deleted_elements,
+  "Number of elements delted in last pruning",
+  labels = ["protocol_id"]
 
 type
   RowInfo = tuple
@@ -305,3 +317,82 @@ proc put*(
       furthestStoredElementDistance: furthestNonDeletedElement,
       fractionOfDeletedContent: deletedFraction,
       numOfDeletedElements: deletedElements)
+
+proc adjustRadius(
+    p: PortalProtocol,
+    fractionOfDeletedContent: float64,
+    furthestElementInDbDistance: UInt256) =
+  if fractionOfDeletedContent == 0.0:
+    # even though pruning was triggered no content was deleted, it could happen
+    # in pathological case of really small database with really big values.
+    # log it as error as it should not happenn
+    error "Database pruning attempt resulted in no content deleted"
+    return
+
+  # we need to invert fraction as our Uin256 implementation does not support
+  # multiplication by float
+  let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
+
+  let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
+
+  # Chose larger value to avoid situation, where furthestElementInDbDistance
+  # is super close to local id, so local radius would end up too small
+  # to accept any more data to local database
+  # If scaledRadius radius will be larger it will still contain all elements
+  let newRadius = max(scaledRadius, furthestElementInDbDistance)
+
+  debug "Database pruned",
+    oldRadius = p.dataRadius,
+    newRadius = newRadius,
+    furthestDistanceInDb = furthestElementInDbDistance,
+    fractionOfDeletedContent = fractionOfDeletedContent
+
+  # both scaledRadius and furthestElementInDbDistance are smaller than current
+  # dataRadius, so the radius will constantly decrease through the node
+  # life time
+  p.dataRadius = newRadius
+
+proc createGetHandler*(db: ContentDB): DbGetHandler =
+  return (
+    proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
+      let
+        maybeContent = db.get(contentId)
+
+      if maybeContent.isNone():
+        return Opt.none(seq[byte])
+
+      return ok(maybeContent.unsafeGet())
+  )
+
+proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): DbStoreHandler =
+  return (proc(
+      contentKey: ByteList,
+      contentId: ContentId,
+      content: seq[byte]) {.raises: [Defect], gcsafe.} =
+    # always re-check that key is in node range, to make sure that invariant that
+    # all keys in database are always in node range hold.
+    # TODO current silent assumption is that both contentDb and portalProtocol are
+    # using the same xor distance function
+    if p.inRange(contentId):
+      case cfg.kind:
+      of Dynamic:
+        # In case of dynamic radius setting we obey storage limits and adjust
+        # radius to store network fraction corresponding to those storage limits.
+        let res = db.put(contentId, content, p.baseProtocol.localNode.id)
+        if res.kind == DbPruned:
+          portal_pruning_counter.inc(labelValues = [$p.protocolId])
+          portal_pruning_deleted_elements.set(
+            res.numOfDeletedElements.int64,
+            labelValues = [$p.protocolId]
+          )
+
+          p.adjustRadius(
+            res.fractionOfDeletedContent,
+            res.furthestStoredElementDistance
+          )
+      of Static:
+        # If the config is set statically, radius is not adjusted, and is kept
+        # constant thorugh node life time, also database max size is disabled
+        # so we will effectivly store fraction of the network
+        db.put(contentId, content)
+  )

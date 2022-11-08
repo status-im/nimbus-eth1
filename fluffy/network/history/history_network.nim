@@ -15,7 +15,6 @@ import
   ../../content_db,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../content_db_callbacks,
   "."/[history_content, accumulator]
 
 logScope:
@@ -36,8 +35,8 @@ type
 
   Block* = (BlockHeader, BlockBody)
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
-  some(toContentId(contentKey))
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+  ok(toContentId(contentKey))
 
 func encodeKey(k: ContentKey): (ByteList, ContentId) =
   let keyEncoded = encode(k)
@@ -691,10 +690,10 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, historyProtocolId,
-      toContentIdHandler, createGetHandler(contentDB, toContentIdHandler), stream, bootstrapRecords,
+      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
       config = portalConfig)
 
-  portalProtocol.portalStore = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   HistoryNetwork(
     portalProtocol: portalProtocol,

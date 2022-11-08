@@ -12,7 +12,7 @@
 
 import
   std/options,
-  nimcrypto/[hash, sha2, keccak], stew/objects, stint,
+  nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
   ssz_serialization,
   ../../common/common_types
 
@@ -118,9 +118,9 @@ func toContentId*(contentKey: ContentKey): ContentId =
       h.update(key.address)
       h.update(key.codeHash.data)
 
-func toContentId*(contentKey: ByteList): Option[ContentId] =
+func toContentId*(contentKey: ByteList): results.Opt[ContentId] =
   let key = decode(contentKey)
   if key.isSome():
-    some(key.get().toContentId())
+    ok(key.get().toContentId())
   else:
-    none(ContentId)
+    Opt.none(ContentId)

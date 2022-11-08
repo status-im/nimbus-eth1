@@ -14,7 +14,6 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   ../../content_db,
-  ../content_db_callbacks,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/light_client_content
@@ -33,8 +32,8 @@ type
     forkDigests*: ForkDigests
     processContentLoop: Future[void]
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
-  some(toContentId(contentKey))
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+  ok(toContentId(contentKey))
 
 func encodeKey(k: ContentKey): (ByteList, ContentId) =
   let keyEncoded = encode(k)
@@ -158,10 +157,10 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
-      toContentIdHandler, createGetHandler(contentDB, toContentIdHandler), stream, bootstrapRecords,
+      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
       config = portalConfig)
 
-  portalProtocol.portalStore = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   LightClientNetwork(
     portalProtocol: portalProtocol,

@@ -10,21 +10,21 @@
 import
   std/[algorithm, sequtils],
   chronos, testutils/unittests, stew/shims/net,
+  stew/results,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/content_db_callbacks,
   ../content_db,
   ./test_helpers
 
 const protocolId = [byte 0x50, 0x00]
 
-proc toContentId(contentKey: ByteList): Option[ContentId] =
+proc toContentId(contentKey: ByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
   # content id derivation is different for the different content networks
   # and their content types.
   let idHash = sha256.digest(contentKey.asSeq())
-  some(readUintBE[256](idHash.data))
+  ok(readUintBE[256](idHash.data))
 
 proc dbGetHandler(db: ContentDB, contentId: ContentId): Option[seq[byte]] =
   db.get(contentId)
@@ -42,10 +42,10 @@ proc initPortalProtocol(
     stream = manager.registerNewStream(q)
 
     proto = PortalProtocol.new(
-      d, protocolId, toContentId, createGetHandler(db, toContentId), stream,
+      d, protocolId, toContentId, createGetHandler(db), stream,
       bootstrapRecords = bootstrapRecords)
 
-  proto.portalStore = createStoreHandler(db, defaultRadiusConfig, proto)
+  proto.dbPut = createStoreHandler(db, defaultRadiusConfig, proto)
 
   return proto
 
@@ -343,9 +343,9 @@ procSuite "Portal Wire Protocol Tests":
       stream = m.registerNewStream(q)
 
       proto1 = PortalProtocol.new(
-        node1, protocolId, toContentId, createGetHandler(db, toContentId), stream)
+        node1, protocolId, toContentId, createGetHandler(db), stream)
 
-    proto1.portalStore = createStoreHandler(db, defaultRadiusConfig, proto1)
+    proto1.dbPut = createStoreHandler(db, defaultRadiusConfig, proto1)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
