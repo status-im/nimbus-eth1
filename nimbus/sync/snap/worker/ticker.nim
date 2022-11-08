@@ -53,44 +53,49 @@ const
 # Private functions: pretty printing
 # ------------------------------------------------------------------------------
 
-proc ppMs*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inMilliseconds
-  let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
-  if ns != 0:
-    # to rounded deca milli seconds
-    let dm = (ns + 5_000i64) div 10_000i64
-    result &= &".{dm:02}"
-  result &= "ms"
+# proc ppMs*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inMilliseconds
+#   let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
+#   if ns != 0:
+#     # to rounded deca milli seconds
+#     let dm = (ns + 5_000i64) div 10_000i64
+#     result &= &".{dm:02}"
+#   result &= "ms"
+#
+# proc ppSecs*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inSeconds
+#   let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
+#   if ns != 0:
+#     # round up
+#     let ds = (ns + 5_000_000i64) div 10_000_000i64
+#     result &= &".{ds:02}"
+#   result &= "s"
+#
+# proc ppMins*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inMinutes
+#   let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
+#   if ns != 0:
+#     # round up
+#     let dm = (ns + 500_000_000i64) div 1_000_000_000i64
+#     result &= &":{dm:02}"
+#   result &= "m"
+#
+# proc pp(d: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   if 40 < d.inSeconds:
+#     d.ppMins
+#   elif 200 < d.inMilliseconds:
+#     d.ppSecs
+#   else:
+#     d.ppMs
 
-proc ppSecs*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
-  if ns != 0:
-    # round up
-    let ds = (ns + 5_000_000i64) div 10_000_000i64
-    result &= &".{ds:02}"
-  result &= "s"
-
-proc ppMins*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inMinutes
-  let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
-  if ns != 0:
-    # round up
-    let dm = (ns + 500_000_000i64) div 1_000_000_000i64
-    result &= &":{dm:02}"
-  result &= "m"
-
-proc pp(d: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  if 40 < d.inSeconds:
-    d.ppMins
-  elif 200 < d.inMilliseconds:
-    d.ppSecs
-  else:
-    d.ppMs
+proc pc99(val: float): string =
+  if 0.99 <= val and val < 1.0: "99%"
+  elif 0.0 < val and val <= 0.01: "1%"
+  else: val.toPC(0)
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -117,9 +122,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       pivot = "n/a"
       nStoQue = "n/a"
     let
-      accCov = data.accountsFill[0].toPC(0) &
-         "(" & data.accountsFill[1].toPC(0) & ")" &
-         "/" & data.accountsFill[2].toPC(0)
+      accCov = data.accountsFill[0].pc99 &
+         "(" & data.accountsFill[1].pc99 & ")" &
+         "/" & data.accountsFill[2].pc99
       buddies = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds

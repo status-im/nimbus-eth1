@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[algorithm, sequtils, strutils, tables],
+  std/[algorithm, sequtils, tables],
   chronicles,
   eth/[common, p2p, rlp, trie/nibbles],
   stew/byteutils,
@@ -97,23 +97,12 @@ proc collectAccounts(
   ## can be used for validating the argument account data.
   var rcAcc: seq[RLeafSpecs]
 
-  if acc.len != 0:
+  if 0 < acc.len:
     let pathTag0 = acc[0].accKey.to(NodeTag)
 
     # Verify lower bound
     if pathTag0 < base:
-      let error = HexaryDbError.AccountSmallerThanBase
-      trace "collectAccounts()", peer, base, accounts=acc.len, error
-      return err(error)
-
-    # Add base for the records (no payload). Note that the assumption
-    # holds: `rcAcc[^1].tag <= base`
-    if base < pathTag0:
-      rcAcc.add RLeafSpecs(pathTag: base)
-
-    # Check for the case that accounts are appended
-    elif 0 < rcAcc.len and pathTag0 <= rcAcc[^1].pathTag:
-      let error = HexaryDbError.AccountsNotSrictlyIncreasing
+      let error = LowerBoundAfterFirstEntry
       trace "collectAccounts()", peer, base, accounts=acc.len, error
       return err(error)
 
@@ -179,17 +168,56 @@ proc importAccounts*(
     base: NodeTag;            ## before or at first account entry in `data`
     data: PackedAccountRange; ## re-packed `snap/1 ` reply data
     persistent = false;       ## store data on disk
-      ): Result[void,HexaryDbError] =
+    noBaseBoundCheck = false; ## Ignore left boundary proof check if `true`
+      ): Result[seq[NodeSpecs],HexaryDbError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
   ## which can be written to disk with the argument `persistent` set `true`. The
   ## memory table is held in the descriptor argument`ps`.
   ##
+  ## On success, the function returns a list of dangling node links from the
+  ## argument `proof` list of nodes after the populating with accounts. The
+  ## following example may illustrate the case:
+  ##
+  ##   Assume an accounts hexary trie
+  ##   ::
+  ##     |          0 1 2 3 4 5 6 7 8 9 a b c d e f     -- nibble positions
+  ##     | root -> (a, .. b, ..   c, ..   d, ..    ,)   -- root branch node
+  ##     |          |     |       |       |
+  ##     |         ...    v       v       v
+  ##     |               (x,X)   (y,Y)   (z,Z)
+  ##
+  ##   with `a`,`b`,`c`,`d` node hashes, `x`,`y`,`z` partial paths and account
+  ##   hashes `3&x`,`7&y`,`b&z` for account values `X`,`Y`,`Z`. All other
+  ##   links in the *root branch node* are assumed nil.
+  ##
+  ##   The passing to this function
+  ##   * base: `3&x`
+  ##   * data.proof: *root branch node*
+  ##   * data.accounts: `(3&x,X)`, `(7&y,Y)`, `(b&z,Z)`
+  ##   a partial tree can be fully constructed and boundary proofs succeed.
+  ##   The return value will be an empty list.
+  ##
+  ##   Leaving out `(7&y,Y)` the boundary proofs still succeed but the
+  ##   return value will be @[`(7&y,c)`].
+  ##
+  ## The left boundary proof might be omitted by passing `true` for the
+  ## `noBaseBoundCheck` argument. In this case, the boundary check must be
+  ## performed on the return code as
+  ## * if `data.accounts` is empty, the return value must be an empty list
+  ## * otherwise, all type `NodeSpecs` items `w` of the return code must
+  ##   satisfy
+  ##   ::
+  ##     let leastAccountPath = data.accounts[0].accKey.to(NodeTag)
+  ##     leastAccountPath <= w.partialPath.max(NodeKey).to(NodeTag)
+  ##
   ## Note that the `peer` argument is for log messages, only.
-  var accounts: seq[RLeafSpecs]
+  var
+    accounts: seq[RLeafSpecs]
+    dangling: seq[NodeSpecs]
   try:
     if 0 < data.proof.len:
-      let rc = ps.mergeProofs(ps.peer, ps.root, data.proof)
+      let rc = ps.mergeProofs(ps.peer, data.proof)
       if rc.isErr:
         return err(rc.error)
     block:
@@ -197,16 +225,50 @@ proc importAccounts*(
       if rc.isErr:
         return err(rc.error)
       accounts = rc.value
-    block:
+
+    if 0 < accounts.len:
+      var innerSubTrie: seq[NodeSpecs]
+      if 0 < data.proof.len:
+        # Inspect trie for dangling nodes. This is not a big deal here as the
+        # proof data is typically small.
+        let
+          proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
+          topTag = accounts[^1].pathTag
+        for w in proofStats.dangling:
+          if base <= w.partialPath.max(NodeKey).to(NodeTag) and
+             w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
+            # Extract dangling links which are inside the accounts range
+            innerSubTrie.add w
+
+      # Build partial hexary trie
       let rc = ps.hexaDb.hexaryInterpolate(
         ps.root, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
         return err(rc.error)
 
-    if persistent and 0 < ps.hexaDb.tab.len:
-      let rc = ps.hexaDb.persistentAccounts(ps)
-      if rc.isErr:
-        return err(rc.error)
+      # Collect missing inner sub-trees in the reconstructed partial hexary
+      # trie (if any).
+      let bottomTag = accounts[0].pathTag
+      for w in innerSubTrie:
+        if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+          continue
+        # Verify that `base` is to the left of the first account and there is
+        # nothing in between. Without proof, there can only be a complete
+        # set/list of accounts. There must be a proof for an empty list.
+        if not noBaseBoundCheck and
+           w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
+          return err(LowerBoundProofError)
+        # Otherwise register left over entry
+        dangling.add w
+
+      if persistent:
+        let rc = ps.hexaDb.persistentAccounts(ps)
+        if rc.isErr:
+          return err(rc.error)
+
+    elif data.proof.len == 0:
+      # There must be a proof for an empty argument list.
+      return err(LowerBoundProofError)
 
   except RlpError:
     return err(RlpEncoding)
@@ -217,21 +279,24 @@ proc importAccounts*(
     return err(OSErrorException)
 
   #when extraTraceMessages:
-  #  trace "Accounts imported", peer=ps.peer,
-  #    root=ps.root.ByteArray32.toHex,
-  #    proof=data.proof.len, base, accounts=data.accounts.len
-  ok()
+  #  trace "Accounts imported", peer=ps.peer, root=ps.root.ByteArray32.toHex,
+  #    proof=data.proof.len, base, accounts=data.accounts.len,
+  #    top=accounts[^1].pathTag, danglingLen=dangling.len
+
+  ok(dangling)
 
 proc importAccounts*(
     pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
-    peer: Peer,               ## for log messages
-    root: Hash256;            ## state root
-    base: NodeTag;            ## before or at first account entry in `data`
-    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-      ): Result[void,HexaryDbError] =
+    peer: Peer;               ## For log messages
+    root: Hash256;            ## State root
+    base: NodeTag;            ## Before or at first account entry in `data`
+    data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
+    noBaseBoundCheck = false; ## Ignore left bound proof check if `true`
+      ): Result[seq[NodeSpecs],HexaryDbError] =
   ## Variant of `importAccounts()`
   SnapDbAccountsRef.init(
-    pv, root, peer).importAccounts(base, data, persistent=true)
+    pv, root, peer).importAccounts(
+      base, data, persistent=true, noBaseBoundCheck)
 
 
 proc importRawAccountsNodes*(

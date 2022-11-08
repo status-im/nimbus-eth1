@@ -11,7 +11,7 @@
 import
   std/[sequtils, tables],
   chronicles,
-  eth/[common, p2p, trie/db],
+  eth/[common, p2p, trie/db, trie/nibbles],
   ../../../../db/[select_backend, storage_types],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_paths, rocky_bulk_load]
@@ -22,6 +22,8 @@ logScope:
   topics = "snap-db"
 
 const
+  extraTraceMessages = false or true
+
   RockyBulkCache* = "accounts.sst"
     ## Name of temporary file to accomodate SST records for `rocksdb`
 
@@ -34,7 +36,7 @@ type
 
   SnapDbBaseRef* = ref object of RootRef
     ## Session descriptor
-    xDb: HexaryTreeDbRef             ## Hexary database
+    xDb: HexaryTreeDbRef             ## Hexary database, memory based
     base: SnapDbRef                  ## Back reference to common parameters
     root*: NodeKey                   ## Session DB root node key
 
@@ -69,6 +71,9 @@ proc toKey(a: NodeKey; ps: SnapDbBaseRef): uint =
 
 proc toKey(a: NodeTag; ps: SnapDbBaseRef): uint =
   a.to(NodeKey).toKey(ps)
+
+proc ppImpl(a: RepairKey; pv: SnapDbRef): string =
+  if a.isZero: "ø" else:"$" & $a.toKey(pv)
 
 # ------------------------------------------------------------------------------
 # Debugging, pretty printing
@@ -122,7 +127,7 @@ proc init*(
       ): T =
   ## Constructor for inner hexary trie database
   let xDb = HexaryTreeDbRef()
-  xDb.keyPp = proc(key: RepairKey): string = key.pp(xDb) # will go away
+  xDb.keyPp = proc(key: RepairKey): string = key.ppImpl(pv) # will go away
   return xDb
 
 proc init*(
@@ -138,7 +143,7 @@ proc init*(
     ps: SnapDbBaseRef;
     pv: SnapDbRef;
     root: NodeKey;
-    peer: Peer = nil) =
+      ) =
   ## Session base constructor
   ps.base = pv
   ps.root = root
@@ -148,7 +153,7 @@ proc init*(
     T: type SnapDbBaseRef;
     ps: SnapDbBaseRef;
     root: NodeKey;
-    peer: Peer = nil): T =
+      ): T =
   ## Variant of session base constructor
   new result
   result.init(ps.base, root)
@@ -177,11 +182,11 @@ proc kvDb*(pv: SnapDbRef): TrieDatabaseRef =
 # Public functions, select sub-tables for persistent storage
 # ------------------------------------------------------------------------------
 
-proc toAccountsKey*(a: NodeKey): ByteArray32 =
-  a.ByteArray32
+proc toAccountsKey*(a: NodeKey): ByteArray33 =
+  a.ByteArray32.snapSyncAccountKey.data
 
 proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
-  a.ByteArray32.slotHashToSlotKey.data
+  a.ByteArray32.snapSyncStorageSlotKey.data
 
 template toOpenArray*(k: ByteArray32): openArray[byte] =
   k.toOpenArray(0, 31)
@@ -204,7 +209,6 @@ proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
 proc mergeProofs*(
     ps: SnapDbBaseRef;        ## Session database
     peer: Peer;               ## For log messages
-    root: NodeKey;            ## Root for checking nodes
     proof: seq[Blob];         ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
       ): Result[void,HexaryDbError]
@@ -216,7 +220,7 @@ proc mergeProofs*(
     db = ps.hexaDb
   var
     nodes: HashSet[RepairKey]
-    refs = @[root.to(RepairKey)].toHashSet
+    refs = @[ps.root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
     let report = db.hexaryImport(rlpRec, nodes, refs)
@@ -239,6 +243,52 @@ proc mergeProofs*(
         trace "mergeProofs() ignoring unrelated nodes", peer, nodes=nodes.len
 
   ok()
+
+
+proc verifyLowerBound*(
+    ps: SnapDbBaseRef;        ## Database session descriptor
+    peer: Peer;               ## For log messages
+    base: NodeTag;            ## Before or at first account entry in `data`
+    first: NodeTag;           ## First account key
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect, KeyError].} =
+  ## Verify that `base` is to the left of the first leaf entry and there is
+  ## nothing in between.
+  proc convertTo(data: openArray[byte]; T: type Hash256): T =
+    discard result.data.NodeKey.init(data) # size error => zero
+
+  let
+    root = ps.root.to(RepairKey)
+    base = base.to(NodeKey)
+    next = base.hexaryPath(root, ps.hexaDb).right(ps.hexaDb).getNibbles
+  if next.len == 64:
+    if first == next.getBytes.convertTo(Hash256).to(NodeTag):
+      return ok()
+
+  let error = LowerBoundProofError
+  when extraTraceMessages:
+    trace "verifyLowerBound()", peer, base=base.pp,
+      first=first.to(NodeKey).pp, error
+  err(error)
+
+proc verifyNoMoreRight*(
+    ps: SnapDbBaseRef;        ## Database session descriptor
+    peer: Peer;               ## For log messages
+    base: NodeTag;            ## Before or at first account entry in `data`
+      ): Result[void,HexaryDbError]
+      {.gcsafe, raises: [Defect, KeyError].} =
+  ## Verify that there is are no more leaf entries to the right of and
+  ## including `base`.
+  let
+    root = ps.root.to(RepairKey)
+    base = base.to(NodeKey)
+  if base.hexaryPath(root, ps.hexaDb).rightStop(ps.hexaDb):
+    return ok()
+
+  let error = LowerBoundProofError
+  when extraTraceMessages:
+    trace "verifyLeftmostBound()", peer, base=base.pp, error
+  err(error)
 
 # ------------------------------------------------------------------------------
 # Debugging (and playing with the hexary database)

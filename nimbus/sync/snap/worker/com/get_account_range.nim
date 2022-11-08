@@ -28,7 +28,6 @@ logScope:
 
 type
   GetAccountRange* = object
-    consumed*: NodeTagRange               ## Real accounts interval covered
     data*: PackedAccountRange             ## Re-packed reply data
     withStorage*: seq[AccountSlotsHeader] ## Accounts with non-idle storage root
 
@@ -79,7 +78,6 @@ proc getAccountRange*(
       return err(ComResponseTimeout)
     let snAccRange = rc.value.get
     GetAccountRange(
-      consumed:    iv,
       data:        PackedAccountRange(
         proof:     snAccRange.proof,
         accounts:  snAccRange.accounts
@@ -114,30 +112,14 @@ proc getAccountRange*(
         nAccounts, nProof, accRange="n/a", reqRange=iv
       return err(ComNoAccountsForStateRoot)
 
-    # So there is no data, otherwise an account beyond the interval end
-    # `iv.maxPt` would have been returned.
-    dd.consumed = NodeTagRange.new(iv.minPt, high(NodeTag))
-    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot,
-      nAccounts, nProof, accRange=dd.consumed, reqRange=iv
+    # So there is no data and a proof.
+    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot, nAccounts,
+      nProof, accRange=NodeTagRange.new(iv.minPt, high(NodeTag)), reqRange=iv
     return ok(dd)
 
   let (accMinPt, accMaxPt) = (
     dd.data.accounts[0].accKey.to(NodeTag),
     dd.data.accounts[^1].accKey.to(NodeTag))
-
-  if nProof == 0:
-    # github.com/ethereum/devp2p/blob/master/caps/snap.md#accountrange-0x01
-    # Notes:
-    # * If the account range is the entire state (requested origin was 0x00..0
-    #   and all accounts fit into the response), no proofs should be sent along
-    #   the response. This is unlikely for accounts, but since it's a common
-    #   situation for storage slots, this clause keeps the behavior the same
-    #   across both.
-    if 0.to(NodeTag) < iv.minPt:
-      trace trSnapRecvProtocolViolation & "proof-less AccountRange", peer,
-        pivot, nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, accMaxPt),
-        reqRange=iv
-      return err(ComMissingProof)
 
   if accMinPt < iv.minPt:
     # Not allowed
@@ -157,15 +139,14 @@ proc getAccountRange*(
       # Geth always seems to allow the last account to be larger than the
       # limit (seen with Geth/v1.10.18-unstable-4b309c70-20220517.)
       if iv.maxPt < dd.data.accounts[^2].accKey.to(NodeTag):
-        # The segcond largest should not excceed the top one requested.
+        # The second largest should not excceed the top one requested.
         trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
           pivot, nAccounts, nProof,
           accRange=NodeTagRange.new(iv.minPt, accMaxPt), reqRange=iv
         return err(ComAccountsMaxTooLarge)
 
-  dd.consumed = NodeTagRange.new(iv.minPt, max(iv.maxPt,accMaxPt))
-  trace trSnapRecvReceived & "AccountRange", peer, pivot,
-    nAccounts, nProof, accRange=dd.consumed, reqRange=iv
+  trace trSnapRecvReceived & "AccountRange", peer, pivot, nAccounts, nProof,
+    accRange=NodeTagRange.new(accMinPt, accMaxPt), reqRange=iv
 
   return ok(dd)
 

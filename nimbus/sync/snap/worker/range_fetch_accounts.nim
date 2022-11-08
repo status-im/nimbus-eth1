@@ -37,7 +37,7 @@ import
   stew/[interval_set, keyed_queue],
   stint,
   ../../sync_desc,
-  ".."/[range_desc, worker_desc],
+  ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
   ./db/snapdb_accounts
 
@@ -50,12 +50,6 @@ const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
 
-  numChunksMax = 2000
-    ## Bound for `numChunks()` (some fancy number)
-
-  addToFetchLoopMax = 4
-    ## Add some extra when calculating number of fetch/store rounds
-
 # ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
@@ -63,75 +57,51 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc numChunks(buddy: SnapBuddyRef): int =
-  var total = 0u64
-  for ivSet in buddy.data.pivotEnv.fetchAccounts.unprocessed:
-    total += ivSet.chunks.uint64
-  min(numChunksMax.uint64, total).int
-
-proc withMaxLen(
+proc dumpUnprocessed(
     buddy: SnapBuddyRef;
-    iv: NodeTagRange;
-    maxlen: UInt256;
-      ): NodeTagRange =
-  ## Reduce accounts interval to maximal size
-  if 0 < iv.len and iv.len <= maxLen:
-    iv
-  else:
-    NodeTagRange.new(iv.minPt, iv.minPt + (maxLen - 1.u256))
+    env: SnapPivotRef;
+      ): string =
+  ## Debugging ...
+  let
+    peer = buddy.peer
+    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    moan = proc(overlap: UInt256; iv: NodeTagRange) =
+      trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
+
+  env.fetchAccounts.unprocessed.dump(moan, 5)
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getUnprocessed(buddy: SnapBuddyRef): Result[NodeTagRange,void] =
+proc getUnprocessed(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ): Result[NodeTagRange,void] =
   ## Fetch an interval from one of the account range lists.
-  let
-    env = buddy.data.pivotEnv
-    accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
+  let accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
 
-  for ivSet in env.fetchAccounts.unprocessed:
-    let rc = ivSet.ge()
-    if rc.isOk:
-      let iv = buddy.withMaxLen(rc.value, accountRangeMax)
-      discard ivSet.reduce(iv)
-      return ok(iv)
-
-  err()
-
-proc putUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
-  ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].merge(iv)
-
-proc delUnprocessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
-  ## Shortcut
-  discard buddy.data.pivotEnv.fetchAccounts.unprocessed[1].reduce(iv)
-
-proc markGloballyProcessed(buddy: SnapBuddyRef; iv: NodeTagRange) =
-  ## Shortcut
-  discard buddy.ctx.data.coveredAccounts.merge(iv)
+  env.fetchAccounts.unprocessed.fetch accountRangeMax
 
 # ------------------------------------------------------------------------------
 #  Private functions: do the account fetching for one round
 # ------------------------------------------------------------------------------
 
-proc accountsRagefetchImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
+proc accountsRangefetchImpl(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ): Future[bool] {.async.} =
   ## Fetch accounts and store them in the database. Returns true while more
   ## data can probably be fetched.
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.data.pivotEnv
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
   # Get a range of accounts to fetch from
   let iv = block:
-    let rc = buddy.getUnprocessed()
+    let rc = buddy.getUnprocessed(env)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "currently all processed", peer, pivot
@@ -142,7 +112,7 @@ proc accountsRagefetchImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
   let dd = block:
     let rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
-      buddy.putUnprocessed(iv) # fail => interval back to pool
+      env.fetchAccounts.unprocessed.merge iv # fail => interval back to pool
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
@@ -161,44 +131,56 @@ proc accountsRagefetchImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
   #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
   #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
-  block:
-    let rc = ctx.data.snapDb.importAccounts(peer, stateRoot, iv.minPt, dd.data)
+  # Now, as we fully own the scheduler and the original interval can savely be
+  # placed back for a moment -- to be corrected below.
+  env.fetchAccounts.unprocessed.merge iv
+
+  # Processed accounts hashes are set up as a set of intervals which is needed
+  # if the data range returned from the network contains holes.
+  let processed = NodeTagRangeSet.init()
+  if 0 < dd.data.accounts.len:
+    discard processed.merge(iv.minPt, dd.data.accounts[^1].accKey.to(NodeTag))
+  else:
+    discard processed.merge iv
+
+  let dangling = block:
+    # No left boundary check needed. If there is a gap, the partial path for
+    # that gap is returned by the import function to be registered, below.
+    let rc = ctx.data.snapDb.importAccounts(
+      peer, stateRoot, iv.minPt, dd.data, noBaseBoundCheck = true)
     if rc.isErr:
       # Bad data, just try another peer
-      buddy.putUnprocessed(iv)
       buddy.ctrl.zombie = true
       when extraTraceMessages:
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
-          pivot, reqLen=iv.len, gotLen=dd.consumed.len, error=rc.error
+          pivot, reqLen=iv.len, gotLen=processed.total, error=rc.error
       return
+    rc.value
 
   # Statistics
   env.nAccounts.inc(gotAccounts)
 
-  # Register consumed intervals on the accumulator over all state roots
-  buddy.markGloballyProcessed(dd.consumed)
+  # Punch holes into the reproted range from the network if it contains holes.
+  for w in dangling:
+    discard processed.reduce(
+      w.partialPath.min(NodeKey).to(NodeTag),
+      w.partialPath.max(NodeKey).to(Nodetag))
 
-  # Register consumed and bulk-imported (well, not yet) accounts range
-  block registerConsumed:
-    block:
-      # Both intervals `min(iv)` and `min(dd.consumed)` are equal
-      let rc = iv - dd.consumed
-      if rc.isOk:
-        # Now, `dd.consumed` < `iv`, return some unused range
-        buddy.putUnprocessed(rc.value)
-        break registerConsumed
-    block:
-      # The processed interval might be a bit larger
-      let rc = dd.consumed - iv
-      if rc.isOk:
-        # Remove from unprocessed data. If it is not unprocessed, anymore
-        # then it was doubly processed which is ok.
-        buddy.delUnprocessed(rc.value)
-        break registerConsumed
-    # End registerConsumed
+  # Update book keeping
+  for w in processed.increasing:
+    # Remove the processed range from the batch of unprocessed ones.
+    env.fetchAccounts.unprocessed.reduce w
+    # Register consumed intervals on the accumulator over all state roots.
+    discard buddy.ctx.data.coveredAccounts.merge w
 
-  # Store accounts on the storage TODO list.
-  env.fetchStorage.merge dd.withStorage
+  # Register accounts with storage slots on the storage TODO list.
+  env.fetchStorageFull.merge dd.withStorage
+
+  when extraTraceMessages:
+    trace logTxt "request done", peer, pivot,
+      nCheckNodes=env.fetchAccounts.checkNodes.len,
+      nMissingNodes=env.fetchAccounts.missingNodes.len,
+      imported=processed.dump(), unprocessed=buddy.dumpUnprocessed(env)
 
   return true
 
@@ -208,27 +190,32 @@ proc accountsRagefetchImpl(buddy: SnapBuddyRef): Future[bool] {.async.} =
 
 proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
   ## Fetch accounts and store them in the database.
-  let numChunks = buddy.numChunks()
-  if 0 < numChunks:
+  let env = buddy.data.pivotEnv
+  if not env.fetchAccounts.unprocessed.isEmpty():
     let
       ctx = buddy.ctx
       peer = buddy.peer
-      env = buddy.data.pivotEnv
       pivot = "#" & $env.stateHeader.blockNumber # for logging
 
-      nFetchLoopMax = max(ctx.buddiesMax + 1, numChunks) + addToFetchLoopMax
-
     when extraTraceMessages:
-      trace logTxt "start", peer, pivot, nFetchLoopMax
+      trace logTxt "start", peer, pivot
 
     var nFetchAccounts = 0
-    while nFetchAccounts < nFetchLoopMax:
-      if not await buddy.accountsRagefetchImpl():
-        break
+    while not env.fetchAccounts.unprocessed.isEmpty() and
+          buddy.ctrl.running and
+          env == buddy.data.pivotEnv:
       nFetchAccounts.inc
+      if not await buddy.accountsRangefetchImpl(env):
+        break
+
+      # Clean up storage slots queue first it it becomes too large
+      let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+      if snapAccountsBuddyStoragesSlotsQuPrioThresh < nStoQu:
+        break
 
     when extraTraceMessages:
-      trace logTxt "done", peer, pivot, nFetchAccounts, nFetchLoopMax
+      trace logTxt "done", peer, pivot, nFetchAccounts,
+        runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------
 # End

@@ -28,11 +28,9 @@ type
     ComEmptyAccountsArguments
     ComEmptyPartialRange
     ComEmptyRequestArguments
-    ComMissingProof
     ComNetworkProblem
     ComNoAccountsForStateRoot
     ComNoByteCodesAvailable
-    ComNoDataForProof
     #ComNoHeaderAvailable -- unused, see get_block_header.nim
     ComNoStorageForAccounts
     ComNoTrieNodesAvailable
@@ -91,8 +89,7 @@ proc stopAfterSeriousComError*(
       # Otherwise try again some time later.
       await sleepAsync(comErrorsNoDataSleepMSecs.milliseconds)
 
-  of ComMissingProof,
-     ComAccountsMinTooSmall,
+  of ComAccountsMinTooSmall,
      ComAccountsMaxTooLarge,
      ComTooManyByteCodes,
      ComTooManyHeaders,
@@ -105,7 +102,6 @@ proc stopAfterSeriousComError*(
   of ComEmptyAccountsArguments,
      ComEmptyRequestArguments,
      ComEmptyPartialRange,
-     ComNoDataForProof,
      ComNothingSerious:
     discard
 

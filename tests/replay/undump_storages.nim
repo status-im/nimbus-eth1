@@ -189,7 +189,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
       if flds.len == 2:
         data.data.storages[^1].data.add SnapStorage(
           slotHash: Hash256.fromHex(flds[0]),
-          slotData:  flds[1].toByteSeq)
+          slotData: flds[1].toByteSeq)
         nSlots.dec
         if 0 < nSlots:
           continue
@@ -211,6 +211,11 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         nProofs.dec
         if nProofs <= 0:
           state = UndumpCommit
+          # KLUDGE: set base (field was later added)
+          if 0 < data.data.storages.len:
+            let topList = data.data.storages[^1]
+            if 0 < topList.data.len:
+              data.data.base = topList.data[0].slotHash.to(NodeTag)
         continue
       state = UndumpError
       say &"*** expected proof data, got {line}"

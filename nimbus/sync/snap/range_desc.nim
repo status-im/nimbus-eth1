@@ -9,8 +9,8 @@
 # distributed except according to those terms.
 
 import
-  std/[math, sequtils, hashes],
-  eth/common/eth_types_rlp,
+  std/[math, sequtils, strutils, hashes],
+  eth/[common, trie/nibbles],
   stew/[byteutils, interval_set],
   stint,
   ../../constants,
@@ -72,14 +72,36 @@ type
 
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
-    ## be incomplete and tthe `proof` is needed for proving validity.
+    ## be incomplete and the `proof` is needed for proving validity.
     storages*: seq[AccountSlots]    ## List of accounts and storage data
     proof*: SnapStorageProof        ## Boundary proofs for last entry
+    base*: NodeTag                  ## Lower limit for last entry w/proof
 
   AccountSlots* = object
     ## Account storage descriptor
     account*: AccountSlotsHeader
     data*: seq[SnapStorage]
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc padPartialPath(partialPath: NibblesSeq; dblNibble: byte): NodeKey =
+  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`
+  # Pad with zeroes
+  var padded: NibblesSeq
+
+  let padLen = 64 - partialPath.len
+  if 0 <= padLen:
+    padded = partialPath & dblNibble.repeat(padlen div 2).initNibbleRange
+    if (padLen and 1) == 1:
+      padded = padded & @[dblNibble].initNibbleRange.slice(1)
+  else:
+    let nope = seq[byte].default.initNibbleRange
+    padded = partialPath.slice(0,63) & nope # nope forces re-alignment
+
+  let bytes = padded.getBytes
+  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -117,6 +139,11 @@ proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
   ## Syntactic sugar
   n.u256.T
 
+proc min*(partialPath: Blob; T: type NodeKey): T =
+  (hexPrefixDecode partialPath)[1].padPartialPath(0)
+
+proc max*(partialPath: Blob; T: type NodeKey): T =
+  (hexPrefixDecode partialPath)[1].padPartialPath(0xff)
 
 proc digestTo*(data: Blob; T: type NodeKey): T =
   keccakHash(data).data.T
@@ -273,7 +300,7 @@ proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
 
 proc `$`*(nodeTag: NodeTag): string =
   if nodeTag == high(NodeTag):
-    "high(NodeTag)"
+    "2^256-1"
   elif nodeTag == 0.u256.NodeTag:
     "0"
   else:
@@ -316,6 +343,61 @@ proc `$`*(n: NodeSpecs): string =
     else:
       result &= "ditto"
   result &= ")"
+
+proc dump*(
+    ranges: openArray[NodeTagRangeSet];
+    moan: proc(overlap: UInt256; iv: NodeTagRange) {.gcsafe.};
+    printRangesMax = high(int);
+      ): string =
+  ## Dump/anlalyse range sets
+  var
+    cache: NodeTagRangeSet
+    ivTotal = 0.u256
+    ivCarry = false
+
+  if ranges.len == 1:
+    cache = ranges[0]
+    ivTotal = cache.total
+    if ivTotal == 0.u256 and 0 < cache.chunks:
+      ivCarry = true
+  else:
+    cache = NodeTagRangeSet.init()
+    for ivSet in ranges:
+      if ivSet.total == 0.u256 and 0 < ivSet.chunks:
+        ivCarry = true
+      elif ivTotal <= high(UInt256) - ivSet.total:
+        ivTotal += ivSet.total
+      else:
+        ivCarry = true
+      for iv in ivSet.increasing():
+        let n = cache.merge(iv)
+        if n != iv.len and not moan.isNil:
+          moan(iv.len - n, iv)
+
+  if 0 == cache.total and 0 < cache.chunks:
+    result = "2^256"
+    if not ivCarry:
+      result &= ":" & $ivTotal
+  else:
+    result = $cache.total
+    if ivCarry:
+      result &= ":2^256"
+    elif ivTotal != cache.total:
+      result &= ":" & $ivTotal
+
+  result &= ":"
+  if cache.chunks <= printRangesMax:
+    result &= toSeq(cache.increasing).mapIt($it).join(",")
+  else:
+    result &= toSeq(cache.increasing).mapIt($it)[0 ..< printRangesMax].join(",")
+    result &= " " & $(cache.chunks - printRangesMax) & " more .."
+
+proc dump*(
+    range: NodeTagRangeSet;
+    printRangesMax = high(int);
+      ): string =
+  ## Ditto
+  [range].dump(nil, printRangesMax)
 
 # ------------------------------------------------------------------------------
 # End

@@ -94,7 +94,8 @@ proc persistentStorageSlots(
 
 
 proc collectStorageSlots(
-    peer: Peer;
+    peer: Peer;               ## for log messages
+    base: NodeTag;            ## before or at first account entry in `data`
     slotLists: seq[SnapStorage];
       ): Result[seq[RLeafSpecs],HexaryDbError]
       {.gcsafe, raises: [Defect, RlpError].} =
@@ -102,6 +103,15 @@ proc collectStorageSlots(
   var rcSlots: seq[RLeafSpecs]
 
   if slotLists.len != 0:
+    let pathTag0 = slotLists[0].slotHash.to(NodeTag)
+
+    # Verify lower bound
+    if pathTag0 < base:
+      let error = LowerBoundAfterFirstEntry
+      trace "collectStorageSlots()", peer, base, item=0,
+        nSlotLists=slotLists.len, error
+      return err(error)
+
     # Add initial account
     rcSlots.add RLeafSpecs(
       pathTag: slotLists[0].slotHash.to(NodeTag),
@@ -126,38 +136,75 @@ proc collectStorageSlots(
 
 proc importStorageSlots(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
+    base: NodeTag;             ## before or at first account entry in `data`
     data: AccountSlots;        ## Account storage descriptor
-    proof: SnapStorageProof;   ## Account storage proof
-      ): Result[void,HexaryDbError]
+    proof: SnapStorageProof;   ## Storage slots proof data
+    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
+      ): Result[seq[NodeSpecs],HexaryDbError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
-  ## Preocess storage slots for a particular storage root
+  ## Process storage slots for a particular storage root. See `importAccounts()`
+  ## for comments on the return value.
   let
-    root = data.account.storageRoot.to(NodeKey)
-    tmpDb = SnapDbBaseRef.init(ps, ps.root, ps.peer)
+    tmpDb = SnapDbBaseRef.init(ps, data.account.storageRoot.to(NodeKey))
   var
     slots: seq[RLeafSpecs]
+    dangling: seq[NodeSpecs]
   if 0 < proof.len:
-    let rc = tmpDb.mergeProofs(ps.peer, root, proof)
+    let rc = tmpDb.mergeProofs(ps.peer, proof)
     if rc.isErr:
       return err(rc.error)
   block:
-    let rc = ps.peer.collectStorageSlots(data.data)
+    let rc = ps.peer.collectStorageSlots(base, data.data)
     if rc.isErr:
       return err(rc.error)
     slots = rc.value
-  block:
+
+  if 0 < slots.len:
+    var innerSubTrie: seq[NodeSpecs]
+    if 0 < proof.len:
+      # Inspect trie for dangling nodes. This is not a big deal here as the
+      # proof data is typically small.
+      let
+        proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
+        topTag = slots[^1].pathTag
+      for w in proofStats.dangling:
+        if base <= w.partialPath.max(NodeKey).to(NodeTag) and
+           w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
+          # Extract dangling links which are inside the accounts range
+          innerSubTrie.add w
+
+    # Build partial hexary trie
     let rc = tmpDb.hexaDb.hexaryInterpolate(
-      root, slots, bootstrap = (proof.len == 0))
+      tmpDb.root, slots, bootstrap = (proof.len == 0))
     if rc.isErr:
       return err(rc.error)
 
-  # Commit to main descriptor
-  for k,v in tmpDb.hexaDb.tab.pairs:
-    if not k.isNodeKey:
-      return err(UnresolvedRepairNode)
-    ps.hexaDb.tab[k] = v
+    # Collect missing inner sub-trees in the reconstructed partial hexary
+    # trie (if any).
+    let bottomTag = slots[0].pathTag
+    for w in innerSubTrie:
+      if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+        continue
+      # Verify that `base` is to the left of the first slot and there is
+      # nothing in between. Without proof, there can only be a complete
+      # set/list of slots. There must be a proof for an empty list.
+      if not noBaseBoundCheck and
+         w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
+        return err(LowerBoundProofError)
+      # Otherwise register left over entry
+      dangling.add w
 
-  ok()
+    # Commit to main descriptor
+    for k,v in tmpDb.hexaDb.tab.pairs:
+      if not k.isNodeKey:
+        return err(UnresolvedRepairNode)
+      ps.hexaDb.tab[k] = v
+
+  elif proof.len == 0:
+    # There must be a proof for an empty argument list.
+    return err(LowerBoundProofError)
+
+  ok(dangling)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -187,6 +234,7 @@ proc importStorageSlots*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
     persistent = false;        ## store data on disk
+    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): seq[HexaryNodeReport] =
   ## Validate and import storage slots (using proofs as received with the snap
   ## message `StorageRanges`). This function accumulates data in a memory table
@@ -213,9 +261,10 @@ proc importStorageSlots*(
   if 0 <= sTop:
     try:
       for n in 0 ..< sTop:
-        # These ones never come with proof data
+        # These ones always come without proof data => `NodeTag.default`
         itemInx = some(n)
-        let rc = ps.importStorageSlots(data.storages[n], @[])
+        let rc = ps.importStorageSlots(
+          NodeTag.default, data.storages[n], @[])
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
           trace "Storage slots item fails", peer, itemInx=n, nItems,
@@ -225,12 +274,15 @@ proc importStorageSlots*(
       # Final one might come with proof data
       block:
         itemInx = some(sTop)
-        let rc = ps.importStorageSlots(data.storages[sTop], data.proof)
+        let rc = ps.importStorageSlots(
+          data.base, data.storages[sTop], data.proof, noBaseBoundCheck)
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
           trace "Storage slots last item fails", peer, itemInx=sTop, nItems,
             nSlots=data.storages[sTop].data.len, proofs=data.proof.len,
             error=rc.error, nErrors=result.len
+        elif 0 < rc.value.len:
+          result.add HexaryNodeReport(slot: itemInx, dangling: rc.value)
 
       # Store to disk
       if persistent and 0 < ps.hexaDb.tab.len:
@@ -260,11 +312,12 @@ proc importStorageSlots*(
     pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
     peer: Peer;                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
+    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): seq[HexaryNodeReport] =
   ## Variant of `importStorages()`
   SnapDbStorageSlotsRef.init(
     pv,  Hash256().to(NodeKey), Hash256(), peer).importStorageSlots(
-      data, persistent = true)
+      data, persistent = true, noBaseBoundCheck)
 
 
 proc importRawStorageSlotsNodes*(

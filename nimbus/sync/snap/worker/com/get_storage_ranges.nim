@@ -104,19 +104,21 @@ proc getStorageRanges*(
     trace trSnapSendSending & "GetStorageRanges", peer, pivot,
       nAccounts, bytesLimit=snapRequestBytesLimit
 
-  let snStoRanges = block:
-    let rc = await buddy.getStorageRangesReq(stateRoot,
-      accounts.mapIt(it.accKey.to(Hash256)), accounts[0].subRange, pivot)
-    if rc.isErr:
-      return err(ComNetworkProblem)
-    if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
-        nAccounts
-      return err(ComResponseTimeout)
-    if nAccounts < rc.value.get.slotLists.len:
-      # Ooops, makes no sense
-      return err(ComTooManyStorageSlots)
-    rc.value.get
+  let
+    iv = accounts[0].subRange
+    snStoRanges = block:
+      let rc = await buddy.getStorageRangesReq(stateRoot,
+        accounts.mapIt(it.accKey.to(Hash256)), iv, pivot)
+      if rc.isErr:
+        return err(ComNetworkProblem)
+      if rc.value.isNone:
+        trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
+          nAccounts
+        return err(ComResponseTimeout)
+      if nAccounts < rc.value.get.slotLists.len:
+        # Ooops, makes no sense
+        return err(ComTooManyStorageSlots)
+      rc.value.get
 
   let
     nSlotLists = snStoRanges.slotLists.len
@@ -138,6 +140,10 @@ proc getStorageRanges*(
   # Assemble return structure for given peer response
   var dd = GetStorageRanges(data: AccountStorageRange(proof: snStoRanges.proof))
 
+  # Set the left proof boundary (if any)
+  if 0 < nProof and iv.isSome:
+    dd.data.base = iv.unsafeGet.minPt
+
   # Filter remaining `slots` responses:
   # * Accounts for empty ones go back to the `leftOver` list.
   for n in 0 ..< nSlotLists:
@@ -154,23 +160,23 @@ proc getStorageRanges*(
     # assigning empty slice is ok
     dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
 
-  # Ok, we have a proof now. What was it to be proved?
-  elif snStoRanges.slotLists[^1].len == 0:
-    return err(ComNoDataForProof) # Now way to prove an empty node set
-
   else:
-    # If the storage data for the last account comes with a proof, then the data
-    # set is incomplete. So record the missing part on the `dd.leftOver` list.
-    let
-      reqTop = if accounts[0].subRange.isNone: high(NodeTag)
-               else: accounts[0].subRange.unsafeGet.maxPt
-      respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
-    if respTop < reqTop:
-      dd.leftOver.add AccountSlotsHeader(
-        subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
-        accKey:      accounts[nSlotLists-1].accKey,
-        storageRoot: accounts[nSlotLists-1].storageRoot)
-    # assigning empty slice isa ok
+    # Ok, we have a proof now
+    if 0 < snStoRanges.slotLists[^1].len:
+      # If the storage data for the last account comes with a proof, then the
+      # data set is incomplete. So record the missing part on the `dd.leftOver`
+      # list.
+      let
+        reqTop = if accounts[0].subRange.isNone: high(NodeTag)
+                 else: accounts[0].subRange.unsafeGet.maxPt
+        respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+      if respTop < reqTop:
+        dd.leftOver.add AccountSlotsHeader(
+          subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
+          accKey:      accounts[nSlotLists-1].accKey,
+          storageRoot: accounts[nSlotLists-1].storageRoot)
+
+    # Do thew rest (assigning empty slice is ok)
     dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
 
   trace trSnapRecvReceived & "StorageRanges", peer, pivot, nAccounts,
