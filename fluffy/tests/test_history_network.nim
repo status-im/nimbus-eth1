@@ -120,9 +120,13 @@ procSuite "History Content Network":
         blockKey = BlockKey(blockHash: headerHash)
         contentKey = ContentKey(
           contentType: blockHeaderWithProof, blockHeaderWithProofKey: blockKey)
+        encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
-        contentId, SSZ.encode(headerWithProof))
+        encKey,
+        contentId,
+        SSZ.encode(headerWithProof)
+      )
 
     # Need to store the epoch accumulators to be able to do the block to hash
     # mapping
@@ -132,9 +136,13 @@ procSuite "History Content Network":
         contentKey = ContentKey(
           contentType: ContentType.epochAccumulator,
           epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash))
+        encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
-        contentId, SSZ.encode(epochAccumulator))
+        encKey,
+        contentId,
+        SSZ.encode(epochAccumulator)
+      )
 
     check:
       historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
@@ -196,7 +204,11 @@ procSuite "History Content Network":
     # node 1 will offer the content so it needs to have it in its database
     for contentInfo in contentInfos:
       let id = toContentId(contentInfo.contentKey)
-      historyNode1.portalProtocol.storeContent(id, contentInfo.content)
+      historyNode1.portalProtocol.storeContent(
+        contentInfo.contentKey,
+        id,
+        contentInfo.content
+      )
 
     # Offering 1 content item too much which should result in a discv5 packet
     # that is too large and thus not get any response.
@@ -276,7 +288,11 @@ procSuite "History Content Network":
 
     for contentInfo in contentInfos:
       let id = toContentId(contentInfo.contentKey)
-      historyNode1.portalProtocol.storeContent(id, contentInfo.content)
+      historyNode1.portalProtocol.storeContent(
+        contentInfo.contentKey,
+        id,
+        contentInfo.content
+      )
 
       let offerResult = await historyNode1.portalProtocol.offer(
         historyNode2.localNode(), @[contentInfo])

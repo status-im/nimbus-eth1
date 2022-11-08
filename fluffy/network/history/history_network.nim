@@ -35,8 +35,8 @@ type
 
   Block* = (BlockHeader, BlockBody)
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
-  some(toContentId(contentKey))
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+  ok(toContentId(contentKey))
 
 func encodeKey(k: ContentKey): (ByteList, ContentId) =
   let keyEncoded = encode(k)
@@ -257,9 +257,7 @@ proc getContentFromDb(
   else:
     none(T)
 
-proc dbGetHandler(db: ContentDB, contentId: ContentId):
-    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
-  db.get(contentId)
+
 
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
@@ -323,7 +321,7 @@ proc getVerifiedBlockHeader*(
           headerContent.content
         )
 
-        n.portalProtocol.storeContent(contentId, headerContent.content)
+        n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
 
         return some(res.get())
     else:
@@ -364,7 +362,7 @@ proc getBlockHeader*(
         headerContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, headerContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
 
       return some(res.get())
     else:
@@ -411,7 +409,7 @@ proc getBlockBody*(
         bodyContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, bodyContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, bodyContent.content)
 
       return some(res.get())
     else:
@@ -483,7 +481,7 @@ proc getReceipts*(
         receiptsContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, receiptsContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, receiptsContent.content)
 
       return some(res.get())
     else:
@@ -534,7 +532,7 @@ proc getEpochAccumulator(
         accumulatorContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, accumulatorContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, accumulatorContent.content)
 
       return some(epochAccumulator)
     else:
@@ -689,10 +687,13 @@ proc new*(
     contentQueue = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
 
     stream = streamManager.registerNewStream(contentQueue)
+
     portalProtocol = PortalProtocol.new(
-      baseProtocol, historyProtocolId, contentDB,
-      toContentIdHandler, dbGetHandler, stream, bootstrapRecords,
+      baseProtocol, historyProtocolId,
+      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
       config = portalConfig)
+
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   HistoryNetwork(
     portalProtocol: portalProtocol,
@@ -716,7 +717,7 @@ proc validateContent(
 
       let contentId = contentIdOpt.get()
 
-      n.portalProtocol.storeContent(contentId, contentItem)
+      n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
 

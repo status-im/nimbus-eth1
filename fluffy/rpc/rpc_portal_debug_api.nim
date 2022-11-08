@@ -26,7 +26,7 @@ proc installPortalDebugApiHandlers*(
     let contentId = p.toContentId(key)
 
     if contentId.isSome():
-      p.storeContent(contentId.get(), hexToSeqByte(content))
+      p.storeContent(key, contentId.get(), hexToSeqByte(content))
 
       return true
     else:

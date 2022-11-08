@@ -50,7 +50,9 @@ procSuite "Light client Content Network":
       bootstrapContentId = toContentId(bootstrapContentKeyEncoded)
 
     lcNode2.portalProtocol().storeContent(
-      bootstrapContentId, encodeBootstrapForked(forks.altair, bootstrap)
+      bootstrapContentKeyEncoded,
+      bootstrapContentId,
+      encodeBootstrapForked(forks.altair, bootstrap)
     )
 
     let bootstrapFromNetworkResult =
@@ -86,24 +88,29 @@ procSuite "Light client Content Network":
         contentType: lightClientFinalityUpdate,
         lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
       )
-      finalityUdpateId = toContentId(encode(finalityUpdateKey))
+      finalityKeyEnc = encode(finalityUpdateKey)
+      finalityUdpateId = toContentId(finalityKeyEnc)
 
       optimistUpdateKey = ContentKey(
         contentType: lightClientOptimisticUpdate,
         lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
       )
-
-      optimisticUpdateId = toContentId(encode(optimistUpdateKey))
+      optimisticKeyEnc = encode(optimistUpdateKey)
+      optimisticUpdateId = toContentId(optimisticKeyEnc)
 
 
     # This silently assumes that peer stores only one latest update, under
     # the contentId coresponding to latest update content key
     lcNode2.portalProtocol().storeContent(
-      finalityUdpateId, encodeFinalityUpdateForked(forks.altair, finalityUpdate)
+      finalityKeyEnc,
+      finalityUdpateId,
+      encodeFinalityUpdateForked(forks.altair, finalityUpdate)
     )
 
     lcNode2.portalProtocol().storeContent(
-      optimisticUpdateId, encodeOptimisticUpdateForked(forks.altair, optimisticUpdate)
+      optimisticKeyEnc,
+      optimisticUpdateId,
+      encodeOptimisticUpdateForked(forks.altair, optimisticUpdate)
     )
 
     let

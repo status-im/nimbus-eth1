@@ -16,7 +16,7 @@ import
   bearssl, ssz_serialization, metrics, faststreams,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2,
     nodes_verification, lru],
-  ".."/../[content_db, seed_db],
+  ../../seed_db,
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
@@ -79,14 +79,6 @@ declareHistogram portal_content_enrs_packed,
   "Portal wire protocol amount of enrs packed in a content message",
   labels = ["protocol_id"], buckets = enrsBuckets
 
-declareCounter portal_pruning_counter,
-  "Number of pruning event which happened during node lifetime",
-  labels = ["protocol_id"]
-
-declareGauge portal_pruning_deleted_elements,
-  "Number of elements delted in last pruning",
-  labels = ["protocol_id"]
-
 logScope:
   topics = "portal_wire"
 
@@ -129,11 +121,18 @@ const
 
 type
   ToContentIdHandler* =
-    proc(contentKey: ByteList): Option[ContentId] {.raises: [Defect], gcsafe.}
+    proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [Defect], gcsafe.}
 
   DbGetHandler* =
-    proc(contentDB: ContentDB, contentId: ContentId):
-      Option[seq[byte]] {.raises: [Defect], gcsafe.}
+    proc(
+      contentKey: ByteList,
+      contentId: ContentId): results.Opt[seq[byte]] {.raises: [Defect], gcsafe.}
+
+  DbStoreHandler* =
+    proc(
+      contentKey: ByteList,
+      contentId: ContentId,
+      content: seq[byte]) {.raises: [Defect], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
@@ -158,9 +157,9 @@ type
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
-    contentDB*: ContentDB
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
+    dbPut*: DbStoreHandler
     radiusConfig: RadiusConfig
     dataRadius*: UInt256
     bootstrapRecords*: seq[Record]
@@ -313,16 +312,18 @@ proc handleFindContent(
     maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
-  let contentIdOpt = p.toContentId(fc.contentKey)
-  if contentIdOpt.isNone:
+  let contentIdResult = p.toContentId(fc.contentKey)
+
+  if contentIdResult.isErr:
     # Return empty response when content key validation fails
     # TODO: Better would be to return no message at all? Needs changes on
     # discv5 layer.
     return @[]
 
-  let contentOpt = p.dbGet(p.contentDB, contentIdOpt.get())
-  if contentOpt.isSome():
-    let content = contentOpt.get()
+  let contentResult = p.dbGet(fc.contentKey, contentIdResult.get())
+
+  if contentResult.isOk():
+    let content = contentResult.get()
     if content.len <= maxPayloadSize:
       encodeMessage(ContentMessage(
         contentMessageType: contentType, content: ByteList(content)))
@@ -335,7 +336,7 @@ proc handleFindContent(
     # Don't have the content, send closest neighbours to content id.
     let
       closestNodes = p.routingTable.neighbours(
-        NodeId(contentIdOpt.get()), seenOnly = true)
+        NodeId(contentIdResult.get()), seenOnly = true)
       enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
     portal_content_enrs_packed.observe(enrs.len().int64)
 
@@ -350,11 +351,11 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # want any of the content? Reply with empty bitlist and a connectionId of
   # all zeroes but don't actually allow an uTP connection?
   for i, contentKey in o.contentKeys:
-    let contentIdOpt = p.toContentId(contentKey)
-    if contentIdOpt.isSome():
-      let contentId = contentIdOpt.get()
+    let contentIdResult = p.toContentId(contentKey)
+    if contentIdResult.isOk():
+      let contentId = contentIdResult.get()
       if p.inRange(contentId):
-        if not p.contentDB.contains(contentId):
+        if p.dbGet(contentKey, contentId).isErr:
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
     else:
@@ -440,7 +441,6 @@ proc getInitialRadius(rc: RadiusConfig): UInt256 =
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
-    contentDB: ContentDB,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     stream: PortalStream,
@@ -458,7 +458,6 @@ proc new*(T: type PortalProtocol,
       baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits,
       baseProtocol.rng, distanceCalculator),
     baseProtocol: baseProtocol,
-    contentDB: contentDB,
     toContentId: toContentId,
     dbGet: dbGet,
     radiusConfig: config.radiusConfig,
@@ -799,15 +798,17 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     of Database:
       for i, b in m.contentKeys:
         if b:
-          let contentIdOpt = p.toContentId(o.contentKeys[i])
-          if contentIdOpt.isSome():
+          let
+            contentKey = o.contentKeys[i]
+            contentIdResult = p.toContentId(contentKey)
+          if contentIdResult.isOk():
             let
-              contentId = contentIdOpt.get()
-              maybeContent = p.contentDB.get(contentId)
+              contentId = contentIdResult.get()
+              contentResult = p.dbGet(contentKey, contentId)
 
             var output = memoryOutput()
-            if maybeContent.isSome():
-              let content = maybeContent.get()
+            if contentResult.isOk():
+              let content = contentResult.get()
 
               output.write(toBytes(content.lenu32, Leb128).toOpenArray())
               output.write(content)
@@ -1186,68 +1187,13 @@ proc neighborhoodGossip*(
       await p.offerQueue.addLast(req)
     return numberOfGossipedNodes
 
-proc adjustRadius(
+proc storeContent*(
     p: PortalProtocol,
-    fractionOfDeletedContent: float64,
-    furthestElementInDbDistance: UInt256) =
-
-  if fractionOfDeletedContent == 0.0:
-    # even though pruning was triggered no content was deleted, it could happen
-    # in pathological case of really small database with really big values.
-    # log it as error as it should not happenn
-    error "Database pruning attempt resulted in no content deleted"
-    return
-
-  # we need to invert fraction as our Uin256 implementation does not support
-  # multiplication by float
-  let invertedFractionAsInt = int64(1.0 / fractionOfDeletedContent)
-
-  let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
-
-  # Chose larger value to avoid situation, where furthestElementInDbDistance
-  # is super close to local id, so local radius would end up too small
-  # to accept any more data to local database
-  # If scaledRadius radius will be larger it will still contain all elements
-  let newRadius = max(scaledRadius, furthestElementInDbDistance)
-
-  debug "Database pruned",
-    oldRadius = p.dataRadius,
-    newRadius = newRadius,
-    furthestDistanceInDb = furthestElementInDbDistance,
-    fractionOfDeletedContent = fractionOfDeletedContent
-
-  # both scaledRadius and furthestElementInDbDistance are smaller than current
-  # dataRadius, so the radius will constantly decrease through the node
-  # life time
-  p.dataRadius = newRadius
-
-proc storeContent*(p: PortalProtocol, key: ContentId, content: openArray[byte]) =
-  # always re-check that key is in node range, to make sure that invariant that
-  # all keys in database are always in node range hold.
-  # TODO current silent assumption is that both contentDb and portalProtocol are
-  # using the same xor distance function
-  if p.inRange(key):
-    case p.radiusConfig.kind:
-    of Dynamic:
-      # In case of dynamic radius setting we obey storage limits and adjust
-      # radius to store network fraction corresponding to those storage limits.
-      let res = p.contentDB.put(key, content, p.baseProtocol.localNode.id)
-      if res.kind == DbPruned:
-        portal_pruning_counter.inc(labelValues = [$p.protocolId])
-        portal_pruning_deleted_elements.set(
-          res.numOfDeletedElements.int64,
-          labelValues = [$p.protocolId]
-        )
-
-        p.adjustRadius(
-          res.fractionOfDeletedContent,
-          res.furthestStoredElementDistance
-        )
-    of Static:
-      # If the config is set statically, radius is not adjusted, and is kept
-      # constant thorugh node life time, also database max size is disabled
-      # so we will effectivly store fraction of the network
-      p.contentDB.put(key, content)
+    contentKey: ByteList,
+    contentId: ContentId,
+    content: seq[byte]) =
+  doAssert(p.dbPut != nil)
+  p.dbPut(contentKey, contentId, content)
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
