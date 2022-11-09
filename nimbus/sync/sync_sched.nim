@@ -50,11 +50,11 @@
 ##   This worker peer method is invoked if the peer-local flag
 ##   `buddy.ctrl.multiOk` is set `false` which is the default mode. This flag
 ##   is updated by the worker peer when deemed appropriate.
-##   + For all workers, there can be only one `runSingle()` function active
-##     simultaneously for all worker peers.
-##   + There will be no `runMulti()` function active for the same worker peer
-##     simultaneously
-##   + There will be no `runPool()` iterator active simultaneously.
+##   + For all worker peerss, there can be only one `runSingle()` function
+##     active simultaneously.
+##   + There will be no `runMulti()` function active for the very same worker
+##     peer that runs the `runSingle()` function.
+##   + There will be no `runPool()` iterator active.
 ##
 ##   Note that this function runs in `async` mode.
 ##
@@ -99,14 +99,27 @@ type
     pool: PeerPool              ## For starting the system
     buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
     tickerOk: bool              ## Ticker logger
-    singleRunLock: bool         ## For worker initialisation
-    monitorLock: bool           ## For worker monitor
-    activeMulti: int            ## Activated runners
+    singleRunLock: bool         ## Some single mode runner is activated
+    monitorLock: bool           ## Monitor mode is activated
+    activeMulti: int            ## Number of activated runners in multi-mode
 
   RunnerBuddyRef[S,W] = ref object
     ## Per worker peer descriptor
     dsc: RunnerSyncRef[S,W]     ## Scheduler descriptor
     worker: BuddyRef[S,W]       ## Worker peer data
+
+const
+  execLoopTimeElapsedMin = 50.milliseconds
+    ## Minimum elapsed time the event loop needs for a single lap. If it
+    ## is faster, asynchroneous sleep seconds are added. in order to avoid
+    ## cpu overload.
+
+  execLoopTaskSwitcher = 1.nanoseconds
+    ## Asynchroneous waiting time at the end of the exec loop unless some sleep
+    ## seconds were added as decribed by `execLoopTimeElapsedMin`, above.
+
+  execLoopPollingTime = 50.milliseconds
+    ## Single asynchroneous time interval wait state for event polling
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -129,67 +142,65 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
     peer = worker.peer
 
   # Continue until stopped
-  while not worker.ctrl.stopped:
-    if dsc.monitorLock:
-      await sleepAsync(50.milliseconds)
-      continue
+  block taskExecLoop:
+    while worker.ctrl.running:
+      # Enforce minimum time spend on this loop
+      let startMoment = Moment.now()
 
-    # Invoke `runPool()` over all buddies if requested
-    if ctx.poolMode:
-      # Grab `monitorLock` (was `false` as checked above) and wait until clear
-      # to run as the only activated instance.
-      dsc.monitorLock = true
-      block poolModeExec:
-        while 0 < dsc.activeMulti:
-          await sleepAsync(50.milliseconds)
+      if dsc.monitorLock:
+        discard # suspend some time at the end of loop body
+
+      # Invoke `runPool()` over all buddies if requested
+      elif ctx.poolMode:
+        # Grab `monitorLock` (was `false` as checked above) and wait until
+        # clear to run as the only activated instance.
+        dsc.monitorLock = true
+        while 0 < dsc.activeMulti or dsc.singleRunLock:
+          await sleepAsync execLoopPollingTime
           if worker.ctrl.stopped:
-            break poolModeExec
-        while dsc.singleRunLock:
-          await sleepAsync(50.milliseconds)
-          if worker.ctrl.stopped:
-            break poolModeExec
+            dsc.monitorLock = false
+            break taskExecLoop
         var count = dsc.buddies.len
         for w in dsc.buddies.nextValues:
           count.dec
           worker.runPool(count == 0)
-        # End `block poolModeExec`
-      dsc.monitorLock = false
-      continue
+        dsc.monitorLock = false
 
-    # Rotate connection table so the most used entry is at the top/right
-    # end. So zombies will end up leftish.
-    discard dsc.buddies.lruFetch(peer.hash)
+      else:
+        # Rotate connection table so the most used entry is at the top/right
+        # end. So zombies will end up leftish.
+        discard dsc.buddies.lruFetch(peer.hash)
 
-    # Allow task switch
-    await sleepAsync(1.milliseconds)
-    if worker.ctrl.stopped:
-      break
+        # Multi mode
+        if worker.ctrl.multiOk:
+          if not dsc.singleRunLock:
+            dsc.activeMulti.inc
+            # Continue doing something, work a bit
+            await worker.runMulti()
+            dsc.activeMulti.dec
 
-    # Multi mode
-    if worker.ctrl.multiOk:
-      if not dsc.singleRunLock:
-        dsc.activeMulti.inc
-        # Continue doing something, work a bit
-        await worker.runMulti()
-        dsc.activeMulti.dec
-      continue
+        elif dsc.singleRunLock:
+          # Some other process is running single mode
+          discard # suspend some time at the end of loop body
 
-    # Single mode as requested. The `multiOk` flag for this worker was just
-    # found `false` in the pervious clause.
-    if not dsc.singleRunLock:
-      # Lock single instance mode and wait for other workers to finish
-      dsc.singleRunLock = true
-      block singleModeExec:
-        while 0 < dsc.activeMulti:
-          await sleepAsync(50.milliseconds)
-          if worker.ctrl.stopped:
-            break singleModeExec
-        # Run single instance and release afterwards
-        await worker.runSingle()
-        # End `block singleModeExec`
-      dsc.singleRunLock = false
+        else:
+          # Start single instance mode by grabbing `singleRunLock` (was
+          # `false` as checked above).
+          dsc.singleRunLock = true
+          await worker.runSingle()
+          dsc.singleRunLock = false
 
-    # End while
+      if worker.ctrl.stopped:
+        break taskExecLoop
+
+      # Enforce minimum time spend on this loop so we never each 100% cpu load
+      # caused by some empty sub-tasks which are out of this scheduler control.
+      let
+        elapsed = Moment.now() - startMoment
+        suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+                  else: execLoopTimeElapsedMin - elapsed
+      await sleepAsync suspend
+      # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`
   worker.runStop()

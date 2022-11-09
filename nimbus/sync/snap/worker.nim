@@ -274,10 +274,10 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
   ## is set `false` which is the default mode. This flag is updated by the
   ## worker when deemed appropriate.
-  ## * For all workers, there can be only one `runSingle()` function active
-  ##   simultaneously for all worker peers.
-  ## * There will be no `runMulti()` function active for the same worker peer
-  ##   simultaneously
+  ## * For all worker peerss, there can be only one `runSingle()` function
+  ##   active simultaneously.
+  ## * There will be no `runMulti()` function active for the very same worker
+  ##   peer that runs the `runSingle()` function.
   ## * There will be no `runPool()` iterator active simultaneously.
   ##
   ## Note that this function runs in `async` mode.
@@ -329,6 +329,8 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
 
           # FIXME: This check might not be needed. It will visit *every* node
           #        in the hexary trie for checking the account leaves.
+          #
+          #        Note: This is insane on main net
           if buddy.checkAccountsTrieIsComplete(env):
             env.accountsState = HealerDone
 
