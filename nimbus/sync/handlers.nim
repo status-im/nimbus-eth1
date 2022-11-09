@@ -1,26 +1,153 @@
 import
-  chronicles,
+  std/[tables, times, hashes, sets],
+  chronicles, chronos,
   eth/[common, p2p, trie/db],
-  ./types,
+  eth/p2p/peer_pool,
+  "."/[types, protocol],
   ./protocol/eth/eth_types,
   ./protocol/trace_config, # gossip noise control
   ../db/db_chain,
   ../p2p/chain,
-  ../utils/tx_pool
+  ../utils/tx_pool,
+  ../utils/tx_pool/tx_item
 
 type
+  HashToTime = TableRef[Hash256, Time]
+
   EthWireRef* = ref object of EthWireBase
     db: BaseChainDB
     chain: Chain
     txPool: TxPoolRef
-    disablePool: bool
+    peerPool: PeerPool
+    disableTxPool: bool
+    knownByPeer: Table[Peer, HashToTime]
+    pending: HashSet[Hash256]
+    lastCleanup: Time
 
-proc new*(_: type EthWireRef, chain: Chain, txPool: TxPoolRef): EthWireRef =
-  EthWireRef(
+const
+  NUM_PEERS_REBROADCAST_QUOTIENT = 4
+  POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
+
+proc hash(peer: Peer): hashes.Hash =
+  hash(peer.remote)
+
+proc cleanupKnownByPeer(ctx: EthWireRef) =
+  let now = getTime()
+  var tmp = initHashSet[Hash256]()
+  for _, map in ctx.knownByPeer:
+    for hash, time in map:
+      if time - now >= POOLED_STORAGE_TIME_LIMIT:
+        tmp.incl hash
+    for hash in tmp:
+      map.del(hash)
+    tmp.clear()
+
+  ctx.lastCleanup = now
+
+proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer) =
+  var map: HashToTime
+  if not ctx.knownByPeer.take(peer, map):
+    map = newTable[Hash256, Time]()
+
+  for txHash in txHashes:
+    if txHash notin map:
+      map[txHash] = getTime()
+
+proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer, newHashes: var seq[Hash256]) =
+  var map: HashToTime
+  if not ctx.knownByPeer.take(peer, map):
+    map = newTable[Hash256, Time]()
+
+  newHashes = newSeqOfCap[Hash256](txHashes.len)
+  for txHash in txHashes:
+    if txHash notin map:
+      map[txHash] = getTime()
+      newHashes.add txHash
+
+proc sendNewTxHashes(ctx: EthWireRef,
+                     txHashes: seq[Hash256],
+                     peers: seq[Peer]): Future[void] {.async.} =
+  for peer in peers:
+    # Add to known tx hashes and get hashes still to send to peer
+    var hashesToSend: seq[Hash256]
+    ctx.addToKnownByPeer(txHashes, peer, hashesToSend)
+
+    # Broadcast to peer if at least 1 new tx hash to announce
+    if hashesToSend.len > 0:
+      await peer.newPooledTransactionHashes(hashesToSend)
+
+proc sendTransactions(ctx: EthWireRef,
+                      txHashes: seq[Hash256],
+                      txs: seq[Transaction],
+                      peers: seq[Peer]): Future[void] {.async.} =
+  for peer in peers:
+    # This is used to avoid re-sending along pooledTxHashes
+    # announcements/re-broadcasts
+    ctx.addToKnownByPeer(txHashes, peer)
+    await peer.transactions(txs)
+
+proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
+  let res = ctx.txPool.getItem(txHash)
+  res.isOk
+
+proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool =
+  let res = ctx.txPool.getItem(txHash)
+  if res.isErr: return false
+  res.get().reject == txInfoOk
+
+proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
+  # do not send back tx or txhash to thisPeer
+  for peer in peers(ctx.peerPool):
+    if peer != thisPeer:
+      result.add peer
+
+proc onPeerConnected(ctx: EthWireRef, peer: Peer) =
+  if ctx.disableTxPool:
+    return
+
+  var txHashes = newSeqOfCap[Hash256](ctx.txPool.numTxs)
+  for txHash, item in okPairs(ctx.txPool):
+    txHashes.add txHash
+
+  if txHashes.len == 0:
+    return
+
+  debug "announce tx hashes to newly connected peer",
+    number = txHashes.len
+
+  asyncSpawn ctx.sendNewTxHashes(txHashes, @[peer])
+
+proc onPeerDisconnected(ctx: EthWireRef, peer: Peer) =
+  debug "ethwire: remove peer from knownByPeer",
+    peer
+
+  ctx.knownByPeer.del(peer)
+
+proc setupPeerObserver(ctx: EthWireRef) =
+  var po = PeerObserver(
+    onPeerConnected:
+      proc(p: Peer) {.gcsafe.} =
+        ctx.onPeerConnected(p),
+    onPeerDisconnected:
+      proc(p: Peer) {.gcsafe.} =
+        ctx.onPeerDisconnected(p))
+  po.setProtocol eth
+  ctx.peerPool.addObserver(ctx, po)
+
+proc new*(_: type EthWireRef,
+          chain: Chain,
+          txPool: TxPoolRef,
+          peerPool: PeerPool): EthWireRef =
+  let ctx = EthWireRef(
     db: chain.db,
     chain: chain,
-    txPool: txPool
+    txPool: txPool,
+    peerPool: peerPool,
+    lastCleanup: getTime()
   )
+
+  ctx.setupPeerObserver()
+  ctx
 
 proc notEnabled(name: string) =
   debug "Wire handler method is disabled", meth = name
@@ -28,8 +155,8 @@ proc notEnabled(name: string) =
 proc notImplemented(name: string) =
   debug "Wire handler method not implemented", meth = name
 
-proc poolEnabled*(ctx: EthWireRef; ena: bool) =
-  ctx.disablePool = not ena
+proc txPoolEnabled*(ctx: EthWireRef; ena: bool) =
+  ctx.disableTxPool = not ena
 
 method getStatus*(ctx: EthWireRef): EthState {.gcsafe.} =
   let
@@ -121,15 +248,106 @@ method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader] {
       result.add foundBlock
 
 method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction]) {.gcsafe.} =
-  if ctx.disablePool:
+  if ctx.disableTxPool:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxs")
-  else:
-    ctx.txPool.jobAddTxs(txs)
+    return
+
+  if txs.len == 0:
+    return
+
+  debug "received new transactions",
+    number = txs.len
+
+  if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
+    ctx.cleanupKnownByPeer()
+
+  var txHashes = newSeqOfCap[Hash256](txs.len)
+  for tx in txs:
+    txHashes.add rlpHash(tx)
+
+  ctx.addToKnownByPeer(txHashes, peer)
+  ctx.txPool.jobAddTxs(txs)
+
+  var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
+  var validTxs = newSeqOfCap[Transaction](txHashes.len)
+  for i, txHash in txHashes:
+    if ctx.inPoolAndOk(txHash):
+      newTxHashes.add txHash
+      validTxs.add txs[i]
+
+  let
+    peers = ctx.getPeers(peer)
+    numPeers = peers.len
+    sendFull = max(1, numPeers div NUM_PEERS_REBROADCAST_QUOTIENT)
+
+  if numPeers == 0 or validTxs.len == 0:
+    return
+
+  asyncSpawn ctx.sendTransactions(txHashes, validTxs, peers[0..<sendFull])
+
+  asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull..^1])
+
+proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Future[void] {.async.} =
+  debug "fetchTx: requesting txs",
+    number = reqHashes.len
+
+  let res = await peer.getPooledTransactions(reqHashes)
+  if res.isNone:
+    error "not able to get pooled transactions"
+    return
+
+  let txs = res.get()
+  debug "fetchTx: received requested txs",
+    number = txs.transactions.len
+
+  # Remove from pending list regardless if tx is in result
+  for tx in txs.transactions:
+    let txHash = rlpHash(tx)
+    ctx.pending.excl txHash
+
+  ctx.txPool.jobAddTxs(txs.transactions)
+
+  var newTxHashes = newSeqOfCap[Hash256](reqHashes.len)
+  for txHash in reqHashes:
+    if ctx.inPoolAndOk(txHash):
+      newTxHashes.add txHash
+
+  let peers = ctx.getPeers(peer)
+  if peers.len == 0:
+    return
+
+  await ctx.sendNewTxHashes(newTxHashes, peers)
 
 method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) {.gcsafe.} =
-  when trMissingOrDisabledGossipOk:
-    notImplemented("handleAnnouncedTxsHashes")
+  if ctx.disableTxPool:
+    when trMissingOrDisabledGossipOk:
+      notImplemented("handleAnnouncedTxsHashes")
+    return
+
+  if txHashes.len == 0:
+    return
+
+  if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
+    ctx.cleanupKnownByPeer()
+
+  ctx.addToKnownByPeer(txHashes, peer)
+  var reqHashes = newSeqOfCap[Hash256](txHashes.len)
+  for txHash in txHashes:
+    if txHash in ctx.pending or ctx.inPool(txHash):
+      continue
+    reqHashes.add txHash
+
+  if reqHashes.len == 0:
+    return
+
+  debug "handleAnnouncedTxsHashes: received new tx hashes",
+    number = reqHashes.len
+
+  for txHash in reqHashes:
+    ctx.pending.incl txHash
+
+  asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt) {.gcsafe.} =
   notImplemented("handleNewBlock")

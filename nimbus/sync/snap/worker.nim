@@ -220,8 +220,11 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  noExceptionOops("worker.setup()"):
-    ctx.ethWireCtx.poolEnabled(false)
+  # I have implemented tx exchange in
+  # eth wire handler. Need the txpool
+  # enabled. --andri
+  #noExceptionOops("worker.setup()"):
+    #ctx.ethWireCtx.txPoolEnabled(false)
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)

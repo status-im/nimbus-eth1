@@ -138,7 +138,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
-    let ethWireHandler = EthWireRef.new(nimbus.chainRef, nimbus.txPool)
+    let ethWireHandler = EthWireRef.new(
+      nimbus.chainRef,
+      nimbus.txPool,
+      nimbus.ethNode.peerPool
+    )
     nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
     of SyncMode.Snap:

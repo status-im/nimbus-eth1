@@ -106,7 +106,7 @@
 ##   from previous *state roots* that have not changed.
 
 import
-  std/sequtils,
+  std/[sequtils, tables],
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
