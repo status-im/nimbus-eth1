@@ -273,17 +273,19 @@ proc stop*(buddy: SnapBuddyRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc runSingle*(buddy: SnapBuddyRef) {.async.} =
-  ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
-  ## is set `false` which is the default mode. This flag is updated by the
-  ## worker when deemed appropriate.
-  ## * For all worker peerss, there can be only one `runSingle()` function
-  ##   active simultaneously.
-  ## * There will be no `runMulti()` function active for the very same worker
-  ##   peer that runs the `runSingle()` function.
-  ## * There will be no `runPool()` iterator active simultaneously.
+proc runDaemon*(ctx: SnapCtxRef) {.async.} =
+  ## Enabled while `ctx.daemon` is `true`
   ##
-  ## Note that this function runs in `async` mode.
+  let nPivots = ctx.data.pivotTable.len
+  trace "I am the mighty recovery daemon ... stopped for now", nPivots
+  # To be populated ...
+  ctx.daemon = false
+
+
+proc runSingle*(buddy: SnapBuddyRef) {.async.} =
+  ## Enabled while
+  ## * `buddy.ctrl.multiOk` is `false`
+  ## * `buddy.ctrl.poolMode` is `false`
   ##
   let peer = buddy.peer
   # This pivot finder one harmonises assigned difficulties of at least two
@@ -299,18 +301,7 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
 
 
 proc runPool*(buddy: SnapBuddyRef, last: bool) =
-  ## Ocne started, the function `runPool()` is called for all worker peers in
-  ## a row (as the body of an iteration.) There will be no other worker peer
-  ## functions activated simultaneously.
-  ##
-  ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
-  ## `true` (default is `false`.) It is the responsibility of the `runPool()`
-  ## instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-  ## peer instance.
-  ##
-  ## The argument `last` is set `true` if the last entry is reached.
-  ##
-  ## Note that this function does not run in `async` mode.
+  ## Enabled when `buddy.ctrl.poolMode` is `true`
   ##
   let ctx = buddy.ctx
   if ctx.poolMode:
@@ -349,9 +340,9 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
-  ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
-  ## `true` which is typically done after finishing `runSingle()`. This
-  ## instance can be simultaneously active for all peer workers.
+  ## Enabled while
+  ## * `buddy.ctrl.multiOk` is `true`
+  ## * `buddy.ctrl.poolMode` is `false`
   ##
   let
     ctx = buddy.ctx

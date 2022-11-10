@@ -20,6 +20,13 @@
 ## *runRelease(ctx: CtxRef[S])*
 ##   Global clean up, done with all the worker peers.
 ##
+## *runDaemon(ctx: CtxRef[S]) {.async.}*
+##   Global background job that will be re-started as long as the variable
+##   `ctx.daemon` is set `true`. If that job was stopped due to setting
+##   `ctx.daemon` to `false`, it will be restarted when reset to `true` when
+##   there is some activity on the `runPool()`, `runSingle()`, or `runMulti()`
+##   functions.
+##
 ##
 ## *runStart(buddy: BuddyRef[S,W]): bool*
 ##   Initialise a new worker peer.
@@ -99,6 +106,7 @@ type
     pool: PeerPool              ## For starting the system
     buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
     tickerOk: bool              ## Ticker logger
+    daemonRunning: bool         ## Run global background job
     singleRunLock: bool         ## Some single mode runner is activated
     monitorLock: bool           ## Monitor mode is activated
     activeMulti: int            ## Number of activated runners in multi-mode
@@ -110,12 +118,12 @@ type
 
 const
   execLoopTimeElapsedMin = 50.milliseconds
-    ## Minimum elapsed time the event loop needs for a single lap. If it
-    ## is faster, asynchroneous sleep seconds are added. in order to avoid
+    ## Minimum elapsed time an exec loop needs for a single lap. If it is
+    ## faster, asynchroneous sleep seconds are added. in order to avoid
     ## cpu overload.
 
   execLoopTaskSwitcher = 1.nanoseconds
-    ## Asynchroneous waiting time at the end of the exec loop unless some sleep
+    ## Asynchroneous waiting time at the end of an exec loop unless some sleep
     ## seconds were added as decribed by `execLoopTimeElapsedMin`, above.
 
   execLoopPollingTime = 50.milliseconds
@@ -132,6 +140,34 @@ proc hash(peer: Peer): Hash =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
+  mixin runDaemon
+
+  if dsc.ctx.daemon:
+    dsc.daemonRunning = true
+
+    # Continue until stopped
+    while true:
+      # Enforce minimum time spend on this loop
+      let startMoment = Moment.now()
+
+      await dsc.ctx.runDaemon()
+
+      if not dsc.ctx.daemon:
+        break
+
+      # Enforce minimum time spend on this loop so we never each 100% cpu load
+      # caused by some empty sub-tasks which are out of this scheduler control.
+      let
+        elapsed = Moment.now() - startMoment
+        suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+                  else: execLoopTimeElapsedMin - elapsed
+      await sleepAsync suspend
+      # End while
+
+  dsc.daemonRunning = false
+
 
 proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
   mixin runMulti, runSingle, runPool, runStop
@@ -190,6 +226,11 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
           await worker.runSingle()
           dsc.singleRunLock = false
 
+      # Dispatch daemon sevice if needed
+      if not dsc.daemonRunning and dsc.ctx.daemon:
+        asyncSpawn dsc.daemonLoop()
+
+      # Check for termination
       if worker.ctrl.stopped:
         break taskExecLoop
 
@@ -294,7 +335,7 @@ proc initSync*[S,W](
   dsc.tickerOk = noisy
   dsc.buddies.init(dsc.ctx.buddiesMax)
 
-proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
+proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; daemon = false): bool =
   ## Set up `PeerObserver` handlers and start syncing.
   mixin runSetup
   # Initialise sub-systems
@@ -309,6 +350,9 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
 
     po.setProtocol eth
     dsc.pool.addObserver(dsc, po)
+    if daemon:
+      dsc.ctx.daemon = true
+      asyncSpawn dsc.daemonLoop()
     return true
 
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =

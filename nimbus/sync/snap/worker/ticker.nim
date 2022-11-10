@@ -10,7 +10,7 @@
 # except according to those terms.
 
 import
-  std/[strformat, strutils, times],
+  std/[strformat, strutils],
   chronos,
   chronicles,
   eth/[common, p2p],
@@ -41,13 +41,13 @@ type
     lastStats: TickerStats
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
-    started:   Time
-    visited:   Time
+    started:   Moment
+    visited:   Moment
 
 const
   tickerStartDelay = chronos.milliseconds(100)
   tickerLogInterval = chronos.seconds(1)
-  tickerLogSuppressMax = initDuration(seconds = 100)
+  tickerLogSuppressMax = chronos.seconds(100)
 
 # ------------------------------------------------------------------------------
 # Private functions: pretty printing
@@ -112,7 +112,7 @@ proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
   let
     data = t.statsCb()
-    now = getTime().utc.toTime
+    now = Moment.now()
 
   if data != t.lastStats or tickerLogSuppressMax < (now - t.visited):
     t.lastStats = data
@@ -128,7 +128,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       buddies = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
-      up = (now - t.started).inSeconds.uint64.toSI
+      up = (now - t.started).seconds.uint64.toSI
       mem = getTotalMem().uint.toSI
 
     noFmtError("runLogTicker"):
@@ -164,8 +164,8 @@ proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
   #debug "Started ticker"
   t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay), runLogTicker, t)
-  if t.started == Time.default:
-    t.started = getTime().utc.toTime
+  if t.started == Moment.default:
+    t.started = Moment.now()
 
 proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally
