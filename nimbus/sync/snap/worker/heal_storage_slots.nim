@@ -93,7 +93,7 @@ proc acceptWorkItemAsIs(
   ok(false)
 
 
-proc updateMissingNodesList(
+proc verifyStillMissingNodes(
     buddy: SnapBuddyRef;
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
@@ -123,11 +123,12 @@ proc updateMissingNodesList(
   slots.missingNodes = slots.missingNodes & delayed
 
 
-proc appendMoreDanglingNodesToMissingNodesList(
+proc updateMissingNodesList(
     buddy: SnapBuddyRef;
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
-      ): bool =
+      ): Future[bool]
+      {.async.} =
   ## Starting with a given set of potentially dangling intermediate trie nodes
   ## `checkNodes`, this set is filtered and processed. The outcome is fed back
   ## to the vey same list `checkNodes`
@@ -139,22 +140,39 @@ proc appendMoreDanglingNodesToMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
-    rc = db.inspectStorageSlotsTrie(peer, accKey, storageRoot, slots.checkNodes)
+  while slots.missingNodes.len < snapTrieNodeFetchMax:
+    # Inspect hexary trie for dangling nodes
+    let rc = db.inspectStorageSlotsTrie(
+      peer, accKey, storageRoot,
+      slots.checkNodes,                 # start with these nodes
+      slots.resumeCtx,                  # resume previous attempt
+      healStorageSlotsInspectionBatch)  # visit no more than this many nodes
+    if rc.isErr:
+      when extraTraceMessages:
+        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+        error logTxt "failed => stop", peer, itCtx=buddy.healingCtx(kvp,env),
+          nSlotLists=env.nSlotLists, nStorageQueue, error=rc.error
+      # Attempt to switch peers, there is not much else we can do here
+      buddy.ctrl.zombie = true
+      return false
 
-  if rc.isErr:
-    when extraTraceMessages:
-      let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-      error logTxt "failed => stop", peer, itCtx=buddy.healingCtx(kvp,env),
-        nSlotLists=env.nSlotLists, nStorageQueue, error=rc.error
-    # Attempt to switch peers, there is not much else we can do here
-    buddy.ctrl.zombie = true
-    return false
+    # Update context for async threading environment
+    slots.resumeCtx = rc.value.resumeCtx
+    slots.checkNodes.setLen(0)
 
-  # Update batch lists
-  slots.checkNodes.setLen(0)
-  slots.missingNodes = slots.missingNodes & rc.value.dangling
+    # Collect result
+    slots.missingNodes =
+      slots.missingNodes  & rc.value.dangling
 
-  true
+    # Done unless there is some resumption context
+    if rc.value.resumeCtx.isNil:
+      break
+
+    # Allow async task switch and continue. Note that some other task might
+    # steal some of the `env.fetchAccounts.missingNodes`.
+    await sleepAsync 1.nanoseconds
+
+  return true
 
 
 proc getMissingNodesFromNetwork(
@@ -358,11 +376,11 @@ proc storageSlotsHealing(
         nSlotLists=env.nSlotLists, nStorageQueue
 
   # Update for changes since last visit
-  buddy.updateMissingNodesList(kvp, env)
+  buddy.verifyStillMissingNodes(kvp, env)
 
   # ???
   if slots.checkNodes.len != 0:
-    if not buddy.appendMoreDanglingNodesToMissingNodesList(kvp,env):
+    if not await buddy.updateMissingNodesList(kvp,env):
       return false
 
   # Check whether the trie is complete.

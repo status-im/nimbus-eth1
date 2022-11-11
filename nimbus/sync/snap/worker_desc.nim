@@ -14,7 +14,7 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ../sync_desc,
-  ./worker/[com/com_error, db/snapdb_desc, ticker],
+  ./worker/[com/com_error, db/hexary_desc, db/snapdb_desc, ticker],
   ./range_desc
 
 {.push raises: [Defect].}
@@ -48,6 +48,7 @@ type
     unprocessed*: SnapTodoRanges       ## Range of slots not covered, yet
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     missingNodes*: seq[NodeSpecs]      ## Dangling links to fetch and merge
+    resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
 
   SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
     ## Referenced object, so it can be made optional for the storage

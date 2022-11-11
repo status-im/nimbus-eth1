@@ -176,11 +176,11 @@ proc accountsRangefetchImpl(
   # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
 
-  when extraTraceMessages:
-    trace logTxt "request done", peer, pivot,
-      nCheckNodes=env.fetchAccounts.checkNodes.len,
-      nMissingNodes=env.fetchAccounts.missingNodes.len,
-      imported=processed.dump(), unprocessed=buddy.dumpUnprocessed(env)
+  #when extraTraceMessages:
+  #  trace logTxt "request done", peer, pivot,
+  #    nCheckNodes=env.fetchAccounts.checkNodes.len,
+  #    nMissingNodes=env.fetchAccounts.missingNodes.len,
+  #    imported=processed.dump(), unprocessed=buddy.dumpUnprocessed(env)
 
   return true
 

@@ -378,23 +378,37 @@ proc importRawAccountsNodes*(
 
 
 proc inspectAccountsTrie*(
-    ps: SnapDbAccountsRef;        ## Re-usable session descriptor
-    pathList = seq[Blob].default; ## Starting nodes for search
-    persistent = false;           ## Read data from disk
-    ignoreError = false;          ## Always return partial results if available
+    ps: SnapDbAccountsRef;               ## Re-usable session descriptor
+    pathList = seq[Blob].default;        ## Starting nodes for search
+    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
+    suspendAfter = high(uint64);         ## To be resumed
+    persistent = false;                  ## Read data from disk
+    ignoreError = false;                 ## Always return partial results if any
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. Argument `pathSet` list entries that do not refer to a
   ## valid node are silently ignored.
   ##
+  ## Trie inspection can be automatically suspended after having visited
+  ## `suspendAfter` nodes to be resumed at the last state. An application of
+  ## this feature would look like
+  ## ::
+  ##   var ctx = TrieNodeStatCtxRef()
+  ##   while not ctx.isNil:
+  ##     let rc = inspectAccountsTrie(.., resumeCtx=ctx, suspendAfter=1024)
+  ##     ...
+  ##     ctx = rc.value.resumeCtx
+  ##
   let peer = ps.peer
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectAccountsTrie()"):
     if persistent:
-      stats = ps.getFn.hexaryInspectTrie(ps.root, pathList)
+      stats = ps.getFn.hexaryInspectTrie(
+        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
     else:
-      stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
+      stats = ps.hexaDb.hexaryInspectTrie(
+        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
 
   block checkForError:
     var error = TrieIsEmpty
@@ -415,15 +429,18 @@ proc inspectAccountsTrie*(
   return ok(stats)
 
 proc inspectAccountsTrie*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer;                   ## For log messages, only
-    root: Hash256;                ## state root
-    pathList = seq[Blob].default; ## Starting paths for search
-    ignoreError = false;          ## Always return partial results when avail.
+    pv: SnapDbRef;                       ## Base descriptor on `BaseChainDB`
+    peer: Peer;                          ## For log messages, only
+    root: Hash256;                       ## state root
+    pathList = seq[Blob].default;        ## Starting paths for search
+    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
+    suspendAfter = high(uint64);         ## To be resumed
+    ignoreError = false;                 ## Always return partial results if any
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectAccountsTrie()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, root, peer).inspectAccountsTrie(pathList, persistent=true, ignoreError)
+    pv, root, peer).inspectAccountsTrie(
+      pathList, resumeCtx, suspendAfter, persistent=true, ignoreError)
 
 
 proc getAccountsNodeKey*(

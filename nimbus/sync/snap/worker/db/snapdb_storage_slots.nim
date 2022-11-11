@@ -401,23 +401,37 @@ proc importRawStorageSlotsNodes*(
 
 
 proc inspectStorageSlotsTrie*(
-    ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
-    pathList = seq[Blob].default; ## Starting nodes for search
-    persistent = false;           ## Read data from disk
-    ignoreError = false;          ## Always return partial results if available
+    ps: SnapDbStorageSlotsRef;           ## Re-usable session descriptor
+    pathList = seq[Blob].default;        ## Starting nodes for search
+    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
+    suspendAfter = high(uint64);         ## To be resumed
+    persistent = false;                  ## Read data from disk
+    ignoreError = false;                 ## Always return partial results if any
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. Argument `pathSet` list entries that do not refer to a
   ## valid node are silently ignored.
   ##
+  ## Trie inspection can be automatically suspended after having visited
+  ## `suspendAfter` nodes to be resumed at the last state. An application of
+  ## this feature would look like
+  ## ::
+  ##   var ctx = TrieNodeStatCtxRef()
+  ##   while not ctx.isNil:
+  ##     let rc = inspectStorageSlotsTrie(.., resumeCtx=ctx, suspendAfter=1024)
+  ##     ...
+  ##     ctx = rc.value.resumeCtx
+  ##
   let peer = ps.peer
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
-      stats = ps.getFn(ps.accKey).hexaryInspectTrie(ps.root, pathList)
+      stats = ps.getFn(ps.accKey).hexaryInspectTrie(
+        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
     else:
-      stats = ps.hexaDb.hexaryInspectTrie(ps.root, pathList)
+      stats = ps.hexaDb.hexaryInspectTrie(
+        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
 
   block checkForError:
     var error = TrieIsEmpty
@@ -438,17 +452,19 @@ proc inspectStorageSlotsTrie*(
   return ok(stats)
 
 proc inspectStorageSlotsTrie*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer;                   ## For log messages, only
-    accKey: NodeKey;              ## Account key
-    root: Hash256;                ## state root
-    pathList = seq[Blob].default; ## Starting paths for search
-    ignoreError = false;          ## Always return partial results when avail.
+    pv: SnapDbRef;                       ## Base descriptor on `BaseChainDB`
+    peer: Peer;                          ## For log messages, only
+    accKey: NodeKey;                     ## Account key
+    root: Hash256;                       ## state root
+    pathList = seq[Blob].default;        ## Starting paths for search
+    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
+    suspendAfter = high(uint64);         ## To be resumed
+    ignoreError = false;                 ## Always return partial results if any
       ): Result[TrieNodeStat, HexaryDbError] =
   ## Variant of `inspectStorageSlotsTrieTrie()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).inspectStorageSlotsTrie(
-      pathList, persistent=true, ignoreError)
+      pathList, resumeCtx, suspendAfter, persistent=true, ignoreError)
 
 
 proc getStorageSlotsNodeKey*(

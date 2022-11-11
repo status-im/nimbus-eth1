@@ -134,11 +134,20 @@ type
     nodeKey*: RepairKey             ## Leaf hash into hexary repair table
     payload*: Blob                  ## Data payload
 
+  TrieNodeStatCtxRef* = ref object
+    ## Context to resume searching for dangling links
+    case persistent*: bool
+    of true:
+      hddCtx*: seq[(NodeKey,NibblesSeq)]
+    else:
+      memCtx*: seq[(RepairKey,NibblesSeq)]
+
   TrieNodeStat* = object
     ## Trie inspection report
     dangling*: seq[NodeSpecs]       ## Referes to nodes with incomplete refs
-    level*: int                     ## Maximim nesting depth of dangling nodes
+    level*: int                     ## Maximum nesting depth of dangling nodes
     stopped*: bool                  ## Potential loop detected if `true`
+    resumeCtx*: TrieNodeStatCtxRef  ## Context for resuming inspection
 
   HexaryTreeDbRef* = ref object
     ## Hexary trie plus helper structures

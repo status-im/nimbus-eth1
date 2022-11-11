@@ -74,9 +74,17 @@ const
     ## over the network. More requests might be a disadvantage if peers only
     ## serve a maximum number requests (rather than data.)
 
+  healAccountsInspectionBatch* = 10_000
+    ## Number of nodes to inspect in a single batch. Several batches are run
+    ## until at least `snapTrieNodeFetchMax` dangling nodes are found. In
+    ## between batches, a tast/thread switch is allowed.
+
   healSlorageSlotsTrigger* = 0.70
     ## Consider per account storage slost healing if a per-account hexary
     ## sub-trie has reached this factor of completeness.
+
+  healStorageSlotsInspectionBatch* = 10_000
+    ## Similar to `healAccountsInspectionBatch` but for storage slots.
 
   healStoragesSlotsBatchMax* = 32
     ## Maximal number of storage tries to to heal in a single batch run. Only

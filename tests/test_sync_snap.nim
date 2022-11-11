@@ -520,10 +520,24 @@ proc inspectionRunner(
         check rc.isOk
         let
           dangling = rc.value.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(
-            rootKey, dangling.toHashSet.toSeq)
+          keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
         check dangling.len == keys.len
         singleStats.add (desc.hexaDb.tab.len,rc.value)
+
+        # Verify piecemeal approach for `inspectAccountsTrie()` ...
+        var
+          ctx = TrieNodeStatCtxRef()
+          piecemeal: HashSet[Blob]
+        while not ctx.isNil:
+          let rx = desc.inspectAccountsTrie(
+            resumeCtx=ctx, suspendAfter=128, persistent=false)
+          check rx.isOk
+          let stats = rx.get(otherwise = TrieNodeStat())
+          ctx = stats.resumeCtx
+          piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+        # Must match earlier all-in-one result
+        check dangling.len == piecemeal.len
+        check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for persistent db":
@@ -540,16 +554,31 @@ proc inspectionRunner(
             dbBase = SnapDbRef.init(db.cdb[2+n])
             desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkImport
-          let rc = desc.inspectAccountsTrie(persistent=false)
+            check desc.importAccounts(w.base, w.data, persistent=true)==OkImport
+          let rc = desc.inspectAccountsTrie(persistent=true)
           check rc.isOk
           let
             dangling = rc.value.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(
-              rootKey, dangling.toHashSet.toSeq)
+            keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
-          check singleStats[n][1] == rc.value
+          let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
+          check ssn1.toHashSet == dangling.toHashSet
+
+          # Verify piecemeal approach for `inspectAccountsTrie()` ...
+          var
+            ctx = TrieNodeStatCtxRef()
+            piecemeal: HashSet[Blob]
+          while not ctx.isNil:
+            let rx = desc.inspectAccountsTrie(
+              resumeCtx=ctx, suspendAfter=128, persistent=persistent)
+            check rx.isOk
+            let stats = rx.get(otherwise = TrieNodeStat())
+            ctx = stats.resumeCtx
+            piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+          # Must match earlier all-in-one result
+          check dangling.len == piecemeal.len
+          check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for in-memory-db":
