@@ -147,6 +147,9 @@ proc rpcMain*() =
       ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
       ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
 
+    # disable POS/post Merge feature
+    chain.config.terminalTotalDifficulty = none(DifficultyInt)
+
     let keyStore = "tests" / "keystore"
     let res = ctx.am.loadKeystores(keyStore)
     if res.isErr:

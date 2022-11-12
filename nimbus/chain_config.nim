@@ -371,6 +371,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
+    const mainNetTTD = UInt256.fromHex("58750000000000000000000")
     ChainConfig(
       poaEngine:           false,
       chainId:             MainNet.ChainId,
@@ -393,8 +394,9 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   13_773_000.toBlockNumber, # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    15_050_000.toBlockNumber, # 2022-06-30 10:54:04 UTC
       mergeForkBlock:      high(BlockNumber),
-      shanghaiBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
       cancunBlock:         high(BlockNumber),
+      terminalTotalDifficulty: some(mainNetTTD)
     )
   of RopstenNet:
     ChainConfig(
@@ -417,7 +419,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
       grayGlacierBlock:    high(BlockNumber),        # No current plan
       mergeForkBlock:      high(BlockNumber),
-      shanghaiBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
       cancunBlock:         high(BlockNumber),
     )
   of RinkebyNet:
@@ -441,7 +443,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
       grayGlacierBlock:    high(BlockNumber),        # No current plan
       mergeForkBlock:      high(BlockNumber),
-      shanghaiBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
       cancunBlock:         high(BlockNumber),
     )
   of GoerliNet:
@@ -465,8 +467,9 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
       grayGlacierBlock:    high(BlockNumber),        # No current plan
       mergeForkBlock:      high(BlockNumber),
-      shanghaiBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
       cancunBlock:         high(BlockNumber),
+      terminalTotalDifficulty: some(10790000.u256)
     )
   of SepoliaNet:
     ChainConfig(
@@ -475,7 +478,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
       grayGlacierBlock:    high(BlockNumber),        # No current plan
       mergeForkBlock:      high(BlockNumber),
-      shanghaiBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
       cancunBlock:         high(BlockNumber),
     )
   else:

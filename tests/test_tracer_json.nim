@@ -8,7 +8,8 @@
 import
   unittest2, json, os, tables, strutils,
   eth/common, stew/byteutils, eth/trie/db,
-  ./test_helpers, ../nimbus/db/db_chain, ../nimbus/[tracer, vm_types]
+  ./test_helpers, ../nimbus/db/db_chain,
+  ../nimbus/[tracer, vm_types, chain_config]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -21,9 +22,12 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB = newMemoryDB()
-    chainDB = newBaseChainDB(memoryDB, false)
+    chainDB = newBaseChainDB(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
+
+  # disable POS/post Merge feature
+  chainDB.config.terminalTotalDifficulty = none(DifficultyInt)
 
   for k, v in state:
     let key = hexToSeqByte(k)
