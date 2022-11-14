@@ -13,60 +13,56 @@ type
 
   # Merger is an internal help structure used to track the eth1/2 transition status.
   # It's a common structure can be used in both full node and light client.
-  Merger* = object
+  MergerRef* = ref object
     db    : TrieDatabaseRef
     status: TransitionStatus
 
-proc write(db: TrieDatabaseRef, status: TransitionStatus) =
+proc writeStatus(db: TrieDatabaseRef, status: TransitionStatus) =
   db.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
 
-proc read(db: TrieDatabaseRef, status: var TransitionStatus) =
+proc readStatus(db: TrieDatabaseRef): TransitionStatus =
   var bytes = db.get(transitionStatusKey().toOpenArray())
   if bytes.len > 0:
     try:
-      status = rlp.decode(bytes, typeof status)
+      result = rlp.decode(bytes, typeof result)
     except:
-      error "Failed to decode transition status"
+      error "Failed to decode POS transition status"
 
-proc init*(m: var Merger, db: TrieDatabaseRef) =
-  m.db = db
-  db.read(m.status)
+proc new*(_: type MergerRef, db: TrieDatabaseRef): MergerRef =
+  MergerRef(
+    db: db,
+    status: db.readStatus()
+  )
 
-proc init*(m: var Merger, db: BaseChainDB) =
-  init(m, db.db)
-
-proc initMerger*(db: BaseChainDB): Merger =
-  result.init(db)
-
-proc initMerger*(db: TrieDatabaseRef): Merger =
-  result.init(db)
+proc new*(_: type MergerRef, db: BaseChainDB): MergerRef =
+  MergerRef.new(db.db)
 
 # ReachTTD is called whenever the first NewHead message received
 # from the consensus-layer.
-proc reachTTD*(m: var Merger) =
+proc reachTTD*(m: MergerRef) =
   if m.status.leftPoW:
     return
 
   m.status = TransitionStatus(leftPoW: true)
-  m.db.write(m.status)
+  m.db.writeStatus(m.status)
 
   info "Left PoW stage"
 
 # FinalizePoS is called whenever the first FinalisedBlock message received
 # from the consensus-layer.
-proc finalizePoS*(m: var Merger) =
+proc finalizePoS*(m: MergerRef) =
   if m.status.enteredPoS:
     return
 
   m.status = TransitionStatus(leftPoW: true, enteredPoS: true)
-  m.db.write(m.status)
+  m.db.writeStatus(m.status)
 
   info "Entered PoS stage"
 
 # TTDReached reports whether the chain has left the PoW stage.
-proc ttdReached*(m: Merger): bool =
+proc ttdReached*(m: MergerRef): bool =
    m.status.leftPoW
 
 # PoSFinalized reports whether the chain has entered the PoS stage.
-proc posFinalized*(m: Merger): bool =
+proc posFinalized*(m: MergerRef): bool =
   m.status.enteredPoS

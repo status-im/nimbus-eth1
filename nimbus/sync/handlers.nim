@@ -9,7 +9,8 @@ import
   ../db/db_chain,
   ../p2p/chain,
   ../utils/tx_pool,
-  ../utils/tx_pool/tx_item
+  ../utils/tx_pool/tx_item,
+  ../merge/merger
 
 type
   HashToTime = TableRef[Hash256, Time]
@@ -23,13 +24,56 @@ type
     knownByPeer: Table[Peer, HashToTime]
     pending: HashSet[Hash256]
     lastCleanup: Time
+    merger: MergerRef
+
+  ReconnectRef = ref object
+    pool: PeerPool
+    node: Node
 
 const
   NUM_PEERS_REBROADCAST_QUOTIENT = 4
   POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
+  PEER_LONG_BANTIME = chronos.minutes(150)
 
 proc hash(peer: Peer): hashes.Hash =
   hash(peer.remote)
+
+proc banExpiredReconnect(arg: pointer) {.gcsafe, raises: [Defect].} =
+  # Reconnect to peer after ban period if pool is empty
+  try:
+
+    let reconnect = cast[ReconnectRef](arg)
+    if reconnect.pool.len > 0:
+      return
+
+    asyncSpawn reconnect.pool.connectToNode(reconnect.node)
+
+  except TransportError:
+    debug "Transport got closed during banExpiredReconnect"
+  except CatchableError as e:
+    debug "Exception in banExpiredReconnect", exc = e.name, err = e.msg
+
+proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
+  try:
+
+    await peer.disconnect(SubprotocolReason)
+
+    let expired = Moment.fromNow(banTime)
+    let reconnect = ReconnectRef(
+      pool: pool,
+      node: peer.remote
+    )
+
+    discard setTimer(
+      expired,
+      banExpiredReconnect,
+      cast[pointer](reconnect)
+    )
+
+  except TransportError:
+    debug "Transport got closed during banPeer"
+  except CatchableError as e:
+    debug "Exception in banPeer", exc = e.name, err = e.msg
 
 proc cleanupKnownByPeer(ctx: EthWireRef) =
   let now = getTime()
@@ -151,13 +195,15 @@ proc setupPeerObserver(ctx: EthWireRef) =
 proc new*(_: type EthWireRef,
           chain: Chain,
           txPool: TxPoolRef,
-          peerPool: PeerPool): EthWireRef =
+          peerPool: PeerPool,
+          merger: MergerRef): EthWireRef =
   let ctx = EthWireRef(
     db: chain.db,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
-    lastCleanup: getTime()
+    merger: merger,
+    lastCleanup: getTime(),
   )
 
   ctx.setupPeerObserver()
@@ -345,7 +391,7 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
 method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) {.gcsafe.} =
   if ctx.disableTxPool:
     when trMissingOrDisabledGossipOk:
-      notImplemented("handleAnnouncedTxsHashes")
+      notEnabled("handleAnnouncedTxsHashes")
     return
 
   if txHashes.len == 0:
@@ -373,10 +419,19 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt) {.gcsafe.} =
-  notImplemented("handleNewBlock")
+  if ctx.merger.posFinalized:
+    debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
+      peer, blockNumber=blk.header.blockNumber,
+      blockHash=blk.header.blockHash, totalDifficulty
+    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+    return
 
 method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) {.gcsafe.} =
-  notImplemented("handleNewBlockHashes")
+  if ctx.merger.posFinalized:
+    debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
+      peer, numHashes=hashes.len
+    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+    return
 
 when defined(legacy_eth66_enabled):
   method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.gcsafe.} =

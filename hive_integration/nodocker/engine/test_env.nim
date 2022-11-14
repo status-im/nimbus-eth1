@@ -22,7 +22,8 @@ import
     rpc/debug,
     rpc/jwt_auth,
     sync/protocol,
-    utils/tx_pool
+    utils/tx_pool,
+    merge/merger
   ],
   ../../../tests/test_helpers,
   "."/[clmock, engine_client]
@@ -112,8 +113,9 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
     txPool, EngineStopped
   )
 
+  let merger = MergerRef.new(t.chainDB)
   setupEthRpc(t.ethNode, t.ctx, t.chainDB, txPool, t.rpcServer)
-  setupEngineAPI(t.sealingEngine, t.rpcServer)
+  setupEngineAPI(t.sealingEngine, t.rpcServer, merger)
   setupDebugRpc(t.chainDB, t.rpcServer)
 
   # Do not start clique sealing engine if we are using a Proof of Work chain file
