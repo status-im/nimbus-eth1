@@ -66,7 +66,6 @@ let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
   OkHexDb = Result[void,HexaryDbError].ok()
   OkStoDb = Result[void,seq[(int,HexaryDbError)]].ok()
-  OkImport = Result[seq[NodeSpecs],HexaryDbError].ok(@[])
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -87,6 +86,14 @@ var
 
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
+
+proc isImportOk(rc: Result[SnapAccountsGaps,HexaryDbError]): bool =
+  if rc.isErr:
+    check rc.error == NothingSerious # prints an error if different
+  elif 0 < rc.value.innerGaps.len:
+    check rc.value.innerGaps == seq[NodeSpecs].default
+  else:
+    return true
 
 proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
   ## Kludge: map error report to (older version) return code
@@ -301,7 +308,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
                  else: SnapDbRef.init(newMemoryDB())
         dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
       for n,w in accountsList:
-        check dbDesc.importAccounts(w.base, w.data, persistent) == OkImport
+        check dbDesc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
@@ -315,7 +322,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
           accounts: accountsList.mapIt(it.data.accounts).sortMerge,
           proof:    accountsList.mapIt(it.data.proof).flatten)
       # Merging intervals will produce gaps, so the result is expected OK but
-      # different from `OkImport`
+      # different from `.isImportOk`
       check desc.importAccounts(lowerBound, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
@@ -401,7 +408,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
 
-
 proc storagesRunner(
     noisy = true;
     persistent = true;
@@ -433,7 +439,7 @@ proc storagesRunner(
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
         let desc = SnapDbAccountsRef.init(dbBase, root, peer)
-        check desc.importAccounts(w.base, w.data, persistent) == OkImport
+        check desc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {storagesList.len} storages lists":
       let
@@ -515,7 +521,7 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
@@ -554,7 +560,7 @@ proc inspectionRunner(
             dbBase = SnapDbRef.init(db.cdb[2+n])
             desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent=true)==OkImport
+            check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
           let rc = desc.inspectAccountsTrie(persistent=true)
           check rc.isOk
           let
@@ -589,7 +595,7 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = memDesc.dup(root,Peer())
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
@@ -612,7 +618,7 @@ proc inspectionRunner(
             rootSet = [rootKey].toHashSet
             desc = perDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkImport
+            check desc.importAccounts(w.base, w.data, persistent).isImportOk
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
@@ -639,7 +645,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent=false)==OkImport
+            check desc.importAccounts(w.base,w.data,persistent=false).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
@@ -671,7 +677,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent) == OkImport
+            check desc.importAccounts(w.base,w.data, persistent).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let

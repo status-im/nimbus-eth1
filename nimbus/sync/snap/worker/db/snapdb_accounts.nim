@@ -27,6 +27,10 @@ type
     peer: Peer               ## For log messages
     getClsFn: AccountsGetFn  ## Persistent database `get()` closure
 
+  SnapAccountsGaps* = object
+    innerGaps*: seq[NodeSpecs]
+    dangling*: seq[NodeSpecs]
+
 const
   extraTraceMessages = false or true
 
@@ -163,21 +167,44 @@ proc dup*(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc nodeExists*(
+    ps: SnapDbAccountsRef;    ## Re-usable session descriptor
+    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
+    persistent = false;       ## Whether to check data on disk
+      ): bool =
+  ## ..
+  if not persistent:
+    return ps.hexaDb.tab.hasKey(node.nodeKey.to(RepairKey))
+  try:
+    return 0 < ps.getFn()(node.nodeKey.ByteArray32).len
+  except Exception as e:
+    raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
+
+proc nodeExists*(
+    pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
+    peer: Peer;               ## For log messages
+    root: Hash256;            ## State root
+    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
+      ): bool =
+  ## Variant of `nodeExists()` for presistent storage, only.
+  SnapDbAccountsRef.init(pv, root, peer).nodeExists(node, persistent=true)
+
+
 proc importAccounts*(
     ps: SnapDbAccountsRef;    ## Re-usable session descriptor
-    base: NodeTag;            ## before or at first account entry in `data`
-    data: PackedAccountRange; ## re-packed `snap/1 ` reply data
-    persistent = false;       ## store data on disk
+    base: NodeTag;            ## Before or at first account entry in `data`
+    data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
+    persistent = false;       ## Store data on disk
     noBaseBoundCheck = false; ## Ignore left boundary proof check if `true`
-      ): Result[seq[NodeSpecs],HexaryDbError] =
+      ): Result[SnapAccountsGaps,HexaryDbError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
-  ## which can be written to disk with the argument `persistent` set `true`. The
-  ## memory table is held in the descriptor argument`ps`.
+  ## which can be written to disk with the argument `persistent` set `true`.
+  ## The memory table is held in the descriptor argument`ps`.
   ##
-  ## On success, the function returns a list of dangling node links from the
-  ## argument `proof` list of nodes after the populating with accounts. The
-  ## following example may illustrate the case:
+  ## On success, the function returns a list `innerGaps` of dangling node
+  ## links from the argument `proof` list of nodes after the populating with
+  ## accounts. The following example may illustrate the case:
   ##
   ##   Assume an accounts hexary trie
   ##   ::
@@ -211,10 +238,14 @@ proc importAccounts*(
   ##     let leastAccountPath = data.accounts[0].accKey.to(NodeTag)
   ##     leastAccountPath <= w.partialPath.max(NodeKey).to(NodeTag)
   ##
+  ## Besides the inner gaps, the function also returns the dangling nodes left
+  ## from the `proof` list.
+  ##
   ## Note that the `peer` argument is for log messages, only.
   var
     accounts: seq[RLeafSpecs]
-    dangling: seq[NodeSpecs]
+    outside: seq[NodeSpecs]
+    gaps: SnapAccountsGaps
   try:
     if 0 < data.proof.len:
       let rc = ps.mergeProofs(ps.peer, data.proof)
@@ -239,6 +270,9 @@ proc importAccounts*(
              w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
             # Extract dangling links which are inside the accounts range
             innerSubTrie.add w
+          else:
+            # Otherwise register outside links
+            outside.add w
 
       # Build partial hexary trie
       let rc = ps.hexaDb.hexaryInterpolate(
@@ -259,12 +293,21 @@ proc importAccounts*(
            w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
           return err(LowerBoundProofError)
         # Otherwise register left over entry
-        dangling.add w
+        gaps.innerGaps.add w
 
       if persistent:
         let rc = ps.hexaDb.persistentAccounts(ps)
         if rc.isErr:
           return err(rc.error)
+        # Verify outer links against database
+        let getFn = ps.getFn
+        for w in outside:
+          if w.nodeKey.ByteArray32.getFn().len == 0:
+            gaps.dangling.add w
+      else:
+        for w in outside:
+          if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+            gaps.dangling.add w
 
     elif data.proof.len == 0:
       # There must be a proof for an empty argument list.
@@ -273,17 +316,20 @@ proc importAccounts*(
   except RlpError:
     return err(RlpEncoding)
   except KeyError as e:
-    raiseAssert "Not possible @ importAccounts: " & e.msg
+    raiseAssert "Not possible @ importAccounts(KeyError): " & e.msg
   except OSError as e:
     error "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
+  except Exception as e:
+    raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
 
   #when extraTraceMessages:
   #  trace "Accounts imported", peer=ps.peer, root=ps.root.ByteArray32.toHex,
   #    proof=data.proof.len, base, accounts=data.accounts.len,
-  #    top=accounts[^1].pathTag, danglingLen=dangling.len
+  #    top=accounts[^1].pathTag, innerGapsLen=gaps.innerGaps.len,
+  #    danglingLen=gaps.dangling.len
 
-  ok(dangling)
+  ok(gaps)
 
 proc importAccounts*(
     pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
@@ -292,8 +338,8 @@ proc importAccounts*(
     base: NodeTag;            ## Before or at first account entry in `data`
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     noBaseBoundCheck = false; ## Ignore left bound proof check if `true`
-      ): Result[seq[NodeSpecs],HexaryDbError] =
-  ## Variant of `importAccounts()`
+      ): Result[SnapAccountsGaps,HexaryDbError] =
+  ## Variant of `importAccounts()` for presistent storage, only.
   SnapDbAccountsRef.init(
     pv, root, peer).importAccounts(
       base, data, persistent=true, noBaseBoundCheck)

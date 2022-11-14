@@ -132,7 +132,7 @@ proc accountsRangefetchImpl(
   #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
   #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
-  # Now, as we fully own the scheduler and the original interval can savely be
+  # Now, we fully own the scheduler. The original interval will savely be
   # placed back for a moment -- to be corrected below.
   env.fetchAccounts.unprocessed.merge iv
 
@@ -144,7 +144,7 @@ proc accountsRangefetchImpl(
   else:
     discard processed.merge iv
 
-  let dangling = block:
+  let gaps = block:
     # No left boundary check needed. If there is a gap, the partial path for
     # that gap is returned by the import function to be registered, below.
     let rc = ctx.data.snapDb.importAccounts(
@@ -162,10 +162,22 @@ proc accountsRangefetchImpl(
   env.nAccounts.inc(gotAccounts)
 
   # Punch holes into the reproted range from the network if it contains holes.
-  for w in dangling:
+  for w in gaps.innerGaps:
     discard processed.reduce(
       w.partialPath.min(NodeKey).to(NodeTag),
       w.partialPath.max(NodeKey).to(Nodetag))
+
+  # Update dangling nodes list
+  var delayed: seq[NodeSpecs]
+  for w in env.fetchAccounts.missingNodes:
+    if not ctx.data.snapDb.nodeExists(peer, stateRoot, w):
+      delayed.add w
+  when extraTraceMessages:
+    trace logTxt "dangling nodes", peer, pivot,
+      nCheckNodes=env.fetchAccounts.checkNodes.len,
+      nMissingNodes=env.fetchAccounts.missingNodes.len,
+      nUpdatedMissing=delayed.len, nOutsideGaps=gaps.dangling.len
+  env.fetchAccounts.missingNodes = delayed & gaps.dangling
 
   # Update book keeping
   for w in processed.increasing:
@@ -178,10 +190,13 @@ proc accountsRangefetchImpl(
   env.fetchStorageFull.merge dd.withStorage
 
   #when extraTraceMessages:
+  #  let
+  #    imported = processed.dump()
+  #    unprocessed = buddy.dumpUnprocessed(env)
   #  trace logTxt "request done", peer, pivot,
   #    nCheckNodes=env.fetchAccounts.checkNodes.len,
   #    nMissingNodes=env.fetchAccounts.missingNodes.len,
-  #    imported=processed.dump(), unprocessed=buddy.dumpUnprocessed(env)
+  #    imported, unprocessed
 
   return true
 

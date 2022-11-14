@@ -165,9 +165,8 @@ proc verifyStillMissingNodes(
 
   var delayed: seq[NodeSpecs]
   for w in env.fetchAccounts.missingNodes:
-    let rc = db.getAccountsNodeKey(peer, stateRoot, w.partialPath)
-    if rc.isOk:
-      # Check nodes for dangling links
+    if ctx.data.snapDb.nodeExists(peer, stateRoot, w):
+      # Check nodes for dangling links below
       env.fetchAccounts.checkNodes.add w.partialPath
     else:
       # Node is still missing
