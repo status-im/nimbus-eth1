@@ -426,12 +426,14 @@ proc accountsHealingImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc healAccounts*(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.data.pivotEnv
 
   # Only start healing if there is some completion level, already.
   #

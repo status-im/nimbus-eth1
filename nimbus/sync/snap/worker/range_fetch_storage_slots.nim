@@ -275,14 +275,16 @@ proc storeStoragesSingleBatch(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
+proc rangeFetchStorageSlots*(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) {.async.} =
   ## Fetch some account storage slots and store them in the database. If left
   ## anlone (e.t. no patallel activated processes) this function tries to fetch
   ## each work item on the queue at least once.For partial partial slot range
   ## items this means in case of success that the outstanding range has become
   ## at least smaller.
   let
-    env = buddy.data.pivotEnv
     peer = buddy.peer
     fullRangeLen = env.fetchStorageFull.len
     partRangeLen = env.fetchStoragePart.len
@@ -301,7 +303,7 @@ proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
     var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStoragesSlotsFetchMax
     while 0 < fullRangeItemsleft and
           buddy.ctrl.running and
-          env == buddy.data.pivotEnv:
+          not env.obsolete:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemsFull(env)
       if req.len == 0:
@@ -312,7 +314,7 @@ proc rangeFetchStorageSlots*(buddy: SnapBuddyRef) {.async.} =
     var partialRangeItemsLeft = env.fetchStoragePart.len
     while 0 < partialRangeItemsLeft and
           buddy.ctrl.running and
-          env == buddy.data.pivotEnv:
+          not env.obsolete:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemPartial(env)
       if req.len == 0:

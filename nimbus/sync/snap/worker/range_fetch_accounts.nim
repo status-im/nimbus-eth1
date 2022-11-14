@@ -90,7 +90,8 @@ proc getUnprocessed(
 proc accountsRangefetchImpl(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): Future[bool] {.async.} =
+      ): Future[bool]
+      {.async.} =
   ## Fetch accounts and store them in the database. Returns true while more
   ## data can probably be fetched.
   let
@@ -188,9 +189,11 @@ proc accountsRangefetchImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc rangeFetchAccounts*(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) {.async.} =
   ## Fetch accounts and store them in the database.
-  let env = buddy.data.pivotEnv
   if not env.fetchAccounts.unprocessed.isEmpty():
     let
       ctx = buddy.ctx
@@ -203,14 +206,14 @@ proc rangeFetchAccounts*(buddy: SnapBuddyRef) {.async.} =
     var nFetchAccounts = 0
     while not env.fetchAccounts.unprocessed.isEmpty() and
           buddy.ctrl.running and
-          env == buddy.data.pivotEnv:
+          not env.obsolete:
       nFetchAccounts.inc
       if not await buddy.accountsRangefetchImpl(env):
         break
 
       # Clean up storage slots queue first it it becomes too large
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-      if snapAccountsBuddyStoragesSlotsQuPrioThresh < nStoQu:
+      if snapStorageSlotsQuPrioThresh < nStoQu:
         break
 
     when extraTraceMessages:

@@ -495,13 +495,15 @@ proc healingIsComplete(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healStorageSlots*(buddy: SnapBuddyRef) {.async.} =
+proc healStorageSlots*(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) {.async.} =
   ## Fetching and merging missing slorage slots trie database nodes.
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
     peer = buddy.peer
-    env = buddy.data.pivotEnv
   var
     (toBeHealed, nAcceptedAsIs) = buddy.assembleWorkItemsQueue(env)
 

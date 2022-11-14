@@ -78,6 +78,7 @@ type
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
     nSlotLists*: uint64                ## Imported # of account storage tries
+    obsolete*: bool                    ## Not latest pivot, anymore
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root

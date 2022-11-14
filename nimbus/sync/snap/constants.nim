@@ -55,7 +55,7 @@ const
     ## For a new worker, prioritise processing the storage slots queue over
     ## processing accounts if the queue has more than this many items.
 
-  snapAccountsBuddyStoragesSlotsQuPrioThresh* = 30_000
+  snapStorageSlotsQuPrioThresh* = 30_000
     ## For a running worker processing accounts, stop processing accounts
     ## and switch to processing the storage slots queue if the queue has
     ## more than this many items.
