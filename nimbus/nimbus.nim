@@ -57,7 +57,7 @@ type
     txPool: TxPoolRef
     networkLoop: Future[void]
     dbBackend: ChainDB
-    peerManager: PeerManagerRe
+    peerManager: PeerManagerRef
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
     merger: MergerRef
