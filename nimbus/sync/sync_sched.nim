@@ -314,8 +314,15 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =
   ## Stop syncing and free peer handlers .
   mixin runRelease
-  dsc.ctx.runRelease()
   dsc.pool.delObserver(dsc)
+
+  # Shut down async services
+  for buddy in dsc.buddies.nextValues:
+    buddy.worker.ctrl.stopped = true
+  dsc.ctx.daemon = false
+
+  # Final shutdown (note that some workers might still linger on)
+  dsc.ctx.runRelease()
 
 # ------------------------------------------------------------------------------
 # End
