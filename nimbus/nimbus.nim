@@ -58,6 +58,8 @@ type
     networkLoop: Future[void]
     dbBackend: ChainDB
     peerManager: PeerManagerRef
+    snapSyncRef: SnapSyncRef
+    fullSyncRef: FullSyncRef
     merger: MergerRef
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
@@ -167,11 +169,15 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
     of SyncMode.Full:
-      FullSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
-                       conf.maxPeers, tickerOK).start
+      nimbus.fullSyncRef = FullSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        tickerOK)
+      nimbus.fullSyncRef.start
     of SyncMode.Snap:
-      SnapSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
-                       conf.maxPeers, nimbus.dbBackend, tickerOK).start
+      nimbus.snapSyncRef = SnapSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        nimbus.dbBackend, tickerOK)
+      nimbus.snapSyncRef.start
     of SyncMode.Default:
       discard
 
@@ -438,6 +444,10 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
     await nimbus.peerManager.stop()
+  if nimbus.snapSyncRef.isNil.not:
+    nimbus.snapSyncRef.stop()
+  if nimbus.fullSyncRef.isNil.not:
+    nimbus.fullSyncRef.stop()
 
 proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop

@@ -50,6 +50,7 @@ type
     ethWireCtx*: EthWireRef ## Eth protocol wire context (if available)
     chain*: Chain           ## Block chain database (no need for `Peer`)
     poolMode*: bool         ## Activate `runPool()` workers if set `true`
+    daemon*: bool           ## Enable global background job
     data*: S                ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

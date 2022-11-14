@@ -33,6 +33,9 @@ proc runSetup(ctx: FullCtxRef; ticker: bool): bool =
 proc runRelease(ctx: FullCtxRef) =
   worker.release(ctx)
 
+proc runDaemon(ctx: FullCtxRef) {.async.} =
+  discard
+
 proc runStart(buddy: FullBuddyRef): bool =
   worker.start(buddy)
 

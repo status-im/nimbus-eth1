@@ -35,6 +35,9 @@ proc runSetup(ctx: SnapCtxRef; ticker: bool): bool =
 proc runRelease(ctx: SnapCtxRef) =
   worker.release(ctx)
 
+proc runDaemon(ctx: SnapCtxRef) {.async.} =
+  await worker.runDaemon(ctx)
+
 proc runStart(buddy: SnapBuddyRef): bool =
   worker.start(buddy)
 
@@ -71,7 +74,7 @@ proc init*(
   doAssert not result.ctx.ethWireCtx.isNil
 
 proc start*(ctx: SnapSyncRef) =
-  doAssert ctx.startSync()
+  doAssert ctx.startSync(daemon = true)
 
 proc stop*(ctx: SnapSyncRef) =
   ctx.stopSync()
