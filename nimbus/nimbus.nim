@@ -28,7 +28,8 @@ import
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
   ./sync/[fast, full, protocol, snap, protocol/les_protocol, handlers],
-  ./utils/tx_pool
+  ./utils/tx_pool,
+  ./merge/merger
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -56,9 +57,10 @@ type
     txPool: TxPoolRef
     networkLoop: Future[void]
     dbBackend: ChainDB
-    peerManager: PeerManagerRef
+    peerManager: PeerManagerRe
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
+    merger: MergerRef
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -82,6 +84,11 @@ proc basicServices(nimbus: NimbusNode,
     let verifyFrom = conf.verifyFrom.get()
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
+
+  # this is temporary workaround to track POS transition
+  # until we have proper chain config and hard fork module
+  # see issue #640
+  nimbus.merger = MergerRef.new(chainDB)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
@@ -143,7 +150,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     let ethWireHandler = EthWireRef.new(
       nimbus.chainRef,
       nimbus.txPool,
-      nimbus.ethNode.peerPool
+      nimbus.ethNode.peerPool,
+      nimbus.merger
     )
     nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
@@ -342,11 +350,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger)
 
     info "Starting engine API server", port = conf.engineApiPort
 
@@ -356,11 +364,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger)
 
     info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 

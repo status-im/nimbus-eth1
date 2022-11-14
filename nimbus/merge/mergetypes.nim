@@ -37,8 +37,8 @@ type
     hash: Hash256
     header: EthBlockHeader
 
-  EngineAPI* = ref object
-    merger*: Merger
+  EngineApiRef* = ref object
+    merger: MergerRef
     payloadQueue: SimpleQueue[MaxTrackedPayloads, PayloadItem]
     headerQueue: SimpleQueue[MaxTrackedHeaders, HeaderItem]
 
@@ -54,27 +54,33 @@ iterator items[M, T](x: SimpleQueue[M, T]): T =
     if z.used:
       yield z.data
 
-proc new*(_: type EngineAPI, db: BaseChainDB): EngineAPI =
-  new result
-  if not db.isNil:
-    result.merger.init(db)
+template new*(_: type EngineApiRef): EngineApiRef =
+  {.error: "EngineApiRef should be created with merger param " & $instantiationInfo().}
 
-proc put*(api: EngineAPI, hash: Hash256, header: EthBlockHeader) =
+proc new*(_: type EngineApiRef, merger: MergerRef): EngineApiRef =
+  EngineApiRef(
+    merger: merger
+  )
+
+proc put*(api: EngineApiRef, hash: Hash256, header: EthBlockHeader) =
   api.headerQueue.put(HeaderItem(hash: hash, header: header))
 
-proc get*(api: EngineAPI, hash: Hash256, header: var EthBlockHeader): bool =
+proc get*(api: EngineApiRef, hash: Hash256, header: var EthBlockHeader): bool =
   for x in api.headerQueue:
     if x.hash == hash:
       header = x.header
       return true
   false
 
-proc put*(api: EngineAPI, id: PayloadID, payload: ExecutionPayloadV1) =
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1) =
   api.payloadQueue.put(PayloadItem(id: id, payload: payload))
 
-proc get*(api: EngineAPI, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
       return true
   false
+
+proc merger*(api: EngineApiRef): MergerRef =
+  api.merger

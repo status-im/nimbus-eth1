@@ -9,7 +9,8 @@ import
   ../db/db_chain,
   ../p2p/chain,
   ../utils/tx_pool,
-  ../utils/tx_pool/tx_item
+  ../utils/tx_pool/tx_item,
+  ../merge/merger
 
 type
   HashToTime = TableRef[Hash256, Time]
@@ -23,13 +24,56 @@ type
     knownByPeer: Table[Peer, HashToTime]
     pending: HashSet[Hash256]
     lastCleanup: Time
+    merger: MergerRef
+
+  ReconnectRef = ref object
+    pool: PeerPool
+    node: Node
 
 const
   NUM_PEERS_REBROADCAST_QUOTIENT = 4
   POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
+  PEER_LONG_BANTIME = chronos.minutes(150)
 
 proc hash(peer: Peer): hashes.Hash =
   hash(peer.remote)
+
+proc banExpiredReconnect(arg: pointer) {.gcsafe, raises: [Defect].} =
+  # Reconnect to peer after ban period if pool is empty
+  try:
+
+    let reconnect = cast[ReconnectRef](arg)
+    if reconnect.pool.len > 0:
+      return
+
+    asyncSpawn reconnect.pool.connectToNode(reconnect.node)
+
+  except TransportError:
+    debug "Transport got closed during banExpiredReconnect"
+  except CatchableError as e:
+    debug "Exception in banExpiredReconnect", exc = e.name, err = e.msg
+
+proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
+  try:
+
+    await peer.disconnect(SubprotocolReason)
+
+    let expired = Moment.fromNow(banTime)
+    let reconnect = ReconnectRef(
+      pool: pool,
+      node: peer.remote
+    )
+
+    discard setTimer(
+      expired,
+      banExpiredReconnect,
+      cast[pointer](reconnect)
+    )
+
+  except TransportError:
+    debug "Transport got closed during banPeer"
+  except CatchableError as e:
+    debug "Exception in banPeer", exc = e.name, err = e.msg
 
 proc cleanupKnownByPeer(ctx: EthWireRef) =
   let now = getTime()
@@ -67,24 +111,38 @@ proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer,
 proc sendNewTxHashes(ctx: EthWireRef,
                      txHashes: seq[Hash256],
                      peers: seq[Peer]): Future[void] {.async.} =
-  for peer in peers:
-    # Add to known tx hashes and get hashes still to send to peer
-    var hashesToSend: seq[Hash256]
-    ctx.addToKnownByPeer(txHashes, peer, hashesToSend)
+  try:
 
-    # Broadcast to peer if at least 1 new tx hash to announce
-    if hashesToSend.len > 0:
-      await peer.newPooledTransactionHashes(hashesToSend)
+    for peer in peers:
+      # Add to known tx hashes and get hashes still to send to peer
+      var hashesToSend: seq[Hash256]
+      ctx.addToKnownByPeer(txHashes, peer, hashesToSend)
+
+      # Broadcast to peer if at least 1 new tx hash to announce
+      if hashesToSend.len > 0:
+        await peer.newPooledTransactionHashes(hashesToSend)
+
+  except TransportError:
+    debug "Transport got closed during sendNewTxHashes"
+  except CatchableError as e:
+    debug "Exception in sendNewTxHashes", exc = e.name, err = e.msg
 
 proc sendTransactions(ctx: EthWireRef,
                       txHashes: seq[Hash256],
                       txs: seq[Transaction],
                       peers: seq[Peer]): Future[void] {.async.} =
-  for peer in peers:
-    # This is used to avoid re-sending along pooledTxHashes
-    # announcements/re-broadcasts
-    ctx.addToKnownByPeer(txHashes, peer)
-    await peer.transactions(txs)
+  try:
+
+    for peer in peers:
+      # This is used to avoid re-sending along pooledTxHashes
+      # announcements/re-broadcasts
+      ctx.addToKnownByPeer(txHashes, peer)
+      await peer.transactions(txs)
+
+  except TransportError:
+    debug "Transport got closed during sendTransactions"
+  except CatchableError as e:
+    debug "Exception in sendTransactions", exc = e.name, err = e.msg
 
 proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
   let res = ctx.txPool.getItem(txHash)
@@ -137,13 +195,15 @@ proc setupPeerObserver(ctx: EthWireRef) =
 proc new*(_: type EthWireRef,
           chain: Chain,
           txPool: TxPoolRef,
-          peerPool: PeerPool): EthWireRef =
+          peerPool: PeerPool,
+          merger: MergerRef): EthWireRef =
   let ctx = EthWireRef(
     db: chain.db,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
-    lastCleanup: getTime()
+    merger: merger,
+    lastCleanup: getTime(),
   )
 
   ctx.setupPeerObserver()
@@ -292,21 +352,30 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
   debug "fetchTx: requesting txs",
     number = reqHashes.len
 
-  let res = await peer.getPooledTransactions(reqHashes)
-  if res.isNone:
-    error "not able to get pooled transactions"
+  try:
+
+    let res = await peer.getPooledTransactions(reqHashes)
+    if res.isNone:
+      error "not able to get pooled transactions"
+      return
+
+    let txs = res.get()
+    debug "fetchTx: received requested txs",
+      number = txs.transactions.len
+
+    # Remove from pending list regardless if tx is in result
+    for tx in txs.transactions:
+      let txHash = rlpHash(tx)
+      ctx.pending.excl txHash
+
+    ctx.txPool.jobAddTxs(txs.transactions)
+
+  except TransportError:
+    debug "Transport got closed during fetchTransactions"
     return
-
-  let txs = res.get()
-  debug "fetchTx: received requested txs",
-    number = txs.transactions.len
-
-  # Remove from pending list regardless if tx is in result
-  for tx in txs.transactions:
-    let txHash = rlpHash(tx)
-    ctx.pending.excl txHash
-
-  ctx.txPool.jobAddTxs(txs.transactions)
+  except CatchableError as e:
+    debug "Exception in fetchTransactions", exc = e.name, err = e.msg
+    return
 
   var newTxHashes = newSeqOfCap[Hash256](reqHashes.len)
   for txHash in reqHashes:
@@ -314,7 +383,7 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
       newTxHashes.add txHash
 
   let peers = ctx.getPeers(peer)
-  if peers.len == 0:
+  if peers.len == 0 or newTxHashes.len == 0:
     return
 
   await ctx.sendNewTxHashes(newTxHashes, peers)
@@ -322,7 +391,7 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
 method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) {.gcsafe.} =
   if ctx.disableTxPool:
     when trMissingOrDisabledGossipOk:
-      notImplemented("handleAnnouncedTxsHashes")
+      notEnabled("handleAnnouncedTxsHashes")
     return
 
   if txHashes.len == 0:
@@ -350,10 +419,19 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt) {.gcsafe.} =
-  notImplemented("handleNewBlock")
+  if ctx.merger.posFinalized:
+    debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
+      peer, blockNumber=blk.header.blockNumber,
+      blockHash=blk.header.blockHash, totalDifficulty
+    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+    return
 
 method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) {.gcsafe.} =
-  notImplemented("handleNewBlockHashes")
+  if ctx.merger.posFinalized:
+    debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
+      peer, numHashes=hashes.len
+    asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
+    return
 
 when defined(legacy_eth66_enabled):
   method getStorageNodes*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Blob] {.gcsafe.} =

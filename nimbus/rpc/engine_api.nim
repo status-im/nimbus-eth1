@@ -41,12 +41,13 @@ proc invalidFCU(db: BaseChainDB, header: EthBlockHeader): ForkchoiceUpdatedRespo
   let blockHash = latestValidHash(db, parent, db.ttd())
   invalidFCU(blockHash)
 
-proc setupEngineAPI*(
+proc setupEngineApi*(
     sealingEngine: SealingEngineRef,
-    server: RpcServer) =
+    server: RpcServer,
+    merger: MergerRef) =
 
   # TODO: put this singleton somewhere else
-  let api = EngineAPI.new(sealingEngine.chain.db)
+  let api = EngineApiRef.new(merger)
 
   # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128

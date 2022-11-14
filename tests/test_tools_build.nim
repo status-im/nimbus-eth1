@@ -23,4 +23,8 @@ import
   ../hive_integration/nodocker/consensus/extract_consensus_data,
   ../hive_integration/nodocker/consensus/consensus_sim,
   ../hive_integration/nodocker/graphql/graphql_sim,
-  ../hive_integration/nodocker/engine/engine_sim
+  ../hive_integration/nodocker/engine/engine_sim,
+  ../tools/t8n/t8n,
+  ../tools/t8n/t8n_test,
+  ../tools/evmstate/evmstate,
+  ../tools/evmstate/evmstate_test
