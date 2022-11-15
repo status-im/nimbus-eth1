@@ -477,16 +477,9 @@ proc healingIsComplete(
     if rc.value.dangling.len == 0:
       return true # done
 
-    # Set up healing structure for this work item
-    let slots = SnapTrieRangeBatchRef(
-      missingNodes: rc.value.dangling)
-    kvp.data.slots = slots
-
-    # Full range covered vy unprocessed items
-    for n in 0 ..< kvp.data.slots.unprocessed.len:
-      slots.unprocessed[n] = NodeTagRangeSet.init()
-    discard slots.unprocessed[0].merge(
-      NodeTagRange.new(low(NodeTag),high(NodeTag)))
+    # Full range covered by unprocessed items
+    kvp.data.slots = SnapTrieRangeBatchRef(missingNodes: rc.value.dangling)
+    kvp.data.slots.unprocessed.init()
 
   # Proceed with healing
   return await buddy.storageSlotsHealing(kvp, env)

@@ -54,16 +54,18 @@ proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
     # account hashes in the first range set, and the other account hashes
     # in the second range set.
     for iv in ctx.data.coveredAccounts.increasing:
-      # Move covered account ranges (aka intervals) to the second set.
-      batch.unprocessed.merge(iv)
+      # Move already processed account ranges (aka intervals) to the second set.
+      discard batch.unprocessed[0].reduce iv
+      discard batch.unprocessed[1].merge iv
 
-  if batch.unprocessed[0].isEmpty:
-    doAssert batch.unprocessed[1].isFull
-  elif batch.unprocessed[1].isEmpty:
-    doAssert batch.unprocessed[0].isFull
-  else:
-    doAssert((batch.unprocessed[0].total - 1) +
-             batch.unprocessed[1].total == high(UInt256))
+  when extraAsserts:
+    if batch.unprocessed[0].isEmpty:
+      doAssert batch.unprocessed[1].isFull
+    elif batch.unprocessed[1].isEmpty:
+      doAssert batch.unprocessed[0].isFull
+    else:
+      doAssert((batch.unprocessed[0].total - 1) +
+               batch.unprocessed[1].total == high(UInt256))
 
 # ------------------------------------------------------------------------------
 # Public functions: pivot table related
