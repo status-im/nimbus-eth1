@@ -140,7 +140,7 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
-  while slots.missingNodes.len < snapTrieNodeFetchMax:
+  while slots.missingNodes.len < snapTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectStorageSlotsTrie(
       peer, accKey, storageRoot,
@@ -192,7 +192,7 @@ proc getMissingNodesFromNetwork(
     slots = kvp.data.slots
 
     nMissingNodes = slots.missingNodes.len
-    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
+    inxLeft = max(0, nMissingNodes - snapTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.
@@ -329,7 +329,7 @@ proc assembleWorkItemsQueue(
         continue # dropping `kvp`
 
       toBeHealed.add kvp
-      if healStoragesSlotsBatchMax <= toBeHealed.len:
+      if healStorageSlotsBatchMax <= toBeHealed.len:
         return (toBeHealed, nAcceptedAsIs)
 
   # Ditto for partial items queue
@@ -345,7 +345,7 @@ proc assembleWorkItemsQueue(
 
       # Add to local batch to be processed, below
       toBeHealed.add kvp
-      if healStoragesSlotsBatchMax <= toBeHealed.len:
+      if healStorageSlotsBatchMax <= toBeHealed.len:
         break
 
   (toBeHealed, nAcceptedAsIs)
@@ -505,9 +505,9 @@ proc healStorageSlots*(
   if 0 < nHealerQueue:
     when extraTraceMessages:
       block:
-        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+        let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
         trace logTxt "processing", peer,
-          nSlotLists=env.nSlotLists, nStorageQueue, nHealerQueue, nAcceptedAsIs
+          nSlotLists=env.nSlotLists, nStoQu, nHealerQueue, nAcceptedAsIs
 
     for n in 0 ..< toBeHealed.len:
       let kvp = toBeHealed[n]
@@ -524,14 +524,14 @@ proc healStorageSlots*(
         env.fetchStoragePart.merge kvp
 
     when extraTraceMessages:
-      let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-      trace logTxt "done", peer, nSlotLists=env.nSlotLists, nStorageQueue,
+      let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+      trace logTxt "done", peer, nSlotLists=env.nSlotLists, nStoQu,
         nHealerQueue, nAcceptedAsIs, runState=buddy.ctrl.state
 
   elif 0 < nAcceptedAsIs:
-    let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+    let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
     trace logTxt "work items", peer, nSlotLists=env.nSlotLists,
-      nStorageQueue, nHealerQueue, nAcceptedAsIs, runState=buddy.ctrl.state
+      nStoQu, nHealerQueue, nAcceptedAsIs, runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------
 # End

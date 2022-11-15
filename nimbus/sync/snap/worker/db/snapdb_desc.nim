@@ -188,6 +188,9 @@ proc toAccountsKey*(a: NodeKey): ByteArray33 =
 proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
   a.ByteArray32.snapSyncStorageSlotKey.data
 
+proc toStateRootKey*(a: NodeKey): ByteArray33 =
+  a.ByteArray32.snapSyncStateRootKey.data
+
 template toOpenArray*(k: ByteArray32): openArray[byte] =
   k.toOpenArray(0, 31)
 

@@ -112,7 +112,7 @@ proc getNextSlotItemsFull(
     env.fetchStorageFull.del(kvp.key) # ok to delete this item from batch queue
 
     # Maximal number of items to fetch
-    if snapStoragesSlotsFetchMax <= result.len:
+    if snapStorageSlotsFetchMax <= result.len:
       break
 
   when extraTraceMessages:
@@ -300,7 +300,7 @@ proc rangeFetchStorageSlots*(
 
     # Processing the full range will implicitely handle inheritable storage
     # slots first with each batch item (see `getNextSlotItemsFull()`.)
-    var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStoragesSlotsFetchMax
+    var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStorageSlotsFetchMax
     while 0 < fullRangeItemsleft and
           buddy.ctrl.running and
           not env.obsolete:

@@ -204,7 +204,7 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
                env.fetchStoragePart.len == 0:
               env.storageDone = true
 
-      if extraTraceMessages:
+      when extraTraceMessages:
         trace "Checked for pivot DB completeness", peer, pivot,
           nAccounts=env.nAccounts, accountsState=env.accountsState,
           nSlotLists=env.nSlotLists, storageDone=env.storageDone
@@ -253,6 +253,24 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   # This one is the syncing work horse
   let syncActionContinue = await env.execSnapSyncAction(buddy)
+
+  # Save state so sync can be partially resumed at next start up
+  block:
+    let
+      nMissingNodes = env.fetchAccounts.missingNodes.len
+      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+
+      rc = env.saveSnapState(ctx)
+    if rc.isErr:
+      error "Failed to save recovery checkpoint", peer, pivot,
+        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
+        nMissingNodes, nStoQu, error=rc.error
+    else:
+      discard
+      when extraTraceMessages:
+        trace "Saved recovery checkpoint", peer, pivot,
+          nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
+          nMissingNodes, nStoQu, blobSize=rc.value
 
   if not syncActionContinue:
     return

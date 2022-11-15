@@ -9,13 +9,13 @@
 # except according to those terms.
 
 import
-  std/math,
-  chronicles,
+  std/[math, sequtils],
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
+  ./db/[hexary_error, snapdb_pivot],
   "."/[heal_accounts, heal_storage_slots,
        range_fetch_accounts, range_fetch_storage_slots, ticker]
 
@@ -152,13 +152,18 @@ proc tickerStats*(
 
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
-      pivotBlock = if env.isNil: none(BlockNumber)
-                   else: some(env.stateHeader.blockNumber)
-      stoQuLen = if env.isNil: none(uint64)
-                 else: some(env.fetchStorageFull.len.uint64 +
-                            env.fetchStoragePart.len.uint64)
       accCoverage = ctx.data.coveredAccounts.fullFactor
       accFill = meanStdDev(uSum, uSqSum, count)
+    var
+      pivotBlock = none(BlockNumber)
+      stoQuLen = none(int)
+      accStats = (0,0)
+    if not env.isNil:
+      pivotBlock = some(env.stateHeader.blockNumber)
+      stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
+      accStats = (env.fetchAccounts.unprocessed[0].chunks +
+                  env.fetchAccounts.unprocessed[1].chunks,
+                  env.fetchAccounts.missingNodes.len)
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -166,6 +171,7 @@ proc tickerStats*(
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
+      nAccountStats: accStats,
       nStorageQueue: stoQuLen)
 
 # ------------------------------------------------------------------------------
@@ -220,6 +226,33 @@ proc execSnapSyncAction*(
     return false
 
   return true
+
+
+proc saveSnapState*(
+    env: SnapPivotRef;              ## Current pivot environment
+    ctx: SnapCtxRef;                ## Some global context
+      ): Result[int,HexaryDbError] =
+  ## Save current sync admin data. On success, the size of the data record
+  ## saved is returned (e.g. for logging.)
+  if snapAccountsSaveDanglingMax < env.fetchAccounts.missingNodes.len:
+    return err(TooManyDanglingLinks)
+
+  let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+  if snapAccountsSaveStorageSlotsMax < nStoQu:
+    return err(TooManySlotAccounts)
+
+  let
+    rc = ctx.data.snapDb.savePivot(
+    env.stateHeader, env.nAccounts, env.nSlotLists,
+    dangling = env.fetchAccounts.missingNodes.mapIt(it.partialPath),
+    slotAccounts = toSeq(env.fetchStorageFull.nextKeys).mapIt(it.to(NodeKey)) &
+                   toSeq(env.fetchStoragePart.nextKeys).mapIt(it.to(NodeKey)),
+    coverage = (ctx.data.coveredAccounts.fullFactor * 255).uint8)
+
+  if rc.isErr:
+    return err(rc.error)
+
+  ok(rc.value)
 
 # ------------------------------------------------------------------------------
 # End

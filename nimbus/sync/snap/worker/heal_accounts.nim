@@ -190,7 +190,7 @@ proc updateMissingNodesList(
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
 
-  while env.fetchAccounts.missingNodes.len < snapTrieNodeFetchMax:
+  while env.fetchAccounts.missingNodes.len < snapTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectAccountsTrie(
       peer, stateRoot,
@@ -238,7 +238,7 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes = env.fetchAccounts.missingNodes.len
-    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
+    inxLeft = max(0, nMissingNodes - snapTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.
@@ -455,8 +455,8 @@ proc healAccounts*(
   var
     nNodesFetched = 0
     nFetchLoop = 0
-  # Stop after `snapAccountsHealBatchFetchMax` nodes have been fetched
-  while nNodesFetched < snapAccountsHealBatchFetchMax:
+  # Stop after `healAccountsBatchFetchMax` nodes have been fetched
+  while nNodesFetched < healAccountsBatchFetchMax:
     var nNodes = await buddy.accountsHealingImpl(env)
     if nNodes <= 0:
       break

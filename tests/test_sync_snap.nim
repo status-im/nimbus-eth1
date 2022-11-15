@@ -27,7 +27,7 @@ import
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_error, hexary_inspect, rocky_bulk_load,
-    snapdb_accounts, snapdb_desc, snapdb_storage_slots],
+    snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -407,6 +407,47 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       #
       # Beware: dumping a large database is not recommended
       #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
+
+    test &"Storing/retrieving {accKeys.len} items " &
+        "on persistent state root registry":
+      if not persistent:
+        skip()
+      else:
+        let
+          dbBase = SnapDbRef.init(db.cdb[0])
+          dangling = @[@[1u8],@[2u8,3u8],@[4u8,5u8,6u8],@[7u8,8u8,9u8,0u8]]
+          slotAccounts = seq[NodeKey].default
+        for n,w in accKeys:
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, n.uint64,
+              dangling, slotAccounts, 0).isOk
+          # verify latest state root
+          block:
+            let rc = dbBase.recoverPivot()
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+              check rc.value.dangling == dangling
+        for n,w in accKeys:
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+          # Update record in place
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, 0, @[], @[], 0).isOk
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == 0
+              check rc.value.dangling == seq[Blob].default
 
 proc storagesRunner(
     noisy = true;

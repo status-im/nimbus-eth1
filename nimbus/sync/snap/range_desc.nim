@@ -182,12 +182,12 @@ proc init*(tag: var NodeTag; data: openArray[byte]): bool =
 # Public rlp support
 # ------------------------------------------------------------------------------
 
-proc read*(rlp: var Rlp, T: type NodeTag): T
+proc read*[T: NodeTag|NodeKey](rlp: var Rlp, W: type T): T
     {.gcsafe, raises: [Defect,RlpError].} =
   rlp.read(Hash256).to(T)
 
-proc append*(writer: var RlpWriter, nid: NodeTag) =
-  writer.append(nid.to(Hash256))
+proc append*(writer: var RlpWriter, val: NodeTag|NodeKey) =
+  writer.append(val.to(Hash256))
 
 # ------------------------------------------------------------------------------
 # Public `NodeTag` and `NodeTagRange` functions
