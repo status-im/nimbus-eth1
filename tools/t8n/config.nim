@@ -144,6 +144,6 @@ proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf =
   result = T8NConf.load(
     cmdLine.convertToNimStyle,
     version = Version,
-    copyrightBanner = Copyright
+    copyrightBanner = Version & "\n" & Copyright
   )
   {.pop.}
