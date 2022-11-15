@@ -44,6 +44,9 @@ The following options are available:
  --nostack           disable stack output [=false].
  --nostorage         disable storage output [=false].
  --noreturndata      enable return data output [=true].
+ --fork              choose which fork to be tested.
+ --index             if index is unset, all subtest in the fork will be tested [=none(int)].
+ --pretty            pretty print the trace result [=false].
  --verbosity         sets the verbosity level [=0].
 
 ```
