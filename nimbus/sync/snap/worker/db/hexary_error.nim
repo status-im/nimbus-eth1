@@ -22,6 +22,8 @@ type
     SlotsNotSrictlyIncreasing
     TrieLoopAlert
     TrieIsEmpty
+    TooManyDanglingLinks
+    TooManySlotAccounts
 
     # import
     DifferentNodeValueExists
@@ -46,6 +48,7 @@ type
     NoRocksDbBackend
     UnresolvedRepairNode
     OSErrorException
+    StateRootNotFound
 
 # End
 

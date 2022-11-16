@@ -150,7 +150,7 @@ proc healingCtx(
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateMissingNodesList(
+proc verifyStillMissingNodes(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ) =
@@ -165,9 +165,8 @@ proc updateMissingNodesList(
 
   var delayed: seq[NodeSpecs]
   for w in env.fetchAccounts.missingNodes:
-    let rc = db.getAccountsNodeKey(peer, stateRoot, w.partialPath)
-    if rc.isOk:
-      # Check nodes for dangling links
+    if ctx.data.snapDb.nodeExists(peer, stateRoot, w):
+      # Check nodes for dangling links below
       env.fetchAccounts.checkNodes.add w.partialPath
     else:
       # Node is still missing
@@ -177,10 +176,11 @@ proc updateMissingNodesList(
   env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & delayed
 
 
-proc appendMoreDanglingNodesToMissingNodesList(
+proc updateMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): bool =
+      ): Future[bool]
+      {.async.} =
   ## Starting with a given set of potentially dangling account nodes
   ## `checkNodes`, this set is filtered and processed. The outcome is
   ## fed back to the vey same list `checkNodes`
@@ -190,22 +190,38 @@ proc appendMoreDanglingNodesToMissingNodesList(
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
 
-    rc = db.inspectAccountsTrie(peer, stateRoot, env.fetchAccounts.checkNodes)
+  while env.fetchAccounts.missingNodes.len < snapTrieNodesFetchMax:
+    # Inspect hexary trie for dangling nodes
+    let rc = db.inspectAccountsTrie(
+      peer, stateRoot,
+      env.fetchAccounts.checkNodes, # start with these nodes
+      env.fetchAccounts.resumeCtx,  # resume previous attempt
+      healAccountsInspectionBatch)  # visit no more than this many nodes
+    if rc.isErr:
+      when extraTraceMessages:
+        error logTxt "failed => stop", peer,
+          ctx=buddy.healingCtx(env), error=rc.error
+      # Attempt to switch peers, there is not much else we can do here
+      buddy.ctrl.zombie = true
+      return false
 
-  if rc.isErr:
-    when extraTraceMessages:
-      error logTxt "failed => stop", peer,
-        ctx=buddy.healingCtx(env), error=rc.error
-    # Attempt to switch peers, there is not much else we can do here
-    buddy.ctrl.zombie = true
-    return false
+    # Update context for async threading environment
+    env.fetchAccounts.resumeCtx = rc.value.resumeCtx
+    env.fetchAccounts.checkNodes.setLen(0)
 
-  # Global/env batch list to be replaced by by `rc.value.leaves` return value
-  env.fetchAccounts.checkNodes.setLen(0)
-  env.fetchAccounts.missingNodes =
-    env.fetchAccounts.missingNodes & rc.value.dangling
+    # Collect result
+    env.fetchAccounts.missingNodes =
+      env.fetchAccounts.missingNodes  & rc.value.dangling
 
-  true
+    # Done unless there is some resumption context
+    if rc.value.resumeCtx.isNil:
+      break
+
+    # Allow async task switch and continue. Note that some other task might
+    # steal some of the `env.fetchAccounts.missingNodes`.
+    await sleepAsync 1.nanoseconds
+
+  return true
 
 
 proc getMissingNodesFromNetwork(
@@ -222,7 +238,7 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes = env.fetchAccounts.missingNodes.len
-    inxLeft = max(0, nMissingNodes - snapTrieNodeFetchMax)
+    inxLeft = max(0, nMissingNodes - snapTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `missingNodes` queue to be handled later.
@@ -345,13 +361,13 @@ proc accountsHealingImpl(
     peer = buddy.peer
 
   # Update for changes since last visit
-  buddy.updateMissingNodesList(env)
+  buddy.verifyStillMissingNodes(env)
 
   # If `checkNodes` is empty, healing is at the very start or was
   # postponed in which case `missingNodes` is non-empty.
   if env.fetchAccounts.checkNodes.len != 0 or
      env.fetchAccounts.missingNodes.len == 0:
-    if not buddy.appendMoreDanglingNodesToMissingNodesList(env):
+    if not await buddy.updateMissingNodesList(env):
       return 0
 
   # Check whether the trie is complete.
@@ -409,12 +425,14 @@ proc accountsHealingImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
+proc healAccounts*(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    env = buddy.data.pivotEnv
 
   # Only start healing if there is some completion level, already.
   #
@@ -437,8 +455,8 @@ proc healAccounts*(buddy: SnapBuddyRef) {.async.} =
   var
     nNodesFetched = 0
     nFetchLoop = 0
-  # Stop after `snapAccountsHealBatchFetchMax` nodes have been fetched
-  while nNodesFetched < snapAccountsHealBatchFetchMax:
+  # Stop after `healAccountsBatchFetchMax` nodes have been fetched
+  while nNodesFetched < healAccountsBatchFetchMax:
     var nNodes = await buddy.accountsHealingImpl(env)
     if nNodes <= 0:
       break

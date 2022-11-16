@@ -9,15 +9,14 @@
 # except according to those terms.
 
 import
-  std/[hashes, math, options, sets, strutils],
+  std/[hashes, options, sets, strutils],
   chronicles,
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ".."/[handlers, misc/best_pivot, protocol, sync_desc],
-  ./worker/[heal_accounts, heal_storage_slots,
-            range_fetch_accounts, range_fetch_storage_slots, ticker],
+  ".."/[misc/best_pivot, protocol, sync_desc],
+  ./worker/[pivot_helper, ticker],
   ./worker/com/com_error,
   ./worker/db/[snapdb_check, snapdb_desc],
   "."/[constants, range_desc, worker_desc]
@@ -30,25 +29,6 @@ logScope:
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
-  if 0 < length:
-    result[0] = sum / length.float
-    result[1] = sqrt(sqSum / length.float - result[0] * result[0])
-
-template noExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raiseAssert "Inconveivable (" & info & ": name=" & $e.name & " msg=" & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private helpers: integration of pivot finder
@@ -73,70 +53,6 @@ proc `pivot=`(buddy: SnapBuddyRef; val: BestPivotWorkerRef) =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
-  ## Returns a pair of account hash range lists with the full range of hashes
-  ## smartly spread across the mutually disjunct interval sets.
-  batch.unprocessed.init()
-
-  # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
-  # range sets.
-  if ctx.data.coveredAccounts.isFull:
-    # All of accounts hashes are covered by completed range fetch processes
-    # for all pivot environments. Do a random split distributing the full
-    # accounts hash range across the pair of range sets.
-    for _ in 0 .. 5:
-      var nodeKey: NodeKey
-      ctx.data.rng[].generate(nodeKey.ByteArray32)
-      let top = nodeKey.to(NodeTag)
-      if low(NodeTag) < top and top < high(NodeTag):
-        # Move covered account ranges (aka intervals) to the second set.
-        batch.unprocessed.merge NodeTagRange.new(low(NodeTag), top)
-        break
-      # Otherwise there is a full single range in `unprocessed[0]`
-  else:
-    # Not all account hashes are covered, yet. So keep the uncovered
-    # account hashes in the first range set, and the other account hashes
-    # in the second range set.
-    for iv in ctx.data.coveredAccounts.increasing:
-      # Move covered account ranges (aka intervals) to the second set.
-      batch.unprocessed.merge(iv)
-
-  if batch.unprocessed[0].isEmpty:
-    doAssert batch.unprocessed[1].isFull
-  elif batch.unprocessed[1].isEmpty:
-    doAssert batch.unprocessed[0].isFull
-  else:
-    doAssert((batch.unprocessed[0].total - 1) +
-             batch.unprocessed[1].total == high(UInt256))
-
-
-proc appendPivotEnv(buddy: SnapBuddyRef; header: BlockHeader) =
-  ## Activate environment for state root implied by `header` argument. This
-  ## function appends a new environment unless there was any not far enough
-  ## apart.
-  ##
-  ## Note that this function relies on a queue sorted by the block numbers of
-  ## the pivot header. To maintain the sort order, the function `lruFetch()`
-  ## must not be called and only records appended with increasing block
-  ## numbers.
-  let
-    ctx = buddy.ctx
-    minNumber = block:
-      let rc = ctx.data.pivotTable.lastValue
-      if rc.isOk: rc.value.stateHeader.blockNumber + pivotBlockDistanceMin
-      else: 1.toBlockNumber
-
-  # Check whether the new header follows minimum depth requirement. This is
-  # where the queue is assumed to have increasing block numbers.
-  if minNumber <= header.blockNumber:
-    # Ok, append a new environment
-    let env = SnapPivotRef(stateHeader: header)
-    env.fetchAccounts.init(ctx)
-
-    # Append per-state root environment to LRU queue
-    discard ctx.data.pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
-
 
 proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Helper, negotiate pivot unless present
@@ -165,54 +81,12 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
             multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
         return true
 
-    buddy.appendPivotEnv(header)
+    buddy.ctx.data.pivotTable.update(header, buddy.ctx)
 
     info "Snap pivot initialised", peer, pivot=("#" & $header.blockNumber),
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
     return true
-
-
-proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
-  result = proc: TickerStats =
-    var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
-      count = 0
-    for kvp in ctx.data.pivotTable.nextPairs:
-
-      # Accounts mean & variance
-      let aLen = kvp.data.nAccounts.float
-      if 0 < aLen:
-        count.inc
-        aSum += aLen
-        aSqSum += aLen * aLen
-
-        # Fill utilisation mean & variance
-        let fill = kvp.data.fetchAccounts.unprocessed.emptyFactor
-        uSum += fill
-        uSqSum += fill * fill
-
-        let sLen = kvp.data.nSlotLists.float
-        sSum += sLen
-        sSqSum += sLen * sLen
-
-    let
-      env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
-      pivotBlock = if env.isNil: none(BlockNumber)
-                   else: some(env.stateHeader.blockNumber)
-      stoQuLen = if env.isNil: none(uint64)
-                 else: some(env.fetchStorageFull.len.uint64 +
-                            env.fetchStoragePart.len.uint64)
-      accCoverage = ctx.data.coveredAccounts.fullFactor
-      accFill = meanStdDev(uSum, uSqSum, count)
-
-    TickerStats(
-      pivotBlock:    pivotBlock,
-      nQueues:       ctx.data.pivotTable.len,
-      nAccounts:     meanStdDev(aSum, aSqSum, count),
-      nSlotLists:    meanStdDev(sSum, sSqSum, count),
-      accountsFill:  (accFill[0], accFill[1], accCoverage),
-      nStorageQueue: stoQuLen)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -220,21 +94,18 @@ proc tickerUpdate*(ctx: SnapCtxRef): TickerStatsUpdater =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  # I have implemented tx exchange in
-  # eth wire handler. Need the txpool
-  # enabled. --andri
-  #noExceptionOops("worker.setup()"):
-    #ctx.ethWireCtx.txPoolEnabled(false)
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
     else: SnapDbRef.init(ctx.data.dbBackend)
   ctx.pivot = BestPivotCtxRef.init(ctx.data.rng)
   ctx.pivot.pivotRelaxedMode(enable = true)
+
   if tickerOK:
-    ctx.data.ticker = TickerRef.init(ctx.tickerUpdate)
+    ctx.data.ticker = TickerRef.init(ctx.data.pivotTable.tickerStats(ctx))
   else:
     trace "Ticker is disabled"
+
   result = true
 
 proc release*(ctx: SnapCtxRef) =
@@ -333,7 +204,7 @@ proc runPool*(buddy: SnapBuddyRef, last: bool) =
                env.fetchStoragePart.len == 0:
               env.storageDone = true
 
-      if extraTraceMessages:
+      when extraTraceMessages:
         trace "Checked for pivot DB completeness", peer, pivot,
           nAccounts=env.nAccounts, accountsState=env.accountsState,
           nSlotLists=env.nSlotLists, storageDone=env.storageDone
@@ -375,50 +246,34 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # Snapshot sync processing
   # ------------------------
 
-  template runAsync(code: untyped) =
-    await code
-    if buddy.ctrl.stopped:
-      # To be disconnected from peer.
-      return
-    if env != ctx.data.pivotTable.lastValue.value:
-      # Pivot has changed, so restart with the latest one
-      return
-
   # If this is a new pivot, the previous one can be partially cleaned up.
   # There is no point in keeping some older space consuming state data any
   # longer.
+  ctx.data.pivotTable.beforeTopMostlyClean()
+
+  # This one is the syncing work horse
+  let syncActionContinue = await env.execSnapSyncAction(buddy)
+
+  # Save state so sync can be partially resumed at next start up
   block:
-    let rc = ctx.data.pivotTable.beforeLastValue
-    if rc.isOk:
-      let nFetchStorage =
-        rc.value.fetchStorageFull.len + rc.value.fetchStoragePart.len
-      if 0 < nFetchStorage:
-        trace "Cleaning up previous pivot", peer, pivot, nFetchStorage
-        rc.value.fetchStorageFull.clear()
-        rc.value.fetchStoragePart.clear()
-      rc.value.fetchAccounts.checkNodes.setLen(0)
-      rc.value.fetchAccounts.missingNodes.setLen(0)
+    let
+      nMissingNodes = env.fetchAccounts.missingNodes.len
+      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
 
-  # Clean up storage slots queue first it it becomes too large
-  let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-  if snapNewBuddyStoragesSlotsQuPrioThresh < nStoQu:
-    runAsync buddy.rangeFetchStorageSlots()
+      rc = env.saveSnapState(ctx)
+    if rc.isErr:
+      error "Failed to save recovery checkpoint", peer, pivot,
+        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
+        nMissingNodes, nStoQu, error=rc.error
+    else:
+      discard
+      when extraTraceMessages:
+        trace "Saved recovery checkpoint", peer, pivot,
+          nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
+          nMissingNodes, nStoQu, blobSize=rc.value
 
-  if env.accountsState != HealerDone:
-    runAsync buddy.rangeFetchAccounts()
-    runAsync buddy.rangeFetchStorageSlots()
-
-    # Can only run a single accounts healer instance at a time. This instance
-    # will clear the batch queue so there is nothing to do for another process.
-    if env.accountsState == HealerIdle:
-      env.accountsState = HealerRunning
-      runAsync buddy.healAccounts()
-      env.accountsState = HealerIdle
-
-      # Some additional storage slots might have been popped up
-      runAsync buddy.rangeFetchStorageSlots()
-
-  runAsync buddy.healStorageSlots()
+  if not syncActionContinue:
+    return
 
   # Check whether there are more accounts to fetch.
   #

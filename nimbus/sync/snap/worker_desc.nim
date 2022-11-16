@@ -14,7 +14,9 @@ import
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
   ../sync_desc,
-  ./worker/[com/com_error, db/snapdb_desc, ticker],
+  ./worker/com/com_error,
+  ./worker/db/[hexary_desc, snapdb_desc],
+  ./worker/ticker,
   ./range_desc
 
 {.push raises: [Defect].}
@@ -48,6 +50,7 @@ type
     unprocessed*: SnapTodoRanges       ## Range of slots not covered, yet
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     missingNodes*: seq[NodeSpecs]      ## Dangling links to fetch and merge
+    resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
 
   SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
     ## Referenced object, so it can be made optional for the storage
@@ -77,6 +80,7 @@ type
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
     nSlotLists*: uint64                ## Imported # of account storage tries
+    obsolete*: bool                    ## Not latest pivot, anymore
 
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
@@ -92,9 +96,11 @@ type
     ## Globally shared data extension
     rng*: ref HmacDrbgContext          ## Random generator
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
+    snapDb*: SnapDbRef                 ## Accounts snapshot DB
+
+    # Pivot table
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
-    snapDb*: SnapDbRef                 ## Accounts snapshot DB
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
 
     # Info
@@ -123,7 +129,13 @@ proc hash*(a: Hash256): Hash =
 # ------------------------------------------------------------------------------
 
 proc init*(q: var SnapTodoRanges) =
-  ## Populate node range sets with maximal range in the first range set
+  ## Populate node range sets with maximal range in the first range set. This
+  ## kind of pair or interval sets is manages as follows:
+  ## * As long as possible, fetch and merge back intervals on the first set.
+  ## * If the first set is empty and some intervals are to be fetched, swap
+  ##   first and second interval lists.
+  ## That way, intervals from the first set are prioitised while the rest is
+  ## is considered after the prioitised intervals are exhausted.
   q[0] = NodeTagRangeSet.init()
   q[1] = NodeTagRangeSet.init()
   discard q[0].merge(low(NodeTag),high(NodeTag))
@@ -131,8 +143,8 @@ proc init*(q: var SnapTodoRanges) =
 
 proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
   ## Unconditionally merge the node range into the account ranges list
-  discard q[0].reduce(iv)
-  discard q[1].merge(iv)
+  discard q[0].merge(iv)
+  discard q[1].reduce(iv)
 
 proc merge*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
   ## Variant of `merge()`
@@ -147,6 +159,13 @@ proc reduce*(q: var SnapTodoRanges; iv: NodeTagRange) =
 proc reduce*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
   ## Variant of `reduce()`
   q.reduce NodeTagRange.new(minPt, maxPt)
+
+
+iterator ivItems*(q: var SnapTodoRanges): NodeTagRange =
+  ## Iterator over all list entries
+  for ivSet in q:
+    for iv in ivSet.increasing:
+      yield iv
 
 
 proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
@@ -190,8 +209,7 @@ proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
         # Merge argument intervals into target set
         for ivSet in kvp.data.slots.unprocessed:
           for iv in ivSet.increasing:
-            discard qData.slots.unprocessed[0].reduce(iv)
-            discard qData.slots.unprocessed[1].merge(iv)
+            qData.slots.unprocessed.reduce iv
   else:
     # Only add non-existing entries
     if kvp.data.slots.isNil:

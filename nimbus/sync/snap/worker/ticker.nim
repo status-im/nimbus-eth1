@@ -21,15 +21,16 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-ticker"
+  topics = "snap-tick"
 
 type
   TickerStats* = object
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
+    nAccountStats*: (int,int)          ## #chunks, #dangling/missing nodes
     nSlotLists*: (float,float)         ## mean and standard deviation
-    nStorageQueue*: Option[uint64]
+    nStorageQueue*: Option[int]
     nQueues*: int
 
   TickerStatsUpdater* =
@@ -124,7 +125,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     let
       accCov = data.accountsFill[0].pc99 &
          "(" & data.accountsFill[1].pc99 & ")" &
-         "/" & data.accountsFill[2].pc99
+         "/" & data.accountsFill[2].pc99 &
+         "~" & data.nAccountStats[0].uint.toSI &
+         "/" & data.nAccountStats[1].uint.toSI
       buddies = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds

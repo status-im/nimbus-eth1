@@ -11,7 +11,7 @@
 import
   std/[algorithm, tables],
   chronicles,
-  eth/[common, trie/db],
+  eth/[common, rlp, trie/db],
   ../../../../db/kvstore_rocksdb,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
@@ -27,6 +27,26 @@ type
 
   StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob {.gcsafe.}
     ## The `get()` function for the storage trie depends on the current account
+
+  StateRootRegistry* = object
+    ## State root record. A table of these kind of records is organised as
+    ## follows.
+    ## ::
+    ##    zero -> (n/a) -------+
+    ##                         |
+    ##             ...         |
+    ##              ^          |
+    ##              |          |
+    ##            (data)       |
+    ##              ^          |
+    ##              |          |
+    ##            (data)       |
+    ##              ^          |
+    ##              |          |
+    ##            (data) <-----+
+    ##
+    key*: NodeKey  ## Top reference for base entry, back reference otherwise
+    data*: Blob    ## Some data
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -46,22 +66,40 @@ proc toAccountsKey(a: RepairKey): ByteArray33 =
 proc toStorageSlotsKey(a: RepairKey): ByteArray33 =
   a.convertTo(NodeKey).toStorageSlotsKey
 
+proc stateRootGet*(db: TrieDatabaseRef; nodeKey: Nodekey): Blob =
+  db.get(nodeKey.toStateRootKey.toOpenArray)
+
 # ------------------------------------------------------------------------------
 # Public functions: get
 # ------------------------------------------------------------------------------
 
 proc persistentAccountsGetFn*(db: TrieDatabaseRef): AccountsGetFn =
+  ## Returns a `get()` function for retrieving accounts data
   return proc(key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       return db.get(nodeKey.toAccountsKey.toOpenArray)
 
 proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
+  ## Returns a `get()` function for retrieving storage slots data
   return proc(accKey: NodeKey; key: openArray[byte]): Blob =
     var nodeKey: NodeKey
     if nodeKey.init(key):
       return db.get(nodeKey.toStorageSlotsKey.toOpenArray)
-      
+
+proc persistentStateRootGet*(
+    db: TrieDatabaseRef;
+    root: NodeKey;
+      ): Result[StateRootRegistry,HexaryDbError] =
+  ## Implements a `get()` function for returning state root registry data.
+  let rlpBlob = db.stateRootGet(root)
+  if 0 < rlpBlob.len:
+    try:
+      return ok(rlp.decode(rlpBlob, StateRootRegistry))
+    except RlpError:
+      return err(RlpEncoding)
+  err(StateRootNotFound)
+
 # ------------------------------------------------------------------------------
 # Public functions: store/put
 # ------------------------------------------------------------------------------
@@ -70,7 +108,7 @@ proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
-  ## Bulk load using transactional `put()`
+  ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
 
@@ -86,7 +124,7 @@ proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
       ): Result[void,HexaryDbError] =
-  ## Bulk load using transactional `put()`
+  ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
 
@@ -97,6 +135,45 @@ proc persistentStorageSlotsPut*(
       return err(error)
     base.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
+
+proc persistentStateRootPut*(
+    db: TrieDatabaseRef;
+    root: NodeKey;
+    data: Blob;
+      ) {.gcsafe, raises: [Defect, RlpError].} =
+  ## Save or update state root registry data.
+  const
+    zeroKey = NodeKey.default
+  let
+    rlpData = db.stateRootGet(root)
+
+  if rlpData.len == 0:
+    var backKey: NodeKey
+
+    let baseBlob = db.stateRootGet(zeroKey)
+    if 0 < baseBlob.len:
+      backKey = rlp.decode(baseBlob, StateRootRegistry).key
+
+    # No need for a transaction frame. If the system crashes in between,
+    # so be it :). All that can happen is storing redundant top entries.
+    let
+      rootEntryData = rlp.encode StateRootRegistry(key: backKey, data: data)
+      zeroEntryData = rlp.encode StateRootRegistry(key: root)
+      
+    # Store a new top entry
+    db.put(root.toStateRootKey.toOpenArray, rootEntryData)
+
+    # Store updated base record pointing to top entry
+    db.put(zeroKey.toStateRootKey.toOpenArray, zeroEntryData)
+
+  else:
+    let record = rlp.decode(rlpData, StateRootRegistry)
+    if record.data != data:
+
+      let rootEntryData =
+        rlp.encode StateRootRegistry(key: record.key, data: data)
+
+      db.put(root.toStateRootKey.toOpenArray, rootEntryData)
 
 
 proc persistentAccountsPut*(

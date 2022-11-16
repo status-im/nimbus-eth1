@@ -27,7 +27,7 @@ import
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_error, hexary_inspect, rocky_bulk_load,
-    snapdb_accounts, snapdb_desc, snapdb_storage_slots],
+    snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -66,7 +66,6 @@ let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
   OkHexDb = Result[void,HexaryDbError].ok()
   OkStoDb = Result[void,seq[(int,HexaryDbError)]].ok()
-  OkImport = Result[seq[NodeSpecs],HexaryDbError].ok(@[])
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -87,6 +86,14 @@ var
 
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
+
+proc isImportOk(rc: Result[SnapAccountsGaps,HexaryDbError]): bool =
+  if rc.isErr:
+    check rc.error == NothingSerious # prints an error if different
+  elif 0 < rc.value.innerGaps.len:
+    check rc.value.innerGaps == seq[NodeSpecs].default
+  else:
+    return true
 
 proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
   ## Kludge: map error report to (older version) return code
@@ -301,7 +308,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
                  else: SnapDbRef.init(newMemoryDB())
         dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
       for n,w in accountsList:
-        check dbDesc.importAccounts(w.base, w.data, persistent) == OkImport
+        check dbDesc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
@@ -315,7 +322,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
           accounts: accountsList.mapIt(it.data.accounts).sortMerge,
           proof:    accountsList.mapIt(it.data.proof).flatten)
       # Merging intervals will produce gaps, so the result is expected OK but
-      # different from `OkImport`
+      # different from `.isImportOk`
       check desc.importAccounts(lowerBound, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
@@ -401,6 +408,46 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
 
+    test &"Storing/retrieving {accKeys.len} items " &
+        "on persistent state root registry":
+      if not persistent:
+        skip()
+      else:
+        let
+          dbBase = SnapDbRef.init(db.cdb[0])
+          dangling = @[@[1u8],@[2u8,3u8],@[4u8,5u8,6u8],@[7u8,8u8,9u8,0u8]]
+          slotAccounts = seq[NodeKey].default
+        for n,w in accKeys:
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, n.uint64,
+              dangling, slotAccounts, 0).isOk
+          # verify latest state root
+          block:
+            let rc = dbBase.recoverPivot()
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+              check rc.value.dangling == dangling
+        for n,w in accKeys:
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+          # Update record in place
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, 0, @[], @[], 0).isOk
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == 0
+              check rc.value.dangling == seq[Blob].default
 
 proc storagesRunner(
     noisy = true;
@@ -433,7 +480,7 @@ proc storagesRunner(
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
         let desc = SnapDbAccountsRef.init(dbBase, root, peer)
-        check desc.importAccounts(w.base, w.data, persistent) == OkImport
+        check desc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {storagesList.len} storages lists":
       let
@@ -515,15 +562,29 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
           dangling = rc.value.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(
-            rootKey, dangling.toHashSet.toSeq)
+          keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
         check dangling.len == keys.len
         singleStats.add (desc.hexaDb.tab.len,rc.value)
+
+        # Verify piecemeal approach for `inspectAccountsTrie()` ...
+        var
+          ctx = TrieNodeStatCtxRef()
+          piecemeal: HashSet[Blob]
+        while not ctx.isNil:
+          let rx = desc.inspectAccountsTrie(
+            resumeCtx=ctx, suspendAfter=128, persistent=false)
+          check rx.isOk
+          let stats = rx.get(otherwise = TrieNodeStat())
+          ctx = stats.resumeCtx
+          piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+        # Must match earlier all-in-one result
+        check dangling.len == piecemeal.len
+        check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for persistent db":
@@ -540,16 +601,31 @@ proc inspectionRunner(
             dbBase = SnapDbRef.init(db.cdb[2+n])
             desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkImport
-          let rc = desc.inspectAccountsTrie(persistent=false)
+            check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
+          let rc = desc.inspectAccountsTrie(persistent=true)
           check rc.isOk
           let
             dangling = rc.value.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(
-              rootKey, dangling.toHashSet.toSeq)
+            keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
-          check singleStats[n][1] == rc.value
+          let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
+          check ssn1.toHashSet == dangling.toHashSet
+
+          # Verify piecemeal approach for `inspectAccountsTrie()` ...
+          var
+            ctx = TrieNodeStatCtxRef()
+            piecemeal: HashSet[Blob]
+          while not ctx.isNil:
+            let rx = desc.inspectAccountsTrie(
+              resumeCtx=ctx, suspendAfter=128, persistent=persistent)
+            check rx.isOk
+            let stats = rx.get(otherwise = TrieNodeStat())
+            ctx = stats.resumeCtx
+            piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+          # Must match earlier all-in-one result
+          check dangling.len == piecemeal.len
+          check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for in-memory-db":
@@ -560,7 +636,7 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = memDesc.dup(root,Peer())
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false)==OkImport
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
@@ -583,7 +659,7 @@ proc inspectionRunner(
             rootSet = [rootKey].toHashSet
             desc = perDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkImport
+            check desc.importAccounts(w.base, w.data, persistent).isImportOk
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
@@ -610,7 +686,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent=false)==OkImport
+            check desc.importAccounts(w.base,w.data,persistent=false).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
@@ -642,7 +718,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent) == OkImport
+            check desc.importAccounts(w.base,w.data, persistent).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let

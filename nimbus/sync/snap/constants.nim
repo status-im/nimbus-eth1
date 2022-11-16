@@ -37,29 +37,45 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  snapStoragesSlotsFetchMax* = 2 * 1024
+  snapAccountsSaveDanglingMax* = 10_000
+    ## Recovery data are stored if the healing register
+    ## `fetchAccounts.missingNodes` with dangling node links has no more
+    ## than this many entries. Upon recovery, these dangling links allow
+    ## to reconstuct the needed ranges to complete the hexary trie for the
+    ## account fot current pivot.
+    ##
+    ## If there are too many dangling nodes, no data will be saved and restart
+    ## has to perform from scratch.
+
+  snapAccountsSaveStorageSlotsMax* = 10_000
+    ## Similar retriction as `snapAccountsSaveDanglingMax` but for the joint
+    ## queues `fetchStorageFull` and `fetchStoragePart`. If the joint queue
+    ## becomes too large, nothing is saved.
+    ##
+    ## Note thet the length of the jount queue is controlled by the constat
+    ## `snapStorageSlotsQuPrioThresh` which should be smaller than
+    ## this one.
+
+
+  snapStorageSlotsFetchMax* = 2 * 1024
     ## Maximal number of storage tries to fetch with a single message.
 
-  snapTrieNodeFetchMax* = 1024
+  snapStorageSlotsQuPrioThresh* = 5_000
+    ## For a new worker, prioritise processing the storage slots queue over
+    ## processing accounts if the queue has more than this many items.
+    ##
+    ## For a running worker processing accounts, stop processing accounts
+    ## and switch to processing the storage slots queue if the queue has
+    ## more than this many items.
+
+
+  snapTrieNodesFetchMax* = 1024
     ## Informal maximal number of trie nodes to fetch at once. This is not
     ## an official limit but found on several implementations (e.g. Geth.)
     ##
     ## Resticting the fetch list length early allows to better paralellise
     ## healing.
 
-  snapAccountsHealBatchFetchMax* = 5 * snapTrieNodeFetchMax
-    ## Keap on gloing in healing task up until this many nodes have been
-    ## fetched from the network or some error contition therminates the task.
-
-  snapNewBuddyStoragesSlotsQuPrioThresh* = 5_000
-    ## For a new worker, prioritise processing the storage slots queue over
-    ## processing accounts if the queue has more than this many items.
-
-  snapAccountsBuddyStoragesSlotsQuPrioThresh* = 30_000
-    ## For a running worker processing accounts, stop processing accounts
-    ## and switch to processing the storage slots queue if the queue has
-    ## more than this many items.
-  
   # --------------
 
   healAccountsTrigger* = 0.99
@@ -74,11 +90,26 @@ const
     ## over the network. More requests might be a disadvantage if peers only
     ## serve a maximum number requests (rather than data.)
 
+  healAccountsInspectionBatch* = 10_000
+    ## Number of nodes to inspect in a single batch. Several batches are run
+    ## until at least `snapTrieNodeFetchMax` dangling nodes are found. In
+    ## between batches, a tast/thread switch is allowed.
+
+  healAccountsBatchFetchMax* = 10 * 1024
+    ## Keep on gloing in healing task up until this many nodes have been
+    ## fetched from the network or some error contition terminates the task.
+    ##
+    ## This constant should be larger than `snapStorageSlotsFetchMax`
+
+
   healSlorageSlotsTrigger* = 0.70
     ## Consider per account storage slost healing if a per-account hexary
     ## sub-trie has reached this factor of completeness.
 
-  healStoragesSlotsBatchMax* = 32
+  healStorageSlotsInspectionBatch* = 10_000
+    ## Similar to `healAccountsInspectionBatch` but for storage slots.
+
+  healStorageSlotsBatchMax* = 32
     ## Maximal number of storage tries to to heal in a single batch run. Only
     ## this many items will be removed from the batch queue. These items will
     ## then be processed one by one.
@@ -112,6 +143,8 @@ const
 
 static:
   doAssert healAccountsTrigger < 1.0 # larger values make no sense
+  doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
+  doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
 
 # ------------------------------------------------------------------------------
 # End

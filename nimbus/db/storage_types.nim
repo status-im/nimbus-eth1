@@ -21,6 +21,7 @@ type
     skeletonTransaction
     snapSyncAccount
     snapSyncStorageSlot
+    snapSyncStateRoot
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -115,6 +116,12 @@ proc snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
 proc snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(snapSyncStorageSlot)
+  result.data[1 .. 32] = h
+  result.dataEndPos = uint8 sizeof(h)
+
+proc snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
+  doAssert(h.len == 32)
+  result.data[0] = byte ord(snapSyncStateRoot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 sizeof(h)
 
