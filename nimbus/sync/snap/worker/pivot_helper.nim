@@ -10,12 +10,13 @@
 
 import
   std/[math, sequtils],
+  bearssl/rand,
   chronos,
-  eth/[common, p2p],
+  eth/[common, trie/trie_defs],
   stew/[interval_set, keyed_queue],
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
-  ./db/[hexary_error, snapdb_pivot],
+  ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   "."/[heal_accounts, heal_storage_slots,
        range_fetch_accounts, range_fetch_storage_slots, ticker]
 
@@ -29,10 +30,11 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
+proc init(batch: SnapRangeBatchRef; ctx: SnapCtxRef) =
   ## Returns a pair of account hash range lists with the full range of hashes
   ## smartly spread across the mutually disjunct interval sets.
   batch.unprocessed.init()
+  batch.processed = NodeTagRangeSet.init()
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
@@ -59,13 +61,7 @@ proc init(batch: var SnapTrieRangeBatch; ctx: SnapCtxRef) =
       discard batch.unprocessed[1].merge iv
 
   when extraAsserts:
-    if batch.unprocessed[0].isEmpty:
-      doAssert batch.unprocessed[1].isFull
-    elif batch.unprocessed[1].isEmpty:
-      doAssert batch.unprocessed[0].isFull
-    else:
-      doAssert((batch.unprocessed[0].total - 1) +
-               batch.unprocessed[1].total == high(UInt256))
+    doAssert batch.unprocessed.verify
 
 # ------------------------------------------------------------------------------
 # Public functions: pivot table related
@@ -86,7 +82,7 @@ proc beforeTopMostlyClean*(pivotTable: var SnapPivotTable) =
 
 
 proc topNumber*(pivotTable: var SnapPivotTable): BlockNumber =
-  ## Return the block number op the top pivot entry, or zero if there is none.
+  ## Return the block number of the top pivot entry, or zero if there is none.
   let rc = pivotTable.lastValue
   if rc.isOk:
     return rc.value.stateHeader.blockNumber
@@ -96,6 +92,7 @@ proc update*(
     pivotTable: var SnapPivotTable; ## Pivot table
     header: BlockHeader;            ## Header to generate new pivot from
     ctx: SnapCtxRef;                ## Some global context
+    reverse = false;                ## Update from bottom (e.g. for recovery)
       ) =
   ## Activate environment for state root implied by `header` argument. This
   ## function appends a new environment unless there was any not far enough
@@ -106,14 +103,28 @@ proc update*(
   ##
   # Check whether the new header follows minimum depth requirement. This is
   # where the queue is assumed to have increasing block numbers.
-  if pivotTable.topNumber() + pivotBlockDistanceMin < header.blockNumber:
+  if reverse or
+     pivotTable.topNumber() + pivotBlockDistanceMin < header.blockNumber:
 
     # Ok, append a new environment
-    let env = SnapPivotRef(stateHeader: header)
+    let env = SnapPivotRef(
+      stateHeader:   header,
+      fetchAccounts: SnapRangeBatchRef())
     env.fetchAccounts.init(ctx)
+    var topEnv = env
 
     # Append per-state root environment to LRU queue
-    discard pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
+    if reverse:
+      discard pivotTable.prepend(header.stateRoot, env)
+      # Make sure that the LRU table does not grow too big.
+      if max(3, ctx.buddiesMax) < pivotTable.len:
+        # Delete second entry rather thanthe first which might currently
+        # be needed.
+        let rc = pivotTable.secondKey
+        if rc.isOk:
+          pivotTable.del rc.value
+    else:
+      discard pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
 
 
 proc tickerStats*(
@@ -142,7 +153,7 @@ proc tickerStats*(
         aSqSum += aLen * aLen
 
         # Fill utilisation mean & variance
-        let fill = kvp.data.fetchAccounts.unprocessed.emptyFactor
+        let fill = kvp.data.fetchAccounts.processed.fullFactor
         uSum += fill
         uSqSum += fill * fill
 
@@ -161,8 +172,8 @@ proc tickerStats*(
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
       stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
-      accStats = (env.fetchAccounts.unprocessed[0].chunks +
-                  env.fetchAccounts.unprocessed[1].chunks,
+      accStats = (env.fetchAccounts.processed.chunks,
+                  env.fetchAccounts.checkNodes.len +
                   env.fetchAccounts.sickSubTries.len)
 
     TickerStats(
@@ -248,25 +259,66 @@ proc saveCheckpoint*(
       ): Result[int,HexaryDbError] =
   ## Save current sync admin data. On success, the size of the data record
   ## saved is returned (e.g. for logging.)
-  if snapAccountsSaveDanglingMax < env.fetchAccounts.sickSubTries.len:
-    return err(TooManyDanglingLinks)
+  ##
+  let
+    fa = env.fetchAccounts
+    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
 
-  let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+  if snapAccountsSaveProcessedChunksMax < fa.processed.chunks:
+    return err(TooManyProcessedChunks)
+
   if snapAccountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  let
-    rc = ctx.data.snapDb.savePivot(
-    env.stateHeader, env.nAccounts, env.nSlotLists,
-    dangling = env.fetchAccounts.sickSubTries.mapIt(it.partialPath),
-    slotAccounts = toSeq(env.fetchStorageFull.nextKeys).mapIt(it.to(NodeKey)) &
-                   toSeq(env.fetchStoragePart.nextKeys).mapIt(it.to(NodeKey)),
-    coverage = (ctx.data.coveredAccounts.fullFactor * 255).uint8)
+  ctx.data.snapDb.savePivot SnapDbPivotRegistry(
+    header:       env.stateHeader,
+    nAccounts:    env.nAccounts,
+    nSlotLists:   env.nSlotLists,
+    processed:    toSeq(env.fetchAccounts.processed.increasing)
+                    .mapIt((it.minPt,it.maxPt)),
+    slotAccounts: (toSeq(env.fetchStorageFull.nextKeys) &
+                   toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)))
 
-  if rc.isErr:
-    return err(rc.error)
 
-  ok(rc.value)
+proc recoverPivotFromCheckpoint*(
+    env: SnapPivotRef;              ## Current pivot environment
+    ctx: SnapCtxRef;                ## Global context (containing save state)
+    topLevel: bool;                 ## Full data set on top level only
+      ) =
+  ## Recover some pivot variables and global list `coveredAccounts` from
+  ## checkpoint data. If the argument `toplevel` is set `true`, also the
+  ## `processed`, `unprocessed`, and the `fetchStorageFull` lists are
+  ## initialised.
+  ##
+  let recov = ctx.data.recovery
+  if recov.isNil:
+    return
+
+  env.nAccounts = recov.state.nAccounts
+  env.nSlotLists = recov.state.nSlotLists
+
+  if topLevel:
+    # Import processed interval
+    for (minPt,maxPt) in recov.state.processed:
+      discard env.fetchAccounts.processed.merge(minPt, maxPt)
+      env.fetchAccounts.unprocessed.reduce(minPt, maxPt)
+
+    # Handle storage slots
+    let stateRoot = recov.state.header.stateRoot
+    for w in recov.state.slotAccounts:
+      let pt = NodeTagRange.new(w.to(NodeTag),w.to(NodeTag))
+
+      if 0 < env.fetchAccounts.processed.covered(pt):
+        # Ignoring slots that have accounts to be downloaded, anyway
+        let rc = ctx.data.snapDb.getAccountsData(stateRoot, w)
+        if rc.isErr:
+          # Oops, how did that account get lost?
+          discard env.fetchAccounts.processed.reduce pt
+          env.fetchAccounts.unprocessed.merge pt
+        elif rc.value.storageRoot != emptyRlpHash:
+          env.fetchStorageFull.merge AccountSlotsHeader(
+            accKey:      w,
+            storageRoot: rc.value.storageRoot)
 
 # ------------------------------------------------------------------------------
 # End

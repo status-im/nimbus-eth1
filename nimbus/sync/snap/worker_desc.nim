@@ -15,7 +15,7 @@ import
   ../../db/select_backend,
   ../sync_desc,
   ./worker/com/com_error,
-  ./worker/db/[hexary_desc, snapdb_desc],
+  ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   ./worker/ticker,
   ./range_desc
 
@@ -37,24 +37,23 @@ type
     ## where the optional `subRange` interval has been replaced by an interval
     ## range + healing support.
     accKey*: NodeKey                   ## Owner account
-    slots*: SnapTrieRangeBatchRef      ## slots to fetch, nil => all slots
+    slots*: SnapRangeBatchRef          ## slots to fetch, nil => all slots
     inherit*: bool                     ## mark this trie seen already
 
   SnapTodoRanges* = array[2,NodeTagRangeSet]
-    ## Pair of node range lists. The first entry must be processed first. This
-    ## allows to coordinate peers working on different state roots to avoid
-    ## ovelapping accounts as long as they fetch from the first entry.
+    ## Pair of sets of ``unprocessed`` node ranges that need to be fetched and
+    ## integrated. The ranges in the first set must be handled with priority.
+    ##
+    ## This data structure is used for coordinating peers that run quasi
+    ## parallel.
 
-  SnapTrieRangeBatch* = object
+  SnapRangeBatchRef* = ref object
     ## `NodeTag` ranges to fetch, healing support
-    unprocessed*: SnapTodoRanges       ## Range of slots not covered, yet
+    unprocessed*: SnapTodoRanges       ## Range of slots to be fetched
+    processed*: NodeTagRangeSet        ## Nodes definitely processed
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
-
-  SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
-    ## Referenced object, so it can be made optional for the storage
-    ## batch list
 
   SnapHealingState* = enum
     ## State of healing process. The `HealerRunning` state indicates that
@@ -69,8 +68,9 @@ type
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download
-    fetchAccounts*: SnapTrieRangeBatch ## Set of accounts ranges to fetch
+    fetchAccounts*: SnapRangeBatchRef  ## Set of accounts ranges to fetch
     accountsState*: SnapHealingState   ## All accounts have been processed
+    healThresh*: float                 ## Start healing when fill factor reached
 
     # Storage slots download
     fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts
@@ -85,6 +85,11 @@ type
   SnapPivotTable* = ##\
     ## LRU table, indexed by state root
     KeyedQueue[Hash256,SnapPivotRef]
+
+  SnapRecoveryRef* = ref object
+    ## Recovery context
+    state*: SnapDbPivotRegistry        ## Saved recovery context state
+    level*: int                        ## top level is zero
 
   BuddyData* = object
     ## Per-worker local descriptor data extension
@@ -103,6 +108,7 @@ type
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     accountsHealing*: bool             ## Activates accounts DB healing
+    recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
     noRecovery*: bool                  ## Ignore recovery checkpoints
 
     # Info
@@ -144,7 +150,7 @@ proc init*(q: var SnapTodoRanges) =
 
 
 proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
-  ## Unconditionally merge the node range into the account ranges list
+  ## Unconditionally merge the node range into the account ranges list.
   discard q[0].merge(iv)
   discard q[1].reduce(iv)
 
@@ -189,6 +195,21 @@ proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
   discard q[0].reduce(iv)
   ok(iv)
 
+
+proc verify*(q: var SnapTodoRanges): bool =
+  ## Verify consistency, i.e. that the two sets of ranges have no overlap.
+  if q[0].chunks == 0 or q[1].chunks == 0:
+    # At least on set is empty
+    return true
+  if q[0].total == 0 or q[1].total == 0:
+    # At least one set is maximal and the other non-empty
+    return false
+  let (a,b) = if q[0].chunks < q[1].chunks: (0,1) else: (1,0)
+  for iv in q[a].increasing:
+    if 0 < q[b].covered(iv):
+      return false
+  true
+
 # ------------------------------------------------------------------------------
 # Public helpers: SlotsQueue
 # ------------------------------------------------------------------------------
@@ -198,7 +219,10 @@ proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
   let
     reqKey = kvp.key
     rc = q.eq(reqKey)
-  if rc.isOk:
+  if rc.isErr:
+    # Append to list
+    discard q.append(reqKey, kvp.data)
+  else:
     # Entry exists already
     let qData = rc.value
     if not qData.slots.isNil:
@@ -206,23 +230,17 @@ proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
       if kvp.data.slots.isNil:
         # Remove restriction for this entry and move it to the right end
         qData.slots = nil
-        discard q.lruFetch(reqKey)
+        discard q.lruFetch reqKey
       else:
         # Merge argument intervals into target set
         for ivSet in kvp.data.slots.unprocessed:
           for iv in ivSet.increasing:
             qData.slots.unprocessed.reduce iv
-  else:
-    # Only add non-existing entries
-    if kvp.data.slots.isNil:
-      # Append full range to the right of the list
-      discard q.append(reqKey, kvp.data)
-    else:
-      # Partial range, add healing support and interval
-      discard q.unshift(reqKey, kvp.data)
 
 proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
-  ## Append/prepend a slot header record into the batch queue.
+  ## Append/prepend a slot header record into the batch queue. If there is
+  ## a range merger, the argument range will be sortred in a way so that it
+  ## is processed separately with highest priority.
   let
     reqKey = fetchReq.storageRoot
     rc = q.eq(reqKey)
@@ -234,26 +252,31 @@ proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
       if fetchReq.subRange.isNone:
         # Remove restriction for this entry and move it to the right end
         qData.slots = nil
-        discard q.lruFetch(reqKey)
+        discard q.lruFetch reqKey
       else:
-        # Merge argument interval into target set
-        let iv = fetchReq.subRange.unsafeGet
-        discard qData.slots.unprocessed[0].reduce(iv)
-        discard qData.slots.unprocessed[1].merge(iv)
-  else:
-    let reqData = SnapSlotsQueueItemRef(accKey: fetchReq.accKey)
+        # Merge argument interval into target separated from the already
+        # existing sets (note that this works only for the last set)
+        for iv in qData.slots.unprocessed[0].increasing:
+          # Move all to second set
+          discard qData.slots.unprocessed[1].merge iv
+        # Clear first set and add argument range
+        qData.slots.unprocessed[0].clear()
+        qData.slots.unprocessed.merge fetchReq.subRange.unsafeGet
 
-    # Only add non-existing entries
-    if fetchReq.subRange.isNone:
-      # Append full range to the right of the list
-      discard q.append(reqKey, reqData)
-    else:
-      # Partial range, add healing support and interval
-      reqData.slots = SnapTrieRangeBatchRef()
-      for n in 0 ..< reqData.slots.unprocessed.len:
-        reqData.slots.unprocessed[n] = NodeTagRangeSet.init()
-      discard reqData.slots.unprocessed[0].merge(fetchReq.subRange.unsafeGet)
-      discard q.unshift(reqKey, reqData)
+  elif fetchReq.subRange.isNone:
+    # Append full range to the list
+    discard q.append(reqKey, SnapSlotsQueueItemRef(
+      accKey: fetchReq.accKey))
+
+  else:
+    # Partial range, add healing support and interval
+    var unprocessed = [NodeTagRangeSet.init(), NodeTagRangeSet.init()]
+    discard unprocessed[0].merge(fetchReq.subRange.unsafeGet)
+    discard q.append(reqKey, SnapSlotsQueueItemRef(
+      accKey: fetchReq.accKey,
+      slots:  SnapRangeBatchRef(
+        unprocessed: unprocessed,
+        processed:   NodeTagRangeSet.init())))
 
 proc merge*(
     q: var SnapSlotsQueue;

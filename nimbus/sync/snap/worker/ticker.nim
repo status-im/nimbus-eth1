@@ -39,6 +39,7 @@ type
   TickerRef* = ref object
     ## Account fetching state that is shared among all peers.
     nBuddies:  int
+    recovery:  bool
     lastStats: TickerStats
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
@@ -145,8 +146,12 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     if data.nStorageQueue.isSome:
       nStoQue = $data.nStorageQueue.unsafeGet
 
-    info "Snap sync statistics",
-      up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+    if t.recovery:
+      info "Snap sync statistics (recovery)",
+        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+    else:
+      info "Snap sync statistics",
+        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
 
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
@@ -183,15 +188,29 @@ proc startBuddy*(t: TickerRef) =
   ## Increment buddies counter and start ticker unless running.
   if t.nBuddies <= 0:
     t.nBuddies = 1
-    t.start()
+    if not t.recovery:
+      t.start()
   else:
     t.nBuddies.inc
+
+proc startRecovery*(t: TickerRef) =
+  ## Ditto for recovery mode
+  if not t.recovery:
+    t.recovery = true
+    if t.nBuddies <= 0:
+      t.start()
 
 proc stopBuddy*(t: TickerRef) =
   ## Decrement buddies counter and stop ticker if there are no more registered
   ## buddies.
   t.nBuddies.dec
-  if t.nBuddies <= 0:
+  if t.nBuddies <= 0 and not t.recovery:
+    t.stop()
+
+proc stopRecovery*(t: TickerRef) =
+  ## Ditto for recovery mode
+  if t.recovery:
+    t.recovery = false
     t.stop()
 
 # ------------------------------------------------------------------------------

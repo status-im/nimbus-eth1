@@ -190,13 +190,13 @@ proc updateMissingNodesList(
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
 
-  while env.fetchAccounts.sickSubTries.len < snapTrieNodesFetchMax:
+  while env.fetchAccounts.sickSubTries.len < snapRequestTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectAccountsTrie(
       peer, stateRoot,
       env.fetchAccounts.checkNodes, # start with these nodes
       env.fetchAccounts.resumeCtx,  # resume previous attempt
-      healAccountsInspectionBatch)  # visit no more than this many nodes
+      healInspectionBatch)          # visit no more than this many nodes
     if rc.isErr:
       when extraTraceMessages:
         error logTxt "failed => stop", peer,
@@ -238,7 +238,7 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nSickSubTries = env.fetchAccounts.sickSubTries.len
-    inxLeft = max(0, nSickSubTries - snapTrieNodesFetchMax)
+    inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `sickSubTries` queue to be handled later.

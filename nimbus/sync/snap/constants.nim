@@ -37,24 +37,28 @@ const
   snapRequestBytesLimit* = 2 * 1024 * 1024
     ## Soft bytes limit to request in `snap` protocol calls.
 
-  snapAccountsSaveDanglingMax* = 10_000
-    ## Recovery data are stored if the healing nodes register
-    ## `fetchAccounts.sickSubTries` with dangling node links has no more
-    ## than this many entries. Upon recovery, these dangling links allow
-    ## to reconstuct the needed ranges to complete the hexary trie for the
-    ## account fot current pivot.
+  snapRequestTrieNodesFetchMax* = 1024
+    ## Informal maximal number of trie nodes to fetch at once in `snap`
+    ## protocol calls. This is not an official limit but found with several
+    ## implementations (e.g. Geth.)
+    ##
+    ## Resticting the fetch list length early allows to better paralellise
+    ## healing.
+
+
+  snapAccountsSaveProcessedChunksMax* = 1000
+    ## Recovery data are stored if the processed ranges list contains no more
+    ## than this many range `chunks`.
     ##
     ## If there are too many dangling nodes, no data will be saved and restart
     ## has to perform from scratch.
 
   snapAccountsSaveStorageSlotsMax* = 10_000
-    ## Similar retriction as `snapAccountsSaveDanglingMax` but for the joint
-    ## queues `fetchStorageFull` and `fetchStoragePart`. If the joint queue
-    ## becomes too large, nothing is saved.
+    ## Recovery data are stored if the oustanding storage slots to process do
+    ## not amount to more than this many entries.
     ##
-    ## Note thet the length of the jount queue is controlled by the constat
-    ## `snapStorageSlotsQuPrioThresh` which should be smaller than
-    ## this one.
+    ## If there are too many dangling nodes, no data will be saved and restart
+    ## has to perform from scratch.
 
 
   snapStorageSlotsFetchMax* = 2 * 1024
@@ -68,15 +72,16 @@ const
     ## and switch to processing the storage slots queue if the queue has
     ## more than this many items.
 
-
-  snapTrieNodesFetchMax* = 1024
-    ## Informal maximal number of trie nodes to fetch at once. This is not
-    ## an official limit but found on several implementations (e.g. Geth.)
-    ##
-    ## Resticting the fetch list length early allows to better paralellise
-    ## healing.
-
   # --------------
+
+  healInspectionBatch* = 10_000
+    ## Number of nodes to inspect in a single batch. In between batches, a
+    ## task/thread switch is allowed.
+
+  healInspectionBatchWaitNanoSecs* = 500
+    ## Wait some time asynchroneously after processing `healInspectionBatch`
+    ## nodes to allow for a pseudo -task switch.
+
 
   healAccountsTrigger* = 0.99
     ## Apply accounts healing if the global snap download coverage factor
@@ -89,11 +94,6 @@ const
     ## account ranges. This in turn leads to smaller but more range requests
     ## over the network. More requests might be a disadvantage if peers only
     ## serve a maximum number requests (rather than data.)
-
-  healAccountsInspectionBatch* = 10_000
-    ## Number of nodes to inspect in a single batch. Several batches are run
-    ## until at least `snapTrieNodeFetchMax` dangling nodes are found. In
-    ## between batches, a tast/thread switch is allowed.
 
   healAccountsBatchFetchMax* = 10 * 1024
     ## Keep on gloing in healing task up until this many nodes have been

@@ -221,13 +221,13 @@ proc digestTo*(data: Blob; T: type NodeTag): T =
 
 proc isEmpty*(lrs: NodeTagRangeSet): bool =
   ## Returns `true` if the argument set `lrs` of intervals is empty
-  lrs.total == 0 and lrs.chunks == 0
+  lrs.chunks == 0
 
 proc isEmpty*(lrs: openArray[NodeTagRangeSet]): bool =
   ## Variant of `isEmpty()` where intervals are distributed across several
   ## sets.
   for ivSet in lrs:
-    if 0 < ivSet.total or 0 < ivSet.chunks:
+    if 0 < ivSet.chunks:
       return false
   true
 
@@ -275,24 +275,6 @@ proc fullFactor*(lrs: NodeTagRangeSet): float =
     0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
     1.0 # number of points in `lrs` is `2^256 + 1`
-
-proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
-  ## Variant of `fullFactor()` where intervals are distributed across several
-  ## sets. This function makes sense only if the interval sets are mutually
-  ## disjunct.
-  var accu: NodeTag
-  for ivSet in lrs:
-    if 0 < ivSet.total:
-      if high(NodeTag) - ivSet.total < accu:
-        return 1.0
-      accu = accu + ivSet.total
-    elif ivSet.chunks == 0:
-      discard
-    else: # number of points in `ivSet` is `2^256 + 1`
-      return 1.0
-  if accu == 0.to(NodeTag):
-    return 0.0
-  accu.u256.to(float) / (2.0^256)
 
 # ------------------------------------------------------------------------------
 # Public functions: printing & pretty printing

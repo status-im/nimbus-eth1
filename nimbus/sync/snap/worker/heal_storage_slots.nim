@@ -140,7 +140,7 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
-  while slots.sickSubTries.len < snapTrieNodesFetchMax:
+  while slots.sickSubTries.len < snapRequestTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectStorageSlotsTrie(
       peer, accKey, storageRoot,
@@ -191,7 +191,7 @@ proc getMissingNodesFromNetwork(
     slots = kvp.data.slots
 
     nSickSubTries = slots.sickSubTries.len
-    inxLeft = max(0, nSickSubTries - snapTrieNodesFetchMax)
+    inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `sickSubTries` queue to be handled later.
@@ -477,7 +477,7 @@ proc healingIsComplete(
       return true # done
 
     # Full range covered by unprocessed items
-    kvp.data.slots = SnapTrieRangeBatchRef(sickSubTries: rc.value.dangling)
+    kvp.data.slots = SnapRangeBatchRef(sickSubTries: rc.value.dangling)
     kvp.data.slots.unprocessed.init()
 
   # Proceed with healing
