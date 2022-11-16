@@ -64,9 +64,14 @@ const
   trEthSendDelaying* =
     ">> " & prettyEthProtoName & " Delaying "
 
-func toHex(hash: Hash256): string =
-  ## Shortcut for `byteutils.toHex(hash.data)`
-  hash.data.toHex
+  trEthRecvNewBlock* =
+    "<< " & prettyEthProtoName & " Received NewBlock"
+  trEthRecvNewBlockHashes* =
+    "<< " & prettyEthProtoName & " Received NewBlockHashes"
+  trEthSendNewBlock* =
+    ">> " & prettyEthProtoName & " Sending NewBlock"
+  trEthSendNewBlockHashes* =
+    ">> " & prettyEthProtoName & " Sending NewBlockHashes"
 
 p2pProtocol eth67(version = ethVersion,
                   rlpxName = "eth",
@@ -82,9 +87,9 @@ p2pProtocol eth67(version = ethVersion,
 
     trace trEthSendSending & "Status (0x00)", peer,
       td        = status.totalDifficulty,
-      bestHash  = status.bestBlockHash,
+      bestHash  = short(status.bestBlockHash),
       networkId = network.networkId,
-      genesis   = status.genesisHash,
+      genesis   = short(status.genesisHash),
       forkHash  = status.forkId.forkHash.toHex,
       forkNext  = status.forkId.forkNext
 
@@ -100,7 +105,7 @@ p2pProtocol eth67(version = ethVersion,
       trace "Handshake: Local and remote networkId",
         local=network.networkId, remote=m.networkId
       trace "Handshake: Local and remote genesisHash",
-        local=status.genesisHash, remote=m.genesisHash
+        local=short(status.genesisHash), remote=short(m.genesisHash)
       trace "Handshake: Local and remote forkId",
         local=(status.forkId.forkHash.toHex & "/" & $status.forkId.forkNext),
         remote=(m.forkId.forkHash.toHex & "/" & $m.forkId.forkNext)
@@ -113,7 +118,7 @@ p2pProtocol eth67(version = ethVersion,
 
     if m.genesisHash != status.genesisHash:
       trace "Peer for a different network (genesisHash)", peer,
-        expectGenesis=status.genesisHash, gotGenesis=m.genesisHash
+        expectGenesis=short(status.genesisHash), gotGenesis=short(m.genesisHash)
       raise newException(
         UselessPeerError, "Eth handshake for different network")
 
@@ -132,7 +137,7 @@ p2pProtocol eth67(version = ethVersion,
                 genesisHash: Hash256,
                 forkId: ChainForkId) =
       trace trEthRecvReceived & "Status (0x00)", peer,
-          networkId, totalDifficulty, bestHash, genesisHash,
+          networkId, totalDifficulty, bestHash=short(bestHash), genesisHash=short(genesisHash),
          forkHash=forkId.forkHash.toHex, forkNext=forkId.forkNext
 
   # User message 0x01: NewBlockHashes.

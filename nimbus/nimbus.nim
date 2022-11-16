@@ -416,7 +416,23 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        FastSyncCtx.new(nimbus.ethNode, nimbus.chainRef).start
+        let syncer = FastSyncCtx.new(nimbus.ethNode, nimbus.chainRef)
+        syncer.start
+
+        let wireHandler = EthWireRef(
+          nimbus.ethNode.protocolState(eth)
+        )
+
+        wireHandler.setNewBlockHandler(
+          fast.newBlockHandler,
+          cast[pointer](syncer)
+        )
+
+        wireHandler.setNewBlockHashesHandler(
+          fast.newBlockHashesHandler,
+          cast[pointer](syncer)
+        )
+
       of SyncMode.Full, SyncMode.Snap:
         discard
 
