@@ -16,7 +16,6 @@ import
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[light_client_network, light_client_content],
   ../../../nimbus/constants,
-  ../../content_db,
   "."/[light_client_test_data, light_client_test_helpers]
 
 procSuite "Light client Content Network":
@@ -84,17 +83,11 @@ procSuite "Light client Content Network":
       finalityUpdate = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
       optimisticUpdate = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
 
-      finalityUpdateKey = ContentKey(
-        contentType: lightClientFinalityUpdate,
-        lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
-      )
+      finalityUpdateKey = latestFinalityUpdateContentKey()
       finalityKeyEnc = encode(finalityUpdateKey)
       finalityUdpateId = toContentId(finalityKeyEnc)
 
-      optimistUpdateKey = ContentKey(
-        contentType: lightClientOptimisticUpdate,
-        lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
-      )
+      optimistUpdateKey = latestOptimisticUpdateContentKey()
       optimisticKeyEnc = encode(optimistUpdateKey)
       optimisticUpdateId = toContentId(optimisticKeyEnc)
 
@@ -122,6 +115,58 @@ procSuite "Light client Content Network":
       optimisticResult.isOk()
       finalityResult.get() == finalityUpdate
       optimisticResult.get() == optimisticUpdate
+
+    await lcNode1.stop()
+    await lcNode2.stop()
+
+  asyncTest "Get range of light client updates":
+    let
+      lcNode1 = newLCNode(rng, 20302)
+      lcNode2 = newLCNode(rng, 20303)
+      forks = getTestForkDigests()
+
+    check:
+      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+
+    let
+      update1 = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      update2 = SSZ.decode(lightClientUpdateBytes1, altair.LightClientUpdate)
+      updates = @[update1, update2]
+      content = encodeLightClientUpdatesForked(forks.altair, updates)
+      startPeriod = update1.attested_header.slot.sync_committee_period
+      contentKey = ContentKey(
+        contentType: lightClientUpdate,
+        lightClientUpdateKey: LightClientUpdateKey(
+          startPeriod: startPeriod.uint64,
+          count: uint64(2)
+        )
+      )
+      contentKeyEncoded = encode(contentKey)
+      contentId = toContentId(contentKey)
+
+    lcNode2.portalProtocol().storeContent(
+      contentKeyEncoded,
+      contentId,
+      content
+    )
+
+    let updatesResult =
+      await lcNode1.lightClientNetwork.getLightClientUpdatesByRange(
+        startPeriod.uint64,
+        uint64(2)
+      )
+
+    check:
+      updatesResult.isOk()
+
+    let updatesFromPeer = updatesResult.get()
+
+    check:
+      updatesFromPeer == updates
 
     await lcNode1.stop()
     await lcNode2.stop()

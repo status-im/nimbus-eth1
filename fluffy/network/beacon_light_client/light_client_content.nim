@@ -41,12 +41,21 @@ type
   LightClientBootstrapKey* = object
     blockHash*: Digest
 
-  #TODO Following types will need revision and improvements
   LightClientUpdateKey* = object
+    startPeriod*: uint64
+    count*: uint64
 
+  #TODO Following types will need revision and improvements
+  # - Cannot user empty objects as SSZ spec does not support containers without
+  # fields
+  # - Cannot use any other type which serializes to empty bytearray (like List[byte, 0])
+  # as ssz_serialization library complains that `invalid empty for selector`
+  # For now use Container with one bool
   LightClientFinalityUpdateKey* = object
+    latest: bool
 
   LightClientOptimisticUpdateKey* = object
+    latest: bool
 
   ContentKey* = object
     case contentType*: ContentType
@@ -59,13 +68,13 @@ type
     of lightClientOptimisticUpdate:
       lightClientOptimisticUpdateKey*: LightClientOptimisticUpdateKey
 
-  ForkedLightClientUpdateBytes = List[byte, MAX_LIGHT_CLIENT_UPDATE_SIZE]
-  LightClientUpdateList = List[ForkedLightClientUpdateBytes, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
+  ForkedLightClientUpdateBytes* = List[byte, MAX_LIGHT_CLIENT_UPDATE_SIZE]
+  LightClientUpdateList* = List[ForkedLightClientUpdateBytes, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
-func decode*(contentKey: ByteList): Option[ContentKey] =
+proc decode*(contentKey: ByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
@@ -194,21 +203,38 @@ proc encodeLightClientUpdatesForked*(
 
   return SSZ.encode(lu)
 
-proc decodeLightClientUpdatesForked*(
-    forks: ForkDigests,
-    data: openArray[byte]): Result[seq[altair.LightClientUpdate], string] =
+proc decodeLightClientUpdatesForkedAsList*(
+    data: openArray[byte]): Result[LightClientUpdateList, string] =
   try:
     let listDecoded = SSZ.decode(
       data,
       LightClientUpdateList
     )
-
-    var updates: seq[altair.LightClientUpdate]
-
-    for enc in listDecoded:
-      let updateDecoded = ? decodeLightClientUpdateForked(forks, enc.asSeq())
-      updates.add(updateDecoded)
-
-    return ok(updates)
+    return ok(listDecoded)
   except SszError as exc:
     return err(exc.msg)
+
+proc decodeLightClientUpdatesForked*(
+    forks: ForkDigests,
+    data: openArray[byte]): Result[seq[altair.LightClientUpdate], string] =
+  let listDecoded = ? decodeLightClientUpdatesForkedAsList(data)
+
+  var updates: seq[altair.LightClientUpdate]
+
+  for enc in listDecoded:
+    let updateDecoded = ? decodeLightClientUpdateForked(forks, enc.asSeq())
+    updates.add(updateDecoded)
+
+  return ok(updates)
+
+func latestFinalityUpdateContentKey*(): ContentKey =
+  ContentKey(
+    contentType: lightClientFinalityUpdate,
+    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(latest: true)
+  )
+
+func latestOptimisticUpdateContentKey*(): ContentKey =
+  ContentKey(
+    contentType: lightClientOptimisticUpdate,
+    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(latest: true)
+  )
