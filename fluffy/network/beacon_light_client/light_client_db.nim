@@ -14,12 +14,17 @@ import
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
   stint,
-  stew/results,
+  stew/[results, byteutils],
   ssz_serialization,
   ./light_client_content,
   ../wire/portal_protocol
 
 export kvstore_sqlite3
+
+# We only one best optimistic and one best final update
+const
+  bestFinalUpdateKey = toContentId(ByteList.init(toBytes("bestFinal")))
+  bestOptimisticUpdateKey = toContentId(ByteList.init(toBytes("bestOptimistic")))
 
 type
   BestLightClientUpdateStore = ref object
@@ -100,22 +105,22 @@ func putLightClientUpdate(
 
 ## Private KvStoreRef Calls
 
-proc get(kv: KvStoreRef, key: openArray[byte]): Option[seq[byte]] =
-  var res: Option[seq[byte]]
-  proc onData(data: openArray[byte]) = res = some(@data)
+proc get(kv: KvStoreRef, key: openArray[byte]): results.Opt[seq[byte]] =
+  var res: results.Opt[seq[byte]] = Opt.none(seq[byte])
+  proc onData(data: openArray[byte]) = res = ok(@data)
 
   discard kv.get(key, onData).expectDb()
 
   return res
 
 ## Private LightClientDb calls
-proc get(db: LightClientDb, key: openArray[byte]): Option[seq[byte]] =
+proc get(db: LightClientDb, key: openArray[byte]): results.Opt[seq[byte]] =
   db.kv.get(key)
 
 proc put(db: LightClientDb, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
-proc get*(db: LightClientDb, key: ContentId): Option[seq[byte]] =
+proc get*(db: LightClientDb, key: ContentId):  results.Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
@@ -149,14 +154,14 @@ proc createGetHandler*(db: LightClientDb): DbGetHandler =
           return Opt.none(seq[byte])
         else:
           return ok(SSZ.encode(updates))
+      elif ck.contentType == lightClientFinalityUpdate:
+        # TODO Return only when the update is better that requeste by contentKey
+        return db.get(bestFinalUpdateKey)
+      elif ck.contentType == lightClientOptimisticUpdate:
+        # TODO Return only when the update is better that requeste by contentKey
+        return db.get(bestOptimisticUpdateKey)
       else:
-        let
-          maybeContent = db.get(contentId)
-
-        if maybeContent.isNone():
-          return Opt.none(seq[byte])
-
-        return ok(maybeContent.unsafeGet())
+        return db.get(contentId)
   )
 
 proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
@@ -187,6 +192,10 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
       for update in updates.asSeq():
         db.putLightClientUpdate(period, update.asSeq())
         inc period
+    elif ck.contentType == lightClientFinalityUpdate:
+      db.put(bestFinalUpdateKey, content)
+    elif ck.contentType == lightClientOptimisticUpdate:
+      db.put(bestOptimisticUpdateKey, content)
     else:
       db.put(contentId, content)
   )

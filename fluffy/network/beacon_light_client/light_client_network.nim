@@ -95,13 +95,7 @@ proc getLightClientUpdatesByRange*(
     # above
     return Opt.some(decodingResult.get())
 
-proc getLatestUpdate(l: LightClientNetwork, optimistic: bool):Future[results.Opt[seq[byte]]] {.async.} =
-  let ck =
-    if optimistic:
-      latestOptimisticUpdateContentKey()
-    else:
-      latestFinalityUpdateContentKey()
-
+proc getUpdate(l: LightClientNetwork, ck: ContentKey):Future[results.Opt[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(ck)
     contentID = toContentId(keyEncoded)
@@ -117,9 +111,14 @@ proc getLatestUpdate(l: LightClientNetwork, optimistic: bool):Future[results.Opt
 # are implemented in naive way as finding first peer with any of those updates
 # and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
-    l: LightClientNetwork
+    l: LightClientNetwork,
+    currentFinalSlot: uint64,
+    currentOptimisticSlot: uint64
   ): Future[results.Opt[altair.LightClientFinalityUpdate]] {.async.} =
-  let lookupResult = await l.getLatestUpdate(optimistic = false)
+
+  let
+    ck = finalityUpdateContentKey(currentFinalSlot, currentOptimisticSlot)
+    lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(altair.LightClientFinalityUpdate)
@@ -134,10 +133,13 @@ proc getLightClientFinalityUpdate*(
     return Opt.some(decodingResult.get())
 
 proc getLightClientOptimisticUpdate*(
-    l: LightClientNetwork
+    l: LightClientNetwork,
+    currentOptimisticSlot: uint64
   ): Future[results.Opt[altair.LightClientOptimisticUpdate]] {.async.} =
 
-  let lookupResult = await l.getLatestUpdate(optimistic = true)
+  let
+    ck = optimisticUpdateContentKey(currentOptimisticSlot)
+    lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(altair.LightClientOptimisticUpdate)

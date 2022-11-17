@@ -45,17 +45,16 @@ type
     startPeriod*: uint64
     count*: uint64
 
-  #TODO Following types will need revision and improvements
-  # - Cannot user empty objects as SSZ spec does not support containers without
-  # fields
-  # - Cannot use any other type which serializes to empty bytearray (like List[byte, 0])
-  # as ssz_serialization library complains that `invalid empty for selector`
-  # For now use Container with one bool
+  # TODO Following types are not yet included in spec
+  # optimisticSlot - slot of attested header of the update
+  # finalSlot - slot of finalized header of the update
   LightClientFinalityUpdateKey* = object
-    latest: bool
+    optimisticSlot: uint64
+    finalSlot: uint64
 
+  # optimisticSlot - slot of attested header of the update
   LightClientOptimisticUpdateKey* = object
-    latest: bool
+    optimisticSlot: uint64
 
   ContentKey* = object
     case contentType*: ContentType
@@ -227,14 +226,19 @@ proc decodeLightClientUpdatesForked*(
 
   return ok(updates)
 
-func latestFinalityUpdateContentKey*(): ContentKey =
+func finalityUpdateContentKey*(finalSlot: uint64, optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientFinalityUpdate,
-    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(latest: true)
+    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(
+      optimisticSlot: optimisticSlot,
+      finalSlot: finalSlot
+    )
   )
 
-func latestOptimisticUpdateContentKey*(): ContentKey =
+func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientOptimisticUpdate,
-    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(latest: true)
+    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(
+      optimisticSlot: optimisticSlot
+    )
   )

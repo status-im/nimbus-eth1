@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, typetraits],
   testutils/unittests, chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
@@ -81,13 +81,18 @@ procSuite "Light client Content Network":
 
     let
       finalityUpdate = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      finalHeaderSlot = finalityUpdate.finalized_header.slot
+      finaloptimisticHeaderSlot = finalityUpdate.attested_header.slot
       optimisticUpdate = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+      optimisticHeaderSlot = optimisticUpdate.attested_header.slot
 
-      finalityUpdateKey = latestFinalityUpdateContentKey()
+      finalityUpdateKey = finalityUpdateContentKey(
+        distinctBase(finalHeaderSlot),
+        distinctBase(finaloptimisticHeaderSlot)
+      )
       finalityKeyEnc = encode(finalityUpdateKey)
       finalityUdpateId = toContentId(finalityKeyEnc)
-
-      optimistUpdateKey = latestOptimisticUpdateContentKey()
+      optimistUpdateKey = optimisticUpdateContentKey(distinctBase(optimisticHeaderSlot))
       optimisticKeyEnc = encode(optimistUpdateKey)
       optimisticUpdateId = toContentId(optimisticKeyEnc)
 
@@ -107,8 +112,13 @@ procSuite "Light client Content Network":
     )
 
     let
-      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate()
-      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate()
+      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
+        distinctBase(finalHeaderSlot) - 1,
+        distinctBase(finaloptimisticHeaderSlot) - 1
+      )
+      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
+        distinctBase(optimisticHeaderSlot) - 1
+      )
 
     check:
       finalityResult.isOk()
