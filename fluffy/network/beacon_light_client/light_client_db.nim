@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, heapqueue],
+  std/[options],
   chronicles,
   metrics,
   eth/db/kvstore,
@@ -134,8 +134,8 @@ proc createGetHandler*(db: LightClientDb): DbGetHandler =
 
       if ck.contentType == lightClientUpdate:
         let
-          # TODO: add validation that startPeriod is not from the furure,
-          # this requires db to be aware to current beacon time
+          # TODO: add validation that startPeriod is not from the future,
+          # this requires db to be aware off the current beacon time
           startPeriod = ck.lightClientUpdateKey.startPeriod
           # get max 128 updates
           numOfUpdates = min(

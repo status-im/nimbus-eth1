@@ -74,7 +74,7 @@ type
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
-proc decode*(contentKey: ByteList): Option[ContentKey] =
+func decode*(contentKey: ByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
