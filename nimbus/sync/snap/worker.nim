@@ -256,21 +256,21 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   # Save state so sync can be partially resumed at next start up
   block:
-    let
-      nMissingNodes = env.fetchAccounts.missingNodes.len
-      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-
-      rc = env.saveSnapState(ctx)
-    if rc.isErr:
-      error "Failed to save recovery checkpoint", peer, pivot,
-        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-        nMissingNodes, nStoQu, error=rc.error
-    else:
-      discard
-      when extraTraceMessages:
-        trace "Saved recovery checkpoint", peer, pivot,
+    let nSickSubTries = env.fetchAccounts.sickSubTries.len
+    if 0 < nSickSubTries:
+      let
+        nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+        rc = env.saveCheckpoint(ctx)
+      if rc.isErr:
+        error "Failed to save recovery checkpoint", peer, pivot,
           nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-          nMissingNodes, nStoQu, blobSize=rc.value
+          nSickSubTries, nStoQu, error=rc.error
+      else:
+        discard
+        when extraTraceMessages:
+          trace "Saved recovery checkpoint", peer, pivot,
+            nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
+            nSickSubTries, nStoQu, blobSize=rc.value
 
   if not syncActionContinue:
     return

@@ -47,7 +47,7 @@
 ##
 ## Legend:
 ## * `<..>`: some action, process, etc.
-## * `{missing-nodes}`: list implemented as `env.fetchAccounts.missingNodes`
+## * `{missing-nodes}`: list implemented as `env.fetchAccounts.sickSubTries`
 ## * `(state-root}`: implicit argument for `getAccountNodeKey()` when
 ##   the argument list is empty
 ## * `{leaf-nodes}`: list is optimised out
@@ -144,7 +144,7 @@ proc healingCtx(
     ("covered=" & env.fetchAccounts.unprocessed.emptyFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
     "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
-    "nMissingNodes=" & $env.fetchAccounts.missingNodes.len & "}"
+    "nSickSubTries=" & $env.fetchAccounts.sickSubTries.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -154,7 +154,7 @@ proc verifyStillMissingNodes(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ) =
-  ## Check whether previously missing nodes from the `missingNodes` list
+  ## Check whether previously missing nodes from the `sickSubTries` list
   ## have been magically added to the database since it was checked last
   ## time. These nodes will me moved to `checkNodes` for further processing.
   let
@@ -164,7 +164,7 @@ proc verifyStillMissingNodes(
     stateRoot = env.stateHeader.stateRoot
 
   var delayed: seq[NodeSpecs]
-  for w in env.fetchAccounts.missingNodes:
+  for w in env.fetchAccounts.sickSubTries:
     if ctx.data.snapDb.nodeExists(peer, stateRoot, w):
       # Check nodes for dangling links below
       env.fetchAccounts.checkNodes.add w.partialPath
@@ -173,7 +173,7 @@ proc verifyStillMissingNodes(
       delayed.add w
 
   # Must not modify sequence while looping over it
-  env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & delayed
+  env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & delayed
 
 
 proc updateMissingNodesList(
@@ -190,7 +190,7 @@ proc updateMissingNodesList(
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
 
-  while env.fetchAccounts.missingNodes.len < snapTrieNodesFetchMax:
+  while env.fetchAccounts.sickSubTries.len < snapTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectAccountsTrie(
       peer, stateRoot,
@@ -210,15 +210,15 @@ proc updateMissingNodesList(
     env.fetchAccounts.checkNodes.setLen(0)
 
     # Collect result
-    env.fetchAccounts.missingNodes =
-      env.fetchAccounts.missingNodes  & rc.value.dangling
+    env.fetchAccounts.sickSubTries =
+      env.fetchAccounts.sickSubTries  & rc.value.dangling
 
     # Done unless there is some resumption context
     if rc.value.resumeCtx.isNil:
       break
 
     # Allow async task switch and continue. Note that some other task might
-    # steal some of the `env.fetchAccounts.missingNodes`.
+    # steal some of the `env.fetchAccounts.sickSubTries`.
     await sleepAsync 1.nanoseconds
 
   return true
@@ -229,7 +229,7 @@ proc getMissingNodesFromNetwork(
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ## Extract from `missingNodes` the next batch of nodes that need
+  ## Extract from `sickSubTries` the next batch of nodes that need
   ## to be merged it into the database
   let
     ctx = buddy.ctx
@@ -237,13 +237,13 @@ proc getMissingNodesFromNetwork(
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
-    nMissingNodes = env.fetchAccounts.missingNodes.len
-    inxLeft = max(0, nMissingNodes - snapTrieNodesFetchMax)
+    nSickSubTries = env.fetchAccounts.sickSubTries.len
+    inxLeft = max(0, nSickSubTries - snapTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
-  # the rest on the `missingNodes` queue to be handled later.
-  let fetchNodes = env.fetchAccounts.missingNodes[inxLeft ..< nMissingNodes]
-  env.fetchAccounts.missingNodes.setLen(inxLeft)
+  # the rest on the `sickSubTries` queue to be handled later.
+  let fetchNodes = env.fetchAccounts.sickSubTries[inxLeft ..< nSickSubTries]
+  env.fetchAccounts.sickSubTries.setLen(inxLeft)
 
   # Initalise for `getTrieNodes()` for fetching nodes from the network
   var
@@ -253,8 +253,9 @@ proc getMissingNodesFromNetwork(
     pathList.add @[w.partialPath]
     nodeKey[w.partialPath] = w.nodeKey
 
-  # Fetch nodes from the network. Note that the remainder of the `missingNodes`
-  # list might be used by another process that runs semi-parallel.
+  # Fetch nodes from the network. Note that the remainder of the
+  # `sickSubTries` list might be used by another process that runs
+  # semi-parallel.
   let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
     # Reset error counts for detecting repeated timeouts, network errors, etc.
@@ -262,7 +263,7 @@ proc getMissingNodesFromNetwork(
 
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
-      env.fetchAccounts.missingNodes.add NodeSpecs(
+      env.fetchAccounts.sickSubTries.add NodeSpecs(
         partialPath: w[0],
         nodeKey:     nodeKey[w[0]])
     return rc.value.nodes.mapIt(NodeSpecs(
@@ -271,8 +272,8 @@ proc getMissingNodesFromNetwork(
       data:        it.data))
 
   # Restore missing nodes list now so that a task switch in the error checker
-  # allows other processes to access the full `missingNodes` list.
-  env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & fetchNodes
+  # allows other processes to access the full `sickSubTries` list.
+  env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & fetchNodes
 
   let error = rc.error
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
@@ -364,14 +365,14 @@ proc accountsHealingImpl(
   buddy.verifyStillMissingNodes(env)
 
   # If `checkNodes` is empty, healing is at the very start or was
-  # postponed in which case `missingNodes` is non-empty.
+  # postponed in which case `sickSubTries` is non-empty.
   if env.fetchAccounts.checkNodes.len != 0 or
-     env.fetchAccounts.missingNodes.len == 0:
+     env.fetchAccounts.sickSubTries.len == 0:
     if not await buddy.updateMissingNodesList(env):
       return 0
 
   # Check whether the trie is complete.
-  if env.fetchAccounts.missingNodes.len == 0:
+  if env.fetchAccounts.sickSubTries.len == 0:
     trace logTxt "complete", peer, ctx=buddy.healingCtx(env)
     return 0 # nothing to do
 
@@ -386,7 +387,7 @@ proc accountsHealingImpl(
     # Storage error, just run the next lap (not much else that can be done)
     error logTxt "error updating persistent database", peer,
       ctx=buddy.healingCtx(env), nNodes=nodeSpecs.len, error=report[^1].error
-    env.fetchAccounts.missingNodes = env.fetchAccounts.missingNodes & nodeSpecs
+    env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & nodeSpecs
     return -1
 
   # Filter out error and leaf nodes
@@ -399,7 +400,7 @@ proc accountsHealingImpl(
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
-        env.fetchAccounts.missingNodes.add nodeSpecs[inx]
+        env.fetchAccounts.sickSubTries.add nodeSpecs[inx]
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
@@ -433,21 +434,6 @@ proc healAccounts*(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-
-  # Only start healing if there is some completion level, already.
-  #
-  # We check against the global coverage factor, i.e. a measure for how
-  # much of the total of all accounts have been processed. Even if the trie
-  # database for the current pivot state root is sparsely filled, there
-  # is a good chance that it can inherit some unchanged sub-trie from an
-  # earlier pivor state root download. The healing process then works like
-  # sort of glue.
-  #
-  if env.nAccounts == 0 or
-     ctx.data.coveredAccounts.fullFactor < healAccountsTrigger:
-    #when extraTraceMessages:
-    #  trace logTxt "postponed", peer, ctx=buddy.healingCtx(env)
-    return
 
   when extraTraceMessages:
     trace logTxt "started", peer, ctx=buddy.healingCtx(env)

@@ -49,7 +49,7 @@ type
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapTodoRanges       ## Range of slots not covered, yet
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
-    missingNodes*: seq[NodeSpecs]      ## Dangling links to fetch and merge
+    sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
 
   SnapTrieRangeBatchRef* = ref SnapTrieRangeBatch
@@ -102,6 +102,7 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
+    accountsHealing*: bool             ## Activates accounts DB healing
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger

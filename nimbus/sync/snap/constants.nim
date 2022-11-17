@@ -38,8 +38,8 @@ const
     ## Soft bytes limit to request in `snap` protocol calls.
 
   snapAccountsSaveDanglingMax* = 10_000
-    ## Recovery data are stored if the healing register
-    ## `fetchAccounts.missingNodes` with dangling node links has no more
+    ## Recovery data are stored if the healing nodes register
+    ## `fetchAccounts.sickSubTries` with dangling node links has no more
     ## than this many entries. Upon recovery, these dangling links allow
     ## to reconstuct the needed ranges to complete the hexary trie for the
     ## account fot current pivot.

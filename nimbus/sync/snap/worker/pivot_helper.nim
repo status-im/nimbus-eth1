@@ -81,7 +81,7 @@ proc beforeTopMostlyClean*(pivotTable: var SnapPivotTable) =
     env.fetchStorageFull.clear()
     env.fetchStoragePart.clear()
     env.fetchAccounts.checkNodes.setLen(0)
-    env.fetchAccounts.missingNodes.setLen(0)
+    env.fetchAccounts.sickSubTries.setLen(0)
     env.obsolete = true
 
 
@@ -163,7 +163,7 @@ proc tickerStats*(
       stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
       accStats = (env.fetchAccounts.unprocessed[0].chunks +
                   env.fetchAccounts.unprocessed[1].chunks,
-                  env.fetchAccounts.missingNodes.len)
+                  env.fetchAccounts.sickSubTries.len)
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -205,16 +205,30 @@ proc execSnapSyncAction*(
     if buddy.ctrl.stopped or env.obsolete:
       return false
 
-    # Can only run a single accounts healer instance at a time. This
-    # instance will clear the batch queue so there is nothing to do for
-    # another process.
-    if env.accountsState == HealerIdle:
-      env.accountsState = HealerRunning
-      await buddy.healAccounts(env)
-      env.accountsState = HealerIdle
+    if not ctx.data.accountsHealing:
+      # Only start healing if there is some completion level, already.
+      #
+      # We check against the global coverage factor, i.e. a measure for how
+      # much of the total of all accounts have been processed. Even if the
+      # hexary trie database for the current pivot state root is sparsely
+      # filled, there is a good chance that it can inherit some unchanged
+      # sub-trie from an earlier pivor state root download. The healing
+      # process then works like sort of glue.
+      if 0 < env.nAccounts:
+        if healAccountsTrigger <= ctx.data.coveredAccounts.fullFactor:
+          ctx.data.accountsHealing = true
 
-      if buddy.ctrl.stopped or env.obsolete:
-        return false
+    if ctx.data.accountsHealing:
+      # Can only run a single accounts healer instance at a time. This
+      # instance will clear the batch queue so there is nothing to do for
+      # another process.
+      if env.accountsState == HealerIdle:
+        env.accountsState = HealerRunning
+        await buddy.healAccounts(env)
+        env.accountsState = HealerIdle
+
+        if buddy.ctrl.stopped or env.obsolete:
+          return false
 
       # Some additional storage slots might have been popped up
       await buddy.rangeFetchStorageSlots(env)
@@ -228,13 +242,13 @@ proc execSnapSyncAction*(
   return true
 
 
-proc saveSnapState*(
+proc saveCheckpoint*(
     env: SnapPivotRef;              ## Current pivot environment
     ctx: SnapCtxRef;                ## Some global context
       ): Result[int,HexaryDbError] =
   ## Save current sync admin data. On success, the size of the data record
   ## saved is returned (e.g. for logging.)
-  if snapAccountsSaveDanglingMax < env.fetchAccounts.missingNodes.len:
+  if snapAccountsSaveDanglingMax < env.fetchAccounts.sickSubTries.len:
     return err(TooManyDanglingLinks)
 
   let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
@@ -244,7 +258,7 @@ proc saveSnapState*(
   let
     rc = ctx.data.snapDb.savePivot(
     env.stateHeader, env.nAccounts, env.nSlotLists,
-    dangling = env.fetchAccounts.missingNodes.mapIt(it.partialPath),
+    dangling = env.fetchAccounts.sickSubTries.mapIt(it.partialPath),
     slotAccounts = toSeq(env.fetchStorageFull.nextKeys).mapIt(it.to(NodeKey)) &
                    toSeq(env.fetchStoragePart.nextKeys).mapIt(it.to(NodeKey)),
     coverage = (ctx.data.coveredAccounts.fullFactor * 255).uint8)
