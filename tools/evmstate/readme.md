@@ -9,13 +9,13 @@ There are few options to build `evmstate` tool like any other nimbus tools.
 1. Use nimble to install dependencies and your system Nim compiler(version <= 1.6.0).
     ```
     $> nimble install -y --depsOnly
-    $> nim c -d:release -d:chronicles_enabled=off tools/evmstate/evmstate
+    $> nim c -d:release tools/evmstate/evmstate
     $> nim c -r -d:release tools/evmstate/evmstate_test
     ```
 2. Use nimbus shipped Nim compiler and dependencies.
     ```
     $> make update
-    $> ./env.sh nim c -d:release -d:chronicles_enabled=off tools/evmstate/evmstate
+    $> ./env.sh nim c -d:release tools/evmstate/evmstate
     $> ./env.sh nim c -r -d:release tools/evmstate/evmstate_test
     ```
 3. Use nimbus makefile.
@@ -48,5 +48,5 @@ The following options are available:
  --index             if index is unset, all subtest in the fork will be tested [=none(int)].
  --pretty            pretty print the trace result [=false].
  --verbosity         sets the verbosity level [=0].
-
+                        0 = silent, 1 = error, 2 = warn, 3 = info, 4 = debug, 5 = detail.
 ```

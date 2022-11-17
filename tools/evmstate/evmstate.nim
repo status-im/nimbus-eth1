@@ -1,5 +1,6 @@
 import
   std/[json, strutils, sets, tables, options],
+  chronicles,
   eth/[common, keys],
   stew/[results, byteutils],
   stint,
@@ -300,8 +301,24 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
   writeResultToStdout(stateRes)
   not hasError
 
+when defined(chronicles_runtime_filtering):
+  proc toLogLevel(v: int): LogLevel =
+    case v
+    of 1: LogLevel.ERROR
+    of 2: LogLevel.WARN
+    of 3: LogLevel.INFO
+    of 4: LogLevel.DEBUG
+    of 5: LogLevel.TRACE
+    else: LogLevel.NONE
+
+  proc setVerbosity(v: int) =
+    let level = v.toLogLevel
+    setLogLevel(level)
+
 proc main() =
   let conf = StateConf.init()
+  when defined(chronicles_runtime_filtering):
+    setVerbosity(conf.verbosity)
   var ctx: StateContext
   if not ctx.prepareAndRun(conf):
     quit(QuitFailure)

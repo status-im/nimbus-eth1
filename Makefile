@@ -251,7 +251,7 @@ t8n_test: | build deps t8n
 
 # builds evm state test tool
 evmstate: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled=off "tools/evmstate/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds and runs evm state tool test suite
 evmstate_test: | build deps evmstate
