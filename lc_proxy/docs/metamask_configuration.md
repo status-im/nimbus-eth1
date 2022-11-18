@@ -1,6 +1,6 @@
 # MetaMask configuration with Alchemy provider
 
-This doucment explains how to configure the proxy, and how to configure MetaMask
+This document explains how to configure the proxy, and how to configure MetaMask
 to make use of the proxy.
 
 ### 1. Building the Nimbus Light Client Proxy
@@ -49,7 +49,7 @@ The `New RPC URL` field must be configured to point to the HTTP server of the pr
 example it will be `http://127.0.0.1:8545`. The `Chain ID` field must be set to the chain id of
 the network used by the proxy. The chain id for Goerli is `5`.
 
-If everyting went smooth there should be a new network in `Networks` drop down menu.
+If everything went smooth there should be a new network in `Networks` drop down menu.
 
 After switching to this network it should be possible to create new accounts, and
 perform transfers between them.
