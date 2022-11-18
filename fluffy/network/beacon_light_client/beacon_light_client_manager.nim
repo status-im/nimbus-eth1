@@ -23,6 +23,10 @@ logScope:
 
 type
   Nothing = object
+  SlotInfo = object
+    finalSlot: Slot
+    optimisticSlot: Slot
+
   NetRes*[T] = Result[T, void]
   Endpoint[K, V] =
     (K, V) # https://github.com/nim-lang/Nim/issues/19531
@@ -31,9 +35,9 @@ type
   UpdatesByRange =
     Endpoint[Slice[SyncCommitteePeriod], altair.LightClientUpdate]
   FinalityUpdate =
-    Endpoint[Nothing, altair.LightClientFinalityUpdate]
+    Endpoint[SlotInfo, altair.LightClientFinalityUpdate]
   OptimisticUpdate =
-    Endpoint[Nothing, altair.LightClientOptimisticUpdate]
+    Endpoint[Slot, altair.LightClientOptimisticUpdate]
 
   ValueVerifier[V] =
     proc(v: V): Future[Result[void, BlockError]] {.gcsafe, raises: [Defect].}
@@ -50,8 +54,9 @@ type
     proc(): Option[Eth2Digest] {.gcsafe, raises: [Defect].}
   GetBoolCallback* =
     proc(): bool {.gcsafe, raises: [Defect].}
-  GetSyncCommitteePeriodCallback* =
-    proc(): SyncCommitteePeriod {.gcsafe, raises: [Defect].}
+
+  GetSlotCallback* =
+    proc(): Slot {.gcsafe, raises: [Defect].}
 
   LightClientManager* = object
     network: LightClientNetwork
@@ -63,8 +68,8 @@ type
     optimisticUpdateVerifier: OptimisticUpdateVerifier
     isLightClientStoreInitialized: GetBoolCallback
     isNextSyncCommitteeKnown: GetBoolCallback
-    getFinalizedPeriod: GetSyncCommitteePeriodCallback
-    getOptimisticPeriod: GetSyncCommitteePeriodCallback
+    getFinalizedSlot: GetSlotCallback
+    getOptimisticSlot: GetSlotCallback
     getBeaconTime: GetBeaconTimeFn
     loopFuture: Future[void]
 
@@ -79,8 +84,8 @@ func init*(
     optimisticUpdateVerifier: OptimisticUpdateVerifier,
     isLightClientStoreInitialized: GetBoolCallback,
     isNextSyncCommitteeKnown: GetBoolCallback,
-    getFinalizedPeriod: GetSyncCommitteePeriodCallback,
-    getOptimisticPeriod: GetSyncCommitteePeriodCallback,
+    getFinalizedSlot: GetSlotCallback,
+    getOptimisticSlot: GetSlotCallback,
     getBeaconTime: GetBeaconTimeFn
 ): LightClientManager =
   ## Initialize light client manager.
@@ -94,8 +99,8 @@ func init*(
     optimisticUpdateVerifier: optimisticUpdateVerifier,
     isLightClientStoreInitialized: isLightClientStoreInitialized,
     isNextSyncCommitteeKnown: isNextSyncCommitteeKnown,
-    getFinalizedPeriod: getFinalizedPeriod,
-    getOptimisticPeriod: getOptimisticPeriod,
+    getFinalizedSlot: getFinalizedSlot,
+    getOptimisticSlot: getOptimisticSlot,
     getBeaconTime: getBeaconTime
   )
 
@@ -108,7 +113,7 @@ proc isGossipSupported*(
     return false
 
   let
-    finalizedPeriod = self.getFinalizedPeriod()
+    finalizedPeriod = self.getFinalizedSlot().sync_committee_period
     isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown()
   if isNextSyncCommitteeKnown:
     period <= finalizedPeriod + 1
@@ -142,16 +147,21 @@ proc doRequest(
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0/specs/altair/light-client/p2p-interface.md#getlightclientfinalityupdate
 proc doRequest(
     e: typedesc[FinalityUpdate],
-    n: LightClientNetwork
+    n: LightClientNetwork,
+    slotInfo: SlotInfo
 ): Future[NetRes[altair.LightClientFinalityUpdate]] =
-  n.getLightClientFinalityUpdate()
+  n.getLightClientFinalityUpdate(
+    distinctBase(slotInfo.finalSlot),
+    distinctBase(slotInfo.optimisticSlot)
+  )
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
 proc doRequest(
     e: typedesc[OptimisticUpdate],
-    n: LightClientNetwork
+    n: LightClientNetwork,
+    optimisticSlot: Slot
 ): Future[NetRes[altair.LightClientOptimisticUpdate]] =
-  n.getLightClientOptimisticUpdate()
+  n.getLightClientOptimisticUpdate(distinctBase(optimisticSlot))
 
 template valueVerifier[E](
     self: LightClientManager,
@@ -296,8 +306,10 @@ proc loop(self: LightClientManager) {.async.} =
     # Fetch updates
     var allowWaitNextPeriod = false
     let
-      finalized = self.getFinalizedPeriod()
-      optimistic = self.getOptimisticPeriod()
+      finalSlot = self.getFinalizedSlot()
+      optimisticSlot = self.getOptimisticSlot()
+      finalized = finalSlot.sync_committee_period
+      optimistic = optimisticSlot.sync_committee_period
       current = wallTime.slotOrZero().sync_committee_period
       isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown()
 
@@ -310,10 +322,13 @@ proc loop(self: LightClientManager) {.async.} =
         elif finalized + 1 < current:
           await self.query(UpdatesByRange, finalized + 1 ..< current)
         elif finalized != optimistic:
-          await self.query(FinalityUpdate)
+          await self.query(FinalityUpdate, SlotInfo(
+            finalSlot: finalSlot,
+            optimisticSlot: optimisticSlot
+          ))
         else:
           allowWaitNextPeriod = true
-          await self.query(OptimisticUpdate)
+          await self.query(OptimisticUpdate, optimisticSlot)
 
       schedulingMode =
         if not didProgress or not self.isGossipSupported(current):

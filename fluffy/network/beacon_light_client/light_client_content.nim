@@ -41,12 +41,20 @@ type
   LightClientBootstrapKey* = object
     blockHash*: Digest
 
-  #TODO Following types will need revision and improvements
   LightClientUpdateKey* = object
+    startPeriod*: uint64
+    count*: uint64
 
+  # TODO Following types are not yet included in spec
+  # optimisticSlot - slot of attested header of the update
+  # finalSlot - slot of finalized header of the update
   LightClientFinalityUpdateKey* = object
+    optimisticSlot: uint64
+    finalSlot: uint64
 
+  # optimisticSlot - slot of attested header of the update
   LightClientOptimisticUpdateKey* = object
+    optimisticSlot: uint64
 
   ContentKey* = object
     case contentType*: ContentType
@@ -59,8 +67,8 @@ type
     of lightClientOptimisticUpdate:
       lightClientOptimisticUpdateKey*: LightClientOptimisticUpdateKey
 
-  ForkedLightClientUpdateBytes = List[byte, MAX_LIGHT_CLIENT_UPDATE_SIZE]
-  LightClientUpdateList = List[ForkedLightClientUpdateBytes, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
+  ForkedLightClientUpdateBytes* = List[byte, MAX_LIGHT_CLIENT_UPDATE_SIZE]
+  LightClientUpdateList* = List[ForkedLightClientUpdateBytes, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -194,21 +202,43 @@ proc encodeLightClientUpdatesForked*(
 
   return SSZ.encode(lu)
 
-proc decodeLightClientUpdatesForked*(
-    forks: ForkDigests,
-    data: openArray[byte]): Result[seq[altair.LightClientUpdate], string] =
+proc decodeLightClientUpdatesForkedAsList*(
+    data: openArray[byte]): Result[LightClientUpdateList, string] =
   try:
     let listDecoded = SSZ.decode(
       data,
       LightClientUpdateList
     )
-
-    var updates: seq[altair.LightClientUpdate]
-
-    for enc in listDecoded:
-      let updateDecoded = ? decodeLightClientUpdateForked(forks, enc.asSeq())
-      updates.add(updateDecoded)
-
-    return ok(updates)
+    return ok(listDecoded)
   except SszError as exc:
     return err(exc.msg)
+
+proc decodeLightClientUpdatesForked*(
+    forks: ForkDigests,
+    data: openArray[byte]): Result[seq[altair.LightClientUpdate], string] =
+  let listDecoded = ? decodeLightClientUpdatesForkedAsList(data)
+
+  var updates: seq[altair.LightClientUpdate]
+
+  for enc in listDecoded:
+    let updateDecoded = ? decodeLightClientUpdateForked(forks, enc.asSeq())
+    updates.add(updateDecoded)
+
+  return ok(updates)
+
+func finalityUpdateContentKey*(finalSlot: uint64, optimisticSlot: uint64): ContentKey =
+  ContentKey(
+    contentType: lightClientFinalityUpdate,
+    lightClientFinalityUpdateKey: LightClientFinalityUpdateKey(
+      optimisticSlot: optimisticSlot,
+      finalSlot: finalSlot
+    )
+  )
+
+func optimisticUpdateContentKey*(optimisticSlot: uint64): ContentKey =
+  ContentKey(
+    contentType: lightClientOptimisticUpdate,
+    lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey(
+      optimisticSlot: optimisticSlot
+    )
+  )

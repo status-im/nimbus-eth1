@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, typetraits],
   testutils/unittests, chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
@@ -16,7 +16,6 @@ import
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[light_client_network, light_client_content],
   ../../../nimbus/constants,
-  ../../content_db,
   "."/[light_client_test_data, light_client_test_helpers]
 
 procSuite "Light client Content Network":
@@ -82,19 +81,18 @@ procSuite "Light client Content Network":
 
     let
       finalityUpdate = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      finalHeaderSlot = finalityUpdate.finalized_header.slot
+      finaloptimisticHeaderSlot = finalityUpdate.attested_header.slot
       optimisticUpdate = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+      optimisticHeaderSlot = optimisticUpdate.attested_header.slot
 
-      finalityUpdateKey = ContentKey(
-        contentType: lightClientFinalityUpdate,
-        lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
+      finalityUpdateKey = finalityUpdateContentKey(
+        distinctBase(finalHeaderSlot),
+        distinctBase(finaloptimisticHeaderSlot)
       )
       finalityKeyEnc = encode(finalityUpdateKey)
       finalityUdpateId = toContentId(finalityKeyEnc)
-
-      optimistUpdateKey = ContentKey(
-        contentType: lightClientOptimisticUpdate,
-        lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
-      )
+      optimistUpdateKey = optimisticUpdateContentKey(distinctBase(optimisticHeaderSlot))
       optimisticKeyEnc = encode(optimistUpdateKey)
       optimisticUpdateId = toContentId(optimisticKeyEnc)
 
@@ -114,14 +112,71 @@ procSuite "Light client Content Network":
     )
 
     let
-      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate()
-      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate()
+      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
+        distinctBase(finalHeaderSlot) - 1,
+        distinctBase(finaloptimisticHeaderSlot) - 1
+      )
+      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
+        distinctBase(optimisticHeaderSlot) - 1
+      )
 
     check:
       finalityResult.isOk()
       optimisticResult.isOk()
       finalityResult.get() == finalityUpdate
       optimisticResult.get() == optimisticUpdate
+
+    await lcNode1.stop()
+    await lcNode2.stop()
+
+  asyncTest "Get range of light client updates":
+    let
+      lcNode1 = newLCNode(rng, 20302)
+      lcNode2 = newLCNode(rng, 20303)
+      forks = getTestForkDigests()
+
+    check:
+      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+
+    let
+      update1 = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      update2 = SSZ.decode(lightClientUpdateBytes1, altair.LightClientUpdate)
+      updates = @[update1, update2]
+      content = encodeLightClientUpdatesForked(forks.altair, updates)
+      startPeriod = update1.attested_header.slot.sync_committee_period
+      contentKey = ContentKey(
+        contentType: lightClientUpdate,
+        lightClientUpdateKey: LightClientUpdateKey(
+          startPeriod: startPeriod.uint64,
+          count: uint64(2)
+        )
+      )
+      contentKeyEncoded = encode(contentKey)
+      contentId = toContentId(contentKey)
+
+    lcNode2.portalProtocol().storeContent(
+      contentKeyEncoded,
+      contentId,
+      content
+    )
+
+    let updatesResult =
+      await lcNode1.lightClientNetwork.getLightClientUpdatesByRange(
+        startPeriod.uint64,
+        uint64(2)
+      )
+
+    check:
+      updatesResult.isOk()
+
+    let updatesFromPeer = updatesResult.get()
+
+    check:
+      updatesFromPeer == updates
 
     await lcNode1.stop()
     await lcNode2.stop()

@@ -112,23 +112,23 @@ proc new*(
     else:
       false
 
-  func getFinalizedPeriod(): SyncCommitteePeriod =
+  func getFinalizedSlot(): Slot =
     if lightClient.store[].isSome:
-      lightClient.store[].get.finalized_header.slot.sync_committee_period
+      lightClient.store[].get.finalized_header.slot
     else:
-      GENESIS_SLOT.sync_committee_period
+      GENESIS_SLOT
 
-  func getOptimisticPeriod(): SyncCommitteePeriod =
+  func getOptimistiSlot(): Slot =
     if lightClient.store[].isSome:
-      lightClient.store[].get.optimistic_header.slot.sync_committee_period
+      lightClient.store[].get.optimistic_header.slot
     else:
-      GENESIS_SLOT.sync_committee_period
+      GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
     lightClient.network, rng, getTrustedBlockRoot,
     bootstrapVerifier, updateVerifier, finalityVerifier, optimisticVerifier,
     isLightClientStoreInitialized, isNextSyncCommitteeKnown,
-    getFinalizedPeriod, getOptimisticPeriod, getBeaconTime)
+    getFinalizedSlot, getOptimistiSlot, getBeaconTime)
 
   lightClient
 

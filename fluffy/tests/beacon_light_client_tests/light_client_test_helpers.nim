@@ -13,8 +13,11 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../../network/beacon_light_client/[light_client_network, light_client_content],
-  ../../content_db,
+  ../../network/beacon_light_client/[
+    light_client_network,
+    light_client_content,
+    light_client_db
+  ],
   ../test_helpers
 
 type LightClientNode* = ref object
@@ -36,7 +39,7 @@ proc newLCNode*(
     forks: ForkDigests = getTestForkDigests()): LightClientNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
-    db = ContentDB.new("", uint32.high, inMemory = true)
+    db = LightClientDb.new("", inMemory = true)
     streamManager = StreamManager.new(node)
     hn = LightClientNetwork.new(node, db, streamManager, forks)
 
@@ -56,4 +59,4 @@ proc stop*(hn: LightClientNode) {.async.} =
   await hn.discoveryProtocol.closeWait()
 
 proc containsId*(hn: LightClientNode, contentId: ContentId): bool =
-  return hn.lightClientNetwork.contentDB.get(contentId).isSome()
+  return hn.lightClientNetwork.lightClientDb.get(contentId).isSome()

@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, heapqueue],
+  std/[options],
   chronicles,
   metrics,
   eth/db/kvstore,

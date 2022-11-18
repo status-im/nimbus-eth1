@@ -13,10 +13,9 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  ../../content_db,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/light_client_content
+  "."/[light_client_content, light_client_db]
 
 logScope:
   topics = "portal_lc"
@@ -27,21 +26,13 @@ const
 type
   LightClientNetwork* = ref object
     portalProtocol*: PortalProtocol
-    contentDB*: ContentDB
+    lightClientDb*: LightClientDb
     contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
     forkDigests*: ForkDigests
     processContentLoop: Future[void]
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
-
-func encodeKey(k: ContentKey): (ByteList, ContentId) =
-  let keyEncoded = encode(k)
-  return (keyEncoded, toContentId(keyEncoded))
-
-proc dbGetHandler(db: ContentDB, contentId: ContentId):
-    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
-  db.get(contentId)
 
 proc getLightClientBootstrap*(
     l: LightClientNetwork,
@@ -77,22 +68,34 @@ proc getLightClientUpdatesByRange*(
     l: LightClientNetwork,
     startPeriod: uint64,
     count: uint64): Future[results.Opt[seq[altair.LightClientUpdate]]] {.async.} =
-  # TODO: Not implemented!
-  return Opt.none(seq[altair.LightClientUpdate])
+  let
+    bk = LightClientUpdateKey(startPeriod: startPeriod, count: count)
+    ck = ContentKey(
+      contentType: lightClientUpdate,
+      lightClientUpdateKey: bk
+    )
+    keyEncoded = encode(ck)
+    contentID = toContentId(keyEncoded)
 
-proc getLatestUpdate( l: LightClientNetwork, optimistic: bool):Future[results.Opt[seq[byte]]] {.async.} =
-  let ck =
-    if optimistic:
-      ContentKey(
-        contentType: lightClientOptimisticUpdate,
-        lightClientOptimisticUpdateKey: LightClientOptimisticUpdateKey()
-      )
-    else:
-      ContentKey(
-        contentType: lightClientFinalityUpdate,
-        lightClientFinalityUpdateKey: LightClientFinalityUpdateKey()
-      )
+  let updatesResult =
+      await l.portalProtocol.contentLookup(keyEncoded, contentId)
 
+  if updatesResult.isNone():
+      warn "Failed fetching updates network", contentKey = keyEncoded
+      return Opt.none(seq[altair.LightClientUpdate])
+
+  let
+    updates = updatesResult.unsafeGet()
+    decodingResult = decodeLightClientUpdatesForked(l.forkDigests, updates.content)
+
+  if decodingResult.isErr:
+    return Opt.none(seq[altair.LightClientUpdate])
+  else:
+    # TODO Not doing validation for now, as probably it should be done by layer
+    # above
+    return Opt.some(decodingResult.get())
+
+proc getUpdate(l: LightClientNetwork, ck: ContentKey):Future[results.Opt[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(ck)
     contentID = toContentId(keyEncoded)
@@ -108,9 +111,14 @@ proc getLatestUpdate( l: LightClientNetwork, optimistic: bool):Future[results.Op
 # are implemented in naive way as finding first peer with any of those updates
 # and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
-    l: LightClientNetwork
+    l: LightClientNetwork,
+    currentFinalSlot: uint64,
+    currentOptimisticSlot: uint64
   ): Future[results.Opt[altair.LightClientFinalityUpdate]] {.async.} =
-  let lookupResult = await l.getLatestUpdate(optimistic = false)
+
+  let
+    ck = finalityUpdateContentKey(currentFinalSlot, currentOptimisticSlot)
+    lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(altair.LightClientFinalityUpdate)
@@ -125,10 +133,13 @@ proc getLightClientFinalityUpdate*(
     return Opt.some(decodingResult.get())
 
 proc getLightClientOptimisticUpdate*(
-    l: LightClientNetwork
+    l: LightClientNetwork,
+    currentOptimisticSlot: uint64
   ): Future[results.Opt[altair.LightClientOptimisticUpdate]] {.async.} =
 
-  let lookupResult = await l.getLatestUpdate(optimistic = true)
+  let
+    ck = optimisticUpdateContentKey(currentOptimisticSlot)
+    lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
     return Opt.none(altair.LightClientOptimisticUpdate)
@@ -145,7 +156,7 @@ proc getLightClientOptimisticUpdate*(
 proc new*(
     T: type LightClientNetwork,
     baseProtocol: protocol.Protocol,
-    contentDB: ContentDB,
+    lightClientDb: LightClientDb,
     streamManager: StreamManager,
     forkDigests: ForkDigests,
     bootstrapRecords: openArray[Record] = [],
@@ -157,14 +168,14 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
-      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
+      toContentIdHandler, createGetHandler(lightClientDb), stream, bootstrapRecords,
       config = portalConfig)
 
-  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
+  portalProtocol.dbPut = createStoreHandler(lightClientDb)
 
   LightClientNetwork(
     portalProtocol: portalProtocol,
-    contentDB: contentDB,
+    lightClientDb: lightClientDb,
     contentQueue: contentQueue,
     forkDigests: forkDigests
   )
