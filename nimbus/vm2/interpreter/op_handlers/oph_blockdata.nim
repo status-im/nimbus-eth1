@@ -13,6 +13,7 @@
 ##
 
 import
+  ../../async/operations,
   ../../computation,
   ../../stack,
   ../op_codes,
@@ -30,9 +31,11 @@ when not defined(evmc_enabled):
 const
   blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-    let (blockNumber) = k.cpt.stack.popInt(1)
-    k.cpt.stack.push:
-      k.cpt.getBlockHash(blockNumber)
+    let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
+    let (blockNumber) = cpt.stack.popInt(1)
+    cpt.asyncChainTo(ifNecessaryGetBlockHeader(cpt.vmState, blockNumber)):
+      cpt.stack.push:
+        cpt.getBlockHash(blockNumber)
 
   coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x41, Get the block's beneficiary address.
@@ -66,8 +69,10 @@ const
 
   selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x47, Get current contract's balance.
-    k.cpt.stack.push:
-      k.cpt.getBalance(k.cpt.msg.contractAddress)
+    let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress)):
+      cpt.stack.push:
+        cpt.getBalance(cpt.msg.contractAddress)
 
   baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x48, Get the block's base fee.

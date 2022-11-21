@@ -130,6 +130,24 @@ type
     topics*: seq[Option[seq[Hash256]]]  # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
     blockHash*: Option[Hash256]         # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
 
+
+  # FIXME-Adam - Switch to nim-web3 instead. But for now it was giving me trouble, so I'm trying this.
+  
+  StorageProof* = object
+    key*: HexQuantityStr
+    value*: HexQuantityStr
+    proof*: seq[HexDataStr]
+  
+  ProofResponse* = object
+    address*: EthAddressStr
+    accountProof*: seq[HexDataStr]
+    balance*: HexQuantityStr
+    codeHash*: EthHashStr
+    nonce*: HexQuantityStr
+    storageHash*: EthHashStr
+    storageProof*: seq[StorageProof]
+
+
 proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
   proc getOptionString(argName: string): Option[string] =
     let s = n.getOrDefault(argName)

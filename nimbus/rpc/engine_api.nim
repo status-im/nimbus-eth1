@@ -15,7 +15,7 @@ import
   eth/[rlp, common],
   ".."/db/db_chain,
   ".."/p2p/chain/[chain_desc, persist_blocks],
-  ".."/[sealer, constants],
+  ".."/[sealer, constants, stateless_runner],
   ".."/merge/[mergetypes, mergeutils],
   ".."/utils/tx_pool,
   # put chronicles import last because Nim
@@ -43,7 +43,8 @@ proc invalidFCU(db: BaseChainDB, header: EthBlockHeader): ForkchoiceUpdatedRespo
 
 proc setupEngineAPI*(
     sealingEngine: SealingEngineRef,
-    server: RpcServer) =
+    server: RpcServer,
+    maybeStatelessDataSourceUrl: Option[string] = none[string]()) =
 
   # TODO: put this singleton somewhere else
   let api = EngineAPI.new(sealingEngine.chain.db)
@@ -68,6 +69,17 @@ proc setupEngineAPI*(
       warn "Ignoring already known beacon payload",
         number = header.blockNumber, hash = blockHash
       return validStatus(blockHash)
+
+    # FIXME-Adam - I'm adding this here, but I don't actually think this is the right place.
+    # For one thing, it won't even persist the new block. But let's worry about persisting
+    # after I've gotten a block to come out actually correct. --Adam
+    if maybeStatelessDataSourceUrl.isSome:
+      let r = statelesslyRunBlock(maybeStatelessDataSourceUrl.get, sealingEngine.chain, header, toBlockBody(payload))
+      if r.isErr:
+        error "Stateless execution failed", error=r.error
+        return invalidStatus()
+      else:
+        return validStatus(r.get)
 
     # If the parent is missing, we - in theory - could trigger a sync, but that
     # would also entail a reorg. That is problematic if multiple sibling blocks

@@ -15,6 +15,7 @@ import
   json_rpc/rpcclient,
   ./stack,  ./memory, ./code_stream, ../forks,
   ./interpreter/[gas_costs, op_codes],
+  ./async/data_sources/types,
   # TODO - will be hidden at a lower layer
   ../db/[db_chain, accounts_cache]
 
@@ -130,9 +131,3 @@ type
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
-
-  LazyDataSource* = ref object of RootObj
-    ifNecessaryGetStorage*: proc(c: Computation, slot: UInt256): Future[void] {.gcsafe.}
-  
-  AsyncOperationFactory* = ref object of RootObj
-    lazyDataSource*: LazyDataSource

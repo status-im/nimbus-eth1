@@ -1,9 +1,13 @@
 import
   tables, hashes, sets,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
+  chronicles,
+  eth/[common, rlp], eth/trie/[db, trie_defs],
   ../constants, ../utils, storage_types,
   ../../stateless/multi_keys,
-  ./access_list as ac_access_list
+  ./access_list as ac_access_list,
+  ./values_from_bytes,
+  ./distinct_tries,
+  ./incomplete_db
 
 type
   AccountFlag = enum
@@ -31,10 +35,12 @@ type
 
   AccountsCache* = ref object
     db: TrieDatabaseRef
-    trie: SecureHexaryTrie
+    trie: AccountsTrie
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
+    # FIXME-Adam: maybe take this out and have a cleaner way of doing these checks
+    shouldCheckForMissingNodes: bool
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -63,17 +69,36 @@ const
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
+
+
+# FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
+# take this out once those are gone.
+proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
+
+
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
-           root: KeccakHash, pruneTrie: bool = true): AccountsCache =
+           root: KeccakHash, pruneTrie: bool = true,
+           shouldCheckForMissingNodes: bool = false): AccountsCache =
   new result
   result.db = db
-  result.trie = initSecureHexaryTrie(db, root, pruneTrie)
+  result.trie = initAccountsTrie(db, root, pruneTrie)
   result.witnessCache = initTable[EthAddress, WitnessData]()
+  result.shouldCheckForMissingNodes = shouldCheckForMissingNodes
   discard result.beginSavepoint
 
-proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = true): AccountsCache =
-  init(x, db, emptyRlpHash, pruneTrie)
+proc statelessInit*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
+                    root: KeccakHash, pruneTrie: bool = true,
+                    shouldCheckForMissingNodes: bool = true): AccountsCache =
+  new result
+  result.db = db
+  result.trie = initAccountsTrie(db, root, pruneTrie)
+  result.witnessCache = initTable[EthAddress, WitnessData]()
+  result.shouldCheckForMissingNodes = shouldCheckForMissingNodes
+  discard result.beginSavepoint
+
+proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = true, shouldCheckForMissingNodes: bool = false): AccountsCache =
+  init(x, db, emptyRlpHash, pruneTrie, shouldCheckForMissingNodes)
 
 proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
@@ -126,6 +151,8 @@ proc safeDispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
     ac.rollback(sp)
 
 proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): RefAccount =
+  if ac.shouldCheckForMissingNodes: assertFetchedAccount(ac.trie, address)
+  
   # search account from layers of cache
   var sp = ac.savePoint
   while sp != nil:
@@ -135,7 +162,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     sp = sp.parentSavepoint
 
   # not found in cache, look into state trie
-  let recordFound = ac.trie.get(address)
+  let recordFound = ac.trie.getAccountBytes(address)
   if recordFound.len > 0:
     # we found it
     result = RefAccount(
@@ -173,22 +200,13 @@ proc isEmpty(acc: RefAccount): bool =
 template exists(acc: RefAccount): bool =
   IsAlive in acc.flags
 
-template createTrieKeyFromSlot(slot: UInt256): auto =
-  # XXX: This is too expensive. Similar to `createRangeFromAddress`
-  # Converts a number to hex big-endian representation including
-  # prefix and leading zeros:
-  slot.toByteArrayBE
-  # Original py-evm code:
-  # pad32(int_to_big_endian(slot))
-  # morally equivalent to toByteRange_Unnecessary but with different types
-
 template getAccountTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initSecureHexaryTrie(db, acc.account.storageRoot, false)
+  initStorageTrie(db, acc.account.storageRoot, false)
 
 proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
   # share the same original storage between multiple
@@ -203,12 +221,9 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
   let
     slotAsKey = createTrieKeyFromSlot slot
     accountTrie = getAccountTrie(db, acc)
-    foundRecord = accountTrie.get(slotAsKey)
+    foundRecord = accountTrie.getSlotBytes(slotAsKey)
 
-  result = if foundRecord.len > 0:
-            rlp.decode(foundRecord, UInt256)
-          else:
-            UInt256.zero()
+  result = slotValueFromBytes(foundRecord)
 
   acc.originalStorage[slot] = result
 
@@ -263,9 +278,9 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
 
     if value > 0:
       let encodedValue = rlp.encode(value)
-      accountTrie.put(slotAsKey, encodedValue)
+      accountTrie.putSlotBytes(slotAsKey, encodedValue)
     else:
-      accountTrie.del(slotAsKey)
+      accountTrie.delSlotBytes(slotAsKey)
 
     # TODO: this can be disabled if we do not perform
     #       accounts tracing
@@ -316,6 +331,8 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   else: acc.account.nonce
 
 proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
+  if ac.shouldCheckForMissingNodes: assertFetchedCode(ac.trie, address)
+  
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -323,11 +340,7 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    when defined(geth):
-      let data = ac.db.get(acc.account.codeHash.data)
-    else:
-      let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
-
+    let data = getCode(ac.db, acc.account.codeHash)
     acc.code = data
     acc.flags.incl CodeLoaded
     result = acc.code
@@ -336,12 +349,14 @@ proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
   ac.getCode(address).len
 
 proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+  if ac.shouldCheckForMissingNodes: assertFetchedStorage(ac.trie, address, slot)
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
   acc.originalStorageValue(slot, ac.db)
 
 proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
+  if ac.shouldCheckForMissingNodes: assertFetchedStorage(ac.trie, address, slot)
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -397,6 +412,7 @@ proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
   ac.setNonce(address, ac.getNonce(address) + 1)
 
 proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
+  if ac.shouldCheckForMissingNodes: assertFetchedCode(ac.trie, address)
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   let codeHash = keccakHash(code)
@@ -407,6 +423,7 @@ proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
     acc.flags.incl CodeChanged
 
 proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
+  if ac.shouldCheckForMissingNodes: assertFetchedStorage(ac.trie, address, slot)
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
   let oldValue = acc.storageValue(slot, ac.db)
@@ -442,9 +459,9 @@ proc persist*(ac: AccountsCache, clearCache: bool = true) =
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac.db, clearCache)
-      ac.trie.put address, rlp.encode(acc.account)
+      ac.trie.putAccountBytes address, rlp.encode(acc.account)
     of Remove:
-      ac.trie.del address
+      ac.trie.delAccountBytes address
       if not clearCache:
         cleanAccounts.incl address
     of DoNothing:
@@ -487,9 +504,9 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
   if not acc.isNil:
     let storageRoot = acc.account.storageRoot
-    var trie = initHexaryTrie(ac.db, storageRoot)
+    var trie = initStorageTrie(ac.db, storageRoot)
 
-    for slotHash, value in trie:
+    for slotHash, value in trie.pairsOfSlotHashAndValueBytes:
       if slotHash.len == 0: continue
       let keyData = ac.db.get(slotHashToSlotKey(slotHash).toOpenArray)
       if keyData.len == 0: continue

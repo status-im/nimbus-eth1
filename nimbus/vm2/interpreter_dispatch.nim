@@ -17,6 +17,7 @@ import
   ../constants,
   ../utils,
   ../db/accounts_cache,
+  ./async/operations,
   ./code_stream,
   ./computation,
   ./interpreter/[op_dispatcher, gas_costs],
@@ -212,9 +213,27 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
       break
 
     try:
-      if not c.continuation.isNil:
-        (c.continuation)()
-      c.selectVM(fork, shouldPrepareTracer)
+      let cont = c.continuation
+      if not cont.isNil:
+        c.continuation = nil
+        cont()
+      let nextCont = c.continuation
+      if nextCont.isNil:
+        # FIXME-Adam: I hate how convoluted this is. See also the comment in
+        # op_dispatcher.nim. The idea here is that we need to call
+        # traceOpCodeEnded at the end of the opcode (and only if there
+        # hasn't been an exception thrown); otherwise we run into problems
+        # if an exception (e.g. out of gas) is thrown during a continuation.
+        # So this code says, "If we've just run a continuation, but there's
+        # no *subsequent* continuation, then the opcode is done."
+        if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
+          c.traceOpCodeEnded(c.instr, c.opIndex)
+        if c.instr != SelfDestruct: # FIXME-Adam: HACK, fix this in a clean way
+          c.selectVM(fork, shouldPrepareTracer)
+      else:
+        # Return up to the caller, which will run the async operation or child
+        # and then call this proc again.
+        discard
     except CatchableError as e:
       c.setError(
         &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
@@ -292,6 +311,9 @@ else:
 # rather use this one. --Adam
 proc asyncExecCallOrCreate*(c: Computation): Future[void] {.async.} =
   defer: c.dispose()
+
+  await ifNecessaryGetCode(c.vmState, c.msg.contractAddress)
+  
   if c.beforeExec():
     return
   c.executeOpcodes()

@@ -23,12 +23,12 @@ import
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
   websock/websock as ws,
-  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version, peers],
+  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version, peers, stateless_runner],
   ./db/[storage_types, db_chain, select_backend],
   ./graphql/ethapi,
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
-  ./sync/[fast, full, protocol, snap],
+  ./sync/[fast, full, protocol, snap, stateless],
   ./utils/tx_pool
 
 when defined(evmc_enabled):
@@ -128,7 +128,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     of SyncMode.Snap:
       nimbus.ethNode.addCapability protocol.snap
-    of SyncMode.Full, SyncMode.Default:
+    of SyncMode.Full, SyncMode.Default, SyncMode.Stateless:
       discard
 
   if ProtocolFlag.Les in protocols:
@@ -153,7 +153,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     of SyncMode.Snap:
       SnapSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
                        conf.maxPeers, nimbus.dbBackend, tickerOK).start
-    of SyncMode.Default:
+    of SyncMode.Default, SyncMode.Stateless:
       discard
 
   # Connect directly to the static nodes
@@ -171,7 +171,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     var waitForPeers = true
     case conf.syncMode:
-    of SyncMode.Snap:
+    of SyncMode.Snap, SyncMode.Stateless:
       waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -331,11 +331,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, maybeStatelessModeDataSourceUrl(conf))
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, maybeStatelessModeDataSourceUrl(conf))
 
     info "Starting engine API server", port = conf.engineApiPort
 
@@ -345,11 +345,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, maybeStatelessModeDataSourceUrl(conf))
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, maybeStatelessModeDataSourceUrl(conf))
 
     info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 
@@ -388,6 +388,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, chainDB)
+  of NimbusCmd.statelesslyRun:
+      statelesslyRunBlock(conf.statelessRunDataSourceUrl, newChain(chainDB), conf.statelessBlockHash)
   else:
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, chainDB, protocols)
@@ -397,6 +399,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       case conf.syncMode:
       of SyncMode.Default:
         FastSyncCtx.new(nimbus.ethNode).start
+      of SyncMode.Stateless:
+        StatelessCtx.new(nimbus.ethNode, conf.statelessModeDataSourceUrl).start
       of SyncMode.Full, SyncMode.Snap:
         discard
 

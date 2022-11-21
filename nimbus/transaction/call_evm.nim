@@ -217,6 +217,10 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   let call = callParamsForTx(tx, sender, vmState, fork)
   return runComputation(call).gasUsed
 
+proc asyncTxCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Future[GasInt] {.async.} =
+  let call = callParamsForTx(tx, sender, vmState, fork)
+  return (await asyncRunComputation(call)).gasUsed
+
 proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
   let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)

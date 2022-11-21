@@ -29,6 +29,7 @@ proc eth_accounts(): seq[EthAddressStr]
 proc eth_blockNumber(): HexQuantityStr
 proc eth_getBalance(data: EthAddressStr, quantityTag: string): HexQuantityStr
 proc eth_getStorageAt(data: EthAddressStr, slot: HexDataStr, quantityTag: string): HexDataStr
+proc eth_getProof(data: EthAddressStr, slot: seq[HexDataStr], quantityTag: string): ProofResponse
 proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string): HexQuantityStr
 proc eth_getBlockTransactionCountByHash(data: Hash256): HexQuantityStr
 proc eth_getBlockTransactionCountByNumber(quantityTag: string): HexQuantityStr

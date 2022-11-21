@@ -16,6 +16,7 @@ import
   ../errors,
   ../forks,
   ../utils/[ec_recover],
+  ./async/data_sources/none,
   ./transaction_tracer,
   ./types,
   eth/[common, keys]
@@ -87,6 +88,7 @@ proc init(
   self.stateDB = ac
   self.touchedAccounts = initHashSet[EthAddress]()
   self.minerAddress = miner
+  self.asyncFactory = AsyncOperationFactory(lazyDataSource: noLazyDataSource())
 
 proc init(
       self:        BaseVMState;
@@ -320,6 +322,34 @@ proc init*(
       tracerFlags = tracerFlags,
       pruneTrie   = pruneTrie)
     return true
+
+proc statelessInit*(
+      vmState:     BaseVMState;
+      header:      BlockHeader;     ## header with tx environment data fields
+      chainDB:     BaseChainDB;     ## block chain database
+      parent:      BlockHeader;
+      asyncFactory: AsyncOperationFactory;
+      tracerFlags: set[TracerFlags] = {};
+      pruneTrie:   bool = true): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  var tracer: TransactionTracer
+  tracer.initTracer(tracerFlags)
+  vmState.init(
+    ac          = AccountsCache.statelessInit(chainDB.db, parent.stateRoot, pruneTrie),
+    parent      = parent,
+    timestamp   = header.timestamp,
+    gasLimit    = header.gasLimit,
+    fee         = header.fee,
+    prevRandao  = header.prevRandao,
+    difficulty  = header.difficulty,
+    miner       = chainDB.getMinerAddress(header),
+    chainDB     = chainDB,
+    # FIXME-Adam: I think we need to hardcode this to true because we don't have all
+    # the previous blocks; am I wrong?
+    ttdReached  = true,
+    tracer      = tracer)
+  vmState.asyncFactory = asyncFactory
+  return true
 
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
   vmState.minerAddress

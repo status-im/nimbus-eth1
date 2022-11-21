@@ -16,9 +16,11 @@ import
   ../../transaction,
   ../../vm_state,
   ../../vm_types,
+  ../../vm2/async/operations,
   ../validate,
   ./executor_helpers,
   chronicles,
+  chronos,
   eth/common,
   stew/results
 
@@ -35,14 +37,14 @@ proc eip1559BaseFee(header: BlockHeader; fork: Fork): UInt256 =
   if FkLondon <= fork:
     result = header.baseFee
 
-proc processTransactionImpl(
+proc asyncProcessTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    Fork): Result[GasInt,void]
+    fork:    Fork): Future[Result[GasInt,void]]
     # wildcard exception, wrapped below
-    {.gcsafe, raises: [Exception].} =
+    {.async, gcsafe.} =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -58,8 +60,12 @@ proc processTransactionImpl(
     miner = vmState.coinbase()
 
   # Return failure unless explicitely set `ok()`
-  result = err()
+  var res: Result[GasInt,void] = err()
 
+  await ifNecessaryGetAccounts(vmState, @[sender, miner])
+  if tx.to.isSome:
+    await ifNecessaryGetCode(vmState, tx.to.get)
+  
   # Actually, the eip-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
@@ -71,7 +77,7 @@ proc processTransactionImpl(
     # Execute the transaction.
     let
       accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState, fork)
+      gasBurned = await tx.asyncTxCallEvm(sender, vmState, fork)
 
     # Make sure that the tx does not exceed the maximum cumulative limit as
     # set in the block header. Again, the eip-1559 reference does not mention
@@ -88,7 +94,7 @@ proc processTransactionImpl(
       vmState.stateDB.commit(accTx)
       vmState.stateDB.addBalance(miner, gasBurned.u256 * priorityFee.u256)
       vmState.cumulativeGasUsed += gasBurned
-      result = ok(gasBurned)
+      res = ok(gasBurned)
 
   vmState.mutateStateDB:
     for deletedAccount in vmState.selfDestructs:
@@ -105,6 +111,18 @@ proc processTransactionImpl(
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
   vmState.stateDB.persist(clearCache = false)
+
+  return res;
+
+proc processTransactionImpl(
+    vmState: BaseVMState; ## Parent accounts environment for transaction
+    tx:      Transaction; ## Transaction to validate
+    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    header:  BlockHeader; ## Header for the block containing the current tx
+    fork:    Fork): Result[GasInt,void]
+    # wildcard exception, wrapped below
+    {.gcsafe, raises: [Exception].} =
+  return waitFor(asyncProcessTransactionImpl(vmState, tx, sender, header, fork))
 
 # ------------------------------------------------------------------------------
 # Public functions

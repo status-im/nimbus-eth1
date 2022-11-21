@@ -60,7 +60,11 @@ template handleOtherDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
 
     vmOpHandlers[fork][op].run(k)
 
-    if k.cpt.tracingEnabled:
+    # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+    # FIXME-Adam: I hate this. It is horribly convoluted. Can we fix this? I'm
+    # hesitant to mess with this code too much, because I worry that I'll wreck
+    # performance. I should really do some performance tests.
+    if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
       k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 # ------------------------------------------------------------------------------
@@ -98,7 +102,15 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     # Wrap innner case/switch into outer case/switch
     let branchStmt = block:
       case op
-      of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
+      # FIXME-manyOpcodesNowRequireContinuations
+      #
+      # Note that Sload and the ones following it are on this list because
+      # they call asyncChainTo (and so they set a pendingAsyncOperation and
+      # a continuation that needs to be noticed by the interpreter_dispatch
+      # loop).
+      #
+      # This is looking very ugly. Is there a better way of doing it?
+      of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload, Sstore, Balance, SelfBalance, CodeSize, CodeCopy, ExtCodeSize, ExtCodeCopy, ExtCodeHash, Blockhash:
         quote do:
           `forkCaseSubExpr`
           if not `k`.cpt.continuation.isNil:
@@ -135,7 +147,9 @@ template genLowMemDispatcher*(fork: Fork; op: Op; k: Vm2Ctx) =
     handleOtherDirective(fork, op, k)
 
   case c.instr
-  of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
+  # FIXME-manyOpcodesNowRequireContinuations
+  # See the comment above regarding why this list is so huge.
+  of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload, Sstore, Balance, SelfBalance, CodeSize, CodeCopy, ExtCodeSize, ExtCodeCopy, ExtCodeHash, Blockhash:
     if not k.cpt.continuation.isNil:
       break
   of Return, Revert, SelfDestruct:

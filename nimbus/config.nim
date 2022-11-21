@@ -115,6 +115,7 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
+    statelesslyRun
 
   ProtocolFlag* {.pure.} = enum
     ## Protocol flags
@@ -135,6 +136,7 @@ type
     Default
     Full                          ## Beware, experimental
     Snap                          ## Beware, experimental
+    Stateless                     ## Beware, experimental
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
@@ -164,9 +166,10 @@ type
     syncMode* {.
       desc: "Specify particular blockchain sync mode."
       longDesc:
-        "- default -- legacy sync mode\n" &
-        "- full    -- full blockchain archive\n" &
-        "- snap    -- experimental snap mode (development only)\n"
+        "- default   -- legacy sync mode\n" &
+        "- full      -- full blockchain archive\n" &
+        "- snap      -- experimental snap mode (development only)\n" &
+        "- stateless -- experimental stateless mode (development only)\n"
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default
       abbr: "y"
@@ -349,6 +352,13 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    # FIXME-Adam: moved this here from the noCommand section, because I need it in the statelesslyRun command also.
+    # Is there a better way to do this? (Do I have to make two fields with different names?)
+    terminalTotalDifficulty* {.
+      desc: "The terminal total difficulty of the eth2 merge transition block." &
+            " It takes precedence over terminalTotalDifficulty in config file."
+      name: "terminal-total-difficulty" .}: Option[UInt256]
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
@@ -435,11 +445,6 @@ type
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "engine-api-ws-address" .}: ValidIpAddress
 
-      terminalTotalDifficulty* {.
-        desc: "The terminal total difficulty of the eth2 merge transition block." &
-              " It takes precedence over terminalTotalDifficulty in config file."
-        name: "terminal-total-difficulty" .}: Option[UInt256]
-
       allowedOrigins* {.
         desc: "Comma separated list of domains from which to accept cross origin requests"
         defaultValue: @[]
@@ -488,6 +493,11 @@ type
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "metrics-address" }: ValidIpAddress
+      
+      statelessModeDataSourceUrl* {.
+        desc: "URL of the node to use as a data source for on-demand data fetching via the JSON-RPC API"
+        defaultValue: ""
+        name: "stateless-data-source-url" .}: string
 
     of `import`:
 
@@ -496,6 +506,18 @@ type
         desc: "Import RLP encoded block(s) from a file, validate, write to database and quit"
         defaultValue: ""
         name: "blocks-file" }: InputFile
+
+    of statelesslyRun:
+      
+      statelessRunDataSourceUrl* {.
+        desc: "URL of the node to use as a data source for on-demand data fetching via the JSON-RPC API"
+        defaultValue: ""
+        name: "stateless-data-source-url" .}: string
+      
+      statelessBlockHash* {.
+        desc: "hash of the block to run"
+        defaultValue: ""
+        name: "stateless-block-hash" .}: string
 
 proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
   parseInt(p.string).T
@@ -644,6 +666,12 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
+
+proc maybeStatelessModeDataSourceUrl*(conf: NimbusConf): Option[string] =
+  if conf.syncMode == SyncMode.Stateless:
+    some(conf.statelessModeDataSourceUrl)
+  else:
+    none[string]()
 
 proc getBootNodes*(conf: NimbusConf): seq[ENode] =
   # Ignore standard bootnodes if customNetwork is loaded

@@ -8,7 +8,8 @@
 import
   strformat,
   chronicles, eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils, storage_types, sets
+  ../constants, ../utils, storage_types, sets,
+  ./distinct_tries, ./values_from_bytes
 
 logScope:
   topics = "state_db"
@@ -46,7 +47,7 @@ const
 
 type
   AccountStateDB* = ref object
-    trie: SecureHexaryTrie
+    trie: AccountsTrie
     originalRoot: KeccakHash   # will be updated for every transaction
     transactionID: TransactionID
     when aleth_compat:
@@ -55,18 +56,18 @@ type
   ReadOnlyStateDB* = distinct AccountStateDB
 
 template trieDB(stateDB: AccountStateDB): TrieDatabaseRef =
-  HexaryTrie(stateDB.trie).db
+  SecureHexaryTrie(stateDB.trie).db
 
 proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash
 
 proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
-  db.trie = initSecureHexaryTrie(trieDB(db), root, db.trie.isPruning)
+  db.trie = initAccountsTrie(trieDB(db), root, SecureHexaryTrie(db.trie).isPruning)
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
-  result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
+  result.trie = initAccountsTrie(backingStore, root, pruneTrie)
   result.originalRoot = root
   result.transactionID = backingStore.getTransactionID()
   when aleth_compat:
@@ -75,21 +76,17 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
 proc getTrie*(db: AccountStateDB): HexaryTrie =
   HexaryTrie db.trie
 
-proc getSecureTrie*(db: AccountStateDB): SecureHexaryTrie =
+proc getSecureTrie*(db: AccountStateDB): AccountsTrie =
   db.trie
 
 proc getAccount*(db: AccountStateDB, address: EthAddress): Account =
-  let recordFound = db.trie.get(address)
-  if recordFound.len > 0:
-    result = rlp.decode(recordFound, Account)
-  else:
-    result = newAccount()
+  accountFromBytes(db.trie.getAccountBytes(address))
 
 proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
-  db.trie.put(address, rlp.encode(account))
+  db.trie.putAccountBytes(address, rlp.encode(account))
 
 proc deleteAccount*(db: AccountStateDB, address: EthAddress) =
-  db.trie.del(address)
+  db.trie.delAccountBytes(address)
 
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
   let account = db.getAccount(address)
@@ -110,21 +107,8 @@ proc addBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
 proc subBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) - delta)
 
-template createTrieKeyFromSlot(slot: UInt256): auto =
-  # Converts a number to hex big-endian representation including
-  # prefix and leading zeros:
-  slot.toByteArrayBE
-  # Original py-evm code:
-  # pad32(int_to_big_endian(slot))
-  # morally equivalent to toByteRange_Unnecessary but with different types
-
 template getAccountTrie(db: AccountStateDB, account: Account): auto =
-  # TODO: implement `prefix-db` to solve issue #228 permanently.
-  # the `prefix-db` will automatically insert account address to the
-  # underlying-db key without disturb how the trie works.
-  # it will create virtual container for each account.
-  # see nim-eth#9
-  initSecureHexaryTrie(trieDB(db), account.storageRoot, false)
+  storageTrieForAccount(db.trie, account, false)
 
 proc clearStorage*(db: AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
@@ -146,9 +130,9 @@ proc setStorage*(db: AccountStateDB,
 
   if value > 0:
     let encodedValue = rlp.encode(value)
-    accountTrie.put(slotAsKey, encodedValue)
+    accountTrie.putSlotBytes(slotAsKey, encodedValue)
   else:
-    accountTrie.del(slotAsKey)
+    accountTrie.delSlotBytes(slotAsKey)
 
   # map slothash back to slot value
   # see iterator storage below
@@ -179,7 +163,7 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
     accountTrie = getAccountTrie(db, account)
 
   let
-    foundRecord = accountTrie.get(slotAsKey)
+    foundRecord = accountTrie.getSlotBytes(slotAsKey)
 
   if foundRecord.len > 0:
     result = (rlp.decode(foundRecord, UInt256), true)
@@ -226,10 +210,10 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
 proc accountExists*(db: AccountStateDB, address: EthAddress): bool =
-  db.trie.get(address).len > 0
+  db.trie.getAccountBytes(address).len > 0
 
 proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
-  let recordFound = db.trie.get(address)
+  let recordFound = db.trie.getAccountBytes(address)
   assert(recordFound.len > 0)
 
   let account = rlp.decode(recordFound, Account)
@@ -238,7 +222,7 @@ proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
     account.nonce == 0
 
 proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
-  let recordFound = db.trie.get(address)
+  let recordFound = db.trie.getAccountBytes(address)
   if recordFound.len > 0:
     let account = rlp.decode(recordFound, Account)
     result = account.codeHash == EMPTY_SHA3 and

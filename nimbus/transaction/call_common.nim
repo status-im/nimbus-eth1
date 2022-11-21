@@ -12,6 +12,7 @@ import
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/accounts_cache, forks],
+  ../vm2/async/operations,
   ./host_types
 
 when defined(evmc_enabled):
@@ -264,6 +265,10 @@ proc runComputation*(call: CallParams): CallResult =
 
 # FIXME-duplicatedForAsync
 proc asyncRunComputation*(call: CallParams): Future[CallResult] {.async.} =
+  # This has to come before the newComputation call inside setupHost.
+  if not call.isCreate:
+    await ifNecessaryGetCodeForAccounts(call.vmState, @[call.to.toEvmc.fromEvmc])
+  
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 
