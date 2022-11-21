@@ -106,6 +106,10 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   else:
     trace "Ticker is disabled"
 
+  # Check for recover mode
+  if not ctx.data.noRecovery:
+    ctx.daemon = true
+
   result = true
 
 proc release*(ctx: SnapCtxRef) =
@@ -171,13 +175,14 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   buddy.ctrl.multiOk = true
 
 
-proc runPool*(buddy: SnapBuddyRef, last: bool) =
+proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
   ## Enabled when `buddy.ctrl.poolMode` is `true`
   ##
   let ctx = buddy.ctx
-  if ctx.poolMode:
-    ctx.poolMode = false
+  ctx.poolMode = false
+  result = true
 
+  block:
     let rc = ctx.data.pivotTable.lastValue
     if rc.isOk:
 

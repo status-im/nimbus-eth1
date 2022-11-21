@@ -103,6 +103,7 @@ type
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     accountsHealing*: bool             ## Activates accounts DB healing
+    noRecovery*: bool                  ## Ignore recovery checkpoints
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger

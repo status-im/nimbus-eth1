@@ -135,6 +135,7 @@ type
     Default
     Full                          ## Beware, experimental
     Snap                          ## Beware, experimental
+    SnapCtx                       ## Beware, experimental
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
@@ -166,7 +167,8 @@ type
       longDesc:
         "- default -- legacy sync mode\n" &
         "- full    -- full blockchain archive\n" &
-        "- snap    -- experimental snap mode (development only)\n"
+        "- snap    -- experimental snap mode (development only)\n" &
+        "- snapCtx -- snap considering possible recovery context\n"
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default
       abbr: "y"

@@ -44,7 +44,7 @@ proc runStart(buddy: SnapBuddyRef): bool =
 proc runStop(buddy: SnapBuddyRef) =
   worker.stop(buddy)
 
-proc runPool(buddy: SnapBuddyRef; last: bool) =
+proc runPool(buddy: SnapBuddyRef; last: bool): bool =
   worker.runPool(buddy, last)
 
 proc runSingle(buddy: SnapBuddyRef) {.async.} =
@@ -63,18 +63,21 @@ proc init*(
     chain: Chain;
     rng: ref HmacDrbgContext;
     maxPeers: int;
-    dbBackend: ChainDb,
-    enableTicker = false): T =
+    dbBackend: ChainDb;
+    enableTicker = false;
+    noRecovery = false;
+      ): T =
   new result
   result.initSync(ethNode, chain, maxPeers, enableTicker)
   result.ctx.chain = chain # explicitely override
   result.ctx.data.rng = rng
   result.ctx.data.dbBackend = dbBackend
+  result.ctx.data.noRecovery = noRecovery
   # Required to have been initialised via `addCapability()`
   doAssert not result.ctx.ethWireCtx.isNil
 
 proc start*(ctx: SnapSyncRef) =
-  doAssert ctx.startSync(daemon = true)
+  doAssert ctx.startSync()
 
 proc stop*(ctx: SnapSyncRef) =
   ctx.stopSync()
