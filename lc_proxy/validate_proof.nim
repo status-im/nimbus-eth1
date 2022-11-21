@@ -95,7 +95,6 @@ proc getStorageData(
   of InvalidProof:
     return err(proofResult.errorMsg)
 
-
 proc getStorageData*(
     stateRoot: FixedBytes[32],
     requestedSlot: UInt256,
@@ -128,3 +127,6 @@ proc getStorageData*(
     return err("received proof for invalid slot")
 
   return getStorageData(account, sproof)
+
+func isValidCode*(account: etypes.Account, code: openArray[byte]): bool =
+   return account.codeHash == keccakHash(code)
