@@ -13,6 +13,7 @@ import
   stew/[byteutils, results],
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
+  eth/common/eth_types as etypes,
   web3,
   web3/[ethhexstrings, ethtypes],
   beacon_chain/eth1/eth1_monitor,
@@ -33,6 +34,9 @@ template encodeQuantity(value: UInt256): HexQuantityStr =
 
 template encodeHexData(value: UInt256): HexDataStr =
   hexDataStr("0x" & toBytesBE(value).toHex)
+
+template bytesToHex(bytes: seq[byte]): HexDataStr =
+  hexDataStr("0x" & toHex(bytes))
 
 template encodeQuantity(value: Quantity): HexQuantityStr =
   hexQuantityStr(encodeQuantity(value.uint64))
@@ -191,6 +195,42 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
       return hexQuantityStr(encodeQuantity(accountResult.get.nonce))
     else:
       raise newException(ValueError, accountResult.error)
+
+  lcProxy.proxy.rpc("eth_getCode") do(address: Address, quantityTag: string) -> HexDataStr:
+    let
+      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      blockNumber = executionPayload.blockNumber.uint64
+
+    let
+      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+      accountResult = getAccountFromProof(
+        executionPayload.stateRoot,
+        proof.address,
+        proof.balance,
+        proof.nonce,
+        proof.codeHash,
+        proof.storageHash,
+        proof.accountProof
+      )
+
+    if accountResult.isErr():
+      raise newException(ValueError, accountResult.error)
+
+    let account = accountResult.get()
+
+    if account.codeHash == etypes.EMPTY_CODE_HASH:
+      # account does not have any code, return empty hex data
+      return hexDataStr("0x")
+
+    let code = await lcProxy.rpcClient.eth_getCode(
+      address,
+      blockId(blockNumber)
+    )
+
+    if isValidCode(account, code):
+      return bytesToHex(code)
+    else:
+      raise newException(ValueError, "received code which does not match account code hash")
 
   # TODO This methods are forwarded directly to provider therefore thay are not
   # validated in any way
