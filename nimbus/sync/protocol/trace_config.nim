@@ -13,7 +13,7 @@ const
   # Some static noisy settings for `eth` debugging
   trEthTracePacketsOk* = true
     ## `trace` log each sync network message.
-  trEthTraceGossipOk* = true
+  trEthTraceGossipOk* = true and false
     ## `trace` log each sync network message.
   trEthTraceHandshakesOk* = true
     ## `trace` log each network handshake message.
@@ -24,7 +24,8 @@ const
   trSnapTracePacketsOk* = true
     ## `trace` log each sync network message.
 
-# The files and lines clutter differently when sync tracing is enabled.
-# publicLogScope: chroniclesLineNumbers=false
+  # Shut up particular eth context handler gossip
+  trMissingOrDisabledGossipOk* = true and false
+    ## Control `handleAnnouncedTxsHashes`, `handleAnnouncedTxsHashes`, etc.
 
 # End

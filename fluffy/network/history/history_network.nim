@@ -22,16 +22,6 @@ logScope:
 
 export accumulator
 
-# TODO: To currently verify if content is from the canonical chain it is
-# required to download the right epoch accunulator, which is ~0.5 MB. This is
-# too much, at least for the local testnet tests. This needs to be improved
-# by adding the proofs to the block header content. Another independent
-# improvement would be to have a content cache (LRU or so). The latter would
-# probably help mostly for the local testnet tests.
-# For now, we disable this verification default until further improvements are
-# made.
-const canonicalVerify* {.booldefine.} = false
-
 const
   historyProtocolId* = [byte 0x50, 0x0B]
 
@@ -40,12 +30,13 @@ type
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
+    accumulator*: FinishedAccumulator
     processContentLoop: Future[void]
 
   Block* = (BlockHeader, BlockBody)
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
-  some(toContentId(contentKey))
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+  ok(toContentId(contentKey))
 
 func encodeKey(k: ContentKey): (ByteList, ContentId) =
   let keyEncoded = encode(k)
@@ -66,15 +57,21 @@ func getEncodedKeyForContent(
       ContentKey(contentType: cType, receiptsKey: contentKeyType)
     of epochAccumulator:
       raiseAssert("Not implemented")
-    of masterAccumulator:
-      raiseAssert("Not implemented")
+    of blockHeaderWithProof:
+      ContentKey(contentType: cType, blockHeaderWithProofKey: contentKeyType)
 
   return encodeKey(contentKey)
 
-func decodeRlp*(bytes: openArray[byte], T: type): Result[T, string] =
+func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   try:
-    ok(rlp.decode(bytes, T))
+    ok(rlp.decode(input, T))
   except RlpError as e:
+    err(e.msg)
+
+func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(SSZ.decode(input, T))
+  except SszError as e:
     err(e.msg)
 
 ## Calls to go from SSZ decoded types to RLP fully decoded types
@@ -183,11 +180,7 @@ proc validateBlockBodyBytes*(
     bytes: openArray[byte], txRoot, ommersHash: KeccakHash):
     Result[BlockBody, string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let body =
-    try:
-      SSZ.decode(bytes, BlockBodySSZ)
-    except SszError as e:
-      return err("Failed to decode block body: " & e.msg)
+  let body = ? decodeSsz(bytes, BlockBodySSZ)
 
   ? validateBlockBody(body, txRoot, ommersHash)
 
@@ -206,11 +199,7 @@ proc validateReceiptsBytes*(
     bytes: openArray[byte],
     receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let receipts =
-    try:
-      SSZ.decode(bytes, ReceiptsSSZ)
-    except SszError as e:
-      return err("Failed to decode receipts: " & e.msg)
+  let receipts = ? decodeSsz(bytes, ReceiptsSSZ)
 
   ? validateReceipts(receipts, receiptsRoot)
 
@@ -221,7 +210,13 @@ proc validateReceiptsBytes*(
 proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Option[T] =
   let contentFromDB = db.get(contentId)
   if contentFromDB.isSome():
-    let res = decodeRlp(contentFromDB.get(), T)
+    let headerWithProof =
+      try:
+        SSZ.decode(contentFromDB.get(), BlockHeaderWithProof)
+      except SszError as e:
+        raiseAssert(e.msg)
+
+    let res = decodeRlp(headerWithProof.header.asSeq(), T)
     if res.isErr():
       raiseAssert(res.error)
     else:
@@ -255,12 +250,6 @@ proc get(
     db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Option[T] =
   db.getSszDecoded(contentId, T)
 
-proc getAccumulator(db: ContentDB): Option[Accumulator] =
-  db.getPermanentSszDecoded(subkey(kLatestAccumulator), Accumulator)
-
-proc putAccumulator*(db: ContentDB, value: openArray[byte]) =
-  db.putPermanent(subkey(kLatestAccumulator), value)
-
 proc getContentFromDb(
     n: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
   if n.portalProtocol.inRange(contentId):
@@ -268,20 +257,7 @@ proc getContentFromDb(
   else:
     none(T)
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) {.raises: [Defect], gcsafe.} =
-  let keyOpt = decode(contentKey)
-  if keyOpt.isNone():
-    return (none(ContentId), none(seq[byte]))
 
-  let key = keyOpt.get()
-
-  case key.contentType:
-  of masterAccumulator:
-    (none(ContentId), db.getPermanent(subkey(kLatestAccumulator)))
-  else:
-    let contentId = key.toContentId()
-    (some(contentId), db.get(contentId))
 
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
@@ -295,6 +271,67 @@ const requestRetries = 4
 # ongoing requests are cancelled after the receival of the first response,
 # however that response is not yet validated at that moment.
 
+func verifyHeader(
+    n: HistoryNetwork, header: BlockHeader, proof: BlockHeaderProof):
+    Result[void, string] =
+  verifyHeader(n.accumulator, header, proof)
+
+proc getVerifiedBlockHeader*(
+    n: HistoryNetwork, hash: BlockHash):
+    Future[Option[BlockHeader]] {.async.} =
+  let (keyEncoded, contentId) =
+    getEncodedKeyForContent(blockHeaderWithProof, hash)
+
+  # Note: This still requests a BlockHeaderWithProof from the database, as that
+  # is what is stored. But the proof doesn't need to be checked as everthing
+  # should get checked before storing.
+  let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
+
+  if headerFromDb.isSome():
+    info "Fetched block header from database", hash, contentKey = keyEncoded
+    return headerFromDb
+
+  for i in 0..<requestRetries:
+    let headerContentLookup =
+      await n.portalProtocol.contentLookup(keyEncoded, contentId)
+    if headerContentLookup.isNone():
+      warn "Failed fetching block header with proof from the network",
+        hash, contentKey = keyEncoded
+      return none(BlockHeader)
+
+    let headerContent = headerContentLookup.unsafeGet()
+
+    let headerWithProofRes = decodeSsz(headerContent.content, BlockHeaderWithProof)
+    if headerWithProofRes.isErr():
+      warn "Failed decoding header with proof", err = headerWithProofRes.error
+      return none(BlockHeader)
+
+    let headerWithProof = headerWithProofRes.get()
+
+    let res = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash)
+    if res.isOk():
+      let isCanonical = n.verifyHeader(res.get(), headerWithProof.proof)
+
+      if isCanonical.isOk():
+        info "Fetched block header from the network", hash, contentKey = keyEncoded
+        # Content is valid, it can be propagated to interested peers
+        n.portalProtocol.triggerPoke(
+          headerContent.nodesInterestedInContent,
+          keyEncoded,
+          headerContent.content
+        )
+
+        n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
+
+        return some(res.get())
+    else:
+      warn "Validation of block header failed", err = res.error, hash, contentKey = keyEncoded
+
+  # Headers were requested `requestRetries` times and all failed on validation
+  return none(BlockHeader)
+
+# TODO: To be deprecated or not? Should there be the case for requesting a
+# block header without proofs?
 proc getBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
     Future[Option[BlockHeader]] {.async.} =
@@ -325,7 +362,7 @@ proc getBlockHeader*(
         headerContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, headerContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
 
       return some(res.get())
     else:
@@ -372,7 +409,7 @@ proc getBlockBody*(
         bodyContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, bodyContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, bodyContent.content)
 
       return some(res.get())
     else:
@@ -385,7 +422,10 @@ proc getBlock*(
     Future[Option[Block]] {.async.} =
   debug "Trying to retrieve block with hash", hash
 
-  let headerOpt = await n.getBlockHeader(hash)
+  # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
+  # proofs are not necessiarly needed, in order to avoid having to inject
+  # also the original type into the network.
+  let headerOpt = await n.getVerifiedBlockHeader(hash)
   if headerOpt.isNone():
     warn "Failed to get header when getting block with hash", hash
     # Cannot validate block without header.
@@ -441,7 +481,7 @@ proc getReceipts*(
         receiptsContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, receiptsContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, receiptsContent.content)
 
       return some(res.get())
     else:
@@ -492,7 +532,7 @@ proc getEpochAccumulator(
         accumulatorContent.content
       )
 
-      n.portalProtocol.storeContent(contentId, accumulatorContent.content)
+      n.portalProtocol.storeContent(keyEncoded, contentId, accumulatorContent.content)
 
       return some(epochAccumulator)
     else:
@@ -504,18 +544,7 @@ proc getEpochAccumulator(
 proc getBlock*(
     n: HistoryNetwork, bn: UInt256):
     Future[Result[Option[Block], string]] {.async.} =
-
-  # TODO for now checking accumulator only in db, we could also ask our
-  # peers for it.
-  let accumulatorOpt = n.contentDB.getAccumulator()
-
-  if accumulatorOpt.isNone():
-    return err("Master accumulator not found in database")
-
-  let accumulator = accumulatorOpt.unsafeGet()
-
-  let epochDataRes = accumulator.getBlockEpochDataForBlockNumber(bn)
-
+  let epochDataRes = n.accumulator.getBlockEpochDataForBlockNumber(bn)
   if epochDataRes.isOk():
     let
       epochData = epochDataRes.get()
@@ -535,89 +564,6 @@ proc getBlock*(
   else:
     return err(epochDataRes.error)
 
-proc getInitialMasterAccumulator*(
-    n: HistoryNetwork):
-    Future[bool] {.async.} =
-  let
-    contentKey = ContentKey(
-      contentType: masterAccumulator,
-      masterAccumulatorKey: MasterAccumulatorKey(accumulaterKeyType: latest))
-    keyEncoded = encode(contentKey)
-
-  let nodes = await n.portalProtocol.queryRandom()
-
-  var hashes: CountTable[Accumulator]
-
-  for node in nodes:
-    # TODO: Could make concurrent
-    let foundContentRes = await n.portalProtocol.findContent(node, keyEncoded)
-    if foundContentRes.isOk():
-      let foundContent = foundContentRes.get()
-      if foundContent.kind == Content:
-        let masterAccumulator =
-          try:
-            SSZ.decode(foundContent.content, Accumulator)
-          except SszError:
-            continue
-        hashes.inc(masterAccumulator)
-        let (accumulator, count) = hashes.largest()
-
-        if count > 1: # Should be increased eventually
-          n.contentDB.putAccumulator(foundContent.content)
-          return true
-
-  # Could not find a common accumulator from all the queried nodes
-  return false
-
-proc buildProof*(n: HistoryNetwork, header: BlockHeader):
-    Future[Result[seq[Digest], string]] {.async.} =
-  # Note: Temporarily needed proc until proofs are send over with headers.
-  let accumulatorOpt = n.contentDB.getAccumulator()
-  if accumulatorOpt.isNone():
-    return err("Master accumulator not found in database")
-
-  let
-    accumulator = accumulatorOpt.get()
-    epochIndex = getEpochIndex(header)
-    epochHash = Digest(data: accumulator.historicalEpochs[epochIndex])
-
-    epochAccumulatorOpt = await n.getEpochAccumulator(epochHash)
-
-  if epochAccumulatorOpt.isNone():
-    return err("Epoch accumulator not found")
-
-  let
-    epochAccumulator = epochAccumulatorOpt.get()
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-    # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
-
-  return epochAccumulator.build_proof(gIndex)
-
-proc verifyCanonicalChain(
-    n: HistoryNetwork, header: BlockHeader):
-    Future[Result[void, string]] {.async.} =
-  when not canonicalVerify:
-    return ok()
-
-  let accumulatorOpt = n.contentDB.getAccumulator()
-  if accumulatorOpt.isNone():
-    # Should acquire a master accumulator first
-    return err("Cannot accept any data without a master accumulator")
-
-  let accumulator = accumulatorOpt.get()
-
-  # Note: It is a bit silly to build a proof, as we still need to request the
-  # epoch accumulators for it, and could just verify it with those. But the
-  # idea here is that eventually this gets changed so that the proof is send
-  # together with the header.
-  let proof = await n.buildProof(header)
-  if proof.isOk():
-    return verifyHeader(accumulator, header, proof.get())
-  else:
-    # Can't verify without master and epoch accumulators
-    return err("Cannot build proof: " & proof.error)
-
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ByteList):
     Future[bool] {.async.} =
@@ -630,6 +576,11 @@ proc validateContent(
 
   case key.contentType:
   of blockHeader:
+    # Note: For now we still accept regular block header type to remain
+    # compatible with the current specs. However, a verification is done by
+    # basically requesting the header with proofs from somewhere else.
+    # This all doesn't make much sense aside from compatibility and should
+    # eventually be removed.
     let validateResult =
       validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash)
     if validateResult.isErr():
@@ -638,68 +589,51 @@ proc validateContent(
 
     let header = validateResult.get()
 
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
+    let res = await n.getVerifiedBlockHeader(key.blockHeaderKey.blockHash)
+    if res.isNone():
+      warn "Block header failed canonical verification"
       return false
     else:
       return true
-  of blockBody:
-    let headerOpt = await n.getBlockHeader(key.blockBodyKey.blockHash)
 
-    if headerOpt.isNone():
-      warn "Cannot find the header, no way to validate the block body"
+  of blockBody:
+    let res = await n.getVerifiedBlockHeader(key.blockBodyKey.blockHash)
+    if res.isNone():
+      warn "Block body Failed canonical verification"
       return false
 
-    let header = headerOpt.get()
+    let header = res.get()
     let validationResult =
       validateBlockBodyBytes(content, header.txRoot, header.ommersHash)
 
     if validationResult.isErr():
       warn "Failed validating block body", error = validationResult.error
       return false
-
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
-      return false
     else:
       return true
-  of receipts:
-    let headerOpt = await n.getBlockHeader(key.receiptsKey.blockHash)
 
-    if headerOpt.isNone():
-      warn "Cannot find the header, no way to validate the receipts"
+  of receipts:
+    let res = await n.getVerifiedBlockHeader(key.receiptsKey.blockHash)
+    if res.isNone():
+      warn "Receipts failed canonical verification"
       return false
 
-    let header = headerOpt.get()
+    let header = res.get()
     let validationResult =
       validateReceiptsBytes(content, header.receiptRoot)
 
     if validationResult.isErr():
       warn "Failed validating receipts", error = validationResult.error
       return false
-
-    let verifyResult = await n.verifyCanonicalChain(header)
-    if verifyResult.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = verifyResult.error
-      return false
     else:
       return true
+
   of epochAccumulator:
     # Check first if epochHash is part of master accumulator
-    let masterAccumulator = n.contentDB.getAccumulator()
-    if masterAccumulator.isNone():
-      error "Cannot accept any data without a master accumulator"
-      return false
-
     let epochHash = key.epochAccumulatorKey.epochHash
-
-    if not masterAccumulator.get().historicalEpochs.contains(epochHash.data):
-      warn "Offered epoch accumulator is not part of master accumulator"
+    if not n.accumulator.historicalEpochs.contains(epochHash.data):
+      warn "Offered epoch accumulator is not part of master accumulator",
+        epochHash
       return false
 
     let epochAccumulator =
@@ -708,6 +642,7 @@ proc validateContent(
       except SszError:
         warn "Failed decoding epoch accumulator"
         return false
+
     # Next check the hash tree root, as this is probably more expensive
     let hash = hash_tree_root(epochAccumulator)
     if hash != epochHash:
@@ -715,32 +650,56 @@ proc validateContent(
       return false
     else:
       return true
-  of masterAccumulator:
-    # Don't allow a master accumulator to be offered, we only request it.
-    warn "Node does not accept master accumulators through offer/accept"
-    return false
+
+  of blockHeaderWithProof:
+    let headerWithProofRes = decodeSsz(content, BlockHeaderWithProof)
+    if headerWithProofRes.isErr():
+      warn "Failed decoding header with proof", err = headerWithProofRes.error
+      return false
+
+    let headerWithProof = headerWithProofRes.get()
+
+    let validateResult = validateBlockHeaderBytes(
+      headerWithProof.header.asSeq(), key.blockHeaderWithProofKey.blockHash)
+    if validateResult.isErr():
+      warn "Invalid block header offered", error = validateResult.error
+      return false
+
+    let header = validateResult.get()
+
+    let isCanonical = n.verifyHeader(header, headerWithProof.proof)
+    if isCanonical.isErr():
+      warn "Failed on check if header is part of canonical chain",
+        error = isCanonical.error
+      return false
+    else:
+      return true
 
 proc new*(
     T: type HistoryNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
+    accumulator: FinishedAccumulator,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig): T =
+  let
+    contentQueue = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
 
-  let cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
+    stream = streamManager.registerNewStream(contentQueue)
 
-  let s = streamManager.registerNewStream(cq)
+    portalProtocol = PortalProtocol.new(
+      baseProtocol, historyProtocolId,
+      toContentIdHandler, createGetHandler(contentDB), stream, bootstrapRecords,
+      config = portalConfig)
 
-  let portalProtocol = PortalProtocol.new(
-    baseProtocol, historyProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler, s, bootstrapRecords,
-    config = portalConfig)
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
-  return HistoryNetwork(
+  HistoryNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
-    contentQueue: cq
+    contentQueue: contentQueue,
+    accumulator: accumulator
   )
 
 proc validateContent(
@@ -758,7 +717,7 @@ proc validateContent(
 
       let contentId = contentIdOpt.get()
 
-      n.portalProtocol.storeContent(contentId, contentItem)
+      n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       info "Received offered content validated successfully", contentKey
 
@@ -794,28 +753,11 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
 
 proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
-    protocolId = n.portalProtocol.protocolId
+    protocolId = n.portalProtocol.protocolId,
+    accumulatorRoot = hash_tree_root(n.accumulator)
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
-
-proc initMasterAccumulator*(
-    n: HistoryNetwork,
-    accumulator: Option[Accumulator]) {.async.} =
-  if accumulator.isSome():
-    n.contentDB.putAccumulator(SSZ.encode(accumulator.get()))
-    info "Successfully retrieved master accumulator from local data"
-  else:
-    while true:
-      if await n.getInitialMasterAccumulator():
-        info "Successfully retrieved master accumulator from the network"
-        return
-      else:
-        warn "Could not retrieve initial master accumulator from the network"
-        when not canonicalVerify:
-          return
-        else:
-          await sleepAsync(2.seconds)
 
 proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()

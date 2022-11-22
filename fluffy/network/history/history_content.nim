@@ -32,24 +32,13 @@ type
     blockBody = 0x01
     receipts = 0x02
     epochAccumulator = 0x03
-    masterAccumulator = 0x04
+    blockHeaderWithProof = 0x04
 
   BlockKey* = object
     blockHash*: BlockHash
 
   EpochAccumulatorKey* = object
     epochHash*: Digest # TODO: Perhaps this should be called epochRoot in the spec instead
-
-  MasterAccumulatorKeyType* = enum
-    latest = 0x00 # An SSZ Union None
-    masterHash = 0x01
-
-  MasterAccumulatorKey* = object
-    case accumulaterKeyType*: MasterAccumulatorKeyType
-    of latest:
-      discard
-    of masterHash:
-      masterHashKey*: Digest
 
   ContentKey* = object
     case contentType*: ContentType
@@ -61,8 +50,8 @@ type
       receiptsKey*: BlockKey
     of epochAccumulator:
       epochAccumulatorKey*: EpochAccumulatorKey
-    of masterAccumulator:
-      masterAccumulatorKey*: MasterAccumulatorKey
+    of blockHeaderWithProof:
+      blockHeaderWithProofKey*: BlockKey
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -100,13 +89,8 @@ func `$`*(x: ContentKey): string =
   of epochAccumulator:
     let key = x.epochAccumulatorKey
     res.add("epochHash: " & $key.epochHash)
-  of masterAccumulator:
-    let key = x.masterAccumulatorKey
-    case key.accumulaterKeyType:
-    of latest:
-      res.add($key.accumulaterKeyType)
-    of masterHash:
-      res.add($key.accumulaterKeyType & ": " & $key.masterHashKey)
+  of blockHeaderWithProof:
+    res.add($x.blockHeaderWithProofKey)
 
   res.add(")")
 
@@ -135,3 +119,23 @@ type
 
   ReceiptByteList* = List[byte, MAX_RECEIPT_LENGTH] # RLP data
   ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
+
+  AccumulatorProof* = array[15, Digest]
+
+  BlockHeaderProofType* = enum
+    none = 0x00 # An SSZ Union None
+    accumulatorProof = 0x01
+
+  BlockHeaderProof* = object
+    case proofType*: BlockHeaderProofType
+    of none:
+      discard
+    of accumulatorProof:
+      accumulatorProof*: AccumulatorProof
+
+  BlockHeaderWithProof* = object
+    header*: ByteList # RLP data
+    proof*: BlockHeaderProof
+
+func init*(T: type BlockHeaderProof, proof: AccumulatorProof): T =
+  BlockHeaderProof(proofType: accumulatorProof, accumulatorProof: proof)

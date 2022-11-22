@@ -8,8 +8,9 @@
 {.push raises: [Defect].}
 
 import
+  std/[strformat, os],
   stew/results, chronos, chronicles,
-  eth/common/eth_types,
+  eth/common/eth_types, eth/rlp,
   ../network/wire/portal_protocol,
   ../network/history/[history_content, accumulator],
   ./history_data_parser
@@ -18,38 +19,6 @@ export results
 
 ### Helper calls to seed the local database and/or the network
 
-proc buildAccumulator*(dataFile: string): Result[Accumulator, string] =
-  let blockData = ? readJsonType(dataFile, BlockDataTable)
-
-  var headers: seq[BlockHeader]
-  # Len of headers from blockdata + genesis header
-  headers.setLen(blockData.len() + 1)
-
-  headers[0] = getGenesisHeader()
-
-  for k, v in blockData.pairs:
-    let header = ? v.readBlockHeader()
-    headers[header.blockNumber.truncate(int)] = header
-
-  ok(buildAccumulator(headers))
-
-proc buildAccumulatorData*(
-    dataFile: string):
-    Result[seq[(ContentKey, EpochAccumulator)], string] =
-  let blockData = ? readJsonType(dataFile, BlockDataTable)
-
-  var headers: seq[BlockHeader]
-  # Len of headers from blockdata + genesis header
-  headers.setLen(blockData.len() + 1)
-
-  headers[0] = getGenesisHeader()
-
-  for k, v in blockData.pairs:
-    let header = ? v.readBlockHeader()
-    headers[header.blockNumber.truncate(int)] = header
-
-  ok(buildAccumulatorData(headers))
-
 proc historyStore*(
     p: PortalProtocol, dataFile: string, verify = false):
     Result[void, string] =
@@ -57,37 +26,18 @@ proc historyStore*(
 
   for b in blocks(blockData, verify):
     for value in b:
+      let encKey = history_content.encode(value[0])
       # Note: This is the slowest part due to the hashing that takes place.
-      p.storeContent(history_content.toContentId(value[0]), value[1])
+      p.storeContent(encKey, history_content.toContentId(encKey), value[1])
 
   ok()
 
-proc propagateAccumulatorData*(
-    p: PortalProtocol, dataFile: string):
-    Future[Result[void, string]] {.async.} =
-  ## Propagate all epoch accumulators created when building the accumulator
-  ## from the block headers.
-  ## dataFile holds block data
-  let epochAccumulators = buildAccumulatorData(dataFile)
-  if epochAccumulators.isErr():
-    return err(epochAccumulators.error)
-  else:
-    for (key, epochAccumulator) in epochAccumulators.get():
-      let content = SSZ.encode(epochAccumulator)
-
-      p.storeContent(
-        history_content.toContentId(key), content)
-      discard await p.neighborhoodGossip(
-        ContentKeysList(@[encode(key)]), @[content])
-
-    return ok()
-
 proc propagateEpochAccumulator*(
-    p: PortalProtocol, dataFile: string):
+    p: PortalProtocol, file: string):
     Future[Result[void, string]] {.async.} =
   ## Propagate a specific epoch accumulator into the network.
-  ## dataFile holds the SSZ serialized epoch accumulator
-  let epochAccumulatorRes = readEpochAccumulator(dataFile)
+  ## file holds the SSZ serialized epoch accumulator.
+  let epochAccumulatorRes = readEpochAccumulator(file)
   if epochAccumulatorRes.isErr():
     return err(epochAccumulatorRes.error)
   else:
@@ -98,13 +48,38 @@ proc propagateEpochAccumulator*(
         contentType: epochAccumulator,
         epochAccumulatorKey: EpochAccumulatorKey(
           epochHash: rootHash))
+      encKey = history_content.encode(key)
+      # Note: The file actually holds the SSZ encoded accumulator, but we need
+      # to decode as we need the root for the content key.
+      encodedAccumulator = SSZ.encode(accumulator)
+    info "Gossiping epoch accumulator", rootHash
 
     p.storeContent(
-      history_content.toContentId(key), SSZ.encode(accumulator))
+      encKey,
+      history_content.toContentId(encKey),
+      encodedAccumulator
+    )
     discard await p.neighborhoodGossip(
-      ContentKeysList(@[encode(key)]), @[SSZ.encode(accumulator)])
+      ContentKeysList(@[encKey]), @[encodedAccumulator])
 
     return ok()
+
+proc propagateEpochAccumulators*(
+    p: PortalProtocol, path: string):
+    Future[Result[void, string]] {.async.} =
+  ## Propagate all epoch accumulators created when building the accumulator
+  ## from the block headers.
+  ## path is a directory that holds all SSZ encoded epoch accumulator files.
+  for i in 0..<preMergeEpochs:
+    let file =
+      try: path / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+      except ValueError as e: raiseAssert e.msg
+
+    let res = await p.propagateEpochAccumulator(file)
+    if res.isErr():
+      return err(res.error)
+
+  return ok()
 
 proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false):
@@ -140,8 +115,10 @@ proc historyPropagate*(
         if value[1].len() > 0:
           info "Seeding block content into the network", contentKey = value[0]
           # Note: This is the slowest part due to the hashing that takes place.
-          let contentId = history_content.toContentId(value[0])
-          p.storeContent(contentId, value[1])
+          let
+            encKey = history_content.encode(value[0])
+            contentId = history_content.toContentId(encKey)
+          p.storeContent(encKey, contentId, value[1])
 
           await gossipQueue.addLast(
             (ContentKeysList(@[encode(value[0])]), value[1]))
@@ -170,14 +147,73 @@ proc historyPropagateBlock*(
 
     for value in blockData:
       info "Seeding block content into the network", contentKey = value[0]
-      let contentId = history_content.toContentId(value[0])
-      p.storeContent(contentId, value[1])
+      let
+        encKey = history_content.encode(value[0])
+        contentId = history_content.toContentId(encKey)
+      p.storeContent(encKey, contentId, value[1])
 
       discard await p.neighborhoodGossip(ContentKeysList(@[encode(value[0])]), @[value[1]])
 
     return ok()
   else:
     return err(blockDataTable.error)
+
+proc historyPropagateHeadersWithProof*(
+    p: PortalProtocol, epochHeadersFile: string, epochAccumulatorFile: string):
+    Future[Result[void, string]] {.async.} =
+  let res = readBlockHeaders(epochHeadersFile)
+  if res.isErr():
+    return err(res.error)
+
+  let blockHeaders = res.get()
+
+  let epochAccumulatorRes = readEpochAccumulatorCached(epochAccumulatorFile)
+  if epochAccumulatorRes.isErr():
+    return err(res.error)
+
+  let epochAccumulator = epochAccumulatorRes.get()
+  for header in blockHeaders:
+    if header.isPreMerge():
+      let headerWithProof = buildHeaderWithProof(header, epochAccumulator)
+      if headerWithProof.isErr:
+        return err(headerWithProof.error)
+
+      let
+        content = headerWithProof.get()
+        contentKey = ContentKey(
+          contentType: blockHeaderWithProof,
+          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
+        encKey = history_content.encode(contentKey)
+        contentId = history_content.toContentId(encKey)
+        encodedContent = SSZ.encode(content)
+
+      p.storeContent(encKey, contentId, encodedContent)
+
+      let keys = ContentKeysList(@[encode(contentKey)])
+      discard await p.neighborhoodGossip(keys, @[encodedContent])
+
+  return ok()
+
+proc historyPropagateHeadersWithProof*(
+    p: PortalProtocol, dataDir: string):
+    Future[Result[void, string]] {.async.} =
+  for i in 0..<preMergeEpochs:
+    let
+      epochHeadersfile =
+        try: dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
+        except ValueError as e: raiseAssert e.msg
+      epochAccumulatorFile =
+        try: dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+        except ValueError as e: raiseAssert e.msg
+
+    let res = await p.historyPropagateHeadersWithProof(
+      epochHeadersfile, epochAccumulatorFile)
+    if res.isOk():
+      info "Finished gossiping 1 epoch of headers with proof", i
+    else:
+      return err(res.error)
+
+  return ok()
 
 proc historyPropagateHeaders*(
     p: PortalProtocol, dataFile: string, verify = false):
@@ -202,8 +238,10 @@ proc historyPropagateHeaders*(
   if blockData.isOk():
     for header in headers(blockData.get(), verify):
       info "Seeding header content into the network", contentKey = header[0]
-      let contentId = history_content.toContentId(header[0])
-      p.storeContent(contentId, header[1])
+      let
+        encKey = history_content.encode(header[0])
+        contentId = history_content.toContentId(encKey)
+      p.storeContent(encKey, contentId, header[1])
 
       await gossipQueue.addLast(
         (ContentKeysList(@[encode(header[0])]), header[1]))

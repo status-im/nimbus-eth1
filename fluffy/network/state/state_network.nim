@@ -26,16 +26,12 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
 
-func toContentIdHandler(contentKey: ByteList): Option[ContentId] =
+func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   toContentId(contentKey)
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentIdOpt = contentKey.toContentId()
-  if contentIdOpt.isSome():
-    (contentIdOpt, db.get(contentIdOpt.get()))
-  else:
-    (contentIdOpt, none(seq[byte]))
+proc dbGetHandler(db: ContentDB, contentId: ContentId):
+    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
+  db.get(contentId)
 
 proc getContent*(n: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
@@ -62,7 +58,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
     # TODO Add poke when working on state network
     # TODO When working on state network, make it possible to pass different
     # distance functions to store content
-    n.portalProtocol.storeContent(contentId, contentResult.content)
+    n.portalProtocol.storeContent(keyEncoded, contentId, contentResult.content)
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
@@ -84,10 +80,12 @@ proc new*(
   let s = streamManager.registerNewStream(cq)
 
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, stateProtocolId, contentDB,
-    toContentIdHandler, dbGetHandler, s,
+    baseProtocol, stateProtocolId,
+    toContentIdHandler, createGetHandler(contentDB), s,
     bootstrapRecords, stateDistanceCalculator,
     config = portalConfig)
+
+  portalProtocol.dbPut = createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   return StateNetwork(
     portalProtocol: portalProtocol,

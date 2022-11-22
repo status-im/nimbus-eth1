@@ -21,7 +21,8 @@ import
   ./executor_helpers,
   ./process_transaction,
   chronicles,
-  eth/[common, trie/db],
+  eth/[common, rlp, trie/db],
+  stew/byteutils,
   stew/results
 
 {.push raises: [Defect].}
@@ -39,6 +40,7 @@ proc processTransactions*(vmState: BaseVMState;
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in transactions:
+    # echo("about to run txIndex " & $(txIndex) & " out of " & $(transactions.len) & ", tx is " & toHex(rlp.encode(tx)))
     var sender: EthAddress
     if not tx.getSender(sender):
       return err("Could not get sender for tx with index " & $(txIndex) & ": " & $(tx))

@@ -10,19 +10,15 @@
 
 import
   chronos,
-  ../../../sync_desc
-
-const
-  comErrorsTimeoutMax* = 2
-    ## Maximal number of non-resonses accepted in a row. If there are more than
-    ## `comErrorsTimeoutMax` consecutive errors, the worker will be degraded
-    ## as zombie.
+  ../../../sync_desc,
+  ../../constants
 
 type
   ComErrorStatsRef* = ref object
     ## particular error counters so connections will not be cut immediately
     ## after a particular error.
     nTimeouts*: uint
+    nNoData*: uint
     nNetwork*: uint
 
   ComError* = enum
@@ -30,13 +26,12 @@ type
     ComAccountsMaxTooLarge
     ComAccountsMinTooSmall
     ComEmptyAccountsArguments
+    ComEmptyPartialRange
     ComEmptyRequestArguments
-    ComMissingProof
     ComNetworkProblem
     ComNoAccountsForStateRoot
     ComNoByteCodesAvailable
-    ComNoDataForProof
-    ComNoHeaderAvailable
+    #ComNoHeaderAvailable -- unused, see get_block_header.nim
     ComNoStorageForAccounts
     ComNoTrieNodesAvailable
     ComResponseTimeout
@@ -45,10 +40,10 @@ type
     ComTooManyStorageSlots
     ComTooManyTrieNodes
 
-    # Other errors not directly related to communication
-    ComInspectDbFailed
-    ComImportAccountsFailed
 
+proc resetComError*(stats: ComErrorStatsRef) =
+  ## Reset error counts after successful network operation
+  stats[].reset
 
 proc stopAfterSeriousComError*(
     ctrl: BuddyCtrlRef;
@@ -56,41 +51,46 @@ proc stopAfterSeriousComError*(
     stats: ComErrorStatsRef;
       ): Future[bool]
       {.async.} =
-  ## Error handling after data protocol failed.
+  ## Error handling after data protocol failed. Returns `true` if the current
+  ## worker should be terminated as *zombie*.
   case error:
   of ComResponseTimeout:
     stats.nTimeouts.inc
     if comErrorsTimeoutMax < stats.nTimeouts:
       # Mark this peer dead, i.e. avoid fetching from this peer for a while
       ctrl.zombie = true
-    else:
-      # Otherwise try again some time later. Nevertheless, stop the
-      # current action.
-      await sleepAsync(5.seconds)
-    return true
+      return true
 
-  of ComNetworkProblem,
-     ComMissingProof,
-     ComAccountsMinTooSmall,
-     ComAccountsMaxTooLarge:
+    when 0 < comErrorsTimeoutSleepMSecs:
+      # Otherwise try again some time later.
+      await sleepAsync(comErrorsTimeoutSleepMSecs.milliseconds)
+
+  of ComNetworkProblem:
     stats.nNetwork.inc
-    # Mark this peer dead, i.e. avoid fetching from this peer for a while
-    ctrl.zombie = true
-    return true
+    if comErrorsNetworkMax < stats.nNetwork:
+      ctrl.zombie = true
+      return true
 
-  of ComEmptyAccountsArguments,
-     ComEmptyRequestArguments,
-     ComInspectDbFailed,
-     ComImportAccountsFailed,
-     ComNoDataForProof,
-     ComNothingSerious:
-    discard
+    when 0 < comErrorsNetworkSleepMSecs:
+      # Otherwise try again some time later.
+      await sleepAsync(comErrorsNetworkSleepMSecs.milliseconds)
 
   of ComNoAccountsForStateRoot,
-     ComNoStorageForAccounts,
      ComNoByteCodesAvailable,
-     ComNoHeaderAvailable,
-     ComNoTrieNodesAvailable,
+     ComNoStorageForAccounts,
+     #ComNoHeaderAvailable,
+     ComNoTrieNodesAvailable:
+    stats.nNoData.inc
+    if comErrorsNoDataMax < stats.nNoData:
+      ctrl.zombie = true
+      return true
+
+    when 0 < comErrorsNoDataSleepMSecs:
+      # Otherwise try again some time later.
+      await sleepAsync(comErrorsNoDataSleepMSecs.milliseconds)
+
+  of ComAccountsMinTooSmall,
+     ComAccountsMaxTooLarge,
      ComTooManyByteCodes,
      ComTooManyHeaders,
      ComTooManyStorageSlots,
@@ -98,5 +98,11 @@ proc stopAfterSeriousComError*(
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
     ctrl.zombie = true
     return true
+
+  of ComEmptyAccountsArguments,
+     ComEmptyRequestArguments,
+     ComEmptyPartialRange,
+     ComNothingSerious:
+    discard
 
 # End

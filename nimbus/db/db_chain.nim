@@ -8,7 +8,7 @@
 import
   std/[sequtils, algorithm],
   stew/[byteutils], eth/trie/[hexary, db],
-  eth/[common, rlp, p2p], chronicles,
+  eth/[common, rlp], chronicles,
   ".."/[errors, constants, utils, chain_config],
   "."/storage_types
 
@@ -42,6 +42,18 @@ proc newBaseChainDB*(
   result.networkId = id
   result.config    = params.config
   result.genesis   = params.genesis
+
+proc newBaseChainDB*(
+       db: TrieDatabaseRef,
+       config: ChainConfig,
+       pruneTrie: bool = true,
+       id: NetworkId = MainNet): BaseChainDB =
+
+  new(result)
+  result.db = db
+  result.pruneTrie = pruneTrie
+  result.networkId = id
+  result.config    = config
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"

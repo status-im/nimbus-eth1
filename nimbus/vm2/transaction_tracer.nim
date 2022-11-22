@@ -107,7 +107,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
   let gasRemaining = j["gas"].getBiggestInt()
   j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
-  if op in {Return, Revert}:
+  if op in {Return, Revert} and TracerFlags.DisableReturnData notin tracer.flags:
     let returnValue = %("0x" & toHex(c.output, true))
     j["returnValue"] = returnValue
     tracer.trace["returnValue"] = returnValue

@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],
@@ -33,6 +33,9 @@ proc runSetup(ctx: FullCtxRef; ticker: bool): bool =
 proc runRelease(ctx: FullCtxRef) =
   worker.release(ctx)
 
+proc runDaemon(ctx: FullCtxRef) {.async.} =
+  discard
+
 proc runStart(buddy: FullBuddyRef): bool =
   worker.start(buddy)
 
@@ -55,11 +58,12 @@ proc runMulti(buddy: FullBuddyRef) {.async.} =
 proc init*(
     T: type FullSyncRef;
     ethNode: EthereumNode;
+    chain: Chain;
     rng: ref HmacDrbgContext;
     maxPeers: int;
     enableTicker = false): T =
   new result
-  result.initSync(ethNode, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker)
   result.ctx.data.rng = rng
 
 proc start*(ctx: FullSyncRef) =

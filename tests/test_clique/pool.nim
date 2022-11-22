@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, random, sequtils, strformat, strutils, tables, times],
-  eth/[common, keys, p2p, rlp, trie/db],
+  eth/[common, keys, rlp, trie/db],
   ethash,
   secp256k1/abi,
   stew/objects,

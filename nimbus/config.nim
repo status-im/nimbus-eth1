@@ -22,7 +22,7 @@ import
     confutils/std/net
   ],
   stew/shims/net as stewNet,
-  eth/[p2p, common, net/nat, p2p/bootnodes],
+  eth/[common, net/nat, p2p/bootnodes, p2p/enode],
   "."/[db/select_backend, chain_config,
     constants, vm_compile_info, version
   ]
@@ -518,6 +518,11 @@ type
         desc: "hash of the block to run"
         defaultValue: ""
         name: "stateless-block-hash" .}: string
+      
+      statelessTxStr* {.
+        desc: "RLP hex string of a transaction to run"
+        defaultValue: ""
+        name: "stateless-tx" .}: string
 
 proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
   parseInt(p.string).T

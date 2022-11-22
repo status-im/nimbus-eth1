@@ -9,13 +9,13 @@
 # except according to those terms.
 
 import
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   chronicles,
   chronos,
   ../db/select_backend,
   ../p2p/chain,
   ./snap/[worker, worker_desc],
-  "."/[sync_desc, sync_sched, protocol]
+  "."/[protocol, sync_desc, sync_sched]
 
 {.push raises: [Defect].}
 
@@ -34,6 +34,9 @@ proc runSetup(ctx: SnapCtxRef; ticker: bool): bool =
 
 proc runRelease(ctx: SnapCtxRef) =
   worker.release(ctx)
+
+proc runDaemon(ctx: SnapCtxRef) {.async.} =
+  await worker.runDaemon(ctx)
 
 proc runStart(buddy: SnapBuddyRef): bool =
   worker.start(buddy)
@@ -63,13 +66,15 @@ proc init*(
     dbBackend: ChainDb,
     enableTicker = false): T =
   new result
-  result.initSync(ethNode, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker)
   result.ctx.chain = chain # explicitely override
   result.ctx.data.rng = rng
   result.ctx.data.dbBackend = dbBackend
+  # Required to have been initialised via `addCapability()`
+  doAssert not result.ctx.ethWireCtx.isNil
 
 proc start*(ctx: SnapSyncRef) =
-  doAssert ctx.startSync()
+  doAssert ctx.startSync(daemon = true)
 
 proc stop*(ctx: SnapSyncRef) =
   ctx.stopSync()

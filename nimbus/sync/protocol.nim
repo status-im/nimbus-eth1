@@ -16,7 +16,6 @@ else:
   type eth* = eth67
 
 import
-  #./protocol/eth67 as proto_eth
   ./protocol/snap1 as proto_snap
 
 export
@@ -24,7 +23,6 @@ export
   proto_snap
 
 type
-  #eth* = eth67
   snap* = snap1
 
   SnapAccountRange* = accountRangeObj

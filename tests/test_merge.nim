@@ -18,7 +18,7 @@ import
   ../nimbus/[config, context, genesis, sealer],
   ../nimbus/utils/[tx_pool],
   ../nimbus/p2p/chain,
-  ../nimbus/merge/mergetypes,
+  ../nimbus/merge/[mergetypes, merger],
   ./test_helpers
 
 const
@@ -98,13 +98,14 @@ proc runTest(steps: Steps) =
       chainRef, ctx, conf.engineSigner,
       txPool, EnginePostMerge
     )
+    merger = MergerRef.new(chainDB)
 
   setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
-  setupEngineAPI(sealingEngine, rpcServer)
+  setupEngineAPI(sealingEngine, rpcServer, merger)
 
   sealingEngine.start()
   rpcServer.start()
-  waitFor client.connect("localhost", Port(conf.rpcPort))
+  waitFor client.connect("localhost", conf.rpcPort)
 
   suite "Engine API tests":
     for i, step in steps.list:
@@ -138,7 +139,7 @@ proc `==`(a, b: Quantity): bool =
   uint64(a) == uint64(b)
 
 proc testEngineApiSupport() =
-  var api = EngineAPI.new()
+  var api = EngineAPIRef.new(nil)
   let
     id1 = toId(1)
     id2 = toId(2)

@@ -22,6 +22,7 @@ export
   vms.difficulty,
   vms.disableTracing,
   vms.enableTracing,
+  vms.tracingEnabled,
   vms.baseFee,
   vms.generateWitness,
   vms.`generateWitness=`,

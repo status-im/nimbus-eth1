@@ -95,7 +95,11 @@ proc depthContentPropagate*(
         break
 
       for e in content:
-        p.storeContent(UInt256.fromBytesBE(e.contentId), e.content)
+        p.storeContent(
+          ByteList.init(e.contentKey),
+          UInt256.fromBytesBE(e.contentId),
+          e.content
+        )
 
       if len(content) < localBatchSize:
         # got to the end of db.
@@ -178,7 +182,11 @@ proc breadthContentPropagate*(
       break
 
     for cd in contentData:
-      p.storeContent(UInt256.fromBytesBE(cd.contentId), cd.content)
+      p.storeContent(
+        ByteList.init(cd.contentKey),
+        UInt256.fromBytesBE(cd.contentId),
+        cd.content
+      )
 
     # TODO this a bit hacky way to make sure we will engage more valid peers for each
     # batch of data. This maybe removed after improving neighborhoodGossip
@@ -250,7 +258,6 @@ proc offerContentInNodeRange*(
   else:
     return err(offerResult.error)
 
-
 proc storeContentInNodeRange*(
     p: PortalProtocol,
     seedDbPath: string,
@@ -273,6 +280,10 @@ proc storeContentInNodeRange*(
 
   for contentData in contentInRange:
     let cid = UInt256.fromBytesBE(contentData.contentId)
-    p.storeContent(cid, contentData.content)
+    p.storeContent(
+      ByteList.init(contentData.contentKey),
+      cid,
+      contentData.content
+    )
 
   return ok()

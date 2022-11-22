@@ -40,11 +40,10 @@ type
     berlinBlock        : Option[BlockNumber]
     londonBlock        : Option[BlockNumber]
     arrowGlacierBlock  : Option[BlockNumber]
-
-    mergeForkBlock     : Option[BlockNumber] ##\
-      ## EIP-3675 (TheMerge) switch block: "For the purposes of the EIP-2124\
-      ## fork identifier, nodes implementing this EIP *MUST* set the\
-      ## `FORK_NEXT` parameter to the `FORK_NEXT_VALUE`."
+    grayGlacierBlock   : Option[BlockNumber]
+    mergeForkBlock     : Option[BlockNumber]
+    shanghaiBlock      : Option[BlockNumber]
+    cancunBlock        : Option[BlockNumber]
 
     clique             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
@@ -70,7 +69,10 @@ type
     berlinBlock*        : BlockNumber
     londonBlock*        : BlockNumber
     arrowGlacierBlock*  : BlockNumber
-    mergeForkBlock*     : Option[BlockNumber] # EIP-3675 (TheMerge) switch block
+    grayGlacierBlock*   : BlockNumber
+    mergeForkBlock*     : BlockNumber # EIP-3675 (TheMerge) switch block
+    shanghaiBlock*      : BlockNumber
+    cancunBlock*        : BlockNumber
 
     poaEngine*          : bool
     cliquePeriod*       : int
@@ -269,12 +271,9 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
 
   cg.config.terminalTotalDifficulty = cc.config.terminalTotalDifficulty
 
-  template validateFork(forkName: untyped, nextBlock: BlockNumber) =
+  template validateFork(forkName: untyped, nextBlock: untyped) =
     let fork = astToStr(forkName)
-    if cc.config.forkName.isSome:
-      cg.config.forkName = cc.config.forkName.get()
-    else:
-      cg.config.forkName = nextBlock
+    cg.config.forkName = cc.config.forkName.get(nextBlock)
     if cg.config.forkName > nextBlock:
       error "Forks can't be assigned out of order", fork=fork
       return false
@@ -287,7 +286,11 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
   # The difference to the ref implementation is that we have no optional values
   # everywhere for the block numbers but rather assign the next larger block.
 
-  validateFork(arrowGlacierBlock,   high(BlockNumber))
+  validateFork(cancunBlock,         high(BlockNumber))
+  validateFork(shanghaiBlock,       cg.config.cancunBlock)
+  validateFork(mergeForkBlock,      cg.config.shanghaiBlock)
+  validateFork(grayGlacierBlock,    cg.config.mergeForkBlock)
+  validateFork(arrowGlacierBlock,   cg.config.grayGlacierBlock)
   validateFork(londonBlock,         cg.config.arrowGlacierBlock)
   validateFork(berlinBlock,         cg.config.londonBlock)
   validateFork(muirGlacierBlock,    cg.config.berlinBlock)
@@ -300,15 +303,6 @@ proc loadNetworkParams*(cc: CustomChain, cg: var NetworkParams): bool =
   validateFork(eip150Block,         cg.config.eip155Block)
   validateFork(daoForkBlock,        cg.config.eip150Block)
   validateFork(homesteadBlock,      cg.config.daoForkBlock)
-
-  # Only this last entry remains optional.
-  cg.config.mergeForkBlock = cc.config.mergeForkBlock
-  if cc.config.mergeForkBlock.isSome:
-    # Must be larger than the largest block
-    let topBlock = min(cg.config.arrowGlacierBlock, cg.config.londonBlock)
-    if cg.config.mergeForkBlock.get < topBlock:
-      error "Forks can't be assigned out of order", fork="mergeForkBlock"
-      return false
 
   return true
 
@@ -357,10 +351,10 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   ## Map to EVM fork, which doesn't include the DAO or Glacier forks.
-  if c.mergeForkBlock.isSome and number >= c.mergeForkBlock.get:
-    return FkParis
-
-  if number >= c.londonBlock: FkLondon
+  if number >= c.cancunBlock: FkCancun
+  elif number >= c.shanghaiBlock: FkShanghai
+  elif number >= c.mergeForkBlock: FkParis
+  elif number >= c.londonBlock: FkLondon
   elif number >= c.berlinBlock: FkBerlin
   elif number >= c.istanbulBlock: FkIstanbul
   elif number >= c.petersburgBlock: FkPetersburg
@@ -377,6 +371,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
+    const mainNetTTD = UInt256.fromHex("58750000000000000000000")
     ChainConfig(
       poaEngine:           false,
       chainId:             MainNet.ChainId,
@@ -397,7 +392,11 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         12_244_000.toBlockNumber, # 2021-04-15 10:07:03 UTC
       londonBlock:         12_965_000.toBlockNumber, # 2021-08-05 12:33:42 UTC
       arrowGlacierBlock:   13_773_000.toBlockNumber, # 2021-12-09 19:55:23 UTC
-      mergeForkBlock:      none(BlockNumber),
+      grayGlacierBlock:    15_050_000.toBlockNumber, # 2022-06-30 10:54:04 UTC
+      mergeForkBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
+      cancunBlock:         high(BlockNumber),
+      terminalTotalDifficulty: some(mainNetTTD)
     )
   of RopstenNet:
     ChainConfig(
@@ -418,7 +417,10 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         9_812_189.toBlockNumber,  # 2021-03-10 13:32:08 UTC
       londonBlock:         10_499_401.toBlockNumber, # 2021-06-24 02:03:37 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
-      mergeForkBlock:      none(BlockNumber),
+      grayGlacierBlock:    high(BlockNumber),        # No current plan
+      mergeForkBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
+      cancunBlock:         high(BlockNumber),
     )
   of RinkebyNet:
     ChainConfig(
@@ -439,7 +441,10 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         8_290_928.toBlockNumber,  # 2021-03-24 14:48:36 UTC
       londonBlock:         8_897_988.toBlockNumber,  # 2021-07-08 01:27:32 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
-      mergeForkBlock:      none(BlockNumber),
+      grayGlacierBlock:    high(BlockNumber),        # No current plan
+      mergeForkBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
+      cancunBlock:         high(BlockNumber),
     )
   of GoerliNet:
     ChainConfig(
@@ -460,14 +465,21 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         4_460_644.toBlockNumber,  # 2021-03-18 05:29:51 UTC
       londonBlock:         5_062_605.toBlockNumber,  # 2021-07-01 03:19:39 UTC
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
-      mergeForkBlock:      none(BlockNumber),
+      grayGlacierBlock:    high(BlockNumber),        # No current plan
+      mergeForkBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
+      cancunBlock:         high(BlockNumber),
+      terminalTotalDifficulty: some(10790000.u256)
     )
   of SepoliaNet:
     ChainConfig(
       poaEngine:           false,
       chainId:             SepoliaNet.ChainId,
       arrowGlacierBlock:   high(BlockNumber),        # No current plan
-      mergeForkBlock:      none(BlockNumber),
+      grayGlacierBlock:    high(BlockNumber),        # No current plan
+      mergeForkBlock:      high(BlockNumber),
+      shanghaiBlock:       high(BlockNumber),
+      cancunBlock:         high(BlockNumber),
     )
   else:
     ChainConfig()
@@ -540,3 +552,6 @@ proc `==`*(a, b: ChainConfig): bool =
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
   a[] == b[]
+
+proc isLondon*(c: ChainConfig, number: BlockNumber): bool {.inline.} =
+  number >= c.londonBlock

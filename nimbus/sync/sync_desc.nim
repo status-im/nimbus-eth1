@@ -14,7 +14,14 @@
 ## Public descriptors
 
 import
-  eth/[common/eth_types, p2p]
+  eth/[common, p2p],
+  ../p2p/chain,
+  ../db/db_chain,
+  ./handlers
+
+export
+  chain,
+  db_chain
 
 {.push raises: [Defect].}
 
@@ -40,8 +47,10 @@ type
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
     buddiesMax*: int        ## Max number of buddies
-    chain*: AbstractChainDB ## Block chain database (no need for `Peer`)
+    ethWireCtx*: EthWireRef ## Eth protocol wire context (if available)
+    chain*: Chain           ## Block chain database (no need for `Peer`)
     poolMode*: bool         ## Activate `runPool()` workers if set `true`
+    daemon*: bool           ## Enable global background job
     data*: S                ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------
@@ -65,7 +74,7 @@ proc running*(ctrl: BuddyCtrlRef): bool =
 
 proc stopped*(ctrl: BuddyCtrlRef): bool =
   ## Getter, if `true`, if `ctrl.state()` is not `Running`
-  ctrl.runState in {Stopped, ZombieStop, ZombieRun}
+  ctrl.runState != Running
 
 proc zombie*(ctrl: BuddyCtrlRef): bool =
   ## Getter, `true` if `ctrl.state()` is `Zombie` (i.e. not `running()` and

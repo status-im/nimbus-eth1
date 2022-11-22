@@ -10,10 +10,10 @@
 # except according to those terms.
 
 import
-  std/[strformat, strutils, times],
+  std/[strformat, strutils],
   chronos,
   chronicles,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stint,
   ../../../utils/prettify,
   ../../misc/timer_helper
@@ -21,15 +21,16 @@ import
 {.push raises: [Defect].}
 
 logScope:
-  topics = "snap-ticker"
+  topics = "snap-tick"
 
 type
   TickerStats* = object
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
-    nStorage*: (float,float)           ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
-    accCoverage*: float                ## as factor
+    nAccountStats*: (int,int)          ## #chunks, #dangling/missing nodes
+    nSlotLists*: (float,float)         ## mean and standard deviation
+    nStorageQueue*: Option[int]
     nQueues*: int
 
   TickerStatsUpdater* =
@@ -39,58 +40,63 @@ type
     ## Account fetching state that is shared among all peers.
     nBuddies:  int
     lastStats: TickerStats
-    lastTick:  uint64
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
-    tick:      uint64 # more than 5*10^11y before wrap when ticking every sec
+    started:   Moment
+    visited:   Moment
 
 const
   tickerStartDelay = chronos.milliseconds(100)
   tickerLogInterval = chronos.seconds(1)
-  tickerLogSuppressMax = 100
+  tickerLogSuppressMax = chronos.seconds(100)
 
 # ------------------------------------------------------------------------------
 # Private functions: pretty printing
 # ------------------------------------------------------------------------------
 
-proc ppMs*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inMilliseconds
-  let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
-  if ns != 0:
-    # to rounded deca milli seconds
-    let dm = (ns + 5_000i64) div 10_000i64
-    result &= &".{dm:02}"
-  result &= "ms"
+# proc ppMs*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inMilliseconds
+#   let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
+#   if ns != 0:
+#     # to rounded deca milli seconds
+#     let dm = (ns + 5_000i64) div 10_000i64
+#     result &= &".{dm:02}"
+#   result &= "ms"
+#
+# proc ppSecs*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inSeconds
+#   let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
+#   if ns != 0:
+#     # round up
+#     let ds = (ns + 5_000_000i64) div 10_000_000i64
+#     result &= &".{ds:02}"
+#   result &= "s"
+#
+# proc ppMins*(elapsed: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   result = $elapsed.inMinutes
+#   let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
+#   if ns != 0:
+#     # round up
+#     let dm = (ns + 500_000_000i64) div 1_000_000_000i64
+#     result &= &":{dm:02}"
+#   result &= "m"
+#
+# proc pp(d: times.Duration): string
+#     {.gcsafe, raises: [Defect, ValueError]} =
+#   if 40 < d.inSeconds:
+#     d.ppMins
+#   elif 200 < d.inMilliseconds:
+#     d.ppSecs
+#   else:
+#     d.ppMs
 
-proc ppSecs*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
-  if ns != 0:
-    # round up
-    let ds = (ns + 5_000_000i64) div 10_000_000i64
-    result &= &".{ds:02}"
-  result &= "s"
-
-proc ppMins*(elapsed: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  result = $elapsed.inMinutes
-  let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
-  if ns != 0:
-    # round up
-    let dm = (ns + 500_000_000i64) div 1_000_000_000i64
-    result &= &":{dm:02}"
-  result &= "m"
-
-proc pp(d: times.Duration): string
-    {.gcsafe, raises: [Defect, ValueError]} =
-  if 40 < d.inSeconds:
-    d.ppMins
-  elif 200 < d.inMilliseconds:
-    d.ppSecs
-  else:
-    d.ppMs
+proc pc99(val: float): string =
+  if 0.99 <= val and val < 1.0: "99%"
+  elif 0.0 < val and val <= 0.01: "1%"
+  else: val.toPC(0)
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -105,33 +111,43 @@ template noFmtError(info: static[string]; code: untyped) =
 proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
-  let data = t.statsCb()
+  let
+    data = t.statsCb()
+    now = Moment.now()
 
-  if data != t.lastStats or
-     t.lastTick + tickerLogSuppressMax < t.tick:
+  if data != t.lastStats or tickerLogSuppressMax < (now - t.visited):
     t.lastStats = data
-    t.lastTick = t.tick
+    t.visited = now
     var
-      nAcc, nStore, bulk: string
+      nAcc, nSto, bulk: string
       pivot = "n/a"
+      nStoQue = "n/a"
     let
-      accCov = data.accountsFill[0].toPC(1) &
-         "(" & data.accountsFill[1].toPC(1) & ")" &
-         "/" & data.accountsFill[2].toPC(0)
+      accCov = data.accountsFill[0].pc99 &
+         "(" & data.accountsFill[1].pc99 & ")" &
+         "/" & data.accountsFill[2].pc99 &
+         "~" & data.nAccountStats[0].uint.toSI &
+         "/" & data.nAccountStats[1].uint.toSI
       buddies = t.nBuddies
-      tick = t.tick.toSI
+
+      # With `int64`, there are more than 29*10^10 years range for seconds
+      up = (now - t.started).seconds.uint64.toSI
       mem = getTotalMem().uint.toSI
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
-      nAcc = &"{(data.nAccounts[0]+0.5).int64}({(data.nAccounts[1]+0.5).int64})"
-      nStore = &"{(data.nStorage[0]+0.5).int64}({(data.nStorage[1]+0.5).int64})"
+      nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
+              &"({(data.nAccounts[1]+0.5).int64})")
+      nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
+              &"({(data.nSlotLists[1]+0.5).int64})")
+
+    if data.nStorageQueue.isSome:
+      nStoQue = $data.nStorageQueue.unsafeGet
 
     info "Snap sync statistics",
-      tick, buddies, pivot, nAcc, accCov, nStore, mem
+      up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
 
-  t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 
@@ -151,6 +167,8 @@ proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
   #debug "Started ticker"
   t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay), runLogTicker, t)
+  if t.started == Moment.default:
+    t.started = Moment.now()
 
 proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally

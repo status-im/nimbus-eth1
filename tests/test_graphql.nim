@@ -42,7 +42,11 @@ proc setupChain(): BaseChainDB =
     muirGlacierBlock    : 0.toBlockNumber,
     berlinBlock         : 10.toBlockNumber,
     londonBlock         : high(BlockNumber),
-    arrowGlacierBlock   : high(BlockNumber)
+    arrowGlacierBlock   : high(BlockNumber),
+    grayGlacierBlock    : high(BlockNumber),
+    mergeForkBlock      : high(BlockNumber),
+    shanghaiBlock       : high(BlockNumber),
+    cancunBlock         : high(BlockNumber),
   )
 
   var jn = json.parseFile(dataFolder / "oneUncle.json")

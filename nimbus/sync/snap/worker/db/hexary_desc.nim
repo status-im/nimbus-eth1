@@ -10,9 +10,10 @@
 
 import
   std/[algorithm, hashes, sequtils, sets, strutils, tables],
-  eth/[common/eth_types, p2p, trie/nibbles],
+  eth/[common, p2p, trie/nibbles],
   stint,
-  ../../range_desc
+  ../../range_desc,
+  ./hexary_error
 
 {.push raises: [Defect].}
 
@@ -133,12 +134,20 @@ type
     nodeKey*: RepairKey             ## Leaf hash into hexary repair table
     payload*: Blob                  ## Data payload
 
+  TrieNodeStatCtxRef* = ref object
+    ## Context to resume searching for dangling links
+    case persistent*: bool
+    of true:
+      hddCtx*: seq[(NodeKey,NibblesSeq)]
+    else:
+      memCtx*: seq[(RepairKey,NibblesSeq)]
+
   TrieNodeStat* = object
     ## Trie inspection report
-    dangling*: seq[Blob]            ## Paths from nodes with incomplete refs
-    leaves*: seq[NodeKey]           ## Paths to leave nodes (if any)
-    level*: int                     ## Maximim nesting depth of dangling nodes
+    dangling*: seq[NodeSpecs]       ## Referes to nodes with incomplete refs
+    level*: int                     ## Maximum nesting depth of dangling nodes
     stopped*: bool                  ## Potential loop detected if `true`
+    resumeCtx*: TrieNodeStatCtxRef  ## Context for resuming inspection
 
   HexaryTreeDbRef* = ref object
     ## Hexary trie plus helper structures
@@ -146,10 +155,17 @@ type
     repairKeyGen*: uint64           ## Unique tmp key generator
     keyPp*: HexaryPpFn              ## For debugging, might go away
 
-  HexaryGetFn* = proc(key: Blob): Blob {.gcsafe.}
-    ## Persistent database get() function. For read-only cacses, this function
-    ## can be seen as the persistent alternative to `HexaryTreeDbRef`.
+  HexaryGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
+    ## Persistent database `get()` function. For read-only cases, this function
+    ## can be seen as the persistent alternative to ``tab[]` on a
+    ## `HexaryTreeDbRef` descriptor.
 
+  HexaryNodeReport* = object
+    ## Return code for single node operations
+    slot*: Option[int]              ## May refer to indexed argument slots
+    kind*: Option[NodeKind]         ## Node type (if any)
+    dangling*: seq[NodeSpecs]       ## Missing inner sub-tries
+    error*: HexaryDbError           ## Error code, or `NothingSerious`
 
 const
   EmptyNodeBlob* = seq[byte].default
@@ -278,17 +294,11 @@ proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
   except Exception as e:
     result &= " ! Ooops ppImpl(): name=" & $e.name & " msg=" & e.msg
 
-proc ppDangling(a: seq[Blob]; maxItems = 30): string =
+proc ppDangling(a: seq[NodeSpecs]; maxItems = 30): string =
   proc ppBlob(w: Blob): string =
     w.mapIt(it.toHex(2)).join.toLowerAscii
   let
-    q = a.mapIt(it.ppBlob)[0 ..< min(maxItems,a.len)]
-    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
-  "{" & q.join(",") & andMore & "}"
-
-proc ppLeaves(a: openArray[NodeKey]; db: HexaryTreeDbRef; maxItems=30): string =
-  let
-    q = a.mapIt(it.ppImpl(db))[0 ..< min(maxItems,a.len)]
+    q = a.mapIt(it.partialPath.ppBlob)[0 ..< min(maxItems,a.len)]
     andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
   "{" & q.join(",") & andMore & "}"
 
@@ -339,8 +349,7 @@ proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
   if a.stopped:
     result &= "stopped,"
   result &= $a.dangling.len & "," &
-    a.dangling.ppDangling(maxItems) & "," &
-    a.leaves.ppLeaves(db, maxItems) & ")"
+    a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)
@@ -359,17 +368,9 @@ proc newRepairKey*(db: HexaryTreeDbRef): RepairKey =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hash*(a: NodeKey): Hash =
-  ## Tables mixin
-  a.ByteArray32.hash
-
 proc hash*(a: RepairKey): Hash =
   ## Tables mixin
   a.ByteArray33.hash
-
-proc `==`*(a, b: NodeKey): bool =
-  ## Tables mixin
-  a.ByteArray32 == b.ByteArray32
 
 proc `==`*(a, b: RepairKey): bool =
   ## Tables mixin
@@ -386,9 +387,6 @@ proc isZero*[T: NodeTag|NodeKey|RepairKey](a: T): bool =
 
 proc isNodeKey*(a: RepairKey): bool =
   a.ByteArray33[0] == 0
-
-proc digestTo*(data: Blob; T: type NodeKey): T =
-  keccakHash(data).data.T
 
 proc convertTo*(data: Blob; T: type NodeKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion

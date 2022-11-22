@@ -11,8 +11,7 @@ import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], chronicles,
   eth/[rlp, common/eth_types],
-  # TODO: `NetworkId` should not be in these private types
-  eth/p2p/private/p2p_types,
+  ncli/e2store,
   ../../nimbus/[chain_config, genesis],
   ../network/history/[history_content, accumulator]
 
@@ -33,17 +32,6 @@ type
     # Fix in nim-json-serialization or should I overload something here?
     number*: int
 
-  AccumulatorData = object
-    accumulatorHash: string
-    maxBlockNumber: int
-    accumulator: string
-
-  AccumulatorObject = object
-    accumulator: AccumulatorData
-
-  EpochAccumulatorObject = object
-    epochAccumulator: string
-
   BlockDataTable* = Table[string, BlockData]
 
 proc readJsonType*(dataFile: string, T: type): Result[T, string] =
@@ -60,7 +48,7 @@ proc readJsonType*(dataFile: string, T: type): Result[T, string] =
   ok(decoded)
 
 iterator blockHashes*(blockData: BlockDataTable): BlockHash =
-  for k,v in blockData:
+  for k, v in blockData:
     var blockHash: BlockHash
     try:
       blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
@@ -119,7 +107,7 @@ func readBlockData*(
 
 iterator blocks*(
     blockData: BlockDataTable, verify = false): seq[(ContentKey, seq[byte])] =
-  for k,v in blockData:
+  for k, v in blockData:
     let res = readBlockData(k, v, verify)
 
     if res.isOk():
@@ -180,7 +168,7 @@ func readHeaderData*(
 
 iterator headers*(
     blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
-  for k,v in blockData:
+  for k, v in blockData:
     let res = readHeaderData(k, v, verify)
 
     if res.isOk():
@@ -200,30 +188,64 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
-proc readAccumulator*(dataFile: string): Result[Accumulator, string] =
-  let res = ? readJsonType(dataFile, AccumulatorObject)
+proc toString*(v: IoErrorCode): string =
+  try: ioErrorMsg(v)
+  except Exception as e: raiseAssert e.msg
 
-  let encodedAccumulator =
-    try:
-      res.accumulator.accumulator.hexToSeqByte()
-    except ValueError as e:
-      return err("Invalid hex data for accumulator: " & e.msg)
+proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
 
   try:
-    ok(SSZ.decode(encodedAccumulator, Accumulator))
+    ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
   except SszError as e:
-    err("Decoding accumulator failed: " & e.msg)
+    err("Failed decoding accumulator: " & e.msg)
 
-proc readEpochAccumulator*(dataFile: string): Result[EpochAccumulator, string] =
-  let res = ? readJsonType(dataFile, EpochAccumulatorObject)
 
-  let encodedAccumulator =
-    try:
-      res.epochAccumulator.hexToSeqByte()
-    except ValueError as e:
-      return err("Invalid hex data for accumulator: " & e.msg)
+proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
 
   try:
     ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
   except SszError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
+
+proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
+  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+
+  try:
+    ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
+  except SszError as e:
+    err("Decoding epoch accumulator failed: " & e.msg)
+
+const
+  # Using the e2s format to store data, but without the specific structure
+  # like in an era file, as we currently don't really need that.
+  # See: https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
+  # Added one type for now, with numbers not formally specified.
+  # Note:
+  # Snappy compression for `ExecutionBlockHeaderRecord` only helps for the
+  # first ~1M (?) block headers, after that there is no gain so we don't do it.
+  ExecutionBlockHeaderRecord* = [byte 0xFF, 0x00]
+
+proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
+  let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
+  defer: discard closeFile(fh)
+
+  var data: seq[byte]
+  var blockHeaders: seq[BlockHeader]
+  while true:
+    let header = readRecord(fh, data).valueOr:
+      break
+
+    if header.typ == ExecutionBlockHeaderRecord:
+      let blockHeader =
+        try:
+          rlp.decode(data, BlockHeader)
+        except RlpError as e:
+          return err("Invalid block header in " & file & ": " & e.msg)
+
+      blockHeaders.add(blockHeader)
+    else:
+      warn "Skipping record, not a block header", typ = toHex(header.typ)
+
+  ok(blockHeaders)

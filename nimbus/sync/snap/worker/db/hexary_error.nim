@@ -13,14 +13,17 @@ type
     NothingSerious = 0
 
     AccountNotFound
-    AccountSmallerThanBase
     AccountsNotSrictlyIncreasing
     AccountRangesOverlap
+    LowerBoundAfterFirstEntry
+    LowerBoundProofError
     NodeNotFound
     RlpEncoding
     SlotsNotSrictlyIncreasing
     TrieLoopAlert
     TrieIsEmpty
+    TooManyDanglingLinks
+    TooManySlotAccounts
 
     # import
     DifferentNodeValueExists
@@ -45,6 +48,7 @@ type
     NoRocksDbBackend
     UnresolvedRepairNode
     OSErrorException
+    StateRootNotFound
 
 # End
 

@@ -26,7 +26,7 @@ proc installPortalDebugApiHandlers*(
     let contentId = p.toContentId(key)
 
     if contentId.isSome():
-      p.storeContent(contentId.get(), hexToSeqByte(content))
+      p.storeContent(key, contentId.get(), hexToSeqByte(content))
 
       return true
     else:
@@ -49,8 +49,17 @@ proc installPortalDebugApiHandlers*(
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
-      dataFile: string) -> bool:
-    let res = await p.historyPropagateHeaders(dataFile)
+      dataDir: string) -> bool:
+    let res = await p.historyPropagateHeadersWithProof(dataDir)
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
+      epochHeadersFile: string, epochAccumulatorFile: string) -> bool:
+    let res = await p.historyPropagateHeadersWithProof(
+      epochHeadersFile, epochAccumulatorFile)
     if res.isOk():
       return true
     else:
@@ -64,21 +73,20 @@ proc installPortalDebugApiHandlers*(
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateAccumulatorData") do(
-      dataFile: string) -> bool:
-    let res = await p.propagateAccumulatorData(dataFile)
-    if res.isOk():
-      return true
-    else:
-      raise newException(ValueError, $res.error)
-
   rpcServer.rpc("portal_" & network & "_propagateEpochAccumulator") do(
       dataFile: string) -> bool:
     let res = await p.propagateEpochAccumulator(dataFile)
     if res.isOk():
       return true
     else:
-      echo $res.error
+      raise newException(ValueError, $res.error)
+
+  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulators") do(
+      path: string) -> bool:
+    let res = await p.propagateEpochAccumulators(path)
+    if res.isOk():
+      return true
+    else:
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_storeContentInNodeRange") do(

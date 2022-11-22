@@ -10,7 +10,7 @@
 
 import
   std/[sequtils, sets, strutils, tables],
-  eth/[common/eth_types_rlp, trie/nibbles],
+  eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error]
@@ -33,10 +33,12 @@ proc hexaryImport*(
     recData: Blob;                      ## Node to add
     unrefNodes: var HashSet[RepairKey]; ## Keep track of freestanding nodes
     nodeRefs: var HashSet[RepairKey];   ## Ditto
-      ): Result[void,HexaryDbError]
+      ): HexaryNodeReport
       {.gcsafe, raises: [Defect, RlpError, KeyError].} =
   ## Decode a single trie item for adding to the table and add it to the
   ## database. Branch and exrension record links are collected.
+  if recData.len == 0:
+    return HexaryNodeReport(error: RlpNonEmptyBlobExpected)
   let
     nodeKey = recData.digestTo(NodeKey)
     repairKey = nodeKey.to(RepairKey) # for repair table
@@ -53,29 +55,29 @@ proc hexaryImport*(
     case top
     of 0, 1:
       if not w.isBlob:
-        return err(RlpBlobExpected)
+        return HexaryNodeReport(error: RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
       var key: NodeKey
       if not key.init(rlp.read(Blob)):
-        return err(RlpBranchLinkExpected)
+        return HexaryNodeReport(error: RlpBranchLinkExpected)
       # Update ref pool
       links[top] = key.to(RepairKey)
       unrefNodes.excl links[top] # is referenced, now (if any)
       nodeRefs.incl links[top]
     of 16:
       if not w.isBlob:
-        return err(RlpBlobExpected)
+        return HexaryNodeReport(error: RlpBlobExpected)
       blob16 = rlp.read(Blob)
     else:
-      return err(Rlp2Or17ListEntries)
+      return HexaryNodeReport(error: Rlp2Or17ListEntries)
     top.inc
 
   # Verify extension data
   case top
   of 2:
     if blobs[0].len == 0:
-      return err(RlpNonEmptyBlobExpected)
+      return HexaryNodeReport(error: RlpNonEmptyBlobExpected)
     let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
     if isLeaf:
       rNode = RNodeRef(
@@ -85,7 +87,7 @@ proc hexaryImport*(
     else:
       var key: NodeKey
       if not key.init(blobs[1]):
-        return err(RlpExtPathEncoding)
+        return HexaryNodeReport(error: RlpExtPathEncoding)
       # Update ref pool
       rNode = RNodeRef(
         kind:  Extension,
@@ -97,7 +99,7 @@ proc hexaryImport*(
     for n in [0,1]:
       var key: NodeKey
       if not key.init(blobs[n]):
-        return err(RlpBranchLinkExpected)
+        return HexaryNodeReport(error: RlpBranchLinkExpected)
       # Update ref pool
       links[n] = key.to(RepairKey)
       unrefNodes.excl links[n] # is referenced, now (if any)
@@ -118,22 +120,26 @@ proc hexaryImport*(
       unrefNodes.incl repairKey # keep track of stray nodes
 
   elif db.tab[repairKey].convertTo(Blob) != recData:
-    return err(DifferentNodeValueExists)
+    return HexaryNodeReport(error: DifferentNodeValueExists)
 
-  ok()
+  HexaryNodeReport(kind: some(rNode.kind))
 
 
 proc hexaryImport*(
     db: HexaryTreeDbRef;                ## Contains node table
-    recData: Blob;                      ## Node to add
-      ): Result[void,HexaryDbError]
+    rec: NodeSpecs;                     ## Expected key and value data pair
+      ): HexaryNodeReport
       {.gcsafe, raises: [Defect, RlpError, KeyError].} =
-  ## Ditto without referece checks
+  ## Ditto without referece checks but expected node key argument.
+  if rec.data.len == 0:
+    return HexaryNodeReport(error: RlpNonEmptyBlobExpected)
+  if rec.nodeKey != rec.data.digestTo(NodeKey):
+    return HexaryNodeReport(error: ExpectedNodeKeyDiffers)
+
   let
-    nodeKey = recData.digestTo(NodeKey)
-    repairKey = nodeKey.to(RepairKey) # for repair table
+    repairKey = rec.nodeKey.to(RepairKey) # for repair table
   var
-    rlp = recData.rlpFromBytes
+    rlp = rec.data.rlpFromBytes
     blobs = newSeq[Blob](2)         # temporary, cache
     links: array[16,RepairKey]      # reconstruct branch node
     blob16: Blob                    # reconstruct branch node
@@ -145,27 +151,27 @@ proc hexaryImport*(
     case top
     of 0, 1:
       if not w.isBlob:
-        return err(RlpBlobExpected)
+        return HexaryNodeReport(error: RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
       var key: NodeKey
       if not key.init(rlp.read(Blob)):
-        return err(RlpBranchLinkExpected)
+        return HexaryNodeReport(error: RlpBranchLinkExpected)
       # Update ref pool
       links[top] = key.to(RepairKey)
     of 16:
       if not w.isBlob:
-        return err(RlpBlobExpected)
+        return HexaryNodeReport(error: RlpBlobExpected)
       blob16 = rlp.read(Blob)
     else:
-      return err(Rlp2Or17ListEntries)
+      return HexaryNodeReport(error: Rlp2Or17ListEntries)
     top.inc
 
   # Verify extension data
   case top
   of 2:
     if blobs[0].len == 0:
-      return err(RlpNonEmptyBlobExpected)
+      return HexaryNodeReport(error: RlpNonEmptyBlobExpected)
     let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
     if isLeaf:
       rNode = RNodeRef(
@@ -175,7 +181,7 @@ proc hexaryImport*(
     else:
       var key: NodeKey
       if not key.init(blobs[1]):
-        return err(RlpExtPathEncoding)
+        return HexaryNodeReport(error: RlpExtPathEncoding)
       # Update ref pool
       rNode = RNodeRef(
         kind:  Extension,
@@ -185,7 +191,7 @@ proc hexaryImport*(
     for n in [0,1]:
       var key: NodeKey
       if not key.init(blobs[n]):
-        return err(RlpBranchLinkExpected)
+        return HexaryNodeReport(error: RlpBranchLinkExpected)
       # Update ref pool
       links[n] = key.to(RepairKey)
     rNode = RNodeRef(
@@ -199,10 +205,10 @@ proc hexaryImport*(
   if not db.tab.hasKey(repairKey):
     db.tab[repairKey] = rNode
 
-  elif db.tab[repairKey].convertTo(Blob) != recData:
-    return err(DifferentNodeValueExists)
+  elif db.tab[repairKey].convertTo(Blob) != rec.data:
+    return HexaryNodeReport(error: DifferentNodeValueExists)
 
-  ok()
+  HexaryNodeReport(kind: some(rNode.kind))
 
 # ------------------------------------------------------------------------------
 # End

@@ -34,7 +34,7 @@ import
   ../nimbus/p2p/chain,
   ./replay/[undump_blocks, pp],
   chronicles,
-  eth/[common, p2p, trie/db],
+  eth/[common, trie/db],
   stew/results,
   unittest2
 
@@ -237,8 +237,7 @@ proc genesisLoadRunner(noisy = true;
         params = params)
 
       check mdb.ttd == sSpcs.termTotalDff
-      check mdb.config.mergeForkBlock.isSome
-      check mdb.config.mergeForkBlock.get == sSpcs.mergeFork.u256
+      check mdb.config.mergeForkBlock == sSpcs.mergeFork.u256
 
     test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
@@ -258,8 +257,7 @@ proc genesisLoadRunner(noisy = true;
           params = params)
 
         check ddb.ttd == sSpcs.termTotalDff
-        check ddb.config.mergeForkBlock.isSome
-        check ddb.config.mergeForkBlock.get == sSpcs.mergeFork.u256
+        check ddb.config.mergeForkBlock == sSpcs.mergeFork.u256
 
     test "Initialise in-memory Genesis":
       mdb.initializeEmptyDb
@@ -388,7 +386,6 @@ when isMainModule:
     # typically on the `nimbus-eth1-blobs` module.
     noisy.testnetChainRunner(
       stopAfterBlock = 999999999)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

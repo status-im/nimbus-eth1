@@ -13,21 +13,8 @@ import
   unittest2, stint,
   eth/common/eth_types_rlp,
   ../data/history_data_parser,
-  ../network/history/[history_content, accumulator]
-
-func buildProof(
-    accumulator: Accumulator,
-    epochAccumulators: seq[(ContentKey, EpochAccumulator)],
-    header: BlockHeader):
-    Result[seq[Digest], string] =
-  let
-    epochIndex = getEpochIndex(header)
-    epochAccumulator = epochAccumulators[epochIndex][1]
-
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-    gIndex = GeneralizedIndex(epochSize*2*2 + (headerRecordIndex*2))
-
-  return epochAccumulator.build_proof(gIndex)
+  ../network/history/[history_content, accumulator],
+  ./test_helpers
 
 suite "Header Accumulator":
   test "Header Accumulator Canonical Verification":
@@ -55,42 +42,53 @@ suite "Header Accumulator":
       headers.add(BlockHeader(
         blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
 
-    let
-      accumulator = buildAccumulator(headers)
-      epochAccumulators = buildAccumulatorData(headers)
+    let accumulatorRes = buildAccumulatorData(headers)
+    check accumulatorRes.isOk()
+    let (accumulator, epochAccumulators) = accumulatorRes.get()
 
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(accumulator, epochAccumulators, header)
+        let proof = buildProof(header, epochAccumulators)
         check:
           proof.isOk()
-          verifyHeader(accumulator, header, proof.get()).isOk()
+          verifyAccumulatorProof(accumulator, header, proof.get()).isOk()
 
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
+      var proof: AccumulatorProof
       let header = BlockHeader(blockNumber: mergeBlockNumber.stuint(256))
-      check verifyHeader(accumulator, header, @[]).isErr()
+      check verifyAccumulatorProof(accumulator, header, proof).isErr()
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof(accumulator, epochAccumulators, headers[i])
+        let proof = buildProof(headers[i], epochAccumulators)
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
         let header = BlockHeader(
           blockNumber: i.stuint(256), difficulty: 2.stuint(256))
 
-        check verifyHeader(accumulator, header, proof.get()).isErr()
+        check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
     block: # Test invalid proofs
-      var proof: seq[Digest]
-      for i in 0..14:
-        var digest: Digest
-        proof.add(digest)
+      var proof: AccumulatorProof
 
       for i in headersToTest:
-        check verifyHeader(accumulator, headers[i], proof).isErr()
+        check verifyAccumulatorProof(accumulator, headers[i], proof).isErr()
+
+  test "Header Accumulator - Not Finished":
+    # Less headers than needed to finish the accumulator
+    const amount = mergeBlockNumber - 1
+
+    var headers: seq[BlockHeader]
+    for i in 0..<amount:
+      headers.add(BlockHeader(
+        blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+
+    let accumulatorRes = buildAccumulator(headers)
+
+    check accumulatorRes.isErr()
 
   test "Header BlockNumber to EpochAccumulator Root":
     # Note: This test assumes at least 3 epochs
@@ -105,7 +103,9 @@ suite "Header Accumulator":
       headers.add(header)
       headerHashes.add(header.blockHash())
 
-    let accumulator = buildAccumulator(headers)
+    let accumulatorRes = buildAccumulator(headers)
+    check accumulatorRes.isOk()
+    let accumulator = accumulatorRes.get()
 
     # Valid response for block numbers in epoch 0
     block:

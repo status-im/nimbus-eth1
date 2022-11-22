@@ -2,6 +2,9 @@ import
   chronos,
   sequtils,
   times,
+  nimcrypto,
+  os,
+  stew/byteutils,
   stew/results,
   json_rpc/rpcclient,
   eth/[rlp, common, p2p],
@@ -132,7 +135,7 @@ proc statelesslyRunBlock*(rpcClient: RpcClient, chain: Chain, header: BlockHeade
     let parentHeader = waitFor(fetchBlockHeaderWithHash(rpcClient, header.parentHash))
     chain.db.persistHeaderToDbWithoutSetHeadOrScore(parentHeader)
 
-    info("statelessly running block", blockNumber=header.blockNumber, blockHash=blockHash)
+    info("statelessly running block", blockNumber=header.blockNumber, blockHash=blockHash, parentHash=header.parentHash)
 
     let vmState = createVmStateForStatelessMode(chain.db, header, body, parentHeader, asyncFactory).get
     let vres = processBlockNotPoA(vmState, header, body)
@@ -207,7 +210,9 @@ proc statelesslyRunTransaction*(rpcClient: RpcClient, chain: Chain, headerHash: 
 # FIXME-Adam: I'm not sure whether these procs that take raw strings are useful;
 # maybe just delete them. But the point that I'm expecting these to be called
 # from "outside".
-proc statelesslyRunTransaction*(dataSourceUrl: string, dataDir: string, headerHashStr: string, tx: Transaction) =
+proc statelesslyRunTransaction*(dataSourceUrl: string, dataDir: string, headerHashStr: string, txHexStr: string) =
+  let txBytes: seq[byte] = fromHex(txHexStr)
+  let tx: Transaction = rlp.decode(txBytes, Transaction)
   let chain = getChain(dataDir)
   let rpcClient = waitFor(makeAnRpcClient(dataSourceUrl))
   statelesslyRunTransaction(rpcClient, chain, headerHashStr.toHash, tx)

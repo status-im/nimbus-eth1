@@ -14,12 +14,11 @@ import
   eth/[common, eip1559],
   ../db/db_chain,
   ../constants,
-  ../chain_config,
-  ../forks
+  ../chain_config
 
 export
   eip1559
- 
+
 # ------------------------------------------------------------------------------
 # Pre Eip 1559 gas limit validation
 # ------------------------------------------------------------------------------
@@ -55,17 +54,13 @@ proc validateGasLimit(c: BaseChainDB; header: BlockHeader): Result[void, string]
 # Eip 1559 support
 # ------------------------------------------------------------------------------
 
-# params/config.go(450): func (c *ChainConfig) IsLondon(num [..]
-proc isLondonOrLater*(c: ChainConfig; number: BlockNumber): bool =
-  c.toFork(number) >= FkLondon
-
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
 proc calcEip1599BaseFee*(c: ChainConfig; parent: BlockHeader): UInt256 =
   ## calculates the basefee of the header.
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if c.isLondonOrLater(parent.blockNumber):
+  if c.isLondon(parent.blockNumber):
     eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFee)
   else:
     EIP1559_INITIAL_BASE_FEE
@@ -75,7 +70,7 @@ proc verifyEip1559Header(c: ChainConfig;
                          parent, header: BlockHeader): Result[void, string]
                         {.raises: [Defect].} =
   ## Verify that the gas limit remains within allowed bounds
-  let limit = if c.isLondonOrLater(parent.blockNumber):
+  let limit = if c.isLondon(parent.blockNumber):
                 parent.gasLimit
               else:
                 parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
@@ -106,7 +101,7 @@ proc validateGasLimitOrBaseFee*(c: BaseChainDB;
                                 header, parent: BlockHeader): Result[void, string]
                                {.gcsafe, raises: [Defect].} =
 
-  if not c.config.isLondonOrLater(header.blockNumber):
+  if not c.config.isLondon(header.blockNumber):
     # Verify BaseFee not present before EIP-1559 fork.
     if not header.baseFee.isZero:
       return err("invalid baseFee before London fork: have " & $header.baseFee & ", want <0>")

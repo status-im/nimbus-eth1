@@ -17,7 +17,6 @@ import
   eth/[keys, net/nat, trie/db],
   eth/common as eth_common,
   eth/p2p as eth_p2p,
-  eth/p2p/[rlpx_protocols/les_protocol],
   json_rpc/rpcserver,
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
@@ -28,8 +27,9 @@ import
   ./graphql/ethapi,
   ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
   ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
-  ./sync/[fast, full, protocol, snap, stateless],
-  ./utils/tx_pool
+  ./sync/[fast, full, protocol, snap, stateless, protocol/les_protocol, handlers],
+  ./utils/tx_pool,
+  ./merge/merger
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -58,6 +58,9 @@ type
     networkLoop: Future[void]
     dbBackend: ChainDB
     peerManager: PeerManagerRef
+    snapSyncRef: SnapSyncRef
+    fullSyncRef: FullSyncRef
+    merger: MergerRef
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -66,6 +69,26 @@ proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
       quit(QuitFailure)
     else:
       quit(QuitSuccess)
+
+proc basicServices(nimbus: NimbusNode,
+                   conf: NimbusConf,
+                   chainDB: BaseChainDB) =
+  # app wide TxPool singleton
+  # TODO: disable some of txPool internal mechanism if
+  # the engineSigner is zero.
+  nimbus.txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+
+  # chainRef: some name to avoid module-name/filed/function misunderstandings
+  nimbus.chainRef = newChain(chainDB)
+  if conf.verifyFrom.isSome:
+    let verifyFrom = conf.verifyFrom.get()
+    nimbus.chainRef.extraValidation = 0 < verifyFrom
+    nimbus.chainRef.verifyFrom = verifyFrom
+
+  # this is temporary workaround to track POS transition
+  # until we have proper chain config and hard fork module
+  # see issue #640
+  nimbus.merger = MergerRef.new(chainDB)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
@@ -81,7 +104,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
+              protocols: set[ProtocolFlag]) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -115,7 +138,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   let bootstrapNodes = conf.getBootNodes()
 
   nimbus.ethNode = newEthereumNode(
-    keypair, address, conf.networkId, nil, conf.agentString,
+    keypair, address, conf.networkId, conf.agentString,
     addAllCapabilities = false, minPeers = conf.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
@@ -124,7 +147,13 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
-    nimbus.ethNode.addCapability protocol.eth
+    let ethWireHandler = EthWireRef.new(
+      nimbus.chainRef,
+      nimbus.txPool,
+      nimbus.ethNode.peerPool,
+      nimbus.merger
+    )
+    nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
     of SyncMode.Snap:
       nimbus.ethNode.addCapability protocol.snap
@@ -134,25 +163,21 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 
-  # chainRef: some name to avoid module-name/filed/function misunderstandings
-  nimbus.chainRef = newChain(chainDB)
-  nimbus.ethNode.chain = nimbus.chainRef
-  if conf.verifyFrom.isSome:
-    let verifyFrom = conf.verifyFrom.get()
-    nimbus.chainRef.extraValidation = 0 < verifyFrom
-    nimbus.chainRef.verifyFrom = verifyFrom
-
   # Early-initialise "--snap-sync" before starting any network connections.
   if ProtocolFlag.Eth in protocols:
     let tickerOK =
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
     of SyncMode.Full:
-      FullSyncRef.init(nimbus.ethNode, nimbus.ctx.rng, conf.maxPeers,
-                       tickerOK).start
+      nimbus.fullSyncRef = FullSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        tickerOK)
+      nimbus.fullSyncRef.start
     of SyncMode.Snap:
-      SnapSyncRef.init(nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng,
-                       conf.maxPeers, nimbus.dbBackend, tickerOK).start
+      nimbus.snapSyncRef = SnapSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        nimbus.dbBackend, tickerOK)
+      nimbus.snapSyncRef.start
     of SyncMode.Default, SyncMode.Stateless:
       discard
 
@@ -181,12 +206,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
-
-  # app wide TxPool singleton
-  # TODO: disable some of txPool internal mechanism if
-  # the engineSigner is zero.
-  nimbus.txPool = TxPoolRef.new(chainDB, conf.engineSigner)
-
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -331,11 +350,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, maybeStatelessModeDataSourceUrl(conf))
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger, maybeStatelessModeDataSourceUrl(conf))
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, maybeStatelessModeDataSourceUrl(conf))
+      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger, maybeStatelessModeDataSourceUrl(conf))
 
     info "Starting engine API server", port = conf.engineApiPort
 
@@ -345,11 +364,11 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, maybeStatelessModeDataSourceUrl(conf))
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger, maybeStatelessModeDataSourceUrl(conf))
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, maybeStatelessModeDataSourceUrl(conf))
+      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger, maybeStatelessModeDataSourceUrl(conf))
 
     info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 
@@ -389,16 +408,33 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, chainDB)
   of NimbusCmd.statelesslyRun:
-      statelesslyRunBlock(conf.statelessRunDataSourceUrl, newChain(chainDB), conf.statelessBlockHash)
+    statelesslyRunBlock(conf.statelessRunDataSourceUrl, newChain(chainDB), conf.statelessBlockHash)
   else:
+    basicServices(nimbus, conf, chainDB)
     manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, chainDB, protocols)
+    setupP2P(nimbus, conf, protocols)
     localServices(nimbus, conf, chainDB, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        FastSyncCtx.new(nimbus.ethNode).start
+        let syncer = FastSyncCtx.new(nimbus.ethNode, nimbus.chainRef)
+        syncer.start
+
+        let wireHandler = EthWireRef(
+          nimbus.ethNode.protocolState(eth)
+        )
+
+        wireHandler.setNewBlockHandler(
+          fast.newBlockHandler,
+          cast[pointer](syncer)
+        )
+
+        wireHandler.setNewBlockHashesHandler(
+          fast.newBlockHashesHandler,
+          cast[pointer](syncer)
+        )
+      
       of SyncMode.Stateless:
         StatelessCtx.new(nimbus.ethNode, conf.statelessModeDataSourceUrl).start
       of SyncMode.Full, SyncMode.Snap:
@@ -428,6 +464,10 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
     await nimbus.peerManager.stop()
+  if nimbus.snapSyncRef.isNil.not:
+    nimbus.snapSyncRef.stop()
+  if nimbus.fullSyncRef.isNil.not:
+    nimbus.fullSyncRef.stop()
 
 proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop

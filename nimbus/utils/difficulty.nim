@@ -162,9 +162,17 @@ template calcDifficultyArrowGlacier*(timeStamp: EthTime, parent: BlockHeader): D
   ## Offset the bomb a total of 10.7M blocks.
   makeDifficultyCalculator(10_700_000, timeStamp, parent)
 
+template calcDifficultyGrayGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  ## "EIP-4345: Difficulty Bomb Delay to September 2022"
+  ## <https://eips.ethereum.org/EIPS/eip-5133>
+  ## Offset the bomb a total of 11.4M blocks.
+  makeDifficultyCalculator(11_400_000, timeStamp, parent)
+
 func calcDifficulty*(c: ChainConfig, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= c.arrowGlacierBlock:
+  if next >= c.grayGlacierBlock:
+    result = calcDifficultyGrayGlacier(timeStamp, parent)
+  elif next >= c.arrowGlacierBlock:
     result = calcDifficultyArrowGlacier(timeStamp, parent)
   elif next >= c.londonBlock:
     result = calcDifficultyLondon(timeStamp, parent)

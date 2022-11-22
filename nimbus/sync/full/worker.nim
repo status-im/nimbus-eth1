@@ -12,7 +12,7 @@ import
   std/[options],
   chronicles,
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   ".."/[protocol, sync_desc],
   ../misc/[best_pivot, block_queue],
   ./ticker
@@ -64,7 +64,7 @@ proc topUsedNumber(
     top = 0.toBlockNumber
   try:
     let
-      bestNumber = ctx.chain.getBestBlockHeader.blockNumber
+      bestNumber = ctx.chain.db.getCanonicalHead().blockNumber
       nBackBlocks = backBlocks.toBlockNumber
     # Initialise before best block number
     if nBackBlocks < bestNumber:
@@ -95,7 +95,8 @@ proc processStaged(buddy: FullBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    chainDb = buddy.ctx.chain
+    chainDb = buddy.ctx.chain.db
+    chain = buddy.ctx.chain
     bq = buddy.data.bQueue
 
     # Get a work item, a list of headers + bodies
@@ -109,7 +110,7 @@ proc processStaged(buddy: FullBuddyRef): bool =
 
   # Store in persistent database
   try:
-    if chainDb.persistBlocks(wi.headers, wi.bodies) == ValidationResult.OK:
+    if chain.persistBlocks(wi.headers, wi.bodies) == ValidationResult.OK:
       bq.blockQueueAccept(wi)
       return true
   except CatchableError as e:
@@ -128,11 +129,11 @@ proc processStaged(buddy: FullBuddyRef): bool =
 
   # Something went wrong. Recycle work item (needs to be re-fetched, anyway)
   let
-    parentHoN = HashOrNum(isHash: true, hash: wi.headers[0].parentHash)
+    parentHash = wi.headers[0].parentHash
   try:
     # Check whether hash of the first block is consistent
     var parent: BlockHeader
-    if chainDb.getBlockHeader(parentHoN, parent):
+    if chainDb.getBlockHeader(parentHash, parent):
       # First block parent is ok, so there might be other problems. Re-fetch
       # the blocks from another peer.
       trace "Storing persistent blocks failed", peer, range=($wi.blocks)

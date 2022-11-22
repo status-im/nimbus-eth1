@@ -22,6 +22,11 @@ type
     ## Note that the `ethXX` protocol driver always uses the
     ## underlying `Hash256` type which needs to be converted to `BlockHash`.
 
+  BlocksRequest* = object
+    startBlock*: HashOrNum
+    maxResults*, skip*: uint
+    reverse*: bool
+
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------

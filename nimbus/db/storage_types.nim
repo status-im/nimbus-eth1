@@ -19,6 +19,9 @@ type
     skeletonBlockHashToNumber
     skeletonBlock
     skeletonTransaction
+    snapSyncAccount
+    snapSyncStorageSlot
+    snapSyncStateRoot
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -103,6 +106,24 @@ proc skeletonTransactionKey*(u: BlockNumber): DbKey {.inline.} =
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
+
+proc snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
+  doAssert(h.len == 32)
+  result.data[0] = byte ord(snapSyncAccount)
+  result.data[1 .. 32] = h
+  result.dataEndPos = uint8 sizeof(h)
+
+proc snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
+  doAssert(h.len == 32)
+  result.data[0] = byte ord(snapSyncStorageSlot)
+  result.data[1 .. 32] = h
+  result.dataEndPos = uint8 sizeof(h)
+
+proc snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
+  doAssert(h.len == 32)
+  result.data[0] = byte ord(snapSyncStateRoot)
+  result.data[1 .. 32] = h
+  result.dataEndPos = uint8 sizeof(h)
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

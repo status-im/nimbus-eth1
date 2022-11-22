@@ -807,6 +807,18 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
   ## the number of items eventally removed.
   xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
+iterator txHashes*(xp: TxPoolRef): Hash256 =
+  for txHash in nextKeys(xp.txDB.byItemID):
+    yield txHash
+
+iterator okPairs*(xp: TxPoolRef): (Hash256, TxItemRef) =
+  for x in nextPairs(xp.txDB.byItemID):
+    if x.data.reject == txInfoOk:
+      yield (x.key, x.data)
+
+proc numTxs*(xp: TxPoolRef): int =
+  xp.txDB.byItemID.len
+
 # ------------------------------------------------------------------------------
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------

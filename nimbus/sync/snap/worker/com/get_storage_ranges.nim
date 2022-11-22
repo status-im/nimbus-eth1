@@ -12,10 +12,10 @@
 import
   std/[options, sequtils],
   chronos,
-  eth/[common/eth_types, p2p],
+  eth/[common, p2p],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
 {.push raises: [Defect].}
@@ -29,11 +29,11 @@ type
   #  slotData*: Blob
   #
   # SnapStorageRanges* = object
-  #  slots*: seq[seq[SnapStorage]]
+  #  slotLists*: seq[seq[SnapStorage]]
   #  proof*: SnapStorageProof
 
   GetStorageRanges* = object
-    leftOver*: seq[SnapSlotQueueItemRef]
+    leftOver*: seq[AccountSlotsHeader]
     data*: AccountStorageRange
 
 const
@@ -46,8 +46,9 @@ const
 proc getStorageRangesReq(
     buddy: SnapBuddyRef;
     root: Hash256;
-    accounts: seq[Hash256],
-    iv: Option[LeafRange]
+    accounts: seq[Hash256];
+    iv: Option[NodeTagRange];
+    pivot: string;
       ): Future[Result[Option[SnapStorageRanges],void]]
       {.async.} =
   let
@@ -70,7 +71,7 @@ proc getStorageRangesReq(
     return ok(reply)
 
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetStorageRanges reply", peer,
+    trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
       error=e.msg
     return err()
 
@@ -78,22 +79,11 @@ proc getStorageRangesReq(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc addLeftOver*(
-    dd: var GetStorageRanges;              ## Descriptor
-    accounts: seq[AccountSlotsHeader];     ## List of items to re-queue
-    forceNew = false;                      ## Begin new block regardless
-      ) =
-  ## Helper for maintaining the `leftOver` queue
-  if 0 < accounts.len:
-    if accounts[0].firstSlot != Hash256() or dd.leftOver.len == 0:
-      dd.leftOver.add SnapSlotQueueItemRef(q: accounts)
-    else:
-      dd.leftOver[^1].q = dd.leftOver[^1].q & accounts
-
 proc getStorageRanges*(
     buddy: SnapBuddyRef;
-    stateRoot: Hash256;
-    accounts: seq[AccountSlotsHeader],
+    stateRoot: Hash256;                ## Current DB base (`pivot` for logging)
+    accounts: seq[AccountSlotsHeader]; ## List of per-account storage slots
+    pivot: string;                     ## For logging, instead of `stateRoot`
       ): Future[Result[GetStorageRanges,ComError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
@@ -106,38 +96,35 @@ proc getStorageRanges*(
     peer = buddy.peer
   var
     nAccounts = accounts.len
-    maybeIv = none(LeafRange)
 
   if nAccounts == 0:
     return err(ComEmptyAccountsArguments)
-  if accounts[0].firstSlot != Hash256():
-    # Set up for range
-    maybeIv = some(LeafRange.new(
-      accounts[0].firstSlot.to(NodeTag), high(NodeTag)))
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetStorageRanges", peer,
-      nAccounts, stateRoot, bytesLimit=snapRequestBytesLimit
-
-  let snStoRanges = block:
-    let rc = await buddy.getStorageRangesReq(
-      stateRoot, accounts.mapIt(it.accHash), maybeIv)
-    if rc.isErr:
-      return err(ComNetworkProblem)
-    if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for reply to GetStorageRanges", peer,
-        nAccounts
-      return err(ComResponseTimeout)
-    if nAccounts < rc.value.get.slots.len:
-      # Ooops, makes no sense
-      return err(ComTooManyStorageSlots)
-    rc.value.get
+    trace trSnapSendSending & "GetStorageRanges", peer, pivot,
+      nAccounts, bytesLimit=snapRequestBytesLimit
 
   let
-    nSlots = snStoRanges.slots.len
+    iv = accounts[0].subRange
+    snStoRanges = block:
+      let rc = await buddy.getStorageRangesReq(stateRoot,
+        accounts.mapIt(it.accKey.to(Hash256)), iv, pivot)
+      if rc.isErr:
+        return err(ComNetworkProblem)
+      if rc.value.isNone:
+        trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
+          nAccounts
+        return err(ComResponseTimeout)
+      if nAccounts < rc.value.get.slotLists.len:
+        # Ooops, makes no sense
+        return err(ComTooManyStorageSlots)
+      rc.value.get
+
+  let
+    nSlotLists = snStoRanges.slotLists.len
     nProof = snStoRanges.proof.len
 
-  if nSlots == 0:
+  if nSlotLists == 0:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getstorageranges-0x02:
     #
     # Notes:
@@ -146,49 +133,54 @@ proc getStorageRanges*(
     #   for any requested account hash, it must return an empty reply. It is
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
-    trace trSnapRecvReceived & "empty StorageRanges", peer,
-      nAccounts, nSlots, nProof, stateRoot, firstAccount=accounts[0].accHash
+    trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
+      nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
     return err(ComNoStorageForAccounts)
 
   # Assemble return structure for given peer response
   var dd = GetStorageRanges(data: AccountStorageRange(proof: snStoRanges.proof))
 
-  # Filter `slots` responses:
+  # Set the left proof boundary (if any)
+  if 0 < nProof and iv.isSome:
+    dd.data.base = iv.unsafeGet.minPt
+
+  # Filter remaining `slots` responses:
   # * Accounts for empty ones go back to the `leftOver` list.
-  for n in 0 ..< nSlots:
+  for n in 0 ..< nSlotLists:
     # Empty data for a slot indicates missing data
-    if snStoRanges.slots[n].len == 0:
-      dd.addLeftOver @[accounts[n]]
+    if snStoRanges.slotLists[n].len == 0:
+      dd.leftOver.add accounts[n]
     else:
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
-        data: snStoRanges.slots[n])
+        data:    snStoRanges.slotLists[n])
 
   # Complete the part that was not answered by the peer
   if nProof == 0:
-    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
+    # assigning empty slice is ok
+    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
+
   else:
-    if snStoRanges.slots[^1].len == 0:
-      # `dd.data.storages.len == 0` => `snStoRanges.slots[^1].len == 0` as
-      # it was confirmed that `0 < nSlots == snStoRanges.slots.len`
-      return err(ComNoDataForProof)
+    # Ok, we have a proof now
+    if 0 < snStoRanges.slotLists[^1].len:
+      # If the storage data for the last account comes with a proof, then the
+      # data set is incomplete. So record the missing part on the `dd.leftOver`
+      # list.
+      let
+        reqTop = if accounts[0].subRange.isNone: high(NodeTag)
+                 else: accounts[0].subRange.unsafeGet.maxPt
+        respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+      if respTop < reqTop:
+        dd.leftOver.add AccountSlotsHeader(
+          subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
+          accKey:      accounts[nSlotLists-1].accKey,
+          storageRoot: accounts[nSlotLists-1].storageRoot)
 
-    # If the storage data for the last account comes with a proof, then it is
-    # incomplete. So record the missing part on the `dd.leftOver` list.
-    let top = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+    # Do thew rest (assigning empty slice is ok)
+    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
 
-    # Contrived situation with `top==high()`: any right proof will be useless
-    # so it is just ignored (i.e. `firstSlot` is zero in first slice.)
-    if top < high(NodeTag):
-      dd.addLeftOver @[AccountSlotsHeader(
-        firstSlot:   (top + 1.u256).to(Hash256),
-        accHash:     accounts[nSlots-1].accHash,
-        storageRoot: accounts[nSlots-1].storageRoot)]
-    dd.addLeftOver accounts[nSlots ..< nAccounts] # empty slice is ok
-
-  let nLeftOver = dd.leftOver.foldl(a + b.q.len, 0)
-  trace trSnapRecvReceived & "StorageRanges", peer,
-    nAccounts, nSlots, nProof, nLeftOver, stateRoot
+  trace trSnapRecvReceived & "StorageRanges", peer, pivot, nAccounts,
+    nSlotLists, nProof, nLeftOver=dd.leftOver.len
 
   return ok(dd)
 

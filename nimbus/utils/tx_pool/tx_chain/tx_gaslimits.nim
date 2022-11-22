@@ -87,9 +87,6 @@ proc setPreLondonLimits(gl: var TxChainGasLimits) =
     gl.minLimit = gl.gasLimit - delta
     gl.trgLimit = gl.gasLimit
 
-proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
-  number >= c.londonBlock
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

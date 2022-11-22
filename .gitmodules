@@ -212,3 +212,8 @@
 	url = https://github.com/status-im/nimbus-security-resources.git
 	ignore = untracked
 	branch = master
+[submodule "vendor/portal-spec-tests"]
+	path = vendor/portal-spec-tests
+	url = https://github.com/status-im/portal-spec-tests.git
+	ignore = untracked
+	branch = master

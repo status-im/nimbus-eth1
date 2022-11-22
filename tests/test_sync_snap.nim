@@ -15,7 +15,7 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[common/eth_types, p2p, rlp, trie/db],
+  eth/[common, p2p, rlp, trie/db],
   rocksdb,
   stint,
   stew/[byteutils, results],
@@ -25,8 +25,9 @@ import
   ../nimbus/p2p/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
-  ../nimbus/sync/snap/worker/db/[hexary_desc, hexary_inspect,
-                                 rocky_bulk_load, snap_db,],
+  ../nimbus/sync/snap/worker/db/[
+    hexary_desc, hexary_error, hexary_inspect, rocky_bulk_load,
+    snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -86,6 +87,20 @@ var
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
+proc isImportOk(rc: Result[SnapAccountsGaps,HexaryDbError]): bool =
+  if rc.isErr:
+    check rc.error == NothingSerious # prints an error if different
+  elif 0 < rc.value.innerGaps.len:
+    check rc.value.innerGaps == seq[NodeSpecs].default
+  else:
+    return true
+
+proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
+  ## Kludge: map error report to (older version) return code
+  if r.len != 0:
+    return err(r.mapIt((it.slot.get(otherwise = -1),it.error)))
+  ok()
+
 proc findFilePath(file: string;
                   baseDir, repoDir: openArray[string]): Result[string,void] =
   for dir in baseDir:
@@ -115,11 +130,11 @@ proc pp(rc: Result[Account,HexaryDbError]): string =
 proc pp(rc: Result[Hash256,HexaryDbError]): string =
   if rc.isErr: $rc.error else: $rc.value.to(NodeTag)
 
-proc pp(
-    rc: Result[TrieNodeStat,HexaryDbError];
-    db: SnapDbSessionRef
-      ): string =
-  if rc.isErr: $rc.error else: rc.value.pp(db.getAcc)
+proc pp(rc: Result[TrieNodeStat,HexaryDbError]; db: SnapDbBaseRef): string =
+  if rc.isErr: $rc.error else: rc.value.pp(db.hexaDb)
+
+proc pp(a: NodeKey; collapse = true): string =
+  a.to(Hash256).pp(collapse)
 
 proc ppKvPc(w: openArray[(string,int)]): string =
   w.mapIt(&"{it[0]}={it[1]}%").join(", ")
@@ -284,21 +299,21 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
     var
-      desc: SnapDbSessionRef
-      accKeys: seq[Hash256]
+      desc: SnapDbAccountsRef
+      accKeys: seq[NodeKey]
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
         dbBase = if persistent: SnapDbRef.init(db.cdb[0])
                  else: SnapDbRef.init(newMemoryDB())
-        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
+        dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
       for n,w in accountsList:
-        check dbDesc.importAccounts(w.base, w.data, persistent) == OkHexDb
+        check dbDesc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
       let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
                    else: SnapDbRef.init(newMemoryDB())
-      desc = SnapDbSessionRef.init(dbBase, root, peer)
+      desc = SnapDbAccountsRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
       let
@@ -306,7 +321,9 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         packed = PackedAccountRange(
           accounts: accountsList.mapIt(it.data.accounts).sortMerge,
           proof:    accountsList.mapIt(it.data.proof).flatten)
-      check desc.importAccounts(lowerBound, packed, true) == OkHexDb
+      # Merging intervals will produce gaps, so the result is expected OK but
+      # different from `.isImportOk`
+      check desc.importAccounts(lowerBound, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
@@ -315,36 +332,36 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # of proof nodes, typically before the `lowerBound` of each block. As
       # there is a list of account ranges (that were merged for testing), one
       # need to check for additional records only on either end of a range.
-      var keySet = packed.accounts.mapIt(it.accHash).toHashSet
+      var keySet = packed.accounts.mapIt(it.accKey).toHashSet
       for w in accountsList:
-        var key = desc.prevChainDbKey(w.data.accounts[0].accHash)
+        var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accKey)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
-          let newKey = desc.prevChainDbKey(key.value)
+          let newKey = desc.prevAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
-        key = desc.nextChainDbKey(w.data.accounts[^1].accHash)
+        key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accKey)
         while key.isOk and key.value notin keySet:
           keySet.incl key.value
-          let newKey = desc.nextChainDbKey(key.value)
+          let newKey = desc.nextAccountsChainDbKey(key.value)
           check newKey != key
           key = newKey
       accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
-                             .mapIt(it.to(Hash256))
+                             .mapIt(it.to(NodeKey))
       check packed.accounts.len <= accKeys.len
 
     test &"Revisiting {accKeys.len} items stored items on BaseChainDb":
       var
         nextAccount = accKeys[0]
-        prevAccount: Hash256
+        prevAccount: NodeKey
         count = 0
-      for accHash in accKeys:
+      for accKey in accKeys:
         count.inc
         let
           pfx = $count & "#"
-          byChainDB = desc.getChainDbAccount(accHash)
-          byNextKey = desc.nextChainDbKey(accHash)
-          byPrevKey = desc.prevChainDbKey(accHash)
+          byChainDB = desc.getAccountsChainDb(accKey)
+          byNextKey = desc.nextAccountsChainDbKey(accKey)
+          byPrevKey = desc.prevAccountsChainDbKey(accKey)
         noisy.say "*** find",
           "<", count, "> byChainDb=", byChainDB.pp
         check byChainDB.isOk
@@ -352,18 +369,18 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
         # `nextAccount` value is still the old one and will be different from
         # the account in the next for-loop cycle (if any.)
-        check pfx & accHash.pp(false) == pfx & nextAccount.pp(false)
+        check pfx & accKey.pp(false) == pfx & nextAccount.pp(false)
         if byNextKey.isOk:
           nextAccount = byNextKey.value
         else:
-          nextAccount = Hash256.default
+          nextAccount = NodeKey.default
 
         # Check `prev` traversal funcionality
-        if prevAccount != Hash256.default:
+        if prevAccount != NodeKey.default:
           check byPrevKey.isOk
           if byPrevKey.isOk:
             check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
-        prevAccount = accHash
+        prevAccount = accKey
 
       # Hexary trie memory database dump. These are key value pairs for
       # ::
@@ -391,6 +408,46 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
 
+    test &"Storing/retrieving {accKeys.len} items " &
+        "on persistent state root registry":
+      if not persistent:
+        skip()
+      else:
+        let
+          dbBase = SnapDbRef.init(db.cdb[0])
+          dangling = @[@[1u8],@[2u8,3u8],@[4u8,5u8,6u8],@[7u8,8u8,9u8,0u8]]
+          slotAccounts = seq[NodeKey].default
+        for n,w in accKeys:
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, n.uint64,
+              dangling, slotAccounts, 0).isOk
+          # verify latest state root
+          block:
+            let rc = dbBase.recoverPivot()
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+              check rc.value.dangling == dangling
+        for n,w in accKeys:
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == n.uint64
+          # Update record in place
+          check dbBase.savePivot(
+            BlockHeader(
+              stateRoot: w.to(Hash256)), n.uint64, 0, @[], @[], 0).isOk
+          block:
+            let rc = dbBase.recoverPivot(w)
+            check rc.isOk
+            if rc.isOk:
+              check rc.value.nAccounts == n.uint64
+              check rc.value.nSlotLists == 0
+              check rc.value.dangling == seq[Blob].default
 
 proc storagesRunner(
     noisy = true;
@@ -419,17 +476,16 @@ proc storagesRunner(
     let
       dbBase = if persistent: SnapDbRef.init(db.cdb[0])
                else: SnapDbRef.init(newMemoryDB())
-    var
-      desc = SnapDbSessionRef.init(dbBase, root, peer)
 
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
       for w in accountsList:
-        let desc = SnapDbSessionRef.init(dbBase, root, peer)
-        check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
+        let desc = SnapDbAccountsRef.init(dbBase, root, peer)
+        check desc.importAccounts(w.base, w.data, persistent).isImportOk
 
     test &"Merging {storagesList.len} storages lists":
       let
-        dbDesc = SnapDbSessionRef.init(dbBase, root, peer)
+        dbDesc = SnapDbStorageSlotsRef.init(
+          dbBase, Hash256().to(NodeKey), Hash256(), peer)
         ignore = knownFailures.toTable
       for n,w in storagesList:
         let
@@ -438,7 +494,25 @@ proc storagesRunner(
                     Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
                   else:
                     OkStoDb
-        check dbDesc.importStorages(w.data, persistent) == expRc
+        check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
+
+    test &"Inspecting {storagesList.len} imported storages lists sub-tries":
+      let ignore = knownFailures.toTable
+      for n,w in storagesList:
+        let
+          testId = fileInfo & "#" & $n
+          errInx = if ignore.hasKey(testId): ignore[testId][0][0]
+                   else: high(int)
+        for m in 0 ..< w.data.storages.len:
+          let
+            accKey = w.data.storages[m].account.accKey
+            root = w.data.storages[m].account.storageRoot
+            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accKey, root, peer)
+            rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
+          if m == errInx:
+            check rc == Result[TrieNodeStat,HexaryDbError].err(TrieIsEmpty)
+          else:
+            check rc.isOk # ok => level > 0 and not stopped
 
 
 proc inspectionRunner(
@@ -467,17 +541,17 @@ proc inspectionRunner(
   suite &"SyncSnap: inspect {fileInfo} lists for {info} for healing":
     let
       memBase = SnapDbRef.init(newMemoryDB())
-      memDesc = SnapDbSessionRef.init(memBase, Hash256(), peer)
+      memDesc = SnapDbAccountsRef.init(memBase, Hash256(), peer)
     var
       singleStats: seq[(int,TrieNodeStat)]
       accuStats: seq[(int,TrieNodeStat)]
       perBase,altBase: SnapDbRef
-      perDesc,altDesc: SnapDbSessionRef
+      perDesc,altDesc: SnapDbAccountsRef
     if persistent:
       perBase = SnapDbRef.init(db.cdb[0])
-      perDesc = SnapDbSessionRef.init(perBase, Hash256(), peer)
+      perDesc = SnapDbAccountsRef.init(perBase, Hash256(), peer)
       altBase = SnapDbRef.init(db.cdb[1])
-      altDesc = SnapDbSessionRef.init(altBase, Hash256(), peer)
+      altDesc = SnapDbAccountsRef.init(altBase, Hash256(), peer)
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for in-memory-db":
@@ -486,17 +560,31 @@ proc inspectionRunner(
         let
           root = accList[0].root
           rootKey = root.to(NodeKey)
-          desc = SnapDbSessionRef.init(memBase, root, peer)
+          desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling
-          keys = desc.getAcc.hexaryInspectToKeys(
-            rootKey, dangling.toHashSet.toSeq)
+          dangling = rc.value.dangling.mapIt(it.partialPath)
+          keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
         check dangling.len == keys.len
-        singleStats.add (desc.getAcc.tab.len,rc.value)
+        singleStats.add (desc.hexaDb.tab.len,rc.value)
+
+        # Verify piecemeal approach for `inspectAccountsTrie()` ...
+        var
+          ctx = TrieNodeStatCtxRef()
+          piecemeal: HashSet[Blob]
+        while not ctx.isNil:
+          let rx = desc.inspectAccountsTrie(
+            resumeCtx=ctx, suspendAfter=128, persistent=false)
+          check rx.isOk
+          let stats = rx.get(otherwise = TrieNodeStat())
+          ctx = stats.resumeCtx
+          piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+        # Must match earlier all-in-one result
+        check dangling.len == piecemeal.len
+        check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} single accounts lists " &
         "for persistent db":
@@ -511,18 +599,33 @@ proc inspectionRunner(
             root = accList[0].root
             rootKey = root.to(NodeKey)
             dbBase = SnapDbRef.init(db.cdb[2+n])
-            desc = SnapDbSessionRef.init(dbBase, root, peer)
+            desc = SnapDbAccountsRef.init(dbBase, root, peer)
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
-          let rc = desc.inspectAccountsTrie(persistent=false)
+            check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
+          let rc = desc.inspectAccountsTrie(persistent=true)
           check rc.isOk
           let
-            dangling = rc.value.dangling
-            keys = desc.getAcc.hexaryInspectToKeys(
-              rootKey, dangling.toHashSet.toSeq)
+            dangling = rc.value.dangling.mapIt(it.partialPath)
+            keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
-          check singleStats[n][1] == rc.value
+          let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
+          check ssn1.toHashSet == dangling.toHashSet
+
+          # Verify piecemeal approach for `inspectAccountsTrie()` ...
+          var
+            ctx = TrieNodeStatCtxRef()
+            piecemeal: HashSet[Blob]
+          while not ctx.isNil:
+            let rx = desc.inspectAccountsTrie(
+              resumeCtx=ctx, suspendAfter=128, persistent=persistent)
+            check rx.isOk
+            let stats = rx.get(otherwise = TrieNodeStat())
+            ctx = stats.resumeCtx
+            piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+          # Must match earlier all-in-one result
+          check dangling.len == piecemeal.len
+          check dangling.toHashSet == piecemeal
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for in-memory-db":
@@ -533,15 +636,15 @@ proc inspectionRunner(
           rootKey = root.to(NodeKey)
           desc = memDesc.dup(root,Peer())
         for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false) == OkHexDb
+          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
         let rc = desc.inspectAccountsTrie(persistent=false)
         check rc.isOk
         let
-          dangling = rc.value.dangling
-          keys = desc.getAcc.hexaryInspectToKeys(
+          dangling = rc.value.dangling.mapIt(it.partialPath)
+          keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
-        accuStats.add (desc.getAcc.tab.len,rc.value)
+        accuStats.add (desc.hexaDb.tab.len,rc.value)
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for persistent db":
@@ -556,12 +659,12 @@ proc inspectionRunner(
             rootSet = [rootKey].toHashSet
             desc = perDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent) == OkHexDb
+            check desc.importAccounts(w.base, w.data, persistent).isImportOk
           let rc = desc.inspectAccountsTrie(persistent=false)
           check rc.isOk
           let
-            dangling = rc.value.dangling
-            keys = desc.getAcc.hexaryInspectToKeys(
+            dangling = rc.value.dangling.mapIt(it.partialPath)
+            keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
           check accuStats[n][1] == rc.value
@@ -573,7 +676,7 @@ proc inspectionRunner(
       else:
         let
           cscBase = SnapDbRef.init(newMemoryDB())
-          cscDesc = SnapDbSessionRef.init(cscBase, Hash256(), peer)
+          cscDesc = SnapDbAccountsRef.init(cscBase, Hash256(), peer)
         var
           cscStep: Table[NodeKey,(int,seq[Blob])]
         for n,accList in inspectList:
@@ -583,7 +686,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent=false) == OkHexDb
+            check desc.importAccounts(w.base,w.data,persistent=false).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
@@ -591,8 +694,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.toHashSet
-            cascaded = rc.value.dangling.toHashSet
+            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -615,7 +718,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             desc = cscDesc.dup(root,Peer())
           for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent) == OkHexDb
+            check desc.importAccounts(w.base,w.data, persistent).isImportOk
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
@@ -623,8 +726,8 @@ proc inspectionRunner(
             rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
           check rc.isOk
           let
-            accumulated = r0.value.dangling.toHashSet
-            cascaded = rc.value.dangling.toHashSet
+            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -1107,7 +1210,7 @@ when isMainModule:
   #   value is mostly ignored but carried through.
   #
   # * `Proof`: There is a list of hexary nodes which allow to build a partial
-  #   Patricia-Mercle trie starting at the state root with all the account
+  #   Patricia-Merkle trie starting at the state root with all the account
   #   leaves. There are enough nodes that show that there is no account before
   #   the least account (which is currently ignored.)
   #
@@ -1127,17 +1230,14 @@ when isMainModule:
   #    * Load/accumulate accounts (needs some unique sorting)
   #    * Build/complete hexary trie for accounts
   #    * Save/bulk-store hexary trie on disk. If rocksdb is available, data
-  #      are bulk stored via sst. An additional data set is stored in a table
-  #      with key prefix 200 using transactional `put()` (for time comparison.)
-  #      If there is no rocksdb, standard transactional `put()` is used, only
-  #      (no key prefix 200 storage.)
+  #      are bulk stored via sst.
   #
   # 3. Traverse trie nodes stored earlier. The accounts from test 2 are
   #    re-visted using the account hash as access path.
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true: # and false:
+  when true and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
@@ -1147,7 +1247,7 @@ when isMainModule:
         false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
-  when true: # and false:
+  when true and false:
     import ./test_sync_snap/snap_storage_xx
     let knownFailures = @[
       ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),

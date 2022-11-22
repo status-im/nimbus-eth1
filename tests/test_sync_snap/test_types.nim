@@ -10,7 +10,7 @@
 # distributed except according to those terms.
 
 import
-  eth/p2p
+  eth/common
 
 type
   AccountsSample* = object

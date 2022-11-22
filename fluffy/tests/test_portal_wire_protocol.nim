@@ -10,28 +10,24 @@
 import
   std/[algorithm, sequtils],
   chronos, testutils/unittests, stew/shims/net,
+  stew/results,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/wire/[portal_protocol, portal_stream],
+  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../content_db,
   ./test_helpers
 
 const protocolId = [byte 0x50, 0x00]
 
-proc toContentId(contentKey: ByteList): Option[ContentId] =
+proc toContentId(contentKey: ByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
   # content id derivation is different for the different content networks
   # and their content types.
   let idHash = sha256.digest(contentKey.asSeq())
-  some(readUintBE[256](idHash.data))
+  ok(readUintBE[256](idHash.data))
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentIdOpt = contentKey.toContentId()
-  if contentIdOpt.isSome():
-    (contentIdOpt, db.get(contentIdOpt.get()))
-  else:
-    (contentIdOpt, none(seq[byte]))
+proc dbGetHandler(db: ContentDB, contentId: ContentId): Option[seq[byte]] =
+  db.get(contentId)
 
 proc initPortalProtocol(
     rng: ref HmacDrbgContext,
@@ -46,8 +42,10 @@ proc initPortalProtocol(
     stream = manager.registerNewStream(q)
 
     proto = PortalProtocol.new(
-      d, protocolId, db, toContentId, dbGetHandler, stream,
+      d, protocolId, toContentId, createGetHandler(db), stream,
       bootstrapRecords = bootstrapRecords)
+
+  proto.dbPut = createStoreHandler(db, defaultRadiusConfig, proto)
 
   return proto
 
@@ -269,7 +267,8 @@ procSuite "Portal Wire Protocol Tests":
       contentId = readUintBE[256](sha256.digest(content).data)
 
     # Store the content on node3
-    discard node3.contentDB.put(contentId, content, node3.localNode.id)
+    node3.storeContent(contentList, contentId, content)
+
 
     # Make node1 know about node2, and node2 about node3
     check node1.addNode(node2.localNode) == Added
@@ -344,13 +343,15 @@ procSuite "Portal Wire Protocol Tests":
       stream = m.registerNewStream(q)
 
       proto1 = PortalProtocol.new(
-        node1, protocolId, db, toContentId, dbGetHandler, stream)
+        node1, protocolId, toContentId, createGetHandler(db), stream)
+
+    proto1.dbPut = createStoreHandler(db, defaultRadiusConfig, proto1)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
 
     for i in 0..8:
-      proto1.storeContent(u256(i), item)
+      proto1.storeContent(ByteList.init(@[uint8(i)]), u256(i), item)
       distances.add(u256(i) xor proto1.localNode.id)
 
     distances.sort(order = SortOrder.Descending)

@@ -15,6 +15,7 @@ import
     vm_types,
     forks,
     constants,
+    chain_config,
     vm_precompiles,
     transaction,
     db/db_chain,
@@ -67,7 +68,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState = BaseVMState.new(
       BlockHeader(blockNumber: 1.u256),
       BlockHeader(),
-      newBaseChainDB(newMemoryDB()))
+      newBaseChainDB(newMemoryDB(), config = ChainConfig())
+    )
 
   case toLowerAscii(label)
   of "ecrecover": data.doTest(vmState, fork, paEcRecover)

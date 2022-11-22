@@ -8,14 +8,14 @@
 import
   std/[options, strutils, tables],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
+  chronos, metrics, metrics/chronos_httpserver, stew/[byteutils, results],
   nimcrypto/[hash, sha2],
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../content_db,
-  ../network/wire/[portal_protocol, portal_stream],
+  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_content, history_network]
 
 const
@@ -190,19 +190,17 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-proc testContentIdHandler(contentKey: ByteList): Option[ContentId] =
+proc testContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   # Note: Returning a static content id here, as in practice this depends
   # on the content key to content id derivation, which is different for the
   # different content networks. And we want these tests to be independent from
   # that.
   let idHash = sha256.digest("test")
-  some(readUintBE[256](idHash.data))
+  ok(readUintBE[256](idHash.data))
 
-proc dbGetHandler(db: ContentDB, contentKey: ByteList):
-    (Option[ContentId], Option[seq[byte]]) =
-  let contentId = contentKey.toContentId()
-
-  (some(contentId), db.get(contentId))
+proc dbGetHandler(db: ContentDB, contentId: ContentId):
+    Option[seq[byte]] =
+  db.get(contentId)
 
 proc run(config: PortalCliConf) =
   let
@@ -232,9 +230,11 @@ proc run(config: PortalCliConf) =
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(ContentKeysList, seq[seq[byte]])](50)
     stream = sm.registerNewStream(cq)
-    portal = PortalProtocol.new(d, config.protocolId, db,
-      testContentIdHandler, dbGetHandler, stream,
+    portal = PortalProtocol.new(d, config.protocolId,
+      testContentIdHandler, createGetHandler(db), stream,
       bootstrapRecords = bootstrapRecords)
+
+  portal.dbPut = createStoreHandler(db, defaultRadiusConfig, portal)
 
   if config.metricsEnabled:
     let

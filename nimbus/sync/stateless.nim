@@ -26,8 +26,8 @@ type
   # FIXME-Adam: copied from FastSyncCtx, but for now let's leave out some of it;
   # I don't really understand what all the fields are.
   StatelessCtx* = ref object
-    finalizedBlockHeader: BlockHeader # Block which was downloaded and verified
-    chain: AbstractChainDB
+    #finalizedBlockHeader: BlockHeader # Block which was downloaded and verified
+    #chain: AbstractChainDB
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
     dataSourceUrl: string
@@ -44,10 +44,10 @@ proc new*(T: type StatelessCtx; ethNode: EthereumNode, dataSourceUrl: string): T
     # workQueue:           n/a
     # endBlockNumber:      n/a
     # hasOutOfOrderBlocks: n/a
-    chain:          ethNode.chain,
+    # chain:          ethNode.chain,
     peerPool:       ethNode.peerPool,
     trustedPeers:   initHashSet[Peer](),
-    finalizedBlockHeader: ethNode.chain.getBestBlockHeader,
+    #finalizedBlockHeader: ethNode.chain.getBestBlockHeader,
     dataSourceUrl:  dataSourceUrl)
 
 proc start*(ctx: StatelessCtx) {.raises:[Defect,CatchableError].} =
