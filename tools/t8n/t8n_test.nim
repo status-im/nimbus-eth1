@@ -286,6 +286,15 @@ const
       output: T8nOutput(alloc: false, result: false),
       expExitCode: ErrorConfig.int,
     ),
+    TestSpec(
+      name  : "Test state-reward -1",
+      base  : "testdata/3",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "-1"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =

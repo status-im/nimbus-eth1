@@ -1,10 +1,10 @@
 import
   std/[options, os, strutils],
-  confutils,
+  confutils, stint,
   ./types
 
 export
-  options
+  options, stint
 
 func combineForks(): string =
   for x in low(TestFork)..high(TestFork):
@@ -83,9 +83,10 @@ type
       name: "input.txs" }: string
 
     stateReward* {.
-      desc: "Mining reward. Set to 0 to disable"
-      defaultValue: 0
-      name: "state.reward" }: HexOrInt
+      desc: "Mining reward. Set to -1 to disable"
+      defaultValue: none(UInt256)
+      defaultValueDesc: "-1"
+      name: "state.reward" }: Option[UInt256]
 
     stateChainId* {.
       desc: "ChainID to use"
@@ -105,6 +106,17 @@ type
       defaultValue: 3
       name: "verbosity" }: int
 
+proc parseCmdArg*(T: type Option[UInt256], p: TaintedString): T =
+  if p.string == "-1":
+    none(UInt256)
+  elif startsWith(p.string, "0x"):
+    some(parse(p.string, UInt256, 16))
+  else:
+    some(parse(p.string, UInt256, 10))
+
+proc completeCmdArg*(T: type Option[UInt256], val: TaintedString): seq[string] =
+  return @[]
+
 proc parseCmdArg*(T: type HexOrInt, p: TaintedString): T =
   if startsWith(p.string, "0x"):
     parseHexInt(p.string).T
@@ -116,6 +128,13 @@ proc completeCmdArg*(T: type HexOrInt, val: TaintedString): seq[string] =
 
 proc notCmd(x: string): bool =
   if x.len == 0: return true
+
+  # negative number
+  if x.len >= 2 and
+    x[0] == '-' and
+    x[1].isDigit: return true
+
+  # else
   x[0] != '-'
 
 proc convertToNimStyle(cmds: openArray[string]): seq[string] =
