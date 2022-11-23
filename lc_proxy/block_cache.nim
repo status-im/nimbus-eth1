@@ -61,7 +61,7 @@ proc getByNumber*(
 
   return payloadResult
 
-proc getByHash*(
+proc getPayloadByHash*(
     self: BlockCache,
     hash: BlockHash): Opt[ExecutionPayloadV1] =
   return self.blocks.eq(hash)

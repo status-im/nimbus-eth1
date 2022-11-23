@@ -113,7 +113,7 @@ proc getPayloadByTagOrThrow(
   let tagResult = getPayloadByTag(proxy, quantityTag)
 
   if tagResult.isErr:
-     raise newException(ValueError, "No block for given tag " & quantityTag)
+    raise newException(ValueError, "No block stored for given tag " & quantityTag)
 
   return tagResult.get()
 
@@ -251,7 +251,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     return some(asBlockObject(executionPayload.get()))
 
   lcProxy.proxy.rpc("eth_getBlockByHash") do(blockHash: BlockHash, fullTransactions: bool) -> Option[BlockObject]:
-    let executionPayload = lcProxy.blockCache.getByHash(blockHash)
+    let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
 
     if executionPayload.isErr:
       return none(BlockObject)
