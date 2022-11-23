@@ -1,4 +1,4 @@
-# ligh client proxy
+# nimbus_verified_proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -26,7 +26,7 @@ import
 export forks
 
 logScope:
-  topics = "light_proxy"
+  topics = "verified_proxy"
 
 proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 
@@ -43,7 +43,7 @@ template encodeQuantity(value: Quantity): HexQuantityStr =
   hexQuantityStr(encodeQuantity(value.uint64))
 
 type
-  LightClientRpcProxy* = ref object
+  VerifiedRpcProxy* = ref object
     proxy: RpcProxy
     blockCache: BlockCache
     chainId: Quantity
@@ -81,14 +81,14 @@ func parseQuantityTag(blockTag: string): Result[QuantityTag, string] =
     let quantity = ? parseHexQuantity(tag)
     return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
 
-template checkPreconditions(proxy: LightClientRpcProxy) =
+template checkPreconditions(proxy: VerifiedRpcProxy) =
   if proxy.blockCache.isEmpty():
     raise newException(ValueError, "Syncing")
 
-template rpcClient(lcProxy: LightClientRpcProxy): RpcClient = lcProxy.proxy.getClient()
+template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient = lcProxy.proxy.getClient()
 
 proc getPayloadByTag(
-    proxy: LightClientRpcProxy,
+    proxy: VerifiedRpcProxy,
     quantityTag: string): results.Opt[ExecutionPayloadV1] {.raises: [ValueError, Defect].} =
   checkPreconditions(proxy)
 
@@ -107,7 +107,7 @@ proc getPayloadByTag(
     return proxy.blockCache.getByNumber(tag.blockNumber)
 
 proc getPayloadByTagOrThrow(
-    proxy: LightClientRpcProxy,
+    proxy: VerifiedRpcProxy,
     quantityTag: string): ExecutionPayloadV1 {.raises: [ValueError, Defect].} =
 
   let tagResult = getPayloadByTag(proxy, quantityTag)
@@ -117,7 +117,7 @@ proc getPayloadByTagOrThrow(
 
   return tagResult.get()
 
-proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
+proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_chainId") do() -> HexQuantityStr:
     return encodeQuantity(lcProxy.chainId)
 
@@ -259,18 +259,18 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     return some(asBlockObject(executionPayload.get()))
 
 proc new*(
-    T: type LightClientRpcProxy,
+    T: type VerifiedRpcProxy,
     proxy: RpcProxy,
     blockCache: BlockCache,
     chainId: Quantity): T =
 
-  return LightClientRpcProxy(
+  return VerifiedRpcProxy(
     proxy: proxy,
     blockCache: blockCache,
     chainId: chainId
   )
 
-proc verifyChaindId*(p: LightClientRpcProxy): Future[void] {.async.} =
+proc verifyChaindId*(p: VerifiedRpcProxy): Future[void] {.async.} =
   let localId = p.chainId
 
   # retry 2 times, if the data provider will fail despite re-tries, propagate

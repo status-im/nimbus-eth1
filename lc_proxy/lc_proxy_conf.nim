@@ -1,4 +1,4 @@
-# beacon_chain
+# nimbus_verified_proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -21,11 +21,11 @@ export net, conf
 
 proc defaultLCPDataDir*(): string =
   let dataDir = when defined(windows):
-    "AppData" / "Roaming" / "LightClientProxy"
+    "AppData" / "Roaming" / "NimbusVerifiedProxy"
   elif defined(macosx):
-    "Library" / "Application Support" / "LightClientProxy"
+    "Library" / "Application Support" / "NimbusVerifiedProxy"
   else:
-    ".cache" / "lightclientproxy"
+    ".cache" / "nimbus-verified-proxy"
 
   getHomeDir() / dataDir
 
@@ -40,7 +40,7 @@ type
     kind*: Web3UrlKind
     web3Url*: string
 
-type LcProxyConf* = object
+type VerifiedProxyConf* = object
   # Config
   configFile* {.
     desc: "Loads the configuration from a TOML file"
@@ -147,11 +147,6 @@ type LcProxyConf* = object
           "Peering agreements are established out of band and must be reciprocal."
     name: "direct-peer" .}: seq[string]
 
-  # Light client
-  trustedBlockRoot* {.
-    desc: "Recent trusted finalized block root to initialize light client from"
-    name: "trusted-block-root" .}: Eth2Digest
-
   rpcPort* {.
     desc: "HTTP port for the JSON-RPC server"
     defaultValue: 8545
@@ -163,7 +158,12 @@ type LcProxyConf* = object
     defaultValueDesc: $defaultAdminListenAddressDesc
     name: "rpc-address" .}: ValidIpAddress
 
-  # There is no default as its need to be provided by the user
+  # No default - Needs to be provided by the user
+  trustedBlockRoot* {.
+    desc: "Recent trusted finalized block root to initialize the consensus light client from"
+    name: "trusted-block-root" .}: Eth2Digest
+
+  # No default - Needs to be provided by the user
   web3url* {.
     desc: "url of web3 data provider"
     name: "web3-url" .}: ValidatedWeb3Url
@@ -184,7 +184,7 @@ proc parseCmdArg*(T: type ValidatedWeb3Url, p: TaintedString): T
 proc completeCmdArg*(T: type ValidatedWeb3Url, val: TaintedString): seq[string] =
   return @[]
 
-func asLightClientConf*(pc: LcProxyConf): LightClientConf =
+func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
   return LightClientConf(
     configFile: pc.configFile,
     logLevel: pc.logLevel,
@@ -210,7 +210,7 @@ func asLightClientConf*(pc: LcProxyConf): LightClientConf =
     stopAtEpoch: 0
   )
 
-# TODO: Cannot use ClientConfig in LcProxyConf due to the fact that
+# TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
 # it contain `set[TLSFlags]` which does not have proper toml serialization
 func asClientConfig*(url: ValidatedWeb3Url): ClientConfig =
   case url.kind

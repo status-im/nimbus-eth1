@@ -1,12 +1,9 @@
-# light client proxy
+# nimbus_verified_proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
-
-# This implements the pre-release proposal of the libp2p based light client sync
-# protocol. See https://github.com/ethereum/consensus-specs/pull/2802
 
 {.push raises: [Defect].}
 
@@ -47,7 +44,7 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
 proc run() {.raises: [Exception, Defect].} =
   {.pop.}
   var config = makeBannerAndConfig(
-    "Nimbus light client " & fullVersionStr, LcProxyConf)
+    "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
   {.push raises: [Defect].}
 
   # Required as both Eth2Node and LightClient requires correct config type
@@ -55,7 +52,7 @@ proc run() {.raises: [Exception, Defect].} =
 
   setupLogging(config.logLevel, config.logStdout, config.logFile)
 
-  notice "Launching light client proxy",
+  notice "Launching Nimbus verified proxy",
     version = fullVersionStr, cmdParams = commandLineParams(), config
 
   let
@@ -108,7 +105,7 @@ proc run() {.raises: [Exception, Defect].} =
       authHooks
     )
 
-    lcProxy = LightClientRpcProxy.new(rpcProxy, blockCache, chainId)
+    verifiedProxy = VerifiedRpcProxy.new(rpcProxy, blockCache, chainId)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -130,7 +127,7 @@ proc run() {.raises: [Exception, Defect].} =
       network, rng, lcConfig, cfg, forkDigests, getBeaconTime,
       genesis_validators_root, LightClientFinalizationMode.Optimistic)
 
-  lcProxy.installEthApiHandlers()
+  verifiedProxy.installEthApiHandlers()
 
   info "Listening to incoming network requests"
   network.initBeaconSync(cfg, forkDigests, genesisBlockRoot, getBeaconTime)
@@ -154,7 +151,7 @@ proc run() {.raises: [Exception, Defect].} =
   waitFor network.startListening()
   waitFor network.start()
   waitFor rpcProxy.start()
-  waitFor lcProxy.verifyChaindId()
+  waitFor verifiedProxy.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
