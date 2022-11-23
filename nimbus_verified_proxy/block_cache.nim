@@ -1,4 +1,4 @@
-# light client proxy
+# nimbus_verified_proxy
 # Copyright (c) 2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -13,9 +13,10 @@ import
   stew/[results, keyed_queue]
 
 
-## payloads received through block gossip (and validated by light client).
-## Payloads are stored in order of arrival. When cache is full the oldest
-## payload is deleted first.
+## Cache for payloads received through block gossip and validated by the
+## consensus light client.
+## The payloads are stored in order of arrival. When the cache is full, the
+## oldest payload is deleted first.
 type BlockCache* = ref object
   max: int
   blocks: KeyedQueue[BlockHash, ExecutionPayloadV1]

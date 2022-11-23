@@ -97,10 +97,10 @@ task utp_test, "Run uTP integration tests":
 task fluffy_test_portal_testnet, "Build test_portal_testnet":
   buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:chronosStrictException -d:unittest2DisableParamFiltering -d:PREFER_BLST_SHA256=false"
 
-## Light Client Proxy tasks
+## Nimbus Verified Proxy tasks
 
-task lc_proxy, "Build light client proxy":
-  buildBinary "lc_proxy", "lc_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
+task nimbus_verified_proxy, "Build Nimbus verified proxy":
+  buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
 
-task lc_proxy_test, "Run light proxy tests":
-  test "lc_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
+task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
+  test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
