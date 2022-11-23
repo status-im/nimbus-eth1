@@ -128,7 +128,7 @@ proc dumpTrace(txIndex: int, txHash: Hash256, traceResult: JsonNode) =
 
 proc exec(ctx: var TransContext,
           vmState: BaseVMState,
-          blockReward: UInt256,
+          stateReward: Option[UInt256],
           header: BlockHeader): ExecOutput =
 
   var
@@ -174,7 +174,8 @@ proc exec(ctx: var TransContext,
     )
     includedTx.add tx
 
-  if blockReward > 0.u256:
+  if stateReward.isSome:
+    let blockReward = stateReward.get()
     var mainReward = blockReward
     for uncle in ctx.env.ommers:
       var uncleReward = 8.u256 - uncle.delta.u256
@@ -355,7 +356,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       db.setupAlloc(ctx.alloc)
       db.persist(clearCache = false)
 
-    let res = exec(ctx, vmState, conf.stateReward.uint64.u256, header)
+    let res = exec(ctx, vmState, conf.stateReward, header)
 
     if vmState.hashError.len > 0:
       raise newError(ErrorMissingBlockhash, vmState.hashError)
