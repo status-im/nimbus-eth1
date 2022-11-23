@@ -19,6 +19,7 @@ import
   beacon_chain/eth1/eth1_monitor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
+  ./rpc_utils,
   ../validate_proof,
   ../block_cache
 
@@ -88,7 +89,7 @@ template rpcClient(lcProxy: LightClientRpcProxy): RpcClient = lcProxy.proxy.getC
 
 proc getPayloadByTag(
     proxy: LightClientRpcProxy,
-    quantityTag: string): ExecutionPayloadV1 {.raises: [ValueError, Defect].} =
+    quantityTag: string): results.Opt[ExecutionPayloadV1] {.raises: [ValueError, Defect].} =
   checkPreconditions(proxy)
 
   let tagResult = parseQuantityTag(quantityTag)
@@ -98,25 +99,25 @@ proc getPayloadByTag(
 
   let tag = tagResult.get()
 
-  var payload: ExecutionPayloadV1
-
   case tag.kind
   of LatestBlock:
-    # this will always be ok as we always validate that cache is not empty
-    payload = proxy.blockCache.latest.get
+    # this will always return some block, as we always checkPreconditions
+    return proxy.blockCache.latest
   of BlockNumber:
-    let payLoadResult = proxy.blockCache.getByNumber(tag.blockNumber)
-    if payLoadResult.isErr():
-      raise newException(
-        ValueError, "Block not stored in cache " & $tag.blockNumber
-      )
-    payload = payLoadResult.get
+    return proxy.blockCache.getByNumber(tag.blockNumber)
 
-  return payload
+proc getPayloadByTagOrThrow(
+    proxy: LightClientRpcProxy,
+    quantityTag: string): ExecutionPayloadV1 {.raises: [ValueError, Defect].} =
+
+  let tagResult = getPayloadByTag(proxy, quantityTag)
+
+  if tagResult.isErr:
+    raise newException(ValueError, "No block stored for given tag " & quantityTag)
+
+  return tagResult.get()
 
 proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
-  template payload(): Opt[ExecutionPayloadV1] = lcProxy.executionPayload
-
   lcProxy.proxy.rpc("eth_chainId") do() -> HexQuantityStr:
     return encodeQuantity(lcProxy.chainId)
 
@@ -132,7 +133,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
     # can mean different blocks and ultimatly piece received piece of state
     # must by validated against correct state root
     let
-      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding get_Balance", executionBn = blockNumber
@@ -156,7 +157,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(address: Address, slot: HexDataStr, quantityTag: string) -> HexDataStr:
     let
-      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       uslot = UInt256.fromHex(slot.string)
       blockNumber = executionPayload.blockNumber.uint64
 
@@ -174,7 +175,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(address: Address, quantityTag: string) -> HexQuantityStr:
     let
-      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     info "Forwarding eth_getTransactionCount", executionBn = blockNumber
@@ -198,7 +199,7 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
 
   lcProxy.proxy.rpc("eth_getCode") do(address: Address, quantityTag: string) -> HexDataStr:
     let
-      executionPayload = lcProxy.getPayloadByTag(quantityTag)
+      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
       blockNumber = executionPayload.blockNumber.uint64
 
     let
@@ -239,9 +240,23 @@ proc installEthApiHandlers*(lcProxy: LightClientRpcProxy) =
   lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
-  # TODO Respond to this calls using BlockCache
-  lcProxy.proxy.registerProxyMethod("eth_getBlockByNumber")
-  lcProxy.proxy.registerProxyMethod("eth_getBlockByHash")
+  # TODO currently we do not handle fullTransactions flag. It require updates on
+  # nim-web3 side
+  lcProxy.proxy.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
+    let executionPayload = lcProxy.getPayloadByTag(quantityTag)
+
+    if executionPayload.isErr:
+      return none(BlockObject)
+
+    return some(asBlockObject(executionPayload.get()))
+
+  lcProxy.proxy.rpc("eth_getBlockByHash") do(blockHash: BlockHash, fullTransactions: bool) -> Option[BlockObject]:
+    let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
+
+    if executionPayload.isErr:
+      return none(BlockObject)
+
+    return some(asBlockObject(executionPayload.get()))
 
 proc new*(
     T: type LightClientRpcProxy,
