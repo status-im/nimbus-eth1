@@ -19,8 +19,8 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../nimbus/rpc/cors,
-  ./rpc/rpc_eth_lc_api,
-  ./lc_proxy_conf,
+  ./rpc/rpc_eth_api,
+  ./nimbus_verified_proxy_conf,
   ./block_cache
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload

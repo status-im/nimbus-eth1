@@ -69,7 +69,7 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	update \
 	nimbus \
 	fluffy \
-	lc_proxy \
+	nimbus_verified_proxy \
 	test \
 	test-reproducibility \
 	clean \
@@ -230,16 +230,16 @@ utp-test: | build deps
 fluffy-test-portal-testnet: | build deps
 	$(ENV_SCRIPT) nim fluffy_test_portal_testnet $(NIM_PARAMS) nimbus.nims
 
-# Light Client Proxy related targets
+# Nimbus Verified Proxy related targets
 
-# Builds the lc proxy client
-lc-proxy: | build deps
+# Builds the nimbus_verified_proxy
+nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim lc_proxy $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
 
-# builds and runs the lc proxy test suite
-lc-proxy-test: | build deps
-	$(ENV_SCRIPT) nim lc_proxy_test $(NIM_PARAMS) nimbus.nims
+# builds and runs the nimbus_verified_proxy test suite
+nimbus-verified-proxy-test: | build deps
+	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
 
 # builds transition tool
 t8n: | build deps
@@ -259,7 +259,7 @@ evmstate_test: | build deps evmstate
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,lc_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
