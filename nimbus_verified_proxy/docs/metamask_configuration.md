@@ -3,11 +3,11 @@
 This document explains how to configure the proxy, and how to configure MetaMask
 to make use of the proxy.
 
-### 1. Building the Nimbus Light Client Proxy
+### 1. Building the Nimbus Verified Proxy
 
-First build the Nimbus Light Client Proxy as explained [here](../README.md#Build-light-client-proxy).
+First build the Nimbus Verified Proxy as explained [here](../README.md#Build-light-client-proxy).
 
-### 2. Configuring and running the Nimbus Light Client Proxy
+### 2. Configuring and running the Nimbus Verified Proxy
 
 To start the proxy for the Goerli network, run the following command (inserting your own `TRUSTED_BLOCK_ROOT` and Alchemy `API_KEY`):
 
@@ -16,14 +16,14 @@ To start the proxy for the Goerli network, run the following command (inserting 
 # From the nimbus-eth1 repository
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
 API_KEY=abcd # Replace this
-./build/lc_proxy \
+./build/nimbus_verified_proxy \
     --network=goerli \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
     --web3-url="wss://eth-goerli.g.alchemy.com/v2/${API_KEY}"
 ```
 
 
-After startup, the Nimbus Light Client Proxy will start looking for suitable peers in the network,
+After startup, the Nimbus Verified Proxy will start looking for suitable peers in the network,
 i.e peers which serve consensus light client data, and will then start syncing.
 During syncing most of the RPC endpoints will be inactive
 and will fail to respond to queries. This happens because the proxy cannot verify responses

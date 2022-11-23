@@ -1,6 +1,6 @@
-# Nimbus Light Client Proxy
+# Nimbus Verified Proxy
 
-[![Nimbus Light Client Proxy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/lc_proxy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/lc_proxy.yml)
+[![Nimbus Verified Proxy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/nimbus_verified_proxy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/nimbus_verified_proxy.yml)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 [![License: Apache](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@
 [![Discord: Nimbus](https://img.shields.io/badge/Discord-Nimbus-blue.svg)](https://discord.gg/XRxWahP)
 [![Status: #nimbus-general](https://img.shields.io/badge/Status-nimbus--general-blue.svg)](https://join.status.im/nimbus-general)
 
-The Nimbus Light Client Proxy is a very efficient light client for the Ethereum
+The Nimbus Verified Proxy is a very efficient light client for the Ethereum
 PoS network.
 
 It exposes the standard [Ethereum JSON RPC Execution API](https://github.com/ethereum/execution-apis)
@@ -20,30 +20,30 @@ The [consensus p2p light client](https://github.com/ethereum/consensus-specs/tre
 is used to efficiently follow the tip of the consensus chain and
 have access to the latest state hash.
 
-As such the Nimbus Light Client Proxy turns the untrusted web3 data provider
+As such the Nimbus Verified Proxy turns the untrusted web3 data provider
 into a verified data source, and it can be directly used by any wallet that
 relies on the Ethereum JSON RPC Execution API.
 
 
-### Build the Nimbus Light Client Proxy from source
+### Build the Nimbus Verified Proxy from source
 ```bash
 # Clone the nimbus-eth1 repository
 git clone git@github.com:status-im/nimbus-eth1.git
 cd nimbus-eth1
 
 # Run the build process
-make lc-proxy
+make nimbus_verified_proxy
 
 # See available command line options
-./build/lc_proxy --help
+./build/nimbus_verified_proxy --help
 ```
 
 
-### Run the Nimbus Light Client Proxy
+### Run the Nimbus Verified Proxy
 
 Two options need to be explicitly configured by the user:
 
-* `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Light Client Proxy.
+* `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Verified Proxy.
 
 * `--web3-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
 [Alchemy](https://www.alchemy.com/).
@@ -52,10 +52,9 @@ Two options need to be explicitly configured by the user:
     The latter is necessary to validate the provided data against the light client.
 
     A second requirement is that data served from provider needs to match with
-the ```--network``` option configured for the Nimbus Light Client Proxy. By default the light client proxy is configured to work on mainnet. Thus, the configured provider needs to serve mainnet data.
+the ```--network``` option configured for the Nimbus Verified Proxy. By default the proxy is configured to work on mainnet. Thus, the configured provider needs to serve mainnet data.
 This is verified on start-up by querying the provider its `eth_chainId` endpoint, and comparing the
-received chain id with the one configured locally. If this validation fails, the Nimbus Light
-Client Proxy will quit.
+received chain id with the one configured locally. If this validation fails, the Nimbus Verified Proxy will quit.
 
 > Note: Infura currently does not support the `eth_getProof` call.
 
@@ -82,42 +81,42 @@ To start the proxy for the Goerli network, run the following command (inserting 
 ```bash
 # From the nimbus-eth1 repository
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
-./build/lc_proxy \
+./build/nimbus_verified_proxy \
     --network=goerli \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
     --web3-url="wss://eth-goerli.g.alchemy.com/v2/<ApiKey>"
 ```
 
-### Using the Nimbus Light Client Proxy with existing Wallets
-The Nimbus Light Client Proxy exposes the standard Ethereum JSON RPC Execution API and can thus be used
+### Using the Nimbus Verified Proxy with existing Wallets
+The Nimbus Verified Proxy exposes the standard Ethereum JSON RPC Execution API and can thus be used
 as drop-in replacement for any Wallet that relies on this API.
 
 By doing so, it turns an untrusted web3 data provider into a verified data source.
 
-The Nimbus Light Client Proxy has been tested in combination with MetaMask.
+The Nimbus Verified Proxy has been tested in combination with MetaMask.
 
 The [MetaMask configuration page](./docs/metamask_configuration.md) explains how to configure the proxy, and how to configure MetaMask to make use of the proxy.
 
 
-### Update and rebuild the Nimbus Light Client Proxy
+### Update and rebuild the Nimbus Verified Proxy
 ```bash
 # From the nimbus-eth1 repository
 git pull
 # To bring the git submodules up to date
 make update
 
-make lc-proxy
+make nimbus_verified_proxy
 ```
 
-### Run the Nimbus Light Client Proxy test suite
+### Run the Nimbus Verified Proxy test suite
 ```bash
 # From the nimbus-eth1 repository
-make lc-proxy-test
+make nimbus-verified-proxy-test
 ```
 
 ### Windows support
 
-Follow the steps outlined [here](../README.md#windows) to build light client proxy on Windows.
+Follow the steps outlined [here](../README.md#windows) to build Nimbus Verified Proxy on Windows.
 
 
 ## For Developers
