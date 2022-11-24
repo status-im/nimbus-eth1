@@ -12,7 +12,7 @@ import
   std/[algorithm, sequtils, tables],
   chronicles,
   eth/[common, p2p, rlp, trie/nibbles],
-  stew/byteutils,
+  stew/[byteutils, interval_set],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_interpolate,
        hexary_inspect, hexary_paths, snapdb_desc, snapdb_persistent]
@@ -266,8 +266,8 @@ proc importAccounts*(
           proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
           topTag = accounts[^1].pathTag
         for w in proofStats.dangling:
-          if base <= w.partialPath.max(NodeKey).to(NodeTag) and
-             w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
+          let iv = w.partialPath.pathEnvelope
+          if base <= iv.maxPt and  iv.minPt <= topTag:
             # Extract dangling links which are inside the accounts range
             innerSubTrie.add w
           else:
@@ -290,7 +290,7 @@ proc importAccounts*(
         # nothing in between. Without proof, there can only be a complete
         # set/list of accounts. There must be a proof for an empty list.
         if not noBaseBoundCheck and
-           w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
+           w.partialPath.pathEnvelope.maxPt < bottomTag:
           return err(LowerBoundProofError)
         # Otherwise register left over entry
         gaps.innerGaps.add w

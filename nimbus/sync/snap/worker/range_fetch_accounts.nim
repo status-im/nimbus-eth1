@@ -39,7 +39,7 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/snapdb_accounts
+  ./db/[hexary_paths, snapdb_accounts]
 
 {.push raises: [Defect].}
 
@@ -164,9 +164,7 @@ proc accountsRangefetchImpl(
   # Punch holes into the reported range of received accounts from the network
   # if it there are gaps (described by dangling nodes.)
   for w in gaps.innerGaps:
-    discard processed.reduce(
-      w.partialPath.min(NodeKey).to(NodeTag),
-      w.partialPath.max(NodeKey).to(Nodetag))
+    discard processed.reduce w.partialPath.pathEnvelope
 
   # Update dangling nodes list unless healing is activated. The problem
   # with healing activated is, that a previously missing node that suddenly

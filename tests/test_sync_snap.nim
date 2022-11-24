@@ -409,6 +409,56 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
+    test "Dismantle path prefix envelopes":
+      doAssert 1 < accKeys.len
+      let
+        iv = NodeTagRange.new(accBaseTag, accKeys[^2].to(NodeTag))
+        ivMin = iv.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
+        ivMax = iv.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
+        pfxLen = ivMin.sharedPrefixLen ivMax
+      # Use some overlapping prefixes. Note that a prefix must refer to
+      # an existing node
+      for n in 0 .. pfxLen:
+        let
+          pfx = ivMin.slice(0, pfxLen - n).hexPrefixEncode
+          qfx = pfx.dismantle(root.to(NodeKey), iv, desc.hexaDB)
+
+        # Re-assemble intervals
+        let covered = NodeTagRangeSet.init()
+        for w in qfx:
+          let iv = pathEnvelope w
+          check iv.len == covered.merge iv
+
+        if covered.chunks == 1 and iv.minPt == low(NodeTag):
+          # Order: `iv` <= `covered`
+          check iv.maxPt <= covered.ge.value.minPt
+        elif covered.chunks == 1 and iv.maxPt == high(NodeTag):
+          # Order: `covered` <= `iv`
+          check covered.ge.value.maxPt <= iv.minPt
+        else:
+          # Covered contains two ranges were the gap is big enough for `iv`
+          check covered.chunks == 2
+          # Order: `covered.ge` <= `iv` <= `covered.le`
+          check covered.ge.value.maxPt <= iv.minPt
+          check iv.maxPt <= covered.le.value.minPt
+
+        # Must hold
+        check covered.le.value.minPt <= accKeys[^1].to(Nodetag)
+
+        when false: # or true:
+          let
+            cmaNlSp0 = ",\n" & repeat(" ",12)
+            cmaNlSpc = ",\n" & repeat(" ",13)
+          echo ">>> n=", n, " pfxMax=", pfxLen,
+            "\n         pfx=", pfx,
+            "\n       ivMin=", ivMin,
+            "\n       iv1st=", accKeys[0],
+            "\n       ivMax=", ivMax,
+            "\n      ivPast=", accKeys[^1],
+            "\n  covered=@[", toSeq(covered.increasing)
+                .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
+                .join(cmaNlSp0), "]",
+            "\n        => @[", qfx.mapIt(it.toHex).join(cmaNlSpc), "]"
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent state root registry":
