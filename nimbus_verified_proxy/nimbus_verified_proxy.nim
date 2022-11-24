@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   std/[os, strutils],
@@ -50,7 +53,7 @@ proc run() {.raises: [Exception, Defect].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
-  setupLogging(config.logLevel, config.logStdout, config.logFile)
+  setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Nimbus verified proxy",
     version = fullVersionStr, cmdParams = commandLineParams(), config

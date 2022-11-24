@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   std/[sequtils, typetraits, options],
@@ -36,8 +39,8 @@ proc isValidProof(
     key, value: seq[byte]): bool =
   try:
     # TODO: Investigate if this handles proof of non-existence.
-    # Probably not as bool is not expressive enough to say if proof is valid, but
-    # key actually does not exists in MPT
+    # Probably not as bool is not expressive enough to say if proof is valid,
+    # but key actually does not exists in MPT
     return isValidBranch(branch, rootHash, key, value)
   except RlpError:
     return false
@@ -85,7 +88,8 @@ proc getStorageData(
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
     key = toSeq(keccakHash(toBytesBE(storageProof.key)).data)
     encodedValue = rlp.encode(storageProof.value)
-    proofResult = verifyMptProof(storageMptNodes, account.storageRoot, key, encodedValue)
+    proofResult = verifyMptProof(
+      storageMptNodes, account.storageRoot, key, encodedValue)
 
   case proofResult.kind
   of MissingKey:

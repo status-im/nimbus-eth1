@@ -5,6 +5,11 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
+
 import
   std/typetraits,
   eth/common/eth_types as etypes,
@@ -22,7 +27,8 @@ template asEthHash(hash: BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
 
 proc calculateTransactionData(
-  items: openArray[TypedTransaction]): (etypes.Hash256, seq[TxHash], uint64) =
+    items: openArray[TypedTransaction]):
+    (etypes.Hash256, seq[TxHash], uint64) {.raises: [Defect, RlpError].} =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -37,7 +43,8 @@ proc calculateTransactionData(
     txHashes.add(toFixedBytes(keccakHash(tx)))
   return (tr.rootHash(), txHashes, txSize)
 
-func blockHeaderSize(payload: ExecutionPayloadV1, txRoot: etypes.Hash256): uint64 =
+func blockHeaderSize(
+    payload: ExecutionPayloadV1, txRoot: etypes.Hash256): uint64 =
   let bh = etypes.BlockHeader(
     parentHash    : payload.parentHash.asEthHash,
     ommersHash    : etypes.EMPTY_UNCLE_HASH,
@@ -58,8 +65,9 @@ func blockHeaderSize(payload: ExecutionPayloadV1, txRoot: etypes.Hash256): uint6
   )
   return uint64(len(rlp.encode(bh)))
 
-proc asBlockObject*(p: ExecutionPayloadV1): BlockObject =
-  # TODO currently we always calculate txHashes as BlockObject does not have
+proc asBlockObject*(
+    p: ExecutionPayloadV1): BlockObject {.raises: [Defect, RlpError].} =
+  # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level
   let (txRoot, txHashes, txSize) = calculateTransactionData(p.transactions)
@@ -82,7 +90,7 @@ proc asBlockObject*(p: ExecutionPayloadV1): BlockObject =
     timestamp: p.timestamp,
     nonce: some(default(FixedBytes[8])),
     size: Quantity(blockSize),
-    # TODO It does not matter what we put here in after merge blocks.
+    # TODO: It does not matter what we put here after merge blocks.
     # Other projects like `helios` return `0`, data providers like alchemy return
     # transition difficulty. For now retruning `0` as this is a bit easier to do.
     totalDifficulty: UInt256.zero,
