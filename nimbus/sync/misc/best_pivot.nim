@@ -33,6 +33,10 @@ const
   pivotMinPeersToStartSync* = 2
     ## Wait for consensus of at least this number of peers before syncing.
 
+  pivotFailCountMax* = 3
+    ## Stop after a peer fails too often while negotiating. This happens if
+    ## a peer responses repeatedly with useless data.
+
 type
   BestPivotCtxRef* = ref object of RootRef
     ## Data shared by all peers.
@@ -47,6 +51,7 @@ type
     header: Option[BlockHeader] ## Pivot header (if any)
     ctrl: BuddyCtrlRef          ## Control and state settings
     peer: Peer                  ## network peer
+    comFailCount: int           ## Beware of repeated network errors
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -139,7 +144,11 @@ proc getBestHeader(
     return err()
 
   if hdrResp.isNone:
-    trace trEthRecvReceivedBlockHeaders, peer, reqLen, respose="n/a"
+    bp.comFailCount.inc
+    trace trEthRecvReceivedBlockHeaders, peer, reqLen,
+      response="n/a", comFailCount=bp.comFailCount
+    if pivotFailCountMax < bp.comFailCount:
+      bp.ctrl.zombie = true
     return err()
 
   let hdrRespLen = hdrResp.get.headers.len
@@ -148,6 +157,7 @@ proc getBestHeader(
       header = hdrResp.get.headers[0]
       blockNumber = header.blockNumber
     trace trEthRecvReceivedBlockHeaders, peer, hdrRespLen, blockNumber
+    bp.comFailCount = 0 # reset fail count
     return ok(header)
 
   trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
