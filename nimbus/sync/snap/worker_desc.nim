@@ -56,21 +56,12 @@ type
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
     lockTriePerusal*: bool             ## Only one process at a time
 
-  SnapHealingState* = enum
-    ## State of healing process. The `HealerRunning` state indicates that
-    ## dangling and/or missing nodes have been temprarily removed from the
-    ## batch queue while processing.
-    HealerIdle
-    HealerRunning
-    HealerDone
-
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download
     fetchAccounts*: SnapRangeBatchRef  ## Set of accounts ranges to fetch
-    accountsState*: SnapHealingState   ## All accounts have been processed
     healThresh*: float                 ## Start healing when fill factor reached
 
     # Storage slots download

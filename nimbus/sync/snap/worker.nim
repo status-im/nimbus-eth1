@@ -20,7 +20,7 @@ import
   ".."/[protocol, sync_desc],
   ./worker/[pivot_helper, ticker],
   ./worker/com/com_error,
-  ./worker/db/[hexary_desc, snapdb_check, snapdb_desc, snapdb_pivot],
+  ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   "."/[constants, range_desc, worker_desc]
 
 {.push raises: [Defect].}
@@ -221,10 +221,6 @@ proc runDaemon*(ctx: SnapCtxRef) {.async.} =
         ctx.data.ticker.stopRecovery()
     return
 
-  # Update logging
-  if not ctx.data.ticker.isNil:
-    ctx.data.ticker.stopRecovery()
-
 
 proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ## Enabled while
@@ -248,38 +244,6 @@ proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
   let ctx = buddy.ctx
   ctx.poolMode = false
   result = true
-
-  block:
-    let rc = ctx.data.pivotTable.lastValue
-    if rc.isOk:
-
-      # Check whether last pivot accounts and storage are complete.
-      let
-        env = rc.value
-        peer = buddy.peer
-        pivot = "#" & $env.stateHeader.blockNumber # for logging
-
-      if not env.storageDone:
-
-        # Check whether accounts download is complete
-        if env.fetchAccounts.unprocessed.isEmpty():
-
-          # FIXME: This check might not be needed. It will visit *every* node
-          #        in the hexary trie for checking the account leaves.
-          #
-          #        Note: This is insane on main net
-          if buddy.checkAccountsTrieIsComplete(env):
-            env.accountsState = HealerDone
-
-            # Check whether storage slots are complete
-            if env.fetchStorageFull.len == 0 and
-               env.fetchStoragePart.len == 0:
-              env.storageDone = true
-
-      when extraTraceMessages:
-        trace "Checked for pivot DB completeness", peer, pivot,
-          nAccounts=env.nAccounts, accountsState=env.accountsState,
-          nSlotLists=env.nSlotLists, storageDone=env.storageDone
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
@@ -317,7 +281,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   ctx.data.pivotTable.beforeTopMostlyClean()
 
   # This one is the syncing work horse which downloads the database
-  let syncActionContinue = await env.execSnapSyncAction(buddy)
+  await env.execSnapSyncAction(buddy)
+
+  if env.obsolete:
+    return # pivot has changed
 
   # Save state so sync can be partially resumed at next start up
   let
@@ -337,29 +304,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
           nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
           processed, nStoQu, blobSize=rc.value
 
-  if not syncActionContinue:
-    return
-
-  # Check whether there are more accounts to fetch.
-  #
-  # Note that some other process might have temporarily borrowed from the
-  # `fetchAccounts.unprocessed` list. Whether we are done can only be decided
-  # if only a single buddy is active. S be it.
-  if env.fetchAccounts.unprocessed.isEmpty():
-
-    # Debugging log: analyse pivot against database
-    warn "Analysing accounts database -- might be slow", peer, pivot
-    discard buddy.checkAccountsListOk(env)
-
-    # Check whether pivot download is complete.
-    if env.fetchStorageFull.len == 0 and
-       env.fetchStoragePart.len == 0:
-      trace "Running pool mode for verifying completeness", peer, pivot
-      buddy.ctx.poolMode = true
-
-    # Debugging log: analyse pivot against database
-    warn "Analysing storage slots database -- might be slow", peer, pivot
-    discard buddy.checkStorageSlotsTrieIsComplete(env)
+  if buddy.ctrl.stopped:
+    return # peer worker has gone
 
 # ------------------------------------------------------------------------------
 # End

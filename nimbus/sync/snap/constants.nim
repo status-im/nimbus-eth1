@@ -83,7 +83,7 @@ const
     ## nodes to allow for a pseudo -task switch.
 
 
-  healAccountsTrigger* = 0.99
+  healAccountsCoverageTrigger* = 0.999
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
@@ -94,6 +94,23 @@ const
     ## account ranges. This in turn leads to smaller but more range requests
     ## over the network. More requests might be a disadvantage if peers only
     ## serve a maximum number requests (rather than data.)
+
+  healAccountsPivotTriggerMinFactor* = 0.17
+    ## Additional condition to meed before starting healing. The current
+    ## pivot must have at least this much processed as recorded in the
+    ## `processed` ranges set. This is the minimim value (see below.)
+
+  healAccountsPivotTriggerWeight* = 0.01
+  healAccountsPivotTriggerNMax* = 10
+    ## Enable healing not before the `processed` ranges set fill factor has
+    ## at least the following value.
+    ## ::
+    ##   MinFactor + max(0, NMax - pivotTable.len) * Weight
+    ##
+    ## (the `healAccountsPivotTrigger` prefix of the constant names is ommited.)
+    ##
+    ## This effects in favouring late healing when more pivots have been
+    ## downloaded.
 
   healAccountsBatchFetchMax* = 10 * 1024
     ## Keep on gloing in healing task up until this many nodes have been
@@ -142,7 +159,7 @@ const
     ## Set 0 to disable.
 
 static:
-  doAssert healAccountsTrigger < 1.0 # larger values make no sense
+  doAssert healAccountsCoverageTrigger < 1.0 # larger values make no sense
   doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
   doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
 

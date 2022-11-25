@@ -36,6 +36,11 @@ proc init(batch: SnapRangeBatchRef; ctx: SnapCtxRef) =
   batch.unprocessed.init()
   batch.processed = NodeTagRangeSet.init()
 
+  # Initialise partial path the envelope of which covers the full range of
+  # account keys `0..high(NodeTag)`. This will trigger healing on the full
+  # range all possible keys.
+  batch.checkNodes.add @[0.byte]
+
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
   if ctx.data.coveredAccounts.isFull:
@@ -123,8 +128,18 @@ proc update*(
         let rc = pivotTable.secondKey
         if rc.isOk:
           pivotTable.del rc.value
+
+      # Update healing threshold for top pivot entry
+      topEnv = pivotTable.lastValue.value
+
     else:
       discard pivotTable.lruAppend(header.stateRoot, env, ctx.buddiesMax)
+
+    # Update healing threshold
+    let
+      slots = max(0, healAccountsPivotTriggerNMax - pivotTable.len)
+      delta = slots.float * healAccountsPivotTriggerWeight
+    topEnv.healThresh = healAccountsPivotTriggerMinFactor + delta
 
 
 proc tickerStats*(
@@ -189,13 +204,39 @@ proc tickerStats*(
 # Public functions: particular pivot
 # ------------------------------------------------------------------------------
 
+proc pivotAccountsComplete*(
+    env: SnapPivotRef;              ## Current pivot environment
+      ): bool =
+  ## Returns `true` if accounts are fully available for this this pivot.
+  env.fetchAccounts.processed.isFull
+
+
+proc pivotAccountsHealingOk*(
+    env: SnapPivotRef;              ## Current pivot environment
+    ctx: SnapCtxRef;                ## Some global context
+      ): bool =
+  ## Returns `true` if accounts healing is enabled for this pivot.
+  ##
+  if not env.pivotAccountsComplete():
+    # Only start accounts healing if there is some completion level, already.
+    #
+    # We check against the global coverage factor, i.e. a measure for how much
+    # of the total of all accounts have been processed. Even if the hexary trie
+    # database for the current pivot state root is sparsely filled, there is a
+    # good chance that it can inherit some unchanged sub-trie from an earlier
+    # pivot state root download. The healing process then works like sort of
+    # glue.
+    if healAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
+      # Ditto for pivot.
+      if env.healThresh <= env.fetchAccounts.processed.fullFactor:
+        return true
+
+
 proc execSnapSyncAction*(
     env: SnapPivotRef;              ## Current pivot environment
     buddy: SnapBuddyRef;            ## Worker peer
-      ): Future[bool]
-      {.async.} =
-  ## Execute a synchronisation run. The return code is `true` if a full
-  ## synchronisation cycle could be executed.
+      ) {.async.} =
+  ## Execute a synchronisation run.
   let
     ctx = buddy.ctx
 
@@ -205,52 +246,28 @@ proc execSnapSyncAction*(
     if snapStorageSlotsQuPrioThresh < nStoQu:
       await buddy.rangeFetchStorageSlots(env)
       if buddy.ctrl.stopped or env.obsolete:
-        return false
+        return
 
-  if env.accountsState != HealerDone:
+  if not env.pivotAccountsComplete():
     await buddy.rangeFetchAccounts(env)
     if buddy.ctrl.stopped or env.obsolete:
-      return false
+      return
 
     await buddy.rangeFetchStorageSlots(env)
     if buddy.ctrl.stopped or env.obsolete:
-      return false
+      return
 
-    if not ctx.data.accountsHealing:
-      # Only start healing if there is some completion level, already.
-      #
-      # We check against the global coverage factor, i.e. a measure for how
-      # much of the total of all accounts have been processed. Even if the
-      # hexary trie database for the current pivot state root is sparsely
-      # filled, there is a good chance that it can inherit some unchanged
-      # sub-trie from an earlier pivor state root download. The healing
-      # process then works like sort of glue.
-      if 0 < env.nAccounts:
-        if healAccountsTrigger <= ctx.data.coveredAccounts.fullFactor:
-          ctx.data.accountsHealing = true
-
-    if ctx.data.accountsHealing:
-      # Can only run a single accounts healer instance at a time. This
-      # instance will clear the batch queue so there is nothing to do for
-      # another process.
-      if env.accountsState == HealerIdle:
-        env.accountsState = HealerRunning
-        await buddy.healAccounts(env)
-        env.accountsState = HealerIdle
-
-        if buddy.ctrl.stopped or env.obsolete:
-          return false
+    if env.pivotAccountsHealingOk(ctx):
+      await buddy.healAccounts(env)
+      if buddy.ctrl.stopped or env.obsolete:
+        return
 
       # Some additional storage slots might have been popped up
       await buddy.rangeFetchStorageSlots(env)
       if buddy.ctrl.stopped or env.obsolete:
-        return false
+        return
 
   await buddy.healStorageSlots(env)
-  if buddy.ctrl.stopped or env.obsolete:
-    return false
-
-  return true
 
 
 proc saveCheckpoint*(
