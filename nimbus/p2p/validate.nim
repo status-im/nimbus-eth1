@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,8 +15,7 @@ import
   ../transaction,
   ../utils/[difficulty, header, pow],
   ".."/[vm_state, vm_types, forks, errors],
-  ./dao,
-  ./gaslimit,
+  "."/[dao, gaslimit, withdrawals],
   chronicles,
   eth/[common, rlp],
   nimcrypto/utils,
@@ -129,7 +128,7 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
     if checkSealOK:
       return pow.validateSeal(header)
 
-  result = ok()
+  db.validateWithdrawals(header)
 
 func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
                                                Result[void,string] =

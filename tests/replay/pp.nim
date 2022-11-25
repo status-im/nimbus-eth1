@@ -1,6 +1,6 @@
 
 # Nimbus
-# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -54,7 +54,8 @@ proc pp*(h: BlockHeader; sep = " "): string =
     &"txRoot={h.txRoot.pp}{sep}" &
     &"receiptRoot={h.receiptRoot.pp}{sep}" &
     &"stateRoot={h.stateRoot.pp}{sep}" &
-    &"baseFee={h.baseFee}"
+    &"baseFee={h.baseFee}{sep}" &
+    &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH)}"
 
 proc pp*(g: Genesis; sep = " "): string =
   "" &

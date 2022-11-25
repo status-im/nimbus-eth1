@@ -1,5 +1,5 @@
 # nim-eth
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -17,7 +17,7 @@ import
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
   "."/[protocol, types],
-  ../p2p/[chain, clique/clique_sealer, gaslimit],
+  ../p2p/[chain, clique/clique_sealer, gaslimit, withdrawals],
   ../db/db_chain,
   ../utils/difficulty,
   ".."/[constants, utils]
@@ -198,7 +198,7 @@ proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNu
         period
       return false
 
-  let res = db.validateGasLimitOrBaseFee(header, parentHeader)
+  var res = db.validateGasLimitOrBaseFee(header, parentHeader)
   if res.isErr:
     trace "validate gaslimit error",
       msg=res.error
@@ -212,6 +212,12 @@ proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNu
         height=height.get(),
         parentNumber=parentHeader.blockNumber
       return false
+
+  res = db.validateWithdrawals(header)
+  if res.isErr:
+    trace "validate withdrawals error",
+      msg=res.error
+    return false
 
   return true
 
