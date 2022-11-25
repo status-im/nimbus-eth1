@@ -143,8 +143,10 @@ proc importStorageSlots(
   let
     tmpDb = SnapDbBaseRef.init(ps, data.account.storageRoot.to(NodeKey))
   var
-    slots: seq[RLeafSpecs]
-    dangling: seq[NodeSpecs]
+    slots: seq[RLeafSpecs]        # validated slots to add to database
+    dangling: seq[NodeSpecs]      # return value
+    proofStats: TrieNodeStat      # `proof` data dangling links
+    innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   if 0 < proof.len:
     let rc = tmpDb.mergeProofs(ps.peer, proof)
     if rc.isErr:
@@ -156,17 +158,17 @@ proc importStorageSlots(
     slots = rc.value
 
   if 0 < slots.len:
-    var innerSubTrie: seq[NodeSpecs]
     if 0 < proof.len:
       # Inspect trie for dangling nodes. This is not a big deal here as the
       # proof data is typically small.
-      let
-        proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
-        topTag = slots[^1].pathTag
+      let topTag = slots[^1].pathTag
       for w in proofStats.dangling:
         let iv = w.partialPath.pathEnvelope
-        if base <= iv.maxPt and iv.minPt <= topTag:
-          # Extract dangling links which are inside the accounts range
+        if iv.maxPt < base or topTag < iv.minPt:
+          # Dangling link with partial path envelope outside accounts range
+          discard
+        else:
+          # Overlapping partial path envelope.
           innerSubTrie.add w
 
     # Build partial hexary trie
@@ -179,16 +181,18 @@ proc importStorageSlots(
     # trie (if any).
     let bottomTag = slots[0].pathTag
     for w in innerSubTrie:
-      if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-        continue
-      # Verify that `base` is to the left of the first slot and there is
-      # nothing in between. Without proof, there can only be a complete
-      # set/list of slots. There must be a proof for an empty list.
-      if not noBaseBoundCheck and
-         w.partialPath.pathEnvelope.maxPt < bottomTag:
-        return err(LowerBoundProofError)
-      # Otherwise register left over entry
-      dangling.add w
+      if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+        if not noBaseBoundCheck:
+          # Verify that `base` is to the left of the first slot and there is
+          # nothing in between.
+          #
+          # Without `proof` data available there can only be a complete
+          # set/list of accounts so there are no dangling nodes in the first
+          # place. But there must be `proof` data for an empty list.
+          if w.partialPath.pathEnvelope.maxPt < bottomTag:
+            return err(LowerBoundProofError)
+        # Otherwise register left over entry
+        dangling.add w
 
     # Commit to main descriptor
     for k,v in tmpDb.hexaDb.tab.pairs:
@@ -199,6 +203,13 @@ proc importStorageSlots(
   elif proof.len == 0:
     # There must be a proof for an empty argument list.
     return err(LowerBoundProofError)
+
+  else:
+    if not noBaseBoundCheck:
+      for w in proofStats.dangling:
+        if base <= w.partialPath.pathEnvelope.maxPt:
+          return err(LowerBoundProofError)
+    dangling = proofStats.dangling
 
   ok(dangling)
 

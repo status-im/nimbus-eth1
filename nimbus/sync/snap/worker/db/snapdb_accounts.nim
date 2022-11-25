@@ -169,29 +169,6 @@ proc getAccountFn*(pv: SnapDbRef): HexaryGetFn =
   return proc(key: openArray[byte]): Blob = getFn(key)
 
 
-proc nodeExists*(
-    ps: SnapDbAccountsRef;    ## Re-usable session descriptor
-    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
-    persistent = false;       ## Whether to check data on disk
-      ): bool =
-  ## ..
-  if not persistent:
-    return ps.hexaDb.tab.hasKey(node.nodeKey.to(RepairKey))
-  try:
-    return 0 < ps.getAccountFn()(node.nodeKey.ByteArray32).len
-  except Exception as e:
-    raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
-
-proc nodeExists*(
-    pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
-    peer: Peer;               ## For log messages
-    root: Hash256;            ## State root
-    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
-      ): bool =
-  ## Variant of `nodeExists()` for presistent storage, only.
-  SnapDbAccountsRef.init(pv, root, peer).nodeExists(node, persistent=true)
-
-
 proc importAccounts*(
     ps: SnapDbAccountsRef;    ## Re-usable session descriptor
     base: NodeTag;            ## Before or at first account entry in `data`
@@ -245,9 +222,10 @@ proc importAccounts*(
   ##
   ## Note that the `peer` argument is for log messages, only.
   var
-    accounts: seq[RLeafSpecs]
-    outside: seq[NodeSpecs]
-    gaps: SnapAccountsGaps
+    accounts: seq[RLeafSpecs]     # validated accounts to add to database
+    gaps: SnapAccountsGaps        # return value
+    proofStats: TrieNodeStat      # `proof` data dangling links
+    innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   try:
     if 0 < data.proof.len:
       let rc = ps.mergeProofs(ps.peer, data.proof)
@@ -259,24 +237,25 @@ proc importAccounts*(
         return err(rc.error)
       accounts = rc.value
 
+    # Inspect trie for dangling nodes from prrof data (if any.)
+    if 0 < data.proof.len:
+      proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
+
     if 0 < accounts.len:
-      var innerSubTrie: seq[NodeSpecs]
       if 0 < data.proof.len:
         # Inspect trie for dangling nodes. This is not a big deal here as the
         # proof data is typically small.
-        let
-          proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
-          topTag = accounts[^1].pathTag
+        let topTag = accounts[^1].pathTag
         for w in proofStats.dangling:
           let iv = w.partialPath.pathEnvelope
-          if base <= iv.maxPt and  iv.minPt <= topTag:
-            # Extract dangling links which are inside the accounts range
-            innerSubTrie.add w
+          if iv.maxPt < base or topTag < iv.minPt:
+            # Dangling link with partial path envelope outside accounts range
+            gaps.dangling.add w
           else:
-            # Otherwise register outside links
-            outside.add w
+            # Overlapping partial path envelope.
+            innerSubTrie.add w
 
-      # Build partial hexary trie
+      # Build partial or full hexary trie
       let rc = ps.hexaDb.hexaryInterpolate(
         ps.root, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
@@ -286,34 +265,34 @@ proc importAccounts*(
       # trie (if any).
       let bottomTag = accounts[0].pathTag
       for w in innerSubTrie:
-        if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-          continue
-        # Verify that `base` is to the left of the first account and there is
-        # nothing in between. Without proof, there can only be a complete
-        # set/list of accounts. There must be a proof for an empty list.
-        if not noBaseBoundCheck and
-           w.partialPath.pathEnvelope.maxPt < bottomTag:
-          return err(LowerBoundProofError)
-        # Otherwise register left over entry
-        gaps.innerGaps.add w
+        if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+          if not noBaseBoundCheck:
+            # Verify that `base` is to the left of the first account and there
+            # is nothing in between.
+            #
+            # Without `proof` data available there can only be a complete
+            # set/list of accounts so there are no dangling nodes in the first
+            # place. But there must be `proof` data for an empty list.
+            if w.partialPath.pathEnvelope.maxPt < bottomTag:
+              return err(LowerBoundProofError)
+          # Otherwise register left over entry
+          gaps.innerGaps.add w
 
       if persistent:
         let rc = ps.hexaDb.persistentAccounts(ps)
         if rc.isErr:
           return err(rc.error)
-        # Verify outer links against database
-        let getFn = ps.getAccountFn
-        for w in outside:
-          if w.nodeKey.ByteArray32.getFn().len == 0:
-            gaps.dangling.add w
-      else:
-        for w in outside:
-          if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-            gaps.dangling.add w
 
     elif data.proof.len == 0:
       # There must be a proof for an empty argument list.
       return err(LowerBoundProofError)
+
+    else:
+      if not noBaseBoundCheck:
+        for w in proofStats.dangling:
+          if base <= w.partialPath.pathEnvelope.maxPt:
+            return err(LowerBoundProofError)
+      gaps.dangling = proofStats.dangling
 
   except RlpError:
     return err(RlpEncoding)

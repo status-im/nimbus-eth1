@@ -99,7 +99,6 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
-    accountsHealing*: bool             ## Activates accounts DB healing
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
     noRecovery*: bool                  ## Ignore recovery checkpoints
 

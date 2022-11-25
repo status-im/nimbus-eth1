@@ -61,7 +61,7 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_storage_ranges],
-  ./db/snapdb_storage_slots
+  ./db/[hexary_error, snapdb_storage_slots]
 
 {.push raises: [Defect].}
 
@@ -131,28 +131,24 @@ proc getNextSlotItemPartial(
 
   for kvp in env.fetchStoragePart.nextPairs:
     if not kvp.data.slots.isNil:
-      # Extract first interval and return single item request queue
-      for ivSet in kvp.data.slots.unprocessed:
-        let rc = ivSet.ge()
-        if rc.isOk:
+      # Extract range and return single item request queue
+      let rc = kvp.data.slots.unprocessed.fetch(maxLen = high(UInt256))
+      if rc.isOk:
 
-          # Extraxt this interval from the range set
-          discard ivSet.reduce rc.value
+        # Delete from batch queue if the range set becomes empty
+        if kvp.data.slots.unprocessed.isEmpty:
+          env.fetchStoragePart.del(kvp.key)
 
-          # Delete from batch queue if the range set becomes empty
-          if kvp.data.slots.unprocessed.isEmpty:
-            env.fetchStoragePart.del(kvp.key)
+        when extraTraceMessages:
+          trace logTxt "fetch partial", peer,
+            nSlotLists=env.nSlotLists,
+            nStorageQuPart=env.fetchStoragePart.len,
+            subRange=rc.value, account=kvp.data.accKey
 
-          when extraTraceMessages:
-            trace logTxt "fetch partial", peer,
-              nSlotLists=env.nSlotLists,
-              nStorageQuPart=env.fetchStoragePart.len,
-              subRange=rc.value, account=kvp.data.accKey
-
-          return @[AccountSlotsHeader(
-            accKey:      kvp.data.accKey,
-            storageRoot: kvp.key,
-            subRange:    some rc.value)]
+        return @[AccountSlotsHeader(
+          accKey:      kvp.data.accKey,
+          storageRoot: kvp.key,
+          subRange:    some rc.value)]
 
     # Oops, empty range set? Remove range and move item to the full requests
     kvp.data.slots = nil
@@ -231,20 +227,54 @@ proc storeStoragesSingleBatch(
       for w in report:
         # All except the last item always index to a node argument. The last
         # item has been checked for, already.
-        let inx = w.slot.get
+        let
+          inx = w.slot.get
+          acc = stoRange.data.storages[inx].account
 
-        # if w.error in {RootNodeMismatch, RightBoundaryProofFailed}:
-        #   ???
+        if w.error == RootNodeMismatch:
+          # Some pathological case, needs further investigation. For the
+          # moment, provide partial fetches.
+          const
+            halfTag = (high(UInt256) div 2).NodeTag
+            halfTag1 = halfTag + 1.u256
+          env.fetchStoragePart.merge [
+            AccountSlotsHeader(
+              accKey:      acc.accKey,
+              storageRoot: acc.storageRoot,
+              subRange:    some NodeTagRange.new(low(NodeTag), halfTag)),
+            AccountSlotsHeader(
+              accKey:      acc.accKey,
+              storageRoot: acc.storageRoot,
+              subRange:    some NodeTagRange.new(halfTag1, high(NodeTag)))]
 
-        # Reset any partial result (which would be the last entry) to
-        # requesting the full interval. So all the storage slots are
-        # re-fetched completely for this account.
-        env.fetchStorageFull.merge AccountSlotsHeader(
-          accKey:      stoRange.data.storages[inx].account.accKey,
-          storageRoot: stoRange.data.storages[inx].account.storageRoot)
+        elif w.error == RightBoundaryProofFailed and
+             acc.subRange.isSome and 1 < acc.subRange.unsafeGet.len:
+          # Some pathological case, needs further investigation. For the
+          # moment, provide a partial fetches.
+          let
+            iv = acc.subRange.unsafeGet
+            halfTag = iv.minPt + (iv.len div 2)
+            halfTag1 = halfTag + 1.u256
+          env.fetchStoragePart.merge [
+            AccountSlotsHeader(
+              accKey:      acc.accKey,
+              storageRoot: acc.storageRoot,
+              subRange:    some NodeTagRange.new(iv.minPt, halfTag)),
+            AccountSlotsHeader(
+              accKey:      acc.accKey,
+              storageRoot: acc.storageRoot,
+              subRange:    some NodeTagRange.new(halfTag1, iv.maxPt))]
 
-        # Last entry might be partial
-        if inx == topStoRange:
+        else:
+          # Reset any partial result (which would be the last entry) to
+          # requesting the full interval. So all the storage slots are
+          # re-fetched completely for this account.
+          env.fetchStorageFull.merge AccountSlotsHeader(
+            accKey:      acc.accKey,
+            storageRoot: acc.storageRoot)
+
+          # Last entry might be partial (if any)
+          #
           # Forget about partial result processing if the last partial entry
           # was reported because
           # * either there was an error processing it
