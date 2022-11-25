@@ -16,15 +16,12 @@ import
   ./extract_consensus_data
 
 proc processChainData(cd: ChainData): TestStatus =
-  var np: NetworkParams
-  doAssert decodeNetworkParams(cd.genesis, np)
-
   let
-    networkId = NetworkId(np.config.chainId)
+    networkId = NetworkId(cd.params.config.chainId)
     chainDB = newBaseChainDB(newMemoryDB(),
       pruneTrie = false,
       networkId,
-      np
+      cd.params
     )
 
   initializeEmptyDb(chainDB)

@@ -349,6 +349,14 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
   return true
 
+proc parseGenesis*(data: string): Genesis
+     {.gcsafe, raises: [Defect,CatchableError].} =
+  try:
+    result = Json.decode(data, Genesis, allowUnknownFields = true)
+  except JsonReaderError as e:
+    error "Invalid genesis config file format", msg=e.formatMsg("")
+    return nil
+
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   ## Map to EVM fork, which doesn't include the DAO or Glacier forks.
   if number >= c.cancunBlock: FkCancun

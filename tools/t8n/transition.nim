@@ -242,6 +242,12 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 
 
   return h
 
+proc parseChainConfig(network: string): ChainConfig =
+  try:
+    result = getChainConfig(network)
+  except ValueError as e:
+    raise newError(ErrorConfig, e.msg)
+
 proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
   wrapException:
     var tracerFlags = {
@@ -261,7 +267,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
-    let chainConfig = getChainConfig(conf.stateFork)
+    let chainConfig = parseChainConfig(conf.stateFork)
     chainConfig.chainId = conf.stateChainId.ChainId
 
     # We need to load three things: alloc, env and transactions.

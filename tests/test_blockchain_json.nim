@@ -1,9 +1,12 @@
 # Nimbus
 # Copyright (c) 2018 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
 
 import
   unittest2, json, os, tables, strutils, sets,
@@ -17,7 +20,8 @@ import
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, validate],
   ../nimbus/chain_config,
-  ../stateless/[tree_from_witness, witness_types]
+  ../stateless/[tree_from_witness, witness_types],
+  ../tools/common/helpers
 
 type
   SealEngine = enum
@@ -113,87 +117,6 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
         t.hasException = true
 
     result.add t
-
-func vmConfiguration(network: string, c: var ChainConfig) =
-  const
-    H = high(BlockNumber)
-    Zero = 0.toBlockNumber
-    Five = 5.toBlockNumber
-
-  proc assignNumber(c: var ChainConfig,
-                    fork: Fork, n: BlockNumber) =
-    var number: array[Fork, BlockNumber]
-    var z = low(Fork)
-    while z < fork:
-      number[z] = Zero
-      z = z.succ
-    number[fork] = n
-    z = high(Fork)
-    while z > fork:
-      number[z] = H
-      z = z.pred
-
-    c.daoForkSupport = false
-    c.homesteadBlock      = number[FkHomestead]
-    c.daoForkBlock        = number[FkHomestead]
-    c.eip150Block         = number[FkTangerine]
-    c.eip155Block         = number[FkSpurious]
-    c.eip158Block         = number[FkSpurious]
-    c.byzantiumBlock      = number[FkByzantium]
-    c.constantinopleBlock = number[FkConstantinople]
-    c.petersburgBlock     = number[FkPetersburg]
-    c.istanbulBlock       = number[FkIstanbul]
-    c.muirGlacierBlock    = number[FkBerlin]
-    c.berlinBlock         = number[FkBerlin]
-    c.londonBlock         = number[FkLondon]
-    c.arrowGlacierBlock   = number[FkLondon]
-    c.mergeForkBlock      = number[FkParis]
-
-  c.terminalTotalDifficulty = none(UInt256)
-  case network
-  of "EIP150":
-    c.assignNumber(FkTangerine, Zero)
-  of "ConstantinopleFix":
-    c.assignNumber(FkPetersburg, Zero)
-  of "Homestead":
-    c.assignNumber(FkHomestead, Zero)
-  of "Frontier":
-    c.assignNumber(FkFrontier, Zero)
-  of "Byzantium":
-    c.assignNumber(FkByzantium, Zero)
-  of "EIP158ToByzantiumAt5":
-    c.assignNumber(FkByzantium, Five)
-  of "EIP158":
-    c.assignNumber(FkSpurious, Zero)
-  of "HomesteadToDaoAt5":
-    c.assignNumber(FkHomestead, Zero)
-    c.daoForkBlock = Five
-    c.daoForkSupport = true
-  of "Constantinople":
-    c.assignNumber(FkConstantinople, Zero)
-  of "HomesteadToEIP150At5":
-    c.assignNumber(FkTangerine, Five)
-  of "FrontierToHomesteadAt5":
-    c.assignNumber(FkHomestead, Five)
-  of "ByzantiumToConstantinopleFixAt5":
-    c.assignNumber(FkPetersburg, Five)
-    c.constantinopleBlock = Five
-  of "Istanbul":
-    c.assignNumber(FkIstanbul, Zero)
-  of "Berlin":
-    c.assignNumber(FkBerlin, Zero)
-  of "London":
-    c.assignNumber(FkLondon, Zero)
-  of "BerlinToLondonAt5":
-    c.assignNumber(FkLondon, Five)
-  of "Merge":
-    c.assignNumber(FkParis, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
-  of "ArrowGlacierToMergeAtDiffC0000":
-    c.assignNumber(FkParis, H)
-    c.terminalTotalDifficulty = some(0xC0000.u256)
-  else:
-    raise newException(ValueError, "unsupported network " & network)
 
 proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   result.blocks = parseBlocks(fixture["blocks"])
@@ -293,7 +216,7 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
   chainDB: BaseChainDB, checkSeal, validation: bool): (EthBlock, EthBlock, Blob) =
 
   # we hack the ChainConfig here and let it works with calcDifficulty
-  vmConfiguration(tester.network, chainDB.config)
+  getChainConfig(tester.network, chainDB.config)
 
   var
     preminedBlock = rlp.decode(tb.blockRLP, EthBlock)

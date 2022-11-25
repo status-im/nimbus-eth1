@@ -1,117 +1,24 @@
+# Nimbus
+# Copyright (c) 2022 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 import
   std/[json, strutils, tables],
   stew/byteutils,
   stint,
   eth/[common, rlp, keys],
-  ../../nimbus/[chain_config, forks, transaction],
+  ../../nimbus/[chain_config, transaction],
+  ../common/helpers,
   ./types
 
-func getChainConfig*(network: string): ChainConfig =
-  let c = ChainConfig()
-  const
-    H = high(BlockNumber)
-    Zero = 0.toBlockNumber
-    Five = 5.toBlockNumber
-
-  proc assignNumber(c: ChainConfig,
-                    fork: Fork, n: BlockNumber) =
-    var number: array[Fork, BlockNumber]
-    var z = low(Fork)
-    while z < fork:
-      number[z] = Zero
-      z = z.succ
-    number[fork] = n
-    z = high(Fork)
-    while z > fork:
-      number[z] = H
-      z = z.pred
-
-    c.homesteadBlock      = number[FkHomestead]
-    c.daoForkBlock        = number[FkHomestead]
-    c.eip150Block         = number[FkTangerine]
-    c.eip155Block         = number[FkSpurious]
-    c.eip158Block         = number[FkSpurious]
-    c.byzantiumBlock      = number[FkByzantium]
-    c.constantinopleBlock = number[FkConstantinople]
-    c.petersburgBlock     = number[FkPetersburg]
-    c.istanbulBlock       = number[FkIstanbul]
-    c.muirGlacierBlock    = number[FkBerlin]
-    c.berlinBlock         = number[FkBerlin]
-    c.londonBlock         = number[FkLondon]
-    c.arrowGlacierBlock   = number[FkLondon]
-    c.grayGlacierBlock    = number[FkLondon]
-    c.mergeForkBlock      = number[FkParis]
-    c.shanghaiBlock       = number[FkShanghai]
-    c.cancunBlock         = number[FkCancun]
-
-  c.daoForkSupport = false
-  c.chainId = 1.ChainId
-  c.terminalTotalDifficulty = none(UInt256)
-
-  case network
-  of "Frontier":
-    c.assignNumber(FkFrontier, Zero)
-  of "Homestead":
-    c.assignNumber(FkHomestead, Zero)
-  of "EIP150":
-    c.assignNumber(FkTangerine, Zero)
-  of "EIP158":
-    c.assignNumber(FkSpurious, Zero)
-  of "Byzantium":
-    c.assignNumber(FkByzantium, Zero)
-  of "Constantinople":
-    c.assignNumber(FkConstantinople, Zero)
-  of "ConstantinopleFix":
-    c.assignNumber(FkPetersburg, Zero)
-  of "Istanbul":
-    c.assignNumber(FkIstanbul, Zero)
-  of "FrontierToHomesteadAt5":
-    c.assignNumber(FkHomestead, Five)
-  of "HomesteadToEIP150At5":
-    c.assignNumber(FkTangerine, Five)
-  of "HomesteadToDaoAt5":
-    c.assignNumber(FkHomestead, Zero)
-    c.daoForkBlock = Five
-    c.daoForkSupport = true
-  of "EIP158ToByzantiumAt5":
-    c.assignNumber(FkByzantium, Five)
-  of "ByzantiumToConstantinopleAt5":
-    c.assignNumber(FkPetersburg, Five)
-  of "ByzantiumToConstantinopleFixAt5":
-    c.assignNumber(FkPetersburg, Five)
-    c.constantinopleBlock = Five
-  of "ConstantinopleFixToIstanbulAt5":
-    c.assignNumber(FkIstanbul, Five)
-  of "Berlin":
-    c.assignNumber(FkBerlin, Zero)
-  of "BerlinToLondonAt5":
-    c.assignNumber(FkLondon, Five)
-  of "London":
-    c.assignNumber(FkLondon, Zero)
-    c.arrowGlacierBlock = H
-    c.grayGlacierBlock = H
-  of "ArrowGlacier":
-    c.assignNumber(FkLondon, Zero)
-    c.grayGlacierBlock = H
-  of "GrayGlacier":
-    c.assignNumber(FkLondon, Zero)
-    c.grayGlacierBlock = Zero
-  of "Merged":
-    c.assignNumber(FkParis, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
-  of "ArrowGlacierToMergeAtDiffC0000":
-    c.assignNumber(FkParis, H)
-    c.terminalTotalDifficulty = some(0xC0000.u256)
-  of "Shanghai":
-    c.assignNumber(FkShanghai, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
-  of "Cancun":
-    c.assignNumber(FkCancun, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
-  else:
-    raise newError(ErrorConfig, "unsupported network " & network)
-
-  result = c
+export
+  helpers
 
 proc parseHexOrInt[T](x: string): T =
   when T is UInt256:
