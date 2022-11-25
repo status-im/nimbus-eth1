@@ -17,15 +17,18 @@
 ##   Global set up. This function will be called before any worker peer is
 ##   started. If that function returns `false`, no worker peers will be run.
 ##
+##   Also, this function should decide whether the `runDaemon()` job will be
+##   started next by controlling the `ctx.daemon` flag (default is `false`.)
+##
 ## *runRelease(ctx: CtxRef[S])*
 ##   Global clean up, done with all the worker peers.
 ##
 ## *runDaemon(ctx: CtxRef[S]) {.async.}*
 ##   Global background job that will be re-started as long as the variable
-##   `ctx.daemon` is set `true`. If that job was stopped due to setting
-##   `ctx.daemon` to `false`, it will be restarted when reset to `true` when
-##   there is some activity on the `runPool()`, `runSingle()`, or `runMulti()`
-##   functions.
+##   `ctx.daemon` is set `true`. If that job was stopped due to re-setting
+##   `ctx.daemon` to `false`, it will be restarted next after it was reset
+##   as `true` not before there is some activity on the `runPool()`,
+##   `runSingle()`, or `runMulti()` functions.
 ##
 ##
 ## *runStart(buddy: BuddyRef[S,W]): bool*
@@ -35,10 +38,11 @@
 ##   Clean up this worker peer.
 ##
 ##
-## *runPool(buddy: BuddyRef[S,W], last: bool)*
+## *runPool(buddy: BuddyRef[S,W], last: bool): bool*
 ##   Once started, the function `runPool()` is called for all worker peers in
-##   sequence as the body of an iteration. There will be no other worker peer
-##   functions activated simultaneously.
+##   sequence as the body of an iteration as long as the function returns
+##   `false`. There will be no other worker peer functions activated
+##   simultaneously.
 ##
 ##   This procedure is started if the global flag `buddy.ctx.poolMode` is set
 ##   `true` (default is `false`.) It is the responsibility of the `runPool()`
@@ -48,7 +52,7 @@
 ##   The argument `last` is set `true` if the last entry is reached.
 ##
 ##   Note:
-##   + This function does not run in `async` mode.
+##   + This function does *not* runs in `async` mode.
 ##   + The flag `buddy.ctx.poolMode` has priority over the flag
 ##     `buddy.ctrl.multiOk` which controls `runSingle()` and `runMulti()`.
 ##
@@ -110,6 +114,7 @@ type
     singleRunLock: bool         ## Some single mode runner is activated
     monitorLock: bool           ## Monitor mode is activated
     activeMulti: int            ## Number of activated runners in multi-mode
+    shutdown: bool              ## Internal shut down flag
 
   RunnerBuddyRef[S,W] = ref object
     ## Per worker peer descriptor
@@ -144,7 +149,7 @@ proc hash(peer: Peer): Hash =
 proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   mixin runDaemon
 
-  if dsc.ctx.daemon:
+  if dsc.ctx.daemon and not dsc.shutdown:
     dsc.daemonRunning = true
 
     # Continue until stopped
@@ -179,7 +184,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
 
   # Continue until stopped
   block taskExecLoop:
-    while worker.ctrl.running:
+    while worker.ctrl.running and not dsc.shutdown:
       # Enforce minimum time spend on this loop
       let startMoment = Moment.now()
 
@@ -199,7 +204,8 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         var count = dsc.buddies.len
         for w in dsc.buddies.nextValues:
           count.dec
-          worker.runPool(count == 0)
+          if worker.runPool(count == 0):
+            break # `true` => stop
         dsc.monitorLock = false
 
       else:
@@ -335,7 +341,7 @@ proc initSync*[S,W](
   dsc.tickerOk = noisy
   dsc.buddies.init(dsc.ctx.buddiesMax)
 
-proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; daemon = false): bool =
+proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
   ## Set up `PeerObserver` handlers and start syncing.
   mixin runSetup
   # Initialise sub-systems
@@ -350,8 +356,7 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; daemon = false): bool =
 
     po.setProtocol eth
     dsc.pool.addObserver(dsc, po)
-    if daemon:
-      dsc.ctx.daemon = true
+    if dsc.ctx.daemon:
       asyncSpawn dsc.daemonLoop()
     return true
 
@@ -360,7 +365,8 @@ proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =
   mixin runRelease
   dsc.pool.delObserver(dsc)
 
-  # Shut down async services
+  # Gracefully shut down async services
+  dsc.shutdown = true
   for buddy in dsc.buddies.nextValues:
     buddy.worker.ctrl.stopped = true
   dsc.ctx.daemon = false

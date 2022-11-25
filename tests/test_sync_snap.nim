@@ -15,10 +15,11 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[common, p2p, rlp, trie/db],
+  eth/[common, p2p, rlp],
+  eth/trie/[db, nibbles],
   rocksdb,
   stint,
-  stew/[byteutils, results],
+  stew/[byteutils, interval_set, results],
   unittest2,
   ../nimbus/[chain_config, config, genesis],
   ../nimbus/db/[db_chain, select_backend, storage_types],
@@ -26,7 +27,7 @@ import
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_error, hexary_inspect, rocky_bulk_load,
+    hexary_desc, hexary_error, hexary_inspect,  hexary_paths, rocky_bulk_load,
     snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
@@ -301,6 +302,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
     var
       desc: SnapDbAccountsRef
       accKeys: seq[NodeKey]
+      accBaseTag: NodeTag
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
@@ -316,14 +318,13 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       desc = SnapDbAccountsRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
-      let
-        lowerBound = accountsList.mapIt(it.base).sortMerge
-        packed = PackedAccountRange(
-          accounts: accountsList.mapIt(it.data.accounts).sortMerge,
-          proof:    accountsList.mapIt(it.data.proof).flatten)
+      accBaseTag = accountsList.mapIt(it.base).sortMerge
+      let packed = PackedAccountRange(
+        accounts: accountsList.mapIt(it.data.accounts).sortMerge,
+        proof:    accountsList.mapIt(it.data.proof).flatten)
       # Merging intervals will produce gaps, so the result is expected OK but
       # different from `.isImportOk`
-      check desc.importAccounts(lowerBound, packed, true).isOk
+      check desc.importAccounts(accBaseTag, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
@@ -406,7 +407,8 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # added later (typically these nodes are update `Mutable` nodes.)
       #
       # Beware: dumping a large database is not recommended
-      #noisy.say "***", "database dump\n    ", desc.dumpAccDB()
+      #true.say "***", "database dump\n    ", desc.dumpHexaDB()
+
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent state root registry":
@@ -415,13 +417,18 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       else:
         let
           dbBase = SnapDbRef.init(db.cdb[0])
-          dangling = @[@[1u8],@[2u8,3u8],@[4u8,5u8,6u8],@[7u8,8u8,9u8,0u8]]
+          processed = @[(1.to(NodeTag),2.to(NodeTag)),
+                        (4.to(NodeTag),5.to(NodeTag)),
+                        (6.to(NodeTag),7.to(NodeTag))]
           slotAccounts = seq[NodeKey].default
         for n,w in accKeys:
           check dbBase.savePivot(
-            BlockHeader(
-              stateRoot: w.to(Hash256)), n.uint64, n.uint64,
-              dangling, slotAccounts, 0).isOk
+            SnapDbPivotRegistry(
+              header:       BlockHeader(stateRoot: w.to(Hash256)),
+              nAccounts:    n.uint64,
+              nSlotLists:   n.uint64,
+              processed:    processed,
+              slotAccounts: slotAccounts)).isOk
           # verify latest state root
           block:
             let rc = dbBase.recoverPivot()
@@ -429,7 +436,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
             if rc.isOk:
               check rc.value.nAccounts == n.uint64
               check rc.value.nSlotLists == n.uint64
-              check rc.value.dangling == dangling
+              check rc.value.processed == processed
         for n,w in accKeys:
           block:
             let rc = dbBase.recoverPivot(w)
@@ -439,15 +446,19 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
               check rc.value.nSlotLists == n.uint64
           # Update record in place
           check dbBase.savePivot(
-            BlockHeader(
-              stateRoot: w.to(Hash256)), n.uint64, 0, @[], @[], 0).isOk
+            SnapDbPivotRegistry(
+              header:       BlockHeader(stateRoot: w.to(Hash256)),
+              nAccounts:    n.uint64,
+              nSlotLists:   0,
+              processed:    @[],
+              slotAccounts: @[])).isOk
           block:
             let rc = dbBase.recoverPivot(w)
             check rc.isOk
             if rc.isOk:
               check rc.value.nAccounts == n.uint64
               check rc.value.nSlotLists == 0
-              check rc.value.dangling == seq[Blob].default
+              check rc.value.processed == seq[(NodeTag,NodeTag)].default
 
 proc storagesRunner(
     noisy = true;
@@ -600,6 +611,7 @@ proc inspectionRunner(
             rootKey = root.to(NodeKey)
             dbBase = SnapDbRef.init(db.cdb[2+n])
             desc = SnapDbAccountsRef.init(dbBase, root, peer)
+
           for w in accList:
             check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
           let rc = desc.inspectAccountsTrie(persistent=true)

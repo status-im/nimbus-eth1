@@ -15,10 +15,12 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   ../../db/select_backend,
-  ".."/[misc/best_pivot, protocol, sync_desc],
+  ../../utils/prettify,
+  ../misc/best_pivot,
+  ".."/[protocol, sync_desc],
   ./worker/[pivot_helper, ticker],
   ./worker/com/com_error,
-  ./worker/db/[snapdb_check, snapdb_desc],
+  ./worker/db/[hexary_desc, snapdb_check, snapdb_desc, snapdb_pivot],
   "."/[constants, range_desc, worker_desc]
 
 {.push raises: [Defect].}
@@ -53,6 +55,54 @@ proc `pivot=`(buddy: SnapBuddyRef; val: BestPivotWorkerRef) =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
+  let recov = ctx.data.recovery
+  if recov.isNil:
+    return false
+
+  let
+    checkpoint =
+      "#" & $recov.state.header.blockNumber & "(" & $recov.level & ")"
+    topLevel = recov.level == 0
+    env = block:
+      let rc = ctx.data.pivotTable.eq recov.state.header.stateRoot
+      if rc.isErr:
+        error "Recovery pivot context gone", checkpoint, topLevel
+        return false
+      rc.value
+
+  # Cosmetics: allows other processes to log etc.
+  await sleepAsync(1300.milliseconds)
+
+  when extraTraceMessages:
+    trace "Recovery continued ...", checkpoint, topLevel,
+      nAccounts=recov.state.nAccounts, nDangling=recov.state.dangling.len
+
+  # Update pivot data from recovery checkpoint
+  env.recoverPivotFromCheckpoint(ctx, topLevel)
+
+  # Fetch next recovery record if there is any
+  if recov.state.predecessor.isZero:
+    trace "Recovery done", checkpoint, topLevel
+    return false
+  let rc = ctx.data.snapDb.recoverPivot(recov.state.predecessor)
+  if rc.isErr:
+    when extraTraceMessages:
+      trace "Recovery stopped at pivot stale checkpoint", checkpoint, topLevel
+    return false
+
+  # Set up next level pivot checkpoint
+  ctx.data.recovery = SnapRecoveryRef(
+    state: rc.value,
+    level: recov.level + 1)
+
+  # Push onto pivot table and continue recovery (i.e. do not stop it yet)
+  ctx.data.pivotTable.update(
+    ctx.data.recovery.state.header, ctx, reverse=true)
+
+  return true # continue recovery
+
 
 proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
   ## Helper, negotiate pivot unless present
@@ -106,7 +156,20 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   else:
     trace "Ticker is disabled"
 
-  result = true
+  # Check for recovery mode
+  if not ctx.data.noRecovery:
+    let rc = ctx.data.snapDb.recoverPivot()
+    if rc.isOk:
+      ctx.data.recovery = SnapRecoveryRef(state: rc.value)
+      ctx.daemon = true
+
+      # Set up early initial pivot
+      ctx.data.pivotTable.update(ctx.data.recovery.state.header, ctx)
+      trace "Recovery started",
+        checkpoint=("#" & $ctx.data.pivotTable.topNumber() & "(0)")
+      if not ctx.data.ticker.isNil:
+        ctx.data.ticker.startRecovery()
+  true
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
@@ -147,10 +210,20 @@ proc stop*(buddy: SnapBuddyRef) =
 proc runDaemon*(ctx: SnapCtxRef) {.async.} =
   ## Enabled while `ctx.daemon` is `true`
   ##
-  let nPivots = ctx.data.pivotTable.len
-  trace "I am the mighty recovery daemon ... stopped for now", nPivots
-  # To be populated ...
-  ctx.daemon = false
+  if not ctx.data.recovery.isNil:
+    if not await ctx.recoveryStepContinue():
+      # Done, stop recovery
+      ctx.data.recovery = nil
+      ctx.daemon = false
+
+      # Update logging
+      if not ctx.data.ticker.isNil:
+        ctx.data.ticker.stopRecovery()
+    return
+
+  # Update logging
+  if not ctx.data.ticker.isNil:
+    ctx.data.ticker.stopRecovery()
 
 
 proc runSingle*(buddy: SnapBuddyRef) {.async.} =
@@ -159,9 +232,7 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ## * `buddy.ctrl.poolMode` is `false`
   ##
   let peer = buddy.peer
-  # This pivot finder one harmonises assigned difficulties of at least two
-  # peers. There can only be one  `pivot2Exec()` instance active/unfinished
-  # (which is wrapped into the helper function `updateSinglePivot()`.)
+  # Find pivot, probably relaxed mode enabled in `setup()`
   if not await buddy.updateSinglePivot():
     # Wait if needed, then return => repeat
     if not buddy.ctrl.stopped:
@@ -171,13 +242,14 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   buddy.ctrl.multiOk = true
 
 
-proc runPool*(buddy: SnapBuddyRef, last: bool) =
+proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
   ## Enabled when `buddy.ctrl.poolMode` is `true`
   ##
   let ctx = buddy.ctx
-  if ctx.poolMode:
-    ctx.poolMode = false
+  ctx.poolMode = false
+  result = true
 
+  block:
     let rc = ctx.data.pivotTable.lastValue
     if rc.isOk:
 
@@ -233,12 +305,6 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # Full sync processsing based on current snapshot
   # -----------------------------------------------
   if env.storageDone:
-    if not buddy.checkAccountsTrieIsComplete(env):
-      error "Ooops, all accounts fetched but DvnB still incomplete", peer, pivot
-
-      if not buddy.checkStorageSlotsTrieIsComplete(env):
-        error "Ooops, all storages fetched but DB still incomplete", peer, pivot
-
     trace "Snap full sync -- not implemented yet", peer, pivot
     await sleepAsync(5.seconds)
     return
@@ -246,31 +312,30 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # Snapshot sync processing
   # ------------------------
 
-  # If this is a new pivot, the previous one can be partially cleaned up.
-  # There is no point in keeping some older space consuming state data any
-  # longer.
+  # If this is a new pivot, the previous one can be cleaned up. There is no
+  # point in keeping some older space consuming state data any longer.
   ctx.data.pivotTable.beforeTopMostlyClean()
 
-  # This one is the syncing work horse
+  # This one is the syncing work horse which downloads the database
   let syncActionContinue = await env.execSnapSyncAction(buddy)
 
   # Save state so sync can be partially resumed at next start up
+  let
+    nCheckNodes = env.fetchAccounts.checkNodes.len
+    nSickSubTries = env.fetchAccounts.sickSubTries.len
+    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+    processed = env.fetchAccounts.processed.fullFactor.toPC(2)
   block:
-    let
-      nMissingNodes = env.fetchAccounts.missingNodes.len
-      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-
-      rc = env.saveSnapState(ctx)
+    let rc = env.saveCheckpoint(ctx)
     if rc.isErr:
       error "Failed to save recovery checkpoint", peer, pivot,
         nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-        nMissingNodes, nStoQu, error=rc.error
+        processed, nStoQu, error=rc.error
     else:
-      discard
       when extraTraceMessages:
         trace "Saved recovery checkpoint", peer, pivot,
           nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-          nMissingNodes, nStoQu, blobSize=rc.value
+          processed, nStoQu, blobSize=rc.value
 
   if not syncActionContinue:
     return

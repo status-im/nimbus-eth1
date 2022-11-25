@@ -9,7 +9,6 @@
 # except according to those terms.
 
 import
-  #chronicles,
   eth/[common, rlp],
   stew/results,
   ../../range_desc,
@@ -17,18 +16,16 @@ import
 
 {.push raises: [Defect].}
 
-#logScope:
-#  topics = "snap-db"
-
 type
   SnapDbPivotRegistry* = object
-    predecessor*: NodeKey         ## Predecessor key in chain
+    predecessor*: NodeKey         ## Predecessor key in chain, auto filled
     header*: BlockHeader          ## Pivot state, containg state root
     nAccounts*: uint64            ## Imported # of accounts
     nSlotLists*: uint64           ## Imported # of account storage tries
     dangling*: seq[Blob]          ## Dangling nodes in accounts trie
+    processed*: seq[
+      (NodeTag,NodeTag)]          ## Processed acoount ranges
     slotAccounts*: seq[NodeKey]   ## List of accounts with storage slots
-    coverage*: uint8              ## coverage factor, 255 => 100%
 
 const
   extraTraceMessages = false or true
@@ -57,24 +54,6 @@ proc savePivot*(
     pv.kvDb.persistentStateRootPut(data.header.stateRoot.to(NodeKey), rlpData)
     return ok(rlpData.len)
   # notreached
-
-proc savePivot*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    header: BlockHeader;          ## Pivot state, containg state root
-    nAccounts: uint64;            ## Imported # of accounts
-    nSlotLists: uint64;           ## Imported # of account storage tries
-    dangling: seq[Blob];          ## Dangling nodes in accounts trie
-    slotAccounts: seq[NodeKey];   ## List of accounts with storage slots
-    coverage: uint8;              ## coverage factor, 255 => 100%
-      ): Result[int,HexaryDbError] =
-  ## Variant of `savePivot()`
-  result = pv.savePivot SnapDbPivotRegistry(
-    header:       header,
-    nAccounts:    nAccounts,
-    nSlotLists:   nSlotLists,
-    dangling:     dangling,
-    slotAccounts: slotAccounts,
-    coverage:     coverage)
 
 proc recoverPivot*(
   pv: SnapDbRef;                  ## Base descriptor on `BaseChainDB`

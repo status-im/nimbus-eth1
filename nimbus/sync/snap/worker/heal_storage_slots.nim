@@ -62,7 +62,7 @@ proc healingCtx(
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "covered=" & slots.unprocessed.emptyFactor.toPC(0) & "," &
     "nCheckNodes=" & $slots.checkNodes.len & "," &
-    "nMissingNodes=" & $slots.missingNodes.len & "}"
+    "nSickSubTries=" & $slots.sickSubTries.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -98,7 +98,7 @@ proc verifyStillMissingNodes(
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
       ) =
-  ## Check whether previously missing nodes from the `missingNodes` list
+  ## Check whether previously missing nodes from the `sickSubTries` list
   ## have been magically added to the database since it was checked last
   ## time. These nodes will me moved to `checkNodes` for further processing.
   let
@@ -110,7 +110,7 @@ proc verifyStillMissingNodes(
     slots = kvp.data.slots
 
   var delayed: seq[NodeSpecs]
-  for w in slots.missingNodes:
+  for w in slots.sickSubTries:
     let rc = db.getStorageSlotsNodeKey(peer, accKey, storageRoot, w.partialPath)
     if rc.isOk:
       # Check nodes for dangling links
@@ -120,7 +120,7 @@ proc verifyStillMissingNodes(
       delayed.add w
 
   # Must not modify sequence while looping over it
-  slots.missingNodes = slots.missingNodes & delayed
+  slots.sickSubTries = slots.sickSubTries & delayed
 
 
 proc updateMissingNodesList(
@@ -140,7 +140,7 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
-  while slots.missingNodes.len < snapTrieNodesFetchMax:
+  while slots.sickSubTries.len < snapRequestTrieNodesFetchMax:
     # Inspect hexary trie for dangling nodes
     let rc = db.inspectStorageSlotsTrie(
       peer, accKey, storageRoot,
@@ -161,15 +161,14 @@ proc updateMissingNodesList(
     slots.checkNodes.setLen(0)
 
     # Collect result
-    slots.missingNodes =
-      slots.missingNodes  & rc.value.dangling
+    slots.sickSubTries = slots.sickSubTries & rc.value.dangling
 
     # Done unless there is some resumption context
     if rc.value.resumeCtx.isNil:
       break
 
     # Allow async task switch and continue. Note that some other task might
-    # steal some of the `env.fetchAccounts.missingNodes`.
+    # steal some of the `env.fetchAccounts.sickSubTries`.
     await sleepAsync 1.nanoseconds
 
   return true
@@ -181,7 +180,7 @@ proc getMissingNodesFromNetwork(
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ##  Extract from `missingNodes` the next batch of nodes that need
+  ##  Extract from `sickSubTries` the next batch of nodes that need
   ## to be merged it into the database
   let
     ctx = buddy.ctx
@@ -191,13 +190,13 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
     slots = kvp.data.slots
 
-    nMissingNodes = slots.missingNodes.len
-    inxLeft = max(0, nMissingNodes - snapTrieNodesFetchMax)
+    nSickSubTries = slots.sickSubTries.len
+    inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
-  # the rest on the `missingNodes` queue to be handled later.
-  let fetchNodes = slots.missingNodes[inxLeft ..< nMissingNodes]
-  slots.missingNodes.setLen(inxLeft)
+  # the rest on the `sickSubTries` queue to be handled later.
+  let fetchNodes = slots.sickSubTries[inxLeft ..< nSickSubTries]
+  slots.sickSubTries.setLen(inxLeft)
 
   # Initalise for `getTrieNodes()` for fetching nodes from the network
   var
@@ -207,7 +206,7 @@ proc getMissingNodesFromNetwork(
     pathList.add @[w.partialPath]
     nodeKey[w.partialPath] = w.nodeKey
 
-  # Fetch nodes from the network. Note that the remainder of the `missingNodes`
+  # Fetch nodes from the network. Note that the remainder of the `sickSubTries`
   # list might be used by another process that runs semi-parallel.
   let
     req = @[accKey.to(Blob)] & fetchNodes.mapIt(it.partialPath)
@@ -219,7 +218,7 @@ proc getMissingNodesFromNetwork(
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
       for n in 1 ..< w.len:
-        slots.missingNodes.add NodeSpecs(
+        slots.sickSubTries.add NodeSpecs(
           partialPath: w[n],
           nodeKey:     nodeKey[w[n]])
     return rc.value.nodes.mapIt(NodeSpecs(
@@ -228,8 +227,8 @@ proc getMissingNodesFromNetwork(
       data:        it.data))
 
   # Restore missing nodes list now so that a task switch in the error checker
-  # allows other processes to access the full `missingNodes` list.
-  slots.missingNodes = slots.missingNodes & fetchNodes
+  # allows other processes to access the full `sickSubTries` list.
+  slots.sickSubTries = slots.sickSubTries & fetchNodes
 
   let error = rc.error
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
@@ -384,7 +383,7 @@ proc storageSlotsHealing(
       return false
 
   # Check whether the trie is complete.
-  if slots.missingNodes.len == 0:
+  if slots.sickSubTries.len == 0:
     trace logTxt "complete", peer, itCtx=buddy.healingCtx(kvp,env)
     return true
 
@@ -401,7 +400,7 @@ proc storageSlotsHealing(
     error logTxt "error updating persistent database", peer,
       itCtx=buddy.healingCtx(kvp,env), nSlotLists=env.nSlotLists,
       nStorageQueue, nNodes=nodeSpecs.len, error=report[^1].error
-    slots.missingNodes = slots.missingNodes & nodeSpecs
+    slots.sickSubTries = slots.sickSubTries & nodeSpecs
     return false
 
   when extraTraceMessages:
@@ -421,7 +420,7 @@ proc storageSlotsHealing(
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
-        slots.missingNodes.add nodeSpecs[inx]
+        slots.sickSubTries.add nodeSpecs[inx]
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
@@ -478,7 +477,7 @@ proc healingIsComplete(
       return true # done
 
     # Full range covered by unprocessed items
-    kvp.data.slots = SnapTrieRangeBatchRef(missingNodes: rc.value.dangling)
+    kvp.data.slots = SnapRangeBatchRef(sickSubTries: rc.value.dangling)
     kvp.data.slots.unprocessed.init()
 
   # Proceed with healing

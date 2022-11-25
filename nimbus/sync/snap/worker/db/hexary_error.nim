@@ -22,7 +22,7 @@ type
     SlotsNotSrictlyIncreasing
     TrieLoopAlert
     TrieIsEmpty
-    TooManyDanglingLinks
+    TooManyProcessedChunks
     TooManySlotAccounts
 
     # import

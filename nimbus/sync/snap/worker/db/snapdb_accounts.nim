@@ -507,13 +507,12 @@ proc getAccountsNodeKey*(
 
 proc getAccountsNodeKey*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer;                   ## For log messages, only
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
       ): Result[NodeKey,HexaryDbError] =
   ## Variant of `getAccountsNodeKey()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, root, peer).getAccountsNodeKey(path, persistent=true)
+    pv, root, Peer()).getAccountsNodeKey(path, persistent=true)
 
 
 proc getAccountsData*(
@@ -524,7 +523,6 @@ proc getAccountsData*(
   ## Fetch account data.
   ##
   ## Caveat: There is no unit test yet for the non-persistent version
-  let peer = ps.peer
   var acc: Account
 
   noRlpExceptionOops("getAccountData()"):
@@ -542,13 +540,12 @@ proc getAccountsData*(
 
 proc getAccountsData*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
-    peer: Peer;                   ## For log messages, only
     root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
       ): Result[Account,HexaryDbError] =
   ## Variant of `getAccountsData()` for persistent storage.
   SnapDbAccountsRef.init(
-    pv, root, peer).getAccountsData(path, persistent=true)
+    pv, root, Peer()).getAccountsData(path, persistent=true)
 
 # ------------------------------------------------------------------------------
 # Public functions: additional helpers

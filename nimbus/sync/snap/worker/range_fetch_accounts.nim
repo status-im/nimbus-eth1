@@ -161,23 +161,31 @@ proc accountsRangefetchImpl(
   # Statistics
   env.nAccounts.inc(gotAccounts)
 
-  # Punch holes into the reproted range from the network if it contains holes.
+  # Punch holes into the reported range of received accounts from the network
+  # if it there are gaps (described by dangling nodes.)
   for w in gaps.innerGaps:
     discard processed.reduce(
       w.partialPath.min(NodeKey).to(NodeTag),
       w.partialPath.max(NodeKey).to(Nodetag))
 
-  # Update dangling nodes list
-  var delayed: seq[NodeSpecs]
-  for w in env.fetchAccounts.missingNodes:
-    if not ctx.data.snapDb.nodeExists(peer, stateRoot, w):
-      delayed.add w
-  when extraTraceMessages:
-    trace logTxt "dangling nodes", peer, pivot,
-      nCheckNodes=env.fetchAccounts.checkNodes.len,
-      nMissingNodes=env.fetchAccounts.missingNodes.len,
-      nUpdatedMissing=delayed.len, nOutsideGaps=gaps.dangling.len
-  env.fetchAccounts.missingNodes = delayed & gaps.dangling
+  # Update dangling nodes list unless healing is activated. The problem
+  # with healing activated is, that a previously missing node that suddenly
+  # appears will not automatically translate into a full sub-trie. It might
+  # just be the node itself (which justified the name `sickSubTrie`).
+  #
+  # Instead of managing partial sub-tries here, this is delegated to the
+  # healing module.
+  if not ctx.data.accountsHealing:
+    var delayed: seq[NodeSpecs]
+    for w in env.fetchAccounts.sickSubTries:
+      if not ctx.data.snapDb.nodeExists(peer, stateRoot, w):
+        delayed.add w
+    when extraTraceMessages:
+      trace logTxt "dangling nodes", peer, pivot,
+        nCheckNodes=env.fetchAccounts.checkNodes.len,
+        nSickSubTries=env.fetchAccounts.sickSubTries.len,
+        nUpdatedMissing=delayed.len, nOutsideGaps=gaps.dangling.len
+    env.fetchAccounts.sickSubTries = delayed & gaps.dangling
 
   # Update book keeping
   for w in processed.increasing:
@@ -195,7 +203,7 @@ proc accountsRangefetchImpl(
   #    unprocessed = buddy.dumpUnprocessed(env)
   #  trace logTxt "request done", peer, pivot,
   #    nCheckNodes=env.fetchAccounts.checkNodes.len,
-  #    nMissingNodes=env.fetchAccounts.missingNodes.len,
+  #    nSickSubTries=env.fetchAccounts.sickSubTries.len,
   #    imported, unprocessed
 
   return true

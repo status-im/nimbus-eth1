@@ -155,7 +155,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     )
     nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
-    of SyncMode.Snap:
+    of SyncMode.Snap, SyncMode.SnapCtx:
       nimbus.ethNode.addCapability protocol.snap
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -173,10 +173,10 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK)
       nimbus.fullSyncRef.start
-    of SyncMode.Snap:
+    of SyncMode.Snap, SyncMode.SnapCtx:
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        nimbus.dbBackend, tickerOK)
+        nimbus.dbBackend, tickerOK, noRecovery = (conf.syncMode==SyncMode.Snap))
       nimbus.snapSyncRef.start
     of SyncMode.Default:
       discard
@@ -196,7 +196,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     var waitForPeers = true
     case conf.syncMode:
-    of SyncMode.Snap:
+    of SyncMode.Snap, SyncMode.SnapCtx:
       waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -433,7 +433,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
           cast[pointer](syncer)
         )
 
-      of SyncMode.Full, SyncMode.Snap:
+      of SyncMode.Full, SyncMode.Snap, SyncMode.SnapCtx:
         discard
 
     if nimbus.state == Starting:
