@@ -34,7 +34,8 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
-  ./db/[hexary_desc, hexary_error, snapdb_storage_slots]
+  ./db/[hexary_desc, hexary_error, snapdb_storage_slots],
+  ./sub_tries_helper
 
 {.push raises: [Defect].}
 
@@ -140,36 +141,21 @@ proc updateMissingNodesList(
     storageRoot = kvp.key
     slots = kvp.data.slots
 
-  while slots.sickSubTries.len < snapRequestTrieNodesFetchMax:
-    # Inspect hexary trie for dangling nodes
-    let rc = db.inspectStorageSlotsTrie(
-      peer, accKey, storageRoot,
-      slots.checkNodes,                 # start with these nodes
-      slots.resumeCtx,                  # resume previous attempt
-      healStorageSlotsInspectionBatch)  # visit no more than this many nodes
-    if rc.isErr:
-      when extraTraceMessages:
-        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-        error logTxt "failed => stop", peer, itCtx=buddy.healingCtx(kvp,env),
-          nSlotLists=env.nSlotLists, nStorageQueue, error=rc.error
-      # Attempt to switch peers, there is not much else we can do here
+  let rc = await db.getStorageSlotsFn(accKey).subTriesFromPartialPaths(
+    storageRoot,                       # State root related to storage slots
+    slots,                             # Storage slots download specs
+    snapRequestTrieNodesFetchMax)      # Maxinmal datagram request size
+  if rc.isErr:
+    let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
+    if rc.error == TrieIsLockedForPerusal:
+      trace logTxt "failed", peer, itCtx=buddy.healingCtx(kvp,env),
+        nSlotLists=env.nSlotLists, nStorageQueue, error=rc.error
+    else:
+      error logTxt "failed => stop", peer, itCtx=buddy.healingCtx(kvp,env),
+        nSlotLists=env.nSlotLists, nStorageQueue, error=rc.error
+      # Attempt to switch pivot, there is not much else one can do here
       buddy.ctrl.zombie = true
-      return false
-
-    # Update context for async threading environment
-    slots.resumeCtx = rc.value.resumeCtx
-    slots.checkNodes.setLen(0)
-
-    # Collect result
-    slots.sickSubTries = slots.sickSubTries & rc.value.dangling
-
-    # Done unless there is some resumption context
-    if rc.value.resumeCtx.isNil:
-      break
-
-    # Allow async task switch and continue. Note that some other task might
-    # steal some of the `env.fetchAccounts.sickSubTries`.
-    await sleepAsync 1.nanoseconds
+    return false
 
   return true
 

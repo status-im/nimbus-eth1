@@ -139,7 +139,7 @@ proc processLink(
     inspect: var seq[(NodeKey,NibblesSeq)];
     trail: NibblesSeq;
     child: Rlp;
-      ) {.gcsafe, raises: [Defect,RlpError,KeyError]} =
+      ) {.gcsafe, raises: [Defect,RlpError]} =
   ## Ditto
   if not child.isEmpty:
     let childBlob = child.toBytes
@@ -160,6 +160,27 @@ proc processLink(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc to*(resumeCtx: TrieNodeStatCtxRef; T: type seq[NodeSpecs]): T =
+  ## Convert resumption context to nodes that can be used otherwise. This
+  ## function might be useful for error recovery.
+  ##
+  ## Note: In a non-persistant case, temporary `RepairKey` type node specs
+  ## that cannot be converted to `NodeKey` type nodes are silently dropped.
+  ## This should be no problem as a hexary trie with `RepairKey` type node
+  ## refs must be repaired or discarded anyway.
+  if resumeCtx.persistent:
+    for (key,trail) in resumeCtx.hddCtx:
+      result.add NodeSpecs(
+        partialPath: trail.hexPrefixEncode(isLeaf = false),
+        nodeKey:     key)
+  else:
+    for (key,trail) in resumeCtx.memCtx:
+      if key.isNodeKey:
+        result.add NodeSpecs(
+          partialPath: trail.hexPrefixEncode(isLeaf = false),
+          nodeKey:     key.convertTo(NodeKey))
+
 
 proc hexaryInspectPath*(
     db: HexaryTreeDbRef;           ## Database
@@ -206,7 +227,7 @@ proc hexaryInspectToKeys*(
 proc hexaryInspectTrie*(
     db: HexaryTreeDbRef;                 ## Database
     root: NodeKey;                       ## State root
-    paths: seq[Blob];                    ## Starting paths for search
+    paths: seq[Blob] = @[];              ## Starting paths for search
     resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
     suspendAfter = high(uint64);         ## To be resumed
     stopAtLevel = 64;                    ## Instead of loop detector
@@ -309,12 +330,12 @@ proc hexaryInspectTrie*(
 proc hexaryInspectTrie*(
     getFn: HexaryGetFn;                  ## Database abstraction
     rootKey: NodeKey;                    ## State root
-    paths: seq[Blob];                    ## Starting paths for search
+    paths: seq[Blob] = @[];              ## Starting paths for search
     resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
     suspendAfter = high(uint64);         ## To be resumed
     stopAtLevel = 64;                    ## Instead of loop detector
       ): TrieNodeStat
-      {.gcsafe, raises: [Defect,RlpError,KeyError]} =
+      {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryInspectTrie()` for persistent database.
   when extraTraceMessages:
     let nPaths = paths.len

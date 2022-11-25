@@ -54,6 +54,7 @@ type
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
+    lockTriePerusal*: bool             ## Only one process at a time
 
   SnapHealingState* = enum
     ## State of healing process. The `HealerRunning` state indicates that

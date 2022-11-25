@@ -624,25 +624,24 @@ proc inspectionRunner(
           desc = SnapDbAccountsRef.init(memBase, root, peer)
         for w in accList:
           check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
-        let rc = desc.inspectAccountsTrie(persistent=false)
-        check rc.isOk
+        let stats = desc.hexaDb.hexaryInspectTrie(rootKey)
+        check not stats.stopped
         let
-          dangling = rc.value.dangling.mapIt(it.partialPath)
+          dangling = stats.dangling.mapIt(it.partialPath)
           keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
         check dangling.len == keys.len
-        singleStats.add (desc.hexaDb.tab.len,rc.value)
+        singleStats.add (desc.hexaDb.tab.len,stats)
 
-        # Verify piecemeal approach for `inspectAccountsTrie()` ...
+        # Verify piecemeal approach for `hexaryInspectTrie()` ...
         var
           ctx = TrieNodeStatCtxRef()
           piecemeal: HashSet[Blob]
         while not ctx.isNil:
-          let rx = desc.inspectAccountsTrie(
-            resumeCtx=ctx, suspendAfter=128, persistent=false)
-          check rx.isOk
-          let stats = rx.get(otherwise = TrieNodeStat())
-          ctx = stats.resumeCtx
-          piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+          let stat2 = desc.hexaDb.hexaryInspectTrie(
+            rootKey, resumeCtx=ctx, suspendAfter=128)
+          check not stat2.stopped
+          ctx = stat2.resumeCtx
+          piecemeal.incl stat2.dangling.mapIt(it.partialPath).toHashSet
         # Must match earlier all-in-one result
         check dangling.len == piecemeal.len
         check dangling.toHashSet == piecemeal
@@ -664,27 +663,26 @@ proc inspectionRunner(
 
           for w in accList:
             check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
-          let rc = desc.inspectAccountsTrie(persistent=true)
-          check rc.isOk
+          let stats = desc.getAccountFn.hexaryInspectTrie(rootKey)
+          check not stats.stopped
           let
-            dangling = rc.value.dangling.mapIt(it.partialPath)
+            dangling = stats.dangling.mapIt(it.partialPath)
             keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
           let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
           check ssn1.toHashSet == dangling.toHashSet
 
-          # Verify piecemeal approach for `inspectAccountsTrie()` ...
+          # Verify piecemeal approach for `hexaryInspectTrie()` ...
           var
             ctx = TrieNodeStatCtxRef()
             piecemeal: HashSet[Blob]
           while not ctx.isNil:
-            let rx = desc.inspectAccountsTrie(
-              resumeCtx=ctx, suspendAfter=128, persistent=persistent)
-            check rx.isOk
-            let stats = rx.get(otherwise = TrieNodeStat())
-            ctx = stats.resumeCtx
-            piecemeal.incl stats.dangling.mapIt(it.partialPath).toHashSet
+            let stat2 = desc.getAccountFn.hexaryInspectTrie(
+              rootKey, resumeCtx=ctx, suspendAfter=128)
+            check not stat2.stopped
+            ctx = stat2.resumeCtx
+            piecemeal.incl stat2.dangling.mapIt(it.partialPath).toHashSet
           # Must match earlier all-in-one result
           check dangling.len == piecemeal.len
           check dangling.toHashSet == piecemeal
@@ -699,14 +697,14 @@ proc inspectionRunner(
           desc = memDesc.dup(root,Peer())
         for w in accList:
           check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
-        let rc = desc.inspectAccountsTrie(persistent=false)
-        check rc.isOk
+        let stats = desc.hexaDb.hexaryInspectTrie(rootKey)
+        check not stats.stopped
         let
-          dangling = rc.value.dangling.mapIt(it.partialPath)
+          dangling = stats.dangling.mapIt(it.partialPath)
           keys = desc.hexaDb.hexaryInspectToKeys(
             rootKey, dangling.toHashSet.toSeq)
         check dangling.len == keys.len
-        accuStats.add (desc.hexaDb.tab.len,rc.value)
+        accuStats.add (desc.hexaDb.tab.len, stats)
 
     test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
         "for persistent db":
@@ -722,14 +720,14 @@ proc inspectionRunner(
             desc = perDesc.dup(root,Peer())
           for w in accList:
             check desc.importAccounts(w.base, w.data, persistent).isImportOk
-          let rc = desc.inspectAccountsTrie(persistent=false)
-          check rc.isOk
+          let stats = desc.getAccountFn.hexaryInspectTrie(rootKey)
+          check not stats.stopped
           let
-            dangling = rc.value.dangling.mapIt(it.partialPath)
+            dangling = stats.dangling.mapIt(it.partialPath)
             keys = desc.hexaDb.hexaryInspectToKeys(
               rootKey, dangling.toHashSet.toSeq)
           check dangling.len == keys.len
-          check accuStats[n][1] == rc.value
+          check accuStats[n][1] == stats
 
     test &"Cascaded fingerprinting {inspectList.len} accumulated accounts " &
         "lists for in-memory-db":
@@ -752,12 +750,13 @@ proc inspectionRunner(
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
-            r0 = desc.inspectAccountsTrie(persistent=false)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=false)
-          check rc.isOk
+            stat0 = desc.hexaDb.hexaryInspectTrie(rootKey)
+            stats = desc.hexaDb.hexaryInspectTrie(rootKey,cscStep[rootKey][1])
+          check not stat0.stopped
+          check not stats.stopped
           let
-            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
+            accumulated = stat0.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = stats.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
@@ -784,12 +783,14 @@ proc inspectionRunner(
           if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
             cscStep[rootKey][0].inc
           let
-            r0 = desc.inspectAccountsTrie(persistent=true)
-            rc = desc.inspectAccountsTrie(cscStep[rootKey][1],persistent=true)
-          check rc.isOk
+            stat0 = desc.getAccountFn.hexaryInspectTrie(rootKey)
+            stats = desc.getAccountFn.hexaryInspectTrie(rootKey,
+                                                        cscStep[rootKey][1])
+          check not stat0.stopped
+          check not stats.stopped
           let
-            accumulated = r0.value.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = rc.value.dangling.mapIt(it.partialPath).toHashSet
+            accumulated = stat0.dangling.mapIt(it.partialPath).toHashSet
+            cascaded = stats.dangling.mapIt(it.partialPath).toHashSet
           check accumulated == cascaded
         # Make sure that there are no trivial cases
         let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len

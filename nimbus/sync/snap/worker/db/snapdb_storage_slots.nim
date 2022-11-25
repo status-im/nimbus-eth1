@@ -30,7 +30,6 @@ type
   SnapDbStorageSlotsRef* = ref object of SnapDbBaseRef
     peer: Peer                  ## For log messages
     accKey: NodeKey             ## Accounts address hash (curr.unused)
-    getClsFn: StorageSlotsGetFn ## Persistent database `get()` closure
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -41,10 +40,6 @@ proc to(h: Hash256; T: type NodeKey): T =
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
-
-proc getFn(ps: SnapDbStorageSlotsRef; accKey: NodeKey): HexaryGetFn =
-  ## Capture `accKey` argument for `GetClsFn` closure => `HexaryGetFn`
-  return proc(key: openArray[byte]): Blob = ps.getClsFn(accKey,key)
 
 
 template noKeyError(info: static[string]; code: untyped) =
@@ -225,11 +220,26 @@ proc init*(
   result.init(pv, root.to(NodeKey))
   result.peer = peer
   result.accKey = accKey
-  result.getClsFn = db.persistentStorageSlotsGetFn()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc getStorageSlotsFn*(
+    ps: SnapDbStorageSlotsRef;
+      ): HexaryGetFn =
+  ## Return `HexaryGetFn` closure.
+  let getFn = ps.kvDb.persistentStorageSlotsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(ps.accKey, key)
+
+proc getStorageSlotsFn*(
+    pv: SnapDbRef;
+    accKey: NodeKey;
+      ): HexaryGetFn =
+  ## Variant of `getStorageSlotsFn()` for captured `accKey` argument.
+  let getFn = pv.kvDb.persistentStorageSlotsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(accKey, key)
+
 
 proc importStorageSlots*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
@@ -428,7 +438,7 @@ proc inspectStorageSlotsTrie*(
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
-      stats = ps.getFn(ps.accKey).hexaryInspectTrie(
+      stats = ps.getStorageSlotsFn.hexaryInspectTrie(
         ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
     else:
       stats = ps.hexaDb.hexaryInspectTrie(
@@ -477,7 +487,7 @@ proc getStorageSlotsNodeKey*(
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getStorageSlotsNodeKey()"):
     if persistent:
-      rc = ps.getFn(ps.accKey).hexaryInspectPath(ps.root, path)
+      rc = ps.getStorageSlotsFn.hexaryInspectPath(ps.root, path)
     else:
       rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
   if rc.isOk:
@@ -510,9 +520,9 @@ proc getStorageSlotsData*(
   noRlpExceptionOops("getStorageSlotsData()"):
     var leaf: Blob
     if persistent:
-      leaf = path.hexaryPath(ps.root, ps.getFn(ps.accKey)).leafData
+      leaf = path.hexaryPath(ps.root, ps.getStorageSlotsFn).leafData
     else:
-      leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
+      leaf = path.hexaryPath(ps.root.to(RepairKey), ps.hexaDb).leafData
 
     if leaf.len == 0:
       return err(AccountNotFound)
@@ -542,8 +552,7 @@ proc haveStorageSlotsData*(
   ## Caveat: There is no unit test yet
   noGenericExOrKeyError("haveStorageSlotsData()"):
     if persistent:
-      let getFn = ps.getFn(ps.accKey)
-      return 0 < ps.root.ByteArray32.getFn().len
+      return 0 < ps.getStorageSlotsFn()(ps.root.ByteArray32).len
     else:
       return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))
 

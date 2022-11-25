@@ -22,6 +22,7 @@ type
     SlotsNotSrictlyIncreasing
     TrieLoopAlert
     TrieIsEmpty
+    TrieIsLockedForPerusal
     TooManyProcessedChunks
     TooManySlotAccounts
 
