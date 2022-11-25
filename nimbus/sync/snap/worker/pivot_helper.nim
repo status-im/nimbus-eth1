@@ -297,13 +297,15 @@ proc recoverPivotFromCheckpoint*(
   env.nAccounts = recov.state.nAccounts
   env.nSlotLists = recov.state.nSlotLists
 
-  if topLevel:
-    # Import processed interval
-    for (minPt,maxPt) in recov.state.processed:
+  # Import processed interval
+  for (minPt,maxPt) in recov.state.processed:
+    if topLevel:
       discard env.fetchAccounts.processed.merge(minPt, maxPt)
       env.fetchAccounts.unprocessed.reduce(minPt, maxPt)
+    discard ctx.data.coveredAccounts.merge(minPt, maxPt)
 
-    # Handle storage slots
+  # Handle storage slots
+  if topLevel:
     let stateRoot = recov.state.header.stateRoot
     for w in recov.state.slotAccounts:
       let pt = NodeTagRange.new(w.to(NodeTag),w.to(NodeTag))
