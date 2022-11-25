@@ -273,7 +273,7 @@ proc execSnapSyncAction*(
 proc saveCheckpoint*(
     env: SnapPivotRef;              ## Current pivot environment
     ctx: SnapCtxRef;                ## Some global context
-      ): Result[int,HexaryDbError] =
+      ): Result[int,HexaryError] =
   ## Save current sync admin data. On success, the size of the data record
   ## saved is returned (e.g. for logging.)
   ##

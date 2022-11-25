@@ -77,7 +77,7 @@ template noGenericExOrKeyError(info: static[string]; code: untyped) =
 proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
@@ -93,7 +93,7 @@ proc collectStorageSlots(
     peer: Peer;               ## for log messages
     base: NodeTag;            ## before or at first account entry in `data`
     slotLists: seq[SnapStorage];
-      ): Result[seq[RLeafSpecs],HexaryDbError]
+      ): Result[seq[RLeafSpecs],HexaryError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Similar to `collectAccounts()`
   var rcSlots: seq[RLeafSpecs]
@@ -136,7 +136,7 @@ proc importStorageSlots(
     data: AccountSlots;        ## Account storage descriptor
     proof: SnapStorageProof;   ## Storage slots proof data
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
-      ): Result[seq[NodeSpecs],HexaryDbError]
+      ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
@@ -429,7 +429,7 @@ proc inspectStorageSlotsTrie*(
     suspendAfter = high(uint64);         ## To be resumed
     persistent = false;                  ## Read data from disk
     ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
+      ): Result[TrieNodeStat, HexaryError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. Argument `pathSet` list entries that do not refer to a
@@ -482,7 +482,7 @@ proc inspectStorageSlotsTrie*(
     resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
     suspendAfter = high(uint64);         ## To be resumed
     ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
+      ): Result[TrieNodeStat, HexaryError] =
   ## Variant of `inspectStorageSlotsTrieTrie()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).inspectStorageSlotsTrie(
@@ -493,7 +493,7 @@ proc getStorageSlotsNodeKey*(
     ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getStorageSlotsNodeKey()"):
@@ -511,7 +511,7 @@ proc getStorageSlotsNodeKey*(
     accKey: NodeKey;              ## Account key
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Variant of `getStorageSlotsNodeKey()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).getStorageSlotsNodeKey(path, persistent=true)
@@ -521,7 +521,7 @@ proc getStorageSlotsData*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     path: NodeKey;             ## Account to visit
     persistent = false;        ## Read data from disk
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch storage slots data.
   ##
   ## Caveat: There is no unit test yet
@@ -547,7 +547,7 @@ proc getStorageSlotsData*(
     accKey: NodeKey;              ## Account key
     root: Hash256;             ## state root
     path: NodeKey;             ## Account to visit
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Variant of `getStorageSlotsData()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).getStorageSlotsData(path, persistent=true)

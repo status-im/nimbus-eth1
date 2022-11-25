@@ -65,8 +65,8 @@ else:
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkHexDb = Result[void,HexaryDbError].ok()
-  OkStoDb = Result[void,seq[(int,HexaryDbError)]].ok()
+  OkHexDb = Result[void,HexaryError].ok()
+  OkStoDb = Result[void,seq[(int,HexaryError)]].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent BaseChainDB initialisation
@@ -88,7 +88,7 @@ var
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
-proc isImportOk(rc: Result[SnapAccountsGaps,HexaryDbError]): bool =
+proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
   if rc.isErr:
     check rc.error == NothingSerious # prints an error if different
   elif 0 < rc.value.innerGaps.len:
@@ -96,7 +96,7 @@ proc isImportOk(rc: Result[SnapAccountsGaps,HexaryDbError]): bool =
   else:
     return true
 
-proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryDbError)]]=
+proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryError)]]=
   ## Kludge: map error report to (older version) return code
   if r.len != 0:
     return err(r.mapIt((it.slot.get(otherwise = -1),it.error)))
@@ -125,13 +125,13 @@ proc pp(d: Duration): string =
   else:
     d.ppUs
 
-proc pp(rc: Result[Account,HexaryDbError]): string =
+proc pp(rc: Result[Account,HexaryError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
 
-proc pp(rc: Result[Hash256,HexaryDbError]): string =
+proc pp(rc: Result[Hash256,HexaryError]): string =
   if rc.isErr: $rc.error else: $rc.value.to(NodeTag)
 
-proc pp(rc: Result[TrieNodeStat,HexaryDbError]; db: SnapDbBaseRef): string =
+proc pp(rc: Result[TrieNodeStat,HexaryError]; db: SnapDbBaseRef): string =
   if rc.isErr: $rc.error else: rc.value.pp(db.hexaDb)
 
 proc pp(a: NodeKey; collapse = true): string =
@@ -514,7 +514,7 @@ proc storagesRunner(
     noisy = true;
     persistent = true;
     sample = storSample;
-    knownFailures: seq[(string,seq[(int,HexaryDbError)])] = @[]) =
+    knownFailures: seq[(string,seq[(int,HexaryError)])] = @[]) =
   let
     peer = Peer.new
     accountsList = sample.to(seq[UndumpAccounts])
@@ -552,7 +552,7 @@ proc storagesRunner(
         let
           testId = fileInfo & "#" & $n
           expRc = if ignore.hasKey(testId):
-                    Result[void,seq[(int,HexaryDbError)]].err(ignore[testId])
+                    Result[void,seq[(int,HexaryError)]].err(ignore[testId])
                   else:
                     OkStoDb
         check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
@@ -571,7 +571,7 @@ proc storagesRunner(
             dbDesc = SnapDbStorageSlotsRef.init(dbBase, accKey, root, peer)
             rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
           if m == errInx:
-            check rc == Result[TrieNodeStat,HexaryDbError].err(TrieIsEmpty)
+            check rc == Result[TrieNodeStat,HexaryError].err(TrieIsEmpty)
           else:
             check rc.isOk # ok => level > 0 and not stopped
 

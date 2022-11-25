@@ -9,7 +9,7 @@
 # except according to those terms.
 
 type
-  HexaryDbError* = enum
+  HexaryError* = enum
     NothingSerious = 0
 
     AccountNotFound

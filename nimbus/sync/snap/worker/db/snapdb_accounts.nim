@@ -68,7 +68,7 @@ template noRlpExceptionOops(info: static[string]; code: untyped) =
 proc persistentAccounts(
     db: HexaryTreeDbRef;      ## Current table
     ps: SnapDbAccountsRef;    ## For persistent database
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
@@ -84,7 +84,7 @@ proc collectAccounts(
     peer: Peer,               ## for log messages
     base: NodeTag;
     acc: seq[PackedAccount];
-      ): Result[seq[RLeafSpecs],HexaryDbError]
+      ): Result[seq[RLeafSpecs],HexaryError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Repack account records into a `seq[RLeafSpecs]` queue. The argument data
   ## `acc` are as received with the snap message `AccountRange`).
@@ -175,7 +175,7 @@ proc importAccounts*(
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     persistent = false;       ## Store data on disk
     noBaseBoundCheck = false; ## Ignore left boundary proof check if `true`
-      ): Result[SnapAccountsGaps,HexaryDbError] =
+      ): Result[SnapAccountsGaps,HexaryError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
   ## which can be written to disk with the argument `persistent` set `true`.
@@ -319,7 +319,7 @@ proc importAccounts*(
     base: NodeTag;            ## Before or at first account entry in `data`
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     noBaseBoundCheck = false; ## Ignore left bound proof check if `true`
-      ): Result[SnapAccountsGaps,HexaryDbError] =
+      ): Result[SnapAccountsGaps,HexaryError] =
   ## Variant of `importAccounts()` for presistent storage, only.
   SnapDbAccountsRef.init(
     pv, root, peer).importAccounts(
@@ -408,7 +408,7 @@ proc getAccountsNodeKey*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getAccountsNodeKey()"):
@@ -424,7 +424,7 @@ proc getAccountsNodeKey*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Variant of `getAccountsNodeKey()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, root, Peer()).getAccountsNodeKey(path, persistent=true)
@@ -434,7 +434,7 @@ proc getAccountsData*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: NodeKey;                ## Account to visit
     persistent = false;           ## Read data from disk
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch account data.
   ##
   ## Caveat: There is no unit test yet for the non-persistent version
@@ -457,7 +457,7 @@ proc getAccountsData*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Variant of `getAccountsData()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, root, Peer()).getAccountsData(path, persistent=true)
@@ -491,14 +491,14 @@ proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
 proc getAccountsChainDb*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch account via `BaseChainDB`
   ps.getAccountsData(accKey, persistent = true)
 
 proc nextAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
   ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
@@ -514,7 +514,7 @@ proc nextAccountsChainDbKey*(
 proc prevAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `BaseChainDB`, the one before to the
   ## argument account.
   noRlpExceptionOops("getChainDbAccount()"):

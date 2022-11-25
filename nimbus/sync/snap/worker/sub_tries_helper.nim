@@ -41,7 +41,7 @@ proc doInspect(
     rootKey: NodeKey;                  ## Start of hexary trie
     partialPaths: seq[Blob];           ## Nodes with prob. dangling child links
     resumeCtx: TrieNodeStatCtxRef;     ## Resume previous inspection
-     ): Result[TrieNodeStat,HexaryDbError]
+     ): Result[TrieNodeStat,HexaryError]
      {.gcsafe, raises: [Defect,RlpError].} =
   ## ..
   let stats = getFn.hexaryInspectTrie(
@@ -77,7 +77,7 @@ proc subTriesFromPartialPaths*(
     stateRoot: Hash256;                ## Start of hexary trie
     batch: SnapRangeBatchRef;          ## Healing data support
     sickSubTriesMaxLen = high(int);    ## Max length of `sickSubTries`
-      ): Future[Result[void,HexaryDbError]]
+      ): Future[Result[void,HexaryError]]
       {.async.} =
   ## Starting with a given set of potentially dangling account nodes
   ## `checkNodes`, this set is filtered and processed. The outcome is
@@ -91,7 +91,7 @@ proc subTriesFromPartialPaths*(
   let
     rootKey = stateRoot.to(NodeKey)
   var
-    error: HexaryDbError
+    error: HexaryError
     count = 0                                      # for logging
     start = Moment.now()                           # for logging
 

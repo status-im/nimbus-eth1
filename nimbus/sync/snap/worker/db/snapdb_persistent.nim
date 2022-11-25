@@ -90,7 +90,7 @@ proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
 proc persistentStateRootGet*(
     db: TrieDatabaseRef;
     root: NodeKey;
-      ): Result[StateRootRegistry,HexaryDbError] =
+      ): Result[StateRootRegistry,HexaryError] =
   ## Implements a `get()` function for returning state root registry data.
   let rlpBlob = db.stateRootGet(root)
   if 0 < rlpBlob.len:
@@ -107,7 +107,7 @@ proc persistentStateRootGet*(
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
-      ): Result[void,HexaryDbError] =
+      ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -123,7 +123,7 @@ proc persistentAccountsPut*(
 proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     base: TrieDatabaseRef
-      ): Result[void,HexaryDbError] =
+      ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
   defer: dbTx.commit
@@ -179,7 +179,7 @@ proc persistentStateRootPut*(
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:
@@ -228,7 +228,7 @@ proc persistentAccountsPut*(
 proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:

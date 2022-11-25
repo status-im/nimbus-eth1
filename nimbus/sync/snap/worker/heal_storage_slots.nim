@@ -72,7 +72,7 @@ proc healingCtx(
 proc acceptWorkItemAsIs(
     buddy: SnapBuddyRef;
     kvp: SnapSlotsQueuePair;
-      ): Result[bool, HexaryDbError] =
+      ): Result[bool,HexaryError] =
   ## Check whether this work item is done and the corresponding storage trie
   ## can be completely inherited.
   if kvp.data.inherit:

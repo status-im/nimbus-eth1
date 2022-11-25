@@ -89,7 +89,7 @@ proc checkStorageSlotsTrie(
     accKey: NodeKey;
     storageRoot: Hash256;
     env: SnapPivotRef;
-      ): Result[bool,HexaryDbError] =
+      ): Result[bool,HexaryError] =
   ## Check whether a storage slots hexary trie is complete.
   let
     ctx = buddy.ctx
@@ -107,7 +107,7 @@ proc checkStorageSlotsTrie(
 iterator accountsWalk(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): (NodeKey,Account,HexaryDbError) =
+      ): (NodeKey,Account,HexaryError) =
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
@@ -162,7 +162,7 @@ proc checkAccountsTrieIsComplete*(
     db = ctx.data.snapDb
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
   var
-    error: HexaryDbError
+    error: HexaryError
 
   try:
     let stats = db.getAccountFn.hexaryInspectTrie(rootKey, @[])
