@@ -157,6 +157,9 @@ func validateBlockHeaderBytes*(
 
   let header = ? decodeRlp(bytes, BlockHeader)
 
+  if header.withdrawalsRoot.isSome:
+    return err("Withdrawals not yet implemented")
+
   if not (header.blockHash() == hash):
     err("Block header hash does not match")
   else:
