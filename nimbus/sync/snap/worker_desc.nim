@@ -54,14 +54,7 @@ type
     checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
     sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
-
-  SnapHealingState* = enum
-    ## State of healing process. The `HealerRunning` state indicates that
-    ## dangling and/or missing nodes have been temprarily removed from the
-    ## batch queue while processing.
-    HealerIdle
-    HealerRunning
-    HealerDone
+    lockTriePerusal*: bool             ## Only one process at a time
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
@@ -69,7 +62,6 @@ type
 
     # Accounts download
     fetchAccounts*: SnapRangeBatchRef  ## Set of accounts ranges to fetch
-    accountsState*: SnapHealingState   ## All accounts have been processed
     healThresh*: float                 ## Start healing when fill factor reached
 
     # Storage slots download
@@ -107,7 +99,6 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
-    accountsHealing*: bool             ## Activates accounts DB healing
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
     noRecovery*: bool                  ## Ignore recovery checkpoints
 

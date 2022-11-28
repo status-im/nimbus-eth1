@@ -18,7 +18,8 @@ import
   ../../../../utils/prettify,
   ../../../sync_desc,
   "../.."/[range_desc, worker_desc],
-  "."/[hexary_desc, hexary_error, snapdb_accounts, snapdb_storage_slots]
+  "."/[hexary_desc, hexary_error, hexary_inspect,
+       snapdb_accounts, snapdb_storage_slots]
 
 {.push raises: [Defect].}
 
@@ -45,7 +46,7 @@ proc accountsCtx(
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "nAccounts=" & $env.nAccounts & "," &
-    ("covered=" & env.fetchAccounts.unprocessed.emptyFactor.toPC(0) & "/" &
+    ("covered=" & env.fetchAccounts.processed.fullFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
     "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
     "nSickSubTries=" & $env.fetchAccounts.sickSubTries.len & "}"
@@ -74,7 +75,7 @@ proc storageSlotsCtx(
     "inherit=" & (if data.inherit: "t" else: "f") & ","
   if not slots.isNil:
     result &= "" &
-      "covered=" & slots.unprocessed.emptyFactor.toPC(0) &
+      "covered=" & slots.processed.fullFactor.toPC(0) &
       "nCheckNodes=" & $slots.checkNodes.len & "," &
       "nSickSubTries=" & $slots.sickSubTries.len
   result &= "}"
@@ -88,7 +89,7 @@ proc checkStorageSlotsTrie(
     accKey: NodeKey;
     storageRoot: Hash256;
     env: SnapPivotRef;
-      ): Result[bool,HexaryDbError] =
+      ): Result[bool,HexaryError] =
   ## Check whether a storage slots hexary trie is complete.
   let
     ctx = buddy.ctx
@@ -106,7 +107,7 @@ proc checkStorageSlotsTrie(
 iterator accountsWalk(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): (NodeKey,Account,HexaryDbError) =
+      ): (NodeKey,Account,HexaryError) =
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
@@ -157,18 +158,29 @@ proc checkAccountsTrieIsComplete*(
   ## Check whether accounts hexary trie is complete
   let
     ctx = buddy.ctx
-    db = ctx.data.snapDb
     peer = buddy.peer
-    stateRoot = env.stateHeader.stateRoot
+    db = ctx.data.snapDb
+    rootKey = env.stateHeader.stateRoot.to(NodeKey)
+  var
+    error: HexaryError
 
-    rc = db.inspectAccountsTrie(peer, stateRoot)
+  try:
+    let stats = db.getAccountFn.hexaryInspectTrie(rootKey, @[])
+    if not stats.stopped:
+      return stats.dangling.len == 0
 
-  if rc.isErr:
-    error logTxt "accounts health check failed", peer,
-      ctx=buddy.accountsCtx(env), error=rc.error
-    return false
+    error = TrieLoopAlert
+  except RlpError:
+    error = RlpEncoding
+  except KeyError as e:
+    raiseAssert "Not possible @ importRawAccountNodes: " & e.msg
+  except Exception as e:
+    raiseAssert "Ooops checkAccountsTrieIsComplete(): name=" &
+      $e.name & " msg=" & e.msg
 
-  rc.value.dangling.len == 0
+  error logTxt "accounts health check failed", peer,
+    ctx=buddy.accountsCtx(env), error
+  return false
 
 
 proc checkAccountsListOk*(

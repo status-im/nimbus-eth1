@@ -10,7 +10,7 @@
 
 import
   std/[math, sequtils, strutils, hashes],
-  eth/[common, trie/nibbles],
+  eth/common,
   stew/[byteutils, interval_set],
   stint,
   ../../constants,
@@ -83,27 +83,6 @@ type
     data*: seq[SnapStorage]
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc padPartialPath(partialPath: NibblesSeq; dblNibble: byte): NodeKey =
-  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`
-  # Pad with zeroes
-  var padded: NibblesSeq
-
-  let padLen = 64 - partialPath.len
-  if 0 <= padLen:
-    padded = partialPath & dblNibble.repeat(padlen div 2).initNibbleRange
-    if (padLen and 1) == 1:
-      padded = padded & @[dblNibble].initNibbleRange.slice(1)
-  else:
-    let nope = seq[byte].default.initNibbleRange
-    padded = partialPath.slice(0,63) & nope # nope forces re-alignment
-
-  let bytes = padded.getBytes
-  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
-
-# ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
@@ -138,12 +117,6 @@ proc to*(key: NodeKey; T: type Blob): T =
 proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
   ## Syntactic sugar
   n.u256.T
-
-proc min*(partialPath: Blob; T: type NodeKey): T =
-  (hexPrefixDecode partialPath)[1].padPartialPath(0)
-
-proc max*(partialPath: Blob; T: type NodeKey): T =
-  (hexPrefixDecode partialPath)[1].padPartialPath(0xff)
 
 proc digestTo*(data: Blob; T: type NodeKey): T =
   keccakHash(data).data.T

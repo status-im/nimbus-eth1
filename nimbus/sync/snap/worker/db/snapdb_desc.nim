@@ -214,7 +214,7 @@ proc mergeProofs*(
     peer: Peer;               ## For log messages
     proof: seq[Blob];         ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Import proof records (as received with snap message) into a hexary trie
   ## of the repair table. These hexary trie records can be extended to a full
@@ -253,7 +253,7 @@ proc verifyLowerBound*(
     peer: Peer;               ## For log messages
     base: NodeTag;            ## Before or at first account entry in `data`
     first: NodeTag;           ## First account key
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect, KeyError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
@@ -278,7 +278,7 @@ proc verifyNoMoreRight*(
     ps: SnapDbBaseRef;        ## Database session descriptor
     peer: Peer;               ## For log messages
     base: NodeTag;            ## Before or at first account entry in `data`
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect, KeyError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.

@@ -12,6 +12,7 @@ import
   std/tables,
   chronicles,
   eth/[common, p2p, rlp],
+  stew/interval_set,
   ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_inspect,
@@ -29,7 +30,6 @@ type
   SnapDbStorageSlotsRef* = ref object of SnapDbBaseRef
     peer: Peer                  ## For log messages
     accKey: NodeKey             ## Accounts address hash (curr.unused)
-    getClsFn: StorageSlotsGetFn ## Persistent database `get()` closure
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -40,10 +40,6 @@ proc to(h: Hash256; T: type NodeKey): T =
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
-
-proc getFn(ps: SnapDbStorageSlotsRef; accKey: NodeKey): HexaryGetFn =
-  ## Capture `accKey` argument for `GetClsFn` closure => `HexaryGetFn`
-  return proc(key: openArray[byte]): Blob = ps.getClsFn(accKey,key)
 
 
 template noKeyError(info: static[string]; code: untyped) =
@@ -81,7 +77,7 @@ template noGenericExOrKeyError(info: static[string]; code: untyped) =
 proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
@@ -97,7 +93,7 @@ proc collectStorageSlots(
     peer: Peer;               ## for log messages
     base: NodeTag;            ## before or at first account entry in `data`
     slotLists: seq[SnapStorage];
-      ): Result[seq[RLeafSpecs],HexaryDbError]
+      ): Result[seq[RLeafSpecs],HexaryError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Similar to `collectAccounts()`
   var rcSlots: seq[RLeafSpecs]
@@ -140,15 +136,17 @@ proc importStorageSlots(
     data: AccountSlots;        ## Account storage descriptor
     proof: SnapStorageProof;   ## Storage slots proof data
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
-      ): Result[seq[NodeSpecs],HexaryDbError]
+      ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
   let
     tmpDb = SnapDbBaseRef.init(ps, data.account.storageRoot.to(NodeKey))
   var
-    slots: seq[RLeafSpecs]
-    dangling: seq[NodeSpecs]
+    slots: seq[RLeafSpecs]        # validated slots to add to database
+    dangling: seq[NodeSpecs]      # return value
+    proofStats: TrieNodeStat      # `proof` data dangling links
+    innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   if 0 < proof.len:
     let rc = tmpDb.mergeProofs(ps.peer, proof)
     if rc.isErr:
@@ -160,17 +158,17 @@ proc importStorageSlots(
     slots = rc.value
 
   if 0 < slots.len:
-    var innerSubTrie: seq[NodeSpecs]
     if 0 < proof.len:
       # Inspect trie for dangling nodes. This is not a big deal here as the
       # proof data is typically small.
-      let
-        proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
-        topTag = slots[^1].pathTag
+      let topTag = slots[^1].pathTag
       for w in proofStats.dangling:
-        if base <= w.partialPath.max(NodeKey).to(NodeTag) and
-           w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
-          # Extract dangling links which are inside the accounts range
+        let iv = w.partialPath.pathEnvelope
+        if iv.maxPt < base or topTag < iv.minPt:
+          # Dangling link with partial path envelope outside accounts range
+          discard
+        else:
+          # Overlapping partial path envelope.
           innerSubTrie.add w
 
     # Build partial hexary trie
@@ -183,16 +181,18 @@ proc importStorageSlots(
     # trie (if any).
     let bottomTag = slots[0].pathTag
     for w in innerSubTrie:
-      if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-        continue
-      # Verify that `base` is to the left of the first slot and there is
-      # nothing in between. Without proof, there can only be a complete
-      # set/list of slots. There must be a proof for an empty list.
-      if not noBaseBoundCheck and
-         w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
-        return err(LowerBoundProofError)
-      # Otherwise register left over entry
-      dangling.add w
+      if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+        if not noBaseBoundCheck:
+          # Verify that `base` is to the left of the first slot and there is
+          # nothing in between.
+          #
+          # Without `proof` data available there can only be a complete
+          # set/list of accounts so there are no dangling nodes in the first
+          # place. But there must be `proof` data for an empty list.
+          if w.partialPath.pathEnvelope.maxPt < bottomTag:
+            return err(LowerBoundProofError)
+        # Otherwise register left over entry
+        dangling.add w
 
     # Commit to main descriptor
     for k,v in tmpDb.hexaDb.tab.pairs:
@@ -203,6 +203,13 @@ proc importStorageSlots(
   elif proof.len == 0:
     # There must be a proof for an empty argument list.
     return err(LowerBoundProofError)
+
+  else:
+    if not noBaseBoundCheck:
+      for w in proofStats.dangling:
+        if base <= w.partialPath.pathEnvelope.maxPt:
+          return err(LowerBoundProofError)
+    dangling = proofStats.dangling
 
   ok(dangling)
 
@@ -224,11 +231,26 @@ proc init*(
   result.init(pv, root.to(NodeKey))
   result.peer = peer
   result.accKey = accKey
-  result.getClsFn = db.persistentStorageSlotsGetFn()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc getStorageSlotsFn*(
+    ps: SnapDbStorageSlotsRef;
+      ): HexaryGetFn =
+  ## Return `HexaryGetFn` closure.
+  let getFn = ps.kvDb.persistentStorageSlotsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(ps.accKey, key)
+
+proc getStorageSlotsFn*(
+    pv: SnapDbRef;
+    accKey: NodeKey;
+      ): HexaryGetFn =
+  ## Variant of `getStorageSlotsFn()` for captured `accKey` argument.
+  let getFn = pv.kvDb.persistentStorageSlotsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(accKey, key)
+
 
 proc importStorageSlots*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
@@ -407,7 +429,7 @@ proc inspectStorageSlotsTrie*(
     suspendAfter = high(uint64);         ## To be resumed
     persistent = false;                  ## Read data from disk
     ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
+      ): Result[TrieNodeStat, HexaryError] =
   ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. Argument `pathSet` list entries that do not refer to a
@@ -427,7 +449,7 @@ proc inspectStorageSlotsTrie*(
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
-      stats = ps.getFn(ps.accKey).hexaryInspectTrie(
+      stats = ps.getStorageSlotsFn.hexaryInspectTrie(
         ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
     else:
       stats = ps.hexaDb.hexaryInspectTrie(
@@ -460,7 +482,7 @@ proc inspectStorageSlotsTrie*(
     resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
     suspendAfter = high(uint64);         ## To be resumed
     ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
+      ): Result[TrieNodeStat, HexaryError] =
   ## Variant of `inspectStorageSlotsTrieTrie()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).inspectStorageSlotsTrie(
@@ -471,12 +493,12 @@ proc getStorageSlotsNodeKey*(
     ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getStorageSlotsNodeKey()"):
     if persistent:
-      rc = ps.getFn(ps.accKey).hexaryInspectPath(ps.root, path)
+      rc = ps.getStorageSlotsFn.hexaryInspectPath(ps.root, path)
     else:
       rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
   if rc.isOk:
@@ -489,7 +511,7 @@ proc getStorageSlotsNodeKey*(
     accKey: NodeKey;              ## Account key
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Variant of `getStorageSlotsNodeKey()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).getStorageSlotsNodeKey(path, persistent=true)
@@ -499,7 +521,7 @@ proc getStorageSlotsData*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     path: NodeKey;             ## Account to visit
     persistent = false;        ## Read data from disk
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch storage slots data.
   ##
   ## Caveat: There is no unit test yet
@@ -509,9 +531,9 @@ proc getStorageSlotsData*(
   noRlpExceptionOops("getStorageSlotsData()"):
     var leaf: Blob
     if persistent:
-      leaf = path.hexaryPath(ps.root, ps.getFn(ps.accKey)).leafData
+      leaf = path.hexaryPath(ps.root, ps.getStorageSlotsFn).leafData
     else:
-      leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
+      leaf = path.hexaryPath(ps.root.to(RepairKey), ps.hexaDb).leafData
 
     if leaf.len == 0:
       return err(AccountNotFound)
@@ -525,7 +547,7 @@ proc getStorageSlotsData*(
     accKey: NodeKey;              ## Account key
     root: Hash256;             ## state root
     path: NodeKey;             ## Account to visit
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Variant of `getStorageSlotsData()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).getStorageSlotsData(path, persistent=true)
@@ -541,8 +563,7 @@ proc haveStorageSlotsData*(
   ## Caveat: There is no unit test yet
   noGenericExOrKeyError("haveStorageSlotsData()"):
     if persistent:
-      let getFn = ps.getFn(ps.accKey)
-      return 0 < ps.root.ByteArray32.getFn().len
+      return 0 < ps.getStorageSlotsFn()(ps.root.ByteArray32).len
     else:
       return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))
 

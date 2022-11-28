@@ -29,17 +29,17 @@
 ## * Data points in `iv` that were invalid or not recevied from the network
 ##   are merged back it the set `env.fetchAccounts.unprocessed`.
 ##
-
 import
   chronicles,
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   stint,
+  ../../../utils/prettify,
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/snapdb_accounts
+  ./db/[hexary_paths, snapdb_accounts]
 
 {.push raises: [Defect].}
 
@@ -57,21 +57,21 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
-proc dumpUnprocessed(
-    buddy: SnapBuddyRef;
-    env: SnapPivotRef;
-      ): string =
-  ## Debugging ...
-  let
-    peer = buddy.peer
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
-    moan = proc(overlap: UInt256; iv: NodeTagRange) =
-      trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
-
-  env.fetchAccounts.unprocessed.dump(moan, 5)
+# proc dumpUnprocessed(
+#     buddy: SnapBuddyRef;
+#     env: SnapPivotRef;
+#       ): string =
+#   ## Debugging ...
+#   let
+#     peer = buddy.peer
+#     pivot = "#" & $env.stateHeader.blockNumber # for logging
+#     moan = proc(overlap: UInt256; iv: NodeTagRange) =
+#       trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
+#
+#   env.fetchAccounts.unprocessed.dump(moan, 5)
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helpers
 # ------------------------------------------------------------------------------
 
 proc getUnprocessed(
@@ -97,6 +97,8 @@ proc accountsRangefetchImpl(
   let
     ctx = buddy.ctx
     peer = buddy.peer
+    db = ctx.data.snapDb
+    fa = env.fetchAccounts
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
@@ -113,7 +115,7 @@ proc accountsRangefetchImpl(
   let dd = block:
     let rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
-      env.fetchAccounts.unprocessed.merge iv # fail => interval back to pool
+      fa.unprocessed.merge iv # fail => interval back to pool
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
@@ -132,29 +134,29 @@ proc accountsRangefetchImpl(
   #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
   #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
-  # Now, we fully own the scheduler. The original interval will savely be
-  # placed back for a moment -- to be corrected below.
-  env.fetchAccounts.unprocessed.merge iv
+  # Now, we fully own the scheduler. The original interval will savely be placed
+  # back for a moment (the `unprocessed` range set to be corrected below.)
+  fa.unprocessed.merge iv
 
   # Processed accounts hashes are set up as a set of intervals which is needed
   # if the data range returned from the network contains holes.
-  let processed = NodeTagRangeSet.init()
+  let covered = NodeTagRangeSet.init()
   if 0 < dd.data.accounts.len:
-    discard processed.merge(iv.minPt, dd.data.accounts[^1].accKey.to(NodeTag))
+    discard covered.merge(iv.minPt, dd.data.accounts[^1].accKey.to(NodeTag))
   else:
-    discard processed.merge iv
+    discard covered.merge iv
 
   let gaps = block:
     # No left boundary check needed. If there is a gap, the partial path for
     # that gap is returned by the import function to be registered, below.
-    let rc = ctx.data.snapDb.importAccounts(
+    let rc = db.importAccounts(
       peer, stateRoot, iv.minPt, dd.data, noBaseBoundCheck = true)
     if rc.isErr:
       # Bad data, just try another peer
       buddy.ctrl.zombie = true
       when extraTraceMessages:
         trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
-          pivot, reqLen=iv.len, gotLen=processed.total, error=rc.error
+          pivot, reqLen=iv.len, gotLen=covered.total, error=rc.error
       return
     rc.value
 
@@ -164,47 +166,23 @@ proc accountsRangefetchImpl(
   # Punch holes into the reported range of received accounts from the network
   # if it there are gaps (described by dangling nodes.)
   for w in gaps.innerGaps:
-    discard processed.reduce(
-      w.partialPath.min(NodeKey).to(NodeTag),
-      w.partialPath.max(NodeKey).to(Nodetag))
-
-  # Update dangling nodes list unless healing is activated. The problem
-  # with healing activated is, that a previously missing node that suddenly
-  # appears will not automatically translate into a full sub-trie. It might
-  # just be the node itself (which justified the name `sickSubTrie`).
-  #
-  # Instead of managing partial sub-tries here, this is delegated to the
-  # healing module.
-  if not ctx.data.accountsHealing:
-    var delayed: seq[NodeSpecs]
-    for w in env.fetchAccounts.sickSubTries:
-      if not ctx.data.snapDb.nodeExists(peer, stateRoot, w):
-        delayed.add w
-    when extraTraceMessages:
-      trace logTxt "dangling nodes", peer, pivot,
-        nCheckNodes=env.fetchAccounts.checkNodes.len,
-        nSickSubTries=env.fetchAccounts.sickSubTries.len,
-        nUpdatedMissing=delayed.len, nOutsideGaps=gaps.dangling.len
-    env.fetchAccounts.sickSubTries = delayed & gaps.dangling
+    discard covered.reduce w.partialPath.pathEnvelope
 
   # Update book keeping
-  for w in processed.increasing:
+  for w in covered.increasing:
     # Remove the processed range from the batch of unprocessed ones.
-    env.fetchAccounts.unprocessed.reduce w
-    # Register consumed intervals on the accumulator over all state roots.
+    fa.unprocessed.reduce w
+    # Register consumed intervals on the accumulators over all state roots.
     discard buddy.ctx.data.coveredAccounts.merge w
+    discard fa.processed.merge w
 
   # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
 
-  #when extraTraceMessages:
-  #  let
-  #    imported = processed.dump()
-  #    unprocessed = buddy.dumpUnprocessed(env)
-  #  trace logTxt "request done", peer, pivot,
-  #    nCheckNodes=env.fetchAccounts.checkNodes.len,
-  #    nSickSubTries=env.fetchAccounts.sickSubTries.len,
-  #    imported, unprocessed
+  when extraTraceMessages:
+    trace logTxt "request done", peer, pivot,
+      covered=covered.fullFactor.toPC(2),
+      processed=fa.processed.fullFactor.toPC(2)
 
   return true
 
@@ -217,7 +195,10 @@ proc rangeFetchAccounts*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetch accounts and store them in the database.
-  if not env.fetchAccounts.unprocessed.isEmpty():
+  let
+    fa = env.fetchAccounts
+
+  if not fa.processed.isFull():
     let
       ctx = buddy.ctx
       peer = buddy.peer
@@ -226,8 +207,8 @@ proc rangeFetchAccounts*(
     when extraTraceMessages:
       trace logTxt "start", peer, pivot
 
-    var nFetchAccounts = 0
-    while not env.fetchAccounts.unprocessed.isEmpty() and
+    var nFetchAccounts = 0                     # for logging
+    while not fa.processed.isFull() and
           buddy.ctrl.running and
           not env.obsolete:
       nFetchAccounts.inc
@@ -241,6 +222,7 @@ proc rangeFetchAccounts*(
 
     when extraTraceMessages:
       trace logTxt "done", peer, pivot, nFetchAccounts,
+        nCheckNodes=fa.checkNodes.len, nSickSubTries=fa.sickSubTries.len,
         runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------

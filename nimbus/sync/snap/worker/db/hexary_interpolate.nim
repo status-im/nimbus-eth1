@@ -42,7 +42,7 @@ proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
   let pfx = "\n" & " ".repeat(indent)
   w.mapIt(it.pp(db)).join(pfx)
 
-proc pp(rc: Result[TrieNodeStat, HexaryDbError]; db: HexaryTreeDbRef): string =
+proc pp(rc: Result[TrieNodeStat, HexaryError]; db: HexaryTreeDbRef): string =
   if rc.isErr: $rc.error else: rc.value.pp(db)
 
 # ------------------------------------------------------------------------------
@@ -524,7 +524,7 @@ proc hexaryInterpolate*(
     rootKey: NodeKey;              ## Root node hash
     dbItems: var seq[RLeafSpecs];  ## List of path and leaf items
     bootstrap = false;             ## Can create root node on-the-fly
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## From the argument list `dbItems`, leaf nodes will be added to the hexary
   ## trie while interpolating the path for the leaf nodes by adding  missing

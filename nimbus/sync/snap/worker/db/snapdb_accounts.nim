@@ -12,7 +12,7 @@ import
   std/[algorithm, sequtils, tables],
   chronicles,
   eth/[common, p2p, rlp, trie/nibbles],
-  stew/byteutils,
+  stew/[byteutils, interval_set],
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_interpolate,
        hexary_inspect, hexary_paths, snapdb_desc, snapdb_persistent]
@@ -25,7 +25,6 @@ logScope:
 type
   SnapDbAccountsRef* = ref object of SnapDbBaseRef
     peer: Peer               ## For log messages
-    getClsFn: AccountsGetFn  ## Persistent database `get()` closure
 
   SnapAccountsGaps* = object
     innerGaps*: seq[NodeSpecs]
@@ -43,12 +42,6 @@ proc to(h: Hash256; T: type NodeKey): T =
 
 proc convertTo(data: openArray[byte]; T: type Hash256): T =
   discard result.data.NodeKey.init(data) # size error => zero
-
-proc getFn(ps: SnapDbAccountsRef): HexaryGetFn =
-  ## Derive from `GetClsFn` closure => `HexaryGetFn`. There reason for that
-  ## seemingly redundant mapping is that here is space for additional localised
-  ## and locked parameters as done with the `StorageSlotsGetFn`.
-  return proc(key: openArray[byte]): Blob = ps.getClsFn(key)
 
 template noKeyError(info: static[string]; code: untyped) =
   try:
@@ -75,7 +68,7 @@ template noRlpExceptionOops(info: static[string]; code: untyped) =
 proc persistentAccounts(
     db: HexaryTreeDbRef;      ## Current table
     ps: SnapDbAccountsRef;    ## For persistent database
-      ): Result[void,HexaryDbError]
+      ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
@@ -91,7 +84,7 @@ proc collectAccounts(
     peer: Peer,               ## for log messages
     base: NodeTag;
     acc: seq[PackedAccount];
-      ): Result[seq[RLeafSpecs],HexaryDbError]
+      ): Result[seq[RLeafSpecs],HexaryError]
       {.gcsafe, raises: [Defect, RlpError].} =
   ## Repack account records into a `seq[RLeafSpecs]` queue. The argument data
   ## `acc` are as received with the snap message `AccountRange`).
@@ -137,11 +130,9 @@ proc init*(
     peer: Peer = nil
       ): T =
   ## Constructor, starts a new accounts session.
-  let db = pv.kvDb
   new result
   result.init(pv, root.to(NodeKey))
   result.peer = peer
-  result.getClsFn = db.persistentAccountsGetFn()
 
 proc dup*(
     ps: SnapDbAccountsRef;
@@ -167,27 +158,15 @@ proc dup*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc nodeExists*(
-    ps: SnapDbAccountsRef;    ## Re-usable session descriptor
-    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
-    persistent = false;       ## Whether to check data on disk
-      ): bool =
-  ## ..
-  if not persistent:
-    return ps.hexaDb.tab.hasKey(node.nodeKey.to(RepairKey))
-  try:
-    return 0 < ps.getFn()(node.nodeKey.ByteArray32).len
-  except Exception as e:
-    raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
+proc getAccountFn*(ps: SnapDbAccountsRef): HexaryGetFn =
+  ## Return `HexaryGetFn` closure.
+  let getFn = ps.kvDb.persistentAccountsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(key)
 
-proc nodeExists*(
-    pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
-    peer: Peer;               ## For log messages
-    root: Hash256;            ## State root
-    node: NodeSpecs;          ## Node specs, e.g. returned by `importAccounts()`
-      ): bool =
-  ## Variant of `nodeExists()` for presistent storage, only.
-  SnapDbAccountsRef.init(pv, root, peer).nodeExists(node, persistent=true)
+proc getAccountFn*(pv: SnapDbRef): HexaryGetFn =
+  ## Variant of `getAccountFn()`
+  let getFn = pv.kvDb.persistentAccountsGetFn()
+  return proc(key: openArray[byte]): Blob = getFn(key)
 
 
 proc importAccounts*(
@@ -196,7 +175,7 @@ proc importAccounts*(
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     persistent = false;       ## Store data on disk
     noBaseBoundCheck = false; ## Ignore left boundary proof check if `true`
-      ): Result[SnapAccountsGaps,HexaryDbError] =
+      ): Result[SnapAccountsGaps,HexaryError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
   ## which can be written to disk with the argument `persistent` set `true`.
@@ -243,9 +222,10 @@ proc importAccounts*(
   ##
   ## Note that the `peer` argument is for log messages, only.
   var
-    accounts: seq[RLeafSpecs]
-    outside: seq[NodeSpecs]
-    gaps: SnapAccountsGaps
+    accounts: seq[RLeafSpecs]     # validated accounts to add to database
+    gaps: SnapAccountsGaps        # return value
+    proofStats: TrieNodeStat      # `proof` data dangling links
+    innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   try:
     if 0 < data.proof.len:
       let rc = ps.mergeProofs(ps.peer, data.proof)
@@ -257,24 +237,25 @@ proc importAccounts*(
         return err(rc.error)
       accounts = rc.value
 
+    # Inspect trie for dangling nodes from prrof data (if any.)
+    if 0 < data.proof.len:
+      proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
+
     if 0 < accounts.len:
-      var innerSubTrie: seq[NodeSpecs]
       if 0 < data.proof.len:
         # Inspect trie for dangling nodes. This is not a big deal here as the
         # proof data is typically small.
-        let
-          proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
-          topTag = accounts[^1].pathTag
+        let topTag = accounts[^1].pathTag
         for w in proofStats.dangling:
-          if base <= w.partialPath.max(NodeKey).to(NodeTag) and
-             w.partialPath.min(NodeKey).to(NodeTag) <= topTag:
-            # Extract dangling links which are inside the accounts range
-            innerSubTrie.add w
+          let iv = w.partialPath.pathEnvelope
+          if iv.maxPt < base or topTag < iv.minPt:
+            # Dangling link with partial path envelope outside accounts range
+            gaps.dangling.add w
           else:
-            # Otherwise register outside links
-            outside.add w
+            # Overlapping partial path envelope.
+            innerSubTrie.add w
 
-      # Build partial hexary trie
+      # Build partial or full hexary trie
       let rc = ps.hexaDb.hexaryInterpolate(
         ps.root, accounts, bootstrap = (data.proof.len == 0))
       if rc.isErr:
@@ -284,34 +265,34 @@ proc importAccounts*(
       # trie (if any).
       let bottomTag = accounts[0].pathTag
       for w in innerSubTrie:
-        if ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-          continue
-        # Verify that `base` is to the left of the first account and there is
-        # nothing in between. Without proof, there can only be a complete
-        # set/list of accounts. There must be a proof for an empty list.
-        if not noBaseBoundCheck and
-           w.partialPath.max(NodeKey).to(NodeTag) < bottomTag:
-          return err(LowerBoundProofError)
-        # Otherwise register left over entry
-        gaps.innerGaps.add w
+        if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
+          if not noBaseBoundCheck:
+            # Verify that `base` is to the left of the first account and there
+            # is nothing in between.
+            #
+            # Without `proof` data available there can only be a complete
+            # set/list of accounts so there are no dangling nodes in the first
+            # place. But there must be `proof` data for an empty list.
+            if w.partialPath.pathEnvelope.maxPt < bottomTag:
+              return err(LowerBoundProofError)
+          # Otherwise register left over entry
+          gaps.innerGaps.add w
 
       if persistent:
         let rc = ps.hexaDb.persistentAccounts(ps)
         if rc.isErr:
           return err(rc.error)
-        # Verify outer links against database
-        let getFn = ps.getFn
-        for w in outside:
-          if w.nodeKey.ByteArray32.getFn().len == 0:
-            gaps.dangling.add w
-      else:
-        for w in outside:
-          if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-            gaps.dangling.add w
 
     elif data.proof.len == 0:
       # There must be a proof for an empty argument list.
       return err(LowerBoundProofError)
+
+    else:
+      if not noBaseBoundCheck:
+        for w in proofStats.dangling:
+          if base <= w.partialPath.pathEnvelope.maxPt:
+            return err(LowerBoundProofError)
+      gaps.dangling = proofStats.dangling
 
   except RlpError:
     return err(RlpEncoding)
@@ -338,7 +319,7 @@ proc importAccounts*(
     base: NodeTag;            ## Before or at first account entry in `data`
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     noBaseBoundCheck = false; ## Ignore left bound proof check if `true`
-      ): Result[SnapAccountsGaps,HexaryDbError] =
+      ): Result[SnapAccountsGaps,HexaryError] =
   ## Variant of `importAccounts()` for presistent storage, only.
   SnapDbAccountsRef.init(
     pv, root, peer).importAccounts(
@@ -423,82 +404,16 @@ proc importRawAccountsNodes*(
       nodes, reportNodes, persistent=true)
 
 
-proc inspectAccountsTrie*(
-    ps: SnapDbAccountsRef;               ## Re-usable session descriptor
-    pathList = seq[Blob].default;        ## Starting nodes for search
-    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
-    suspendAfter = high(uint64);         ## To be resumed
-    persistent = false;                  ## Read data from disk
-    ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
-  ## Starting with the argument list `pathSet`, find all the non-leaf nodes in
-  ## the hexary trie which have at least one node key reference missing in
-  ## the trie database. Argument `pathSet` list entries that do not refer to a
-  ## valid node are silently ignored.
-  ##
-  ## Trie inspection can be automatically suspended after having visited
-  ## `suspendAfter` nodes to be resumed at the last state. An application of
-  ## this feature would look like
-  ## ::
-  ##   var ctx = TrieNodeStatCtxRef()
-  ##   while not ctx.isNil:
-  ##     let rc = inspectAccountsTrie(.., resumeCtx=ctx, suspendAfter=1024)
-  ##     ...
-  ##     ctx = rc.value.resumeCtx
-  ##
-  let peer = ps.peer
-  var stats: TrieNodeStat
-  noRlpExceptionOops("inspectAccountsTrie()"):
-    if persistent:
-      stats = ps.getFn.hexaryInspectTrie(
-        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
-    else:
-      stats = ps.hexaDb.hexaryInspectTrie(
-        ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
-
-  block checkForError:
-    var error = TrieIsEmpty
-    if stats.stopped:
-      error = TrieLoopAlert
-      trace "Inspect account trie failed", peer, nPathList=pathList.len,
-        nDangling=stats.dangling.len, stoppedAt=stats.level, error
-    elif 0 < stats.level:
-      break checkForError
-    if ignoreError:
-      return ok(stats)
-    return err(error)
-
-  #when extraTraceMessages:
-  #  trace "Inspect account trie ok", peer, nPathList=pathList.len,
-  #    nDangling=stats.dangling.len, level=stats.level
-
-  return ok(stats)
-
-proc inspectAccountsTrie*(
-    pv: SnapDbRef;                       ## Base descriptor on `BaseChainDB`
-    peer: Peer;                          ## For log messages, only
-    root: Hash256;                       ## state root
-    pathList = seq[Blob].default;        ## Starting paths for search
-    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
-    suspendAfter = high(uint64);         ## To be resumed
-    ignoreError = false;                 ## Always return partial results if any
-      ): Result[TrieNodeStat, HexaryDbError] =
-  ## Variant of `inspectAccountsTrie()` for persistent storage.
-  SnapDbAccountsRef.init(
-    pv, root, peer).inspectAccountsTrie(
-      pathList, resumeCtx, suspendAfter, persistent=true, ignoreError)
-
-
 proc getAccountsNodeKey*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: Blob;                   ## Partial node path
     persistent = false;           ## Read data from disk
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getAccountsNodeKey()"):
     if persistent:
-      rc = ps.getFn.hexaryInspectPath(ps.root, path)
+      rc = ps.getAccountFn.hexaryInspectPath(ps.root, path)
     else:
       rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
   if rc.isOk:
@@ -509,7 +424,7 @@ proc getAccountsNodeKey*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Variant of `getAccountsNodeKey()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, root, Peer()).getAccountsNodeKey(path, persistent=true)
@@ -519,7 +434,7 @@ proc getAccountsData*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
     path: NodeKey;                ## Account to visit
     persistent = false;           ## Read data from disk
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch account data.
   ##
   ## Caveat: There is no unit test yet for the non-persistent version
@@ -528,7 +443,7 @@ proc getAccountsData*(
   noRlpExceptionOops("getAccountData()"):
     var leaf: Blob
     if persistent:
-      leaf = path.hexaryPath(ps.root, ps.getFn).leafData
+      leaf = path.hexaryPath(ps.root, ps.getAccountFn).leafData
     else:
       leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
 
@@ -542,7 +457,7 @@ proc getAccountsData*(
     pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
     root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Variant of `getAccountsData()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, root, Peer()).getAccountsData(path, persistent=true)
@@ -576,20 +491,20 @@ proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
 proc getAccountsChainDb*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[Account,HexaryDbError] =
+      ): Result[Account,HexaryError] =
   ## Fetch account via `BaseChainDB`
   ps.getAccountsData(accKey, persistent = true)
 
 proc nextAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `BaseChainDB`, the one next to the
   ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accKey
-               .hexaryPath(ps.root, ps.getFn)
-               .next(ps.getFn)
+               .hexaryPath(ps.root, ps.getAccountFn)
+               .next(ps.getAccountFn)
                .getNibbles
     if 64 == path.len:
       return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
@@ -599,13 +514,13 @@ proc nextAccountsChainDbKey*(
 proc prevAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
-      ): Result[NodeKey,HexaryDbError] =
+      ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `BaseChainDB`, the one before to the
   ## argument account.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accKey
-               .hexaryPath(ps.root, ps.getFn)
-               .prev(ps.getFn)
+               .hexaryPath(ps.root, ps.getAccountFn)
+               .prev(ps.getAccountFn)
                .getNibbles
     if 64 == path.len:
       return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
