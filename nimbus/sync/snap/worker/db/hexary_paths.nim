@@ -11,7 +11,7 @@
 ## Find node paths in hexary tries.
 
 import
-  std/[algorithm, sequtils, tables],
+  std/[sequtils, sets, tables],
   eth/[common, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../range_desc,
@@ -30,15 +30,9 @@ proc pp(w: Blob; db: HexaryTreeDbRef): string =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc `==`(a, b: XNodeObj): bool =
-  if a.kind == b.kind:
-    case a.kind:
-    of Leaf:
-      return a.lPfx == b.lPfx and a.lData == b.lData
-    of Extension:
-      return a.ePfx == b.ePfx and a.eLink == b.eLink
-    of Branch:
-      return a.bLink == b.bLink
+proc convertTo(key: RepairKey; T: type NodeKey): T =
+  ## Might be lossy, check before use
+  discard result.init(key.ByteArray33[1 .. 32])
 
 proc getNibblesImpl(path: XPath|RPath; start = 0): NibblesSeq =
   ## Re-build the key path
@@ -87,48 +81,9 @@ proc toExtensionNode(
       {.gcsafe, raises: [Defect,RlpError]} =
   XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
 
-
-proc `<=`(a, b: NibblesSeq): bool =
-  ## Compare nibbles, different lengths are padded to the right with zeros
-  let abMin = min(a.len, b.len)
-  for n in 0 ..< abMin:
-    if a[n] < b[n]:
-      return true
-    if b[n] < a[n]:
-      return false
-    # otherwise a[n] == b[n]
-
-  # Assuming zero for missing entries
-  if b.len < a.len:
-    for n in abMin + 1 ..< a.len:
-      if 0 < a[n]:
-        return false
-  true
-
-proc `<`(a, b: NibblesSeq): bool =
-  not (b <= a)
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc padPartialPath(pfx: NibblesSeq; dblNibble: byte): NodeKey =
-  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`
-  # Pad with zeroes
-  var padded: NibblesSeq
-
-  let padLen = 64 - pfx.len
-  if 0 <= padLen:
-    padded = pfx & dblNibble.repeat(padlen div 2).initNibbleRange
-    if (padLen and 1) == 1:
-      padded = padded & @[dblNibble].initNibbleRange.slice(1)
-  else:
-    let nope = seq[byte].default.initNibbleRange
-    padded = pfx.slice(0,63) & nope # nope forces re-alignment
-
-  let bytes = padded.getBytes
-  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
-
 
 proc pathExtend(
     path: RPath;
@@ -140,7 +95,7 @@ proc pathExtend(
   ## path following the argument `path.tail`.
   result = path
   var key = key
-  while db.tab.hasKey(key) and 0 < result.tail.len:
+  while db.tab.hasKey(key):
     let node = db.tab[key]
     case node.kind:
     of Leaf:
@@ -150,6 +105,9 @@ proc pathExtend(
         result.tail = EmptyNibbleRange
       return
     of Branch:
+      if result.tail.len == 0:
+        result.path.add RPathStep(key: key, node: node, nibble: -1)
+        return
       let nibble = result.tail[0].int8
       if node.bLink[nibble].isZero:
         return
@@ -173,7 +131,6 @@ proc pathExtend(
   ## Ditto for `XPath` rather than `RPath`
   result = path
   var key = key
-
   while true:
     let value = key.getFn()
     if value.len == 0:
@@ -223,48 +180,6 @@ proc pathExtend(
 
     # end while
   # notreached
-
-
-proc completeLeast(
-    path: RPath;
-    key: RepairKey;
-    db: HexaryTreeDbRef;
-    pathLenMax = 64;
-      ): RPath
-      {.gcsafe, raises: [Defect,KeyError].} =
-  ## Extend path using least nodes without recursion.
-  result.path = path.path
-  if db.tab.hasKey(key):
-    var
-      key = key
-      node = db.tab[key]
-
-    while result.path.len < pathLenMax:
-      case node.kind:
-      of Leaf:
-        result.path.add RPathStep(key: key, node: node, nibble: -1)
-        return # done
-
-      of Extension:
-        block useExtensionLink:
-          let newKey = node.eLink
-          if not newkey.isZero and db.tab.hasKey(newKey):
-            result.path.add RPathStep(key: key, node: node, nibble: -1)
-            key = newKey
-            node = db.tab[key]
-            break useExtensionLink
-          return # Oops, no way
-
-      of Branch:
-        block findBranchLink:
-          for inx in 0 .. 15:
-            let newKey = node.bLink[inx]
-            if not newkey.isZero and db.tab.hasKey(newKey):
-              result.path.add RPathStep(key: key, node: node, nibble: inx.int8)
-              key = newKey
-              node = db.tab[key]
-              break findBranchLink
-          return # Oops, no way
 
 
 proc pathLeast(
@@ -447,82 +362,6 @@ proc pathMost(
     # End while
   # Notreached
 
-
-proc dismantleLeft(envPt, ivPt: RPath|XPath): Result[seq[Blob],void] =
-  ## Helper for `dismantle()` for handling left side of envelope
-  #
-  #      partialPath
-  #         / \
-  #        /   \
-  #       /     \
-  #      /       \
-  #    envPt..              -- envelope of partial path
-  #        |
-  #      ivPt..             -- `iv`, not fully covering left of `env`
-  #
-  var collect: seq[Blob]
-  block leftCurbEnvelope:
-    for n in 0 ..< min(envPt.path.len, ivPt.path.len):
-      if envPt.path[n] != ivPt.path[n]:
-        #
-        # At this point, the `node` entries of either `path[n]` step are
-        # the same. This is so because the predecessor steps were the same
-        # or were the `rootKey` in case n == 0.
-        #
-        # But then (`node` entries being equal) the only way for the
-        # `path[n]` steps to differ is in the entry selector `nibble` for
-        # a branch node.
-        #
-        for m in n ..< ivPt.path.len:
-          let
-            pfx = ivPt.getNibblesImpl(0,m) # common path segment
-            top = ivPt.path[m].nibble      # need nibbles smaller than top
-          #
-          # Incidentally for a non-`Branch` node, the value `top` becomes
-          # `-1` and the `for`- loop will be ignored (which is correct)
-          for nibble in 0 ..< top:
-            collect.add hexPrefixEncode(
-              pfx & @[nibble.byte].initNibbleRange.slice(1), isLeaf=false)
-        break leftCurbEnvelope
-    #
-    # Fringe case, e.g. when `partialPath` is an empty prefix (aka `@[0]`)
-    # and the database has a single leaf node `(a,some-value)` where the
-    # `rootKey` is the hash of this node. In that case, `pMin == 0` and
-    # `pMax == high(NodeTag)` and `iv == [a,a]`.
-    #
-    return err()
-
-  ok(collect)
-
-proc dismantleRight(envPt, ivPt: RPath|XPath): Result[seq[Blob],void] =
-  ## Helper for `dismantle()` for handling right side of envelope
-  #
-  #       partialPath
-  #           / \
-  #          /   \
-  #         /     \
-  #        /       \
-  #           .. envPt     -- envelope of partial path
-  #              |
-  #          .. ivPt       -- `iv`, not fully covering right of `env`
-  #
-  var collect: seq[Blob]
-  block rightCurbEnvelope:
-    for n in 0 ..< min(envPt.path.len, ivPt.path.len):
-      if envPt.path[n] != ivPt.path[n]:
-        for m in n ..< ivPt.path.len:
-          let
-            pfx = ivPt.getNibblesImpl(0,m) # common path segment
-            base = ivPt.path[m].nibble     # need nibbles greater/equal
-          if 0 <= base:
-            for nibble in base+1 .. 15:
-              collect.add hexPrefixEncode(
-                pfx & @[nibble.byte].initNibbleRange.slice(1), isLeaf=false)
-        break rightCurbEnvelope
-    return err()
-
-  ok(collect)
-
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -530,6 +369,25 @@ proc dismantleRight(envPt, ivPt: RPath|XPath): Result[seq[Blob],void] =
 proc getNibbles*(path: XPath|RPath; start = 0): NibblesSeq =
   ## Re-build the key path
   path.getNibblesImpl(start)
+
+proc getNibbles*(path: XPath|RPath; start, maxLen: int): NibblesSeq =
+  ## Variant of `getNibbles()`
+  path.getNibblesImpl(start, maxLen)
+
+
+proc getPartialPath*(path: XPath|RPath): Blob =
+  ## Convert to hex encoded partial path as used in `eth` or `snap` protocol
+  ## where full leaf paths of nibble length 64 are encoded as 32 byte `Blob`
+  ## and non-leaf partial paths are *compact encoded* (i.e. per the Ethereum
+  ## wire protocol.)
+  let
+    isLeaf = (0 < path.path.len and path.path[^1].node.kind == Leaf)
+    nibbles = path.getNibbles
+  if isLeaf and nibbles.len == 64:
+    nibbles.getBytes
+  else:
+    nibbles.hexPrefixEncode(isLeaf)
+
 
 proc leafData*(path: XPath): Blob =
   ## Return the leaf data from a successful `XPath` computation (if any.)
@@ -555,204 +413,175 @@ proc leafData*(path: RPath): Blob =
     of Extension:
       discard
 
-proc pathEnvelope*(partialPath: Blob): NodeTagRange =
-  ## Convert partial path to range of all keys starting with this
-  ## partial path
-  let pfx = (hexPrefixDecode partialPath)[1]
-  NodeTagRange.new(
-    pfx.padPartialPath(0).to(NodeTag),
-    pfx.padPartialPath(255).to(NodeTag))
-
-proc pathSortUniq*(
-    partialPaths: openArray[Blob];
-      ): seq[Blob]
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Sort and simplify a list of partial paths by removoing nested entries.
-
-  var tab: Table[NodeTag,(Blob,bool)]
-  for w in partialPaths:
-    let iv = w.pathEnvelope
-    tab[iv.minPt] = (w,true)    # begin entry
-    tab[iv.maxPt] = (@[],false) # end entry
-
-  # When sorted, nested entries look like
-  #
-  # 123000000.. (w0, true)
-  # 123400000.. (w1, true)
-  # 1234fffff..  (, false)
-  # 123ffffff..  (, false)
-  # ...
-  # 777000000.. (w2, true)
-  #
-  var level = 0
-  for key in toSeq(tab.keys).sorted(cmp):
-    let (w,begin) = tab[key]
-    if begin:
-      if level == 0:
-        result.add w
-      level.inc
-    else:
-      level.dec
-
 # ------------------------------------------------------------------------------
-# Public functions
+# Public functions, hexary path constructors
 # ------------------------------------------------------------------------------
 
 proc hexaryPath*(
-    nodeKey: NodeKey;
-    rootKey: RepairKey;
-    db: HexaryTreeDbRef;
+    partialPath: NibblesSeq;        ## partial path to resolve
+    rootKey: NodeKey|RepairKey;             ## State root
+    db: HexaryTreeDbRef;            ## Database
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## Compute logest possible repair tree `db` path matching the `nodeKey`
-  ## nibbles. The `nodeNey` path argument come first to support a more
-  ## functional notation.
-  RPath(tail: nodeKey.to(NibblesSeq)).pathExtend(rootKey,db)
-
-proc hexaryPath*(
-    partialPath: NibblesSeq;
-    rootKey: RepairKey;
-    db: HexaryTreeDbRef;
-      ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Variant of `hexaryPath`.
-  RPath(tail: partialPath).pathExtend(rootKey,db)
+  ## Compute the longest possible repair tree `db` path matching the `nodeKey`
+  ## nibbles. The `nodeNey` path argument comes before the `db` one for
+  ## supporting a more functional notation.
+  proc to(a: RepairKey; T: type RepairKey): RepairKey = a
+  RPath(tail: partialPath).pathExtend(rootKey.to(RepairKey), db)
 
 proc hexaryPath*(
     nodeKey: NodeKey;
-    root: NodeKey;
-    getFn: HexaryGetFn;
-      ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Compute logest possible path on an arbitrary hexary trie. Note that this
-  ## prototype resembles the other ones with the implict `state root`. The
-  ## rules for the protopye arguments are:
-  ## * First argument is the node key, the node path to be followed
-  ## * Last argument is the database (needed only here for debugging)
-  ##
-  ## Note that this function will flag a potential lowest level `Extception`
-  ## in the invoking function due to the `getFn` argument.
-  XPath(tail: nodeKey.to(NibblesSeq)).pathExtend(root.to(Blob), getFn)
-
-proc hexaryPath*(
-    partialPath: NibblesSeq;
-    root: NodeKey;
-    getFn: HexaryGetFn;
-      ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Variant of `hexaryPath`.
-  XPath(tail: partialPath).pathExtend(root.to(Blob), getFn)
-
-
-proc right*(
-    path: RPath;
+    rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## Extends the maximally extended argument nodes `path` to the right (with
-  ## path value not decreasing). This is similar to `next()`, only that the
-  ## algorithm does not backtrack if there are dangling links in between.
-  ##
-  ## This code is intended be used for verifying a left-bound proof.
+  ## Variant of `hexaryPath` for a node key.
+  nodeKey.to(NibblesSeq).hexaryPath(rootKey, db)
 
-  # Some easy cases
-  if path.path.len == 0:
-    return RPath() # error
-  if path.path[^1].node.kind == Leaf:
-    return path
-
-  var rPath = path
-  while 0 < rPath.path.len:
-    let top = rPath.path[^1]
-    if top.node.kind != Branch or
-       top.nibble < 0 or
-       rPath.tail.len == 0:
-      return RPath() # error
-
-    let topLink = top.node.bLink[top.nibble]
-    if topLink.isZero or not db.tab.hasKey(topLink):
-      return RPath() # error
-
-    let nextNibble = rPath.tail[0].int8
-    if nextNibble < 15:
-      let
-        nextNode = db.tab[topLink]
-        rPathLen = rPath.path.len # in case of backtracking
-      case nextNode.kind
-      of Leaf:
-        if rPath.tail <= nextNode.lPfx:
-          return rPath.completeLeast(topLink, db)
-      of Extension:
-        if rPath.tail <= nextNode.ePfx:
-          return rPath.completeLeast(topLink, db)
-      of Branch:
-        # Step down and complete with a branch link on the child node
-        rPath.path = rPath.path & RPathStep(
-          key:    topLink,
-          node:   nextNode,
-          nibble: nextNibble)
-
-      # Find the next item to the right of the new top entry
-      let step = rPath.path[^1]
-      for inx in (step.nibble + 1) .. 15:
-        let link = step.node.bLink[inx]
-        if not link.isZero:
-          rPath.path[^1].nibble = inx.int8
-          return rPath.completeLeast(link, db)
-
-      # Restore `rPath` and backtrack
-      rPath.path.setLen(rPathLen)
-
-    # Pop `Branch` node on top and append nibble to `tail`
-    rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
-    rPath.path.setLen(rPath.path.len - 1)
-
-  # Pathological case: nfffff.. for n < f
-  var step = path.path[0]
-  for inx in (step.nibble + 1) .. 15:
-    let link = step.node.bLink[inx]
-    if not link.isZero:
-      step.nibble = inx.int8
-      rPath.path = @[step]
-      return rPath.completeLeast(link, db)
-
-  RPath() # error
-
-
-proc rightStop*(
-    path: RPath;
+proc hexaryPath*(
+    nodeTag: NodeTag;
+    rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
-      ): bool
+      ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## Returns `true` if the maximally extended argument nodes `path` is the
-  ## rightmost on the hexary trie database. It verifies that there is no more
-  ## leaf entry to the right of the argument `path`.
-  ##
-  ## This code is intended be used for verifying a left-bound proof.
-  if 0 < path.path.len and 0 < path.tail.len:
-    let top = path.path[^1]
-    if top.node.kind == Branch and 0 <= top.nibble:
+  ## Variant of `hexaryPath` for a node tag.
+  nodeTag.to(NodeKey).hexaryPath(rootKey, db)
 
-      let topLink = top.node.bLink[top.nibble]
-      if not topLink.isZero and db.tab.hasKey(topLink):
-        let
-          nextNibble = path.tail[0]
-          nextNode = db.tab[topLink]
+proc hexaryPath*(
+    partialPath: Blob;
+    rootKey: NodeKey|RepairKey;
+    db: HexaryTreeDbRef;
+      ): RPath
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Variant of `hexaryPath` for a  hex encoded partial path.
+  partialPath.hexPrefixDecode[1].hexaryPath(rootKey, db)
 
-        case nextNode.kind
-        of Leaf:
-          return nextNode.lPfx < path.tail
 
-        of Extension:
-          return nextNode.ePfx < path.tail
+proc hexaryPath*(
+    partialPath: NibblesSeq;        ## partial path to resolve
+    rootKey: NodeKey;               ## State root
+    getFn: HexaryGetFn;             ## Database abstraction
+      ): XPath
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Compute the longest possible path on an arbitrary hexary trie.
+  XPath(tail: partialPath).pathExtend(rootKey.to(Blob), getFn)
 
-        of Branch:
-          # Step down and verify that there is no branch link
-          for inx in nextNibble .. 15:
-            if not nextNode.bLink[inx].isZero:
-              return false
-          return true
+proc hexaryPath*(
+    nodeKey: NodeKey;
+    rootKey: NodeKey;
+    getFn: HexaryGetFn;
+      ): XPath
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPath` for a node key..
+  nodeKey.to(NibblesSeq).hexaryPath(rootKey, getFn)
 
+proc hexaryPath*(
+    nodeTag: NodeTag;
+    rootKey: NodeKey;
+    getFn: HexaryGetFn;
+      ): XPath
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPath` for a node tag..
+  nodeTag.to(NodeKey).hexaryPath(rootKey, getFn)
+
+proc hexaryPath*(
+    partialPath: Blob;
+    rootKey: NodeKey;
+    getFn: HexaryGetFn;
+      ): XPath
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPath` for a hex encoded partial path.
+  partialPath.hexPrefixDecode[1].hexaryPath(rootKey, getFn)
+
+# ------------------------------------------------------------------------------
+# Public helpers, partial paths resolvers
+# ------------------------------------------------------------------------------
+
+proc hexaryPathNodeKey*(
+    partialPath: NibblesSeq;       ## Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    ## State root
+    db: HexaryTreeDbRef;           ## Database
+    missingOk = false;             ## Also return key for missing node
+      ): Result[NodeKey,void]
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Returns the `NodeKey` equivalent for the argment `partialPath` if this
+  ## node is available in the database. If the argument flag `missingOk` is
+  ## set`true` and the last node addressed by the argument path is missing,
+  ## its key is returned as well.
+  let steps = partialPath.hexaryPath(rootKey, db)
+  if 0 < steps.path.len and steps.tail.len == 0:
+    let top = steps.path[^1]
+    # If the path was fully exhaused and the node exists for a `Branch` node,
+    # then the `nibble` is `-1`.
+    if top.nibble < 0 and top.key.isNodeKey:
+      return ok(top.key.convertTo(NodeKey))
+    if missingOk:
+      let link = top.node.bLink[top.nibble]
+      if not link.isZero and link.isNodeKey:
+        return ok(link.convertTo(NodeKey))
+  err()
+
+proc hexaryPathNodeKey*(
+    partialPath: Blob;             ## Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    ## State root
+    db: HexaryTreeDbRef;           ## Database
+    missingOk = false;             ## Also return key for missing node
+      ): Result[NodeKey,void]
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Variant of `hexaryPathNodeKey()` for hex encoded partial path.
+  partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, db, missingOk)
+
+
+proc hexaryPathNodeKey*(
+    partialPath: NibblesSeq;       ## Hex encoded partial path
+    rootKey: NodeKey;              ## State root
+    getFn: HexaryGetFn;            ## Database abstraction
+    missingOk = false;             ## Also return key for missing node
+      ): Result[NodeKey,void]
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPathNodeKey()` for persistent database.
+  let steps = partialPath.hexaryPath(rootKey, getFn)
+  if 0 < steps.path.len and steps.tail.len == 0:
+    let top = steps.path[^1]
+    # If the path was fully exhaused and the node exists for a `Branch` node,
+    # then the `nibble` is `-1`.
+    if top.nibble < 0:
+      return ok(top.key.convertTo(NodeKey))
+    if missingOk:
+      let link = top.node.bLink[top.nibble]
+      if 0 < link.len:
+        return ok(link.convertTo(NodeKey))
+  err()
+
+proc hexaryPathNodeKey*(
+    partialPath: Blob;             ## Partial database path
+    rootKey: NodeKey;              ## State root
+    getFn: HexaryGetFn;            ## Database abstraction
+    missingOk = false;             ## Also return key for missing node
+      ): Result[NodeKey,void]
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryPathNodeKey()` for persistent database and
+  ## hex encoded partial path.
+  partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, getFn, missingOk)
+
+
+proc hexaryPathNodeKeys*(
+    partialPaths: seq[Blob];       ## Partial paths segments
+    rootKey: NodeKey|RepairKey;    ## State root
+    db: HexaryTreeDbRef;           ## Database
+    missingOk = false;             ## Also return key for missing node
+      ): HashSet[NodeKey]
+      {.gcsafe, raises: [Defect,KeyError]} =
+  ## Convert a list of path segments to a set of node keys
+  partialPaths.toSeq
+    .mapIt(it.hexaryPathNodeKey(rootKey, db, missingOk))
+    .filterIt(it.isOk)
+    .mapIt(it.value)
+    .toHashSet
+
+# ------------------------------------------------------------------------------
+# Public functions, traversal
+# ------------------------------------------------------------------------------
 
 proc next*(
     path: XPath;
@@ -814,97 +643,6 @@ proc prev*(
             newPath = XPath(path: walk).pathMost(link, getFn)
           if minDepth <= newPath.depth and 0 < newPath.leafData.len:
             return newPath
-
-
-proc dismantle*(
-    partialPath: Blob;             ## Patrial path for existing node
-    rootKey: NodeKey;              ## State root
-    iv: NodeTagRange;              ## Proofed range of leaf paths
-    db: HexaryTreeDbRef;           ## Database
-      ): seq[Blob]
-      {.gcsafe, raises: [Defect,RlpError,KeyError]} =
-  ## Returns the list of partial paths which envelopes span the range of
-  ## node paths one obtains by subtracting the argument range `iv` from the
-  ## envelope of the argumenr `partialPath`.
-  ##
-  ## The following boundary conditions apply in order to get a useful result
-  ## in a partially completed hexary trie database.
-  ##
-  ## * The argument `partialPath` refers to an existing node.
-  ##
-  ## * The argument `iv` contains a range of paths (e.g. account hash keys)
-  ##   with the property that if there is no (leaf-) node for that path, then
-  ##   no such node exists when the database is completed.
-  ##
-  ##   This condition is sort of rephrasing the boundary proof condition that
-  ##   applies when downloading a range of accounts or storage slots from the
-  ##   network via `snap/1` protocol. In fact the condition here is stricter
-  ##   as it excludes sub-trie *holes* (see comment on `importAccounts()`.)
-  ##
-  # Chechk for the trivial case when the `partialPath` envelope and `iv` do
-  # not overlap.
-  let env = partialPath.pathEnvelope
-  if iv.maxPt < env.minPt or env.maxPt < iv.minPt:
-    return @[partialPath]
-
-  # So ranges do overlap. The case that the `partialPath` envelope is fully
-  # contained in `iv` results in `@[]` which is implicitely handled by
-  # non-matching any of the cases, below.
-  if env.minPt < iv.minPt:
-    let
-      envPt = env.minPt.to(NodeKey).hexaryPath(rootKey.to(RepairKey), db)
-      ivPt = iv.minPt.to(NodeKey).hexaryPath(rootKey.to(RepairKey), db)
-    when false: # or true:
-      echo ">>> ",
-         "\n    ",  envPt.pp(db),
-         "\n   -----",
-         "\n    ",  ivPt.pp(db)
-    let rc = envPt.dismantleLeft ivPt
-    if rc.isErr:
-      return @[partialPath]
-    result &= rc.value
-
-  if iv.maxPt < env.maxPt:
-    let
-      envPt = env.maxPt.to(NodeKey).hexaryPath(rootKey.to(RepairKey), db)
-      ivPt = iv.maxPt.to(NodeKey).hexaryPath(rootKey.to(RepairKey), db)
-    when false: # or true:
-      echo ">>> ",
-        "\n    ", envPt.pp(db),
-        "\n   -----",
-        "\n    ", ivPt.pp(db)
-    let rc = envPt.dismantleRight ivPt
-    if rc.isErr:
-      return @[partialPath]
-    result &= rc.value
-
-proc dismantle*(
-    partialPath: Blob;             ## Patrial path for existing node
-    rootKey: NodeKey;              ## State root
-    iv: NodeTagRange;              ## Proofed range of leaf paths
-    getFn: HexaryGetFn;            ## Database abstraction
-      ): seq[Blob]
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Variant of `dismantle()` for persistent database.
-  let env = partialPath.pathEnvelope
-  if iv.maxPt < env.minPt or env.maxPt < iv.minPt:
-    return @[partialPath]
-
-  if env.minPt < iv.minPt:
-    let rc = dismantleLeft(
-      env.minPt.to(NodeKey).hexaryPath(rootKey, getFn),
-      iv.minPt.to(NodeKey).hexaryPath(rootKey, getFn))
-    if rc.isErr:
-      return @[partialPath]
-    result &= rc.value
-
-  if iv.maxPt < env.maxPt:
-    let rc = dismantleRight(
-      env.maxPt.to(NodeKey).hexaryPath(rootKey, getFn),
-      iv.maxPt.to(NodeKey).hexaryPath(rootKey, getFn))
-    if rc.isErr:
-      return @[partialPath]
-    result &= rc.value
 
 # ------------------------------------------------------------------------------
 # End

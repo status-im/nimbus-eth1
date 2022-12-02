@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[hashes, sequtils, sets, tables],
+  std/tables,
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
@@ -27,6 +27,15 @@ const
 when extraTraceMessages:
   import stew/byteutils
 
+# --------
+#
+#import
+#  std/strutils,
+#  stew/byteutils
+#
+#proc pp(w: (RepairKey, NibblesSeq); db: HexaryTreeDbRef): string =
+#  "(" & $w[1] & "," & w[0].pp(db) & ")"
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -38,75 +47,6 @@ proc convertTo(key: RepairKey; T: type NodeKey): T =
 proc convertTo(key: Blob; T: type NodeKey): T =
   ## Might be lossy, check before use
   discard result.init(key)
-
-proc doStepLink(step: RPathStep): Result[RepairKey,bool] =
-  ## Helper for `hexaryInspectPath()` variant
-  case step.node.kind:
-  of Branch:
-    if step.nibble < 0:
-      return err(false) # indicates caller should try parent
-    return ok(step.node.bLink[step.nibble])
-  of Extension:
-    return ok(step.node.eLink)
-  of Leaf:
-    discard
-  err(true) # fully fail
-
-proc doStepLink(step: XPathStep): Result[NodeKey,bool] =
-  ## Helper for `hexaryInspectPath()` variant
-  case step.node.kind:
-  of Branch:
-    if step.nibble < 0:
-      return err(false) # indicates caller should try parent
-    return ok(step.node.bLink[step.nibble].convertTo(NodeKey))
-  of Extension:
-    return ok(step.node.eLink.convertTo(NodeKey))
-  of Leaf:
-    discard
-  err(true) # fully fail
-
-
-proc hexaryInspectPathImpl(
-    db: HexaryTreeDbRef;           ## Database
-    rootKey: RepairKey;            ## State root
-    path: NibblesSeq;              ## Starting path
-      ): Result[RepairKey,void]
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Translate `path` into `RepairKey`
-  let steps = path.hexaryPath(rootKey,db)
-  if 0 < steps.path.len and steps.tail.len == 0:
-    block:
-      let rc = steps.path[^1].doStepLink()
-      if rc.isOk:
-         return ok(rc.value)
-      if rc.error or steps.path.len == 1:
-        return err()
-    block:
-      let rc = steps.path[^2].doStepLink()
-      if rc.isOk:
-         return ok(rc.value)
-  err()
-
-proc hexaryInspectPathImpl(
-    getFn: HexaryGetFn;            ## Database retrieval function
-    root: NodeKey;                 ## State root
-    path: NibblesSeq;              ## Starting path
-      ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Translate `path` into `RepairKey`
-  let steps = path.hexaryPath(root,getFn)
-  if 0 < steps.path.len and steps.tail.len == 0:
-    block:
-      let rc = steps.path[^1].doStepLink()
-      if rc.isOk:
-         return ok(rc.value)
-      if rc.error or steps.path.len == 1:
-        return err()
-    block:
-      let rc = steps.path[^2].doStepLink()
-      if rc.isOk:
-         return ok(rc.value)
-  err()
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -182,48 +122,6 @@ proc to*(resumeCtx: TrieNodeStatCtxRef; T: type seq[NodeSpecs]): T =
           nodeKey:     key.convertTo(NodeKey))
 
 
-proc hexaryInspectPath*(
-    db: HexaryTreeDbRef;           ## Database
-    root: NodeKey;                 ## State root
-    path: Blob;                    ## Starting path
-      ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Returns the `NodeKey` for a given path if there is any.
-  let (isLeaf,nibbles) = hexPrefixDecode path
-  if not isLeaf:
-    let rc = db.hexaryInspectPathImpl(root.to(RepairKey), nibbles)
-    if rc.isOk and rc.value.isNodeKey:
-      return ok(rc.value.convertTo(NodeKey))
-  err()
-
-proc hexaryInspectPath*(
-    getFn: HexaryGetFn;            ## Database abstraction
-    root: NodeKey;                 ## State root
-    path: Blob;                    ## Partial database path
-      ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Variant of `hexaryInspectPath()` for persistent database.
-  let (isLeaf,nibbles) = hexPrefixDecode path
-  if not isLeaf:
-    let rc = getFn.hexaryInspectPathImpl(root, nibbles)
-    if rc.isOk:
-      return ok(rc.value)
-  err()
-
-proc hexaryInspectToKeys*(
-    db: HexaryTreeDbRef;           ## Database
-    root: NodeKey;                 ## State root
-    paths: seq[Blob];              ## Paths segments
-      ): HashSet[NodeKey]
-      {.gcsafe, raises: [Defect,KeyError]} =
-  ## Convert a set of path segments to a node key set
-  paths.toSeq
-       .mapIt(db.hexaryInspectPath(root,it))
-       .filterIt(it.isOk)
-       .mapIt(it.value)
-       .toHashSet
-
-
 proc hexaryInspectTrie*(
     db: HexaryTreeDbRef;                 ## Database
     root: NodeKey;                       ## State root
@@ -264,7 +162,7 @@ proc hexaryInspectTrie*(
     numActions = 0u64
     resumeOk = false
 
-  # Initialise lists
+  # Initialise lists from previous session
   if not resumeCtx.isNil and
      not resumeCtx.persistent and
      0 < resumeCtx.memCtx.len:
@@ -274,12 +172,13 @@ proc hexaryInspectTrie*(
   if paths.len == 0 and not resumeOk:
     reVisit.add (rootKey,EmptyNibbleRange)
   else:
+    # Add argument paths
     for w in paths:
       let (isLeaf,nibbles) = hexPrefixDecode w
       if not isLeaf:
-        let rc = db.hexaryInspectPathImpl(rootKey, nibbles)
+        let rc = nibbles.hexaryPathNodeKey(rootKey, db, missingOk=false)
         if rc.isOk:
-          reVisit.add (rc.value,nibbles)
+          reVisit.add (rc.value.to(RepairKey), nibbles)
 
   while 0 < reVisit.len and numActions <= suspendAfter:
     if stopAtLevel < result.level:
@@ -353,7 +252,7 @@ proc hexaryInspectTrie*(
     numActions = 0u64
     resumeOk = false
 
-  # Initialise lists
+  # Initialise lists from previous session
   if not resumeCtx.isNil and
      resumeCtx.persistent and
      0 < resumeCtx.hddCtx.len:
@@ -363,12 +262,13 @@ proc hexaryInspectTrie*(
   if paths.len == 0 and not resumeOk:
     reVisit.add (rootKey,EmptyNibbleRange)
   else:
+    # Add argument paths
     for w in paths:
       let (isLeaf,nibbles) = hexPrefixDecode w
       if not isLeaf:
-        let rc = getFn.hexaryInspectPathImpl(rootKey, nibbles)
+        let rc = nibbles.hexaryPathNodeKey(rootKey, getFn, missingOk=false)
         if rc.isOk:
-          reVisit.add (rc.value,nibbles)
+          reVisit.add (rc.value, nibbles)
 
   while 0 < reVisit.len and numActions <= suspendAfter:
     when extraTraceMessages:

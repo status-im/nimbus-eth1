@@ -27,8 +27,9 @@ import
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_error, hexary_inspect,  hexary_paths, rocky_bulk_load,
-    snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
+    hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
+    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot,
+    snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
   ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
@@ -302,7 +303,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
     var
       desc: SnapDbAccountsRef
       accKeys: seq[NodeKey]
-      accBaseTag: NodeTag
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
@@ -318,13 +318,13 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       desc = SnapDbAccountsRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
-      accBaseTag = accountsList.mapIt(it.base).sortMerge
+      let baseTag = accountsList.mapIt(it.base).sortMerge
       let packed = PackedAccountRange(
         accounts: accountsList.mapIt(it.data.accounts).sortMerge,
         proof:    accountsList.mapIt(it.data.proof).flatten)
       # Merging intervals will produce gaps, so the result is expected OK but
       # different from `.isImportOk`
-      check desc.importAccounts(accBaseTag, packed, true).isOk
+      check desc.importAccounts(baseTag, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
@@ -409,56 +409,145 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
-    test "Dismantle path prefix envelopes":
-      doAssert 1 < accKeys.len
+    test "Decompose path prefix envelopes":
+
+      # The base data from above cannot be relied upon as there might be
+      # stray account nodes in the proof *before* the left boundary.
+      doAssert 2 < accKeys.len
       let
-        iv = NodeTagRange.new(accBaseTag, accKeys[^2].to(NodeTag))
+        db = desc.hexaDB
+        rootKey = root.to(NodeKey)
+        baseTag = accKeys[0].to(NodeTag) + 1.u256
+        firstTag = baseTag.to(NodeKey)
+                     .hexaryPath(rootKey, db)
+                     .hexaryNearbyRight(db)
+                     .get(otherwise = RPath())
+                     .getPartialPath
+                     .convertTo(NodeTag)
+        lastTag = accKeys[^2].to(NodeTag) # might be the same as `firstTag`
+        finalTag = accKeys[^1].to(NodeTag)
+      # Verify left boundary
+      check baseTag <= firstTag
+
+      # Construct test range
+      let
+        iv = NodeTagRange.new(baseTag, lastTag)
         ivMin = iv.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
         ivMax = iv.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
         pfxLen = ivMin.sharedPrefixLen ivMax
+
       # Use some overlapping prefixes. Note that a prefix must refer to
       # an existing node
       for n in 0 .. pfxLen:
         let
           pfx = ivMin.slice(0, pfxLen - n).hexPrefixEncode
-          qfx = pfx.dismantle(root.to(NodeKey), iv, desc.hexaDB)
+          qfx = block:
+            let rc = pfx.hexaryEnvelopeDecompose(rootKey, iv, db)
+            check rc.isOk
+            if rc.isOk:
+              rc.value
+            else:
+              seq[NodeSpecs].default
 
-        # Re-assemble intervals
-        let covered = NodeTagRangeSet.init()
+        # Assemble possible gaps in decomposed envelope `qfx`
+        let gaps = NodeTagRangeSet.init()
+
+        # Start with full envelope and remove decomposed enveloped from `qfx`
+        discard gaps.merge pfx.hexaryEnvelope
+
+        #for w in qfx:
+        #  # The envelope of `w` must be fully contained in `gaps`
+        #  let iw = w.partialPath.hexaryEnvelope
+        #  check iw.len == gaps.reduce iw
+
+        # There are no node points between `iv.minPt` (aka base) and the first
+        # account `firstTag`. So only the interval `[firstTag,iv.maxPt]` is
+        # required to be fully covered by `gaps`
+        block:
+          let iw = NodeTagRange.new(firstTag, iv.maxPt)
+          check iw.len == gaps.reduce iw
+
         for w in qfx:
-          let iv = pathEnvelope w
-          check iv.len == covered.merge iv
+          # The envelope of `w` must be fully contained in `gaps`
+          let iw = w.partialPath.hexaryEnvelope
+          if iw.len != gaps.covered iw:
+            let
+              cmaNlSp0 = ",\n" & repeat(" ",12)
+              cmaNlSpc = ",\n" & repeat(" ",13)
+            echo ">>>     w=", w.partialPath.toHex,
+               "\n     gaps=@[", toSeq(gaps.increasing)
+                 .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
+                 .join(cmaNlSp0), "]"
+          check iw.len == gaps.reduce iw
 
-        if covered.chunks == 1 and iv.minPt == low(NodeTag):
-          # Order: `iv` <= `covered`
-          check iv.maxPt <= covered.ge.value.minPt
-        elif covered.chunks == 1 and iv.maxPt == high(NodeTag):
-          # Order: `covered` <= `iv`
-          check covered.ge.value.maxPt <= iv.minPt
-        else:
-          # Covered contains two ranges were the gap is big enough for `iv`
-          check covered.chunks == 2
-          # Order: `covered.ge` <= `iv` <= `covered.le`
-          check covered.ge.value.maxPt <= iv.minPt
-          check iv.maxPt <= covered.le.value.minPt
+        # Remove that space between the start of `iv` and the first account
+        # key (if any.).
+        if iv.minPt < firstTag:
+          discard gaps.reduce(iv.minPt, firstTag-1.u256)
 
-        # Must hold
-        check covered.le.value.minPt <= accKeys[^1].to(Nodetag)
+        # There are no node points between `iv.maxPt` and `finalTag`
+        if iv.maxPt+1.u256 <= finalTag-1.u256:
+          discard gaps.reduce(iv.maxPt+1.u256, finalTag-1.u256)
+
+        # All gaps must be empty intervals
+        var gapPaths: seq[NodeTagRange]
+        for w in gaps.increasing:
+          let rc = w.minPt.hexaryPath(rootKey,db).hexaryNearbyRight(db)
+          if rc.isOk:
+            var firstTag = rc.value.getPartialPath.convertTo(NodeTag)
+
+            # The point `firstTag` might be zero if there is a missing node
+            # in between to advance to the next key.
+            if w.minPt <= firstTag:
+              # The interval `w` starts before the first interval
+              if firstTag <= w.maxPt:
+                # Make sure that there is no leaf node in the range
+                gapPaths.add w
+              continue
+
+          # Some sub-tries might not exists which leads to gaps
+          let
+            wMin = w.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
+            wMax = w.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
+            nPfx = wMin.sharedPrefixLen wMax
+          for nibble in wMin[nPfx] .. wMax[nPfx]:
+            let wPfy = wMin.slice(0,nPfx) & @[nibble].initNibbleRange.slice(1)
+            if wPfy.hexaryPathNodeKey(rootKey, db, missingOk=true).isOk:
+              gapPaths.add wPfy.hexPrefixEncode.hexaryEnvelope
+
+        # Verify :)
+        check gapPaths == seq[NodeTagRange].default
 
         when false: # or true:
           let
             cmaNlSp0 = ",\n" & repeat(" ",12)
             cmaNlSpc = ",\n" & repeat(" ",13)
           echo ">>> n=", n, " pfxMax=", pfxLen,
-            "\n         pfx=", pfx,
+            "\n         pfx=", pfx, "/", ivMin.slice(0,pfxLen).hexPrefixEncode,
             "\n       ivMin=", ivMin,
-            "\n       iv1st=", accKeys[0],
+            "\n       iv1st=", firstTag,
             "\n       ivMax=", ivMax,
-            "\n      ivPast=", accKeys[^1],
-            "\n  covered=@[", toSeq(covered.increasing)
+            "\n      ivPast=", finaltag,
+            "\n     gaps=@[", toSeq(gaps.increasing)
                 .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
                 .join(cmaNlSp0), "]",
-            "\n        => @[", qfx.mapIt(it.toHex).join(cmaNlSpc), "]"
+            "\n  gapPaths=", gapPaths,
+            "\n        => @[", qfx
+                .mapIt(&"({it.partialPath.toHex},{it.nodeKey.pp(db)})")
+                .join(cmaNlSpc), "]",
+            "\n",
+
+            "*** ivMin=", ivMin,
+            "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(db), "\n",
+            "\n    ivFirst=", accKeys[0],
+            "\n    ", accKeys[0].hexaryPath(rootKey,db).pp(db), "\n",
+            "\n    ivMax=", ivMax,
+            "\n    ", iv.maxPt.hexaryPath(rootKey,db).pp(db), "\n",
+            "\n    ivtPast=", accKeys[^1],
+            "\n    ", accKeys[^1].hexaryPath(rootKey,db).pp(db), "\n",
+            "\n    pfxMax=", pfx.hexaryEnvelope.maxPt,
+            "\n    ", pfx.hexaryEnvelope.maxPt.hexaryPath(rootKey,db).pp(db)
+          if true: quit()
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent state root registry":
@@ -628,7 +717,8 @@ proc inspectionRunner(
         check not stats.stopped
         let
           dangling = stats.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
+          keys = dangling.hexaryPathNodeKeys(
+            rootKey, desc.hexaDb, missingOk=true)
         check dangling.len == keys.len
         singleStats.add (desc.hexaDb.tab.len,stats)
 
@@ -667,7 +757,8 @@ proc inspectionRunner(
           check not stats.stopped
           let
             dangling = stats.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
+            keys = dangling.hexaryPathNodeKeys(
+              rootKey, desc.hexaDb, missingOk=true)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
           let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
@@ -701,8 +792,8 @@ proc inspectionRunner(
         check not stats.stopped
         let
           dangling = stats.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(
-            rootKey, dangling.toHashSet.toSeq)
+          keys = dangling.hexaryPathNodeKeys(
+            rootKey, desc.hexaDb, missingOk=true)
         check dangling.len == keys.len
         accuStats.add (desc.hexaDb.tab.len, stats)
 
@@ -724,8 +815,8 @@ proc inspectionRunner(
           check not stats.stopped
           let
             dangling = stats.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(
-              rootKey, dangling.toHashSet.toSeq)
+            keys = dangling.hexaryPathNodeKeys(
+              rootKey, desc.hexaDb, missingOk=true)
           check dangling.len == keys.len
           check accuStats[n][1] == stats
 
@@ -1326,9 +1417,9 @@ when isMainModule:
   # This one uses readily available dumps
   when true: # and false:
     false.inspectionRunner()
-    for sam in snapTestList:
+    for n,sam in snapTestList:
       false.accountsRunner(persistent=true, sam)
-    for sam in snapTestStorageList:
+    for n,sam in snapTestStorageList:
       false.accountsRunner(persistent=true, sam)
       false.storagesRunner(persistent=true, sam)
 

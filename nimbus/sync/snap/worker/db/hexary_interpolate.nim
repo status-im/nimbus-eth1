@@ -53,15 +53,6 @@ proc dup(node: RNodeRef): RNodeRef =
   new result
   result[] = node[]
 
-proc hexaryPath(
-    tag: NodeTag;
-    root: NodeKey;
-    db: HexaryTreeDbRef;
-      ): RPath
-      {.gcsafe, raises: [Defect,KeyError].} =
-  ## Shortcut
-  tag.to(NodeKey).hexaryPath(root.to(RepairKey), db)
-
 # ------------------------------------------------------------------------------
 # Private getters & setters
 # ------------------------------------------------------------------------------

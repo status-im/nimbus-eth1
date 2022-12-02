@@ -392,6 +392,10 @@ proc convertTo*(data: Blob; T: type NodeKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.init(data)
 
+proc convertTo*(data: Blob; T: type NodeTag): T =
+  ## Ditto for node tag
+  data.convertTo(NodeKey).to(NodeTag)
+
 proc convertTo*(data: Blob; T: type RepairKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.initImpl(data)
