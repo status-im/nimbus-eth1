@@ -363,7 +363,7 @@
     "__typename":"SyncState",
     "startingBlock":0,
     "currentBlock":3,
-    "highestBlock":3,
+    "highestBlock":0,
     "pulledStates":null,
     "knownStates":null
   }

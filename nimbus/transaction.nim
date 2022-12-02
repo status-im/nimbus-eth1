@@ -6,13 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./constants, ./errors, eth/[common, keys], ./utils,
-  ./forks, ./vm_gas_costs
+  ./constants, ./errors, eth/[common, keys], ./utils/utils,
+  common/evmforks, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction, errors
 
-func intrinsicGas*(data: openArray[byte], fork: Fork): GasInt =
+func intrinsicGas*(data: openArray[byte], fork: EVMFork): GasInt =
   result = gasFees[fork][GasTransaction]
   for i in data:
     if i == 0:
@@ -20,7 +20,7 @@ func intrinsicGas*(data: openArray[byte], fork: Fork): GasInt =
     else:
       result += gasFees[fork][GasTXDataNonZero]
 
-proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
+proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
@@ -84,7 +84,7 @@ proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
   else:
     result = tx.to.get()
 
-proc validateTxLegacy(tx: Transaction, fork: Fork) =
+proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
   var
     vMin = 27'i64
     vMax = 28'i64
@@ -116,7 +116,7 @@ proc validateTxEip2930(tx: Transaction) =
   if not isValid:
     raise newException(ValidationError, "Invalid transaction")
 
-proc validate*(tx: Transaction, fork: Fork) =
+proc validate*(tx: Transaction, fork: EVMFork) =
   # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
@@ -155,7 +155,7 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   result.S = UInt256.fromBytesBE(sig[32..63])
 
 func eip1559TxNormalization*(tx: Transaction;
-                             baseFee: GasInt; fork: Fork): Transaction =
+                             baseFee: GasInt; fork: EVMFork): Transaction =
   ## This function adjusts a legacy transaction to EIP-1559 standard. This
   ## is needed particularly when using the `validateTransaction()` utility
   ## with legacy transactions.

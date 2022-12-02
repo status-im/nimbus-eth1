@@ -6,15 +6,15 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  os, macros, json, strformat, strutils, parseutils, os, tables,
-  stew/byteutils, net, eth/[common, keys, rlp, p2p], unittest2,
+  os, macros, json, strformat, strutils, os, tables,
+  stew/byteutils, net, eth/[keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[constants, config, transaction, utils, errors, forks],
+  ../nimbus/[constants, config, transaction, errors],
   ../nimbus/db/accounts_cache,
-  ../nimbus/context
+  ../nimbus/common/[context, common]
 
-func revmap(x: Table[Fork, string]): Table[string, Fork] =
-  result = initTable[string, Fork]()
+func revmap(x: Table[EVMFork, string]): Table[string, EVMFork] =
+  result = initTable[string, EVMFork]()
   for k, v in x:
     result[v] = k
 
@@ -51,30 +51,11 @@ const
 
 func skipNothing*(folder: string, name: string): bool = false
 
-proc lacksSupportedForks*(fixtures: JsonNode): bool =
-  # XXX: Until Nimbus supports all forks, some of the GeneralStateTests won't work.
-
-  var fixture: JsonNode
-  for label, child in fixtures:
-    fixture = child
-    break
-
-  # not all fixtures make a distinction between forks, so default to accepting
-  # them all, until we find the ones that specify forks in their "post" section
-  result = false
-  if fixture.kind == JObject and fixture.hasKey("transaction") and fixture.hasKey("post"):
-    result = true
-    for fork in supportedForks:
-      if fixture["post"].hasKey(forkNames[fork]):
-        result = false
-        break
-
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
 
 proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode): NimNode {.compileTime.} =
   let
     testStatusIMPL = ident("testStatusIMPL")
-    testName = ident("testName")
     # workaround for strformat in quote do: https://github.com/nim-lang/Nim/issues/8220
     symbol {.used.} = newIdentNode"symbol"
     final  {.used.} = newIdentNode"final"
@@ -83,7 +64,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
 
   result = quote:
     var filenames: seq[string] = @[]
-    for filename in walkDirRec("tests" / "fixtures" / `inputFolder`):
+    let inputPath = "tests" / "fixtures" / `inputFolder`
+    for filename in walkDirRec(inputPath):
       if not filename.endsWith(".json"):
         continue
       var (folder, name) = filename.splitPath()
@@ -97,26 +79,20 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
 
     doAssert(filenames.len > 0)
     for fname in filenames:
-      test fname:
+      test fname.subStr(inputPath.len + 1):
         {.gcsafe.}:
           let
-            filename = `testName` # the first argument passed to the `test` template
+            filename = fname
             (folder, name) = filename.splitPath()
             last = folder.splitPath().tail
           # we set this here because exceptions might be raised in the handler:
           status[last][name] = Status.Fail
           let fixtures = parseJson(readFile(filename))
-          if fixtures.lacksSupportedForks:
+          `handler`(fixtures, `testStatusIMPL`)
+          if `testStatusIMPL` == OK:
+            status[last][name] = Status.OK
+          elif `testStatusIMPL` == SKIPPED:
             status[last][name] = Status.Skip
-            skip()
-          else:
-            # when not paralleliseTests:
-            #   echo filename
-            `handler`(fixtures, `testStatusIMPL`)
-            if `testStatusIMPL` == OK:
-              status[last][name] = Status.OK
-            elif `testStatusIMPL` == SKIPPED:
-              status[last][name] = Status.Skip
 
     suiteTeardown:
       status.sort do (a: (string, OrderedTable[string, Status]),

@@ -10,7 +10,8 @@
 
 import
   sets, times, stint, chronicles,
-  eth/common/eth_types, ../db/accounts_cache, ../forks,
+  eth/common/eth_types, ../db/accounts_cache,
+  ../common/[evmforks, common],
   ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
   ./host_types, ./host_trace, ./host_call_nested
 
@@ -61,7 +62,7 @@ proc setupTxContext(host: TransactionHost) =
   # vmState.gasLimit now unused
   host.txContext.block_gas_limit  = vmState.gasLimit
   # vmState.difficulty now unused
-  host.txContext.chain_id         = vmState.chaindb.config.chainId.uint.u256.toEvmc
+  host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
   host.txContext.block_base_fee   = vmState.baseFee.toEvmc
 
   # Most host functions do `flip256` in `evmc_host_glue`, but due to this

@@ -1,7 +1,7 @@
 import
   tables, hashes, sets,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils, storage_types,
+  ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
   ./access_list as ac_access_list
 
@@ -494,6 +494,13 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
       let keyData = ac.db.get(slotHashToSlotKey(slotHash).toOpenArray)
       if keyData.len == 0: continue
       yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+
+iterator cachedStorage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
+  let acc = ac.getAccount(address, false)
+  if not acc.isNil:
+    if not acc.originalStorage.isNil:
+      for k, v in acc.originalStorage:
+        yield (k, v)
 
 proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   # beware that if the account not persisted,

@@ -10,16 +10,15 @@
 
 import
   std/[algorithm, os, sequtils, strformat, tables, times],
-  ../../nimbus/[config, chain_config, constants, genesis],
-  ../../nimbus/db/db_chain,
-  ../../nimbus/p2p/chain,
-  ../../nimbus/utils/[ec_recover, tx_pool],
-  ../../nimbus/utils/tx_pool/[tx_chain, tx_item],
+  ../../nimbus/[config, constants],
+  ../../nimbus/core/[chain, tx_pool],
+  ../../nimbus/utils/ec_recover,
+  ../../nimbus/core/tx_pool/[tx_chain, tx_item],
+  ../../nimbus/common/common,
   ./helpers,
   ./sign_helper,
-  eth/[common, keys, p2p, trie/db],
-  stew/[keyed_queue],
-  stint
+  eth/[keys, p2p],
+  stew/[keyed_queue]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -31,7 +30,7 @@ proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
   if status != item.status:
     discard xp.txDB.reassign(item, status)
 
-proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody]): int =
+proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
   if c.persistBlocks(h,b) != ValidationResult.OK:
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
   for body in b:
@@ -41,19 +40,17 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody]): int =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blockChainForTesting*(network: NetworkID): BaseChainDB =
+proc blockChainForTesting*(network: NetworkID): CommonRef =
 
-  result = newBaseChainDB(
+  result = CommonRef.new(
     newMemoryDb(),
-    id = network,
+    networkId = network,
     params = network.networkParams)
 
-  result.populateProgress
   result.initializeEmptyDB
 
-
 proc toTxPool*(
-    db: BaseChainDB;                  ## to be modified
+    com: CommonRef;                   ## to be modified
     file: string;                     ## input, file and transactions
     getStatus: proc(): TxItemStatus;  ## input, random function
     loadBlocks: int;                  ## load at most this many blocks
@@ -63,13 +60,13 @@ proc toTxPool*(
     noisy: bool): (TxPoolRef, int) =
 
   var
-    txCount = 0
-    chainNo = 0
-    chainDB = db.newChain
+    txCount  = 0
+    chainNo  = 0
+    chainRef = com.newChain
     nTxs = 0
 
-  doAssert not db.isNil
-  result[0] = TxPoolRef.new(db,testAddress)
+  doAssert not com.isNil
+  result[0] = TxPoolRef.new(com,testAddress)
   result[0].baseFee = baseFee
 
   for chain in file.undumpNextGroup:
@@ -81,11 +78,11 @@ proc toTxPool*(
 
     # Verify Genesis
     if leadBlkNum == 0.u256:
-      doAssert chain[0][0] == db.getBlockHeader(0.u256)
+      doAssert chain[0][0] == com.db.getBlockHeader(0.u256)
       continue
 
     if leadBlkNum < loadBlocks.u256 or nTxs < minBlockTxs:
-      nTxs += chainDB.importBlocks(chain[0],chain[1])
+      nTxs += chainRef.importBlocks(chain[0],chain[1])
       continue
 
     # Import transactions
@@ -96,7 +93,7 @@ proc toTxPool*(
 
       # Continue importing up until first non-trivial block
       if txCount == 0 and txs.len == 0:
-        nTxs += chainDB.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
+        nTxs += chainRef.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
         continue
 
       # Load transactions, one-by-one
@@ -115,15 +112,15 @@ proc toTxPool*(
 
 
 proc toTxPool*(
-    db: BaseChainDB;              ## to be modified, initialisier for `TxPool`
+    com: CommonRef;               ## to be modified, initialisier for `TxPool`
     itList: seq[TxItemRef];       ## import items into new `TxPool` (read only)
     baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
     local: seq[EthAddress] = @[]; ## local addresses
     noisy = true): TxPoolRef =
 
-  doAssert not db.isNil
+  doAssert not com.isNil
 
-  result = TxPoolRef.new(db,testAddress)
+  result = TxPoolRef.new(com,testAddress)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
@@ -144,7 +141,7 @@ proc toTxPool*(
 
 
 proc toTxPool*(
-    db: BaseChainDB;              ## to be modified, initialisier for `TxPool`
+    com: CommonRef;               ## to be modified, initialisier for `TxPool`
     timeGap: var Time;            ## to be set, time in the middle of time gap
     nGapItems: var int;           ## to be set, # items before time gap
     itList: var seq[TxItemRef];   ## import items into new `TxPool` (read only)
@@ -155,10 +152,10 @@ proc toTxPool*(
     noisy = true): TxPoolRef =
   ## Variant of `toTxPoolFromSeq()` with a time gap between consecutive
   ## items on the `remote` queue
-  doAssert not db.isNil
+  doAssert not com.isNil
   doAssert 0 < itemsPC and itemsPC < 100
 
-  result = TxPoolRef.new(db,testAddress)
+  result = TxPoolRef.new(com,testAddress)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
@@ -222,14 +219,14 @@ proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
     txsLst: seq[Transaction]
     backHash = xp.head.blockHash
     backHeader = xp.head
-    backBody = xp.chain.db.getBlockBody(backHash)
+    backBody = xp.chain.com.db.getBlockBody(backHash)
 
   while true:
     # count txs and step behind last block
     txsLst.add backBody.transactions
     backHash = backHeader.parentHash
-    if not xp.chain.db.getBlockHeader(backHash, backHeader) or
-       not xp.chain.db.getBlockBody(backHash, backBody):
+    if not xp.chain.com.db.getBlockHeader(backHash, backHeader) or
+       not xp.chain.com.db.getBlockBody(backHash, backBody):
       break
 
     # collect accounts unless max reached

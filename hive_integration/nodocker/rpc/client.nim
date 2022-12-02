@@ -13,7 +13,8 @@ import
   stew/byteutils,
   chronos, stint,
   json_rpc/[rpcclient],
-  ../../../nimbus/[utils, transaction],
+  ../../../nimbus/transaction,
+  ../../../nimbus/utils/utils,
   ../../../nimbus/rpc/hexstrings,
   ../../../tests/rpcclient/eth_api
 

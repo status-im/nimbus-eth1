@@ -22,7 +22,7 @@ type
 
   TestEnv = object
     conf    : NimbusConf
-    chainDB : BaseChainDB
+    chainDB : ChainDBRef
     chain   : Chain
 
   CCModify = proc(cc: NetworkParams)
@@ -56,7 +56,7 @@ proc initEnv(ccm: CCModify = nil): TestEnv =
     ccm(conf.networkParams)
 
   let
-    chainDB = newBaseChainDB(
+    chainDB = newChainDBRef(
       newMemoryDb(),
       conf.pruneMode == PruneMode.Full,
       conf.networkId,

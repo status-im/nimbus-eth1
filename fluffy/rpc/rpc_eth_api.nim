@@ -13,7 +13,8 @@ import
   web3/conversions, # sigh, for FixedBytes marshalling
   eth/[common/eth_types, rlp],
   ../../nimbus/rpc/[rpc_types, hexstrings, filters],
-  ../../nimbus/[transaction, chain_config],
+  ../../nimbus/transaction,
+  ../../nimbus/common/chain_config,
   ../network/history/[history_network, history_content]
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API

@@ -1,7 +1,12 @@
 import
-  json, os, stint, eth/trie/db, stew/byteutils, eth/common,
-  ../nimbus/db/[db_chain], chronicles, ../nimbus/[vm_state, vm_types],
-  ../nimbus/p2p/executor, premixcore, prestate, ../nimbus/tracer
+  std/[json, os],
+  stew/byteutils,
+  chronicles,
+  ../nimbus/[vm_state, vm_types],
+  ../nimbus/core/executor,
+  ./premixcore, ./prestate,
+  ../nimbus/tracer,
+  ../nimbus/common/common
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
   let state = node["state"]
@@ -14,16 +19,16 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
 proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: UInt256) =
   let
     parentNumber = blockNumber - 1
-    chainDB = newBaseChainDB(memoryDB, false)
-    parent = chainDB.getBlockHeader(parentNumber)
-    header = chainDB.getBlockHeader(blockNumber)
-    body   = chainDB.getBlockBody(header.blockHash)
+    com = CommonRef.new(memoryDB)
+    parent = com.db.getBlockHeader(parentNumber)
+    header = com.db.getBlockHeader(blockNumber)
+    body   = com.db.getBlockBody(header.blockHash)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
 
   let
-    vmState = BaseVMState.new(parent, header, chainDB)
+    vmState = BaseVMState.new(parent, header, com)
     validationResult = vmState.processBlockNotPoA(header, body)
 
   if validationResult != ValidationResult.OK:
@@ -32,7 +37,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: UI
     info "block validation success", validationResult, blockNumber
 
   transaction.rollback()
-  dumpDebuggingMetaData(chainDB, header, body, vmState, false)
+  dumpDebuggingMetaData(com, header, body, vmState, false)
   let
     fileName = "debug" & $blockNumber & ".json"
     nimbus   = json.parseFile(fileName)

@@ -9,7 +9,7 @@
 
 import
   std/[strutils, os],
-  accounts/manager,
+  manager,
   stew/[results, io2, byteutils],
   eth/keys
 

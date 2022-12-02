@@ -6,10 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, json, os, tables, strutils,
-  eth/common, stew/byteutils, eth/trie/db,
-  ./test_helpers, ../nimbus/db/db_chain,
-  ../nimbus/[tracer, vm_types, chain_config]
+  std/[json, os, tables, strutils],
+  unittest2,
+  stew/byteutils,
+  ./test_helpers,
+  ../nimbus/vm_types,
+  ../nimbus/tracer,
+  ../nimbus/common/common
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -22,25 +25,25 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB = newMemoryDB()
-    chainDB = newBaseChainDB(memoryDB, chainConfigForNetwork(MainNet))
+    com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
 
   # disable POS/post Merge feature
-  chainDB.config.terminalTotalDifficulty = none(DifficultyInt)
+  com.setTTD none(DifficultyInt)
 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
     memoryDB.put(key, value)
 
-  var header = chainDB.getBlockHeader(blockNumber)
+  var header = com.db.getBlockHeader(blockNumber)
   var headerHash = header.blockHash
-  var blockBody = chainDB.getBlockBody(headerHash)
+  var blockBody = com.db.getBlockBody(headerHash)
 
-  let txTraces = traceTransactions(chainDB, header, blockBody)
-  let stateDump = dumpBlockState(chainDB, header, blockBody)
-  let blockTrace = traceBlock(chainDB, header, blockBody, {DisableState})
+  let txTraces = traceTransactions(com, header, blockBody)
+  let stateDump = dumpBlockState(com, header, blockBody)
+  let blockTrace = traceBlock(com, header, blockBody, {DisableState})
 
   check node["txTraces"] == txTraces
   check node["stateDump"] == stateDump

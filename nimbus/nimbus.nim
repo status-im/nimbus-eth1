@@ -11,25 +11,24 @@ import
   ../nimbus/vm_compile_info
 
 import
-  std/[os, strutils, net, options],
+  std/[os, strutils, net],
   chronicles,
   chronos,
-  eth/[keys, net/nat, trie/db],
-  eth/common as eth_common,
+  eth/[keys, net/nat],
   eth/p2p as eth_p2p,
   json_rpc/rpcserver,
   metrics,
   metrics/[chronos_httpserver, chronicles_support],
   stew/shims/net as stewNet,
   websock/websock as ws,
-  "."/[conf_utils, config, constants, context, genesis, sealer, utils, version, peers],
-  ./db/[storage_types, db_chain, select_backend],
+  "."/[config, constants, version, rpc, common],
+  ./db/select_backend,
   ./graphql/ethapi,
-  ./p2p/[chain, clique/clique_desc, clique/clique_sealer],
-  ./rpc/[common, debug, engine_api, jwt_auth, p2p, cors],
-  ./sync/[fast, full, protocol, snap, protocol/les_protocol, handlers],
-  ./utils/tx_pool,
-  ./merge/merger
+  ./core/[chain, sealer, clique/clique_desc,
+    clique/clique_sealer, tx_pool, block_import],
+  ./rpc/merge/merger,
+  ./sync/[fast, full, protocol, snap,
+    protocol/les_protocol, handlers, peers]
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -53,7 +52,7 @@ type
     wsRpcServer: RpcWebSocketServer
     sealingEngine: SealingEngineRef
     ctx: EthContext
-    chainRef: Chain
+    chainRef: ChainRef
     txPool: TxPoolRef
     networkLoop: Future[void]
     dbBackend: ChainDB
@@ -62,24 +61,24 @@ type
     fullSyncRef: FullSyncRef
     merger: MergerRef
 
-proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
+proc importBlocks(conf: NimbusConf, com: CommonRef) =
   if string(conf.blocksFile).len > 0:
     # success or not, we quit after importing blocks
-    if not importRlpBlock(string conf.blocksFile, chainDB):
+    if not importRlpBlock(string conf.blocksFile, com):
       quit(QuitFailure)
     else:
       quit(QuitSuccess)
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
-                   chainDB: BaseChainDB) =
+                   com: CommonRef) =
   # app wide TxPool singleton
   # TODO: disable some of txPool internal mechanism if
   # the engineSigner is zero.
-  nimbus.txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+  nimbus.txPool = TxPoolRef.new(com, conf.engineSigner)
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
-  nimbus.chainRef = newChain(chainDB)
+  nimbus.chainRef = newChain(com)
   if conf.verifyFrom.isSome:
     let verifyFrom = conf.verifyFrom.get()
     nimbus.chainRef.extraValidation = 0 < verifyFrom
@@ -88,7 +87,7 @@ proc basicServices(nimbus: NimbusNode,
   # this is temporary workaround to track POS transition
   # until we have proper chain config and hard fork module
   # see issue #640
-  nimbus.merger = MergerRef.new(chainDB)
+  nimbus.merger = MergerRef.new(com.db)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
@@ -150,8 +149,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     let ethWireHandler = EthWireRef.new(
       nimbus.chainRef,
       nimbus.txPool,
-      nimbus.ethNode.peerPool,
-      nimbus.merger
+      nimbus.ethNode.peerPool
     )
     nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
@@ -205,7 +203,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       waitForPeers = waitForPeers)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
-                   chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
+                   com: CommonRef, protocols: set[ProtocolFlag]) =
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -252,9 +250,9 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     let rpcFlags = conf.getRpcFlags()
     if (RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols) or
        (conf.engineApiPort == conf.rpcPort):
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.rpcServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.rpcServer)
     if RpcFlag.Debug in rpcFlags:
-      setupDebugRpc(chainDB, nimbus.rpcServer)
+      setupDebugRpc(com, nimbus.rpcServer)
 
     nimbus.rpcServer.rpc("admin_quit") do() -> string:
       {.gcsafe.}:
@@ -291,16 +289,16 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     let wsFlags = conf.getWsFlags()
     if (RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols) or
        (conf.engineApiWsPort == conf.wsPort):
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.wsRpcServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.wsRpcServer)
     if RpcFlag.Debug in wsFlags:
-      setupDebugRpc(chainDB, nimbus.wsRpcServer)
+      setupDebugRpc(com, nimbus.wsRpcServer)
 
     nimbus.wsRpcServer.start()
 
   if conf.graphqlEnabled:
     nimbus.graphqlServer = setupGraphqlHttpServer(
       conf,
-      chainDB,
+      com,
       nimbus.ethNode,
       nimbus.txPool,
       @[httpCorsHook]
@@ -333,7 +331,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   # always create sealing engine instance but not always run it
   # e.g. engine api need sealing engine without it running
   var initialState = EngineStopped
-  if chainDB.headTotalDifficulty() > chainDB.ttd:
+  if com.forkGTE(MergeFork):
      initialState = EnginePostMerge
   nimbus.sealingEngine = SealingEngineRef.new(
     nimbus.chainRef, nimbus.ctx, conf.engineSigner,
@@ -351,7 +349,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger)
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
       setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger)
@@ -365,7 +363,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
       setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger)
-      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.txPool, nimbus.engineApiWsServer)
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
       setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger)
@@ -391,27 +389,23 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
   createDir(string conf.dataDir)
   nimbus.dbBackend = newChainDB(string conf.dataDir)
   let trieDB = trieDB nimbus.dbBackend
-  var chainDB = newBaseChainDB(trieDB,
+  let com = CommonRef.new(trieDB,
     conf.pruneMode == PruneMode.Full,
     conf.networkId,
     conf.networkParams
     )
-  chainDB.populateProgress()
 
-  if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDB)
-    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
-
+  com.initializeEmptyDb()
   let protocols = conf.getProtocolFlags()
 
   case conf.cmd
   of NimbusCmd.`import`:
-    importBlocks(conf, chainDB)
+    importBlocks(conf, com)
   else:
-    basicServices(nimbus, conf, chainDB)
+    basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, protocols)
-    localServices(nimbus, conf, chainDB, protocols)
+    localServices(nimbus, conf, com, protocols)
 
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
       case conf.syncMode:

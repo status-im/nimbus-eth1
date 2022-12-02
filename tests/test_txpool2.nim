@@ -1,12 +1,13 @@
 import
-  std/[strutils, math, tables, options, times],
-  eth/[trie/db, keys, common, trie/hexary],
+  std/[strutils, math, tables, times],
+  eth/[keys, trie/hexary],
   stew/[byteutils, results], unittest2,
-  ../nimbus/db/[db_chain, state_db],
-  ../nimbus/p2p/chain,
-  ../nimbus/p2p/clique/[clique_sealer, clique_desc],
-  ../nimbus/[chain_config, config, genesis, transaction, constants],
-  ../nimbus/utils/tx_pool,
+  ../nimbus/db/state_db,
+  ../nimbus/core/chain,
+  ../nimbus/core/clique/[clique_sealer, clique_desc],
+  ../nimbus/[config, transaction, constants],
+  ../nimbus/core/tx_pool,
+  ../nimbus/common/common,
   ./test_txpool/helpers,
   ./macro_assembler
 
@@ -21,8 +22,8 @@ type
     chainId : ChainId
     vaultKey: PrivateKey
     conf    : NimbusConf
-    chainDB : BaseChainDB
-    chain   : Chain
+    com     : CommonRef
+    chain   : ChainRef
     xp      : TxPoolRef
 
 const
@@ -81,21 +82,21 @@ proc initEnv(ttd: Option[UInt256] = none(UInt256)): TestEnv =
     conf.networkParams.config.terminalTotalDifficulty = ttd
 
   let
-    chainDB = newBaseChainDB(
+    com = CommonRef.new(
       newMemoryDb(),
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
     )
-    chain = newChain(chainDB)
+    chain = newChain(com)
 
-  initializeEmptyDb(chainDB)
+  com.initializeEmptyDb()
 
   result = TestEnv(
     conf: conf,
-    chainDB: chainDB,
+    com: com,
     chain: chain,
-    xp: TxPoolRef.new(chainDB, conf.engineSigner),
+    xp: TxPoolRef.new(com, conf.engineSigner),
     vaultKey: privKey(vaultKeyHex),
     chainId: conf.networkParams.config.chainId,
     nonce: 0'u64
@@ -114,7 +115,7 @@ proc runTxPoolCliqueTest*() =
     tx = env.makeTx(recipient, amount)
     xp = env.xp
     conf = env.conf
-    chainDB = env.chainDB
+    com = env.com
     chain = env.chain
     clique = env.chain.clique
     body: BlockBody
@@ -154,7 +155,7 @@ proc runTxPoolCliqueTest*() =
 
     test "Clique prepare and seal":
       clique.authorize(conf.engineSigner, signerFunc)
-      let parent = chainDB.getBlockHeader(blk.header.parentHash)
+      let parent = com.db.getBlockHeader(blk.header.parentHash)
       let ry = chain.clique.prepare(parent, blk.header)
       check ry.isOk
       if ry.isErr:
@@ -178,7 +179,7 @@ proc runTxPoolPosTest*() =
   var
     tx = env.makeTx(recipient, amount)
     xp = env.xp
-    chainDB = env.chainDB
+    com = env.com
     chain = env.chain
     body: BlockBody
     blk: EthBlock
@@ -199,7 +200,7 @@ proc runTxPoolPosTest*() =
       xp.feeRecipient = feeRecipient
       blk = xp.ethBlock()
 
-      check chain.isBlockAfterTtd(blk.header)
+      check com.isBlockAfterTtd(blk.header)
 
       blk.header.difficulty = DifficultyInt.zero
       blk.header.prevRandao = prevRandao
@@ -211,13 +212,12 @@ proc runTxPoolPosTest*() =
         uncles: blk.uncles
       )
       check blk.txs.len == 1
-
     test "PoS persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
       check rr == ValidationResult.OK
 
     test "validate TxPool prevRandao setter":
-      var sdb = newAccountStateDB(chainDB.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
       let (val, ok) = sdb.getStorage(recipient, slot)
       let randao = Hash256(data: val.toBytesBE)
       check ok
@@ -225,12 +225,9 @@ proc runTxPoolPosTest*() =
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = newAccountStateDB(chainDB.db, blk.header.stateRoot, pruneTrie = false)
+      var sdb = newAccountStateDB(com.db.db, blk.header.stateRoot, pruneTrie = false)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
-
-#runTxPoolPosTest()
-
 
 proc runTxHeadDelta*(noisy = true) =
   ## see github.com/status-im/nimbus-eth1/issues/1031
@@ -240,9 +237,9 @@ proc runTxHeadDelta*(noisy = true) =
       var
         env = initEnv(some(100.u256))
         xp = env.xp
-        chainDB = env.chainDB
+        com = env.com
         chain = env.chain
-        head = chainDB.getCanonicalHead()
+        head = com.db.getCanonicalHead()
         timestamp = head.timestamp
 
       const
@@ -267,7 +264,7 @@ proc runTxHeadDelta*(noisy = true) =
 
           xp.prevRandao = prevRandao
           var blk = xp.ethBlock()
-          check chain.isBlockAfterTtd(blk.header)
+          check com.isBlockAfterTtd(blk.header)
 
           timestamp = timestamp + 1.seconds
           blk.header.difficulty = DifficultyInt.zero
@@ -301,10 +298,10 @@ proc runTxHeadDelta*(noisy = true) =
 
           setErrorLevel() # in case we set trace level
 
-      check chainDB.currentBlock == 10.toBlockNumber
-      head = chainDB.getBlockHeader(chainDB.currentBlock)
+      check com.syncCurrent == 10.toBlockNumber
+      head = com.db.getBlockHeader(com.syncCurrent)
       var
-        sdb = newAccountStateDB(chainDB.db, head.stateRoot, pruneTrie = false)
+        sdb = newAccountStateDB(com.db.db, head.stateRoot, pruneTrie = false)
 
       let
         expected = u256(txPerblock * numBlocks) * amount

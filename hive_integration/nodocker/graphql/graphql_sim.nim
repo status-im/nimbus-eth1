@@ -9,11 +9,13 @@
 
 import
   std/[os, json, times],
-  eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
+  eth/p2p,
   ../../../nimbus/sync/protocol,
-  ../../../nimbus/[genesis, config, conf_utils, context],
-  ../../../nimbus/graphql/ethapi, ../../../tests/test_helpers,
-  ../../../nimbus/utils/tx_pool,
+  ../../../nimbus/config,
+  ../../../nimbus/graphql/ethapi,
+  ../../../tests/test_helpers,
+  ../../../nimbus/core/[tx_pool, block_import],
+  ../../../nimbus/common,
   graphql, ../sim_utils
 
 const
@@ -25,7 +27,7 @@ const
 template testCond(expr: untyped) =
   if not (expr):
     result = TestStatus.Failed
-    
+
 proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string): TestStatus =
   let request = node["request"]
   let responses = node["responses"]
@@ -73,20 +75,19 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string): TestStatus 
 
 proc main() =
   let
-    conf = makeConfig(@["--custom-network:" & genesisFile])
-    ethCtx = newEthContext()
+    conf    = makeConfig(@["--custom-network:" & genesisFile])
+    ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    chainDB = newBaseChainDB(newMemoryDB(),
+    com     = CommonRef.new(newMemoryDB(),
       pruneTrie = false,
       conf.networkId,
       conf.networkParams
     )
 
-  initializeEmptyDb(chainDB)
-
-  let txPool = TxPoolRef.new(chainDB, conf.engineSigner)
-  discard importRlpBlock(blocksFile, chainDB)
-  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
+  com.initializeEmptyDb()
+  let txPool = TxPoolRef.new(com, conf.engineSigner)
+  discard importRlpBlock(blocksFile, com)
+  let ctx = setupGraphqlContext(com, ethNode, txPool)
 
   var stat: SimStat
   let start = getTime()

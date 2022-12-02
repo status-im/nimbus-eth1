@@ -8,7 +8,7 @@ import
   "."/[test_env, helper, types],
   ../../../nimbus/transaction,
   ../../../nimbus/rpc/rpc_types,
-  ../../../nimbus/merge/mergeutils
+  ../../../nimbus/rpc/merge/mergeutils
 
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")

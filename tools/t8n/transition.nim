@@ -1,13 +1,15 @@
 import
-  std/[json, strutils, times, tables, options, os],
-  eth/[common, rlp, trie, trie/db],
+  std/[json, strutils, times, tables, os],
+  eth/[rlp, trie],
   stint, chronicles, stew/results,
   "."/[config, types, helpers],
-  ../../nimbus/[chain_config, vm_types, vm_state, utils, transaction],
-  ../../nimbus/db/[db_chain, accounts_cache],
-  ../../nimbus/utils/difficulty,
-  ../../nimbus/p2p/dao,
-  ../../nimbus/p2p/executor/[process_transaction, executor_helpers]
+  ../../nimbus/[vm_types, vm_state, transaction],
+  ../../nimbus/common/common,
+  ../../nimbus/db/accounts_cache,
+  ../../nimbus/utils/utils,
+  ../../nimbus/core/pow/difficulty,
+  ../../nimbus/core/dao,
+  ../../nimbus/core/executor/[process_transaction, executor_helpers]
 
 const
   wrapExceptionEnabled* {.booldefine.} = true
@@ -136,8 +138,8 @@ proc exec(ctx: var TransContext,
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
-  if vmState.chainDB.config.daoForkSupport and
-     vmState.chainDB.config.daoForkBlock == vmState.blockNumber:
+  if vmState.com.daoForkSupport and
+     vmState.com.daoForkBlock.get == vmState.blockNumber:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -267,8 +269,10 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
-    let chainConfig = parseChainConfig(conf.stateFork)
-    chainConfig.chainId = conf.stateChainId.ChainId
+    let config = parseChainConfig(conf.stateFork)
+    config.chainId = conf.stateChainId.ChainId
+
+    let com = CommonRef.new(newMemoryDb(), config, pruneTrie = true)
 
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.
@@ -276,7 +280,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc == stdinSelector or
        conf.inputEnv == stdinSelector or
        conf.inputTxs == stdinSelector:
-      ctx.parseInputFromStdin(chainConfig)
+      ctx.parseInputFromStdin(com.chainId)
 
     if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
       let n = json.parseFile(conf.inputAlloc)
@@ -292,7 +296,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         ctx.parseTxsRlp(data.strip(chars={'"'}))
       else:
         let n = json.parseFile(conf.inputTxs)
-        ctx.parseTxs(n, chainConfig.chainId)
+        ctx.parseTxs(n, com.chainId)
 
     let uncleHash = if ctx.env.parentUncleHash == Hash256():
                       EMPTY_UNCLE_HASH
@@ -308,14 +312,11 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     )
 
     # Sanity check, to not `panic` in state_transition
-    if chainConfig.isLondon(ctx.env.currentNumber):
+    if com.isLondon(ctx.env.currentNumber):
       if ctx.env.currentBaseFee.isNone:
         raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
 
-    let isMerged = chainConfig.terminalTotalDifficulty.isSome and
-                     chainConfig.terminalTotalDifficulty.get() == 0
-
-    if isMerged:
+    if com.forkGTE(MergeFork):
       if ctx.env.currentRandom.isNone:
         raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
 
@@ -335,15 +336,13 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
           "currentDifficulty cannot be calculated -- currentTime ($1) needs to be after parent time ($2)" %
             [$ctx.env.currentTimestamp, $ctx.env.parentTimestamp])
 
-      ctx.env.currentDifficulty = some(calcDifficulty(chainConfig,
+      ctx.env.currentDifficulty = some(calcDifficulty(com,
         ctx.env.currentTimestamp, parent))
 
-    let
-      chainDB = newBaseChainDB(newMemoryDb(), chainConfig, pruneTrie = true)
-      header  = envToHeader(ctx.env)
+    let header  = envToHeader(ctx.env)
 
     # set parent total difficulty
-    chainDB.setScore(parent.blockHash, 0.u256)
+    #chainDB.setScore(parent.blockHash, 0.u256)
 
     let vmState = TestVMState(
       blockHashes: system.move(ctx.env.blockHashes),
@@ -353,9 +352,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     vmState.init(
       parent      = parent,
       header      = header,
-      chainDB     = chainDB,
-      tracerFlags = (if conf.traceEnabled: tracerFlags else: {}),
-      pruneTrie   = chainDB.pruneTrie
+      com         = com,
+      tracerFlags = (if conf.traceEnabled: tracerFlags else: {})
     )
 
     vmState.mutateStateDB:

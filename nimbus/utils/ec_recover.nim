@@ -25,7 +25,7 @@ import
   stint
 
 export
-  utils_defs
+  utils_defs, results
 
 {.push raises: [Defect].}
 

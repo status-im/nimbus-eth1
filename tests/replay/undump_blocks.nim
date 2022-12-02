@@ -47,7 +47,7 @@ proc dumpGroupEndNl*: string =
 proc dumpGroupBlockNl*(header: BlockHeader; body: BlockBody): string =
   dumpGroupBlock(header, body) & "\n"
 
-proc dumpGroupBeginNl*(db: BaseChainDB;
+proc dumpGroupBeginNl*(db: ChainDBRef;
                        headers: openArray[BlockHeader]): string =
   if headers[0].blockNumber == 1.u256:
     let
@@ -61,7 +61,7 @@ proc dumpGroupBeginNl*(db: BaseChainDB;
   result &= dumpGroupBegin(headers) & "\n"
 
 
-proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
+proc dumpGroupNl*(db: ChainDBRef; headers: openArray[BlockHeader];
                   bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:

@@ -2,7 +2,7 @@ import
   std/[os, parseopt, strutils],
   eth/common, stint, ../nimbus/config
 
-from ../nimbus/chain_config import
+from ../nimbus/common/chain_config import
   MainNet,
   RopstenNet,
   RinkebyNet,

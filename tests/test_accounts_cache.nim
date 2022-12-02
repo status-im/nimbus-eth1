@@ -10,14 +10,14 @@
 
 import
   std/[os, sequtils, strformat, strutils, tables],
-  ../nimbus/[chain_config, config, constants, genesis],
-  ../nimbus/db/[accounts_cache, db_chain],
-  ../nimbus/p2p/chain,
+  ../nimbus/db/accounts_cache,
+  ../nimbus/common/common,
+  ../nimbus/core/chain,
   ../nimbus/transaction,
+  ../nimbus/constants,
   ../nimbus/vm_state,
   ../nimbus/vm_types,
   ./replay/undump_blocks,
-  eth/[common, trie/db],
   unittest2
 
 type
@@ -44,7 +44,7 @@ const
     MainNet, "mainnet843841.txt.gz", 50000, 3000)
 
 var
-  xdb: BaseChainDB
+  xdb: ChainDBRef
   txs: seq[Transaction]
   txi: seq[int] # selected index into txs[] (crashable sender addresses)
 
@@ -82,20 +82,19 @@ proc pp*(tx: Transaction; vmState: BaseVMState): string =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc blockChainForTesting*(network: NetworkId): BaseChainDB =
-  result = newBaseChainDB(
+proc blockChainForTesting*(network: NetworkId): CommonRef =
+  result = CommonRef.new(
     newMemoryDB(),
-    id = network,
+    networkId = network,
     params = network.networkParams)
-  result.populateProgress
   initializeEmptyDb(result)
 
-proc importBlocks(cdb: BaseChainDB; h: seq[BlockHeader]; b: seq[BlockBody]) =
-  if cdb.newChain.persistBlocks(h,b) != ValidationResult.OK:
+proc importBlocks(com: CommonRef; h: seq[BlockHeader]; b: seq[BlockBody]) =
+  if com.newChain.persistBlocks(h,b) != ValidationResult.OK:
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
 
-proc getVmState(cdb: BaseChainDB; number: BlockNumber): BaseVMState =
-  BaseVMState.new(cdb.getBlockHeader(number), cdb)
+proc getVmState(com: CommonRef; number: BlockNumber): BaseVMState =
+  BaseVMState.new(com.db.getBlockHeader(number), com)
 
 # ------------------------------------------------------------------------------
 # Crash test function, finding out about how the transaction framework works ..
@@ -271,9 +270,10 @@ proc runner(noisy = true; capture = goerliCapture) =
     loadTxs = capture.numTxs
     fileInfo = capture.file.splitFile.name.split(".")[0]
     filePath = capture.file.findFilePath
+    com = capture.network.blockChainForTesting
 
   txs.reset
-  xdb = capture.network.blockChainForTesting
+  xdb = com.db
 
   suite &"StateDB nesting scenarios":
     var topNumber: BlockNumber
@@ -294,7 +294,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 
         # Import block chain blocks
         if leadBlkNum < loadBlocks:
-          xdb.importBlocks(chain[0],chain[1])
+          com.importBlocks(chain[0],chain[1])
           continue
 
         # Import transactions
@@ -303,7 +303,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 
           # Continue importing up until first non-trivial block
           if txs.len == 0 and blkTxs.len == 0:
-            xdb.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
+            com.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
             continue
 
           # Load transactions
@@ -323,14 +323,14 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.db.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial2ok(n)
 
     test &"Run {txi.len} three-step trials with rollback":
       let dbTx = xdb.db.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial3(n, rollback = true)
 
     test &"Run {txi.len} three-step trials with extra db frame rollback" &
@@ -338,7 +338,7 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.db.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         expect AssertionError:
           vmState.runTrial3crash(n, noisy)
 
@@ -346,14 +346,14 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.db.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial3(n, rollback = false)
 
     test &"Run {txi.len} four-step trials with rollback and db frames":
       let dbTx = xdb.db.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = xdb.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
         vmState.runTrial4(n, rollback = true)
 
 # ------------------------------------------------------------------------------

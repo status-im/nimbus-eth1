@@ -10,15 +10,17 @@
 import
   std/[strutils, times],
   stew/[results, byteutils], stint,
-  eth/[common, rlp], chronos,
+  eth/[rlp], chronos,
   stew/shims/net,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
-  ../db/[db_chain, state_db], ../rpc/rpc_utils,
-  ".."/[utils, transaction, vm_state, config, constants],
+  ../db/[state_db], ../rpc/rpc_utils,
+  ".."/[transaction, vm_state, config, constants],
+  ../common/common,
   ../transaction/call_evm,
-  ../utils/tx_pool
+  ../core/tx_pool,
+  ../utils/utils
 
 from eth/p2p import EthereumNode
 export httpserver
@@ -63,7 +65,8 @@ type
   GraphqlContextRef = ref GraphqlContextObj
   GraphqlContextObj = object of Graphql
     ids: array[EthTypes, Name]
-    chainDB: BaseChainDB
+    com: CommonRef
+    chainDB: ChainDBRef
     ethNode: EthereumNode
     txPool: TxPoolRef
 
@@ -120,10 +123,10 @@ proc aclNode(ctx: GraphqlContextRef, accessPair: AccessPair): Node =
     acl: accessPair
   )
 
-proc getStateDB(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
+proc getStateDB(com: CommonRef, header: BlockHeader): ReadOnlyStateDB =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  let ac = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie)
+  let ac = newAccountStateDB(com.db.db, header.stateRoot, com.pruneTrie)
   ReadOnlyStateDB(ac)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
@@ -311,7 +314,7 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, em.msg])
 
 proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddress): RespResult =
-  let db = getStateDB(ctx.chainDB, header)
+  let db = getStateDB(ctx.com, header)
   when false:
     # EIP 1767 unclear about non existent account
     # but hive test case demand something
@@ -687,7 +690,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
-  let db = getStateDB(ctx.chainDB, h.header)
+  let db = getStateDB(ctx.com, h.header)
   let contractAddress = generateAddress(sender, tx.tx.nonce)
   ctx.accountNode(h.header, contractAddress)
 
@@ -955,8 +958,8 @@ proc toCallData(n: Node): RpcCallData =
   optionalBytes(result.data, n, fData)
 
 proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData,
-              header: BlockHeader, chainDB: BaseChainDB): RespResult =
-  let res = rpcCallEvm(callData, header, chainDB)
+              header: BlockHeader): RespResult =
+  let res = rpcCallEvm(callData, header, ctx.com)
   var map = respMap(ctx.ids[ethCallResult])
   map["data"]    = resp("0x" & res.output.toHex)
   map["gasUsed"] = longNode(res.gasUsed).get()
@@ -969,7 +972,7 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   let param = params[0].val
   try:
     let callData = toCallData(param)
-    ctx.makeCall(callData, h.header, ctx.chainDB)
+    ctx.makeCall(callData, h.header)
   except Exception as em:
     err("call error: " & em.msg)
 
@@ -980,7 +983,7 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
   try:
     let callData = toCallData(param)
     # TODO: DEFAULT_RPC_GAS_CAP should configurable
-    let gasUsed = rpcEstimateGas(callData, h.header, ctx.chainDB, DEFAULT_RPC_GAS_CAP)
+    let gasUsed = rpcEstimateGas(callData, h.header, ctx.com, DEFAULT_RPC_GAS_CAP)
     longNode(gasUsed)
   except Exception as em:
     err("estimateGas error: " & em.msg)
@@ -1043,15 +1046,15 @@ const callResultProcs = {
 
 proc syncStateStartingBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  longNode(ctx.chainDB.startingBlock)
+  longNode(ctx.com.syncStart)
 
 proc syncStateCurrentBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  longNode(ctx.chainDB.currentBlock)
+  longNode(ctx.com.syncCurrent)
 
 proc syncStateHighestBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  longNode(ctx.chainDB.highestBlock)
+  longNode(ctx.com.syncHighest)
 
 proc syncStatePulledStates(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # TODO: what is this ?
@@ -1106,7 +1109,7 @@ const pendingProcs = {
 
 proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): BlockNumber =
   if number.kind == nkEmpty:
-    ctx.chainDB.highestBlock
+    ctx.com.syncCurrent
   else:
     parseU64(number).toBlockNumber
 
@@ -1198,7 +1201,7 @@ proc queryMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespRes
 
 proc queryChainId(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  longNode(ctx.chainDB.config.chainId.uint64)
+  longNode(ctx.com.chainId.uint64)
 
 const queryProcs = {
   "account": queryAccount,
@@ -1297,25 +1300,26 @@ proc initEthApi(ctx: GraphqlContextRef) =
     echo res.error
     quit(QuitFailure)
 
-proc setupGraphqlContext*(chainDB: BaseChainDB,
+proc setupGraphqlContext*(com: CommonRef,
                           ethNode: EthereumNode,
                           txPool: TxPoolRef): GraphqlContextRef =
   let ctx = GraphqlContextRef(
-    chainDB: chainDB,
+    chainDB: com.db,
+    com    : com,
     ethNode: ethNode,
-    txPool: txPool
+    txPool : txPool
   )
   graphql.init(ctx)
   ctx.initEthApi()
   ctx
 
 proc setupGraphqlHttpServer*(conf: NimbusConf,
-                             chainDB: BaseChainDB,
+                             com: CommonRef,
                              ethNode: EthereumNode,
                              txPool: TxPoolRef,
                              authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
-  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
+  let ctx = setupGraphqlContext(com, ethNode, txPool)
   let address = initTAddress(conf.graphqlAddress, conf.graphqlPort)
   let sres = GraphqlHttpServerRef.new(
       ctx,

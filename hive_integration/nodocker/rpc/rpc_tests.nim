@@ -50,7 +50,7 @@ proc envTest(t: TestEnv): Future[TestStatus] {.async.} =
     let res = await client.balanceAt(ethAddr(x[0]))
     let expected = u256(x[1])
     if res != expected:
-      echo "expected: $1, got $2" % [x[0], $res]
+      echo "expected: $1, got $2" % [x[1], $res]
       return TestStatus.Failed
 
   result = TestStatus.OK

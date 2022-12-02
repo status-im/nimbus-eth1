@@ -13,7 +13,8 @@ import
   stew/byteutils,
   stint,
   eth/[common, rlp, keys],
-  ../../nimbus/[chain_config, transaction],
+  ../../nimbus/transaction,
+  ../../nimbus/common/chain_config,
   ../common/helpers,
   ./types
 
@@ -214,12 +215,12 @@ proc parseTxsRlp*(ctx: var TransContext, hexData: string) =
   let data = hexToSeqByte(hexData)
   ctx.txs = rlp.decode(data, seq[Transaction])
 
-proc parseInputFromStdin*(ctx: var TransContext, chainConfig: ChainConfig) =
+proc parseInputFromStdin*(ctx: var TransContext, chainId: ChainId) =
   let data = stdin.readAll()
   let n = json.parseJson(data)
   if n.hasKey("alloc"): ctx.parseAlloc(n["alloc"])
   if n.hasKey("env"): ctx.parseEnv(n["env"])
-  if n.hasKey("txs"): ctx.parseTxs(n["txs"], chainConfig.chainId)
+  if n.hasKey("txs"): ctx.parseTxs(n["txs"], chainId)
   if n.hasKey("txsRlp"): ctx.parseTxsRlp(n["txsRlp"].getStr())
 
 template stripLeadingZeros(value: string): string =

@@ -15,7 +15,7 @@
 import
   std/[tables, times],
   ./pp_light,
-  ../../nimbus/chain_config,
+  ../../nimbus/common/chain_config,
   eth/common
 
 export

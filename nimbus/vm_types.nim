@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ./vm2/types as vmt
+  ./evm/types as vmt
 
 export
   vmt.BaseVMState,
@@ -25,7 +25,7 @@ export
 
 when defined(evmc_enabled):
   import
-    ./vm2/evmc_api as evmc
+    ./evm/evmc_api as evmc
   export
     evmc.HostContext,
     evmc.accountExists,

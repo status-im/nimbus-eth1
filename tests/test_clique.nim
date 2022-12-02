@@ -11,18 +11,18 @@
 import
   std/[algorithm, os, sequtils, strformat, strutils, times, tables],
   chronicles,
-  eth/[common, keys],
+  eth/keys,
   stint,
   unittest2,
-  ../nimbus/db/db_chain,
-  ../nimbus/p2p/[chain,
+  ../nimbus/core/[chain,
     clique,
     clique/clique_snapshot,
     clique/clique_desc,
     clique/clique_helpers
   ],
-  ../nimbus/utils/ec_recover,
-  ../nimbus/[config, utils, constants, context],
+  ../nimbus/common/[common,context],
+  ../nimbus/utils/[ec_recover, utils],
+  ../nimbus/[config, constants],
   ./test_clique/pool,
   ./replay/undump_blocks
 

@@ -11,7 +11,7 @@
 import
   ../../nimbus/constants,
   ../../nimbus/utils/ec_recover,
-  ../../nimbus/utils/tx_pool/tx_item,
+  ../../nimbus/core/tx_pool/tx_item,
   eth/[common, common/transaction, keys],
   stew/results,
   stint

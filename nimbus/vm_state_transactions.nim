@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  vm2/state_transactions as vmx
+  evm/state_transactions as vmx
 
 export
   vmx.asyncExecComputation,

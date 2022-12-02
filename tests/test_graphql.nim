@@ -10,13 +10,13 @@
 import
   std/[os, json],
   stew/byteutils, unittest2,
-  eth/[p2p, common, trie/db, rlp],
+  eth/[p2p, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
   ../nimbus/sync/protocol,
-  ../nimbus/[genesis, config, chain_config, context],
-  ../nimbus/db/[db_chain],
-  ../nimbus/p2p/chain, ./test_helpers,
-  ../nimbus/utils/tx_pool
+  ../nimbus/config,
+  ../nimbus/core/[chain, tx_pool],
+  ../nimbus/common/[common, context],
+  ./test_helpers
 
 type
   EthBlock = object
@@ -32,21 +32,15 @@ proc toBlock(n: JsonNode, key: string): EthBlock =
   let rlpBlob = hexToSeqByte(n[key].str)
   rlp.decode(rlpBlob, EthBlock)
 
-proc setupChain(): BaseChainDB =
+proc setupChain(): CommonRef =
   let config = ChainConfig(
     chainId             : MainNet.ChainId,
-    byzantiumBlock      : 0.toBlockNumber,
-    constantinopleBlock : 0.toBlockNumber,
-    petersburgBlock     : 0.toBlockNumber,
-    istanbulBlock       : 0.toBlockNumber,
-    muirGlacierBlock    : 0.toBlockNumber,
-    berlinBlock         : 10.toBlockNumber,
-    londonBlock         : high(BlockNumber),
-    arrowGlacierBlock   : high(BlockNumber),
-    grayGlacierBlock    : high(BlockNumber),
-    mergeForkBlock      : high(BlockNumber),
-    shanghaiBlock       : high(BlockNumber),
-    cancunBlock         : high(BlockNumber),
+    byzantiumBlock      : some(0.toBlockNumber),
+    constantinopleBlock : some(0.toBlockNumber),
+    petersburgBlock     : some(0.toBlockNumber),
+    istanbulBlock       : some(0.toBlockNumber),
+    muirGlacierBlock    : some(0.toBlockNumber),
+    berlinBlock         : some(10.toBlockNumber)
   )
 
   var jn = json.parseFile(dataFolder / "oneUncle.json")
@@ -74,13 +68,13 @@ proc setupChain(): BaseChainDB =
     genesis: genesis
   )
 
-  let chainDB = newBaseChainDB(
+  let com = CommonRef.new(
     newMemoryDb(),
     pruneTrie = false,
     CustomNet,
     customNetwork
   )
-  chainDB.initializeEmptyDb()
+  com.initializeEmptyDb()
 
   let blocks = jn["blocks"]
   var headers: seq[BlockHeader]
@@ -93,21 +87,21 @@ proc setupChain(): BaseChainDB =
       uncles: ethBlock.uncles
     )
 
-  let chain = newChain(chainDB)
+  let chain = newChain(com)
   let res = chain.persistBlocks(headers, bodies)
   assert(res == ValidationResult.OK)
 
-  chainDB
+  com
 
 proc graphqlMain*() =
   let
     conf    = makeTestConfig()
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    chainDB = setupChain()
-    txPool  = TxPoolRef.new(chainDB, conf.engineSigner)
+    com     = setupChain()
+    txPool  = TxPoolRef.new(com, conf.engineSigner)
 
-  let ctx = setupGraphqlContext(chainDB, ethNode, txPool)
+  let ctx = setupGraphqlContext(com, ethNode, txPool)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:

@@ -1,29 +1,28 @@
 import
-  eth/[common, rlp], stint,
+  eth/rlp,
   chronicles, configuration,
-  eth/trie/[hexary, db]
-
-import
-  ../nimbus/db/[db_chain, select_backend],
+  eth/trie/hexary,
+  ../nimbus/db/select_backend,
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/p2p/executor
+  ../nimbus/core/executor,
+  ../nimbus/common/common
 
 const
   numBlocks = 256
 
-proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber =
+proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
   var
     parentNumber = blockNumber - 1
-    parent = chainDB.getBlockHeader(parentNumber)
+    parent = com.db.getBlockHeader(parentNumber)
     headers = newSeq[BlockHeader](numBlocks)
     bodies  = newSeq[BlockBody](numBlocks)
     lastBlockHash: Hash256
 
   for i in 0 ..< numBlocks:
-    headers[i] = chainDB.getBlockHeader(blockNumber + i.u256)
-    bodies[i]  = chainDB.getBlockBody(headers[i].blockHash)
+    headers[i] = com.db.getBlockHeader(blockNumber + i.u256)
+    bodies[i]  = com.db.getBlockBody(headers[i].blockHash)
 
-  let transaction = chainDB.db.beginTransaction()
+  let transaction = com.db.db.beginTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:
@@ -31,7 +30,7 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
     stdout.write "\r"
 
     let
-      vmState = BaseVMState.new(parent, headers[i], chainDB)
+      vmState = BaseVMState.new(parent, headers[i], com)
       validationResult = vmState.processBlockNotPoA(headers[i], bodies[i])
 
     if validationResult != ValidationResult.OK:
@@ -47,7 +46,7 @@ proc main() {.used.} =
     conf = getConfiguration()
     db = newChainDB(conf.dataDir)
     trieDB = trieDB db
-    chainDB = newBaseChainDB(trieDB, false)
+    com = CommonRef.new(trieDB, false)
 
   # move head to block number ...
   if conf.head == 0.u256:
@@ -57,7 +56,7 @@ proc main() {.used.} =
   var blockNumber = conf.head
 
   while true:
-    blockNumber = chainDB.validateBlock(blockNumber)
+    blockNumber = com.validateBlock(blockNumber)
 
     inc counter
     if conf.maxBlocks != 0 and counter >= conf.maxBlocks:

@@ -1,29 +1,21 @@
 import
-  std/[os, options, json, times, math],
-  eth/[common, keys],
-  eth/trie/db,
+  std/[os, json, times, math],
+  eth/keys,
   eth/p2p as eth_p2p,
   stew/[results, byteutils],
-  stint,
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
     config,
-    conf_utils,
-    genesis,
-    context,
     constants,
     transaction,
-    utils,
-    sealer,
-    p2p/chain,
-    db/db_chain,
-    rpc/p2p,
-    rpc/engine_api,
-    rpc/debug,
-    rpc/jwt_auth,
+    core/sealer,
+    core/chain,
+    core/tx_pool,
+    core/block_import,
+    rpc,
     sync/protocol,
-    utils/tx_pool,
-    merge/merger
+    rpc/merge/merger,
+    common
   ],
   ../../../tests/test_helpers,
   "."/[clmock, engine_client]
@@ -33,7 +25,7 @@ from web3/ethtypes as web3types import nil
 
 export
   common, engine_api_types, times,
-  options, results, constants, utils,
+  results, constants,
   TypedTransaction, clmock, engine_client
 
 type
@@ -43,8 +35,8 @@ type
     conf*: NimbusConf
     ctx: EthContext
     ethNode: EthereumNode
-    chainDB: BaseChainDB
-    chainRef: Chain
+    com: CommonRef
+    chainRef: ChainRef
     rpcServer: RpcHttpServer
     sealingEngine: SealingEngineRef
     rpcClient*: RpcHttpClient
@@ -76,7 +68,7 @@ const
 proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
   if chainFile.len > 0:
     # disable clique if we are using PoW chain
-    t.conf.networkParams.config.poaEngine = false
+    t.conf.networkParams.config.consensusType = ConsensusType.POW
 
   t.ctx  = newEthContext()
   let res = t.ctx.am.importPrivateKey(sealerKey)
@@ -85,16 +77,16 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
     quit(QuitFailure)
 
   t.ethNode = setupEthNode(t.conf, t.ctx, eth)
-  t.chainDB = newBaseChainDB(
+  t.com = CommonRef.new(
       newMemoryDb(),
       t.conf.pruneMode == PruneMode.Full,
       t.conf.networkId,
       t.conf.networkParams
     )
-  t.chainRef = newChain(t.chainDB)
+  t.chainRef = newChain(t.com)
 
-  initializeEmptyDb(t.chainDB)
-  let txPool = TxPoolRef.new(t.chainDB, t.conf.engineSigner)
+  t.com.initializeEmptyDb()
+  let txPool = TxPoolRef.new(t.com, t.conf.engineSigner)
 
   var key: JwtSharedKey
   let kr = key.fromHex(jwtSecret)
@@ -113,14 +105,14 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
     txPool, EngineStopped
   )
 
-  let merger = MergerRef.new(t.chainDB)
-  setupEthRpc(t.ethNode, t.ctx, t.chainDB, txPool, t.rpcServer)
+  let merger = MergerRef.new(t.com.db)
+  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, t.rpcServer)
   setupEngineAPI(t.sealingEngine, t.rpcServer, merger)
-  setupDebugRpc(t.chainDB, t.rpcServer)
+  setupDebugRpc(t.com, t.rpcServer)
 
   # Do not start clique sealing engine if we are using a Proof of Work chain file
   if chainFile.len > 0:
-    if not importRlpBlock(chainFolder / chainFile, t.chainDB):
+    if not importRlpBlock(chainFolder / chainFile, t.com):
       quit(QuitFailure)
   elif not enableAuth:
     t.sealingEngine.start()
@@ -129,7 +121,7 @@ proc setupELClient*(t: TestEnv, chainFile: string, enableAuth: bool) =
 
   t.rpcClient = newRpcHttpClient()
   waitFor t.rpcClient.connect("localhost", t.conf.rpcPort, false)
-  t.gHeader = toGenesisHeader(t.conf.networkParams)
+  t.gHeader = t.com.genesisHeader
 
   let kRes = PrivateKey.fromHex(vaultKeyHex)
   if kRes.isErr:
@@ -153,7 +145,7 @@ proc stopELClient*(t: TestEnv) =
 # TTD is the value specified in the TestSpec + Genesis.Difficulty
 proc setRealTTD*(t: TestEnv, ttdValue: int64) =
   let realTTD = t.gHeader.difficulty + ttdValue.u256
-  t.chainDB.config.terminalTotalDifficulty = some(realTTD)
+  t.com.setTTD some(realTTD)
   t.ttd = realTTD
   t.clmock = newCLMocker(t.rpcClient, realTTD)
 

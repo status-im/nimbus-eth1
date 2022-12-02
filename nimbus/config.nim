@@ -23,9 +23,10 @@ import
   ],
   stew/shims/net as stewNet,
   eth/[common, net/nat, p2p/bootnodes, p2p/enode],
-  "."/[db/select_backend, chain_config,
+  "."/[db/select_backend, 
     constants, vm_compile_info, version
-  ]
+  ],
+  common/chain_config
 
 export stewNet
 

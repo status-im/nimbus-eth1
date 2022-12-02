@@ -15,15 +15,15 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[common, p2p, rlp],
-  eth/trie/[db, nibbles],
+  eth/[p2p, rlp],
+  eth/trie/[nibbles],
   rocksdb,
   stint,
   stew/[byteutils, interval_set, results],
   unittest2,
-  ../nimbus/[chain_config, config, genesis],
-  ../nimbus/db/[db_chain, select_backend, storage_types],
-  ../nimbus/p2p/chain,
+  ../nimbus/common/common,
+  ../nimbus/db/[select_backend, storage_types],
+  ../nimbus/core/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
@@ -69,7 +69,7 @@ let
   OkStoDb = Result[void,seq[(int,HexaryError)]].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
-  # when leaving the `runner()` if the persistent BaseChainDB initialisation
+  # when leaving the `runner()` if the persistent ChainDBRef initialisation
   # was present, see `test_custom_network` for more details.
   disablePersistentDB = isUbuntu32bit
 
@@ -351,7 +351,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
                              .mapIt(it.to(NodeKey))
       check packed.accounts.len <= accKeys.len
 
-    test &"Revisiting {accKeys.len} items stored items on BaseChainDb":
+    test &"Revisiting {accKeys.len} items stored items on ChainDBRef":
       var
         nextAccount = accKeys[0]
         prevAccount: NodeKey
@@ -817,17 +817,17 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
 
   suite &"SyncSnap: using {fileInfo} capture for testing db timings":
     var
-      ddb: BaseChainDB         # perstent DB on disk
-      chn: Chain
+      ddb: CommonRef         # perstent DB on disk
+      chn: ChainRef
 
-    test &"Create persistent BaseChainDB on {tmpDir}":
+    test &"Create persistent ChainDBRef on {tmpDir}":
       let chainDb = if db.persistent: db.cdb[0].trieDB
                     else: newMemoryDB()
 
       # Constructor ...
-      ddb = newBaseChainDB(
+      ddb = CommonRef.new(
         chainDb,
-        id = capture.network,
+        networkId = capture.network,
         pruneTrie = true,
         params = capture.network.networkParams)
 
@@ -838,7 +838,7 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
       for w in filePath.undumpNextGroup:
         let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
         if fromBlock == 0.u256:
-          doAssert w[0][0] == ddb.getBlockHeader(0.u256)
+          doAssert w[0][0] == ddb.db.getBlockHeader(0.u256)
           continue
         # Message if [fromBlock,toBlock] contains a multiple of 700
         if fromBlock + (toBlock mod 900) <= toBlock:

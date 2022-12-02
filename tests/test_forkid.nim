@@ -1,7 +1,6 @@
 import
-  unittest2, eth/[common, p2p], eth/trie/db,
-  ../nimbus/db/db_chain, ../nimbus/p2p/chain,
-  ../nimbus/chain_config
+  unittest2,
+  ../nimbus/common/common
 
 const
   MainNetIDs = [
@@ -86,24 +85,23 @@ const
     (blockNumber: 10000000'u64, id: (crc: 0xb8c6299d'u32, nextFork: 0'u64)),      # Future London block
   ]
 
-template runTest(network: untyped) =
-  test `network`.astToStr:
+template runTest(network: untyped, name: string) =
+  test name:
     var
-      memDB = newMemoryDB()
-      chainDB = newBaseChainDB(memDB, true, network, networkParams(network))
-      chain = newChain(chainDB)
+      params = networkParams(network)
+      com    = CommonRef.new(newMemoryDB(), true, network, params)
 
     for x in `network IDs`:
-      let id = chain.getForkId(x.blockNumber.toBlockNumber)
+      let id = com.forkId(x.blockNumber.toBlockNumber)
       check id.crc == x.id.crc
       check id.nextFork == x.id.nextFork
 
 proc forkIdMain*() =
   suite "Fork ID tests":
-    runTest(MainNet)
-    runTest(RopstenNet)
-    runTest(RinkebyNet)
-    runTest(GoerliNet)
+    runTest(MainNet, "MainNet")
+    runTest(RopstenNet, "RopstenNet")
+    runTest(RinkebyNet, "RinkebyNet")
+    runTest(GoerliNet, "GoerliNet")
 
 when isMainModule:
   forkIdMain()

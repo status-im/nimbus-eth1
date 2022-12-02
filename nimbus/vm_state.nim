@@ -9,8 +9,8 @@
 # according to those terms.
 
 import
-  ./vm2/state_transactions as vmx,
-  ./vm2/state as vms
+  ./evm/state_transactions as vmx,
+  ./evm/state as vms
 export
   vmx.setupTxContext
 

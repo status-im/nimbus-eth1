@@ -11,9 +11,9 @@ import
   chronicles,
   chronos,
   eth/[common/eth_types_rlp, trie/db],
-  stint,
-  ".."/[vm_types, vm_state, vm_gas_costs, forks, constants],
-  ".."/[db/db_chain, db/accounts_cache, chain_config],
+  ".."/[vm_types, vm_state, vm_gas_costs],
+  ../db/accounts_cache,
+  ../common/common,
   ./call_common
 
 type
@@ -30,7 +30,7 @@ type
 
 proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
                   globalGasCap: GasInt, baseFee: Option[UInt256],
-                  forkOverride = none(Fork)): CallParams =
+                  forkOverride = none(EVMFork)): CallParams =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if cd.gasPrice.isSome and (cd.maxFee.isSome or cd.maxPriorityFee.isSome):
@@ -73,30 +73,30 @@ proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
     accessList:   cd.accessList
   )
 
-proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): CallResult =
+proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallResult =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
     timestamp:  getTime().utc.toTime,
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
-  let vmState = BaseVMState.new(topHeader, chainDB)
+  let vmState = BaseVMState.new(topHeader, com)
   let params  = toCallParams(vmState, call, globalGasCap, header.fee)
 
-  var dbTx = chainDB.db.beginTransaction()
+  var dbTx = com.db.db.beginTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   runComputation(params)
 
-proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB, gasCap: GasInt): GasInt =
+proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCap: GasInt): GasInt =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
     timestamp:  getTime().utc.toTime,
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
-  let vmState = BaseVMState.new(topHeader, chainDB)
-  let fork    = chainDB.config.toFork(header.blockNumber)
+  let vmState = BaseVMState.new(topHeader, com)
+  let fork    = com.toEVMFork(header.blockNumber)
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = toCallParams(vmState, cd, gasCap, header.fee)
 
@@ -105,7 +105,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB,
     hi : GasInt = cd.gasLimit.get(0.GasInt)
     cap: GasInt
 
-  var dbTx = chainDB.db.beginTransaction()
+  var dbTx = com.db.db.beginTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
   # Determine the highest gas limit can be used during the estimation.
@@ -178,7 +178,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, chainDB: BaseChainDB,
 
   hi
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallParams =
+proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
@@ -195,7 +195,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallParams =
+proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
   result = CallParams(
     vmState:      vmState,
     forkOverride: some(fork),
@@ -213,15 +213,15 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
 
-proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
+proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt =
   let call = callParamsForTx(tx, sender, vmState, fork)
   return runComputation(call).gasUsed
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallResult =
   let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)
 
 # FIXME-duplicatedForAsync
-proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Future[CallResult] {.async.} =
+proc asyncTestCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): Future[CallResult] {.async.} =
   let call = callParamsForTest(tx, sender, vmState, fork)
   return await asyncRunComputation(call)

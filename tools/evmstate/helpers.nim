@@ -4,7 +4,8 @@ import
   eth/trie/trie_defs,
   stint,
   stew/byteutils,
-  ../../nimbus/[transaction, forks],
+  ../../nimbus/transaction,
+  ../../nimbus/common/evmforks,
   ../../nimbus/db/accounts_cache
 
 template fromJson(T: type EthAddress, n: JsonNode): EthAddress =
@@ -130,7 +131,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
     stateDB.setCode(account, fromJson(Blob, accountData["code"]))
     stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
 
-proc parseFork*(x: string): Option[Fork] =
+proc parseFork*(x: string): Option[EVMFork] =
   case x
   of "Frontier"         : some(FkFrontier)
   of "Homestead"        : some(FkHomestead)
@@ -145,9 +146,9 @@ proc parseFork*(x: string): Option[Fork] =
   of "Merge"            : some(FkParis)
   of "Shanghai"         : some(FkShanghai)
   of "Cancun"           : some(FkCancun)
-  else: none(Fork)
+  else: none(EVMFork)
 
-proc toString*(x: Fork): string =
+proc toString*(x: EVMFork): string =
   case x
   of FkFrontier      : "Frontier"
   of FkHomestead     : "Homestead"

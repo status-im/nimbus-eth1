@@ -10,7 +10,8 @@ import
   testutils/unittests, chronos,
   eth/[common/eth_hash, keys, trie/db, trie/hexary],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[genesis, chain_config, config, db/db_chain, db/state_db],
+  ../../nimbus/[config, db/db_chain, db/state_db],
+  ../../nimbus/common/[chain_config, genesis],
   ../network/wire/[portal_protocol, portal_stream],
   ../network/state/[state_content, state_network],
   ../content_db,
@@ -22,15 +23,10 @@ proc genesisToTrie(filePath: string): HexaryTrie =
   if not loadNetworkParams(filePath, cn):
     quit(1)
 
-  var chainDB = newBaseChainDB(
-    newMemoryDB(),
-    pruneTrie = false,
-    CustomNet,
-    cn
-  )
-
-  let sdb = newStateDB(chainDB.db, chainDB.pruneTrie)
-  let header = toGenesisHeader(chainDB, sdb)
+  let sdb  = newStateDB(newMemoryDB(), false)
+  let map  = toForkToBlockNumber(cn.config)
+  let fork = map.toHardFork(0.toBlockNumber)
+  discard toGenesisHeader(cn.genesis, sdb, fork)
 
   sdb.getTrie
 

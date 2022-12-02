@@ -3,7 +3,7 @@ import
   test_env,
   unittest2,
   web3/ethtypes,
-  ../../../nimbus/merge/mergeutils
+  ../../../nimbus/rpc/merge/mergeutils
 
 export ethtypes
 

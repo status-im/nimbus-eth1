@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  ../../nimbus/chain_config,
+  ../../nimbus/common/chain_config,
   ./test_types
 
 const

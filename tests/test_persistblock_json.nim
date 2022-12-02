@@ -6,18 +6,21 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, json, os, tables, strutils,
-  eth/[common, rlp], stew/byteutils, eth/trie/db,
-  ./test_helpers, ../nimbus/db/db_chain,
-  ../nimbus/p2p/chain, ../nimbus/config
+  std/[json, os, tables, strutils],
+  unittest2,
+  eth/rlp, stew/byteutils,
+  ./test_helpers,
+  ../nimbus/core/chain,
+  ../nimbus/common/common
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB = newMemoryDB()
-    chainDB = newBaseChainDB(memoryDB, false)
-    state = node["state"]
+    memoryDB    = newMemoryDB()
+    config      = chainConfigForNetwork(MainNet)
+    com         = CommonRef.new(memoryDB, config, pruneTrie = false)
+    state       = node["state"]
 
   for k, v in state:
     let key = hexToSeqByte(k)
@@ -26,16 +29,16 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   let
     parentNumber = blockNumber - 1
-    parent = chainDB.getBlockHeader(parentNumber)
-    header = chainDB.getBlockHeader(blockNumber)
+    parent = com.db.getBlockHeader(parentNumber)
+    header = com.db.getBlockHeader(blockNumber)
     headerHash = header.blockHash
-    blockBody = chainDB.getBlockBody(headerHash)
-    chain = newChain(chainDB)
+    blockBody = com.db.getBlockBody(headerHash)
+    chain = newChain(com)
     headers = @[header]
     bodies = @[blockBody]
 
   # it's ok if setHead fails here because of missing ancestors
-  discard chainDB.setHead(parent, true)
+  discard com.db.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
   check validationResult == ValidationResult.OK
 

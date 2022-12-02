@@ -9,8 +9,7 @@
 # according to those terms.
 
 import
-  eth/common,
-  ../../nimbus/[chain_config, forks],
+  ../../nimbus/common/common,
   ./types
 
 export
@@ -18,40 +17,39 @@ export
 
 func getChainConfig*(network: string, c: ChainConfig) =
   const
-    H = high(BlockNumber)
     Zero = 0.toBlockNumber
     Five = 5.toBlockNumber
 
   proc assignNumber(c: ChainConfig,
-                    fork: Fork, n: BlockNumber) =
-    var number: array[Fork, BlockNumber]
-    var z = low(Fork)
+                    fork: HardFork, n: BlockNumber) =
+    var number: array[HardFork, Option[BlockNumber]]
+    var z = low(HardFork)
     while z < fork:
-      number[z] = Zero
+      number[z] = some(Zero)
       z = z.succ
-    number[fork] = n
-    z = high(Fork)
+    number[fork] = some(n)
+    z = high(HardFork)
     while z > fork:
-      number[z] = H
+      number[z] = none(BlockNumber)
       z = z.pred
 
-    c.homesteadBlock      = number[FkHomestead]
-    c.daoForkBlock        = number[FkHomestead]
-    c.eip150Block         = number[FkTangerine]
-    c.eip155Block         = number[FkSpurious]
-    c.eip158Block         = number[FkSpurious]
-    c.byzantiumBlock      = number[FkByzantium]
-    c.constantinopleBlock = number[FkConstantinople]
-    c.petersburgBlock     = number[FkPetersburg]
-    c.istanbulBlock       = number[FkIstanbul]
-    c.muirGlacierBlock    = number[FkBerlin]
-    c.berlinBlock         = number[FkBerlin]
-    c.londonBlock         = number[FkLondon]
-    c.arrowGlacierBlock   = number[FkLondon]
-    c.grayGlacierBlock    = number[FkLondon]
-    c.mergeForkBlock      = number[FkParis]
-    c.shanghaiBlock       = number[FkShanghai]
-    c.cancunBlock         = number[FkCancun]
+    c.homesteadBlock      = number[HardFork.Homestead]
+    c.daoForkBlock        = number[HardFork.DAOFork]
+    c.eip150Block         = number[HardFork.Tangerine]
+    c.eip155Block         = number[HardFork.Spurious]
+    c.eip158Block         = number[HardFork.Spurious]
+    c.byzantiumBlock      = number[HardFork.Byzantium]
+    c.constantinopleBlock = number[HardFork.Constantinople]
+    c.petersburgBlock     = number[HardFork.Petersburg]
+    c.istanbulBlock       = number[HardFork.Istanbul]
+    c.muirGlacierBlock    = number[HardFork.MuirGlacier]
+    c.berlinBlock         = number[HardFork.Berlin]
+    c.londonBlock         = number[HardFork.London]
+    c.arrowGlacierBlock   = number[HardFork.ArrowGlacier]
+    c.grayGlacierBlock    = number[HardFork.GrayGlacier]
+    c.mergeForkBlock      = number[HardFork.MergeFork]
+    c.shanghaiBlock       = number[HardFork.Shanghai]
+    c.cancunBlock         = number[HardFork.Cancun]
 
   c.daoForkSupport = false
   c.chainId = 1.ChainId
@@ -59,64 +57,56 @@ func getChainConfig*(network: string, c: ChainConfig) =
 
   case network
   of $TestFork.Frontier:
-    c.assignNumber(FkFrontier, Zero)
+    c.assignNumber(HardFork.Frontier, Zero)
   of $TestFork.Homestead:
-    c.assignNumber(FkHomestead, Zero)
+    c.assignNumber(HardFork.Homestead, Zero)
   of $TestFork.EIP150:
-    c.assignNumber(FkTangerine, Zero)
+    c.assignNumber(HardFork.Tangerine, Zero)
   of $TestFork.EIP158:
-    c.assignNumber(FkSpurious, Zero)
+    c.assignNumber(HardFork.Spurious, Zero)
   of $TestFork.Byzantium:
-    c.assignNumber(FkByzantium, Zero)
+    c.assignNumber(HardFork.Byzantium, Zero)
   of $TestFork.Constantinople:
-    c.assignNumber(FkConstantinople, Zero)
+    c.assignNumber(HardFork.Constantinople, Zero)
   of $TestFork.ConstantinopleFix:
-    c.assignNumber(FkPetersburg, Zero)
+    c.assignNumber(HardFork.Petersburg, Zero)
   of $TestFork.Istanbul:
-    c.assignNumber(FkIstanbul, Zero)
+    c.assignNumber(HardFork.Istanbul, Zero)
   of $TestFork.FrontierToHomesteadAt5:
-    c.assignNumber(FkHomestead, Five)
+    c.assignNumber(HardFork.Homestead, Five)
   of $TestFork.HomesteadToEIP150At5:
-    c.assignNumber(FkTangerine, Five)
+    c.assignNumber(HardFork.Tangerine, Five)
   of $TestFork.HomesteadToDaoAt5:
-    c.assignNumber(FkHomestead, Zero)
-    c.daoForkBlock = Five
+    c.assignNumber(HardFork.DAOFork, Five)
     c.daoForkSupport = true
   of $TestFork.EIP158ToByzantiumAt5:
-    c.assignNumber(FkByzantium, Five)
+    c.assignNumber(HardFork.Byzantium, Five)
   of $TestFork.ByzantiumToConstantinopleAt5:
-    c.assignNumber(FkPetersburg, Five)
+    c.assignNumber(HardFork.Constantinople, Five)
   of $TestFork.ByzantiumToConstantinopleFixAt5:
-    c.assignNumber(FkPetersburg, Five)
-    c.constantinopleBlock = Five
+    c.assignNumber(HardFork.Petersburg, Five)
+    c.constantinopleBlock = some(Five)
   of $TestFork.ConstantinopleFixToIstanbulAt5:
-    c.assignNumber(FkIstanbul, Five)
+    c.assignNumber(HardFork.Istanbul, Five)
   of $TestFork.Berlin:
-    c.assignNumber(FkBerlin, Zero)
+    c.assignNumber(HardFork.Berlin, Zero)
   of $TestFork.BerlinToLondonAt5:
-    c.assignNumber(FkLondon, Five)
+    c.assignNumber(HardFork.London, Five)
   of $TestFork.London:
-    c.assignNumber(FkLondon, Zero)
-    c.arrowGlacierBlock = H
-    c.grayGlacierBlock = H
+    c.assignNumber(HardFork.London, Zero)
   of $TestFork.ArrowGlacier:
-    c.assignNumber(FkLondon, Zero)
-    c.grayGlacierBlock = H
+    c.assignNumber(HardFork.ArrowGlacier, Zero)
   of $TestFork.GrayGlacier:
-    c.assignNumber(FkLondon, Zero)
-    c.grayGlacierBlock = Zero
+    c.assignNumber(HardFork.GrayGlacier, Zero)
   of $TestFork.Merge:
-    c.assignNumber(FkParis, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
+    c.assignNumber(HardFork.MergeFork, Zero)
   of $TestFork.ArrowGlacierToMergeAtDiffC0000:
-    c.assignNumber(FkParis, H)
+    c.assignNumber(HardFork.GrayGlacier, Zero)
     c.terminalTotalDifficulty = some(0xC0000.u256)
   of $TestFork.Shanghai:
-    c.assignNumber(FkShanghai, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
+    c.assignNumber(HardFork.Shanghai, Zero)
   of $TestFork.Cancun:
-    c.assignNumber(FkCancun, Zero)
-    c.terminalTotalDifficulty = some(0.u256)
+    c.assignNumber(HardFork.Cancun, Zero)
   else:
     raise newException(ValueError, "unsupported network " & network)
 

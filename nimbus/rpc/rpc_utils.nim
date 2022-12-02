@@ -10,8 +10,8 @@
 import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils,
   ../db/db_chain, strutils, algorithm, options, times, json,
   ../constants, stint, hexstrings, rpc_types,
-  ../utils, ../transaction,
-  ../transaction/call_evm, ../forks
+  ../utils/utils, ../transaction,
+  ../transaction/call_evm, ../common/evmforks
 
 const
   defaultTag = "latest"
@@ -33,7 +33,7 @@ func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
     result = result shl 4 or readHexChar(s[i]).T
     inc(i)
 
-proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
+proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
@@ -49,13 +49,13 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
 
-proc headerFromTag*(chain: BaseChainDB, blockTag: Option[string]): BlockHeader =
+proc headerFromTag*(chain: ChainDBRef, blockTag: Option[string]): BlockHeader =
   if blockTag.isSome():
     return chain.headerFromTag(blockTag.unsafeGet())
   else:
     return chain.headerFromTag(defaultTag)
 
-proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
+proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt =
   var prices  = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
   for encodedTx in chain.getBlockTransactionData(header.txRoot):
@@ -72,7 +72,7 @@ proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Transaction =
+proc unsignedTx*(tx: TxSend, chain: ChainDBRef, defaultNonce: AccountNonce): Transaction =
   if tx.to.isSome:
     result.to = some(toAddress(tx.to.get))
 
@@ -140,7 +140,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.r = encodeQuantity(tx.R)
   result.s = encodeQuantity(tx.S)
 
-proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool, isUncle = false): BlockObject =
+proc populateBlockObject*(header: BlockHeader, chain: ChainDBRef, fullTx: bool, isUncle = false): BlockObject =
   let blockHash = header.blockHash
 
   result.number = some(encodeQuantity(header.blockNumber))
@@ -181,7 +181,8 @@ proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool,
       for x in chain.getBlockTransactionHashes(header):
         result.transactions.add %(x)
 
-proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, header: BlockHeader, fork: Fork): ReceiptObject =
+proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
+                      txIndex: int, header: BlockHeader, fork: EVMFork): ReceiptObject =
   result.transactionHash = tx.rlpHash
   result.transactionIndex = encodeQuantity(txIndex.uint)
   result.blockHash = header.hash

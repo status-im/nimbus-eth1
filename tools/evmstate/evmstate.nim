@@ -1,14 +1,15 @@
 import
   std/[json, strutils, sets, tables, options],
   chronicles,
-  eth/[common, keys],
+  eth/keys,
   stew/[results, byteutils],
   stint,
-  eth/trie/[db, trie_defs],
-  ../../nimbus/[forks, vm_types, chain_config, vm_state],
-  ../../nimbus/db/[db_chain, accounts_cache],
+  eth/trie/[trie_defs],
+  ../../nimbus/[vm_types, vm_state],
+  ../../nimbus/db/accounts_cache,
   ../../nimbus/transaction,
-  ../../nimbus/p2p/executor,
+  ../../nimbus/core/executor,
+  ../../nimbus/common/common,
   "."/[config, helpers]
 
 type
@@ -18,7 +19,7 @@ type
     tx: Transaction
     expectedHash: Hash256
     expectedLogs: Hash256
-    fork: Fork
+    fork: EVMFork
     index: int
     tracerFlags: set[TracerFlags]
     error: string
@@ -175,22 +176,20 @@ proc writeTraceToStderr(vmState: BaseVMState, pretty: bool) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    chainParams = NetworkParams(config: chainConfigForNetwork(MainNet))
-    chainDB = newBaseChainDB(newMemoryDB(), pruneTrie = false, params = chainParams)
+    params  = chainConfigForNetwork(MainNet)
+
+  if ctx.fork == FkParis:
+    params.terminalTotalDifficulty = some(0.u256)
+
+  let
+    com     = CommonRef.new(newMemoryDB(), params, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
-
-  # set total difficulty
-  chainDB.setScore(parent.blockHash, 0.u256)
-
-  if ctx.fork >= FkParis:
-    chainDB.config.terminalTotalDifficulty = some(0.u256)
 
   let vmState = BaseVMState.new(
     parent      = parent,
     header      = ctx.header,
-    chainDB     = chainDB,
-    tracerFlags = ctx.tracerFlags,
-    pruneTrie   = chainDB.pruneTrie)
+    com         = com,
+    tracerFlags = ctx.tracerFlags)
 
   var gasUsed: GasInt
   let sender = ctx.tx.getSender()

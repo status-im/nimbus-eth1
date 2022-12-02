@@ -11,18 +11,19 @@ import
   chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/accounts_cache, forks],
+  ".."/[db/accounts_cache],
+  ../common/evmforks,
   ./host_types
 
 when defined(evmc_enabled):
-  import ".."/[utils]
+  import ../utils/utils
   import ./host_services
 
 type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    forkOverride*: Option[Fork]         # Default fork is usually correct.
+    forkOverride*: Option[EVMFork]      # Default fork is usually correct.
     origin*:       Option[HostAddress]  # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
@@ -63,7 +64,7 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
-func intrinsicGas*(call: CallParams, fork: Fork): GasInt {.inline.} =
+func intrinsicGas*(call: CallParams, fork: EVMFork): GasInt {.inline.} =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
@@ -216,7 +217,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
   let c = host.computation
-  
+
   # EIP-3529: Reduction in refunds
   let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
                             5.GasInt
@@ -239,7 +240,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
 
 proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResult =
   let c = host.computation
-  
+
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
 
   result.isError = c.isError

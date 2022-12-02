@@ -1,26 +1,28 @@
 import
-  json, eth/common, stint, chronicles,
-  eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
-  ../nimbus/[tracer, config, vm_types]
+  json, chronicles,
+  ../nimbus/db/[capturedb, select_backend],
+  ../nimbus/[config, vm_types],
+  ../nimbus/tracer,
+  ../nimbus/common/common
 
-proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
+proc dumpTest(com: CommonRef, blockNumber: int) =
   let
     blockNumber = blockNumber.u256
 
   var
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    captureCom = com.clone(captureTrieDB)
 
   let
-    header = captureChainDB.getBlockHeader(blockNumber)
+    header = captureCom.db.getBlockHeader(blockNumber)
     headerHash = header.blockHash
-    blockBody = captureChainDB.getBlockBody(headerHash)
-    txTrace = traceTransactions(captureChainDB, header, blockBody)
-    stateDump = dumpBlockState(captureChainDB, header, blockBody)
-    blockTrace = traceBlock(captureChainDB, header, blockBody, {DisableState})
-    receipts = dumpReceipts(captureChainDB, header)
+    blockBody = captureCom.db.getBlockBody(headerHash)
+    txTrace = traceTransactions(captureCom, header, blockBody)
+    stateDump = dumpBlockState(captureCom, header, blockBody)
+    blockTrace = traceBlock(captureCom, header, blockBody, {DisableState})
+    receipts = dumpReceipts(captureCom.db, header)
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
@@ -50,16 +52,16 @@ proc main() {.used.} =
   var conf = makeConfig()
   let db = newChainDB(string conf.dataDir)
   let trieDB = trieDB db
-  let chainDB = newBaseChainDB(trieDB, false)
+  let com = CommonRef.new(trieDB, false)
 
-  chainDB.dumpTest(97)
-  chainDB.dumpTest(46147)
-  chainDB.dumpTest(46400)
-  chainDB.dumpTest(46402)
-  chainDB.dumpTest(47205)
-  chainDB.dumpTest(48712)
-  chainDB.dumpTest(48915)
-  chainDB.dumpTest(49018)
+  com.dumpTest(97)
+  com.dumpTest(46147)
+  com.dumpTest(46400)
+  com.dumpTest(46402)
+  com.dumpTest(47205)
+  com.dumpTest(48712)
+  com.dumpTest(48915)
+  com.dumpTest(49018)
 
 when isMainModule:
   try:
