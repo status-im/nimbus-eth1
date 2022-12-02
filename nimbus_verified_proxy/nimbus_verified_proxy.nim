@@ -22,7 +22,7 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../nimbus/rpc/cors,
-  ./rpc/rpc_eth_api,
+  "."/rpc/[rpc_eth_api, rpc_utils],
   ./nimbus_verified_proxy_conf,
   ./block_cache
 
@@ -119,7 +119,7 @@ proc run() {.raises: [Exception, Defect].} =
         when stateFork >= BeaconStateFork.Bellatrix:
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
-            blockCache.add(payload.asEngineExecutionPayload())
+            blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
         else: discard
       return
 

@@ -13,7 +13,8 @@ else:
 import
   std/tables,
   web3/ethtypes,
-  stew/[results, keyed_queue]
+  stew/[results, keyed_queue],
+  ./rpc/rpc_utils
 
 
 ## Cache for payloads received through block gossip and validated by the
@@ -22,7 +23,7 @@ import
 ## oldest payload is deleted first.
 type BlockCache* = ref object
   max: int
-  blocks: KeyedQueue[BlockHash, ExecutionPayloadV1]
+  blocks: KeyedQueue[BlockHash, ExecutionData]
 
 proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 
@@ -30,7 +31,7 @@ proc new*(T: type BlockCache, max: uint32): T =
   let maxAsInt = int(max)
   return BlockCache(
     max: maxAsInt,
-    blocks: KeyedQueue[BlockHash, ExecutionPayloadV1].init(maxAsInt)
+    blocks: KeyedQueue[BlockHash, ExecutionData].init(maxAsInt)
   )
 
 func len*(self: BlockCache): int =
@@ -39,7 +40,7 @@ func len*(self: BlockCache): int =
 func isEmpty*(self: BlockCache): bool =
   return len(self.blocks) == 0
 
-proc add*(self: BlockCache, payload: ExecutionPayloadV1) =
+proc add*(self: BlockCache, payload: ExecutionData) =
   if self.blocks.hasKey(payload.blockHash):
     return
 
@@ -48,15 +49,15 @@ proc add*(self: BlockCache, payload: ExecutionPayloadV1) =
 
   discard self.blocks.append(payload.blockHash, payload)
 
-proc latest*(self: BlockCache): results.Opt[ExecutionPayloadV1] =
+proc latest*(self: BlockCache): results.Opt[ExecutionData] =
   let latestPair = ? self.blocks.last()
   return Opt.some(latestPair.data)
 
 proc getByNumber*(
     self: BlockCache,
-    number: Quantity): Opt[ExecutionPayloadV1] =
+    number: Quantity): Opt[ExecutionData] =
 
-  var payloadResult: Opt[ExecutionPayloadV1]
+  var payloadResult: Opt[ExecutionData]
 
   for payload in self.blocks.prevValues:
     if payload.blockNumber == number:
@@ -67,5 +68,5 @@ proc getByNumber*(
 
 proc getPayloadByHash*(
     self: BlockCache,
-    hash: BlockHash): Opt[ExecutionPayloadV1] =
+    hash: BlockHash): Opt[ExecutionData] =
   return self.blocks.eq(hash)

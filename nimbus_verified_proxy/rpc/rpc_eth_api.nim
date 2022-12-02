@@ -94,7 +94,7 @@ template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
 proc getPayloadByTag(
     proxy: VerifiedRpcProxy,
     quantityTag: string):
-    results.Opt[ExecutionPayloadV1] {.raises: [ValueError, Defect].} =
+    results.Opt[ExecutionData] {.raises: [ValueError, Defect].} =
   checkPreconditions(proxy)
 
   let tagResult = parseQuantityTag(quantityTag)
@@ -113,7 +113,7 @@ proc getPayloadByTag(
 
 proc getPayloadByTagOrThrow(
     proxy: VerifiedRpcProxy,
-    quantityTag: string): ExecutionPayloadV1 {.raises: [ValueError, Defect].} =
+    quantityTag: string): ExecutionData {.raises: [ValueError, Defect].} =
 
   let tagResult = getPayloadByTag(proxy, quantityTag)
 
