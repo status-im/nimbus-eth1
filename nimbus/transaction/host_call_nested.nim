@@ -11,7 +11,8 @@
 import
   sets, stint, chronicles, stew/ranges/ptr_arith,
   eth/common/eth_types,
-  ".."/[vm_types, vm_computation, utils],
+  ".."/[vm_types, vm_computation],
+  ../utils/utils,
   ./host_types, ./host_trace
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =

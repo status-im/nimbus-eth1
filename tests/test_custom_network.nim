@@ -29,12 +29,12 @@
 
 import
   std/[distros, os],
-  ../nimbus/[chain_config, config, genesis],
-  ../nimbus/db/[db_chain, select_backend],
-  ../nimbus/p2p/chain,
+  ../nimbus/config,
+  ../nimbus/db/select_backend,
+  ../nimbus/core/chain,
+  ../nimbus/common/common,
   ./replay/[undump_blocks, pp],
   chronicles,
-  eth/[common, trie/db],
   stew/results,
   unittest2
 
@@ -96,7 +96,7 @@ else:
 
 let
   # There is a problem with the Github/CI which results in spurious crashes
-  # when leaving the `runner()` if the persistent BaseChainDB initialisation
+  # when leaving the `runner()` if the persistent ChainDBRef initialisation
   # was present. The Github/CI set up for Linux/i386 is
   #
   #    Ubuntu 10.04.06 LTS
@@ -113,10 +113,10 @@ let
 
 # Block chains shared between test suites
 var
-  mdb: BaseChainDB         # memory DB
-  ddb: BaseChainDB         # perstent DB on disk
-  ddbDir: string           # data directory for disk database
-  sSpcs: ReplaySession     # current replay session specs
+  mcom: CommonRef         # memory DB
+  dcom: CommonRef         # perstent DB on disk
+  ddbDir: string          # data directory for disk database
+  sSpcs: ReplaySession    # current replay session specs
 
 const
   # FIXED: Persistent database crash on `Devnet4` replay if the database
@@ -180,18 +180,18 @@ proc ddbCleanUp =
 proc isOk(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
-proc ttdReached(db: BaseChainDB): bool =
-  if db.config.terminalTotalDifficulty.isSome:
-    return db.config.terminalTotalDifficulty.get <= db.headTotalDifficulty()
+proc ttdReached(com: CommonRef): bool =
+  if com.ttd.isSome:
+    return com.ttd.get <= com.db.headTotalDifficulty()
 
-proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
+proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody];
                   noisy = false): bool =
   ## On error, the block number of the failng block is returned
   let
     (first, last) = (h[0].blockNumber, h[^1].blockNumber)
     nTxs = b.mapIt(it.transactions.len).foldl(a+b)
     nUnc = b.mapIt(it.uncles.len).foldl(a+b)
-    tddOk = c.db.ttdReached
+    tddOk = c.com.ttdReached
     bRng = if 1 < h.len: &"s [#{first}..#{last}]={h.len}" else: &"   #{first}"
     blurb = &"persistBlocks([#{first}..#"
 
@@ -199,7 +199,7 @@ proc importBlocks(c: Chain; h: seq[BlockHeader]; b: seq[BlockBody];
 
   catchException("persistBlocks()", trace = true):
     if c.persistBlocks(h, b).isOk:
-      if not tddOk and c.db.ttdReached:
+      if not tddOk and c.com.ttdReached:
         noisy.say "***", &"block{bRng} => tddReached"
       return true
 
@@ -230,16 +230,16 @@ proc genesisLoadRunner(noisy = true;
       noisy.say "***", "custom-file=", gFilePath
       check gFilePath.loadNetworkParams(params)
 
-    test "Construct in-memory BaseChainDB, pruning enabled":
-      mdb = newBaseChainDB(
+    test "Construct in-memory ChainDBRef, pruning enabled":
+      mcom = CommonRef.new(
         newMemoryDB(),
-        id = params.config.chainId.NetworkId,
+        networkId = params.config.chainId.NetworkId,
         params = params)
 
-      check mdb.ttd == sSpcs.termTotalDff
-      check mdb.config.mergeForkBlock == sSpcs.mergeFork.u256
+      check mcom.ttd.get == sSpcs.termTotalDff
+      check mcom.toFork(sSpcs.mergeFork.toBlockNumber) == MergeFork
 
-    test &"Construct persistent BaseChainDB on {tmpDir}, {persistPruneInfo}":
+    test &"Construct persistent ChainDBRef on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
         skip()
       else:
@@ -250,37 +250,37 @@ proc genesisLoadRunner(noisy = true;
         tmpDir.ddbCleanUp
 
         # Constructor ...
-        ddb = newBaseChainDB(
+        dcom = CommonRef.new(
           tmpDir.newChainDB.trieDB,
-          id = params.config.chainId.NetworkId,
+          networkId = params.config.chainId.NetworkId,
           pruneTrie = persistPruneTrie,
           params = params)
 
-        check ddb.ttd == sSpcs.termTotalDff
-        check ddb.config.mergeForkBlock == sSpcs.mergeFork.u256
+        check dcom.ttd.get == sSpcs.termTotalDff
+        check dcom.toFork(sSpcs.mergeFork.toBlockNumber) == MergeFork
 
     test "Initialise in-memory Genesis":
-      mdb.initializeEmptyDb
+      mcom.initializeEmptyDb
 
       # Verify variant of `toBlockHeader()`. The function `pp()` is used
       # (rather than blockHash()) for readable error report (if any).
       let
-        storedhHeaderPP = mdb.getBlockHeader(0.u256).pp
-        onTheFlyHeaderPP = mdb.toGenesisHeader.pp
+        storedhHeaderPP = mcom.db.getBlockHeader(0.u256).pp
+        onTheFlyHeaderPP = mcom.genesisHeader.pp
       check storedhHeaderPP == onTheFlyHeaderPP
 
     test "Initialise persistent Genesis":
       if disablePersistentDB:
         skip()
       else:
-        ddb.initializeEmptyDb
+        dcom.initializeEmptyDb
 
         # Must be the same as the in-memory DB value
-        check ddb.getBlockHash(0.u256) == mdb.getBlockHash(0.u256)
+        check dcom.db.getBlockHash(0.u256) == mcom.db.getBlockHash(0.u256)
 
         let
-          storedhHeaderPP = ddb.getBlockHeader(0.u256).pp
-          onTheFlyHeaderPP = ddb.toGenesisHeader.pp
+          storedhHeaderPP = dcom.db.getBlockHeader(0.u256).pp
+          onTheFlyHeaderPP = dcom.genesisHeader.pp
         check storedhHeaderPP == onTheFlyHeaderPP
 
 
@@ -298,21 +298,21 @@ proc testnetChainRunner(noisy = true;
 
   suite &"Block chain DB inspector for {sSpcs.fancyName}":
     var
-      bdb: BaseChainDB
-      chn: Chain
+      bcom: CommonRef
+      chn: ChainRef
       pivotHeader: BlockHeader
       pivotBody: BlockBody
 
     test &"Inherit {dbInfo} block chain DB from previous session":
-      check not mdb.isNil
-      check not ddb.isNil
+      check not mcom.isNil
+      check not dcom.isNil
 
       # Whatever DB suits, mdb: in-memory, ddb: persistet/on-disk
-      bdb = if memoryDB: mdb else: ddb
+      bcom = if memoryDB: mcom else: dcom
 
-      chn = bdb.newChain
+      chn = bcom.newChain
       noisy.say "***", "ttd",
-        " db.config.TTD=", chn.db.config.terminalTotalDifficulty
+        " db.config.TTD=", chn.com.ttd
         # " db.arrowGlacierBlock=0x", chn.db.config.arrowGlacierBlock.toHex
 
     test &"Replay {cFileInfo} capture, may fail ~#{pivotBlockNumber} "&
@@ -326,7 +326,7 @@ proc testnetChainRunner(noisy = true;
 
         # Install & verify Genesis
         if w[0][0].blockNumber == 0.u256:
-          doAssert w[0][0] == bdb.getBlockHeader(0.u256)
+          doAssert w[0][0] == bcom.db.getBlockHeader(0.u256)
           continue
 
         # Persist blocks, full range before `pivotBlockNumber`
@@ -335,7 +335,7 @@ proc testnetChainRunner(noisy = true;
             # Just a guess -- might be any block in that range
             (pivotHeader, pivotBody) = (w[0][0],w[1][0])
             break
-          if chn.db.ttdReached:
+          if chn.com.ttdReached:
             check ttdBlockNumber <= toBlock
           else:
             check toBlock < ttdBlockNumber

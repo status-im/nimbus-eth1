@@ -8,7 +8,7 @@
 import
   strformat,
   chronicles, eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils, storage_types, sets
+  ../constants, ../utils/utils, storage_types, sets
 
 logScope:
   topics = "state_db"
@@ -56,6 +56,12 @@ type
 
 template trieDB(stateDB: AccountStateDB): TrieDatabaseRef =
   HexaryTrie(stateDB.trie).db
+
+func pruneTrie*(db: AccountStateDB): bool =
+  db.trie.isPruning
+
+func db*(db: AccountStateDB): TrieDatabaseRef =
+  HexaryTrie(db.trie).db
 
 proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash

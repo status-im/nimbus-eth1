@@ -110,3 +110,6 @@ proc stackMain*() =
       stack.push(123)
       expect(InsufficientStack):
         discard stack.popInt(2)
+
+when isMainModule:
+  stackMain()

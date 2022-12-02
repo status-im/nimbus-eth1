@@ -1,16 +1,14 @@
 import
   std/[tables, times, hashes, sets],
   chronicles, chronos,
-  eth/[common, p2p, trie/db],
+  eth/p2p,
   eth/p2p/peer_pool,
   "."/[types, protocol],
   ./protocol/eth/eth_types,
   ./protocol/trace_config, # gossip noise control
-  ../db/db_chain,
-  ../p2p/chain,
-  ../utils/tx_pool,
-  ../utils/tx_pool/tx_item,
-  ../merge/merger
+  ../core/chain,
+  ../core/tx_pool,
+  ../core/tx_pool/tx_item
 
 type
   HashToTime = TableRef[Hash256, Time]
@@ -37,15 +35,14 @@ type
     handler: NewBlockHashesHandler
 
   EthWireRef* = ref object of EthWireBase
-    db: BaseChainDB
-    chain: Chain
+    db: ChainDBRef
+    chain: ChainRef
     txPool: TxPoolRef
     peerPool: PeerPool
     disableTxPool: bool
     knownByPeer: Table[Peer, HashToTime]
     pending: HashSet[Hash256]
     lastCleanup: Time
-    merger: MergerRef
     newBlockHandler: NewBlockHandlerPair
     newBlockHashesHandler: NewBlockHashesHandlerPair
 
@@ -77,7 +74,7 @@ proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool =
   if res.isErr: return false
   res.get().reject == txInfoOk
 
-proc successorHeader(db: BaseChainDB,
+proc successorHeader(db: ChainDBRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [Defect,RlpError].} =
@@ -85,7 +82,7 @@ proc successorHeader(db: BaseChainDB,
   if h.blockNumber <= (not 0.toBlockNumber) - offset:
     result = db.getBlockHeader(h.blockNumber + offset, output)
 
-proc ancestorHeader(db: BaseChainDB,
+proc ancestorHeader(db: ChainDBRef,
                      h: BlockHeader,
                      output: var BlockHeader,
                      skip = 0'u): bool {.gcsafe, raises: [Defect,RlpError].} =
@@ -93,7 +90,7 @@ proc ancestorHeader(db: BaseChainDB,
   if h.blockNumber >= offset:
     result = db.getBlockHeader(h.blockNumber - offset, output)
 
-proc blockHeader(db: BaseChainDB,
+proc blockHeader(db: ChainDBRef,
                  b: HashOrNum,
                  output: var BlockHeader): bool
                  {.gcsafe, raises: [Defect,RlpError].} =
@@ -256,7 +253,7 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
       let txHash = rlpHash(tx)
       ctx.pending.excl txHash
 
-    ctx.txPool.jobAddTxs(txs.transactions)
+    ctx.txPool.add(txs.transactions)
 
   except TransportError:
     debug "Transport got closed during fetchTransactions"
@@ -318,16 +315,14 @@ proc setupPeerObserver(ctx: EthWireRef) =
 # ------------------------------------------------------------------------------
 
 proc new*(_: type EthWireRef,
-          chain: Chain,
+          chain: ChainRef,
           txPool: TxPoolRef,
-          peerPool: PeerPool,
-          merger: MergerRef): EthWireRef =
+          peerPool: PeerPool): EthWireRef =
   let ctx = EthWireRef(
     db: chain.db,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
-    merger: merger,
     lastCleanup: getTime(),
   )
 
@@ -360,13 +355,13 @@ proc txPoolEnabled*(ctx: EthWireRef; ena: bool) =
 method getStatus*(ctx: EthWireRef): EthState {.gcsafe.} =
   let
     db = ctx.db
-    chain = ctx.chain
+    com = ctx.chain.com
     bestBlock = db.getCanonicalHead()
-    forkId = chain.getForkId(bestBlock.blockNumber)
+    forkId = com.forkId(bestBlock.blockNumber)
 
   EthState(
     totalDifficulty: db.headTotalDifficulty,
-    genesisHash: chain.genesisHash,
+    genesisHash: com.genesisHash,
     bestBlockHash: bestBlock.blockHash,
     forkId: ChainForkId(
       forkHash: forkId.crc.toBytesBE,
@@ -441,7 +436,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transacti
     txHashes.add rlpHash(tx)
 
   ctx.addToKnownByPeer(txHashes, peer)
-  ctx.txPool.jobAddTxs(txs)
+  ctx.txPool.add(txs)
 
   var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
   var validTxs = newSeqOfCap[Transaction](txHashes.len)
@@ -493,7 +488,7 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt) {.gcsafe.} =
-  if ctx.merger.posFinalized:
+  if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
       peer, blockNumber=blk.header.blockNumber,
       blockHash=blk.header.blockHash, totalDifficulty
@@ -507,7 +502,7 @@ method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficul
     )
 
 method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) {.gcsafe.} =
-  if ctx.merger.posFinalized:
+  if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
       peer, numHashes=hashes.len
     asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)

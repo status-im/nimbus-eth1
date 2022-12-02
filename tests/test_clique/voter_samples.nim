@@ -11,7 +11,7 @@
 # Test cases from https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md
 
 import
-  ../../nimbus/p2p/clique/clique_defs
+  ../../nimbus/core/clique/clique_defs
 
 type
   TesterVote* = object  ## VoterBlock represents a single block signed by a

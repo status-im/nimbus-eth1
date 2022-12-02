@@ -13,9 +13,10 @@ import
   chronos, stint,
   stew/byteutils,
   json_rpc/[rpcclient],
-  ../../../nimbus/[utils, transaction],
+  ../../../nimbus/utils/utils,
+  ../../../nimbus/transaction,
   ../../../nimbus/rpc/hexstrings,
-  "."/client
+  ./client
 
 const
   # This is the account that sends vault funding transactions.

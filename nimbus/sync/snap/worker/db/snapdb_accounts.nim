@@ -168,7 +168,6 @@ proc getAccountFn*(pv: SnapDbRef): HexaryGetFn =
   let getFn = pv.kvDb.persistentAccountsGetFn()
   return proc(key: openArray[byte]): Blob = getFn(key)
 
-
 proc importAccounts*(
     ps: SnapDbAccountsRef;    ## Re-usable session descriptor
     base: NodeTag;            ## Before or at first account entry in `data`
@@ -313,7 +312,7 @@ proc importAccounts*(
   ok(gaps)
 
 proc importAccounts*(
-    pv: SnapDbRef;            ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;            ## Base descriptor on `ChainDBRef`
     peer: Peer;               ## For log messages
     root: Hash256;            ## State root
     base: NodeTag;            ## Before or at first account entry in `data`
@@ -393,7 +392,7 @@ proc importRawAccountsNodes*(
       trace "Raw account nodes imported", peer, slot, nItems, report=result.len
 
 proc importRawAccountsNodes*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     peer: Peer,                   ## For log messages, only
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
@@ -402,7 +401,6 @@ proc importRawAccountsNodes*(
   SnapDbAccountsRef.init(
     pv, Hash256(), peer).importRawAccountsNodes(
       nodes, reportNodes, persistent=true)
-
 
 proc getAccountsNodeKey*(
     ps: SnapDbAccountsRef;        ## Re-usable session descriptor
@@ -421,7 +419,7 @@ proc getAccountsNodeKey*(
   err(NodeNotFound)
 
 proc getAccountsNodeKey*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     root: Hash256;                ## state root
     path: Blob;                   ## Partial node path
       ): Result[NodeKey,HexaryError] =
@@ -454,7 +452,7 @@ proc getAccountsData*(
   return ok(acc)
 
 proc getAccountsData*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     root: Hash256;                ## State root
     path: NodeKey;                ## Account to visit
       ): Result[Account,HexaryError] =
@@ -492,14 +490,14 @@ proc getAccountsChainDb*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
       ): Result[Account,HexaryError] =
-  ## Fetch account via `BaseChainDB`
+  ## Fetch account via `ChainDBRef`
   ps.getAccountsData(accKey, persistent = true)
 
 proc nextAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
       ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `BaseChainDB`, the one next to the
+  ## Fetch the account path on the `ChainDBRef`, the one next to the
   ## argument account key.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accKey
@@ -515,7 +513,7 @@ proc prevAccountsChainDbKey*(
     ps: SnapDbAccountsRef;
     accKey: NodeKey;
       ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `BaseChainDB`, the one before to the
+  ## Fetch the account path on the `ChainDBRef`, the one before to the
   ## argument account.
   noRlpExceptionOops("getChainDbAccount()"):
     let path = accKey

@@ -69,3 +69,6 @@ proc memoryMain*() =
       check(mem.read(startPos = 5, size = 4) == @[1.byte, 0.byte, 1.byte, 0.byte])
       check(mem.read(startPos = 6, size = 4) == @[0.byte, 1.byte, 0.byte, 0.byte])
       check(mem.read(startPos = 1, size = 3) == @[0.byte, 0.byte, 0.byte])
+
+when isMainModule:
+  memoryMain()

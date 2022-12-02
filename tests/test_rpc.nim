@@ -6,18 +6,19 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  asynctest, json, strformat, strutils, options, tables, os, typetraits,
+  asynctest, json, strformat, strutils, tables, os, typetraits,
   nimcrypto/[hash], nimcrypto/utils as ncrutils, stew/byteutils, times,
-  json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
-  eth/[rlp, keys, trie/db, p2p/private/p2p_types],
-  ../nimbus/rpc/[common, p2p, rpc_utils],
-  ../nimbus/[constants, config, genesis, utils, transaction,
+  json_rpc/[rpcserver, rpcclient],
+  eth/[rlp, keys, p2p/private/p2p_types],
+  ../nimbus/rpc/rpc_utils,
+  ../nimbus/[constants, transaction, config,
              vm_state, vm_types, version],
-  ../nimbus/db/[accounts_cache, db_chain, storage_types],
+  ../nimbus/db/[accounts_cache, storage_types],
   ../nimbus/sync/protocol,
-  ../nimbus/p2p/[chain, executor, executor/executor_helpers],
-  ../nimbus/utils/[difficulty, tx_pool],
-  ../nimbus/[context, chain_config],
+  ../nimbus/core/[tx_pool, chain, executor, executor/executor_helpers, pow/difficulty],
+  ../nimbus/utils/utils,
+  ../nimbus/common,
+  ../nimbus/rpc,
    ./test_helpers, ./macro_assembler, ./rpcclient/eth_api, ./test_block_fixture
 
 const
@@ -30,7 +31,7 @@ type
     txHash: Hash256
     blockHash: Hash256
 
-proc persistFixtureBlock(chainDB: BaseChainDB) =
+proc persistFixtureBlock(chainDB: ChainDBRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
   chainDB.db.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
@@ -38,9 +39,9 @@ proc persistFixtureBlock(chainDB: BaseChainDB) =
   discard chainDB.persistTransactions(header.blockNumber, getBlockBody4514995().transactions)
   discard chainDB.persistReceipts(getReceipts4514995())
 
-proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
+proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
-    parent = chainDB.getCanonicalHead()
+    parent = com.db.getCanonicalHead()
     acc = ctx.am.getAccount(signer).tryGet()
     blockNumber = 1.toBlockNumber
     parentHash = parent.blockHash
@@ -58,8 +59,7 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     vmState = BaseVMState.new(
       parent    = BlockHeader(stateRoot: parent.stateRoot),
       header    = vmHeader,
-      chainDB   = chainDB,
-      pruneTrie = chainDB.pruneTrie)
+      com       = com)
 
   vmState.stateDB.setCode(ks2, code)
   vmState.stateDB.addBalance(signer, 9_000_000_000.u256)
@@ -81,11 +81,11 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
       value   : 2.u256,
       to      : some(zeroAddress)
     )
-    eip155    = chainDB.currentBlock >= chainDB.config.eip155Block
-    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, chainDB.config.chainId, eip155)
-    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, chainDB.config.chainId, eip155)
+    eip155    = com.isEIP155(com.syncCurrent)
+    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, com.chainId, eip155)
+    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, com.chainId, eip155)
     txs = [signedTx1, signedTx2]
-    txRoot = chainDB.persistTransactions(blockNumber, txs)
+    txRoot = com.db.persistTransactions(blockNumber, txs)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
@@ -95,10 +95,10 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
-    receiptRoot = chainDB.persistReceipts(vmState.receipts)
+    receiptRoot = com.db.persistReceipts(vmState.receipts)
     date        = initDateTime(30, mMar, 2017, 00, 00, 00, 00, utc())
     timeStamp   = date.toTime
-    difficulty  = calcDifficulty(chainDB.config, timeStamp, parent)
+    difficulty  = com.calcDifficulty(timeStamp, parent)
 
   # call persist() before we get the rootHash
   vmState.stateDB.persist()
@@ -121,10 +121,10 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     )
 
   let uncles = [header]
-  header.ommersHash = chainDB.persistUncles(uncles)
+  header.ommersHash = com.db.persistUncles(uncles)
 
-  discard chainDB.persistHeaderToDb(header)
-  chainDB.persistFixtureBlock()
+  discard com.db.persistHeaderToDb(header, none(DifficultyInt))
+  com.db.persistFixtureBlock()
   result = TestEnv(
     txHash: signedTx1.rlpHash,
     blockHash: header.hash
@@ -137,7 +137,7 @@ proc rpcMain*() =
       conf = makeTestConfig()
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
-      chain = newBaseChainDB(
+      com = CommonRef.new(
         newMemoryDB(),
         conf.pruneMode == PruneMode.Full,
         conf.networkId,
@@ -148,7 +148,7 @@ proc rpcMain*() =
       ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
 
     # disable POS/post Merge feature
-    chain.config.terminalTotalDifficulty = none(DifficultyInt)
+    com.setTTD none(DifficultyInt)
 
     let keyStore = "tests" / "keystore"
     let res = ctx.am.loadKeystores(keyStore)
@@ -162,18 +162,18 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    initializeEmptyDb(chain)
-    let env = setupEnv(chain, signer, ks2, ctx)
+    com.initializeEmptyDb()
+    let env = setupEnv(com, signer, ks2, ctx)
 
     # Create Ethereum RPCs
     let RPC_PORT = 8545
     var
       rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
       client = newRpcSocketClient()
-      txPool = TxPoolRef.new(chain, conf.engineSigner)
+      txPool = TxPoolRef.new(com, conf.engineSigner)
 
     setupCommonRpc(ethNode, conf, rpcServer)
-    setupEthRpc(ethNode, ctx, chain, txPool, rpcServer)
+    setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
 
     # Begin tests
     rpcServer.start()
@@ -220,7 +220,7 @@ proc rpcMain*() =
 
     test "eth_chainId":
       let res = await client.eth_chainId()
-      check res == encodeQuantity(distinctBase(chain.config.chainId))
+      check res == encodeQuantity(distinctBase(com.chainId))
 
     test "eth_syncing":
       let res = await client.eth_syncing()
@@ -229,9 +229,9 @@ proc rpcMain*() =
         check res.getBool() == syncing
       else:
         check res.kind == JObject
-        check chain.startingBlock == UInt256.fromHex(res["startingBlock"].getStr())
-        check chain.currentBlock == UInt256.fromHex(res["currentBlock"].getStr())
-        check chain.highestBlock == UInt256.fromHex(res["highestBlock"].getStr())
+        check com.syncStart == UInt256.fromHex(res["startingBlock"].getStr())
+        check com.syncCurrent == UInt256.fromHex(res["currentBlock"].getStr())
+        check com.syncHighest == UInt256.fromHex(res["highestBlock"].getStr())
 
     test "eth_coinbase":
       let res = await client.eth_coinbase()
@@ -280,7 +280,7 @@ proc rpcMain*() =
       check res.string == "0x0"
 
     test "eth_getBlockTransactionCountByHash":
-      let hash = chain.getBlockHash(0.toBlockNumber)
+      let hash = com.db.getBlockHash(0.toBlockNumber)
       let res = await client.eth_getBlockTransactionCountByHash(hash)
       check res.string == "0x0"
 
@@ -289,7 +289,7 @@ proc rpcMain*() =
       check res.string == "0x0"
 
     test "eth_getUncleCountByBlockHash":
-      let hash = chain.getBlockHash(0.toBlockNumber)
+      let hash = com.db.getBlockHash(0.toBlockNumber)
       let res = await client.eth_getUncleCountByBlockHash(hash)
       check res.string == "0x0"
 

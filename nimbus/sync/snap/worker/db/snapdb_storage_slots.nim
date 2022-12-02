@@ -331,7 +331,7 @@ proc importStorageSlots*(
   #      nSlotLists=data.storages.len, proofs=data.proof.len
 
 proc importStorageSlots*(
-    pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
     peer: Peer;                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
@@ -410,7 +410,7 @@ proc importRawStorageSlotsNodes*(
         report=result.len
 
 proc importRawStorageSlotsNodes*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     peer: Peer,                   ## For log messages, only
     accKey: NodeKey;              ## Account key
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
@@ -474,7 +474,7 @@ proc inspectStorageSlotsTrie*(
   return ok(stats)
 
 proc inspectStorageSlotsTrie*(
-    pv: SnapDbRef;                       ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                       ## Base descriptor on `ChainDBRef`
     peer: Peer;                          ## For log messages, only
     accKey: NodeKey;                     ## Account key
     root: Hash256;                       ## state root
@@ -506,7 +506,7 @@ proc getStorageSlotsNodeKey*(
   err(NodeNotFound)
 
 proc getStorageSlotsNodeKey*(
-    pv: SnapDbRef;                ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     peer: Peer;                   ## For log messages, only
     accKey: NodeKey;              ## Account key
     root: Hash256;                ## state root
@@ -542,7 +542,7 @@ proc getStorageSlotsData*(
   return ok(acc)
 
 proc getStorageSlotsData*(
-    pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
     peer: Peer,                ## For log messages, only
     accKey: NodeKey;              ## Account key
     root: Hash256;             ## state root
@@ -568,7 +568,7 @@ proc haveStorageSlotsData*(
       return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))
 
 proc haveStorageSlotsData*(
-    pv: SnapDbRef;             ## Base descriptor on `BaseChainDB`
+    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
     peer: Peer,                ## For log messages, only
     accKey: NodeKey;              ## Account key
     root: Hash256;             ## state root

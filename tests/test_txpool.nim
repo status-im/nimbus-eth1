@@ -10,13 +10,14 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
-  ../nimbus/[chain_config, config, db/db_chain, vm_state, vm_types],
-  ../nimbus/p2p/[chain, clique, executor],
-  ../nimbus/utils/[tx_pool, tx_pool/tx_item],
+  ../nimbus/[config, vm_state, vm_types],
+  ../nimbus/core/[chain, clique, executor],
+  ../nimbus/core/[tx_pool, tx_pool/tx_item],
+  ../nimbus/common/common,
   ./test_txpool/[helpers, setup, sign_helper],
   ./test_txpool2,
   chronos,
-  eth/[common, keys, p2p],
+  eth/[keys, p2p],
   stew/[keyed_queue, sorted_set],
   stint,
   unittest2
@@ -80,7 +81,7 @@ var
   effGasTips: seq[GasPriceEx]
 
   # Running block chain
-  bcDB: BaseChainDB
+  bcCom: CommonRef
 
   # Accounts to be considered local
   localAccounts: seq[EthAddress]
@@ -148,7 +149,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
   statCount.reset
   txList.reset
   effGasTips.reset
-  bcDB = capture.network.blockChainForTesting
+  bcCom = capture.network.blockChainForTesting
 
   suite &"TxPool: Transactions from {fileInfo} capture":
     var
@@ -159,7 +160,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
         &" and collect {capture.numTxs} txs for pooling":
 
       elapNoisy.showElapsed("Total collection time"):
-        (xp, nTxs) = bcDB.toTxPool(file = filePath,
+        (xp, nTxs) = bcCom.toTxPool(file = filePath,
                                    getStatus = randStatus,
                                    loadBlocks = capture.numBlocks,
                                    minBlockTxs = capture.minBlockTxs,
@@ -192,7 +193,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
          "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
       # make sure that the block chain was initialised
-      check capture.numBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
+      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.blockNumber
 
       check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
       #                        ^^^ sum up statCount[] values
@@ -229,7 +230,7 @@ proc runTxPoolTests(noisy = true) =
       test &"Load/forward walk ID queue, " &
           &"deleting groups of at most {groupLen}":
         var
-          xq = bcDB.toTxPool(txList, noisy = noisy)
+          xq = bcCom.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
 
         # Set txs to pseudo random status
@@ -247,7 +248,7 @@ proc runTxPoolTests(noisy = true) =
       test &"Load/reverse walk ID queue, " &
           &"deleting in groups of at most {groupLen}":
         var
-          xq = bcDB.toTxPool(txList, noisy = noisy)
+          xq = bcCom.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
 
         # Set txs to pseudo random status
@@ -264,7 +265,7 @@ proc runTxPoolTests(noisy = true) =
 
     block:
       var
-        xq = TxPoolRef.new(bcDB,testAddress)
+        xq = TxPoolRef.new(bcCom,testAddress)
         testTxs: array[5,(TxItemRef,Transaction,Transaction)]
 
       test &"Superseding txs with sender and nonce variants":
@@ -337,7 +338,7 @@ proc runTxPoolTests(noisy = true) =
       var
         gap: Time
         nItems: int
-        xq = bcDB.toTxPool(timeGap = gap,
+        xq = bcCom.toTxPool(timeGap = gap,
                            nGapItems = nItems,
                            itList = txList,
                            itemsPC = 35,       # arbitrary
@@ -387,7 +388,7 @@ proc runTxPoolTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, noisy = noisy)
+        xq = bcCom.toTxPool(txList, noisy = noisy)
         maxAddr: EthAddress
         nAddrItems = 0
 
@@ -534,7 +535,7 @@ proc runTxPackerTests(noisy = true) =
 
     test &"Calculate some non-trivial base fee":
       var
-        xq = bcDB.toTxPool(txList, noisy = noisy)
+        xq = bcCom.toTxPool(txList, noisy = noisy)
         feesList = SortedSet[GasPriceEx,bool].init()
 
       # provide a sorted list of gas fees
@@ -567,8 +568,8 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, ntBaseFee, noisy = noisy)
-        xr = bcDB.toTxPool(txList, ntNextFee, noisy = noisy)
+        xq = bcCom.toTxPool(txList, ntBaseFee, noisy = noisy)
+        xr = bcCom.toTxPool(txList, ntNextFee, noisy = noisy)
       block:
         let
           pending = xq.nItems.pending
@@ -706,13 +707,13 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(txList, ntBaseFee,
+        xq = bcCom.toTxPool(txList, ntBaseFee,
                            local = localAccounts,
                            noisy = noisy)
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 8)
-        canonicalHead = xq.chain.db.getCanonicalHead
+        canonicalHead = xq.chain.com.db.getCanonicalHead
 
       test &"Back track block chain head (at least "&
           &"{nMinTxs} txs, {nMinAccounts} known accounts)":
@@ -817,7 +818,7 @@ proc runTxPackerTests(noisy = true) =
             " size=", mostlySize + blk.txs[n].gasLimit - blk.header.gasUsed
 
         let
-          poa = bcDB.newClique
+          poa = bcCom.newClique
           bdy = BlockBody(transactions: blk.txs)
           hdr = block:
             var rc = blk.header
@@ -839,28 +840,28 @@ proc runTxPackerTests(noisy = true) =
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
-        check BaseVMState.new(hdr, bcDB).processBlock(poa, hdr, bdy).isOK
+        check BaseVMState.new(hdr, bcCom).processBlock(poa, hdr, bdy).isOK
 
         # This should not have changed
-        check canonicalHead == xq.chain.db.getCanonicalHead
+        check canonicalHead == xq.chain.com.db.getCanonicalHead
 
         # Using the high-level library function, re-append the block while
         # turning off header verification.
-        let c = bcDB.newChain(extraValidation = false)
+        let c = bcCom.newChain(extraValidation = false)
         check c.persistBlocks(@[hdr], @[bdy]).isOK
 
         # The canonical head will be set to hdr if it scores high enough
         # (see implementation of db_chain.persistHeaderToDb()).
         let
-          canonScore = xq.chain.db.getScore(canonicalHead.blockHash)
-          headerScore = xq.chain.db.getScore(hdr.blockHash)
+          canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
+          headerScore = xq.chain.com.db.getScore(hdr.blockHash)
 
         if canonScore < headerScore:
           # Note that the updated canonical head is equivalent to hdr but not
           # necessarily binary equal.
-          check hdr.blockHash == xq.chain.db.getCanonicalHead.blockHash
+          check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
         else:
-          check canonicalHead == xq.chain.db.getCanonicalHead
+          check canonicalHead == xq.chain.com.db.getCanonicalHead
 
 # ------------------------------------------------------------------------------
 # Main function(s)

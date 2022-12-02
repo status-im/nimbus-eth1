@@ -1,5 +1,6 @@
 import
-  json, downloader, stint, strutils, os,
+  std/[json, strutils, os],
+  downloader, stint,
   ../nimbus/tracer, chronicles, prestate,
   eth/common, premixcore
 

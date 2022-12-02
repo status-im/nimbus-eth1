@@ -1,18 +1,21 @@
 import
-  db/[db_chain, accounts_cache, capturedb], eth/common, utils, json,
-  constants, vm_state, vm_types, transaction, p2p/executor,
-  eth/trie/db, strutils, nimcrypto/utils as ncrutils,
-  chronicles, rpc/hexstrings, launcher,
+  std/[strutils, json],
+  ./common/common,
+  ./db/[accounts_cache, capturedb],
+  ./utils/utils,
+  "."/[constants, vm_state, vm_types, transaction, core/executor],
+  nimcrypto/utils as ncrutils,
+  chronicles, ./rpc/hexstrings, ./launcher,
   stew/results
 
 when defined(geth):
   import db/geth_db
 
-  proc getParentHeader(db: BaseChainDB, header: BlockHeader): BlockHeader =
+  proc getParentHeader(db: ChainDBRef, header: BlockHeader): BlockHeader =
     db.blockHeader(header.blockNumber.truncate(uint64) - 1)
 
 else:
-  proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
+  proc getParentHeader(self: ChainDBRef, header: BlockHeader): BlockHeader =
     self.getBlockHeader(header.parentHash)
 
 proc `%`(x: openArray[byte]): JsonNode =
@@ -30,7 +33,7 @@ proc toJson(receipt: Receipt): JsonNode =
   else:
     result["status"] = %receipt.status
 
-proc dumpReceipts*(chainDB: BaseChainDB, header: BlockHeader): JsonNode =
+proc dumpReceipts*(chainDB: ChainDBRef, header: BlockHeader): JsonNode =
   result = newJArray()
   for receipt in chainDB.getReceipts(header.receiptRoot):
     result.add receipt.toJson
@@ -78,19 +81,18 @@ const
   uncleName = "uncle"
   internalTxName = "internalTx"
 
-proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
+proc traceTransaction*(com: CommonRef, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = chainDB.getParentHeader(header)
+    parent = com.db.getParentHeader(header)
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    networkParams = chainDB.networkParams
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams) # prune or not prune?
     captureFlags = tracerFlags + {EnableAccount}
-    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
+    captureCom = com.clone(captureTrieDB)
+    vmState = BaseVMState.new(header, captureCom, captureFlags)
 
   var stateDb = vmState.stateDB
 
@@ -134,7 +136,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = AccountsCache.init(captureTrieDB, beforeRoot, chainDB.pruneTrie)
+  var stateBefore = AccountsCache.init(captureTrieDB, beforeRoot, com.pruneTrie)
   for idx, acc in tracedAccountsPairs(vmState):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -151,23 +153,22 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(memoryDB)
 
-proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
+proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
   let
-    parent = db.getParentHeader(header)
+    parent = com.db.getParentHeader(header)
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(db.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    networkParams = db.networkParams
-    captureChainDB = newBaseChainDB(captureTrieDB, false, db.networkId, networkParams)
+    captureCom = com.clone(captureTrieDB)
     # we only need stack dump if we want to scan for internal transaction address
     captureFlags = {EnableTracing, DisableMemory, DisableStorage, EnableAccount}
-    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
+    vmState = BaseVMState.new(header, captureCom, captureFlags)
     miner = vmState.coinbase()
 
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = AccountsCache.init(captureTrieDB, parent.stateRoot, db.pruneTrie)
+    stateBefore = AccountsCache.init(captureTrieDB, parent.stateRoot, com.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -210,16 +211,15 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
   if dumpState:
     result.dumpMemoryDB(memoryDB)
 
-proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
+proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = chainDB.getParentHeader(header)
+    parent = com.db.getParentHeader(header)
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    networkParams = chainDB.networkParams
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
+    captureCom = com.clone(captureTrieDB)
     captureFlags = tracerFlags + {EnableTracing}
-    vmState = BaseVMState.new(header, captureChainDB, captureFlags)
+    vmState = BaseVMState.new(header, captureCom, captureFlags)
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -240,22 +240,21 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(memoryDB)
 
-proc traceTransactions*(chainDB: BaseChainDB, header: BlockHeader, blockBody: BlockBody): JsonNode =
+proc traceTransactions*(com: CommonRef, header: BlockHeader, blockBody: BlockBody): JsonNode =
   result = newJArray()
   for i in 0 ..< blockBody.transactions.len:
-    result.add traceTransaction(chainDB, header, blockBody, i, {DisableState})
+    result.add traceTransaction(com, header, blockBody, i, {DisableState})
 
-proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
+proc dumpDebuggingMetaData*(com: CommonRef, header: BlockHeader,
                             blockBody: BlockBody, vmState: BaseVMState, launchDebugger = true) =
   let
     blockNumber = header.blockNumber
 
   var
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    networkParams = chainDB.networkParams
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
+    captureCom = com.clone(captureTrieDB)
     bloom = createBloom(vmState.receipts)
 
   let blockSummary = %{
@@ -266,9 +265,9 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactions(captureChainDB, header, blockBody),
-    "stateDump": dumpBlockState(captureChainDB, header, blockBody),
-    "blockTrace": traceBlock(captureChainDB, header, blockBody, {DisableState}),
+    "txTraces": traceTransactions(captureCom, header, blockBody),
+    "stateDump": dumpBlockState(captureCom, header, blockBody),
+    "blockTrace": traceBlock(captureCom, header, blockBody, {DisableState}),
     "receipts": toJson(vmState.receipts),
     "block": blockSummary
   }

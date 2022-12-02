@@ -9,17 +9,15 @@
 
 import
   std/[os],
-  eth/[trie/db],
-  eth/common as ethcommon,
   eth/p2p as ethp2p,
   stew/shims/net as stewNet,
   stew/results,
   chronos, json_rpc/[rpcserver, rpcclient],
-  ../../../nimbus/db/db_chain,
   ../../../nimbus/sync/protocol,
-  ../../../nimbus/[config, context, genesis, utils/tx_pool, sealer],
-  ../../../nimbus/rpc/[common, p2p, debug],
-  ../../../nimbus/p2p/chain,
+  ../../../nimbus/common,
+  ../../../nimbus/config,
+  ../../../nimbus/rpc,
+  ../../../nimbus/core/[chain, tx_pool, sealer],
   ../../../tests/test_helpers,
   ./vault
 
@@ -45,22 +43,22 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
       echo res.error()
       quit(QuitFailure)
 
-proc setupRpcServer(ctx: EthContext, chainDB: BaseChainDB,
+proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf): RpcServer  =
   let rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
+  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
 
   rpcServer.start()
   rpcServer
 
-proc setupWsRpcServer(ctx: EthContext, chainDB: BaseChainDB,
+proc setupWsRpcServer(ctx: EthContext, com: CommonRef,
                       ethNode: EthereumNode, txPool: TxPoolRef,
                       conf: NimbusConf): RpcServer  =
   let rpcServer = newRpcWebSocketServer(initTAddress(conf.wsAddress, conf.wsPort))
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
+  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
 
   rpcServer.start()
   rpcServer
@@ -96,24 +94,23 @@ proc setupEnv*(): TestEnv =
   let
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    chainDB = newBaseChainDB(newMemoryDb(),
+    com     = CommonRef.new(newMemoryDb(),
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
     )
 
   manageAccounts(ethCtx, conf)
-  chainDB.populateProgress()
-  chainDB.initializeEmptyDb()
+  com.initializeEmptyDb()
 
-  let chainRef = newChain(chainDB)
-  let txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+  let chainRef = newChain(com)
+  let txPool = TxPoolRef.new(com, conf.engineSigner)
   let sealingEngine = SealingEngineRef.new(
     chainRef, ethCtx, conf.engineSigner,
     txPool, EngineStopped
   )
 
-  let rpcServer = setupRpcServer(ethCtx, chainDB, ethNode, txPool, conf)
+  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)
   let stopServer = stopRpcHttpServer

@@ -3,7 +3,7 @@ import
   unittest2, stew/byteutils,
   eth/common/eth_types,
   ../nimbus/vm_internals,
-  ../nimbus/utils/header
+  ../nimbus/core/pow/header
 
 func toAddress(n: int): EthAddress =
   result[19] = n.byte

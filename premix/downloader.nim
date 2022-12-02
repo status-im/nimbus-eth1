@@ -1,6 +1,9 @@
 import
-  json_rpc/[rpcclient], json, parser, httputils, strutils,
-  eth/[common, rlp], chronicles, ../nimbus/[utils]
+  std/[json, strutils],
+  json_rpc/[rpcclient], httputils,
+  eth/[common, rlp], chronicles,
+  ../nimbus/utils/utils,
+  ./parser
 
 logScope:
   topics = "downloader"

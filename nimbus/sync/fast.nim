@@ -13,14 +13,15 @@ import
     hashes, sequtils, math, tables, times],
   chronicles,
   chronos,
-  eth/[common, p2p],
+  eth/p2p,
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
   "."/[protocol, types],
-  ../p2p/[chain, clique/clique_sealer, gaslimit, withdrawals],
-  ../db/db_chain,
-  ../utils/difficulty,
-  ".."/[constants, utils]
+  ../core/[chain, clique/clique_sealer, gaslimit, withdrawals],
+  ../core/pow/difficulty,
+  ../constants,
+  ../utils/utils,
+  ../common/common
 
 {.push raises:[Defect].}
 
@@ -62,7 +63,7 @@ type
     workQueue: seq[WantedBlocks]
     endBlockNumber: BlockNumber
     finalizedBlock: BlockNumber # Block which was downloaded and verified
-    chain: Chain
+    chain: ChainRef
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
     hasOutOfOrderBlocks: bool
@@ -124,20 +125,14 @@ proc handleLostPeer(ctx: FastSyncCtx) =
 # Private functions: validators
 # ------------------------------------------------------------------------------
 
-proc validateDifficulty(ctx: FastSyncCtx, header, parentHeader: BlockHeader): bool =
+proc validateDifficulty(ctx: FastSyncCtx,
+                        header, parentHeader: BlockHeader,
+                        consensusType: ConsensusType): bool =
   try:
-    if ctx.chain.isBlockAfterTtd(header):
-      if header.difficulty != 0.u256:
-        trace "invalid difficulty",
-          expect=0, get=header.difficulty
-        return false
-      return true
+    let com = ctx.chain.com
 
-    let
-      db = ctx.chain.db
-      config = db.config
-
-    if config.poaEngine:
+    case consensusType
+    of ConsensusType.POA:
       let rc = ctx.chain.clique.calcDifficulty(parentHeader)
       if rc.isErr:
         return false
@@ -145,27 +140,35 @@ proc validateDifficulty(ctx: FastSyncCtx, header, parentHeader: BlockHeader): bo
         trace "provided header difficulty is too low",
           expect=rc.get(), get=header.difficulty
         return false
-      return true
 
-    let calcDiffc = config.calcDifficulty(header.timestamp, parentHeader)
-    if header.difficulty < calcDiffc:
-      trace "provided header difficulty is too low",
-        expect=calcDiffc, get=header.difficulty
-      return false
+    of ConsensusType.POW:
+      let calcDiffc = com.calcDifficulty(header.timestamp, parentHeader)
+      if header.difficulty < calcDiffc:
+        trace "provided header difficulty is too low",
+          expect=calcDiffc, get=header.difficulty
+        return false
+
+    of ConsensusType.POS:
+      if header.difficulty != 0.u256:
+        trace "invalid difficulty",
+          expect=0, get=header.difficulty
+        return false
+
     return true
-
   except CatchableError as e:
     error "Exception in FastSync.validateDifficulty()",
       exc = e.name, err = e.msg
     return false
 
-proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNumber)): bool =
+proc validateHeader(ctx: FastSyncCtx, header: BlockHeader,
+                    height = none(BlockNumber)): bool
+                    {.raises: [Defect,CatchableError].} =
   if header.parentHash == GENESIS_PARENT_HASH:
     return true
 
   let
-    db = ctx.chain.db
-    config = db.config
+    db  = ctx.chain.db
+    com = ctx.chain.com
 
   var parentHeader: BlockHeader
   if not db.getBlockHeader(header.parentHash, parentHeader):
@@ -185,11 +188,12 @@ proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNu
       header=header.timestamp
     return false
 
-  if not ctx.validateDifficulty(header, parentHeader):
+  let consensusType = com.consensus(header)
+  if not ctx.validateDifficulty(header, parentHeader, consensusType):
     return false
 
-  if config.poaEngine:
-    let period = initDuration(seconds = config.cliquePeriod)
+  if consensusType == ConsensusType.POA:
+    let period = initDuration(seconds = com.cliquePeriod)
     # Timestamp diff between blocks is lower than PERIOD (clique)
     if parentHeader.timestamp + period > header.timestamp:
       trace "invalid timestamp diff (lower than period)",
@@ -198,7 +202,7 @@ proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNu
         period
       return false
 
-  var res = db.validateGasLimitOrBaseFee(header, parentHeader)
+  var res = com.validateGasLimitOrBaseFee(header, parentHeader)
   if res.isErr:
     trace "validate gaslimit error",
       msg=res.error
@@ -213,7 +217,7 @@ proc validateHeader(ctx: FastSyncCtx, header: BlockHeader, height = none(BlockNu
         parentNumber=parentHeader.blockNumber
       return false
 
-  res = db.validateWithdrawals(header)
+  res = com.validateWithdrawals(header)
   if res.isErr:
     trace "validate withdrawals error",
       msg=res.error
@@ -902,7 +906,7 @@ proc onPeerDisconnected(ctx: FastSyncCtx, p: Peer) =
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type FastSyncCtx; ethNode: EthereumNode; chain: Chain): T
+proc new*(T: type FastSyncCtx; ethNode: EthereumNode; chain: ChainRef): T
     {.gcsafe, raises:[Defect,CatchableError].} =
   FastSyncCtx(
     # workQueue:           n/a
@@ -922,16 +926,14 @@ proc start*(ctx: FastSyncCtx) =
     var blockHash: Hash256
     let
       db  = ctx.chain.db
-      ttd = db.ttd()
+      com = ctx.chain.com
 
     if not db.getBlockHash(ctx.finalizedBlock, blockHash):
       debug "FastSync.start: Failed to get blockHash",
         number=ctx.finalizedBlock
       return
 
-    let td = db.getScore(blockHash)
-
-    if td > ttd:
+    if com.consensus == ConsensusType.POS:
       debug "Fast sync is disabled after POS merge"
       return
 

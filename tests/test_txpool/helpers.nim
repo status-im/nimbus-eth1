@@ -10,8 +10,8 @@
 
 import
   std/[os, strformat, sequtils, strutils, times],
-  ../../nimbus/utils/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
-  ../../nimbus/utils/tx_pool/tx_tasks/[tx_packer, tx_recover],
+  ../../nimbus/core/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
+  ../../nimbus/core/tx_pool/tx_tasks/[tx_packer, tx_recover],
   ../replay/[pp, undump_blocks],
   chronicles,
   eth/[common, keys],
@@ -25,7 +25,7 @@ export
   tx_chain.TxChainGasLimits,
   tx_chain.`maxMode=`,
   tx_chain.clearAccounts,
-  tx_chain.db,
+  tx_chain.com,
   tx_chain.limits,
   tx_chain.nextFork,
   tx_chain.profit,

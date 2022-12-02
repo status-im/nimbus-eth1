@@ -8,14 +8,15 @@
 import
   std/[strutils, tables, json, times, os, sets, options],
   ./test_helpers, ./test_allowed_to_fail,
-  ../nimbus/p2p/executor, test_config,
+  ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
-  ../nimbus/[vm_state, vm_types, utils, chain_config],
-  ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/forks,
+  ../nimbus/[vm_state, vm_types],
+  ../nimbus/db/accounts_cache,
+  ../nimbus/common/common,
+  ../nimbus/utils/utils,
   chronicles,
-  eth/[rlp, common],
-  eth/trie/[db, trie_defs],
+  eth/rlp,
+  eth/trie/trie_defs,
   unittest2,
   stew/[results, byteutils]
 
@@ -27,7 +28,7 @@ type
     tx: Transaction
     expectedHash: string
     expectedLogs: string
-    fork: Fork
+    fork: EVMFork
     debugMode: bool
     trace: bool
     index: int
@@ -84,25 +85,24 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
 
 # using only one networkParams will reduce execution
 # time ~90% instead of create it for every test
-let chainParams = networkParams(MainNet)
+let params = chainConfigForNetwork(MainNet)
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
-  let
-    chainDB = newBaseChainDB(newMemoryDB(), getConfiguration().pruning, params = chainParams)
-    parent  = BlockHeader(stateRoot: emptyRlpHash)
+  if tester.fork == FkParis:
+    params.terminalTotalDifficulty = some(0.u256)
+  else:
+    params.terminalTotalDifficulty = none(BlockNumber)
 
-  # can't be assigned to
-  # tester.header.parentHash = parent.blockHash
-  chainDB.setScore(parent.blockHash, 0.u256)
-  if tester.fork >= FkParis:
-    chainDB.config.terminalTotalDifficulty = some(0.u256)
+  let
+    com    = CommonRef.new(newMemoryDB(), params, getConfiguration().pruning)
+    parent = BlockHeader(stateRoot: emptyRlpHash)
 
   let vmState = BaseVMState.new(
       parent      = parent,
       header      = tester.header,
-      chainDB     = chainDB,
+      com         = com,
       tracerFlags = (if tester.trace: {TracerFlags.EnableTracing} else: {}),
-      pruneTrie   = chainDB.pruneTrie)
+    )
 
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
@@ -155,7 +155,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       db.persist()
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
-                 trace = false, debugMode = false, supportedForks: set[Fork] = supportedForks) =
+                 trace = false, debugMode = false, supportedForks: set[EVMFork] = supportedForks) =
   var tester: Tester
   var fixture: JsonNode
   for label, child in fixtures:
@@ -239,7 +239,7 @@ proc generalStateJsonMain*(debugMode = false) =
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    var forks: set[Fork] = {}
+    var forks: set[EVMFork] = {}
     forks.incl config.fork
     testFixture(n, testStatusIMPL, config.trace, true, forks)
 

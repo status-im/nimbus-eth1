@@ -3,7 +3,8 @@ import
   pkg/[unittest2],
   eth/[common, keys],
   stew/byteutils,
-  ../nimbus/[config, chain_config, context],
+  ../nimbus/config,
+  ../nimbus/common/[chain_config, context],
   ./test_helpers
 
 proc `==`(a, b: ChainId): bool =
@@ -53,10 +54,12 @@ proc configurationMain*() =
       check bb.blocksFile.string == genesisFile
 
     test "custom-network loading config file with no genesis data":
+      # no genesis will result in nil, the database is not initialized
       let conf = makeConfig(@["--custom-network:" & noGenesis])
-      check conf.networkParams.genesis.isNil == false
+      check conf.networkParams.genesis.isNil
 
     test "custom-network loading config file with no 'config'":
+      # no config will result in empty config, CommonRef keep working
       let conf = makeConfig(@["--custom-network:" & noConfig])
       check conf.networkParams.config.isNil == false
 
@@ -189,7 +192,7 @@ proc configurationMain*() =
 
       let conf = makeConfig(@["--custom-network:" & chainid1])
       check conf.networkId == 1.NetworkId
-      check conf.networkParams.config.londonBlock == 1337
+      check conf.networkParams.config.londonBlock.get() == 1337
       check conf.getBootnodes().len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":

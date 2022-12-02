@@ -6,7 +6,7 @@ import
   eth/common, chronos,
   web3/engine_api_types,
   json_rpc/rpcclient,
-  ../../../nimbus/merge/mergeutils,
+  ../../../nimbus/rpc/merge/mergeutils,
   ../../../nimbus/[constants],
   ./engine_client
 

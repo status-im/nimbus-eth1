@@ -1,6 +1,6 @@
 import
   macro_assembler, unittest2, macros,
-  stew/byteutils, eth/common,
+  stew/byteutils, ../nimbus/common/common,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/accounts_cache
 
@@ -339,6 +339,9 @@ proc opEnvMain*() =
       fork: berlin
       gasused: 2603
 
+    #[
+    ## TODO: Fixme using MergeFork
+    ## properly rather than using hacky wacky
     vmState.ttdReached = true
     assembler:
       title: "EIP-4399 PrevRandao 0"
@@ -360,6 +363,7 @@ proc opEnvMain*() =
       fork: london
 
     vmState.ttdReached = false
+    ]#
 
 when isMainModule:
   opEnvMain()

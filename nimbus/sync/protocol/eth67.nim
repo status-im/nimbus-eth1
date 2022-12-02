@@ -22,7 +22,7 @@ import
   ./trace_config,
   ./eth/eth_types,
   ../types,
-  ../../utils
+  ../../utils/utils
 
 export
   eth_types

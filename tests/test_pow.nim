@@ -11,7 +11,7 @@
 import
   std/[os, sequtils, strformat, strutils, times],
   ./replay/[pp, gunzip],
-  ../nimbus/utils/[pow, pow/pow_cache, pow/pow_dataset],
+  ../nimbus/core/[pow, pow/pow_cache, pow/pow_dataset],
   eth/[common],
   unittest2
 

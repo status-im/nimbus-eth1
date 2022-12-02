@@ -9,19 +9,19 @@
 # according to those terms.
 
 import
-  unittest2, json, os, tables, strutils, sets,
-  options,
-  eth/[common, rlp], eth/trie/[db, trie_defs],
+  std/[json, os, tables, strutils, sets, options],
+  unittest2,
+  eth/rlp, eth/trie/trie_defs,
   stew/[endians2, byteutils],
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
-  ../nimbus/[vm_state, utils, vm_types, errors, constants, forks],
-  ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/utils/header,
-  ../nimbus/p2p/[executor, validate],
-  ../nimbus/chain_config,
+  ../nimbus/[vm_state, vm_types, errors, constants],
+  ../nimbus/db/accounts_cache,
+  ../nimbus/utils/utils,
+  ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
-  ../tools/common/helpers
+  ../tools/common/helpers,
+  ../nimbus/common/common
 
 type
   SealEngine = enum
@@ -143,7 +143,7 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
   result.network = fixture["network"].getStr
 
-proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
+proc blockWitness(vmState: BaseVMState, chainDB: ChainDBRef) =
   let rootHash = vmState.stateDB.rootHash
   let witness = vmState.buildWitness()
   let fork = vmState.fork
@@ -162,11 +162,11 @@ proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
-proc importBlock(tester: var Tester, chainDB: BaseChainDB,
+proc importBlock(tester: var Tester, com: CommonRef,
   preminedBlock: EthBlock, tb: TestBlock, checkSeal, validation: bool): EthBlock =
 
-  let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
-  var baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
+  let parentHeader = com.db.getBlockHeader(preminedBlock.header.parentHash)
+  var baseHeaderForImport = generateHeaderFromParentHeader(com,
       parentHeader,
       preminedBlock.header.coinbase,
       some(preminedBlock.header.timestamp),
@@ -176,19 +176,18 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   )
 
   deepCopy(result, preminedBlock)
-  let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
-  if ttdReached and chainDB.config.mergeForkBlock == high(BlockNumber):
-    chainDB.config.mergeForkBlock = preminedBlock.header.blockNumber
+  let td = some(com.db.getScore(preminedBlock.header.parentHash))
+  com.hardForkTransition(preminedBlock.header.blockNumber, td)
 
-  if ttdReached:
+  if com.consensus == ConsensusType.POS:
     baseHeaderForImport.prevRandao = preminedBlock.header.prevRandao
 
   tester.vmState = BaseVMState.new(
     parentHeader,
     baseHeaderForImport,
-    chainDB,
+    com,
     (if tester.trace: {TracerFlags.EnableTracing} else: {}),
-    chainDB.pruneTrie)
+  )
 
   let body = BlockBody(
     transactions: result.txs,
@@ -196,8 +195,8 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   )
 
   if validation:
-    let rc = chainDB.validateHeaderAndKinship(
-      result.header, body, checkSeal, ttdReached, pow)
+    let rc = com.validateHeaderAndKinship(
+      result.header, body, checkSeal, pow)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
@@ -208,19 +207,16 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
       raise newException(ValidationError, "process block validation")
   else:
     if tester.vmState.generateWitness():
-      blockWitness(tester.vmState, chainDB)
+     blockWitness(tester.vmState, com.db)
 
-  discard chainDB.persistHeaderToDb(preminedBlock.header)
+  discard com.db.persistHeaderToDb(preminedBlock.header, none(DifficultyInt))
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
-  chainDB: BaseChainDB, checkSeal, validation: bool): (EthBlock, EthBlock, Blob) =
-
-  # we hack the ChainConfig here and let it works with calcDifficulty
-  getChainConfig(tester.network, chainDB.config)
+  com: CommonRef, checkSeal, validation: bool): (EthBlock, EthBlock, Blob) =
 
   var
     preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
-    minedBlock = tester.importBlock(chainDB, preminedBlock, tb, checkSeal, validation)
+    minedBlock = tester.importBlock(com, preminedBlock, tb, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
 
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
@@ -240,9 +236,9 @@ proc collectDebugData(tester: var Tester) =
     "structLogs": tracingResult,
   }
 
-proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
-  discard chainDB.persistHeaderToDb(tester.genesisHeader)
-  check chainDB.getCanonicalHead().blockHash == tester.genesisHeader.blockHash
+proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatus) =
+  discard com.db.persistHeaderToDb(tester.genesisHeader, none(DifficultyInt))
+  check com.db.getCanonicalHead().blockHash == tester.genesisHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
 
   if tester.debugMode:
@@ -252,22 +248,18 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     if testBlock.goodBlock:
       try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
-            testBlock, chainDB, checkSeal, validation = false)
-
-        let ttdReached = chainDB.isBlockAfterTtd(preminedBlock.header)
-        if ttdReached and chainDB.config.mergeForkBlock == high(BlockNumber):
-          chainDB.config.mergeForkBlock = preminedBlock.header.blockNumber
+            testBlock, com, checkSeal, validation = false)
 
         # manually validating
-        let res = chainDB.validateHeaderAndKinship(
-          preminedBlock, checkSeal, ttdReached, pow)
+        let res = com.validateHeaderAndKinship(
+          preminedBlock, checkSeal, pow)
         check res.isOk
         when defined(noisy):
           if res.isErr:
-            debugEcho "blockNumber: ", preminedBlock.header.blockNumber
-            debugEcho "fork: ", chainDB.config.toFork(preminedBlock.header.blockNumber)
+            debugEcho "blockNumber  : ", preminedBlock.header.blockNumber
+            debugEcho "fork         : ", com.toFork(preminedBlock.header.blockNumber)
             debugEcho "error message: ", res.error
-            debugEcho "ttdReached: ", ttdReached
+            debugEcho "consensusType: ", com.consensus
 
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
@@ -276,7 +268,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
       var noError = true
       try:
         let (_, _, _) = tester.applyFixtureBlockToChain(testBlock,
-          chainDB, checkSeal, validation = true)
+          com, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, RlpError:
         # failure is expected on this bad block
         check (testBlock.hasException or (not testBlock.goodBlock))
@@ -358,10 +350,6 @@ proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtu
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
 
-# using only one networkParams will reduce execution
-# time ~87.5% instead of create it for every test
-let chainParams = networkParams(MainNet)
-
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false) =
   # 1 - mine the genesis block
   # 2 - loop over blocks:
@@ -382,8 +370,10 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     let
       pruneTrie = test_config.getConfiguration().pruning
-      chainDB = newBaseChainDB(newMemoryDb(), pruneTrie, params = chainParams)
-      stateDB = AccountsCache.init(chainDB.db, emptyRlpHash, chainDB.pruneTrie)
+      memDB     = newMemoryDb()
+      stateDB   = AccountsCache.init(memDB, emptyRlpHash, pruneTrie)
+      config    = getChainConfig(tester.network)
+      com       = CommonRef.new(memDB, config, pruneTrie)
 
     setupStateDB(fixture["pre"], stateDB)
     stateDB.persist()
@@ -395,8 +385,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     var success = true
     try:
-      tester.runTester(chainDB, testStatusIMPL)
-      let latestBlockHash = chainDB.getCanonicalHead().blockHash
+      tester.runTester(com, testStatusIMPL)
+      let latestBlockHash = com.db.getCanonicalHead().blockHash
       if latestBlockHash != tester.lastBlockHash:
         if tester.postStateHash != Hash256():
           let rootHash = tester.vmState.stateDB.rootHash

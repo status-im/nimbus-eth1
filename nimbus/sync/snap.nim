@@ -13,7 +13,7 @@ import
   chronicles,
   chronos,
   ../db/select_backend,
-  ../p2p/chain,
+  ../core/chain,
   ./snap/[worker, worker_desc],
   "."/[protocol, sync_desc, sync_sched]
 
@@ -60,7 +60,7 @@ proc runMulti(buddy: SnapBuddyRef) {.async.} =
 proc init*(
     T: type SnapSyncRef;
     ethNode: EthereumNode;
-    chain: Chain;
+    chain: ChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
     dbBackend: ChainDb;

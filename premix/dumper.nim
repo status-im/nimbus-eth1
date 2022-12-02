@@ -4,17 +4,20 @@
 #
 
 import
-  configuration, stint, eth/common,
-  ../nimbus/db/[db_chain, select_backend, capturedb],
-  eth/trie/[hexary, db], ../nimbus/p2p/executor,
-  ../nimbus/[tracer, vm_state, vm_types]
+  configuration, stint,
+  eth/trie/hexary,
+  ../nimbus/db/[select_backend, capturedb],
+  ../nimbus/common/common,
+  ../nimbus/core/executor,
+  ../nimbus/[vm_state, vm_types],
+  ../nimbus/tracer
 
-proc dumpDebug(chainDB: BaseChainDB, blockNumber: UInt256) =
+proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
   var
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    captureCom = com.clone(captureTrieDB)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
@@ -22,26 +25,26 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: UInt256) =
 
   let
     parentNumber = blockNumber - 1
-    parent = captureChainDB.getBlockHeader(parentNumber)
-    header = captureChainDB.getBlockHeader(blockNumber)
+    parent = captureCom.db.getBlockHeader(parentNumber)
+    header = captureCom.db.getBlockHeader(blockNumber)
     headerHash = header.blockHash
-    body = captureChainDB.getBlockBody(headerHash)
-    vmState = BaseVMState.new(parent, header, captureChainDB)
+    body = captureCom.db.getBlockBody(headerHash)
+    vmState = BaseVMState.new(parent, header, captureCom)
 
-  discard captureChainDB.setHead(parent, true)
+  discard captureCom.db.setHead(parent, true)
   discard vmState.processBlockNotPoA(header, body)
 
   transaction.rollback()
-  dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)
+  dumpDebuggingMetaData(captureCom, header, body, vmState, false)
 
 proc main() {.used.} =
   let conf = getConfiguration()
   let db = newChainDB(conf.dataDir)
   let trieDB = trieDB db
-  let chainDB = newBaseChainDB(trieDB, false)
+  let com = CommonRef.new(trieDB, false)
 
   if conf.head != 0.u256:
-    dumpDebug(chainDB, conf.head)
+    dumpDebug(com, conf.head)
 
 when isMainModule:
   var message: string

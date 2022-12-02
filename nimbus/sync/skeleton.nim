@@ -38,7 +38,7 @@ type
     pulled   : int64        # Number of headers downloaded in this run
     filling  : bool         # Whether we are actively filling the canonical chain
     chainTTD : DifficultyInt
-    chainDB  : BaseChainDB
+    chainDB  : ChainDBRef
     chain    : Chain
 
     # config

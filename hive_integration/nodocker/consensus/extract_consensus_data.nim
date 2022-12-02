@@ -12,7 +12,7 @@ import
   std/[json, strutils, options],
   stew/byteutils,
   ../../../tools/common/helpers,
-  ../../../nimbus/chain_config
+  ../../../nimbus/common/chain_config
 
 type
   ChainData* = object

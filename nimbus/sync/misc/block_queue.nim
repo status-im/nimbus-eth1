@@ -62,7 +62,8 @@ import
   chronos,
   eth/[common, p2p],
   stew/[byteutils, interval_set, sorted_set],
-  "../.."/[db/db_chain, utils],
+  ../../db/db_chain,
+  ../../utils/utils,
   ".."/[protocol, sync_desc, types]
 
 {.push raises:[Defect].}

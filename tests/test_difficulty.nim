@@ -1,7 +1,11 @@
-import unittest2, strutils, tables, os, json,
-  ../nimbus/utils/difficulty, stint, times,
-  eth/common, test_helpers, stew/byteutils,
-  ../nimbus/constants, ../nimbus/chain_config
+import
+  std/[strutils, tables, os, json, times],
+  unittest2,
+  stew/byteutils,
+  ../nimbus/core/pow/difficulty,
+  ../nimbus/constants,
+  ../nimbus/common/common,
+  test_helpers
 
 type
   Tester = object
@@ -60,13 +64,13 @@ template runTests(name: string, hex: bool, calculator: typed) =
       check diff == t.currentDifficulty
 
 proc difficultyMain*() =
-  let mainnetConfig = networkParams(MainNet).config
-  func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-    mainnetConfig.calcDifficulty(timeStamp, parent)
+  let mainnetCom = CommonRef.new(nil, chainConfigForNetwork(MainNet))
+  func calcDifficultyMainNet(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+    mainnetCom.calcDifficulty(timeStamp, parent)
 
-  let ropstenConfig = networkParams(RopstenNet).config
+  let ropstenCom = CommonRef.new(nil, chainConfigForNetwork(RopstenNet))
   func calcDifficultyRopsten(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-    ropstenConfig.calcDifficulty(timeStamp, parent)
+    ropstenCom.calcDifficulty(timeStamp, parent)
 
   suite "DifficultyTest":
     runTests("EIP2384_random_to20M", true, calcDifficultyMuirGlacier)
@@ -75,9 +79,9 @@ proc difficultyMain*() =
     runTests("Byzantium", true, calcDifficultyByzantium)
     runTests("Constantinople", true, calcDifficultyConstantinople)
     runTests("Homestead", true, calcDifficultyHomestead)
-    runTests("MainNetwork", true, calcDifficultyMainNetwork)
+    runTests("MainNetwork", true, calcDifficultyMainNet)
     runTests("Frontier", true, calcDifficultyFrontier)
-    runTests("", false, calcDifficultyMainNetWork)
+    runTests("", false, calcDifficultyMainNet)
     runTests("Ropsten", true, calcDifficultyRopsten)
 
 when isMainModule:

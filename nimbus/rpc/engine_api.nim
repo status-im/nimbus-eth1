@@ -12,19 +12,19 @@ import
   stew/[objects, results, byteutils],
   json_rpc/[rpcserver, errors],
   web3/[conversions, engine_api_types],
-  eth/[rlp, common],
-  ".."/db/db_chain,
-  ".."/p2p/chain/[chain_desc, persist_blocks],
-  ".."/[sealer, constants],
-  ".."/merge/[mergetypes, mergeutils],
-  ".."/utils/tx_pool,
+  eth/rlp,
+  ../common/common,
+  ".."/core/chain/[chain_desc, persist_blocks],
+  ../constants,
+  ../core/[tx_pool, sealer],
+  ./merge/[mergetypes, mergeutils],
   # put chronicles import last because Nim
   # compiler resolve `$` for logging
   # arguments differently on Windows vs posix
   # if chronicles import is in the middle
   chronicles
 
-proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
+proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:
     parent.blockHash
@@ -33,12 +33,12 @@ proc latestValidHash(db: BaseChainDB, parent: EthBlockHeader, ttd: DifficultyInt
     # latestValidHash MUST be set to ZERO
     Hash256()
 
-proc invalidFCU(db: BaseChainDB, header: EthBlockHeader): ForkchoiceUpdatedResponse =
+proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedResponse =
   var parent: EthBlockHeader
-  if not db.getBlockHeader(header.parentHash, parent):
+  if not com.db.getBlockHeader(header.parentHash, parent):
     return invalidFCU(Hash256())
 
-  let blockHash = latestValidHash(db, parent, db.ttd())
+  let blockHash = latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
   invalidFCU(blockHash)
 
 proc setupEngineApi*(
@@ -46,8 +46,9 @@ proc setupEngineApi*(
     server: RpcServer,
     merger: MergerRef) =
 
-  # TODO: put this singleton somewhere else
-  let api = EngineApiRef.new(merger)
+  let
+    api = EngineApiRef.new(merger)
+    com = sealingEngine.chain.com
 
   # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
@@ -103,7 +104,7 @@ proc setupEngineApi*(
     # triggering too early
     let
       td  = db.getScore(header.parentHash)
-      ttd = db.ttd()
+      ttd = com.ttd.get(high(common.BlockNumber))
 
     if td < ttd:
       warn "Ignoring pre-merge payload",
@@ -159,7 +160,7 @@ proc setupEngineApi*(
       blockHash = conf.terminalBlockHash
 
     let db = sealingEngine.chain.db
-    let ttd = db.ttd()
+    let ttd = com.ttd.get(high(common.BlockNumber))
 
     if conf.terminalTotalDifficulty != ttd:
       raise newException(ValueError, "invalid ttd: EL $1 CL $2" % [$ttd, $conf.terminalTotalDifficulty])
@@ -246,7 +247,7 @@ proc setupEngineApi*(
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       var
         td, ptd: DifficultyInt
-        ttd = db.ttd()
+        ttd = com.ttd.get(high(common.BlockNumber))
 
       if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
         error "TDs unavailable for TTD check",
@@ -275,9 +276,9 @@ proc setupEngineApi*(
       # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
       warn "Reorg to previous block"
       if chain.setCanonical(header) != ValidationResult.OK:
-        return invalidFCU(db, header)
+        return invalidFCU(com, header)
     elif chain.setCanonical(header) != ValidationResult.OK:
-      return invalidFCU(db, header)
+      return invalidFCU(com, header)
 
     # If the beacon client also advertised a finalized block, mark the local
     # chain final and completely in PoS mode.

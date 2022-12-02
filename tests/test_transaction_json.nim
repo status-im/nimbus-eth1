@@ -1,8 +1,10 @@
 import
-  unittest2, json, os, tables, strutils,
-  eth/[common, rlp],
+  std/[json, os, tables, strutils],
+  unittest2,
+  eth/rlp,
   ./test_helpers,
-  ../nimbus/[transaction, utils, errors]
+  ../nimbus/[transaction, errors],
+  ../nimbus/utils/utils
 
 const
   FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]

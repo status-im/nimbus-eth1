@@ -11,7 +11,7 @@
 import
   std/[tables],
   eth/common,
-  ../../nimbus/[chain_config],
+  ../../nimbus/common/chain_config,
   ../common/types
 
 export

@@ -1,5 +1,5 @@
 import
-  eth/common, eth/trie/[db, nibbles], algorithm,
+  eth/common, eth/trie/nibbles, algorithm,
   ./witness_types
 
 type

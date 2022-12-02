@@ -12,7 +12,7 @@ func vmName(): string =
   when defined(evmc_enabled):
     "evmc"
   else:
-    "vm2"
+    "nimvm"
 
 const
   VmName* = vmName()

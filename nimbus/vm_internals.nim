@@ -11,7 +11,7 @@
 # At the moment, this header file interface is only used for testing.
 
 import
-  ./vm2/memory as vmm
+  ./evm/memory as vmm
 
 export
   vmm.Memory,
@@ -26,7 +26,7 @@ when defined(evmc_enabled):
     vmm.readPtr
 
 import
-  ./vm2/interpreter/utils/utils_numeric as vmn
+  ./evm/interpreter/utils/utils_numeric as vmn
 
 
 export
@@ -46,13 +46,13 @@ export
 
 # Wrapping the wrapper -- lol
 import
-  ./vm2/code_stream as aCst,
-  ./vm2/computation as bChp,
-  ./vm2/interpreter_dispatch as cVmc,
-  ./vm2/interpreter/gas_meter as eGmt,
-  ./vm2/interpreter/op_codes as fVmo,
-  ./vm2/message as gVmg,
-  ./vm2/stack as hStk
+  ./evm/code_stream as aCst,
+  ./evm/computation as bChp,
+  ./evm/interpreter_dispatch as cVmc,
+  ./evm/interpreter/gas_meter as eGmt,
+  ./evm/interpreter/op_codes as fVmo,
+  ./evm/message as gVmg,
+  ./evm/stack as hStk
 export
   aCst.CodeStream,
   aCst.`$`,

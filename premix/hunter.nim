@@ -1,13 +1,14 @@
 import
   std/[json, tables, hashes],
-
-  eth/common, eth/trie/[trie_defs, db],
+  eth/trie/trie_defs,
   stint, stew/byteutils, chronicles,
-
-  ../nimbus/[tracer, vm_state, utils, vm_types],
-  ../nimbus/db/[db_chain, state_db],
-  ../nimbus/p2p/executor, premixcore,
-  "."/configuration, downloader, parser
+  ../nimbus/[vm_state, vm_types],
+  ../nimbus/utils/utils,
+  ../nimbus/tracer,
+  ../nimbus/db/state_db,
+  ../nimbus/core/executor,
+  ../nimbus/common/common,
+  "."/[configuration, downloader, parser, premixcore]
 
 const
   emptyCodeHash = blankStringHash
@@ -66,9 +67,9 @@ type
 proc hash*(x: UInt256): Hash =
   result = hash(x.toByteArrayBE)
 
-proc new(T: type HunterVMState; parent, header: BlockHeader, chainDB: BaseChainDB): T =
+proc new(T: type HunterVMState; parent, header: BlockHeader, com: CommonRef): T =
   new result
-  result.init(parent, header, chainDB)
+  result.init(parent, header, com)
   result.headers = initTable[BlockNumber, BlockHeader]()
 
 method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
@@ -80,7 +81,7 @@ method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash2
     result = header.hash
     vmState.headers[blockNumber] = header
 
-proc putAncestorsIntoDB(vmState: HunterVMState, db: BaseChainDB) =
+proc putAncestorsIntoDB(vmState: HunterVMState, db: ChainDBRef) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 
@@ -93,20 +94,20 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
     memoryDB     = prepareBlockEnv(parentBlock.header, thisBlock)
 
     # try to execute current block
-    chainDB = newBaseChainDB(memoryDB, false)
+    com = CommonRef.new(memoryDB, false)
 
-  discard chainDB.setHead(parentBlock.header, true)
+  discard com.db.setHead(parentBlock.header, true)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = HunterVMState.new(parentBlock.header, thisBlock.header, chainDB)
+    vmState = HunterVMState.new(parentBlock.header, thisBlock.header, com)
     validationResult = vmState.processBlockNotPoA(thisBlock.header, thisBlock.body)
 
   if validationResult != ValidationResult.OK:
     transaction.rollback()
-    putAncestorsIntoDB(vmState, chainDB)
-    dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState, false)
+    putAncestorsIntoDB(vmState, com.db)
+    dumpDebuggingMetaData(com, thisBlock.header, thisBlock.body, vmState, false)
 
   result = validationResult
 

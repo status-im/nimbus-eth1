@@ -12,7 +12,7 @@ import
   stew/[byteutils, io2, results], chronicles,
   eth/[rlp, common/eth_types],
   ncli/e2store,
-  ../../nimbus/[chain_config, genesis],
+  ../../nimbus/common/[chain_config, genesis],
   ../network/history/[history_content, accumulator]
 
 export results, tables

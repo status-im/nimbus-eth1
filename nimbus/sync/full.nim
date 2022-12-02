@@ -58,7 +58,7 @@ proc runMulti(buddy: FullBuddyRef) {.async.} =
 proc init*(
     T: type FullSyncRef;
     ethNode: EthereumNode;
-    chain: Chain;
+    chain: ChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
     enableTicker = false): T =

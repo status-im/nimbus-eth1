@@ -12,8 +12,8 @@
 # The VM computation module suffers from a circular include/import dependency.
 # After fixing this wrapper should be re-factored.
 import
-  ./vm2/computation as vmc,
-  ./vm2/interpreter_dispatch as vmi
+  ./evm/computation as vmc,
+  ./evm/interpreter_dispatch as vmi
 export
   vmi.execCallOrCreate,
   vmi.executeOpcodes

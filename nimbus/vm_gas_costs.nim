@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ./vm2/interpreter/gas_costs as vmg
+  ./evm/interpreter/gas_costs as vmg
 
 export
   vmg.Bls12381G1AddGas,

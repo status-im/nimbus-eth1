@@ -1,16 +1,16 @@
 import
   macrocache, strutils, sequtils, unittest2, times,
-  stew/byteutils, chronicles, eth/[common, keys],
+  stew/byteutils, chronicles, eth/keys,
   stew/shims/macros
 
 import
-  options, eth/trie/[db, hexary],
-  ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/vm2/[async_operations, types],
-  ../nimbus/vm_internals, ../nimbus/forks,
+  eth/trie/hexary,
+  ../nimbus/db/accounts_cache,
+  ../nimbus/evm/[async_operations, types],
+  ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
-  ../nimbus/[transaction, chain_config, genesis, vm_types, vm_state],
-  ../nimbus/utils/difficulty
+  ../nimbus/[transaction, vm_types, vm_state],
+  ../nimbus/core/pow/difficulty
 
 # Need to exclude ServerCommand because it contains something
 # called Stop that interferes with the EVM operation named Stop.
@@ -46,7 +46,7 @@ type
     gasUsed*: GasInt
     data*: seq[byte]
     output*: seq[byte]
-    fork*: Fork
+    fork*: EVMFork
 
   ConcurrencyTest* = object
     title*: string
@@ -192,11 +192,11 @@ proc parseCode(codes: NimNode): seq[byte] =
     else:
       error("unknown syntax: " & line.toStrLit.strVal, line)
 
-proc parseFork(fork: NimNode): Fork =
+proc parseFork(fork: NimNode): EVMFork =
   fork[0].expectKind({nnkIdent, nnkStrLit})
-  # Normalise whitespace and capitalize each word because `parseEnum` matches
-  # enum string values not symbols, and the strings are capitalized in `Fork`.
-  parseEnum[Fork](fork[0].strVal.splitWhitespace().map(capitalizeAscii).join(" "))
+  # Normalise whitespace and uppercase each word because `parseEnum` matches
+  # enum string values not symbols, and the strings are uppercase in `EVMFork`.
+  parseEnum[EVMFork]("EVMC_" & fork[0].strVal.splitWhitespace().map(toUpperAscii).join("_"))
 
 proc parseGasUsed(gas: NimNode): GasInt =
   gas[0].expectKind(nnkIntLit)
@@ -314,12 +314,12 @@ proc generateConcurrencyTest(t: ConcurrencyTest): NimNode =
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal
 
-proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
-  let db = newBaseChainDB(newMemoryDB(), false, networkId, networkParams(networkId))
-  initializeEmptyDb(db)
+proc initDatabase*(networkId = MainNet): (BaseVMState, CommonRef) =
+  let com = CommonRef.new(newMemoryDB(), false, networkId, networkParams(networkId))
+  com.initializeEmptyDb()
 
   let
-    parent = getCanonicalHead(db)
+    parent = getCanonicalHead(com.db)
     coinbase = hexToByteArray[20]("bb7b8287f3f0a933474a79eae42cbca977791171")
     timestamp = parent.timestamp + initDuration(seconds = 1)
     header = BlockHeader(
@@ -328,16 +328,16 @@ proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
       parentHash: parent.blockHash,
       coinbase: coinbase,
       timestamp: timestamp,
-      difficulty: db.config.calcDifficulty(timestamp, parent),
+      difficulty: com.calcDifficulty(timestamp, parent),
       gasLimit: 100_000
     )
-    vmState = BaseVMState.new(header, db)
+    vmState = BaseVMState.new(header, com)
 
-  (vmState, db)
+  (vmState, com)
 
 const codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
 
-proc verifyAsmResult(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asmResult: CallResult): bool =
+proc verifyAsmResult(vmState: BaseVMState, com: CommonRef, boa: Assembler, asmResult: CallResult): bool =
   if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
@@ -382,7 +382,7 @@ proc verifyAsmResult(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler,
 
   var
     storageRoot = stateDB.getStorageRoot(codeAddress)
-    trie = initSecureHexaryTrie(chainDB.db, storageRoot)
+    trie = initSecureHexaryTrie(com.db.db, storageRoot)
 
   for kv in boa.storage:
     let key = kv[0].toHex()
@@ -443,24 +443,24 @@ proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
   )
   signTransaction(unsignedTx, privateKey, chainId, false)
 
-proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): bool =
+proc runVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler, asyncFactory: AsyncOperationFactory): bool =
   vmState.asyncFactory = asyncFactory
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
-  let tx = createSignedTx(boa.data, chainDB.config.chainId)
+  let tx = createSignedTx(boa.data, com.chainId)
   let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
-  verifyAsmResult(vmState, chainDB, boa, asmResult)
+  verifyAsmResult(vmState, com, boa, asmResult)
 
 # FIXME-duplicatedForAsync
-proc asyncRunVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler, asyncFactory: AsyncOperationFactory): Future[bool] {.async.} =
+proc asyncRunVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler, asyncFactory: AsyncOperationFactory): Future[bool] {.async.} =
   vmState.asyncFactory = asyncFactory
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
-  let tx = createSignedTx(boa.data, chainDB.config.chainId)
+  let tx = createSignedTx(boa.data, com.chainId)
   let asmResult = await asyncTestCallEvm(tx, tx.getSender, vmState, boa.fork)
-  return verifyAsmResult(vmState, chainDB, boa, asmResult)
+  return verifyAsmResult(vmState, com, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =
   result = parseAssembler(list).generateAssemblerTest()

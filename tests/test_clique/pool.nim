@@ -10,13 +10,13 @@
 
 import
   std/[algorithm, random, sequtils, strformat, strutils, tables, times],
-  eth/[common, keys, rlp, trie/db],
+  eth/[keys, rlp],
   ethash,
   secp256k1/abi,
   stew/objects,
-  ../../nimbus/[config, chain_config, constants, genesis],
-  ../../nimbus/db/db_chain,
-  ../../nimbus/p2p/[chain,
+  ../../nimbus/[config, constants],
+  ../../nimbus/common/common,
+  ../../nimbus/core/[chain,
                     clique,
                     clique/clique_desc,
                     clique/clique_genvote,
@@ -47,7 +47,7 @@ type
     networkId: NetworkId
     boot: NetworkParams                ## imported Genesis configuration
     batch: seq[seq[BlockHeader]]       ## collect header chains
-    chain: Chain
+    chain: ChainRef
 
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
@@ -59,11 +59,11 @@ type
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.clique.db.getBlockHeader(number, result)
+  doAssert ap.chain.clique.com.db.getBlockHeader(number, result)
 
 proc getBlockHeader(ap: TesterPool; hash: Hash256): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.clique.db.getBlockHeader(hash, result)
+  doAssert ap.chain.clique.com.db.getBlockHeader(hash, result)
 
 proc isZero(a: openArray[byte]): bool =
   result = true
@@ -243,17 +243,16 @@ proc pp(ap: TesterPool; v: BlockHeader; indent = 3): string =
 
 proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
-  let chainDB = newBaseChainDB(
-    newMemoryDb(),
-    id = ap.networkId,
-    params = ap.boot)
-  ap.chain = newChain(chainDB)
-  ap.chain.clique.db.populateProgress
-
   # new genesis block
   if 0 < extraData.len:
-    chainDB.genesis.extraData = extraData
-  initializeEmptyDB(chainDB)
+    ap.boot.genesis.extraData = extraData
+
+  let com = CommonRef.new(
+    newMemoryDb(),
+    networkId = ap.networkId,
+    params = ap.boot)
+  ap.chain = newChain(com)
+  com.initializeEmptyDB()
   ap.noisy = debug
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
@@ -297,7 +296,7 @@ proc newVoterPool*(networkId = GoerliNet): TesterPool =
 # Public: getter
 # ------------------------------------------------------------------------------
 
-proc chain*(ap: TesterPool): Chain =
+proc chain*(ap: TesterPool): ChainRef =
   ## Getter
   ap.chain
 
@@ -305,9 +304,9 @@ proc clique*(ap: TesterPool): Clique =
   ## Getter
   ap.chain.clique
 
-proc db*(ap: TesterPool): BaseChainDB =
+proc db*(ap: TesterPool): ChainDBRef =
   ## Getter
-  ap.clique.db
+  ap.clique.com.db
 
 proc cliqueSigners*(ap: TesterPool): seq[EthAddress] =
   ## Getter
@@ -444,7 +443,7 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
 
         # Realign rest of transaction to existing block chain
         if reChainOk:
-          var parent = ap.chain.clique.db.getCanonicalHead
+          var parent = ap.chain.clique.com.db.getCanonicalHead
           for i in 0 ..< headers.len:
             headers[i].parentHash = parent.blockHash
             headers[i].blockNumber = parent.blockNumber + 1

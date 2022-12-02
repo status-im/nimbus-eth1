@@ -9,16 +9,16 @@
 
 import
   std/[json, os, sets, strutils, typetraits],
-  unittest2, eth/common as eth_common,
-  json_rpc/[rpcserver, rpcclient], web3/[engine_api_types],
-  eth/[trie/db, p2p/private/p2p_types],
+  unittest2,
+  json_rpc/[rpcserver, rpcclient],
+  web3/[engine_api_types],
+  eth/[p2p/private/p2p_types],
   ../nimbus/sync/protocol,
-  ../nimbus/rpc/[p2p, engine_api],
-  ../nimbus/db/[db_chain],
-  ../nimbus/[config, context, genesis, sealer],
-  ../nimbus/utils/[tx_pool],
-  ../nimbus/p2p/chain,
-  ../nimbus/merge/[mergetypes, merger],
+  ../nimbus/rpc,
+  ../nimbus/common,
+  ../nimbus/config,
+  ../nimbus/core/[sealer, tx_pool, chain],
+  ../nimbus/rpc/merge/[mergetypes, merger],
   ./test_helpers
 
 const
@@ -80,27 +80,27 @@ proc runTest(steps: Steps) =
     conf = makeConfig(@["--custom-network:" & paramsFile])
     ctx  = newEthContext()
     ethNode = setupEthNode(conf, ctx, eth)
-    chainDB = newBaseChainDB(
+    com = CommonRef.new(
       newMemoryDb(),
       conf.pruneMode == PruneMode.Full,
       conf.networkId,
       conf.networkParams
     )
-    chainRef = newChain(chainDB)
+    chainRef = newChain(com)
 
-  initializeEmptyDb(chainDB)
+  com.initializeEmptyDb()
 
   var
     rpcServer = newRpcSocketServer(["localhost:" & $conf.rpcPort])
     client = newRpcSocketClient()
-    txPool = TxPoolRef.new(chainDB, conf.engineSigner)
+    txPool = TxPoolRef.new(com, conf.engineSigner)
     sealingEngine = SealingEngineRef.new(
       chainRef, ctx, conf.engineSigner,
       txPool, EnginePostMerge
     )
-    merger = MergerRef.new(chainDB)
+    merger = MergerRef.new(com.db)
 
-  setupEthRpc(ethNode, ctx, chainDB, txPool, rpcServer)
+  setupEthRpc(ethNode, ctx, com, txPool, rpcServer)
   setupEngineAPI(sealingEngine, rpcServer, merger)
 
   sealingEngine.start()

@@ -1,6 +1,7 @@
 import
-  parseopt, strutils,
-  ../nimbus/forks
+  std/[parseopt, strutils, tables],
+  ../nimbus/common/evmforks,
+  ./test_helpers
 
 type
   ConfigStatus* = enum
@@ -14,7 +15,7 @@ type
 
   Configuration = ref object
     testSubject*: string
-    fork*: Fork
+    fork*: EVMFork
     index*: int
     trace*: bool
     legacy*: bool
@@ -46,7 +47,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       config.testSubject = key
     of cmdLongOption, cmdShortOption:
       case key.toLowerAscii()
-      of "fork": config.fork = parseEnum[Fork](strip(value))
+      of "fork": config.fork = nameToFork[strip(value)]
       of "index": config.index = parseInt(value)
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)

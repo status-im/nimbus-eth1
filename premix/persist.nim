@@ -1,15 +1,14 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
-  eth/[common, rlp], stint,
+  eth/rlp,
   chronicles, configuration,
-  ../nimbus/[errors, chain_config]
-
-import
-  eth/trie/[hexary, db],
-  ../nimbus/db/[storage_types, db_chain, select_backend],
-  ../nimbus/[genesis],
-  ../nimbus/p2p/chain
+  ../nimbus/errors,
+  eth/trie/hexary,
+  ../nimbus/db/select_backend,
+  ../nimbus/db/storage_types,
+  ../nimbus/core/chain,
+  ../nimbus/common
 
 when defined(graphql):
   import graphql_downloader
@@ -42,21 +41,21 @@ proc main() {.used.} =
   let conf = configuration.getConfiguration()
   let db = newChainDB(conf.dataDir)
   let trieDB = trieDB db
-  let chainDB = newBaseChainDB(trieDB, false, conf.netId, networkParams(conf.netId))
+  let com = CommonRef.new(trieDB, false, conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
   if conf.head != 0.u256:
     var parentBlock = requestBlock(conf.head)
-    discard chainDB.setHead(parentBlock.header)
+    discard com.db.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):
-      initializeEmptyDb(chainDB)
+      com.initializeEmptyDb()
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
-  var head = chainDB.getCanonicalHead()
+  var head = com.db.getCanonicalHead()
   var blockNumber = head.blockNumber + 1
-  var chain = newChain(chainDB)
+  var chain = newChain(com)
 
   let numBlocksToCommit = conf.numCommits
 

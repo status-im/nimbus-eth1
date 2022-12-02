@@ -1,9 +1,10 @@
 import
   std/tables,
-  eth/[common, rlp],
+  eth/[common, rlp, eip1559],
   chronicles, eth/trie/[db, trie_defs],
-  ./db/[db_chain, state_db],
-  "."/[constants, chain_config, forks, p2p/gaslimit]
+  ../db/state_db,
+  ../constants,
+  ./chain_config
 
 {.push raises: [Defect].}
 
@@ -13,7 +14,7 @@ import
 proc newStateDB*(db: TrieDatabaseRef, pruneTrie: bool): AccountStateDB =
   newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
-proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
+proc toGenesisHeader*(g: Genesis, sdb: AccountStateDB, fork: HardFork): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
@@ -24,9 +25,7 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
   # For `eth/trie/db.newMemoryDB()`, the following initialisation is part of
   # the constructor function which is missing for the permanent constructor
   # function `eth/trie/db.trieDB()`.
-  db.db.put(emptyRlpHash.data, emptyRlp)
-
-  let g = db.genesis
+  sdb.db.put(emptyRlpHash.data, emptyRlp)
 
   for address, account in g.alloc:
     sdb.setAccount(address, newAccount(account.nonce, account.balance))
@@ -55,8 +54,8 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     #
     # This kludge also fixes the initial crash described in
     # https://github.com/status-im/nimbus-eth1/issues/932.
-    if not db.isNil and db.pruneTrie and 0 < account.storage.len:
-      db.db.put(emptyRlpHash.data, emptyRlp) # <-- kludge
+    if sdb.pruneTrie and 0 < account.storage.len:
+      sdb.db.put(emptyRlpHash.data, emptyRlp) # <-- kludge
 
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
@@ -76,45 +75,34 @@ proc toGenesisHeader*(db: BaseChainDB, sdb: AccountStateDB): BlockHeader
     ommersHash: EMPTY_UNCLE_HASH
   )
 
-  let fork = db.config.toFork(0.toBlockNumber)
   if g.baseFeePerGas.isSome:
     result.baseFee = g.baseFeePerGas.get()
-  elif fork >= FkLondon:
+  elif fork >= London:
     result.baseFee = EIP1559_INITIAL_BASE_FEE.u256
 
   if g.gasLimit.isZero:
     result.gasLimit = GENESIS_GAS_LIMIT
 
-  if g.difficulty.isZero and fork <= FkLondon:
+  if g.difficulty.isZero and fork <= London:
     result.difficulty = GENESIS_DIFFICULTY
 
-proc toGenesisHeader*(params: NetworkParams): BlockHeader
+proc toGenesisHeader*(genesis: Genesis, fork: HardFork, db: TrieDatabaseRef = nil): BlockHeader
     {.raises: [Defect, RlpError].} =
-  ## Generate the genesis block header from the `params` argument value.
-  let cdb = newBaseChainDB(
-    db        = newMemoryDB(),
-    id        = params.config.chainId.NetworkId,
-    params    = params,
-    pruneTrie = true)
-  let sdb = newStateDB(cdb.db, cdb.pruneTrie)
-  cdb.toGenesisHeader(sdb)
+  ## Generate the genesis block header from the `genesis` and `config` argument value.
+  let
+    db  = if db.isNil: newMemoryDB() else: db
+    sdb = newStateDB(db, pruneTrie = true)
+  toGenesisHeader(genesis, sdb, fork)
 
-proc toGenesisHeader*(db: BaseChainDB): BlockHeader
+proc toGenesisHeader*(params: NetworkParams, db: TrieDatabaseRef = nil): BlockHeader
     {.raises: [Defect, RlpError].} =
-  ## Generate the genesis block header from the `genesis` and `config`
-  ## fields of the argument `db` descriptor.
-  NetworkParams(
-    config:  db.config,
-    genesis: db.genesis).toGenesisHeader()
+  ## Generate the genesis block header from the `genesis` and `config` argument value.
+  let map  = toForkToBlockNumber(params.config)
+  let fork = map.toHardFork(0.toBlockNumber)
+  toGenesisHeader(params.genesis, fork, db)
 
-proc initializeEmptyDb*(cdb: BaseChainDB)
-    {.raises: [Defect, CatchableError].} =
-  trace "Writing genesis to DB"
-  let sdb = newStateDB(cdb.db, cdb.pruneTrie)
-  let header = cdb.toGenesisHeader(sdb)
-  doAssert(header.blockNumber.isZero, "can't commit genesis block with number > 0")
-  # faster lookup of curent total difficulty
-  discard cdb.persistHeaderToDb(header)
+
+
 
 # ------------------------------------------------------------------------------
 # End

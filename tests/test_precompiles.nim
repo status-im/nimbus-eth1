@@ -6,19 +6,16 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strformat, strutils, json, os, tables, macros, options],
+  std/[strformat, strutils, json, os, tables, macros],
   unittest2, stew/byteutils,
-  eth/[trie/db, common, keys],
-
+  eth/keys,
+  ../nimbus/common/common,
   ../nimbus/[vm_computation,
     vm_state,
     vm_types,
-    forks,
     constants,
-    chain_config,
     vm_precompiles,
     transaction,
-    db/db_chain,
     transaction/call_evm
     ],
 
@@ -26,7 +23,7 @@ import
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
-template doTest(fixture: JsonNode; vmState: BaseVMState; fork: Fork, address: PrecompileAddresses): untyped =
+template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address: PrecompileAddresses): untyped =
   for test in fixture:
     let
       expectedErr = test.hasKey("ExpectedError")
@@ -59,16 +56,23 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: Fork, address: Pr
           debugEcho "GAS: ", fixtureResult.gasUsed, " ", gasExpected
         check fixtureResult.gasUsed == gasExpected
 
+proc parseFork(x: string): EVMFork =
+  let x = x.toLowerAscii
+  for name, fork in nameToFork:
+    if name.toLowerAscii == x:
+      return fork
+  doAssert(false, "unsupported fork name " & x)
+
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
-    fork  = parseEnum[Fork](fixtures["fork"].getStr.toLowerAscii)
+    fork  = parseFork(fixtures["fork"].getStr)
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
     vmState = BaseVMState.new(
       BlockHeader(blockNumber: 1.u256),
       BlockHeader(),
-      newBaseChainDB(newMemoryDB(), config = ChainConfig())
+      CommonRef.new(newMemoryDB(), config = ChainConfig())
     )
 
   case toLowerAscii(label)

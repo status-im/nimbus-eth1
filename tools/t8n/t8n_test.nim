@@ -233,7 +233,7 @@ const
       expOut: "exp_berlin.json",
     ),
     TestSpec(
-      name  : "Difficulty calculation on arrow glacier",
+      name  : "Difficulty calculation on london",
       base  : "testdata/19",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "London", "",
@@ -272,7 +272,7 @@ const
       name  : "Test post-merge transition",
       base  : "testdata/24",
       input : t8nInput(
-        "alloc.json", "txs.json", "env.json", "Merged", "",
+        "alloc.json", "txs.json", "env.json", "Merge", "",
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -281,7 +281,7 @@ const
       name  : "Test post-merge transition where input is missing random",
       base  : "testdata/24",
       input : t8nInput(
-        "alloc.json", "txs.json", "env-missingrandom.json", "Merged", "",
+        "alloc.json", "txs.json", "env-missingrandom.json", "Merge", "",
       ),
       output: T8nOutput(alloc: false, result: false),
       expExitCode: ErrorConfig.int,
