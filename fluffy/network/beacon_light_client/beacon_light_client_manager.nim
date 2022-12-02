@@ -16,7 +16,7 @@ import
   beacon_chain/beacon_clock,
   "."/[light_client_network, light_client_content]
 
-from beacon_chain/consensus_object_pools/block_pools_types import BlockError
+from beacon_chain/consensus_object_pools/block_pools_types import VerifierError
 
 logScope:
   topics = "lcman"
@@ -40,7 +40,7 @@ type
     Endpoint[Slot, altair.LightClientOptimisticUpdate]
 
   ValueVerifier[V] =
-    proc(v: V): Future[Result[void, BlockError]] {.gcsafe, raises: [Defect].}
+    proc(v: V): Future[Result[void, VerifierError]] {.gcsafe, raises: [Defect].}
   BootstrapVerifier* =
     ValueVerifier[altair.LightClientBootstrap]
   UpdateVerifier* =
@@ -204,19 +204,19 @@ proc workerTask[E](
         let res = await self.valueVerifier(E)(val)
         if res.isErr:
           case res.error
-          of BlockError.MissingParent:
+          of VerifierError.MissingParent:
             # Stop, requires different request to progress
             return didProgress
-          of BlockError.Duplicate:
+          of VerifierError.Duplicate:
             # Ignore, a concurrent request may have already fulfilled this
             when E.V is altair.LightClientBootstrap:
               didProgress = true
             else:
               discard
-          of BlockError.UnviableFork:
+          of VerifierError.UnviableFork:
             notice "Received value from an unviable fork", value = val.shortLog
             return didProgress
-          of BlockError.Invalid:
+          of VerifierError.Invalid:
             warn "Received invalid value", value = val.shortLog
             return didProgress
         else:

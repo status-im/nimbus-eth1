@@ -17,6 +17,63 @@ import
   stint,
   web3
 
+type
+  ExecutionData* = object
+    parentHash*: BlockHash
+    feeRecipient*: Address
+    stateRoot*: BlockHash
+    receiptsRoot*: BlockHash
+    logsBloom*: FixedBytes[256]
+    prevRandao*: FixedBytes[32]
+    blockNumber*: Quantity
+    gasLimit*: Quantity
+    gasUsed*: Quantity
+    timestamp*: Quantity
+    extraData*: DynamicBytes[0, 32]
+    baseFeePerGas*: UInt256
+    blockHash*: BlockHash
+    transactions*: seq[TypedTransaction]
+    withdrawals*: seq[WithdrawalV1]
+
+proc asExecutionData*(
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2): ExecutionData =
+  when payload is ExecutionPayloadV1:
+    return ExecutionData(
+      parentHash: payload.parentHash,
+      feeRecipient: payload.feeRecipient,
+      stateRoot: payload.stateRoot,
+      receiptsRoot: payload.receiptsRoot,
+      logsBloom: payload.logsBloom,
+      prevRandao: payload.prevRandao,
+      blockNumber: payload.blockNumber,
+      gasLimit: payload.gasLimit,
+      gasUsed: payload.gasUsed,
+      timestamp: payload.timestamp,
+      extraData: payload.extraData,
+      baseFeePerGas: payload.baseFeePerGas,
+      blockHash: payload.blockHash,
+      transactions: payload.transactions,
+      withdrawals: @[]
+    )
+  else:
+    return ExecutionData(
+      parentHash: payload.parentHash,
+      feeRecipient: payload.feeRecipient,
+      stateRoot: payload.stateRoot,
+      receiptsRoot: payload.receiptsRoot,
+      logsBloom: payload.logsBloom,
+      prevRandao: payload.prevRandao,
+      blockNumber: payload.blockNumber,
+      gasLimit: payload.gasLimit,
+      gasUsed: payload.gasUsed,
+      timestamp: payload.timestamp,
+      extraData: payload.extraData,
+      baseFeePerGas: payload.baseFeePerGas,
+      blockHash: payload.blockHash,
+      transactions: payload.transactions,
+      withdrawals: payload.withdrawals
+    )
+
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
 
@@ -44,7 +101,7 @@ proc calculateTransactionData(
   return (tr.rootHash(), txHashes, txSize)
 
 func blockHeaderSize(
-    payload: ExecutionPayloadV1, txRoot: etypes.Hash256): uint64 =
+    payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
   let bh = etypes.BlockHeader(
     parentHash    : payload.parentHash.asEthHash,
     ommersHash    : etypes.EMPTY_UNCLE_HASH,
@@ -66,7 +123,7 @@ func blockHeaderSize(
   return uint64(len(rlp.encode(bh)))
 
 proc asBlockObject*(
-    p: ExecutionPayloadV1): BlockObject {.raises: [Defect, RlpError].} =
+    p: ExecutionData): BlockObject {.raises: [Defect, RlpError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level
