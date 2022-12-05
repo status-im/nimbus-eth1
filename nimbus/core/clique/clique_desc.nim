@@ -159,9 +159,9 @@ proc cfg*(c: Clique): CliqueCfg =
   ## Getter
   c.cfg
 
-proc com*(c: Clique): CommonRef =
+proc db*(c: Clique): ChainDBRef =
   ## Getter
-  c.cfg.com
+  c.cfg.db
 
 proc applySnapsMinBacklog*(c: Clique): bool =
   ## Getter.
@@ -180,9 +180,9 @@ proc applySnapsMinBacklog*(c: Clique): bool =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `com=`*(c: Clique; com: CommonRef) =
+proc `db=`*(c: Clique; db: ChainDBRef) =
   ## Setter, re-set database
-  c.cfg.com = com
+  c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()
 
 proc `snapshot=`*(c: Clique; snaps: Snapshot) =

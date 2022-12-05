@@ -59,11 +59,11 @@ type
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.clique.com.db.getBlockHeader(number, result)
+  doAssert ap.chain.clique.db.getBlockHeader(number, result)
 
 proc getBlockHeader(ap: TesterPool; hash: Hash256): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.clique.com.db.getBlockHeader(hash, result)
+  doAssert ap.chain.clique.db.getBlockHeader(hash, result)
 
 proc isZero(a: openArray[byte]): bool =
   result = true
@@ -306,7 +306,7 @@ proc clique*(ap: TesterPool): Clique =
 
 proc db*(ap: TesterPool): ChainDBRef =
   ## Getter
-  ap.clique.com.db
+  ap.clique.db
 
 proc cliqueSigners*(ap: TesterPool): seq[EthAddress] =
   ## Getter
@@ -443,7 +443,7 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
 
         # Realign rest of transaction to existing block chain
         if reChainOk:
-          var parent = ap.chain.clique.com.db.getCanonicalHead
+          var parent = ap.chain.clique.db.getCanonicalHead
           for i in 0 ..< headers.len:
             headers[i].parentHash = parent.blockHash
             headers[i].blockNumber = parent.blockNumber + 1

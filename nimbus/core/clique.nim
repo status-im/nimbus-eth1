@@ -19,8 +19,8 @@
 ##
 
 import
-  std/[sequtils, times],
-  ./clique/[clique_cfg, clique_defs, clique_desc, clique_verify],
+  std/[times],
+  ./clique/[clique_cfg, clique_defs, clique_desc],
   ./clique/snapshot/[ballot, snapshot_desc],
   stew/results
 
@@ -44,7 +44,7 @@ type
 # Public
 # ------------------------------------------------------------------------------
 
-proc newClique*(com: CommonRef): Clique =
+proc newClique*(db: ChainDBRef, cliquePeriod, cliqueEpoch: int): Clique =
   ## Constructor for a new Clique proof-of-authority consensus engine. The
   ## initial state of the engine is `empty`, there are no authorised signers.
   ##
@@ -52,20 +52,20 @@ proc newClique*(com: CommonRef): Clique =
   ## will be taken from chain_config. Otherwise, default value in `newCliqueCfg`
   ## will be used
 
-  let cfg = com.newCliqueCfg
-  if com.cliquePeriod > 0:
-    cfg.period = initDuration(seconds = com.cliquePeriod)
-  if com.cliqueEpoch > 0:
-    cfg.epoch = com.cliqueEpoch
+  let cfg = db.newCliqueCfg
+  if cliquePeriod > 0:
+    cfg.period = initDuration(seconds = cliquePeriod)
+  if cliqueEpoch > 0:
+    cfg.epoch = cliqueEpoch
   cfg.newClique
 
-proc cliqueSave*(c: var Clique): CliqueState =
+proc cliqueSave*(c: Clique): CliqueState =
   ## Save current `Clique` state. This state snapshot saves the internal
   ## data that make up the list of authorised signers (see `cliqueSigners()`
   ## below.)
   ok(c.snapshot)
 
-proc cliqueRestore*(c: var Clique; state: var CliqueState) =
+proc cliqueRestore*(c: Clique; state: var CliqueState) =
   ## Restore current `Clique` state from a saved snapshot.
   ##
   ## For the particular `state` argument this fuction is disabled with
@@ -74,66 +74,13 @@ proc cliqueRestore*(c: var Clique; state: var CliqueState) =
   if state.isOk:
     c.snapshot = state.value
 
-proc cliqueDispose*(c: var Clique; state: var CliqueState) =
+proc cliqueDispose*(c: Clique; state: var CliqueState) =
   ## Disable the function `cliqueDispose()` for the particular `state`
   ## argument.
   ##
   ## In transaction lingo, this would be the commit function if
   ## `cliqueRestore()` was wrapped in a `defer:` statement.
   state = err(CliqueState)
-
-
-proc cliqueVerify*(c: Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Check whether a header conforms to the consensus rules. The caller may
-  ## optionally pass on a batch of parents (ascending order) to avoid looking
-  ## those up from the database. This function updates the list of authorised
-  ## signers (see `cliqueSigners()` below.)
-  ##
-  ## On success, the latest authorised signers list is available via the
-  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
-  ## in the `Clique` descriptor and is accessible as `c.failed`.
-  ##
-  ## This function is not transaction-save, that is the internal state of
-  ## the authorised signers list has the state of the last update after a
-  ## successful header verification. The hash of the failing header together
-  ## with the error message is then accessible as `c.failed`.
-  ##
-  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
-  ## `cliqueRestore()` for transaction.
-  var list = toSeq(parents)
-  c.cliqueVerifySeq(header, list)
-
-# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc cliqueVerify*(c: Clique; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Consensus rules verifier without optional parents list.
-  var blind: seq[BlockHeader]
-  c.cliqueVerifySeq(header, blind)
-
-proc cliqueVerify*(c: Clique;
-                   headers: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## This function verifies a batch of headers checking each header for
-  ## consensus rules conformance (see also the other `cliqueVerify()` function
-  ## instance.) The `headers` list is supposed to contain a chain of headers,
-  ## i.e. `headers[i]` is parent to `headers[i+1]`.
-  ##
-  ## On success, the latest authorised signers list is available via the
-  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
-  ## in the `Clique` descriptor and is accessible as `c.failed`.
-  ##
-  ## This function is not transaction-save, that is the internal state of
-  ## the authorised signers list has the state of the last update after a
-  ## successful header verification. The hash of the failing header together
-  ## with the error message is then accessible as `c.failed`.
-  ##
-  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
-  ## `cliqueRestore()` for transaction.
-  var list = toSeq(headers)
-  c.cliqueVerifySeq(list)
-
 
 proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
   ## Retrieve the sorted list of authorized signers for the current state

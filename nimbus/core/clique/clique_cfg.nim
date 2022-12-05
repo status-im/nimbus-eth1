@@ -22,20 +22,20 @@ import
   std/[random, times],
   ethash,
   stew/results,
-  ../../common/common,
+  ../../db/db_chain,
   ../../utils/ec_recover,
   ./clique_defs
 
 export
-  common
+  db_chain
 
 const
   prngSeed = 42
 
 type
   CliqueCfg* = ref object of RootRef
-    com*: CommonRef ##\
-      ## Configuration, database.
+    db*: ChainDBRef ##\
+      ## All purpose (incl. blockchain) database.
 
     nSnaps*: uint64 ##\
       ## Number of snapshots stored on disk (for logging troublesshoting)
@@ -79,9 +79,9 @@ type
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newCliqueCfg*(com: CommonRef): CliqueCfg =
+proc newCliqueCfg*(db: ChainDBRef): CliqueCfg =
   result = CliqueCfg(
-    com:         com,
+    db:          db,
     epoch:       EPOCH_LENGTH,
     period:      BLOCK_PERIOD,
     ckpInterval: CHECKPOINT_INTERVAL,

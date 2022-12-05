@@ -221,7 +221,7 @@ proc findSnapshot(d: var LocalSnaps): bool
         return false
 
     # No explicit parents (or no more parents left), reach out to the database
-    elif not d.c.cfg.com.db.getBlockHeader(hash, header):
+    elif not d.c.cfg.db.getBlockHeader(hash, header):
       d.trail.error = (errUnknownAncestor,"")
       return false
 
@@ -377,7 +377,7 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
       return ok(rc.value)
 
   var header: BlockHeader
-  if not c.cfg.com.db.getBlockHeader(hash, header):
+  if not c.cfg.db.getBlockHeader(hash, header):
     return err((errUnknownHash,""))
 
   # Avoid deep copy, sequence will not be changed by `updateSnapshot()`

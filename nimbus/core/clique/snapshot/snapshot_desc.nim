@@ -144,7 +144,7 @@ proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
   ## Load an existing snapshot from the database.
   var s = Snapshot(cfg: cfg)
   try:
-    let db = s.cfg.com.db.db
+    let db = s.cfg.db.db
     let rlpData = db.get(hash.cliqueSnapshotKey.toOpenArray)
 
     # The following check is only needed for Github/CI for 64bit Windows (not
@@ -168,7 +168,7 @@ proc storeSnapshot*(cfg: CliqueCfg; s: Snapshot): CliqueOkResult =
     let
       key = s.data.blockHash.cliqueSnapshotKey
       val = rlp.encode(s.data)
-      db  = s.cfg.com.db.db
+      db  = s.cfg.db.db
     db.put(key.toOpenArray, val)
 
     cfg.nSnaps.inc

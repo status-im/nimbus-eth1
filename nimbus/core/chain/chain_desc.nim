@@ -38,58 +38,31 @@ type
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
 
-    pow: PowRef ##\
-      ## Wrapper around `hashimotoLight()` and lookup cache
-
-    poa: Clique ##\
-      ## For non-PoA networks (when `db.config.poaEngine` is `false`),
-      ## this descriptor is ignored.
-
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private constructor helper
 # ------------------------------------------------------------------------------
 
-proc initChain(c: ChainRef; com: CommonRef; poa: Clique; extraValidation: bool)
+proc initChain(c: ChainRef; com: CommonRef; extraValidation: bool)
                   {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Constructor for the `Chain` descriptor object. For most applications,
-  ## the `poa` argument is transparent and should be initilaised on the fly
-  ## which is available below.
+  ## Constructor for the `Chain` descriptor object.
   c.com = com
 
   c.validateBlock = true
   c.extraValidation = extraValidation
 
-  # Initalise the PoA state regardless of whether it is needed on the current
-  # network. For non-PoA networks (when `db.config.poaEngine` is `false`),
-  # this descriptor is ignored.
-  c.poa = com.newClique
-
-  # Always initialise the PoW epoch cache even though it migh no be used
-  # unless `extraValidation` is set `true`.
-  c.pow = PowRef.new
-
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newChain*(com: CommonRef; poa: Clique; extraValidation: bool): ChainRef
-                 {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Constructor for the `Chain` descriptor object. For most applications,
-  ## the `poa` argument is transparent and should be initilaised on the fly
-  ## which is available below. The argument `extraValidation` enables extra
-  ## block chain validation if set `true`.
-  new result
-  result.initChain(com, poa, extraValidation)
-
 proc newChain*(com: CommonRef, extraValidation: bool): ChainRef
                  {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Constructor for the `Chain` descriptor object with default initialisation
-  ## for the PoA handling. The argument `extraValidation` enables extra block
+  ## Constructor for the `Chain` descriptor object.
+  ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
   new result
-  result.initChain(com, com.newClique, extraValidation)
+  result.initChain(com, extraValidation)
 
 proc newChain*(com: CommonRef): ChainRef
                  {.gcsafe, raises: [Defect,CatchableError].} =
@@ -98,19 +71,18 @@ proc newChain*(com: CommonRef): ChainRef
   ##  * `enabled` for PoA networks (such as Goerli)
   ##  * `disabled` for non-PaA networks
   new result
-  result.initChain(com, com.newClique, com.consensus == ConsensusType.POA)
+  result.initChain(com, com.consensus == ConsensusType.POA)
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
-
-proc clique*(c: ChainRef): var Clique =
+proc clique*(c: ChainRef): Clique =
   ## Getter
-  c.poa
+  c.com.poa
 
 proc pow*(c: ChainRef): PowRef =
   ## Getter
-  c.pow
+  c.com.pow
 
 proc db*(c: ChainRef): ChainDBRef =
   ## Getter

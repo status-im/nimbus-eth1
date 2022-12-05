@@ -21,8 +21,9 @@
 ##
 
 import
-  std/[strformat, times],
+  std/[strformat, times, sequtils],
   ../../utils/utils,
+  ../../common/common,
   ../gaslimit,
   ./clique_cfg,
   ./clique_defs,
@@ -43,17 +44,17 @@ logScope:
 # ------------------------------------------------------------------------------
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
-proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
+proc verifyForkHashes(com: CommonRef; header: BlockHeader): CliqueOkResult
                         {.gcsafe, raises: [Defect,ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 
-  if c.com.eip150Block.isSome and
-     c.com.eip150Block.get == header.blockNumber:
+  if com.eip150Block.isSome and
+     com.eip150Block.get == header.blockNumber:
 
     # If the homestead reprice hash is set, validate it
     let
-      eip150 = c.com.eip150Hash
+      eip150 = com.eip150Hash
       hash = header.blockHash
 
     if eip150 != hash:
@@ -138,7 +139,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
 
 
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
-proc verifyCascadingFields(c: Clique; header: BlockHeader;
+proc verifyCascadingFields(c: Clique; com: CommonRef; header: BlockHeader;
                            parents: var seq[BlockHeader]): CliqueOkResult
                                 {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
@@ -154,7 +155,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
   var parent: BlockHeader
   if 0 < parents.len:
     parent = parents[^1]
-  elif not c.com.db.getBlockHeader(header.blockNumber-1, parent):
+  elif not c.db.getBlockHeader(header.blockNumber-1, parent):
     return err((errUnknownAncestor,""))
 
   if parent.blockNumber != header.blockNumber-1 or
@@ -177,7 +178,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
   # EIP-1559/London fork.
   block:
     # clique/clique.go(337): if !chain.Config().IsLondon(header.Number) {
-    let rc = c.com.validateGasLimitOrBaseFee(header, parent)
+    let rc = com.validateGasLimitOrBaseFee(header, parent)
     if rc.isErr:
       return err((errCliqueGasLimitOrBaseFee, rc.error))
 
@@ -264,7 +265,7 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
 
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
-proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
+proc cliqueVerifyImpl(c: Clique; com: CommonRef; header: BlockHeader;
                       parents: var seq[BlockHeader]): CliqueOkResult
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
@@ -282,21 +283,17 @@ proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
 
   block:
     # If all checks passed, validate any special fields for hard forks
-    let rc = c.verifyForkHashes(header)
+    let rc = com.verifyForkHashes(header)
     if rc.isErr:
       c.failed = (header.blockHash, rc.error)
       return err(rc.error)
 
   # All basic checks passed, verify cascading fields
-  result = c.verifyCascadingFields(header, parents)
+  result = c.verifyCascadingFields(com, header, parents)
   if result.isErr:
     c.failed = (header.blockHash, result.error)
 
-# ------------------------------------------------------------------------------
-# Public function
-# ------------------------------------------------------------------------------
-
-proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
+proc cliqueVerifySeq*(c: Clique; com: CommonRef; header: BlockHeader;
                       parents: var seq[BlockHeader]): CliqueOkResult
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
@@ -312,7 +309,7 @@ proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
   ## descriptor and can be retrieved via `c.failed` along with the hash/ID of
   ## the failed block header.
   block:
-    let rc = c.cliqueVerifyImpl(header, parents)
+    let rc = c.cliqueVerifyImpl(com, header, parents)
     if rc.isErr:
       return rc
 
@@ -325,8 +322,7 @@ proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
 
   ok()
 
-
-proc cliqueVerifySeq*(c: Clique;
+proc cliqueVerifySeq(c: Clique; com: CommonRef;
                  headers: var seq[BlockHeader]): CliqueOkResult
                  {.gcsafe, raises: [Defect,CatchableError].} =
   ## This function verifies a batch of headers checking each header for
@@ -348,13 +344,13 @@ proc cliqueVerifySeq*(c: Clique;
 
     block:
       var blind: seq[BlockHeader]
-      let rc = c.cliqueVerifyImpl(headers[0],blind)
+      let rc = c.cliqueVerifyImpl(com, headers[0],blind)
       if rc.isErr:
         return rc
 
     for n in 1 ..< headers.len:
       var parent = headers[n-1 .. n-1] # is actually a single item squence
-      let rc = c.cliqueVerifyImpl(headers[n],parent)
+      let rc = c.cliqueVerifyImpl(com, headers[n],parent)
       if rc.isErr:
         return rc
 
@@ -366,6 +362,61 @@ proc cliqueVerifySeq*(c: Clique;
         return err(rc.error)
 
   ok()
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader;
+                  parents: openArray[BlockHeader]): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Check whether a header conforms to the consensus rules. The caller may
+  ## optionally pass on a batch of parents (ascending order) to avoid looking
+  ## those up from the database. This function updates the list of authorised
+  ## signers (see `cliqueSigners()` below.)
+  ##
+  ## On success, the latest authorised signers list is available via the
+  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
+  ## in the `Clique` descriptor and is accessible as `c.failed`.
+  ##
+  ## This function is not transaction-save, that is the internal state of
+  ## the authorised signers list has the state of the last update after a
+  ## successful header verification. The hash of the failing header together
+  ## with the error message is then accessible as `c.failed`.
+  ##
+  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
+  ## `cliqueRestore()` for transaction.
+  var list = toSeq(parents)
+  c.cliqueVerifySeq(com, header, list)
+
+# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
+proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Consensus rules verifier without optional parents list.
+  var blind: seq[BlockHeader]
+  c.cliqueVerifySeq(com, header, blind)
+
+proc cliqueVerify*(c: Clique; com: CommonRef;
+                   headers: openArray[BlockHeader]): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## This function verifies a batch of headers checking each header for
+  ## consensus rules conformance (see also the other `cliqueVerify()` function
+  ## instance.) The `headers` list is supposed to contain a chain of headers,
+  ## i.e. `headers[i]` is parent to `headers[i+1]`.
+  ##
+  ## On success, the latest authorised signers list is available via the
+  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
+  ## in the `Clique` descriptor and is accessible as `c.failed`.
+  ##
+  ## This function is not transaction-save, that is the internal state of
+  ## the authorised signers list has the state of the last update after a
+  ## successful header verification. The hash of the failing header together
+  ## with the error message is then accessible as `c.failed`.
+  ##
+  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
+  ## `cliqueRestore()` for transaction.
+  var list = toSeq(headers)
+  c.cliqueVerifySeq(com, list)
 
 # ------------------------------------------------------------------------------
 # End

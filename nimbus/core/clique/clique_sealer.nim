@@ -22,8 +22,9 @@ import
   std/[sequtils, times],
   chronicles,
   chronos,
-  eth/[common, keys, rlp],
+  eth/[keys, rlp],
   "../.."/[constants, utils/ec_recover],
+  ../../common/common,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
@@ -53,18 +54,18 @@ template syncExceptionWrap(action: untyped) =
 
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeader(c: Clique; header: BlockHeader): CliqueOkResult
+proc verifyHeader(c: Clique; com: CommonRef; header: BlockHeader): CliqueOkResult
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## See `clique.cliqueVerify()`
   var blind: seq[BlockHeader]
-  c.cliqueVerifySeq(header, blind)
+  c.cliqueVerifySeq(com, header, blind)
 
-proc verifyHeader(c: Clique; header: BlockHeader;
+proc verifyHeader(c: Clique; com: CommonRef; header: BlockHeader;
                   parents: openArray[BlockHeader]): CliqueOkResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## See `clique.cliqueVerify()`
   var list = toSeq(parents)
-  c.cliqueVerifySeq(header, list)
+  c.cliqueVerifySeq(com, header, list)
 
 
 proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool =
@@ -118,7 +119,7 @@ proc author*(c: Clique; header: BlockHeader): Result[EthAddress,UtilsError]
 
 
 # clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
+proc verifyHeaders*(c: Clique; com: CommonRef; headers: openArray[BlockHeader]):
                                 Future[seq[CliqueOkResult]] {.async,gcsafe.} =
   ## For the Consensus Engine, `verifyHeader()` s similar to VerifyHeader, but
   ## verifies a batch of headers concurrently. This method is accompanied
@@ -136,7 +137,7 @@ proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
       if isStopRequest:
         result.add cliqueResultErr((errCliqueStopped,""))
         break
-      result.add c.verifyHeader(headers[n], headers[0 ..< n])
+      result.add c.verifyHeader(com, headers[n], headers[0 ..< n])
     c.doExclusively:
       c.stopVHeaderReq = false
 

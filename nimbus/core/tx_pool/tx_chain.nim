@@ -80,6 +80,10 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   {.gcsafe,raises: [Defect,CatchableError].} =
   dh.txEnv.reset
 
+  # do hardfork transition before
+  # BaseVMState querying any hardfork/consensus from CommonRef
+  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1)
+
   let timestamp = getTime().utc.toTime
   # we don't consider PoS difficulty here
   # because that is handled in vmState
@@ -95,7 +99,6 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
-  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1)
 
 proc update(dh: TxChainRef; parent: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =

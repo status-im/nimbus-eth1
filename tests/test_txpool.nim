@@ -818,7 +818,7 @@ proc runTxPackerTests(noisy = true) =
             " size=", mostlySize + blk.txs[n].gasLimit - blk.header.gasUsed
 
         let
-          poa = bcCom.newClique
+          poa = bcCom.poa
           bdy = BlockBody(transactions: blk.txs)
           hdr = block:
             var rc = blk.header

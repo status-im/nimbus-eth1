@@ -198,7 +198,7 @@ proc cliqueGenvote*(
   ##    [..]
   ##
   c.clique_genvote(voter, seal,
-                   parent = c.cfg.com.db.getCanonicalHead,
+                   parent = c.cfg.db.getCanonicalHead,
                    elapsed = elapsed,
                    voteInOk = voteInOk,
                    outOfTurn = outOfTurn,

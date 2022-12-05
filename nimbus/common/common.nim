@@ -16,7 +16,8 @@ import
   ./evmforks,
   ./genesis,
   ../utils/[utils, ec_recover],
-  ../db/[db_chain, storage_types]
+  ../db/[db_chain, storage_types],
+  ../core/[pow, clique]
 
 export
   chain_config,
@@ -65,12 +66,26 @@ type
     # one of POW/POA/POS, updated after calling `hardForkTransition`
     consensusType: ConsensusType
 
+    pow: PowRef ##\
+      ## Wrapper around `hashimotoLight()` and lookup cache
+
+    poa: Clique ##\
+      ## For non-PoA networks this descriptor is ignored.
+
 # ------------------------------------------------------------------------------
-# Private helper functions
+# Forward declarations
 # ------------------------------------------------------------------------------
 
 proc hardForkTransition*(com: CommonRef,
   number: BlockNumber, td: Option[DifficultyInt]) {.gcsafe.}
+
+func cliquePeriod*(com: CommonRef): int
+
+func cliqueEpoch*(com: CommonRef): int
+
+# ------------------------------------------------------------------------------
+# Private helper functions
+# ------------------------------------------------------------------------------
 
 proc consensusTransition(com: CommonRef, fork: HardFork) =
   if fork >= MergeFork:
@@ -123,6 +138,13 @@ proc init(com      : CommonRef,
     com.genesisHeader = toGenesisHeader(genesis,
       com.currentFork, com.db.db)
     com.setForkId(com.genesisHeader)
+
+  # Initalise the PoA state regardless of whether it is needed on the current
+  # network. For non-PoA networks this descriptor is ignored.
+  com.poa = newClique(com.db, com.cliquePeriod, com.cliqueEpoch)
+
+  # Always initialise the PoW epoch cache even though it migh no be used
+  com.pow = PowRef.new
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -226,8 +248,10 @@ proc hardForkTransition*(com: CommonRef, parentHash: Hash256,
                          number: BlockNumber)
                          {.gcsafe, raises: [Defect, CatchableError].} =
 
+  # if mergeForkBlock is present, it has higher
+  # priority than TTD
   if com.config.mergeForkBlock.isSome or
-     com.config.terminalTotalDifficulty.isSome:
+     com.config.terminalTotalDifficulty.isNone:
     let fork = com.toHardFork(number)
     com.currentFork = fork
     com.consensusTransition(fork)
@@ -325,6 +349,13 @@ proc initializeEmptyDb*(com: CommonRef)
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
+proc poa*(com: CommonRef): Clique =
+  ## Getter
+  com.poa
+
+proc pow*(com: CommonRef): PowRef =
+  ## Getter
+  com.pow
 
 func db*(com: CommonRef): ChainDBRef =
   com.db
