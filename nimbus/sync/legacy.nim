@@ -61,8 +61,6 @@ type
 
   LegacySyncRef* = ref object
     workQueue: seq[WantedBlocks]
-    endBlockNumber: BlockNumber
-    finalizedBlock: BlockNumber # Block which was downloaded and verified
     chain: ChainRef
     peerPool: PeerPool
     trustedPeers: HashSet[Peer]
@@ -70,6 +68,24 @@ type
     busyPeers: HashSet[Peer]
     knownByPeer: Table[Peer, HashToTime]
     lastCleanup: Time
+
+
+# ------------------------------------------------------------------------------
+# Private functions: sync progress
+# ------------------------------------------------------------------------------
+
+template endBlockNumber(ctx: LegacySyncRef): BlockNumber =
+  ctx.chain.com.syncHighest
+
+template `endBlockNumber=`(ctx: LegacySyncRef, number: BlockNumber) =
+  ctx.chain.com.syncHighest = number
+
+# Block which was downloaded and verified
+template finalizedBlock(ctx: LegacySyncRef): BlockNumber =
+  ctx.chain.com.syncCurrent
+
+template `finalizedBlock=`(ctx: LegacySyncRef, number: BlockNumber) =
+  ctx.chain.com.syncCurrent = number
 
 # ------------------------------------------------------------------------------
 # Private functions: peers related functions
@@ -908,14 +924,16 @@ proc onPeerDisconnected(ctx: LegacySyncRef, p: Peer) =
 
 proc new*(T: type LegacySyncRef; ethNode: EthereumNode; chain: ChainRef): T
     {.gcsafe, raises:[Defect,CatchableError].} =
-  LegacySyncRef(
+  result = LegacySyncRef(
     # workQueue:           n/a
     # endBlockNumber:      n/a
     # hasOutOfOrderBlocks: n/a
     chain:          chain,
     peerPool:       ethNode.peerPool,
-    trustedPeers:   initHashSet[Peer](),
-    finalizedBlock: chain.db.getCanonicalHead().blockNumber)
+    trustedPeers:   initHashSet[Peer]())
+
+  # finalizedBlock
+  chain.com.syncCurrent = chain.db.getCanonicalHead().blockNumber
 
 proc start*(ctx: LegacySyncRef) =
   ## Code for the fast blockchain sync procedure:
@@ -937,8 +955,9 @@ proc start*(ctx: LegacySyncRef) =
       debug "Fast sync is disabled after POS merge"
       return
 
+    ctx.chain.com.syncStart = ctx.finalizedBlock
     info "Fast Sync: start sync from",
-      number=ctx.finalizedBlock,
+      number=ctx.chain.com.syncStart,
       hash=blockHash
 
   except CatchableError as e:
