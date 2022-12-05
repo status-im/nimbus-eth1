@@ -616,14 +616,6 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
 
-  # do hardfork transition
-  # this transition will leak into outside txpool
-  # but it's ok, other subsystem will likely gladly accept the
-  # the transition, until proven otherwise
-  let parentHash = xp.chain.vmState.parent.blockHash
-  let td = some(xp.chain.com.db.getScore(parentHash))
-  xp.chain.com.hardForkTransition(xp.chain.vmState.parent.blockNumber+1, td)
-
   xp.packerVmExec                            # updates vmState
   result.header = xp.chain.getHeader         # uses updated vmState
   for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):

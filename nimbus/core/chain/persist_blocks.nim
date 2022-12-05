@@ -51,8 +51,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
   var cliqueState = c.clique.cliqueSave
   defer: c.clique.cliqueRestore(cliqueState)
 
-  let td = some(c.db.getScore(headers[0].parentHash))
-  c.com.hardForkTransition(headers[0].blockNumber, td)
+  c.com.hardForkTransition(headers[0])
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
   let vmState = BaseVMState()
@@ -70,8 +69,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     let
       (header, body) = (headers[i], bodies[i])
 
-    let td = some(c.db.getScore(header.parentHash))
-    c.com.hardForkTransition(header.blockNumber, td)
+    c.com.hardForkTransition(header)
 
     if not vmState.reinit(header):
       debug "Cannot update VmState",

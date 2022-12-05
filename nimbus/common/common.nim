@@ -185,7 +185,7 @@ proc clone*(com: CommonRef): CommonRef =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func toFork*(com: CommonRef, number: BlockNumber): HardFork =
+func toHardFork*(com: CommonRef, number: BlockNumber): HardFork =
   ## doesn't do transition
   ## only want to know a particular block number
   ## belongs to which fork without considering TD or TTD
@@ -205,7 +205,7 @@ proc hardForkTransition(com: CommonRef,
 
   if td.isNone:
     # fork transition ignoring TD
-    let fork = com.toFork(number)
+    let fork = com.toHardFork(number)
     com.currentFork = fork
     com.consensusTransition(fork)
     return
@@ -222,17 +222,51 @@ proc hardForkTransition(com: CommonRef,
   # should always have a match
   doAssert(false, "unreachable code")
 
+proc hardForkTransition*(com: CommonRef, parentHash: Hash256,
+                         number: BlockNumber)
+                         {.gcsafe, raises: [Defect, CatchableError].} =
+
+  if com.config.mergeForkBlock.isSome or
+     com.config.terminalTotalDifficulty.isSome:
+    let fork = com.toHardFork(number)
+    com.currentFork = fork
+    com.consensusTransition(fork)
+    return
+
+  var td: DifficultyInt
+  if not com.db.getTd(parentHash, td):
+    # TODO: Is this really ok?
+    let fork = com.toHardFork(number)
+    com.currentFork = fork
+    com.consensusTransition(fork)
+    return
+
+  for fork in countdown(HardFork.high, HardFork.low):
+    let x = com.blockToFork[fork]
+    if x.toFork(x.data, number, td):
+      com.currentFork = fork
+      com.consensusTransition(fork)
+      return
+
+  # should always have a match
+  doAssert(false, "unreachable code")
+
+proc hardForkTransition*(com: CommonRef, header: BlockHeader)
+                        {.gcsafe, raises: [Defect, CatchableError].} =
+
+  com.hardForkTransition(header.parentHash, header.blockNumber)
+
 func toEVMFork*(com: CommonRef, number: BlockNumber): EVMFork =
   ## similar to toFork, but produce EVMFork
   ## be aware that if MergeFork is not set in
   ## chain config, this function probably give wrong
   ## result because no TD is put into consideration
-  let fork = com.toFork(number)
+  let fork = com.toHardFork(number)
   ToEVMFork[fork]
 
 func isLondon*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
-  com.toFork(number) >= London
+  com.toHardFork(number) >= London
 
 func forkGTE*(com: CommonRef, fork: HardFork): bool =
   com.currentFork >= fork
@@ -254,7 +288,7 @@ proc minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
 
 func forkId*(com: CommonRef, number: BlockNumber): ForkID {.gcsafe.} =
   ## EIP 2364/2124
-  let fork = com.toFork(number)
+  let fork = com.toHardFork(number)
   com.forkIds[fork]
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =

@@ -257,7 +257,7 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
         when defined(noisy):
           if res.isErr:
             debugEcho "blockNumber  : ", preminedBlock.header.blockNumber
-            debugEcho "fork         : ", com.toFork(preminedBlock.header.blockNumber)
+            debugEcho "fork         : ", com.toHardFork(preminedBlock.header.blockNumber)
             debugEcho "error message: ", res.error
             debugEcho "consensusType: ", com.consensus
 

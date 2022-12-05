@@ -95,6 +95,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
+  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1)
 
 proc update(dh: TxChainRef; parent: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
