@@ -27,7 +27,7 @@ import
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],
   ./rpc/merge/merger,
-  ./sync/[fast, full, protocol, snap,
+  ./sync/[legacy, full, protocol, snap,
     protocol/les_protocol, handlers, peers]
 
 when defined(evmc_enabled):
@@ -410,7 +410,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        let syncer = FastSyncCtx.new(nimbus.ethNode, nimbus.chainRef)
+        let syncer = LegacySyncRef.new(nimbus.ethNode, nimbus.chainRef)
         syncer.start
 
         let wireHandler = EthWireRef(
@@ -418,12 +418,12 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
         )
 
         wireHandler.setNewBlockHandler(
-          fast.newBlockHandler,
+          legacy.newBlockHandler,
           cast[pointer](syncer)
         )
 
         wireHandler.setNewBlockHashesHandler(
-          fast.newBlockHashesHandler,
+          legacy.newBlockHashesHandler,
           cast[pointer](syncer)
         )
 
