@@ -14,6 +14,7 @@ import
   ../nimbus/core/[chain, clique, executor],
   ../nimbus/core/[tx_pool, tx_pool/tx_item],
   ../nimbus/common/common,
+  ../nimbus/core/clique/clique_sealer,
   ./test_txpool/[helpers, setup, sign_helper],
   ./test_txpool2,
   chronos,
@@ -216,7 +217,6 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
 
       check 0.GasPrice <= minGasPrice
       check minGasPrice <= maxGasPrice
-
 
 proc runTxPoolTests(noisy = true) =
   let elapNoisy = false
@@ -781,6 +781,10 @@ proc runTxPackerTests(noisy = true) =
       # if true: return
       test "Store generated block in block chain database":
 
+        # authorized signer is needed to produce correct
+        # POA difficulty and blockheader fields
+        bcCom.poa.authorize(testAddress, signerFunc)
+
         noisy.say "***", "locality",
           " locals=", xq.accountRanks.local.len,
           " remotes=", xq.accountRanks.remote.len
@@ -830,17 +834,22 @@ proc runTxPackerTests(noisy = true) =
         # much less than permitted so this block will be accepted.
         check 0 < overlap
 
-        #setTraceLevel()
+        setTraceLevel()
 
         # Test low-level function for adding the new block to the database
         xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
         check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
 
+        #debugEcho "VMSTATE 1: ", debugAccounts(xq.chain.vmState)
+
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
-        check BaseVMState.new(hdr, bcCom).processBlock(poa, hdr, bdy).isOK
+        let vmstate2 = BaseVMState.new(hdr, bcCom)
+        check vmstate2.processBlock(poa, hdr, bdy).isOK
+
+        #debugEcho "VMSTATE 2: ", debugAccounts(vmstate2)
 
         # This should not have changed
         check canonicalHead == xq.chain.com.db.getCanonicalHead
@@ -871,9 +880,9 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader
   noisy.runTxPoolTests
   noisy.runTxPackerTests
-  #runTxPoolCliqueTest()
-  #runTxPoolPosTest()
-  #noisy.runTxHeadDelta
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+  noisy.runTxHeadDelta
 
 when isMainModule:
   const
@@ -889,9 +898,9 @@ when isMainModule:
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 
-  runTxPoolCliqueTest()
-  runTxPoolPosTest()
-  noisy.runTxHeadDelta
+  #runTxPoolCliqueTest()
+  #runTxPoolPosTest()
+  #noisy.runTxHeadDelta
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

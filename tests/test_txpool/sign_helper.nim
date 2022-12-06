@@ -12,6 +12,7 @@ import
   ../../nimbus/constants,
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/tx_item,
+  ../../nimbus/core/clique/clique_desc,
   eth/[common, common/transaction, keys],
   stew/results,
   stint
@@ -88,5 +89,14 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
 proc testKeySign*(header: BlockHeader): BlockHeader =
   ## Sign the header and embed the signature in extra data
   header.sign(prvTestKey)
+
+proc signerFunc*(signer: EthAddress, msg: openArray[byte]):
+                Result[RawSignature, cstring] {.gcsafe.} =
+  doAssert(signer == testAddress)
+  let
+    data = keccakHash(msg)
+    rawSign  = sign(prvTestKey, SkMessage(data.data)).toRaw
+
+  ok(rawSign)
 
 # End

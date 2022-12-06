@@ -7,9 +7,14 @@ import
   ../nimbus/core/clique/[clique_sealer, clique_desc],
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
+  ../nimbus/core/casper,
+  ../nimbus/core/executor,
   ../nimbus/common/common,
+  ../nimbus/[vm_state, vm_types],
   ./test_txpool/helpers,
   ./macro_assembler
+
+import ../nimbus/utils/debug
 
 const
   baseDir = [".", "tests"]
@@ -115,11 +120,11 @@ proc runTxPoolCliqueTest*() =
     tx = env.makeTx(recipient, amount)
     xp = env.xp
     conf = env.conf
-    com = env.com
     chain = env.chain
     clique = env.chain.clique
     body: BlockBody
     blk: EthBlock
+    com = env.chain.com
 
   let signerKey = privKey(signerKeyHex)
   proc signerFunc(signer: EthAddress, msg: openArray[byte]):
@@ -130,6 +135,7 @@ proc runTxPoolCliqueTest*() =
       rawSign  = sign(signerKey, SkMessage(data.data)).toRaw
 
     ok(rawSign)
+  clique.authorize(conf.engineSigner, signerFunc)
 
   suite "Test TxPool with Clique sealer":
     test "TxPool addLocal":
@@ -143,30 +149,26 @@ proc runTxPoolCliqueTest*() =
       check xp.nItems.total == 1
 
     test "TxPool ethBlock":
-      xp.prevRandao = EMPTY_UNCLE_HASH
       blk = xp.ethBlock()
-
-      blk.header.prevRandao = EMPTY_UNCLE_HASH
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
       )
       check blk.txs.len == 1
 
-    test "Clique prepare and seal":
-      clique.authorize(conf.engineSigner, signerFunc)
-      let parent = com.db.getBlockHeader(blk.header.parentHash)
-      let ry = chain.clique.prepare(parent, blk.header)
-      check ry.isOk
-      if ry.isErr:
-        debugEcho ry.error
-        return
-
+    test "Clique seal":
       let rx = clique.seal(blk)
       check rx.isOk
       if rx.isErr:
         debugEcho rx.error
         return
+
+    test "Store generated block in block chain database":
+      xp.chain.clearAccounts
+      check xp.chain.vmState.processBlock(com.poa, blk.header, body).isOK
+
+      let vmstate2 = BaseVMState.new(blk.header, com)
+      check vmstate2.processBlock(com.poa, blk.header, body).isOK
 
     test "Clique persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
@@ -196,22 +198,20 @@ proc runTxPoolPosTest*() =
       check xp.nItems.total == 1
 
     test "TxPool ethBlock":
-      xp.prevRandao = prevRandao
-      xp.feeRecipient = feeRecipient
+      com.pos.prevRandao = prevRandao
+      com.pos.feeRecipient = feeRecipient
+      com.pos.timestamp = getTime()
+
       blk = xp.ethBlock()
 
       check com.isBlockAfterTtd(blk.header)
-
-      blk.header.difficulty = DifficultyInt.zero
-      blk.header.prevRandao = prevRandao
-      blk.header.nonce = default(BlockNonce)
-      blk.header.extraData = @[]
 
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
       )
       check blk.txs.len == 1
+
     test "PoS persistBlocks":
       let rr = chain.persistBlocks([blk.header], [body])
       check rr == ValidationResult.OK
@@ -262,16 +262,13 @@ proc runTxHeadDelta*(noisy = true) =
             # pending/staged/packed : total/disposed
             &" stats={xp.nItems.pp}"
 
-          xp.prevRandao = prevRandao
+          timestamp = timestamp + 1.seconds
+          com.pos.prevRandao = prevRandao
+          com.pos.timestamp  = timestamp
+          com.pos.feeRecipient = feeRecipient
+
           var blk = xp.ethBlock()
           check com.isBlockAfterTtd(blk.header)
-
-          timestamp = timestamp + 1.seconds
-          blk.header.difficulty = DifficultyInt.zero
-          blk.header.prevRandao = prevRandao
-          blk.header.nonce = default(BlockNonce)
-          blk.header.extraData = @[]
-          blk.header.timestamp = timestamp
 
           let body = BlockBody(
             transactions: blk.txs,

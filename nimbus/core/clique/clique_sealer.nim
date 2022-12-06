@@ -173,7 +173,7 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
   ## running the transactions on top.
 
   # Assemble the voting snapshot to check which votes make sense
-  let rc = c.cliqueSnapshot(header.parentHash, @[])
+  let rc = c.cliqueSnapshot(parent.blockHash, @[])
   if rc.isErr:
     return err(rc.error)
 
@@ -184,7 +184,8 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
   # signer list
   header.coinbase.reset
 
-  if (header.blockNumber mod c.cfg.epoch) != 0:
+  let modEpoch = (parent.blockNumber+1) mod c.cfg.epoch
+  if modEpoch != 0:
     c.doExclusively:
       # Gather all the proposals that make sense voting on
       var addresses: seq[EthAddress]
@@ -203,7 +204,7 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
 
   # Ensure the extra data has all its components
   header.extraData.setLen(EXTRA_VANITY)
-  if (header.blockNumber mod c.cfg.epoch) == 0:
+  if modEpoch == 0:
     header.extraData.add c.snapshot.ballot.authSigners.mapIt(toSeq(it)).concat
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
@@ -216,6 +217,12 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
     header.timestamp = getTime()
 
   ok()
+
+proc prepareForSeal*(c: Clique; prepHeader: BlockHeader; header: var BlockHeader) =
+  # TODO: use system.move?
+  header.nonce = prepHeader.nonce
+  header.extraData = prepHeader.extraData
+  header.mixDigest = prepHeader.mixDigest
 
 # clique/clique.go(589): func (c *Clique) Authorize(signer [..]
 proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
@@ -313,7 +320,8 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
       header.extraData.setLen(extraLen - EXTRA_SEAL)
     header.extraData.add signature.value
   except Exception as exc:
-    return err((errCliqueSealSigFn, "Error when signing block header"))
+    return err((errCliqueSealSigFn,
+      "Error when signing block header: " & exc.msg))
 
   ethBlock = ethBlock.withHeader(header)
   ok()

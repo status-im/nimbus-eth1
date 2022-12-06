@@ -17,11 +17,13 @@ import
   ../../common/common,
   ../../constants,
   ../../db/accounts_cache,
-  ../../core/executor,
   ../../utils/utils,
-  ../../core/pow/difficulty,
   ../../vm_state,
   ../../vm_types,
+  ../clique/clique_sealer,
+  ../pow/difficulty,
+  ../executor,
+  ../casper,
   ./tx_chain/[tx_basefee, tx_gaslimits],
   ./tx_item
 
@@ -51,8 +53,6 @@ type
     txRoot: Hash256          ## `rootHash` after packing
     stateRoot: Hash256       ## `stateRoot` after packing
 
-  DifficultyCalculator* = proc(timeStamp: EthTime, parent: BlockHeader): DifficultyInt {.gcsafe, raises:[].}
-
   TxChainRef* = ref object ##\
     ## State cache of the transaction environment for creating a new\
     ## block. This state is typically synchrionised with the canonical\
@@ -65,16 +65,40 @@ type
     roAcc: ReadOnlyStateDB   ## Accounts cache fixed on current sync header
     limits: TxChainGasLimits ## Gas limits for packer and next header
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
-
-    # EIP-4399 and EIP-3675
-    prevRandao: Hash256      ## PoS block randomness
-
-    # overrideable difficulty calculator
-    calcDifficulty: DifficultyCalculator
+    prepHeader: BlockHeader  ## Prepared Header from Consensus Engine
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+proc prepareHeader(dh: TxChainRef; parent: BlockHeader)
+     {.gcsafe, raises: [Defect, CatchableError].} =
+
+  case dh.com.consensus
+  of ConsensusType.POW:
+    dh.prepHeader.timestamp  = getTime().utc.toTime
+    dh.prepHeader.difficulty = dh.com.calcDifficulty(
+      dh.prepHeader.timestamp, parent)
+    dh.prepHeader.coinbase   = dh.miner
+    dh.prepHeader.mixDigest.reset
+  of ConsensusType.POA:
+    discard dh.com.poa.prepare(parent, dh.prepHeader)
+    # beware POA header.coinbase != signerAddress
+    # but BaseVMState.minerAddress == signerAddress
+    # - minerAddress is extracted from header.extraData
+    # - header.coinbase is from clique engine
+    dh.prepHeader.coinbase = dh.miner
+  of ConsensusType.POS:
+    dh.com.pos.prepare(dh.prepHeader)
+
+proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) =
+  case dh.com.consensus
+  of ConsensusType.POW:
+    # do nothing, tx pool was designed with POW in mind
+    discard
+  of ConsensusType.POA:
+    dh.com.poa.prepareForSeal(dh.prepHeader, header)
+  of ConsensusType.POS:
+    dh.com.pos.prepareForSeal(header)
 
 proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   {.gcsafe,raises: [Defect,CatchableError].} =
@@ -83,18 +107,18 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
   dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1)
+  dh.prepareHeader(parent)
 
-  let timestamp = getTime().utc.toTime
   # we don't consider PoS difficulty here
   # because that is handled in vmState
   dh.txEnv.vmState = BaseVMState.new(
     parent    = parent,
-    timestamp = timestamp,
+    timestamp = dh.prepHeader.timestamp,
     gasLimit  = (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
     fee       = fee,
-    prevRandao= dh.prevRandao,
-    difficulty= dh.calcDifficulty(timestamp, parent),
-    miner     = dh.miner,
+    prevRandao= dh.prepHeader.prevRandao,
+    difficulty= dh.prepHeader.difficulty,
+    miner     = dh.prepHeader.coinbase,
     com       = dh.com)
 
   dh.txEnv.txRoot = EMPTY_ROOT_HASH
@@ -132,12 +156,6 @@ proc new*(T: type TxChainRef; com: CommonRef; miner: EthAddress): T
   result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
   result.lhwm.gasFloor = DEFAULT_GAS_LIMIT
   result.lhwm.gasCeil  = DEFAULT_GAS_LIMIT
-  result.calcDifficulty = proc(timeStamp: EthTime, parent: BlockHeader):
-                               DifficultyInt {.gcsafe, raises:[].} =
-    try:
-      com.calcDifficulty(timestamp, parent)
-    except:
-      0.u256
   result.update(com.db.getCanonicalHead)
 
 # ------------------------------------------------------------------------------
@@ -168,24 +186,25 @@ proc getHeader*(dh: TxChainRef): BlockHeader
   let gasUsed = if dh.txEnv.receipts.len == 0: 0.GasInt
                 else: dh.txEnv.receipts[^1].cumulativeGasUsed
 
-  BlockHeader(
+  result = BlockHeader(
     parentHash:  dh.txEnv.vmState.parent.blockHash,
     ommersHash:  EMPTY_UNCLE_HASH,
-    coinbase:    dh.miner,
+    coinbase:    dh.prepHeader.coinbase,
     stateRoot:   dh.txEnv.stateRoot,
     txRoot:      dh.txEnv.txRoot,
     receiptRoot: dh.txEnv.receipts.calcReceiptRoot,
     bloom:       dh.txEnv.receipts.createBloom,
-    difficulty:  dh.txEnv.vmState.difficulty,
+    difficulty:  dh.prepHeader.difficulty,
     blockNumber: dh.txEnv.vmState.blockNumber,
     gasLimit:    dh.txEnv.vmState.gasLimit,
     gasUsed:     gasUsed,
-    timestamp:   dh.txEnv.vmState.timestamp,
+    timestamp:   dh.prepHeader.timestamp,
     # extraData: Blob       # signing data
     # mixDigest: Hash256    # mining hash for given difficulty
     # nonce:     BlockNonce # mining free vaiable
     fee:         dh.txEnv.vmState.fee)
 
+  dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -216,9 +235,12 @@ proc maxMode*(dh: TxChainRef): bool =
   ## Getter
   dh.maxMode
 
-proc miner*(dh: TxChainRef): EthAddress =
-  ## Getter, shortcut for `dh.vmState.minerAddress`
-  dh.miner
+proc feeRecipient*(dh: TxChainRef): EthAddress =
+  ## Getter
+  if dh.com.consensus == ConsensusType.POS:
+    dh.com.pos.feeRecipient
+  else:
+    dh.miner
 
 proc baseFee*(dh: TxChainRef): GasPrice =
   ## Getter, baseFee for the next bock header. This value is auto-generated
@@ -322,14 +344,6 @@ proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
-
-proc `prevRandao=`*(dh: TxChainRef; val: Hash256) =
-  ## Setter
-  dh.prevRandao = val
-
-proc `calcDifficulty=`*(dh: TxChainRef; val: DifficultyCalculator) =
-  ## Setter
-  dh.calcDifficulty = val
 
 # ------------------------------------------------------------------------------
 # End

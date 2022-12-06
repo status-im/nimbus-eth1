@@ -20,6 +20,7 @@ import
   "."/[
     chain,
     tx_pool,
+    casper,
     validate],
   "."/clique/[clique_defs,
     clique_desc,
@@ -70,47 +71,14 @@ proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: ChainRef): Result
 
   ok()
 
-proc prepareBlock(engine: SealingEngineRef,
-                   parent: BlockHeader,
-                   time: Time,
-                   prevRandao: Hash256): Result[EthBlock, string] =
-  let timestamp = if parent.timestamp >= time:
-                    parent.timestamp + 1.seconds
-                  else:
-                    time
+proc generateBlock(engine: SealingEngineRef,
+                   outBlock: var EthBlock): Result[void, string] =
 
-  engine.txPool.prevRandao = prevRandao
-
-  var blk = engine.txPool.ethBlock()
-
-  if engine.chain.com.isBlockAfterTtd(blk.header):
-    blk.header.difficulty = DifficultyInt.zero
-    blk.header.mixDigest = prevRandao
-    blk.header.nonce = default(BlockNonce)
-    blk.header.extraData = @[] # TODO: probably this should be configurable by user?
+  outBlock = engine.txPool.ethBlock()
+  if engine.chain.com.consensus == ConsensusType.POS:
     # Stop the block generator if we reach TTD
     engine.state = EnginePostMerge
-  else:
-    let res = engine.chain.clique.prepare(parent, blk.header)
-    if res.isErr:
-      return err($res.error)
 
-  ok(blk)
-
-proc generateBlock(engine: SealingEngineRef,
-                   parentHeader: BlockHeader,
-                   outBlock: var EthBlock,
-                   timestamp = getTime(),
-                   prevRandao = Hash256()): Result[void, string] =
-  # deviation from standard block generator
-  # - no DAO hard fork
-  # - no local and remote uncles inclusion
-
-  let res = prepareBlock(engine, parentHeader, timestamp, prevRandao)
-  if res.isErr:
-    return err("error prepare header")
-
-  outBlock = res.get()
   if engine.state != EnginePostMerge:
     # Post merge, Clique should not be executing
     let sealRes = engine.chain.clique.seal(outBlock)
@@ -122,13 +90,6 @@ proc generateBlock(engine: SealingEngineRef,
         blockHash = blockHash(outBlock.header)
 
   ok()
-
-proc generateBlock(engine: SealingEngineRef,
-                   outBlock: var EthBlock,
-                   timestamp = getTime(),
-                   prevRandao = Hash256()): Result[void, string] =
-  generateBlock(engine, engine.chain.currentBlock(),
-                outBlock, timestamp, prevRandao)
 
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
   let clique = engine.chain.clique
@@ -144,20 +105,6 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
     ok(rawSign)
 
   clique.authorize(engine.signer, signerFunc)
-
-  proc diffCalculator(timeStamp: EthTime, parent: BlockHeader): DifficultyInt {.gcsafe, raises:[].}  =
-    # pesky Nim effect system
-    try:
-      discard timestamp
-      let rc = clique.calcDifficulty(parent)
-      if rc.isErr:
-        return 0.u256
-      rc.get()
-    except:
-      0.u256
-
-  # switch to PoA difficulty calculator
-  engine.txPool.calcDifficulty = diffCalculator
 
   # convert times.Duration to chronos.Duration
   let period = chronos.seconds(clique.cfg.period.inSeconds)
@@ -198,32 +145,24 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   let
     headBlock = try: engine.chain.db.getCanonicalHead()
                 except CatchableError: return err "No head block in database"
-    prevRandao = Hash256(data: distinctBase payloadAttrs.prevRandao)
-    timestamp = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
-    coinbase = EthAddress payloadAttrs.suggestedFeeRecipient
+    pos = engine.chain.com.pos
+
+  pos.prevRandao   = Hash256(data: distinctBase payloadAttrs.prevRandao)
+  pos.timestamp    = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
+  pos.feeRecipient = EthAddress payloadAttrs.suggestedFeeRecipient
 
   if headBlock.blockHash != engine.txPool.head.blockHash:
     # reorg
     discard engine.txPool.smartHead(headBlock)
 
   var blk: EthBlock
-  engine.txPool.feeRecipient = coinbase
-
-  let blkRes = engine.generateBlock(
-    headBlock,
-    blk,
-    timestamp,
-    prevRandao)
-
-  if blkRes.isErr:
-    error "sealing engine generateBlock error", msg = blkRes.error
-    return blkRes
+  let res = engine.generateBlock(blk)
+  if res.isErr:
+    error "sealing engine generateBlock error", msg = res.error
+    return res
 
   # make sure both generated block header and payloadRes(ExecutionPayloadV1)
   # produce the same blockHash
-  doAssert blk.header.coinbase == coinbase
-  blk.header.timestamp = timestamp
-  blk.header.prevRandao = prevRandao
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
   let blockHash = rlpHash(blk.header)

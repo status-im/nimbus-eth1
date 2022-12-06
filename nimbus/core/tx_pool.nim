@@ -771,22 +771,6 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
     xp.pMinTipPrice = val
     xp.pDirtyBuckets = true
 
-proc `prevRandao=`*(xp: TxPoolRef; val: Hash256) =
-  ## Setter, PoS block randomness
-  ## Used by `prevRandao` op code in EVM after transition to PoS
-  ## do nothing before transition
-  xp.chain.prevRandao = val
-
-proc `feeRecipient=`*(xp: TxPoolRef; beneficiary: EthAddress) =
-  ## Setter, PoS tx fee recipient
-  ## a.k.a miner in PoW chain or coinbase
-  xp.chain.miner = beneficiary
-
-proc `calcDifficulty=`*(xp: TxPoolRef; val: DifficultyCalculator) =
-  ## Setter, either PoW or PoA difficulty calculator
-  ## PoS difficulty always zero
-  xp.chain.calcDifficulty = val
-
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
 # ------------------------------------------------------------------------------

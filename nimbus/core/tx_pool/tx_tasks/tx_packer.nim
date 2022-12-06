@@ -109,7 +109,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # are vetted for profitability before entering that bucket.
   assert 0 <= gasTip
   let reward = gasBurned.u256 * gasTip.uint64.u256
-  vmState.stateDB.addBalance(xp.chain.miner, reward)
+  vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
 
   # Update account database
   vmState.mutateStateDB:
@@ -117,7 +117,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
       db.deleteAccount deletedAccount
 
     if FkSpurious <= xp.chain.nextFork:
-      vmState.touchedAccounts.incl(xp.chain.miner)
+      vmState.touchedAccounts.incl(xp.chain.feeRecipient)
       # EIP158/161 state clearing
       for account in vmState.touchedAccounts:
         if db.accountExists(account) and db.isEmptyAccount(account):
@@ -169,7 +169,7 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
   TxPackerStateRef( # return value
     xp: xp,
     tr: newMemoryDB().initHexaryTrie,
-    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.miner))
+    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient))
 
 
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
@@ -218,7 +218,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
     let
       number = xp.chain.head.blockNumber + 1
       uncles: seq[BlockHeader] = @[] # no uncles yet
-    vmState.calculateReward(xp.chain.miner, number + 1, uncles)
+    vmState.calculateReward(xp.chain.feeRecipient, number + 1, uncles)
 
   # Reward beneficiary
   vmState.mutateStateDB:
@@ -236,7 +236,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
   proc balanceDelta: UInt256 =
-    let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.miner)
+    let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)
     if pst.balance < postBalance:
       return postBalance - pst.balance
 

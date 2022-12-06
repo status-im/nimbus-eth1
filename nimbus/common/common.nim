@@ -17,7 +17,7 @@ import
   ./genesis,
   ../utils/[utils, ec_recover],
   ../db/[db_chain, storage_types],
-  ../core/[pow, clique]
+  ../core/[pow, clique, casper]
 
 export
   chain_config,
@@ -71,6 +71,9 @@ type
 
     poa: Clique ##\
       ## For non-PoA networks this descriptor is ignored.
+
+    pos: CasperRef
+      ## Proof Of Stake descriptor
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -145,6 +148,7 @@ proc init(com      : CommonRef,
 
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
+  com.pos = CasperRef.new
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -197,7 +201,10 @@ proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
     syncProgress : com.syncProgress,
     networkId    : com.networkId,
     currentFork  : com.currentFork,
-    consensusType: com.consensusType
+    consensusType: com.consensusType,
+    pow          : com.pow,
+    poa          : com.poa,
+    pos          : com.pos
   )
 
 proc clone*(com: CommonRef): CommonRef =
@@ -356,6 +363,10 @@ proc poa*(com: CommonRef): Clique =
 proc pow*(com: CommonRef): PowRef =
   ## Getter
   com.pow
+
+proc pos*(com: CommonRef): CasperRef =
+  ## Getter
+  com.pos
 
 func db*(com: CommonRef): ChainDBRef =
   com.db

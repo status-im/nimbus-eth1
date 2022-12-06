@@ -9,8 +9,8 @@
 # according to those terms.
 
 import
-  std/[options, times, json, strutils],
-  eth/common,
+  std/[options, times, json, strutils, sets],
+  ../common/common,
   stew/byteutils,
   ../vm_state,
   ../vm_types,
@@ -84,3 +84,23 @@ proc debugAccounts*(vmState: BaseVMState): string =
   }
 
   res.pretty
+
+proc debug*(vms: BaseVMState): string =
+  result.add "com.consensus    :" & $vms.com.consensus       & "\n"
+  result.add "parent           :" & $vms.parent.blockHash    & "\n"
+  result.add "timestamp        :" & $vms.timestamp.toUnix    & "\n"
+  result.add "gasLimit         :" & $vms.gasLimit            & "\n"
+  result.add "fee              :" & $vms.fee                 & "\n"
+  result.add "prevRandao       :" & $vms.prevRandao          & "\n"
+  result.add "blockDifficulty  :" & $vms.blockDifficulty     & "\n"
+  result.add "flags            :" & $vms.flags               & "\n"
+  result.add "logEntries.len   :" & $vms.logEntries.len      & "\n"
+  result.add "receipts.len     :" & $vms.receipts.len        & "\n"
+  result.add "stateDB.root     :" & $vms.stateDB.rootHash    & "\n"
+  result.add "cumulativeGasUsed:" & $vms.cumulativeGasUsed   & "\n"
+  result.add "touchedAccs.len  :" & $vms.touchedAccounts.len & "\n"
+  result.add "selfDestructs.len:" & $vms.selfDestructs.len   & "\n"
+  result.add "txOrigin         :" & $vms.txOrigin            & "\n"
+  result.add "txGasPrice       :" & $vms.txGasPrice          & "\n"
+  result.add "fork             :" & $vms.fork                & "\n"
+  result.add "minerAddress     :" & $vms.minerAddress        & "\n"
