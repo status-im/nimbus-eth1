@@ -37,6 +37,10 @@ type
     NearbyLeafExpected
     NearbyDanglingLink
 
+    # envelope
+    DecomposeDegenerated
+    DecomposeDisjuct
+
     # import
     DifferentNodeValueExists
     ExpectedNodeKeyDiffers

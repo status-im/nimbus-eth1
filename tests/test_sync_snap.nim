@@ -1261,8 +1261,7 @@ when isMainModule:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
-        if n == 3:
-          false.accountsRunner(persistent=true, sam)
+        false.accountsRunner(persistent=true, sam)
     noisy.showElapsed("inspectRunner()"):
       for n,sam in snapOtherHealingList:
         false.inspectionRunner(persistent=true, cascaded=false, sam)
