@@ -1257,14 +1257,15 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true: # and false:
+  when true and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
-        false.accountsRunner(persistent=true, sam)
-    #noisy.showElapsed("inspectRunner()"):
-    #  for n,sam in snapOtherHealingList:
-    #    false.inspectionRunner(persistent=true, cascaded=false, sam)
+        if n == 3:
+          false.accountsRunner(persistent=true, sam)
+    noisy.showElapsed("inspectRunner()"):
+      for n,sam in snapOtherHealingList:
+        false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
