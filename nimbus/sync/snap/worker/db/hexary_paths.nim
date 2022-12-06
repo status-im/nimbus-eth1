@@ -97,6 +97,7 @@ proc pathExtend(
   var key = key
   while db.tab.hasKey(key):
     let node = db.tab[key]
+
     case node.kind:
     of Leaf:
       if result.tail.len == result.tail.sharedPrefixLen(node.lPfx):
@@ -135,21 +136,22 @@ proc pathExtend(
     let value = key.getFn()
     if value.len == 0:
       return
-
     var nodeRlp = rlpFromBytes value
+
     case nodeRlp.listLen:
     of 2:
       let
         (isLeaf, pathSegment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
         nSharedNibbles = result.tail.sharedPrefixLen(pathSegment)
         fullPath = (nSharedNibbles == pathSegment.len)
-        newTail = result.tail.slice(nSharedNibbles)
 
       # Leaf node
       if isLeaf:
-        let node = nodeRlp.toLeafNode(pathSegment)
-        result.path.add XPathStep(key: key, node: node, nibble: -1)
-        result.tail = newTail
+        if result.tail.len == nSharedNibbles:
+          # Bingo, got full path
+          let node = nodeRlp.toLeafNode(pathSegment)
+          result.path.add XPathStep(key: key, node: node, nibble: -1)
+          result.tail = EmptyNibbleRange
         return
 
       # Extension node
@@ -158,7 +160,7 @@ proc pathExtend(
         if node.eLink.len == 0:
           return
         result.path.add XPathStep(key: key, node: node, nibble: -1)
-        result.tail = newTail
+        result.tail = result.tail.slice(nSharedNibbles)
         key = node.eLink
       else:
         return

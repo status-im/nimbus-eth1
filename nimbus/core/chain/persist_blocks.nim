@@ -23,7 +23,7 @@ import
 when not defined(release):
   import
     ../../tracer,
-    ../../utils
+    ../../utils/utils
 
 type
   PersistBlockFlag = enum
@@ -87,7 +87,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
     when not defined(release):
       if validationResult == ValidationResult.Error and
          body.transactions.calcTxRoot == header.txRoot:
-        dumpDebuggingMetaData(c.db, header, body, vmState)
+        dumpDebuggingMetaData(c.com, header, body, vmState)
         warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:

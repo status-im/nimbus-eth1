@@ -258,24 +258,21 @@ proc verifyLowerBound*(
       {.gcsafe, raises: [Defect, KeyError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
-  proc convertTo(data: openArray[byte]; T: type Hash256): T =
-    discard result.data.NodeKey.init(data) # size error => zero
+  var error: HexaryError
 
-  let
-    root = ps.root.to(RepairKey)
-    base = base.to(NodeKey)
-    rc = base.hexaryPath(root, ps.hexaDb).hexaryNearbyRight(ps.hexaDb)
-  if rc.isOk:
-    let next = rc.value.getNibbles
-    if next.len == 64:
-      if first == next.getBytes.convertTo(Hash256).to(NodeTag):
-        return ok()
+  let rc = base.hexaryNearbyRight(ps.root, ps.hexaDb)
+  if rc.isErr:
+    error = rc.error
+  elif first == rc.value:
+    return ok()
+  else:
+    error = LowerBoundProofError
 
-  let error = LowerBoundProofError
   when extraTraceMessages:
-    trace "verifyLowerBound()", peer, base=base.pp,
+    trace "verifyLowerBound()", peer, base=base.to(NodeKey).pp,
       first=first.to(NodeKey).pp, error
   err(error)
+
 
 proc verifyNoMoreRight*(
     ps: SnapDbBaseRef;        ## Database session descriptor

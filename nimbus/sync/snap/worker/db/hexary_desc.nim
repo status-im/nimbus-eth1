@@ -324,7 +324,10 @@ proc pp*(key: NodeKey): string =
 proc pp*(key: NodeKey|RepairKey; db: HexaryTreeDbRef): string =
   key.ppImpl(db)
 
-proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDbRef): string =
+proc pp*(
+    w: RNodeRef|XNodeObj|RPathStep|XPathStep;
+    db: HexaryTreeDbRef;
+      ): string =
   w.ppImpl(db)
 
 proc pp*(w:openArray[RPathStep|XPathStep];db:HexaryTreeDbRef;indent=4): string =

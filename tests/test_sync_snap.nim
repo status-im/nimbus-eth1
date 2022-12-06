@@ -15,13 +15,13 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[p2p, rlp],
+  eth/[common, p2p, rlp],
   eth/trie/[nibbles],
   rocksdb,
   stint,
   stew/[byteutils, interval_set, results],
   unittest2,
-  ../nimbus/common/common,
+  ../nimbus/common/common as nimbus_common, # avoid name clash
   ../nimbus/db/[select_backend, storage_types],
   ../nimbus/core/chain,
   ../nimbus/sync/types,
@@ -32,7 +32,7 @@ import
     snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
-  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
+  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_decompose, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -372,9 +372,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # the account in the next for-loop cycle (if any.)
         check pfx & accKey.pp(false) == pfx & nextAccount.pp(false)
         if byNextKey.isOk:
-          nextAccount = byNextKey.value
-        else:
-          nextAccount = NodeKey.default
+          nextAccount = byNextKey.get(otherwise = NodeKey.default)
 
         # Check `prev` traversal funcionality
         if prevAccount != NodeKey.default:
@@ -409,148 +407,15 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
-    test "Decompose path prefix envelopes":
-
-      # The base data from above cannot be relied upon as there might be
-      # stray account nodes in the proof *before* the left boundary.
-      doAssert 2 < accKeys.len
-      let
-        db = desc.hexaDB
-        rootKey = root.to(NodeKey)
-        baseTag = accKeys[0].to(NodeTag) + 1.u256
-        firstTag = baseTag.to(NodeKey)
-                     .hexaryPath(rootKey, db)
-                     .hexaryNearbyRight(db)
-                     .get(otherwise = RPath())
-                     .getPartialPath
-                     .convertTo(NodeTag)
-        lastTag = accKeys[^2].to(NodeTag) # might be the same as `firstTag`
-        finalTag = accKeys[^1].to(NodeTag)
-      # Verify left boundary
-      check baseTag <= firstTag
-
-      # Construct test range
-      let
-        iv = NodeTagRange.new(baseTag, lastTag)
-        ivMin = iv.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-        ivMax = iv.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-        pfxLen = ivMin.sharedPrefixLen ivMax
-
-      # Use some overlapping prefixes. Note that a prefix must refer to
-      # an existing node
-      for n in 0 .. pfxLen:
-        let
-          pfx = ivMin.slice(0, pfxLen - n).hexPrefixEncode
-          qfx = block:
-            let rc = pfx.hexaryEnvelopeDecompose(rootKey, iv, db)
-            check rc.isOk
-            if rc.isOk:
-              rc.value
-            else:
-              seq[NodeSpecs].default
-
-        # Assemble possible gaps in decomposed envelope `qfx`
-        let gaps = NodeTagRangeSet.init()
-
-        # Start with full envelope and remove decomposed enveloped from `qfx`
-        discard gaps.merge pfx.hexaryEnvelope
-
-        #for w in qfx:
-        #  # The envelope of `w` must be fully contained in `gaps`
-        #  let iw = w.partialPath.hexaryEnvelope
-        #  check iw.len == gaps.reduce iw
-
-        # There are no node points between `iv.minPt` (aka base) and the first
-        # account `firstTag`. So only the interval `[firstTag,iv.maxPt]` is
-        # required to be fully covered by `gaps`
-        block:
-          let iw = NodeTagRange.new(firstTag, iv.maxPt)
-          check iw.len == gaps.reduce iw
-
-        for w in qfx:
-          # The envelope of `w` must be fully contained in `gaps`
-          let iw = w.partialPath.hexaryEnvelope
-          if iw.len != gaps.covered iw:
-            let
-              cmaNlSp0 = ",\n" & repeat(" ",12)
-              cmaNlSpc = ",\n" & repeat(" ",13)
-            echo ">>>     w=", w.partialPath.toHex,
-               "\n     gaps=@[", toSeq(gaps.increasing)
-                 .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
-                 .join(cmaNlSp0), "]"
-          check iw.len == gaps.reduce iw
-
-        # Remove that space between the start of `iv` and the first account
-        # key (if any.).
-        if iv.minPt < firstTag:
-          discard gaps.reduce(iv.minPt, firstTag-1.u256)
-
-        # There are no node points between `iv.maxPt` and `finalTag`
-        if iv.maxPt+1.u256 <= finalTag-1.u256:
-          discard gaps.reduce(iv.maxPt+1.u256, finalTag-1.u256)
-
-        # All gaps must be empty intervals
-        var gapPaths: seq[NodeTagRange]
-        for w in gaps.increasing:
-          let rc = w.minPt.hexaryPath(rootKey,db).hexaryNearbyRight(db)
-          if rc.isOk:
-            var firstTag = rc.value.getPartialPath.convertTo(NodeTag)
-
-            # The point `firstTag` might be zero if there is a missing node
-            # in between to advance to the next key.
-            if w.minPt <= firstTag:
-              # The interval `w` starts before the first interval
-              if firstTag <= w.maxPt:
-                # Make sure that there is no leaf node in the range
-                gapPaths.add w
-              continue
-
-          # Some sub-tries might not exists which leads to gaps
-          let
-            wMin = w.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-            wMax = w.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-            nPfx = wMin.sharedPrefixLen wMax
-          for nibble in wMin[nPfx] .. wMax[nPfx]:
-            let wPfy = wMin.slice(0,nPfx) & @[nibble].initNibbleRange.slice(1)
-            if wPfy.hexaryPathNodeKey(rootKey, db, missingOk=true).isOk:
-              gapPaths.add wPfy.hexPrefixEncode.hexaryEnvelope
-
-        # Verify :)
-        check gapPaths == seq[NodeTagRange].default
-
-        when false: # or true:
-          let
-            cmaNlSp0 = ",\n" & repeat(" ",12)
-            cmaNlSpc = ",\n" & repeat(" ",13)
-          echo ">>> n=", n, " pfxMax=", pfxLen,
-            "\n         pfx=", pfx, "/", ivMin.slice(0,pfxLen).hexPrefixEncode,
-            "\n       ivMin=", ivMin,
-            "\n       iv1st=", firstTag,
-            "\n       ivMax=", ivMax,
-            "\n      ivPast=", finaltag,
-            "\n     gaps=@[", toSeq(gaps.increasing)
-                .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
-                .join(cmaNlSp0), "]",
-            "\n  gapPaths=", gapPaths,
-            "\n        => @[", qfx
-                .mapIt(&"({it.partialPath.toHex},{it.nodeKey.pp(db)})")
-                .join(cmaNlSpc), "]",
-            "\n",
-
-            "*** ivMin=", ivMin,
-            "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(db), "\n",
-            "\n    ivFirst=", accKeys[0],
-            "\n    ", accKeys[0].hexaryPath(rootKey,db).pp(db), "\n",
-            "\n    ivMax=", ivMax,
-            "\n    ", iv.maxPt.hexaryPath(rootKey,db).pp(db), "\n",
-            "\n    ivtPast=", accKeys[^1],
-            "\n    ", accKeys[^1].hexaryPath(rootKey,db).pp(db), "\n",
-            "\n    pfxMax=", pfx.hexaryEnvelope.maxPt,
-            "\n    ", pfx.hexaryEnvelope.maxPt.hexaryPath(rootKey,db).pp(db)
-          if true: quit()
+    test &"Decompose path prefix envelopes on {info}":
+      if db.persistent:
+        # Store accounts persistent accounts DB
+        accKeys.test_decompose(root.to(NodeKey), desc.getAccountFn, desc.hexaDB)
+      else:
+        accKeys.test_decompose(root.to(NodeKey), desc.hexaDB, desc.hexaDB)
 
     test &"Storing/retrieving {accKeys.len} items " &
-        "on persistent state root registry":
+        "on persistent pivot/checkpoint registry":
       if not persistent:
         skip()
       else:
@@ -598,6 +463,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
               check rc.value.nAccounts == n.uint64
               check rc.value.nSlotLists == 0
               check rc.value.processed == seq[(NodeTag,NodeTag)].default
+
 
 proc storagesRunner(
     noisy = true;
@@ -1333,7 +1199,7 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
 
 proc syncSnapMain*(noisy = defined(debug)) =
   noisy.accountsRunner(persistent=true)
-  #noisy.accountsRunner(persistent=false) # problems unless running stand-alone
+  noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
   noisy.inspectionRunner()
   noisy.storeRunner()
@@ -1391,14 +1257,14 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
         false.accountsRunner(persistent=true, sam)
-    noisy.showElapsed("inspectRunner()"):
-      for n,sam in snapOtherHealingList:
-        false.inspectionRunner(persistent=true, cascaded=false, sam)
+    #noisy.showElapsed("inspectRunner()"):
+    #  for n,sam in snapOtherHealingList:
+    #    false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -1418,8 +1284,10 @@ when isMainModule:
   when true: # and false:
     false.inspectionRunner()
     for n,sam in snapTestList:
+      false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
     for n,sam in snapTestStorageList:
+      false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
       false.storagesRunner(persistent=true, sam)
 

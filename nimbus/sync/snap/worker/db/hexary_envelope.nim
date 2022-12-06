@@ -238,10 +238,11 @@ proc decomposeImpl(
   if iv.maxPt < env.maxPt:
     let
       envPt = env.maxPt.hexaryPath(rootKey, db)
-      ivPt = iv.maxPt.hexaryPath(rootKey, db)
-    # TODO ...
-    if ivPt.path.len == 0 or ivPt.path[^1].node.kind != Leaf:
-      return err()
+      ivPt = block:
+        let rc = iv.maxPt.hexaryPath(rootKey, db).hexaryNearbyLeft(db)
+        if rc.isErr:
+          return err()
+        rc.value
     block:
       let rc = envPt.decomposeRight ivPt
       if rc.isErr:
@@ -473,7 +474,7 @@ proc hexaryEnvelopeDecompose*(
   ## above though it is highly redundant. All bottom level nodes with
   ## envelopes disjunct from `iv` can be removed for a `boundary proof`.
   ##
-  when false or true:
+  when false: # or true:
     noRlpErrorOops("in-memory hexaryEnvelopeDecompose"):
       return partialPath.decomposeImpl(rootKey, iv, db)
   else:
@@ -491,7 +492,7 @@ proc hexaryEnvelopeDecompose*(
           if rc.isErr:
             return err()
           rc.value
-      when false or true:
+      when false: # or true:
         echo ">>> chop envelope right end => decomposeLeft",
           "\n   envPt=", env.minPt,
           "\n    ", envPt.pp(db),
@@ -499,7 +500,8 @@ proc hexaryEnvelopeDecompose*(
           "\n   ivPt=", iv.minPt,
           "\n    ", ivPt.pp(db)
       block:
-        let rc = envPt.decomposeLeftDebug(ivPt,db)
+        #let rc = envPt.decomposeLeftDebug(ivPt,db)
+        let rc = envPt.decomposeLeft(ivPt)
         if rc.isErr:
           return err()
         nodeSpex &= rc.value
@@ -507,11 +509,12 @@ proc hexaryEnvelopeDecompose*(
     if iv.maxPt < env.maxPt:
       let
         envPt = env.maxPt.hexaryPath(rootKey, db)
-        ivPt = iv.maxPt.hexaryPath(rootKey, db)
-      # TODO ...
-      if ivPt.path.len == 0 or ivPt.path[^1].node.kind != Leaf:
-        return err()
-      when false or true:
+        ivPt = block:
+          let rc = iv.maxPt.hexaryPath(rootKey, db).hexaryNearbyLeft(db)
+          if rc.isErr:
+            return err()
+          rc.value
+      when false: # or true:
         echo ">>> chop envelope left end => decomposeRight",
           "\n   envPt=", env.maxPt,
           "\n    ", envPt.pp(db),
