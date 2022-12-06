@@ -14,7 +14,8 @@ import
   eth/[common, p2p, trie/db, trie/nibbles],
   ../../../../db/[select_backend, storage_types],
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_import, hexary_paths, rocky_bulk_load]
+  "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
+       hexary_paths, rocky_bulk_load]
 
 {.push raises: [Defect].}
 
@@ -257,22 +258,21 @@ proc verifyLowerBound*(
       {.gcsafe, raises: [Defect, KeyError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
-  proc convertTo(data: openArray[byte]; T: type Hash256): T =
-    discard result.data.NodeKey.init(data) # size error => zero
+  var error: HexaryError
 
-  let
-    root = ps.root.to(RepairKey)
-    base = base.to(NodeKey)
-    next = base.hexaryPath(root, ps.hexaDb).right(ps.hexaDb).getNibbles
-  if next.len == 64:
-    if first == next.getBytes.convertTo(Hash256).to(NodeTag):
-      return ok()
+  let rc = base.hexaryNearbyRight(ps.root, ps.hexaDb)
+  if rc.isErr:
+    error = rc.error
+  elif first == rc.value:
+    return ok()
+  else:
+    error = LowerBoundProofError
 
-  let error = LowerBoundProofError
   when extraTraceMessages:
-    trace "verifyLowerBound()", peer, base=base.pp,
+    trace "verifyLowerBound()", peer, base=base.to(NodeKey).pp,
       first=first.to(NodeKey).pp, error
   err(error)
+
 
 proc verifyNoMoreRight*(
     ps: SnapDbBaseRef;        ## Database session descriptor
@@ -285,7 +285,7 @@ proc verifyNoMoreRight*(
   let
     root = ps.root.to(RepairKey)
     base = base.to(NodeKey)
-  if base.hexaryPath(root, ps.hexaDb).rightStop(ps.hexaDb):
+  if base.hexaryPath(root, ps.hexaDb).hexaryNearbyRightMissing(ps.hexaDb):
     return ok()
 
   let error = LowerBoundProofError
@@ -319,7 +319,7 @@ proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the
   ## argument `key`.
   noPpError("dumpPath"):
-    let rPath= key.to(NodeKey).hexaryPath(ps.root.to(RepairKey), ps.hexaDb)
+    let rPath= key.hexaryPath(ps.root, ps.hexaDb)
     result = rPath.path.mapIt(it.pp(ps.hexaDb)) & @["(" & rPath.tail.pp & ")"]
 
 proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =

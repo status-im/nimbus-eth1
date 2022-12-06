@@ -15,8 +15,9 @@ import
   stew/interval_set,
   ../../../protocol,
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_import, hexary_inspect,
-       hexary_interpolate, hexary_paths, snapdb_desc, snapdb_persistent]
+  "."/[hexary_desc, hexary_error, hexary_envelope, hexary_import,
+       hexary_inspect, hexary_interpolate, hexary_paths, snapdb_desc,
+       snapdb_persistent]
 
 {.push raises: [Defect].}
 
@@ -163,7 +164,7 @@ proc importStorageSlots(
       # proof data is typically small.
       let topTag = slots[^1].pathTag
       for w in proofStats.dangling:
-        let iv = w.partialPath.pathEnvelope
+        let iv = w.partialPath.hexaryEnvelope
         if iv.maxPt < base or topTag < iv.minPt:
           # Dangling link with partial path envelope outside accounts range
           discard
@@ -189,7 +190,7 @@ proc importStorageSlots(
           # Without `proof` data available there can only be a complete
           # set/list of accounts so there are no dangling nodes in the first
           # place. But there must be `proof` data for an empty list.
-          if w.partialPath.pathEnvelope.maxPt < bottomTag:
+          if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
             return err(LowerBoundProofError)
         # Otherwise register left over entry
         dangling.add w
@@ -207,7 +208,7 @@ proc importStorageSlots(
   else:
     if not noBaseBoundCheck:
       for w in proofStats.dangling:
-        if base <= w.partialPath.pathEnvelope.maxPt:
+        if base <= w.partialPath.hexaryEnvelope.maxPt:
           return err(LowerBoundProofError)
     dangling = proofStats.dangling
 
@@ -498,9 +499,9 @@ proc getStorageSlotsNodeKey*(
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getStorageSlotsNodeKey()"):
     if persistent:
-      rc = ps.getStorageSlotsFn.hexaryInspectPath(ps.root, path)
+      rc = path.hexarypathNodeKey(ps.root, ps.getStorageSlotsFn)
     else:
-      rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
+      rc = path.hexarypathNodeKey(ps.root, ps.hexaDb)
   if rc.isOk:
     return ok(rc.value)
   err(NodeNotFound)
@@ -533,7 +534,7 @@ proc getStorageSlotsData*(
     if persistent:
       leaf = path.hexaryPath(ps.root, ps.getStorageSlotsFn).leafData
     else:
-      leaf = path.hexaryPath(ps.root.to(RepairKey), ps.hexaDb).leafData
+      leaf = path.hexaryPath(ps.root, ps.hexaDb).leafData
 
     if leaf.len == 0:
       return err(AccountNotFound)

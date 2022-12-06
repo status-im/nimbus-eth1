@@ -39,7 +39,7 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/[hexary_paths, snapdb_accounts]
+  ./db/[hexary_envelope, snapdb_accounts]
 
 {.push raises: [Defect].}
 
@@ -166,7 +166,7 @@ proc accountsRangefetchImpl(
   # Punch holes into the reported range of received accounts from the network
   # if it there are gaps (described by dangling nodes.)
   for w in gaps.innerGaps:
-    discard covered.reduce w.partialPath.pathEnvelope
+    discard covered.reduce w.partialPath.hexaryEnvelope
 
   # Update book keeping
   for w in covered.increasing:

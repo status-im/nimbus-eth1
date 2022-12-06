@@ -15,23 +15,24 @@ import
   std/[algorithm, distros, hashes, math, os, sets,
        sequtils, strformat, strutils, tables, times],
   chronicles,
-  eth/[p2p, rlp],
+  eth/[common, p2p, rlp],
   eth/trie/[nibbles],
   rocksdb,
   stint,
   stew/[byteutils, interval_set, results],
   unittest2,
-  ../nimbus/common/common,
+  ../nimbus/common/common as nimbus_common, # avoid name clash
   ../nimbus/db/[select_backend, storage_types],
   ../nimbus/core/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_error, hexary_inspect,  hexary_paths, rocky_bulk_load,
-    snapdb_accounts, snapdb_desc, snapdb_pivot, snapdb_storage_slots],
+    hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
+    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot,
+    snapdb_storage_slots],
   ../nimbus/utils/prettify,
   ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
-  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_types]
+  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_decompose, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -302,7 +303,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
     var
       desc: SnapDbAccountsRef
       accKeys: seq[NodeKey]
-      accBaseTag: NodeTag
 
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
       let
@@ -318,13 +318,13 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       desc = SnapDbAccountsRef.init(dbBase, root, peer)
 
       # Load/accumulate data from several samples (needs some particular sort)
-      accBaseTag = accountsList.mapIt(it.base).sortMerge
+      let baseTag = accountsList.mapIt(it.base).sortMerge
       let packed = PackedAccountRange(
         accounts: accountsList.mapIt(it.data.accounts).sortMerge,
         proof:    accountsList.mapIt(it.data.proof).flatten)
       # Merging intervals will produce gaps, so the result is expected OK but
       # different from `.isImportOk`
-      check desc.importAccounts(accBaseTag, packed, true).isOk
+      check desc.importAccounts(baseTag, packed, true).isOk
 
       # check desc.merge(lowerBound, accounts) == OkHexDb
       desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
@@ -372,9 +372,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # the account in the next for-loop cycle (if any.)
         check pfx & accKey.pp(false) == pfx & nextAccount.pp(false)
         if byNextKey.isOk:
-          nextAccount = byNextKey.value
-        else:
-          nextAccount = NodeKey.default
+          nextAccount = byNextKey.get(otherwise = NodeKey.default)
 
         # Check `prev` traversal funcionality
         if prevAccount != NodeKey.default:
@@ -409,59 +407,15 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # Beware: dumping a large database is not recommended
       #true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
-    test "Dismantle path prefix envelopes":
-      doAssert 1 < accKeys.len
-      let
-        iv = NodeTagRange.new(accBaseTag, accKeys[^2].to(NodeTag))
-        ivMin = iv.minPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-        ivMax = iv.maxPt.to(NodeKey).ByteArray32.toSeq.initNibbleRange
-        pfxLen = ivMin.sharedPrefixLen ivMax
-      # Use some overlapping prefixes. Note that a prefix must refer to
-      # an existing node
-      for n in 0 .. pfxLen:
-        let
-          pfx = ivMin.slice(0, pfxLen - n).hexPrefixEncode
-          qfx = pfx.dismantle(root.to(NodeKey), iv, desc.hexaDB)
-
-        # Re-assemble intervals
-        let covered = NodeTagRangeSet.init()
-        for w in qfx:
-          let iv = pathEnvelope w
-          check iv.len == covered.merge iv
-
-        if covered.chunks == 1 and iv.minPt == low(NodeTag):
-          # Order: `iv` <= `covered`
-          check iv.maxPt <= covered.ge.value.minPt
-        elif covered.chunks == 1 and iv.maxPt == high(NodeTag):
-          # Order: `covered` <= `iv`
-          check covered.ge.value.maxPt <= iv.minPt
-        else:
-          # Covered contains two ranges were the gap is big enough for `iv`
-          check covered.chunks == 2
-          # Order: `covered.ge` <= `iv` <= `covered.le`
-          check covered.ge.value.maxPt <= iv.minPt
-          check iv.maxPt <= covered.le.value.minPt
-
-        # Must hold
-        check covered.le.value.minPt <= accKeys[^1].to(Nodetag)
-
-        when false: # or true:
-          let
-            cmaNlSp0 = ",\n" & repeat(" ",12)
-            cmaNlSpc = ",\n" & repeat(" ",13)
-          echo ">>> n=", n, " pfxMax=", pfxLen,
-            "\n         pfx=", pfx,
-            "\n       ivMin=", ivMin,
-            "\n       iv1st=", accKeys[0],
-            "\n       ivMax=", ivMax,
-            "\n      ivPast=", accKeys[^1],
-            "\n  covered=@[", toSeq(covered.increasing)
-                .mapIt(&"[{it.minPt}{cmaNlSpc}{it.maxPt}]")
-                .join(cmaNlSp0), "]",
-            "\n        => @[", qfx.mapIt(it.toHex).join(cmaNlSpc), "]"
+    test &"Decompose path prefix envelopes on {info}":
+      if db.persistent:
+        # Store accounts persistent accounts DB
+        accKeys.test_decompose(root.to(NodeKey), desc.getAccountFn, desc.hexaDB)
+      else:
+        accKeys.test_decompose(root.to(NodeKey), desc.hexaDB, desc.hexaDB)
 
     test &"Storing/retrieving {accKeys.len} items " &
-        "on persistent state root registry":
+        "on persistent pivot/checkpoint registry":
       if not persistent:
         skip()
       else:
@@ -509,6 +463,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
               check rc.value.nAccounts == n.uint64
               check rc.value.nSlotLists == 0
               check rc.value.processed == seq[(NodeTag,NodeTag)].default
+
 
 proc storagesRunner(
     noisy = true;
@@ -628,7 +583,8 @@ proc inspectionRunner(
         check not stats.stopped
         let
           dangling = stats.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
+          keys = dangling.hexaryPathNodeKeys(
+            rootKey, desc.hexaDb, missingOk=true)
         check dangling.len == keys.len
         singleStats.add (desc.hexaDb.tab.len,stats)
 
@@ -667,7 +623,8 @@ proc inspectionRunner(
           check not stats.stopped
           let
             dangling = stats.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(rootKey, dangling)
+            keys = dangling.hexaryPathNodeKeys(
+              rootKey, desc.hexaDb, missingOk=true)
           check dangling.len == keys.len
           # Must be the same as the in-memory fingerprint
           let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
@@ -701,8 +658,8 @@ proc inspectionRunner(
         check not stats.stopped
         let
           dangling = stats.dangling.mapIt(it.partialPath)
-          keys = desc.hexaDb.hexaryInspectToKeys(
-            rootKey, dangling.toHashSet.toSeq)
+          keys = dangling.hexaryPathNodeKeys(
+            rootKey, desc.hexaDb, missingOk=true)
         check dangling.len == keys.len
         accuStats.add (desc.hexaDb.tab.len, stats)
 
@@ -724,8 +681,8 @@ proc inspectionRunner(
           check not stats.stopped
           let
             dangling = stats.dangling.mapIt(it.partialPath)
-            keys = desc.hexaDb.hexaryInspectToKeys(
-              rootKey, dangling.toHashSet.toSeq)
+            keys = dangling.hexaryPathNodeKeys(
+              rootKey, desc.hexaDb, missingOk=true)
           check dangling.len == keys.len
           check accuStats[n][1] == stats
 
@@ -1242,7 +1199,7 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
 
 proc syncSnapMain*(noisy = defined(debug)) =
   noisy.accountsRunner(persistent=true)
-  #noisy.accountsRunner(persistent=false) # problems unless running stand-alone
+  noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
   noisy.inspectionRunner()
   noisy.storeRunner()
@@ -1304,7 +1261,8 @@ when isMainModule:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
-        false.accountsRunner(persistent=true, sam)
+        if n == 3:
+          false.accountsRunner(persistent=true, sam)
     noisy.showElapsed("inspectRunner()"):
       for n,sam in snapOtherHealingList:
         false.inspectionRunner(persistent=true, cascaded=false, sam)
@@ -1326,9 +1284,11 @@ when isMainModule:
   # This one uses readily available dumps
   when true: # and false:
     false.inspectionRunner()
-    for sam in snapTestList:
+    for n,sam in snapTestList:
+      false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
-    for sam in snapTestStorageList:
+    for n,sam in snapTestStorageList:
+      false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
       false.storagesRunner(persistent=true, sam)
 

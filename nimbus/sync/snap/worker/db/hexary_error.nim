@@ -26,6 +26,17 @@ type
     TooManyProcessedChunks
     TooManySlotAccounts
 
+    # nearby/boundary proofs
+    NearbyExtensionError
+    NearbyBranchError
+    NearbyGarbledNode
+    NearbyNestingTooDeep
+    NearbyUnexpectedNode
+    NearbyFailed
+    NearbyEmptyPath
+    NearbyLeafExpected
+    NearbyDanglingLink
+
     # import
     DifferentNodeValueExists
     ExpectedNodeKeyDiffers

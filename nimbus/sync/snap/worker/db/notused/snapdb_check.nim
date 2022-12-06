@@ -165,7 +165,7 @@ proc checkAccountsTrieIsComplete*(
     error: HexaryError
 
   try:
-    let stats = db.getAccountFn.hexaryInspectTrie(rootKey, @[])
+    let stats = db.getAccountFn.hexaryInspectTrie(rootKey)
     if not stats.stopped:
       return stats.dangling.len == 0
 

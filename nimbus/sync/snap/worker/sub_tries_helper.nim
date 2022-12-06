@@ -9,12 +9,13 @@
 # except according to those terms.
 
 import
+  std/sequtils,
   chronicles,
   chronos,
   eth/[common, p2p],
   stew/interval_set,
   ".."/[constants, range_desc, worker_desc],
-  ./db/[hexary_desc, hexary_error, hexary_inspect, hexary_paths]
+  ./db/[hexary_desc, hexary_error, hexary_envelope, hexary_inspect]
 
 {.push raises: [Defect].}
 
@@ -179,7 +180,7 @@ proc subTriesNodesReclassify*(
 
       for w in batch.checkNodes:
         let
-          iv = w.pathEnvelope
+          iv = w.hexaryEnvelope
           nCov = batch.processed.covered iv
 
         if iv.len <= nCov:
@@ -193,8 +194,12 @@ proc subTriesNodesReclassify*(
           # Partially processed range, fetch an overlapping interval and
           # remove that from the envelope of `w`.
           try:
-            let paths = w.dismantle(
-              rootKey, batch.getOverlapping(iv).value, getFn)
+            let paths = block:
+              let rc = w.hexaryEnvelopeDecompose(
+                rootKey, batch.getOverlapping(iv).value, getFn)
+              if rc.isErr:
+                continue
+              rc.value.mapIt(it.partialpath)
             delayed &= paths
             when extraTraceMessages:
               trace logTxt "reclassify dismantled", count, partialPath=w,
@@ -211,7 +216,7 @@ proc subTriesNodesReclassify*(
       batch.checkNodes.swap delayed
       delayed.setLen(0)
 
-  batch.checkNodes = doneWith.pathSortUniq
+  batch.checkNodes = doneWith.hexaryEnvelopeUniq
 
   when extraTraceMessages:
     trace logTxt "reclassify finalise", count,

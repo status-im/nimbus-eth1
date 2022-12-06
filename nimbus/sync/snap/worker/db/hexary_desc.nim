@@ -324,7 +324,10 @@ proc pp*(key: NodeKey): string =
 proc pp*(key: NodeKey|RepairKey; db: HexaryTreeDbRef): string =
   key.ppImpl(db)
 
-proc pp*(w: RNodeRef|XNodeObj|RPathStep; db: HexaryTreeDbRef): string =
+proc pp*(
+    w: RNodeRef|XNodeObj|RPathStep|XPathStep;
+    db: HexaryTreeDbRef;
+      ): string =
   w.ppImpl(db)
 
 proc pp*(w:openArray[RPathStep|XPathStep];db:HexaryTreeDbRef;indent=4): string =
@@ -391,6 +394,10 @@ proc isNodeKey*(a: RepairKey): bool =
 proc convertTo*(data: Blob; T: type NodeKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion
   discard result.init(data)
+
+proc convertTo*(data: Blob; T: type NodeTag): T =
+  ## Ditto for node tag
+  data.convertTo(NodeKey).to(NodeTag)
 
 proc convertTo*(data: Blob; T: type RepairKey): T =
   ## Probably lossy conversion, use `init()` for safe conversion

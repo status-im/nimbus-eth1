@@ -14,8 +14,9 @@ import
   eth/[common, p2p, rlp, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_import, hexary_interpolate,
-       hexary_inspect, hexary_paths, snapdb_desc, snapdb_persistent]
+  "."/[hexary_desc, hexary_error, hexary_envelope, hexary_import,
+       hexary_interpolate, hexary_inspect, hexary_paths, snapdb_desc,
+       snapdb_persistent]
 
 {.push raises: [Defect].}
 
@@ -238,7 +239,7 @@ proc importAccounts*(
 
     # Inspect trie for dangling nodes from prrof data (if any.)
     if 0 < data.proof.len:
-      proofStats = ps.hexaDb.hexaryInspectTrie(ps.root, @[])
+      proofStats = ps.hexaDb.hexaryInspectTrie(ps.root)
 
     if 0 < accounts.len:
       if 0 < data.proof.len:
@@ -246,7 +247,7 @@ proc importAccounts*(
         # proof data is typically small.
         let topTag = accounts[^1].pathTag
         for w in proofStats.dangling:
-          let iv = w.partialPath.pathEnvelope
+          let iv = w.partialPath.hexaryEnvelope
           if iv.maxPt < base or topTag < iv.minPt:
             # Dangling link with partial path envelope outside accounts range
             gaps.dangling.add w
@@ -272,7 +273,7 @@ proc importAccounts*(
             # Without `proof` data available there can only be a complete
             # set/list of accounts so there are no dangling nodes in the first
             # place. But there must be `proof` data for an empty list.
-            if w.partialPath.pathEnvelope.maxPt < bottomTag:
+            if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
               return err(LowerBoundProofError)
           # Otherwise register left over entry
           gaps.innerGaps.add w
@@ -289,7 +290,7 @@ proc importAccounts*(
     else:
       if not noBaseBoundCheck:
         for w in proofStats.dangling:
-          if base <= w.partialPath.pathEnvelope.maxPt:
+          if base <= w.partialPath.hexaryEnvelope.maxPt:
             return err(LowerBoundProofError)
       gaps.dangling = proofStats.dangling
 
@@ -411,9 +412,9 @@ proc getAccountsNodeKey*(
   var rc: Result[NodeKey,void]
   noRlpExceptionOops("getAccountsNodeKey()"):
     if persistent:
-      rc = ps.getAccountFn.hexaryInspectPath(ps.root, path)
+      rc = path.hexaryPathNodeKey(ps.root, ps.getAccountFn)
     else:
-      rc = ps.hexaDb.hexaryInspectPath(ps.root, path)
+      rc = path.hexaryPathNodeKey(ps.root, ps.hexaDb)
   if rc.isOk:
     return ok(rc.value)
   err(NodeNotFound)
@@ -443,7 +444,7 @@ proc getAccountsData*(
     if persistent:
       leaf = path.hexaryPath(ps.root, ps.getAccountFn).leafData
     else:
-      leaf = path.hexaryPath(ps.root.to(RepairKey),ps.hexaDb).leafData
+      leaf = path.hexaryPath(ps.root, ps.hexaDb).leafData
 
     if leaf.len == 0:
       return err(AccountNotFound)
