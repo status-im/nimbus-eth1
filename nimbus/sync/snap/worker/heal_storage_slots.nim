@@ -115,7 +115,7 @@ proc verifyStillMissingNodes(
     let rc = db.getStorageSlotsNodeKey(peer, accKey, storageRoot, w.partialPath)
     if rc.isOk:
       # Check nodes for dangling links
-      slots.checkNodes.add w.partialPath
+      slots.checkNodes.add w
     else:
       # Node is still missing
       delayed.add w
@@ -400,9 +400,7 @@ proc storageSlotsHealing(
   var nLeafNodes = 0 # for logging
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
-      let
-        inx = w.slot.unsafeGet
-        nodePath = nodeSpecs[inx].partialPath
+      let inx = w.slot.unsafeGet
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
@@ -410,7 +408,7 @@ proc storageSlotsHealing(
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
-        slots.checkNodes.add nodePath
+        slots.checkNodes.add nodeSpecs[inx]
 
       else:
         # Node has been stored, double check
@@ -421,7 +419,7 @@ proc storageSlotsHealing(
           buddy.registerStorageSlotsLeaf(kvp, slotKey, env)
           nLeafNodes.inc
         else:
-          slots.checkNodes.add nodePath
+          slots.checkNodes.add nodeSpecs[inx]
 
   when extraTraceMessages:
     let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
