@@ -309,12 +309,6 @@ when defined(geth):
   import db/geth_db
 
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe, raises: [Defect,CatchableError,Exception].} =
-  var ancestorDepth = vmState.blockNumber - blockNumber - 1
-  if ancestorDepth >= MAX_PREV_HEADER_DEPTH:
-    return
-  if blockNumber >= vmState.blockNumber:
-    return
-
   let db = vmState.com.db
   when defined(geth):
     result = db.headerHash(blockNumber.truncate(uint64))

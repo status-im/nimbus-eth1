@@ -94,13 +94,6 @@ proc getTxContext*(ctx: HostContext): nimbus_tx_context {.inline.} =
   ctx.host.get_tx_context(ctx.context)
 
 proc getBlockHash*(ctx: HostContext, number: UInt256): Hash256 =
-  let
-    blockNumber = ctx.getTxContext().block_number.u256
-    ancestorDepth  = blockNumber - number - 1
-  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-    return
-  if number >= blockNumber:
-    return
   ctx.host.get_block_hash(ctx.context, number.truncate(int64))
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool {.inline.} =

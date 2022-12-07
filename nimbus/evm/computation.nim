@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ".."/[db/accounts_cache],
+  ".."/[db/accounts_cache, constants],
   "."/[code_stream, memory, message, stack, state],
   "."/[transaction_tracer, types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
@@ -113,11 +113,25 @@ template getGasPrice*(c: Computation): GasInt =
   else:
     c.vmState.txGasPrice
 
-template getBlockHash*(c: Computation, blockNumber: UInt256): Hash256 =
+proc getBlockHash*(c: Computation, number: UInt256): Hash256 =
   when evmc_enabled:
-    c.host.getBlockHash(blockNumber)
+    let
+      blockNumber = c.host.getTxContext().block_number.u256
+      ancestorDepth  = blockNumber - number - 1
+    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+      return
+    if number >= blockNumber:
+      return
+    c.host.getBlockHash(number)
   else:
-    c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
+    let
+      blockNumber = c.vmState.blockNumber
+      ancestorDepth = blockNumber - number - 1
+    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+      return
+    if number >= blockNumber:
+      return
+    c.vmState.getAncestorHash(number.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
   when evmc_enabled:
