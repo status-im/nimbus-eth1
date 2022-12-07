@@ -19,9 +19,6 @@ import
 proc `$`(hash: Hash256): string =
   hash.data.toHex
 
-proc `$`(address: openArray[byte]): string =
-  address.toHex
-
 proc `$`(bloom: BloomFilter): string =
   bloom.toHex
 
@@ -86,21 +83,51 @@ proc debugAccounts*(vmState: BaseVMState): string =
   res.pretty
 
 proc debug*(vms: BaseVMState): string =
-  result.add "com.consensus    :" & $vms.com.consensus       & "\n"
-  result.add "parent           :" & $vms.parent.blockHash    & "\n"
-  result.add "timestamp        :" & $vms.timestamp.toUnix    & "\n"
-  result.add "gasLimit         :" & $vms.gasLimit            & "\n"
-  result.add "fee              :" & $vms.fee                 & "\n"
-  result.add "prevRandao       :" & $vms.prevRandao          & "\n"
-  result.add "blockDifficulty  :" & $vms.blockDifficulty     & "\n"
-  result.add "flags            :" & $vms.flags               & "\n"
-  result.add "logEntries.len   :" & $vms.logEntries.len      & "\n"
-  result.add "receipts.len     :" & $vms.receipts.len        & "\n"
-  result.add "stateDB.root     :" & $vms.stateDB.rootHash    & "\n"
-  result.add "cumulativeGasUsed:" & $vms.cumulativeGasUsed   & "\n"
-  result.add "touchedAccs.len  :" & $vms.touchedAccounts.len & "\n"
-  result.add "selfDestructs.len:" & $vms.selfDestructs.len   & "\n"
-  result.add "txOrigin         :" & $vms.txOrigin            & "\n"
-  result.add "txGasPrice       :" & $vms.txGasPrice          & "\n"
-  result.add "fork             :" & $vms.fork                & "\n"
-  result.add "minerAddress     :" & $vms.minerAddress        & "\n"
+  result.add "com.consensus    : " & $vms.com.consensus       & "\n"
+  result.add "parent           : " & $vms.parent.blockHash    & "\n"
+  result.add "timestamp        : " & $vms.timestamp.toUnix    & "\n"
+  result.add "gasLimit         : " & $vms.gasLimit            & "\n"
+  result.add "fee              : " & $vms.fee                 & "\n"
+  result.add "prevRandao       : " & $vms.prevRandao          & "\n"
+  result.add "blockDifficulty  : " & $vms.blockDifficulty     & "\n"
+  result.add "flags            : " & $vms.flags               & "\n"
+  result.add "logEntries.len   : " & $vms.logEntries.len      & "\n"
+  result.add "receipts.len     : " & $vms.receipts.len        & "\n"
+  result.add "stateDB.root     : " & $vms.stateDB.rootHash    & "\n"
+  result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
+  result.add "touchedAccs.len  : " & $vms.touchedAccounts.len & "\n"
+  result.add "selfDestructs.len: " & $vms.selfDestructs.len   & "\n"
+  result.add "txOrigin         : " & $vms.txOrigin            & "\n"
+  result.add "txGasPrice       : " & $vms.txGasPrice          & "\n"
+  result.add "fork             : " & $vms.fork                & "\n"
+  result.add "minerAddress     : " & $vms.minerAddress        & "\n"
+
+proc `$`(x: ChainId): string =
+  $int(x)
+
+proc `$`(acl: AccessList): string =
+  if acl.len > 0:
+    result.add "\n"
+
+  for ap in acl:
+    result.add " * " & $ap.address & "\n"
+    for i, k in ap.storageKeys:
+      result.add "   - " & k.toHex
+      if i < ap.storageKeys.len-1:
+        result.add "\n"
+
+proc debug*(tx: Transaction): string =
+  result.add "txType        : " & $tx.txType         & "\n"
+  result.add "chainId       : " & $tx.chainId        & "\n"
+  result.add "nonce         : " & $tx.nonce          & "\n"
+  result.add "gasPrice      : " & $tx.gasPrice       & "\n"
+  result.add "maxPriorityFee: " & $tx.maxPriorityFee & "\n"
+  result.add "maxFee        : " & $tx.maxFee         & "\n"
+  result.add "gasLimit      : " & $tx.gasLimit       & "\n"
+  result.add "to            : " & $tx.to             & "\n"
+  result.add "value         : " & $tx.value          & "\n"
+  result.add "payload       : " & $tx.payload        & "\n"
+  result.add "accessList    : " & $tx.accessList     & "\n"
+  result.add "V             : " & $tx.V              & "\n"
+  result.add "R             : " & $tx.R              & "\n"
+  result.add "S             : " & $tx.S              & "\n"
