@@ -56,7 +56,7 @@ The following options are available:
                              extension is '.rlp', then the data is interpreted as an RLP list of signed
                              transactions. The '.rlp' format is identical to the output.body format.
                              [=txs.json].
- --state.reward          Mining reward. Set to 0 to disable [=0].
+ --state.reward          Mining reward. Set to -1 to disable [=0].
  --state.chainid         ChainID to use [=1].
  --state.fork            Name of ruleset to use. [=GrayGlacier].
                              - Frontier.

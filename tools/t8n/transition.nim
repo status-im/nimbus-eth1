@@ -1,5 +1,5 @@
 import
-  std/[json, strutils, times, tables, os],
+  std/[json, strutils, times, tables, os, sets],
   eth/[rlp, trie],
   stint, chronicles, stew/results,
   "."/[config, types, helpers],
@@ -176,7 +176,7 @@ proc exec(ctx: var TransContext,
     )
     includedTx.add tx
 
-  if stateReward.isSome:
+  if stateReward.isSome and stateReward.get >= 0:
     let blockReward = stateReward.get()
     var mainReward = blockReward
     for uncle in ctx.env.ommers:
@@ -190,6 +190,18 @@ proc exec(ctx: var TransContext,
     vmState.mutateStateDB:
       db.addBalance(ctx.env.currentCoinbase, mainReward)
       db.persist(clearCache = false)
+
+  let miner = ctx.env.currentCoinbase
+  vmState.mutateStateDB:
+    if miner in vmState.selfDestructs:
+      db.deleteAccount miner
+    if vmState.com.forkGTE(Spurious):
+      # EIP158/161 state clearing
+      if db.accountExists(miner) and db.isEmptyAccount(miner):
+        db.deleteAccount(miner)
+    # do not clear cache, we need the cache when constructing
+    # post state
+    db.persist(clearCache = false)
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
@@ -232,7 +244,6 @@ proc setupAlloc(stateDB: AccountsCache, alloc: GenesisAlloc) =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
-
   let num = blockNumber.truncate(uint64)
   var h = Hash256()
   if vmState.blockHashes.len == 0:

@@ -84,7 +84,7 @@ type
 
     stateReward* {.
       desc: "Mining reward. Set to -1 to disable"
-      defaultValue: none(UInt256)
+      defaultValue: some(0.u256)
       defaultValueDesc: "-1"
       name: "state.reward" }: Option[UInt256]
 
