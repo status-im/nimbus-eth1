@@ -8,6 +8,73 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Envelope tools for nodes and hex encoded *partial paths*
+## ========================================================
+##
+## Envelope
+## --------
+## Given a hex encoded *partial path*, this is the maximum range of leaf node
+## paths (of data type `NodeTag`) that starts with the *partial path*. It is
+## obtained by creating an interval (of type `NodeTagRange`) with end points
+## starting with the *partial path* and extening it with *zero* nibbles for
+## the left end, and *0xf* nibbles for the right end.
+##
+## Boundary proofs
+## ---------------
+## The *boundary proof* for a range `iv` of leaf node paths (e.g. account
+## hashes) for a given *state root* is a set of nodes enough to construct the
+## partial *Merkel Patricia trie* containing the leafs. If the given range
+## `iv` is larger than the left or right most leaf node paths, the *boundary
+## proof* also implies that there is no other leaf path between the range
+## boundary and the left or rightmost leaf path. There is not minimalist
+## requirement of a *boundary proof*.
+##
+## Envelope decomposition
+## ----------------------
+## The idea is to compute the difference of the envelope of a hex encoded
+## *partial path* off some range of leaf node paths and express the result as
+## a list of envelopes (represented by either nodes or *partial paths*.)
+##
+## Prerequisites
+## ^^^^^^^^^^^^^
+## More formally, assume
+##
+## * ``partialPath`` is a hex encoded *partial path* (of type ``Blob``)
+##
+## * ``iv`` is a range of leaf node paths (of type ``NodeTagRange``)
+##
+## and assume further that for `iv` there are left and right *boundary proofs*
+## in the database (e.g. as downloaded via the `snap/1` protocol.)
+##
+## The decomposition
+## ^^^^^^^^^^^^^^^^^
+## Then there is a (probably empty) set `W` of *partial paths* (represented by
+## nodes or *partial paths*) where the envelope of each *partial path* in `W`
+## has no common leaf path in `iv` (i.e. disjunct to the sub-range of `iv`
+## where the boundaries are existing node keys.)
+##
+## Let this set `W` be maximal in the sense that for every *partial path* `p`
+## which is prefixed by `partialPath` the envelope of which has no common leaf
+## node in `iv` there exists a *partial path* `w` in `W` that prefixes `p`. In
+## other words the envelope of `p` is contained in the envelope of `w`.
+##
+## Formally:
+##
+## * if ``p = partialPath & p-ext`` with ``(envelope of p) * iv`` has no
+##   allocated nodes for in the hexary trie database
+##
+## * then there is a ``w = partialPath & w-ext`` in ``W`` with
+##   ``p-ext = w-ext & some-ext``.
+##
+## Relation to boundary proofs
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## Consider the decomposition of an empty *partial path* (the envelope of which
+## representing the whole leaf node path range) for a leaf node range `iv`.
+## This result is then a `boundary proof` for `iv` according to the definition
+## above though it is highly redundant. All *partial path* bottom level nodes
+## with envelopes disjunct to `iv` can be removed from `W` for a `boundary
+## proof`.
+##
 import
   std/[algorithm, sequtils, tables],
   eth/[common, trie/nibbles],
@@ -173,10 +240,10 @@ proc decomposeRight(
 
 
 proc decomposeImpl(
-    partialPath: Blob;               ## Hex encoded partial path
-    rootKey: NodeKey;                ## State root
-    iv: NodeTagRange;                ## Proofed range of leaf paths
-    db: HexaryGetFn|HexaryTreeDbRef; ## Database abstraction
+    partialPath: Blob;               # Hex encoded partial path
+    rootKey: NodeKey;                # State root
+    iv: NodeTagRange;                # Proofed range of leaf paths
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Database agnostic implementation of `hexaryEnvelopeDecompose()`.
@@ -297,8 +364,8 @@ proc hexaryEnvelopeUniq*(
 
 
 proc hexaryEnvelopeTouchedBy*(
-    rangeSet: NodeTagRangeSet;          ## Set of intervals (aka ranges)
-    partialPath: Blob;                  ## Partial path for some node
+    rangeSet: NodeTagRangeSet;          # Set of intervals (aka ranges)
+    partialPath: Blob;                  # Partial path for some node
       ): NodeTagRangeSet =
   ## For the envelope interval of the `partialPath` argument, this function
   ## returns the complete set of intervals from the argument set `rangeSet`
@@ -359,8 +426,8 @@ proc hexaryEnvelopeTouchedBy*(
         break # all the `w` following will be disjuct, too
 
 proc hexaryEnvelopeTouchedBy*(
-    rangeSet: NodeTagRangeSet;          ## Set of intervals (aka ranges)
-    node: NodeSpecs;                    ## Node w/hex encoded partial path
+    rangeSet: NodeTagRangeSet;          # Set of intervals (aka ranges)
+    node: NodeSpecs;                    # Node w/hex encoded partial path
       ): NodeTagRangeSet =
   ## Variant of `hexaryEnvelopeTouchedBy()`
   rangeSet.hexaryEnvelopeTouchedBy(node.partialPath)
@@ -370,97 +437,55 @@ proc hexaryEnvelopeTouchedBy*(
 # ------------------------------------------------------------------------------
 
 proc hexaryEnvelopeDecompose*(
-    partialPath: Blob;             ## Hex encoded partial path
-    rootKey: NodeKey;              ## State root
-    iv: NodeTagRange;              ## Proofed range of leaf paths
-    db: HexaryTreeDbRef;           ## Database
+    partialPath: Blob;             # Hex encoded partial path
+    rootKey: NodeKey;              # State root
+    iv: NodeTagRange;              # Proofed range of leaf paths
+    db: HexaryTreeDbRef;           # Database
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,KeyError].} =
-  ## The idea of this function is to compute the difference of the envelope
-  ## of a `partialPath` off the range `iv` and express the result as a
-  ## list of envelopes (represented by nodes.)
+  ## This function computes the decomposition of the argument `partialPath`
+  ## relative to the argument range `iv`.
   ##
-  ## More formally, let the argument `partialPath` refer to an allocated node
-  ## and the argument `iv` to a range of `NodeTag` points where left and right
-  ## end have boundary proofs (see discussion below) in the database (e.g. as
-  ## downloaded via the `snap/1` protocol.)
+  ## * Comparison with `hexaryInspect()`
   ##
-  ## Then this function returns a set `W` of partial paths (represented by
-  ## nodes) where the envelope of each partial path in `W` has no common node
-  ## key with `iv` (i.e. it is disjunct to the sub-range of `iv` where the
-  ## boundaries are node keys.)
+  ##   The function `hexaryInspect()` implements a width-first search for
+  ##   dangling nodes starting at the state root (think of the cathode ray of
+  ##   a CRT.) For the sake of comparison with `hexaryEnvelopeDecompose()`, the
+  ##   search may be amended to ignore nodes the envelope of is fully contained
+  ##   in some range `iv`. For a fully allocated hexary trie, there will be at
+  ##   least one sub-trie of length *N* with leafs not in `iv`. So the number
+  ##   of nodes visited is *O(16^N)* for some *N* at most 63.
   ##
-  ## This set `W` is maximal in the sense that for every every envelope of a
-  ## partial path which is prefixed by the argument `partialPath` there exists
-  ## an envelope implied by `W` that contains the former envelope, i.e.
+  ##   The function `hexaryEnvelopeDecompose()` take the left or rightmost leaf
+  ##   path from `iv`, calculates a chain length *N* of nodes from the state
+  ##   root to the leaf, and for each node collects the links not pointing
+  ##   inside the range `iv`. The number of nodes visited is *O(N)*.
   ##
-  ## * if `p = partialPath & extension` with `hexaryEnvelope(p) * iv` has no
-  ##   node key in the hexary trie database
+  ##   The results of both functions are not interchangeable, though. The first
+  ##   function `hexaryInspect()`, always returns dangling nodes if there are
+  ##   any in which case the hexary trie is incomplete and there will be no way
+  ##   to visit all nodes as they simply do not exist. But iteratively adding
+  ##   nodes or sub-tries and re-running this algorithm will end up with having
+  ##   all nodes visited.
   ##
-  ## * then there is a `w` in `W` with `hexaryEnvelope(p) <= hexaryEnvelope(w)`
+  ##   The other function `hexaryEnvelopeDecompose()` always returns the same
+  ##   result where some nodes might be dangling and may be treated similar to
+  ##   what was discussed in the previous paragraph. This function also reveals
+  ##   allocated nodes which might be checked for whether they exist fully or
+  ##   partially for another state root hexary trie.
   ##
-  ## Although not required here (see `hexaryEnvelopeUniq()`) the set `W` will
-  ## be minimal.
-  ##
-  ## Beware:
-  ##   Currently, the right end must be an exisiting node rather than come
-  ##   with a boundaty proof.
-  ##
-  ## Comparison with `hexaryInspect()`
-  ## ---------------------------------
-  ## The function `hexaryInspect()` implements a width-first search for
-  ## dangling nodes starting at the state root (think of the cathode ray of
-  ## a CRT.) For the sake of comparison with `hexaryEnvelopeDecompose()`, the
-  ## search may be amended to ignore nodes the envelope of is fully contained
-  ## in some range `iv`. For a fully allocated hexary trie, there will be at
-  ## least one sub-trie of length `N` with leafs not in `iv`. So the number
-  ## of nodes visited is O(16^N) for some `N` at most 63.
-  ##
-  ## The function `hexaryEnvelopeDecompose()` take the left or rightmost leaf
-  ## path from `iv`, calculates a chain length `N` of nodes from the state
-  ## root to the leaf, and for each node collects the links not pointing inside
-  ## the range `iv`. The number of nodes visited is O(N).
-  ##
-  ## The results of both functions are not interchangeable, though. The first
-  ## function `hexaryInspect()`, always returns dangling nodes if there are
-  ## any in which case the hexary trie is incomplete and there will be no way
-  ## to visit all nodes as they simply do not exist. But iteratively adding
-  ## nodes or sub-tries and re-running this algorithm will end up with having
-  ## all nodes visited.
-  ##
-  ## The other function `hexaryEnvelopeDecompose()` always returns the same
-  ## result where some nodes might be dangling and may be treated similar to
-  ## what was discussed in the previous paragraph. This function also reveals
-  ## allocated nodes which might be checked for whether they exist fully or
-  ## partially for another state root hexary trie.
-  ##
-  ## So both are sort of complementary where the function
-  ## `hexaryEnvelopeDecompose()` is a fast one and `hexaryInspect()` the
-  ## thorough one of last resort.
-  ##
-  ## Relation to boundary proofs
-  ## ---------------------------
-  ## The `boundary proof` for a range of leaf paths (e.g. account hashes) for
-  ## a given state root is a set of nodes enough to construct the partial
-  ## Merkel Patricia trie containing the leafs. If the given range is larger
-  ## than the left or rightmost leaf paths, the `boundary proof` also implies
-  ## that there is no other leaf path between the range boundary and the left
-  ## or rightmost leaf path.
-  ##
-  ## Consider the result of the function `hexaryEnvelopeDecompose()` of an
-  ## empty partial path (the envelope of represents `UIn256`) for a range `iv`.
-  ## This result is a `boundary proof` for `iv` according to the definition
-  ## above though it is highly redundant. All bottom level nodes with
-  ## envelopes disjunct from `iv` can be removed for a `boundary proof`.
+  ##   So both are sort of complementary where the function
+  ##   `hexaryEnvelopeDecompose()` is a fast one and `hexaryInspect()` the
+  ##   thorough one of last resort.
   ##
   noRlpErrorOops("in-memory hexaryEnvelopeDecompose"):
     return partialPath.decomposeImpl(rootKey, iv, db)
 
 proc hexaryEnvelopeDecompose*(
-    partialPath: Blob;             ## Hex encoded partial path
-    rootKey: NodeKey;              ## State root
-    iv: NodeTagRange;              ## Proofed range of leaf paths
-    getFn: HexaryGetFn;            ## Database abstraction
+    partialPath: Blob;             # Hex encoded partial path
+    rootKey: NodeKey;              # State root
+    iv: NodeTagRange;              # Proofed range of leaf paths
+    getFn: HexaryGetFn;            # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError].} =
   ## Variant of `decompose()` for persistent database.
