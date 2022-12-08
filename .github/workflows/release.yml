@@ -11,24 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build project
         id: make_dist
         run: |
           make dist-amd64
           cd dist
           ARCHIVE=$(echo nimbus-eth1_Linux_amd64_*.tar.gz)
-          echo "::set-output name=archive::"${ARCHIVE}
-          echo "::set-output name=archive_dir::"${ARCHIVE%.tar.gz}
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus.sha512sum
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Linux_amd64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Linux_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -61,24 +61,24 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -qq -y install binfmt-support qemu-user-static
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build project
         id: make_dist
         run: |
           make dist-arm64
           cd dist
           ARCHIVE=$(echo nimbus-eth1_Linux_arm64v8_*.tar.gz)
-          echo "::set-output name=archive::"${ARCHIVE}
-          echo "::set-output name=archive_dir::"${ARCHIVE%.tar.gz}
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus.sha512sum
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Linux_arm64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Linux_arm64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -105,24 +105,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build project
         id: make_dist
         run: |
           make dist-win64
           cd dist
           ARCHIVE=$(echo nimbus-eth1_Windows_amd64_*.tar.gz)
-          echo "::set-output name=archive::"${ARCHIVE}
-          echo "::set-output name=archive_dir::"${ARCHIVE%.tar.gz}
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus.sha512sum
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Windows_amd64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Windows_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -132,24 +132,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build project
         id: make_dist
         run: |
           make dist-macos
           cd dist
           ARCHIVE=$(echo nimbus-eth1_macOS_amd64_*.tar.gz)
-          echo "::set-output name=archive::"${ARCHIVE}
-          echo "::set-output name=archive_dir::"${ARCHIVE%.tar.gz}
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus.sha512sum
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: macOS_amd64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: macOS_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -159,24 +159,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Build project
         id: make_dist
         run: |
           make dist-macos-arm64
           cd dist
           ARCHIVE=$(echo nimbus-eth1_macOS_arm64_*.tar.gz)
-          echo "::set-output name=archive::"${ARCHIVE}
-          echo "::set-output name=archive_dir::"${ARCHIVE%.tar.gz}
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus.sha512sum
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: macOS_arm64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: macOS_arm64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
@@ -187,7 +187,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
       - name: Create release notes
         run: |
           cat > release_notes.md <<EOF
