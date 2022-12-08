@@ -295,6 +295,69 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "0-touch reward on pre EIP150 networks -1(txs.rlp)",
+      base  : "testdata/00-501",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "EIP150", "-1"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "0-touch reward on pre EIP150 networks(txs.rlp)",
+      base  : "testdata/00-502",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "EIP150", ""
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "0-touch reward on pre EIP150 networks(txs.json)",
+      base  : "testdata/00-502",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "EIP150", ""
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "calculate basefee from parentBaseFee -1",
+      base  : "testdata/00-503",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "London", "-1"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "calculate basefee from parentBaseFee",
+      base  : "testdata/00-504",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "London", ""
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "BLOCKHASH opcode -1",
+      base  : "testdata/00-505",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "London", "-1"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "BLOCKHASH opcode",
+      base  : "testdata/00-506",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "London", ""
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    )
   ]
 
 proc main() =
