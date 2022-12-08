@@ -106,7 +106,7 @@ type
       defaultValue: 3
       name: "verbosity" }: int
 
-proc parseCmdArg*(T: type Option[UInt256], p: TaintedString): T =
+proc parseCmdArg(T: type Option[UInt256], p: TaintedString): T =
   if p.string == "-1":
     none(UInt256)
   elif startsWith(p.string, "0x"):
@@ -114,16 +114,16 @@ proc parseCmdArg*(T: type Option[UInt256], p: TaintedString): T =
   else:
     some(parse(p.string, UInt256, 10))
 
-proc completeCmdArg*(T: type Option[UInt256], val: TaintedString): seq[string] =
+proc completeCmdArg(T: type Option[UInt256], val: TaintedString): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type HexOrInt, p: TaintedString): T =
+proc parseCmdArg(T: type HexOrInt, p: TaintedString): T =
   if startsWith(p.string, "0x"):
     parseHexInt(p.string).T
   else:
     parseInt(p.string).T
 
-proc completeCmdArg*(T: type HexOrInt, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type HexOrInt, val: TaintedString): seq[string] =
   return @[]
 
 proc notCmd(x: string): bool =
@@ -156,9 +156,13 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
 
 const
   Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.1.0"
+  Version   = "Nimbus-t8n 0.1.2"
 
-proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf =
+# force the compiler to instantiate T8NConf.load
+# rather than have to export parseCmdArg
+# because it will use wrong parseCmdArg from nimbus/config.nim
+# when evmc_enabled
+proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   {.push warning[ProveInit]: off.}
   result = T8NConf.load(
     cmdLine.convertToNimStyle,
@@ -166,3 +170,6 @@ proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf =
     copyrightBanner = Version & "\n" & Copyright
   )
   {.pop.}
+
+proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf =
+  initT8NConf(cmdLine)

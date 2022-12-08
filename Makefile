@@ -114,6 +114,8 @@ ENABLE_EVMC := 0
 # "-d:release" cannot be added to config.nims
 NIM_PARAMS += -d:release
 
+T8N_PARAMS := -d:chronicles_default_output_device=stderr
+
 ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
@@ -129,6 +131,7 @@ endif
 
 ifneq ($(ENABLE_EVMC), 0)
   NIM_PARAMS += -d:evmc_enabled
+  T8N_PARAMS := -d:chronicles_enabled=off
 endif
 
 # disabled by default, enable with ENABLE_VMLOWMEM=1
@@ -243,7 +246,7 @@ nimbus-verified-proxy-test: | build deps
 
 # builds transition tool
 t8n: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
 
 # builds and runs transition tool test suite
 t8n_test: | build deps t8n
