@@ -363,7 +363,7 @@ proc hexaryEnvelopeTouchedBy*(
     node: NodeSpecs;                    ## Node w/hex encoded partial path
       ): NodeTagRangeSet =
   ## Variant of `hexaryEnvelopeTouchedBy()`
-  rangeSet.hexaryEnvelopeTouchedBy(node)
+  rangeSet.hexaryEnvelopeTouchedBy(node.partialPath)
 
 # ------------------------------------------------------------------------------
 # Public functions, complement sub-tries
