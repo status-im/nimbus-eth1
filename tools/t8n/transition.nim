@@ -1,6 +1,6 @@
 import
   std/[json, strutils, times, tables, os, sets],
-  eth/[rlp, trie],
+  eth/[rlp, trie, eip1559],
   stint, chronicles, stew/results,
   "."/[config, types, helpers],
   ../../nimbus/[vm_types, vm_state, transaction],
@@ -11,6 +11,7 @@ import
   ../../nimbus/core/dao,
   ../../nimbus/core/executor/[process_transaction, executor_helpers]
 
+import stew/byteutils
 const
   wrapExceptionEnabled* {.booldefine.} = true
   stdinSelector = "stdin"
@@ -56,7 +57,10 @@ proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
   dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
   dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
 
-  let body = @@(rlp.encode(ctx.txs))
+  let chainId = conf.stateChainId.ChainId
+  let txList = ctx.txList(chainId)
+
+  let body = @@(rlp.encode(txList))
   dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
 
   if dis.stdout.len > 0:
@@ -133,8 +137,10 @@ proc exec(ctx: var TransContext,
           stateReward: Option[UInt256],
           header: BlockHeader): ExecOutput =
 
+  let txList = ctx.parseTxs(vmState.com.chainId)
+
   var
-    receipts = newSeqOfCap[TxReceipt](ctx.txs.len)
+    receipts = newSeqOfCap[TxReceipt](txList.len)
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
@@ -143,10 +149,18 @@ proc exec(ctx: var TransContext,
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  vmState.receipts = newSeqOfCap[Receipt](ctx.txs.len)
+  vmState.receipts = newSeqOfCap[Receipt](txList.len)
   vmState.cumulativeGasUsed = 0
 
-  for txIndex, tx in ctx.txs:
+  for txIndex, txRes in txList:
+    if txRes.isErr:
+      rejected.add RejectedTx(
+        index: txIndex,
+        error: txRes.error
+      )
+      continue
+
+    let tx = txRes.get
     var sender: EthAddress
     if not tx.getSender(sender):
       rejected.add RejectedTx(
@@ -176,7 +190,13 @@ proc exec(ctx: var TransContext,
     )
     includedTx.add tx
 
+  # Add mining reward? (-1 means rewards are disabled)
   if stateReward.isSome and stateReward.get >= 0:
+    # Add mining reward. The mining reward may be `0`, which only makes a difference in the cases
+    # where
+    # - the coinbase suicided, or
+    # - there are only 'bad' transactions, which aren't executed. In those cases,
+    #   the coinbase gets no txfee, so isn't created, and thus needs to be touched
     let blockReward = stateReward.get()
     var mainReward = blockReward
     for uncle in ctx.env.ommers:
@@ -216,7 +236,8 @@ proc exec(ctx: var TransContext,
     # geth using both vmContext.Difficulty and vmContext.Random
     # therefore we cannot use vmState.difficulty
     currentDifficulty: ctx.env.currentDifficulty,
-    gasUsed     : vmState.cumulativeGasUsed
+    gasUsed     : vmState.cumulativeGasUsed,
+    currentBaseFee: ctx.env.currentBaseFee
   )
 
 template wrapException(body: untyped) =
@@ -261,6 +282,20 @@ proc parseChainConfig(network: string): ChainConfig =
   except ValueError as e:
     raise newError(ErrorConfig, e.msg)
 
+proc calcBaseFee(env: EnvStruct): UInt256 =
+  if env.parentGasUsed.isNone:
+    raise newError(ErrorConfig,
+      "'parentBaseFee' exists but missing 'parentGasUsed' in env section")
+
+  if env.parentGasLimit.isNone:
+    raise newError(ErrorConfig,
+      "'parentBaseFee' exists but missing 'parentGasLimit' in env section")
+
+  calcEip1599BaseFee(
+    env.parentGasLimit.get,
+    env.parentGasUsed.get,
+    env.parentBaseFee.get)
+
 proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
   wrapException:
     var tracerFlags = {
@@ -291,7 +326,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc == stdinSelector or
        conf.inputEnv == stdinSelector or
        conf.inputTxs == stdinSelector:
-      ctx.parseInputFromStdin(com.chainId)
+      ctx.parseInputFromStdin()
 
     if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
       let n = json.parseFile(conf.inputAlloc)
@@ -307,7 +342,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         ctx.parseTxsRlp(data.strip(chars={'"'}))
       else:
         let n = json.parseFile(conf.inputTxs)
-        ctx.parseTxs(n, com.chainId)
+        ctx.parseTxs(n)
 
     let uncleHash = if ctx.env.parentUncleHash == Hash256():
                       EMPTY_UNCLE_HASH
@@ -324,7 +359,12 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     # Sanity check, to not `panic` in state_transition
     if com.isLondon(ctx.env.currentNumber):
-      if ctx.env.currentBaseFee.isNone:
+      if ctx.env.currentBaseFee.isSome:
+        # Already set, currentBaseFee has precedent over parentBaseFee.
+        discard
+      elif ctx.env.parentBaseFee.isSome:
+        ctx.env.currentBaseFee = some(calcBaseFee(ctx.env))
+      else:
         raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
 
     if com.forkGTE(MergeFork):

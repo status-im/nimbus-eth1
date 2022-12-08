@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[tables],
+  std/[tables, json],
   eth/common,
   ../../nimbus/common/chain_config,
   ../common/types
@@ -40,10 +40,24 @@ type
     ommers*: seq[Ommer]
     currentBaseFee*: Option[UInt256]
     parentUncleHash*: Hash256
+    parentBaseFee*: Option[UInt256]
+    parentGasUsed*: Option[GasInt]
+    parentGasLimit*: Option[GasInt]
+
+  TxsType* = enum
+    TxsNone
+    TxsRlp
+    TxsJson
+
+  TxsList* = object
+    case txsType*: TxsType
+    of TxsRlp: r*: Rlp
+    of TxsJson: n*: JsonNode
+    else: discard
 
   TransContext* = object
     alloc*: GenesisAlloc
-    txs*: seq[Transaction]
+    txs*: TxsList
     env*: EnvStruct
 
   RejectedTx* = object
@@ -75,6 +89,7 @@ type
     rejected*: seq[RejectedTx]
     currentDifficulty*: Option[DifficultyInt]
     gasUsed*: GasInt
+    currentBaseFee*: Option[UInt256]
 
 const
   ErrorEVM*              = 2.T8NExitCode

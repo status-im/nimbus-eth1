@@ -10,13 +10,14 @@
 
 import
   std/[json, strutils, tables],
-  stew/byteutils,
+  stew/[byteutils, results],
   stint,
   eth/[common, rlp, keys],
   ../../nimbus/transaction,
   ../../nimbus/common/chain_config,
   ../common/helpers,
-  ./types
+  ./types,
+  ./txpriv
 
 export
   helpers
@@ -150,6 +151,9 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   omitZero(ctx.env, EthTime, parentTimestamp)
   optional(ctx.env, UInt256, currentBaseFee)
   omitZero(ctx.env, Hash256, parentUncleHash)
+  optional(ctx.env, UInt256, parentBaseFee)
+  optional(ctx.env, GasInt, parentGasUsed)
+  optional(ctx.env, GasInt, parentGasLimit)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
@@ -203,24 +207,79 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   else:
     tx
 
-proc parseTxs*(ctx: var TransContext, txs: JsonNode, chainId: ChainID) =
+proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =
+  try:
+    var tx: Transaction
+    item.readTxLegacy(tx)
+    return ok(tx)
+  except RlpError as x:
+    return err(x.msg)
+
+proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
+  try:
+    var tx: Transaction
+    var rr = rlpFromBytes(item.read(Blob))
+    rr.readTxTyped(tx)
+    return ok(tx)
+  except RlpError as x:
+    return err(x.msg)
+
+proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transaction, string] =
+  try:
+    let n = ctx.txs.n[i]
+    return ok(parseTx(n, chainId))
+  except Exception as x:
+    return err(x.msg)
+
+proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, string]] =
+  if ctx.txs.txsType == TxsJson:
+    let len = ctx.txs.n.len
+    result = newSeqOfCap[Result[Transaction, string]](len)
+    for i in 0 ..< len:
+      result.add ctx.parseTxJson(i, chainId)
+    return
+
+  if ctx.txs.txsType == TxsRlp:
+    result = newSeqOfCap[Result[Transaction, string]](ctx.txs.r.listLen)
+    var rlp = ctx.txs.r
+    for item in rlp:
+      if item.isList:
+        result.add parseTxLegacy(item)
+      else:
+        result.add parseTxTyped(item)
+    return
+
+proc txList*(ctx: TransContext, chainId: ChainId): seq[Transaction] =
+  let list = ctx.parseTxs(chainId)
+  for txRes in list:
+    if txRes.isOk:
+      result.add txRes.get
+
+proc parseTxs*(ctx: var TransContext, txs: JsonNode) =
   if txs.kind == JNull:
     return
   if txs.kind != JArray:
-    raise newError(ErrorJson, "Transaction list should be a JSON array, got=" & $txs.kind)
-  for n in txs:
-    ctx.txs.add parseTx(n, chainId)
+    raise newError(ErrorJson,
+      "Transaction list should be a JSON array, got=" & $txs.kind)
+  ctx.txs = TxsList(
+    txsType: TxsJson,
+    n: txs)
 
 proc parseTxsRlp*(ctx: var TransContext, hexData: string) =
-  let data = hexToSeqByte(hexData)
-  ctx.txs = rlp.decode(data, seq[Transaction])
+  let bytes = hexToSeqByte(hexData)
+  ctx.txs = TxsList(
+    txsType: TxsRlp,
+    r: rlpFromBytes(bytes)
+  )
+  if ctx.txs.r.isList.not:
+    raise newError(ErrorRlp, "RLP Transaction list should be a list")
 
-proc parseInputFromStdin*(ctx: var TransContext, chainId: ChainId) =
+proc parseInputFromStdin*(ctx: var TransContext) =
   let data = stdin.readAll()
   let n = json.parseJson(data)
   if n.hasKey("alloc"): ctx.parseAlloc(n["alloc"])
   if n.hasKey("env"): ctx.parseEnv(n["env"])
-  if n.hasKey("txs"): ctx.parseTxs(n["txs"], chainId)
+  if n.hasKey("txs"): ctx.parseTxs(n["txs"])
   if n.hasKey("txsRlp"): ctx.parseTxsRlp(n["txsRlp"].getStr())
 
 template stripLeadingZeros(value: string): string =
@@ -336,3 +395,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
   }
   if x.rejected.len > 0:
     result["rejected"] = @@(x.rejected)
+  if x.currentBaseFee.isSome:
+    result["currentBaseFee"] = @@(x.currentBaseFee)
