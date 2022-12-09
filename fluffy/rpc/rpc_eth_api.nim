@@ -204,13 +204,10 @@ proc installEthApiHandlers*(
     ## Returns BlockObject or nil when no block was found.
     let
       blockHash = data.toHash()
-      blockRes = await historyNetwork.getBlock(blockHash)
+      (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+        return none(BlockObject)
 
-    if blockRes.isNone():
-      return none(BlockObject)
-    else:
-      let (header, body) = blockRes.unsafeGet()
-      return some(BlockObject.init(header, body))
+    return some(BlockObject.init(header, body))
 
   # TODO: add test to local testnet, it requires activating accumulator
   # in testnet script
@@ -223,18 +220,14 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = fromHex(UInt256, quantityTag)
-      blockResult = await historyNetwork.getBlock(blockNumber)
+      maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
+        raise newException(ValueError, error)
 
-    if blockResult.isOk():
-      let maybeBlock = blockResult.get()
-
-      if maybeBlock.isNone():
-        return none(BlockObject)
-      else:
-        let (header, body) = maybeBlock.unsafeGet()
-        return some(BlockObject.init(header, body))
+    if maybeBlock.isNone():
+      return none(BlockObject)
     else:
-       raise newException(ValueError, blockResult.error)
+      let (header, body) = maybeBlock.get()
+      return some(BlockObject.init(header, body))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
       data: EthHashStr) -> HexQuantityStr:
@@ -245,17 +238,14 @@ proc installEthApiHandlers*(
     ## Returns integer of the number of transactions in this block.
     let
       blockHash = data.toHash()
-      blockRes = await historyNetwork.getBlock(blockHash)
+      (_, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+        raise newException(ValueError, "Could not find block with requested hash")
 
-    if blockRes.isNone():
-      raise newException(ValueError, "Could not find block with requested hash")
-    else:
-      let (_, body) = blockRes.unsafeGet()
-      var txCount:uint = 0
-      for tx in body.transactions:
-        txCount.inc()
+    var txCount: uint = 0
+    for tx in body.transactions:
+      txCount.inc()
 
-      return encodeQuantity(txCount)
+    return encodeQuantity(txCount)
 
   # Note: can't implement this yet as the fluffy node doesn't know the relation
   # of tx hash -> block number -> block hash, in order to get the receipt
@@ -271,41 +261,30 @@ proc installEthApiHandlers*(
       # To support range queries the Indicies network is required.
       raise newException(ValueError,
         "Unsupported query: Only `blockHash` queries are currently supported")
+
+    let hash = filterOptions.blockHash.unsafeGet()
+
+    let header = (await historyNetwork.getVerifiedBlockHeader(hash)).valueOr:
+      raise newException(ValueError,
+        "Could not find header with requested hash")
+
+    if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
+      # TODO: These queries could be done concurrently, investigate if there
+      # are no assumptions about usage of concurrent queries on portal
+      # wire protocol level
+      let
+        body = (await historyNetwork.getBlockBody(hash, header)).valueOr:
+          raise newException(ValueError,
+            "Could not find block body for requested hash")
+        receipts = (await historyNetwork.getReceipts(hash, header)).valueOr:
+          raise newException(ValueError,
+            "Could not find receipts for requested hash")
+
+        logs = deriveLogs(header, body.transactions, receipts)
+        filteredLogs = filterLogs(
+          logs, filterOptions.address, filterOptions.topics)
+
+      return filteredLogs
     else:
-      let hash = filterOptions.blockHash.unsafeGet()
-
-      let headerOpt = await historyNetwork.getVerifiedBlockHeader(hash)
-      if headerOpt.isNone():
-        raise newException(ValueError,
-          "Could not find header with requested hash")
-
-      let header = headerOpt.unsafeGet()
-
-      if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
-        # TODO: These queries could be done concurrently, investigate if there
-        # are no assumptions about usage of concurrent queries on portal
-        # wire protocol level
-        let
-          bodyOpt = await historyNetwork.getBlockBody(hash, header)
-          receiptsOpt = await historyNetwork.getReceipts(hash, header)
-
-        if bodyOpt.isSome() and receiptsOpt.isSome():
-          let
-            body = bodyOpt.unsafeGet()
-            receipts = receiptsOpt.unsafeGet()
-            logs = deriveLogs(header, body.transactions, receipts)
-            filteredLogs = filterLogs(
-              logs, filterOptions.address, filterOptions.topics)
-
-          return filteredLogs
-        else:
-          if bodyOpt.isNone():
-            raise newException(ValueError,
-              "Could not find block body for requested hash")
-          else:
-            raise newException(ValueError,
-              "Could not find receipts for requested hash")
-      else:
-        # bloomfilter returned false, we do known that there are no logs
-        # matching the given criteria
-        return @[]
+      # bloomfilter returned false, there are no logs matching the criteria
+      return @[]

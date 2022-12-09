@@ -11,12 +11,11 @@
 {.push raises: [Defect].}
 
 import
-  std/options,
   nimcrypto/[hash, sha2, keccak], stew/[objects, results], stint,
   ssz_serialization,
   ../../common/common_types
 
-export ssz_serialization, common_types, hash
+export ssz_serialization, common_types, hash, results
 
 type
   NodeHash* = MDigest[32 * 8] # keccak256
@@ -70,11 +69,11 @@ type
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
-func decode*(contentKey: ByteList): Option[ContentKey] =
+func decode*(contentKey: ByteList): Opt[ContentKey] =
   try:
-    some(SSZ.decode(contentKey.asSeq(), ContentKey))
+    Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
-    return none[ContentKey]()
+    return Opt.none(ContentKey)
 
 template computeContentId*(digestCtxType: type, body: untyped): ContentId =
   var h {.inject.}: digestCtxType

@@ -8,7 +8,6 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, tables],
   stew/results, chronos, chronicles,
   eth/[common/eth_types_rlp, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
@@ -37,30 +36,6 @@ type
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
-
-func encodeKey(k: ContentKey): (ByteList, ContentId) =
-  let keyEncoded = encode(k)
-  return (keyEncoded, toContentId(keyEncoded))
-
-func getEncodedKeyForContent(
-    cType: ContentType, hash: BlockHash):
-    (ByteList, ContentId) =
-  let contentKeyType = BlockKey(blockHash: hash)
-
-  let contentKey =
-    case cType
-    of blockHeader:
-      ContentKey(contentType: cType, blockHeaderKey: contentKeyType)
-    of blockBody:
-      ContentKey(contentType: cType, blockBodyKey: contentKeyType)
-    of receipts:
-      ContentKey(contentType: cType, receiptsKey: contentKeyType)
-    of epochAccumulator:
-      raiseAssert("Not implemented")
-    of blockHeaderWithProof:
-      ContentKey(contentType: cType, blockHeaderWithProofKey: contentKeyType)
-
-  return encodeKey(contentKey)
 
 func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   try:
@@ -210,7 +185,7 @@ proc validateReceiptsBytes*(
 
 ## ContentDB helper calls for specific history network types
 
-proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Option[T] =
+proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
   let contentFromDB = db.get(contentId)
   if contentFromDB.isSome():
     let headerWithProof =
@@ -223,43 +198,42 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Option[T] =
     if res.isErr():
       raiseAssert(res.error)
     else:
-      some(res.get())
+      Opt.some(res.get())
   else:
-    none(T)
+    Opt.none(T)
 
-proc get(db: ContentDB, T: type BlockBody, contentId: ContentId): Option[T] =
+proc get(db: ContentDB, T: type BlockBody, contentId: ContentId): Opt[T] =
   let contentFromDB = db.getSszDecoded(contentId, BlockBodySSZ)
   if contentFromDB.isSome():
     let res = T.fromPortalBlockBody(contentFromDB.get())
     if res.isErr():
       raiseAssert(res.error)
     else:
-      some(res.get())
+      Opt.some(res.get())
   else:
-    none(T)
+    Opt.none(T)
 
-proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Option[T] =
+proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Opt[T] =
   let contentFromDB = db.getSszDecoded(contentId, ReceiptsSSZ)
   if contentFromDB.isSome():
     let res = T.fromReceipts(contentFromDB.get())
     if res.isErr():
       raiseAssert(res.error)
     else:
-      some(res.get())
+      Opt.some(res.get())
   else:
-    none(T)
+    Opt.none(T)
 
 proc get(
-    db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Option[T] =
+    db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Opt[T] =
   db.getSszDecoded(contentId, T)
 
 proc getContentFromDb(
-    n: HistoryNetwork, T: type, contentId: ContentId): Option[T] =
+    n: HistoryNetwork, T: type, contentId: ContentId): Opt[T] =
   if n.portalProtocol.inRange(contentId):
     n.contentDB.get(T, contentId)
   else:
-    none(T)
-
+    Opt.none(T)
 
 
 ## Public API to get the history network specific types, either from database
@@ -281,301 +255,273 @@ func verifyHeader(
 
 proc getVerifiedBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
-    Future[Option[BlockHeader]] {.async.} =
-  let (keyEncoded, contentId) =
-    getEncodedKeyForContent(blockHeaderWithProof, hash)
+    Future[Opt[BlockHeader]] {.async.} =
+  let
+    contentKey = ContentKey.init(blockHeaderWithProof, hash).encode()
+    contentId = contentKey.toContentId()
+
+  logScope:
+    hash
+    contentKey
 
   # Note: This still requests a BlockHeaderWithProof from the database, as that
-  # is what is stored. But the proof doesn't need to be checked as everthing
-  # should get checked before storing.
+  # is what is stored. But the proof doesn't need to be verified as it gets
+  # gets verified before storing.
   let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
-
   if headerFromDb.isSome():
-    info "Fetched block header from database", hash, contentKey = keyEncoded
+    info "Fetched block header from database"
     return headerFromDb
 
   for i in 0..<requestRetries:
-    let headerContentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-    if headerContentLookup.isNone():
-      warn "Failed fetching block header with proof from the network",
-        hash, contentKey = keyEncoded
-      return none(BlockHeader)
+    let
+      headerContent = (await n.portalProtocol.contentLookup(
+          contentKey, contentId)).valueOr:
+        warn "Failed fetching block header with proof from the network"
+        return Opt.none(BlockHeader)
 
-    let headerContent = headerContentLookup.unsafeGet()
+      headerWithProof = decodeSsz(
+          headerContent.content, BlockHeaderWithProof).valueOr:
+        warn "Failed decoding header with proof", error
+        continue
 
-    let headerWithProofRes = decodeSsz(headerContent.content, BlockHeaderWithProof)
-    if headerWithProofRes.isErr():
-      warn "Failed decoding header with proof", err = headerWithProofRes.error
-      return none(BlockHeader)
+      header = validateBlockHeaderBytes(
+          headerWithProof.header.asSeq(), hash).valueOr:
+        warn "Validation of block header failed", error
+        continue
 
-    let headerWithProof = headerWithProofRes.get()
+    if (let r = n.verifyHeader(header, headerWithProof.proof); r.isErr):
+      warn "Verification of block header failed", error = r.error
+      continue
 
-    let res = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash)
-    if res.isOk():
-      let isCanonical = n.verifyHeader(res.get(), headerWithProof.proof)
+    info "Fetched valid block header from the network"
+    # Content is valid, it can be stored and propagated to interested peers
+    n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
+    n.portalProtocol.triggerPoke(
+      headerContent.nodesInterestedInContent,
+      contentKey,
+      headerContent.content
+    )
 
-      if isCanonical.isOk():
-        info "Fetched block header from the network", hash, contentKey = keyEncoded
-        # Content is valid, it can be propagated to interested peers
-        n.portalProtocol.triggerPoke(
-          headerContent.nodesInterestedInContent,
-          keyEncoded,
-          headerContent.content
-        )
-
-        n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
-
-        return some(res.get())
-    else:
-      warn "Validation of block header failed", err = res.error, hash, contentKey = keyEncoded
+    return Opt.some(header)
 
   # Headers were requested `requestRetries` times and all failed on validation
-  return none(BlockHeader)
+  return Opt.none(BlockHeader)
 
 # TODO: To be deprecated or not? Should there be the case for requesting a
 # block header without proofs?
 proc getBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
-    Future[Option[BlockHeader]] {.async.} =
-  let (keyEncoded, contentId) =
-    getEncodedKeyForContent(blockHeader, hash)
+    Future[Opt[BlockHeader]] {.async.} =
+  let
+    contentKey = ContentKey.init(blockHeader, hash).encode()
+    contentId = contentKey.toContentId()
+
+  logScope:
+    hash
+    contentKey
 
   let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
   if headerFromDb.isSome():
-    info "Fetched block header from database", hash, contentKey = keyEncoded
+    info "Fetched block header from database"
     return headerFromDb
 
   for i in 0..<requestRetries:
-    let headerContentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-    if headerContentLookup.isNone():
-      warn "Failed fetching block header from the network", hash, contentKey = keyEncoded
-      return none(BlockHeader)
+    let
+      headerContent = (await n.portalProtocol.contentLookup(
+          contentKey, contentId)).valueOr:
+        warn "Failed fetching block header from the network"
+        return Opt.none(BlockHeader)
 
-    let headerContent = headerContentLookup.unsafeGet()
+      header = validateBlockHeaderBytes(headerContent.content, hash).valueOr:
+        warn "Validation of block header failed", error
+        continue
 
-    let res = validateBlockHeaderBytes(headerContent.content, hash)
-    if res.isOk():
-      info "Fetched block header from the network", hash, contentKey = keyEncoded
-      # Content is valid we can propagate it to interested peers
-      n.portalProtocol.triggerPoke(
-        headerContent.nodesInterestedInContent,
-        keyEncoded,
-        headerContent.content
-      )
+    info "Fetched valid block header from the network"
+    # Content is valid, it can be stored and propagated to interested peers
+    n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
+    n.portalProtocol.triggerPoke(
+      headerContent.nodesInterestedInContent,
+      contentKey,
+      headerContent.content
+    )
 
-      n.portalProtocol.storeContent(keyEncoded, contentId, headerContent.content)
-
-      return some(res.get())
-    else:
-      warn "Validation of block header failed", err = res.error, hash, contentKey = keyEncoded
+    return Opt.some(header)
 
   # Headers were requested `requestRetries` times and all failed on validation
-  return none(BlockHeader)
+  return Opt.none(BlockHeader)
 
 proc getBlockBody*(
     n: HistoryNetwork, hash: BlockHash, header: BlockHeader):
-    Future[Option[BlockBody]] {.async.} =
-
-  # Got header with empty body, no need to make any db calls or network requests
+    Future[Opt[BlockBody]] {.async.} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
-    return some(BlockBody(transactions: @[], uncles: @[]))
+    # Short path for empty body indicated by txRoot and ommersHash
+    return Opt.some(BlockBody(transactions: @[], uncles: @[]))
 
   let
-    (keyEncoded, contentId) = getEncodedKeyForContent(blockBody, hash)
-    bodyFromDb = n.getContentFromDb(BlockBody, contentId)
+    contentKey = ContentKey.init(blockBody, hash).encode()
+    contentId = contentKey.toContentId()
 
+  logScope:
+    hash
+    contentKey
+
+  let bodyFromDb = n.getContentFromDb(BlockBody, contentId)
   if bodyFromDb.isSome():
-    info "Fetched block body from database", hash, contentKey = keyEncoded
+    info "Fetched block body from database"
     return bodyFromDb
 
   for i in 0..<requestRetries:
-    let bodyContentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
+    let
+      bodyContent = (await n.portalProtocol.contentLookup(
+          contentKey, contentId)).valueOr:
+        warn "Failed fetching block body from the network"
+        return Opt.none(BlockBody)
 
-    if bodyContentLookup.isNone():
-      warn "Failed fetching block body from the network", hash, contentKey = keyEncoded
-      return none(BlockBody)
+      body = validateBlockBodyBytes(
+          bodyContent.content, header.txRoot, header.ommersHash).valueOr:
+        warn "Validation of block body failed", error
+        continue
 
-    let bodyContent = bodyContentLookup.unsafeGet()
+    info "Fetched block body from the network"
+    # Content is valid, it can be stored and propagated to interested peers
+    n.portalProtocol.storeContent(contentKey, contentId, bodyContent.content)
+    n.portalProtocol.triggerPoke(
+      bodyContent.nodesInterestedInContent,
+      contentKey,
+      bodyContent.content
+    )
 
-    let res = validateBlockBodyBytes(
-      bodyContent.content, header.txRoot, header.ommersHash)
-    if res.isOk():
-      info "Fetched block body from the network", hash, contentKey = keyEncoded
+    return Opt.some(body)
 
-      # body is valid, propagate it to interested peers
-      n.portalProtocol.triggerPoke(
-        bodyContent.nodesInterestedInContent,
-        keyEncoded,
-        bodyContent.content
-      )
-
-      n.portalProtocol.storeContent(keyEncoded, contentId, bodyContent.content)
-
-      return some(res.get())
-    else:
-      warn "Validation of block body failed", err = res.error, hash, contentKey = keyEncoded
-
-  return none(BlockBody)
+  # Bodies were requested `requestRetries` times and all failed on validation
+  return Opt.none(BlockBody)
 
 proc getBlock*(
     n: HistoryNetwork, hash: BlockHash):
-    Future[Option[Block]] {.async.} =
+    Future[Opt[Block]] {.async.} =
   debug "Trying to retrieve block with hash", hash
 
   # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
   # proofs are not necessiarly needed, in order to avoid having to inject
   # also the original type into the network.
-  let headerOpt = await n.getVerifiedBlockHeader(hash)
-  if headerOpt.isNone():
-    warn "Failed to get header when getting block with hash", hash
-    # Cannot validate block without header.
-    return none(Block)
+  let
+    header = (await n.getVerifiedBlockHeader(hash)).valueOr:
+      warn "Failed to get header when getting block", hash
+      return Opt.none(Block)
+    body = (await n.getBlockBody(hash, header)).valueOr:
+      warn "Failed to get body when getting block", hash
+      return Opt.none(Block)
 
-  let header = headerOpt.unsafeGet()
-
-  let bodyOpt = await n.getBlockBody(hash, header)
-
-  if bodyOpt.isNone():
-    warn "Failed to get body when gettin block with hash", hash
-    return none(Block)
-
-  let body = bodyOpt.unsafeGet()
-
-  return some((header, body))
+  return Opt.some((header, body))
 
 proc getReceipts*(
     n: HistoryNetwork,
     hash: BlockHash,
-    header: BlockHeader): Future[Option[seq[Receipt]]] {.async.} =
+    header: BlockHeader): Future[Opt[seq[Receipt]]] {.async.} =
   if header.receiptRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
-    return some(newSeq[Receipt]())
+    return Opt.some(newSeq[Receipt]())
 
-  let (keyEncoded, contentId) = getEncodedKeyForContent(receipts, hash)
+  let
+    contentKey = ContentKey.init(receipts, hash).encode()
+    contentId = contentKey.toContentId()
+
+  logScope:
+    hash
+    contentKey
 
   let receiptsFromDb = n.getContentFromDb(seq[Receipt], contentId)
-
   if receiptsFromDb.isSome():
-    info "Fetched receipts from database", hash
+    info "Fetched receipts from database"
     return receiptsFromDb
 
   for i in 0..<requestRetries:
-    let receiptsContentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-    if receiptsContentLookup.isNone():
-      warn "Failed fetching receipts from the network", hash, contentKey = keyEncoded
-      return none(seq[Receipt])
+    let
+      receiptsContent = (await n.portalProtocol.contentLookup(
+          contentKey, contentId)).valueOr:
+        warn "Failed fetching receipts from the network"
+        return Opt.none(seq[Receipt])
+      receipts = validateReceiptsBytes(
+          receiptsContent.content, header.receiptRoot).valueOr:
+        warn "Validation of receipts failed", error
+        continue
 
-    let receiptsContent = receiptsContentLookup.unsafeGet()
+    info "Fetched receipts from the network"
+    # Content is valid, it can be stored and propagated to interested peers
+    n.portalProtocol.storeContent(contentKey, contentId, receiptsContent.content)
+    n.portalProtocol.triggerPoke(
+      receiptsContent.nodesInterestedInContent,
+      contentKey,
+      receiptsContent.content
+    )
 
-    let res = validateReceiptsBytes(receiptsContent.content, header.receiptRoot)
-    if res.isOk():
-      info "Fetched receipts from the network", hash, contentKey = keyEncoded
-
-      let receipts = res.get()
-
-      # receipts are valid, propagate it to interested peers
-      n.portalProtocol.triggerPoke(
-        receiptsContent.nodesInterestedInContent,
-        keyEncoded,
-        receiptsContent.content
-      )
-
-      n.portalProtocol.storeContent(keyEncoded, contentId, receiptsContent.content)
-
-      return some(res.get())
-    else:
-      warn "Validation of receipts failed", err = res.error, hash, contentKey = keyEncoded
-
-  return none(seq[Receipt])
+    return Opt.some(receipts)
 
 proc getEpochAccumulator(
     n: HistoryNetwork, epochHash: Digest):
-    Future[Option[EpochAccumulator]] {.async.} =
+    Future[Opt[EpochAccumulator]] {.async.} =
   let
-    contentKey = ContentKey(
-      contentType: epochAccumulator,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash))
+    contentKey = ContentKey.init(epochAccumulator, epochHash).encode()
+    contentId = contentKey.toContentId()
 
-    keyEncoded = encode(contentKey)
-    contentId = toContentId(keyEncoded)
+  logScope:
+    epochHash
+    contentKey
 
-    accumulatorFromDb = n.getContentFromDb(EpochAccumulator, contentId)
-
+  let accumulatorFromDb = n.getContentFromDb(EpochAccumulator, contentId)
   if accumulatorFromDb.isSome():
-    info "Fetched epoch accumulator from database", epochHash
+    info "Fetched epoch accumulator from database"
     return accumulatorFromDb
 
   for i in 0..<requestRetries:
-    let contentLookup =
-      await n.portalProtocol.contentLookup(keyEncoded, contentId)
-    if contentLookup.isNone():
-      warn "Failed fetching epoch accumulator from the network", epochHash
-      return none(EpochAccumulator)
+    let
+      accumulatorContent = (await n.portalProtocol.contentLookup(
+          contentKey, contentId)).valueOr:
+        warn "Failed fetching epoch accumulator from the network"
+        return Opt.none(EpochAccumulator)
 
-    let accumulatorContent = contentLookup.unsafeGet()
-
-    let epochAccumulator =
-      try:
-        SSZ.decode(accumulatorContent.content, EpochAccumulator)
-      except SszError:
-        continue
-        # return none(EpochAccumulator)
+      epochAccumulator =
+        try:
+          SSZ.decode(accumulatorContent.content, EpochAccumulator)
+        except SszError:
+          continue
 
     let hash = hash_tree_root(epochAccumulator)
     if hash == epochHash:
-      info "Fetched epoch accumulator from the network", epochHash
-
+      info "Fetched epoch accumulator from the network"
+      n.portalProtocol.storeContent(contentKey, contentId, accumulatorContent.content)
       n.portalProtocol.triggerPoke(
         accumulatorContent.nodesInterestedInContent,
-        keyEncoded,
+        contentKey,
         accumulatorContent.content
       )
 
-      n.portalProtocol.storeContent(keyEncoded, contentId, accumulatorContent.content)
-
-      return some(epochAccumulator)
+      return Opt.some(epochAccumulator)
     else:
-      warn "Validation of epoch accumulator failed",
-        hash, expectedHash = epochHash
+      warn "Validation of epoch accumulator failed", resultedEpochHash = hash
 
-  return none(EpochAccumulator)
+  return Opt.none(EpochAccumulator)
 
 proc getBlock*(
     n: HistoryNetwork, bn: UInt256):
-    Future[Result[Option[Block], string]] {.async.} =
-  let epochDataRes = n.accumulator.getBlockEpochDataForBlockNumber(bn)
-  if epochDataRes.isOk():
-    let
-      epochData = epochDataRes.get()
-      digest = Digest(data: epochData.epochHash)
-
-      epochOpt = await n.getEpochAccumulator(digest)
-    if epochOpt.isNone():
+    Future[Result[Opt[Block], string]] {.async.} =
+  let
+    epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
+      return err(error)
+    digest = Digest(data: epochData.epochHash)
+    epoch = (await n.getEpochAccumulator(digest)).valueOr:
       return err("Cannot retrieve epoch accumulator for given block number")
+    blockHash = epoch[epochData.blockRelativeIndex].blockHash
 
-    let
-      epoch = epochOpt.unsafeGet()
-      blockHash = epoch[epochData.blockRelativeIndex].blockHash
+    maybeBlock = await n.getBlock(blockHash)
 
-    let maybeBlock = await n.getBlock(blockHash)
-
-    return ok(maybeBlock)
-  else:
-    return err(epochDataRes.error)
+  return ok(maybeBlock)
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ByteList):
     Future[bool] {.async.} =
-  let keyOpt = contentKey.decode()
-
-  if keyOpt.isNone():
+  let key = contentKey.decode().valueOr:
     return false
-
-  let key = keyOpt.get()
 
   case key.contentType:
   of blockHeader:
@@ -584,13 +530,10 @@ proc validateContent(
     # basically requesting the header with proofs from somewhere else.
     # This all doesn't make much sense aside from compatibility and should
     # eventually be removed.
-    let validateResult =
-      validateBlockHeaderBytes(content, key.blockHeaderKey.blockHash)
-    if validateResult.isErr():
-      warn "Invalid block header offered", error = validateResult.error
+    let header = validateBlockHeaderBytes(
+        content, key.blockHeaderKey.blockHash).valueOr:
+      warn "Invalid block header offered", error
       return false
-
-    let header = validateResult.get()
 
     let res = await n.getVerifiedBlockHeader(key.blockHeaderKey.blockHash)
     if res.isNone():
@@ -600,33 +543,27 @@ proc validateContent(
       return true
 
   of blockBody:
-    let res = await n.getVerifiedBlockHeader(key.blockBodyKey.blockHash)
-    if res.isNone():
-      warn "Block body Failed canonical verification"
+    let header = (await n.getVerifiedBlockHeader(
+        key.blockBodyKey.blockHash)).valueOr:
+      warn "Failed getting canonical header for block"
       return false
 
-    let header = res.get()
-    let validationResult =
-      validateBlockBodyBytes(content, header.txRoot, header.ommersHash)
-
-    if validationResult.isErr():
-      warn "Failed validating block body", error = validationResult.error
+    let res = validateBlockBodyBytes(content, header.txRoot, header.ommersHash)
+    if res.isErr():
+      warn "Failed validating block body", error = res.error
       return false
     else:
       return true
 
   of receipts:
-    let res = await n.getVerifiedBlockHeader(key.receiptsKey.blockHash)
-    if res.isNone():
-      warn "Receipts failed canonical verification"
+    let header = (await n.getVerifiedBlockHeader(
+        key.receiptsKey.blockHash)).valueOr:
+      warn "Failed getting canonical header for receipts"
       return false
 
-    let header = res.get()
-    let validationResult =
-      validateReceiptsBytes(content, header.receiptRoot)
-
-    if validationResult.isErr():
-      warn "Failed validating receipts", error = validationResult.error
+    let res = validateReceiptsBytes(content, header.receiptRoot)
+    if res.isErr():
+      warn "Failed validating receipts", error = res.error
       return false
     else:
       return true
@@ -655,25 +592,20 @@ proc validateContent(
       return true
 
   of blockHeaderWithProof:
-    let headerWithProofRes = decodeSsz(content, BlockHeaderWithProof)
-    if headerWithProofRes.isErr():
-      warn "Failed decoding header with proof", err = headerWithProofRes.error
-      return false
+    let
+      headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
+        warn "Failed decoding header with proof", error
+        return false
+      header = validateBlockHeaderBytes(
+          headerWithProof.header.asSeq(),
+          key.blockHeaderWithProofKey.blockHash).valueOr:
+        warn "Invalid block header offered", error
+        return false
 
-    let headerWithProof = headerWithProofRes.get()
-
-    let validateResult = validateBlockHeaderBytes(
-      headerWithProof.header.asSeq(), key.blockHeaderWithProofKey.blockHash)
-    if validateResult.isErr():
-      warn "Invalid block header offered", error = validateResult.error
-      return false
-
-    let header = validateResult.get()
-
-    let isCanonical = n.verifyHeader(header, headerWithProof.proof)
-    if isCanonical.isErr():
+    let res = n.verifyHeader(header, headerWithProof.proof)
+    if res.isErr():
       warn "Failed on check if header is part of canonical chain",
-        error = isCanonical.error
+        error = res.error
       return false
     else:
       return true

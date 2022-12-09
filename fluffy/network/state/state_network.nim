@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/options,
   stew/results, chronos, chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
@@ -29,12 +28,8 @@ type StateNetwork* = ref object
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   toContentId(contentKey)
 
-proc dbGetHandler(db: ContentDB, contentId: ContentId):
-    Option[seq[byte]] {.raises: [Defect], gcsafe.} =
-  db.get(contentId)
-
 proc getContent*(n: StateNetwork, key: ContentKey):
-    Future[Option[seq[byte]]] {.async.} =
+    Future[Opt[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
     contentId = toContentId(key)
@@ -49,7 +44,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   let content = await n.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if content.isNone():
-    return none[seq[byte]]()
+    return Opt.none(seq[byte])
 
   let contentResult = content.get()
 
@@ -62,7 +57,7 @@ proc getContent*(n: StateNetwork, key: ContentKey):
 
   # TODO: for now returning bytes, ultimately it would be nice to return proper
   # domain types.
-  return some(contentResult.content)
+  return Opt.some(contentResult.content)
 
 proc validateContent(content: openArray[byte], contentKey: ByteList): bool =
   true

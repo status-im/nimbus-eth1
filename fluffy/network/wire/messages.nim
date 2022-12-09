@@ -11,7 +11,6 @@
 {.push raises: [Defect].}
 
 import
-  std/options,
   stint, stew/[results, objects],
   ssz_serialization,
   ../../common/common_types
@@ -151,28 +150,18 @@ func decodeMessage*(body: openArray[byte]): Result[Message, cstring] =
   except SszError:
     err("Invalid message encoding")
 
-template innerMessage[T: SomeMessage](message: Message, expected: MessageKind): Option[T] =
+template innerMessage[T: SomeMessage](
+    message: Message, expected: MessageKind): Result[T, cstring] =
   if (message.kind == expected):
-    some[T](message.expected)
+    ok(message.expected)
   else:
-    none[T]()
+    err("Invalid message response")
 
-# All our Message variants correspond to enum MessageKind, therefore we are able to
-# zoom in on inner structure of message by defining expected type T.
-# If expected variant is not active, return None
-func getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
+# Each `Message` variants corresponds to an MessageKind. Therefore, the inner
+# message can be extracted when providing the expected message type T.
+# If the message does not hold the expacted variant, return error.
+func getInnerMessage*[T: SomeMessage](m: Message): Result[T, cstring] =
   innerMessage[T](m, messageKind(T))
-
-# Simple conversion from Option to Result, looks like something which could live in
-# Result library.
-func optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
-  if (opt.isSome()):
-    ok(opt.unsafeGet())
-  else:
-    err(e)
-
-func getInnerMessageResult*[T: SomeMessage](m: Message, errMessage: cstring): Result[T, cstring] =
-  optToResult(getInnnerMessage[T](m), errMessage)
 
 func getTalkReqOverhead*(protocolIdLen: int): int =
   return (

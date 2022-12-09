@@ -496,9 +496,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   let messageResponse = talkresp
     .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
     .flatMap(proc (m: Message): Result[Response, cstring] =
-      getInnerMessageResult[Response](
-        m, cstring"Invalid message response received")
-    )
+      getInnerMessage[Response](m))
 
   if messageResponse.isOk():
     trace "Received message response", srcId = dst.id,
@@ -960,7 +958,7 @@ proc triggerPoke*(
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
 proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
-    Future[Option[ContentLookupResult]] {.async.} =
+    Future[Opt[ContentLookupResult]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -1040,14 +1038,14 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
         for f in pendingQueries:
           f.cancel()
         portal_lookup_content_requests.observe(requestAmount)
-        return some(ContentLookupResult.init(content.content, nodesWithoutContent))
+        return Opt.some(ContentLookupResult.init(content.content, nodesWithoutContent))
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
       discard
 
   portal_lookup_content_failures.inc()
-  return none[ContentLookupResult]()
+  return Opt.none(ContentLookupResult)
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =
