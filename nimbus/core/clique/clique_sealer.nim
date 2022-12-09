@@ -38,35 +38,9 @@ import
 logScope:
   topics = "clique PoA Mining"
 
-type
-  CliqueSyncDefect* = object of Defect
-    ## Defect raised with lock/unlock problem
-
 # ------------------------------------------------------------------------------
 # Private Helpers
 # ------------------------------------------------------------------------------
-
-template syncExceptionWrap(action: untyped) =
-  try:
-    action
-  except:
-    raise (ref CliqueSyncDefect)(msg: getCurrentException().msg)
-
-
-# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeader(c: Clique; com: CommonRef; header: BlockHeader): CliqueOkResult
-                  {.gcsafe, raises: [Defect,CatchableError].} =
-  ## See `clique.cliqueVerify()`
-  var blind: seq[BlockHeader]
-  c.cliqueVerifySeq(com, header, blind)
-
-proc verifyHeader(c: Clique; com: CommonRef; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## See `clique.cliqueVerify()`
-  var list = toSeq(parents)
-  c.cliqueVerifySeq(com, header, list)
-
 
 proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool =
   s.ballot.isValidVote(a, authorize)
@@ -106,63 +80,6 @@ proc recentBlockNumber*(s: Snapshot;
 # Public functions
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(212): func (c *Clique) Author(header [..]
-proc author*(c: Clique; header: BlockHeader): Result[EthAddress,UtilsError]
-                  {.gcsafe, raises: [Defect,CatchableError].} =
-  ## For the Consensus Engine, `author()` retrieves the Ethereum address of the
-  ## account that minted the given block, which may be different from the
-  ## header's coinbase if a consensus engine is based on signatures.
-  ##
-  ## This implementation returns the Ethereum address recovered from the
-  ## signature in the header's extra-data section.
-  c.cfg.ecRecover(header)
-
-
-# clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeaders*(c: Clique; com: CommonRef; headers: openArray[BlockHeader]):
-                                Future[seq[CliqueOkResult]] {.async,gcsafe.} =
-  ## For the Consensus Engine, `verifyHeader()` s similar to VerifyHeader, but
-  ## verifies a batch of headers concurrently. This method is accompanied
-  ## by a `stopVerifyHeader()` method that can abort the operations.
-  ##
-  ## This implementation checks whether a header conforms to the consensus
-  ## rules. It verifies a batch of headers. If running in the background,
-  ## the process can be stopped by calling the `stopVerifyHeader()` function.
-  syncExceptionWrap:
-    c.doExclusively:
-      c.stopVHeaderReq = false
-    for n in 0 ..< headers.len:
-      c.doExclusively:
-        let isStopRequest = c.stopVHeaderReq
-      if isStopRequest:
-        result.add cliqueResultErr((errCliqueStopped,""))
-        break
-      result.add c.verifyHeader(com, headers[n], headers[0 ..< n])
-    c.doExclusively:
-      c.stopVHeaderReq = false
-
-proc stopVerifyHeader*(c: Clique): bool {.discardable.} =
-  ## Activate the stop flag for running `verifyHeader()` function.
-  ## Returns `true` if the stop flag could be activated.
-  syncExceptionWrap:
-    c.doExclusively:
-      if not c.stopVHeaderReq:
-        c.stopVHeaderReq = true
-        result = true
-
-
-# clique/clique.go(450): func (c *Clique) VerifyUncles(chain [..]
-proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueOkResult =
-  ## For the Consensus Engine, `verifyUncles()` verifies that the given
-  ## block's uncles conform to the consensus rules of a given engine.
-  ##
-  ## This implementation always returns an error for existing uncles as this
-  ## consensus mechanism doesn't permit uncles.
-  if 0 < ethBlock.uncles.len:
-    return err((errCliqueUnclesNotAllowed,""))
-  result = ok()
-
-
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
 proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOkResult
                     {.gcsafe, raises: [Defect, CatchableError].} =
@@ -186,18 +103,17 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
 
   let modEpoch = (parent.blockNumber+1) mod c.cfg.epoch
   if modEpoch != 0:
-    c.doExclusively:
-      # Gather all the proposals that make sense voting on
-      var addresses: seq[EthAddress]
-      for (address,authorize) in c.proposals.pairs:
-        if c.snapshot.isValidVote(address, authorize):
-          addresses.add address
+    # Gather all the proposals that make sense voting on
+    var addresses: seq[EthAddress]
+    for (address,authorize) in c.proposals.pairs:
+      if c.snapshot.isValidVote(address, authorize):
+        addresses.add address
 
-      # If there's pending proposals, cast a vote on them
-      if 0 < addresses.len:
-        header.coinbase = addresses[c.cfg.rand(addresses.len-1)]
-        header.nonce = if header.coinbase in c.proposals: NONCE_AUTH
-                       else: NONCE_DROP
+    # If there's pending proposals, cast a vote on them
+    if 0 < addresses.len:
+      header.coinbase = addresses[c.cfg.rand(addresses.len-1)]
+      header.nonce = if header.coinbase in c.proposals: NONCE_AUTH
+                     else: NONCE_DROP
 
   # Set the correct difficulty
   header.difficulty = c.snapshot.calcDifficulty(c.signer)
@@ -227,10 +143,8 @@ proc prepareForSeal*(c: Clique; prepHeader: BlockHeader; header: var BlockHeader
 # clique/clique.go(589): func (c *Clique) Authorize(signer [..]
 proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
   ## Injects private key into the consensus engine to mint new blocks with.
-  syncExceptionWrap:
-    c.doExclusively:
-      c.signer = signer
-      c.signFn = signFn
+  c.signer = signer
+  c.signFn = signFn
 
 # clique/clique.go(724): func CliqueRLP(header [..]
 proc cliqueRlp*(header: BlockHeader): seq[byte] =
@@ -273,10 +187,9 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
     return err((nilCliqueSealNoBlockYet, ""))
 
   # Don't hold the signer fields for the entire sealing procedure
-  c.doExclusively:
-    let
-      signer = c.signer
-      signFn = c.signFn
+  let
+    signer = c.signer
+    signFn = c.signFn
 
   # Bail out if we're unauthorized to sign a block
   let rc = c.cliqueSnapshot(header.parentHash)

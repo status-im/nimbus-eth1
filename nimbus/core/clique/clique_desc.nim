@@ -27,17 +27,6 @@ import
   eth/[keys, rlp],
   stew/[keyed_queue, results]
 
-const
-  enableCliqueAsyncLock* = ##\
-    ## Async locks are currently unused by `Clique` but were part of the Go
-    ## reference implementation. The unused code fragment from the reference
-    ## implementation are buried in the file `clique_unused.nim` and not used
-    ## otherwise.
-    defined(clique_async_lock)
-
-when enableCliqueAsyncLock:
-  import chronos
-
 type
   RawSignature* = array[RawSignatureSize, byte]
 
@@ -70,9 +59,6 @@ type
       ## Ethereum address of the current signing key
 
     signFn*: CliqueSignerFn ## Signer function to authorize hashes with
-    stopSealReq*: bool      ## Stop running `seal()` function
-    stopVHeaderReq*: bool   ## Stop running `verifyHeader()` function
-    # signatures => see CliqueCfg
 
     cfg: CliqueCfg ##\
       ## Common engine parameters to fine tune behaviour
@@ -102,10 +88,6 @@ type
       ## before have been vetted already regardless of the current branch. So
       ## the nearest `epoch` header is used.
 
-    when enableCliqueAsyncLock:
-      asyncLock: AsyncLock ##\
-        ## Protects the signer fields
-
 {.push raises: [Defect].}
 
 logScope:
@@ -122,8 +104,6 @@ proc newClique*(cfg: CliqueCfg): Clique =
   result = Clique(cfg:       cfg,
                   snapshot:  cfg.newSnapshot(BlockHeader()),
                   proposals: initTable[EthAddress,bool]())
-  when enableCliqueAsyncLock:
-    result.asyncLock = newAsyncLock()
 
 # ------------------------------------------------------------------------------
 # Public debug/pretty print
@@ -196,29 +176,6 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
 proc `applySnapsMinBacklog=`*(c: Clique; value: bool) =
   ## Setter
   c.applySnapsMinBacklog = value
-
-# ------------------------------------------------------------------------------
-# Public lock/unlock
-# ------------------------------------------------------------------------------
-
-when enableCliqueAsyncLock:
-  proc lock*(c: Clique) {.gcsafe, raises: [Defect,CatchableError].} =
-    ## Lock descriptor
-    waitFor c.asyncLock.acquire
-
-  proc unLock*(c: Clique) {.gcsafe, raises: [Defect,AsyncLockError].} =
-    ## Unlock descriptor
-    c.asyncLock.release
-
-  template doExclusively*(c: Clique; action: untyped) =
-    ## Handy helper
-    c.lock
-    action
-    c.unlock
-
-else:
-  template doExclusively*(c: Clique; action: untyped) =
-    action
 
 # ------------------------------------------------------------------------------
 # End
