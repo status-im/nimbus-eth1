@@ -30,7 +30,11 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc init(batch: SnapRangeBatchRef; ctx: SnapCtxRef) =
+proc init(
+    batch: SnapRangeBatchRef;
+    stateRoot: Hash256;
+    ctx: SnapCtxRef;
+      ) =
   ## Returns a pair of account hash range lists with the full range of hashes
   ## smartly spread across the mutually disjunct interval sets.
   batch.unprocessed.init()
@@ -39,7 +43,9 @@ proc init(batch: SnapRangeBatchRef; ctx: SnapCtxRef) =
   # Initialise partial path the envelope of which covers the full range of
   # account keys `0..high(NodeTag)`. This will trigger healing on the full
   # range all possible keys.
-  batch.checkNodes.add @[0.byte]
+  batch.checkNodes.add NodeSpecs(
+    partialPath: @[0.byte],
+    nodeKey:     stateRoot.to(NodeKey))
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
@@ -115,7 +121,7 @@ proc update*(
     let env = SnapPivotRef(
       stateHeader:   header,
       fetchAccounts: SnapRangeBatchRef())
-    env.fetchAccounts.init(ctx)
+    env.fetchAccounts.init(header.stateRoot, ctx)
     var topEnv = env
 
     # Append per-state root environment to LRU queue

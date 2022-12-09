@@ -243,7 +243,7 @@ proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
   rlpWriter.snapAppend(account)
 
 
-p2pProtocol snap1(version = 1,
+p2pProtocol snap1(version = snapVersion,
                   rlpxName = "snap",
                   useRequestIds = true):
 

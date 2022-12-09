@@ -25,33 +25,82 @@ logScope:
 type
   SnapSyncRef* = RunnerSyncRef[CtxData,BuddyData]
 
+const
+  extraTraceMessages = false # or true
+    ## Enable additional logging noise
+
+# ------------------------------------------------------------------------------
+# Private logging helpers
+# ------------------------------------------------------------------------------
+
+template traceMsg(f, info: static[string]; args: varargs[untyped]) =
+  trace "Snap scheduler " & f & "() " & info, args
+
+template traceMsgCtx(f, info: static[string]; c: SnapCtxRef) =
+  when extraTraceMessages:
+    block:
+      let
+        poolMode {.inject.} = c.poolMode
+        daemon   {.inject.} = c.daemon
+      f.traceMsg info, poolMode, daemon
+
+template traceMsgBuddy(f, info: static[string]; b: SnapBuddyRef) =
+  when extraTraceMessages:
+    block:
+      let
+        peer     {.inject.} = b.peer
+        runState {.inject.} = b.ctrl.state
+        multiOk  {.inject.} = b.ctrl.multiOk
+        poolMode {.inject.} = b.ctx.poolMode
+        daemon   {.inject.} = b.ctx.daemon
+      f.traceMsg info, peer, runState, multiOk, poolMode, daemon
+
+
+template tracerFrameCtx(f: static[string]; c: SnapCtxRef; code: untyped) =
+  f.traceMsgCtx "begin", c
+  code
+  f.traceMsgCtx "end", c
+
+template tracerFrameBuddy(f: static[string]; b: SnapBuddyRef; code: untyped) =
+  f.traceMsgBuddy "begin", b
+  code
+  f.traceMsgBuddy "end", b
+
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: SnapCtxRef; ticker: bool): bool =
-  worker.setup(ctx,ticker)
+  tracerFrameCtx("runSetup", ctx):
+    result = worker.setup(ctx,ticker)
 
 proc runRelease(ctx: SnapCtxRef) =
-  worker.release(ctx)
+  tracerFrameCtx("runRelease", ctx):
+    worker.release(ctx)
 
 proc runDaemon(ctx: SnapCtxRef) {.async.} =
-  await worker.runDaemon(ctx)
+  tracerFrameCtx("runDaemon", ctx):
+    await worker.runDaemon(ctx)
 
 proc runStart(buddy: SnapBuddyRef): bool =
-  worker.start(buddy)
+  tracerFrameBuddy("runStart", buddy):
+    result = worker.start(buddy)
 
 proc runStop(buddy: SnapBuddyRef) =
-  worker.stop(buddy)
+  tracerFrameBuddy("runStop", buddy):
+    worker.stop(buddy)
 
 proc runPool(buddy: SnapBuddyRef; last: bool): bool =
-  worker.runPool(buddy, last)
+  tracerFrameBuddy("runPool", buddy):
+    result = worker.runPool(buddy, last)
 
 proc runSingle(buddy: SnapBuddyRef) {.async.} =
-  await worker.runSingle(buddy)
+  tracerFrameBuddy("runSingle", buddy):
+    await worker.runSingle(buddy)
 
 proc runMulti(buddy: SnapBuddyRef) {.async.} =
-  await worker.runMulti(buddy)
+  tracerFrameBuddy("runMulti", buddy):
+    await worker.runMulti(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions

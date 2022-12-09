@@ -345,9 +345,7 @@ proc accountsHealingImpl(
   var nLeafNodes = 0 # for logging
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
-      let
-        inx = w.slot.unsafeGet
-        nodePath = nodeSpecs[inx].partialPath
+      let inx = w.slot.unsafeGet
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
@@ -355,7 +353,7 @@ proc accountsHealingImpl(
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
-        env.fetchAccounts.checkNodes.add nodePath
+        env.fetchAccounts.checkNodes.add nodeSpecs[inx]
 
       else:
         # Node has been stored, double check
@@ -365,7 +363,7 @@ proc accountsHealingImpl(
           buddy.registerAccountLeaf(key, acc, env)
           nLeafNodes.inc
         else:
-          env.fetchAccounts.checkNodes.add nodePath
+          env.fetchAccounts.checkNodes.add nodeSpecs[inx]
 
   when extraTraceMessages:
     trace logTxt "merged into database", peer,

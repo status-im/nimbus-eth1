@@ -795,7 +795,12 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
 
   trace trEthSendSendingGetBlockHeaders, peer=a,
     startBlock=request.startBlock.hash.toHex, max=request.maxResults
-  let latestBlock = await a.getBlockHeaders(request)
+  var latestBlock: Option[blockHeadersObj]
+  try:
+    latestBlock = await a.getBlockHeaders(request)
+  except TransportError:
+    debug "Transport got closed during peersAgreeOnChain"
+    return
 
   result = latestBlock.isSome and latestBlock.get.headers.len > 0
   if latestBlock.isSome:

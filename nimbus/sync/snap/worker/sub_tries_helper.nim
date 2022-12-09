@@ -40,13 +40,13 @@ template logTxt(info: static[string]): static[string] =
 proc doInspect(
     getFn: HexaryGetFn;                ## Abstract database access
     rootKey: NodeKey;                  ## Start of hexary trie
-    partialPaths: seq[Blob];           ## Nodes with prob. dangling child links
+    nodes: seq[NodeSpecs];             ## Nodes with prob. dangling child links
     resumeCtx: TrieNodeStatCtxRef;     ## Resume previous inspection
      ): Result[TrieNodeStat,HexaryError]
      {.gcsafe, raises: [Defect,RlpError].} =
   ## ..
   let stats = getFn.hexaryInspectTrie(
-    rootKey, partialPaths, resumeCtx, healInspectionBatch)
+    rootKey, nodes.mapIt(it.partialPath), resumeCtx, healInspectionBatch)
 
   if stats.stopped:
     return err(TrieLoopAlert)
@@ -159,19 +159,19 @@ proc subTriesNodesReclassify*(
     var delayed: seq[NodeSpecs]
     for w in batch.sickSubTries:
       if 0 < getFn(w.nodeKey.ByteArray32).len:
-        batch.checkNodes.add w.partialPath
+        batch.checkNodes.add w
       else:
         delayed.add w
     batch.sickSubTries = delayed
 
   # Remove `checkNodes` entries with complete known sub-tries.
   var
-    doneWith: seq[Blob]        # loop will not recurse on that list
+    doneWith: seq[NodeSpecs]   # loop will not recurse on that list
     count = 0                  # for logging only
 
   # `While` loop will terminate with processed paths in `doneWith`.
   block:
-    var delayed: seq[Blob]
+    var delayed: seq[NodeSpecs]
     while 0 < batch.checkNodes.len:
 
       when extraTraceMessages:
@@ -195,11 +195,11 @@ proc subTriesNodesReclassify*(
           # remove that from the envelope of `w`.
           try:
             let paths = block:
-              let rc = w.hexaryEnvelopeDecompose(
+              let rc = w.partialPath.hexaryEnvelopeDecompose(
                 rootKey, batch.getOverlapping(iv).value, getFn)
               if rc.isErr:
                 continue
-              rc.value.mapIt(it.partialpath)
+              rc.value
             delayed &= paths
             when extraTraceMessages:
               trace logTxt "reclassify dismantled", count, partialPath=w,

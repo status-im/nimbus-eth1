@@ -258,10 +258,10 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   # Check for known entry (which should not exist.)
   let
     maxWorkers = dsc.ctx.buddiesMax
-    peers = dsc.pool.len
-    workers = dsc.buddies.len
+    nPeers = dsc.pool.len
+    nWorkers = dsc.buddies.len
   if dsc.buddies.hasKey(peer.hash):
-    trace "Reconnecting zombie peer ignored", peer, peers, workers, maxWorkers
+    trace "Reconnecting zombie peer ignored", peer, nPeers, nWorkers, maxWorkers
     return
 
   # Initialise worker for this peer
@@ -272,52 +272,53 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ctrl: BuddyCtrlRef(),
       peer: peer))
   if not buddy.worker.runStart():
-    trace "Ignoring useless peer", peer, peers, workers, maxWorkers
+    trace "Ignoring useless peer", peer, nPeers, nWorkers, maxWorkers
     buddy.worker.ctrl.zombie = true
     return
 
   # Check for table overflow. An overflow might happen if there are zombies
   # in the table (though preventing them from re-connecting for a while.)
-  if dsc.ctx.buddiesMax <= workers:
+  if dsc.ctx.buddiesMax <= nWorkers:
     let leastPeer = dsc.buddies.shift.value.data
     if leastPeer.worker.ctrl.zombie:
       trace "Dequeuing zombie peer",
-        oldest=leastPeer.worker, peers, workers=dsc.buddies.len, maxWorkers
+        oldest=leastPeer.worker, nPeers, nWorkers=dsc.buddies.len, maxWorkers
       discard
     else:
       # This could happen if there are idle entries in the table, i.e.
       # somehow hanging runners.
       trace "Peer table full! Dequeuing least used entry",
-        oldest=leastPeer.worker, peers, workers=dsc.buddies.len, maxWorkers
+        oldest=leastPeer.worker, nPeers, nWorkers=dsc.buddies.len, maxWorkers
       leastPeer.worker.runStop()
       leastPeer.worker.ctrl.zombie = true
 
   # Add peer entry
   discard dsc.buddies.lruAppend(peer.hash, buddy, dsc.ctx.buddiesMax)
 
-  trace "Running peer worker", peer, peers,
-    workers=dsc.buddies.len, maxWorkers
+  trace "Running peer worker", peer, nPeers,
+    nWorkers=dsc.buddies.len, maxWorkers
 
   asyncSpawn buddy.workerLoop()
 
 
 proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
   let
-    peers = dsc.pool.len
+    nPeers = dsc.pool.len
     maxWorkers = dsc.ctx.buddiesMax
-    workers = dsc.buddies.len
+    nWorkers = dsc.buddies.len
     rc = dsc.buddies.eq(peer.hash)
   if rc.isErr:
-    debug "Disconnected, unregistered peer", peer, peers, workers, maxWorkers
+    debug "Disconnected, unregistered peer", peer, nPeers, nWorkers, maxWorkers
     return
   if rc.value.worker.ctrl.zombie:
     # Don't disconnect, leave them fall out of the LRU cache. The effect is,
     # that reconnecting might be blocked, for a while.
-    trace "Disconnected, zombie", peer, peers, workers, maxWorkers
+    trace "Disconnected, zombie", peer, nPeers, nWorkers, maxWorkers
   else:
     rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
     dsc.buddies.del(peer.hash)
-    trace "Disconnected buddy", peer, peers, workers=dsc.buddies.len, maxWorkers
+    trace "Disconnected buddy", peer, nPeers,
+      nWorkers=dsc.buddies.len, maxWorkers
 
 # ------------------------------------------------------------------------------
 # Public functions

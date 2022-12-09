@@ -27,15 +27,6 @@ const
 when extraTraceMessages:
   import stew/byteutils
 
-# --------
-#
-#import
-#  std/strutils,
-#  stew/byteutils
-#
-#proc pp(w: (RepairKey, NibblesSeq); db: HexaryTreeDbRef): string =
-#  "(" & $w[1] & "," & w[0].pp(db) & ")"
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------

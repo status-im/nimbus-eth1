@@ -51,7 +51,7 @@ type
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapTodoRanges       ## Range of slots to be fetched
     processed*: NodeTagRangeSet        ## Nodes definitely processed
-    checkNodes*: seq[Blob]             ## Nodes with prob. dangling child links
+    checkNodes*: seq[NodeSpecs]        ## Nodes with prob. dangling child links
     sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
     lockTriePerusal*: bool             ## Only one process at a time
@@ -74,9 +74,8 @@ type
     nSlotLists*: uint64                ## Imported # of account storage tries
     obsolete*: bool                    ## Not latest pivot, anymore
 
-  SnapPivotTable* = ##\
+  SnapPivotTable* = KeyedQueue[Hash256,SnapPivotRef]
     ## LRU table, indexed by state root
-    KeyedQueue[Hash256,SnapPivotRef]
 
   SnapRecoveryRef* = ref object
     ## Recovery context
