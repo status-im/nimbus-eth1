@@ -21,7 +21,7 @@ suite "Test light client contentEncodings":
   forks.altair = ForkDigest([0'u8, 0, 0, 2])
   forks.bellatrix = ForkDigest([0'u8, 0, 0, 3])
   forks.capella = ForkDigest([0'u8, 0, 0, 4])
-  forks.sharding = ForkDigest([0'u8, 0, 0, 5])
+  forks.eip4844 = ForkDigest([0'u8, 0, 0, 5])
 
   test "Light client bootstrap correct":
     let

@@ -14,6 +14,7 @@ import
   eth/common/eth_types_rlp,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
+  beacon_chain/spec/helpers,
   beacon_chain/beacon_clock,
   beacon_chain/conf,
   ../../network/wire/[portal_protocol, portal_stream],
