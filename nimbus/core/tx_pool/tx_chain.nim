@@ -181,8 +181,7 @@ proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce
 
 proc getHeader*(dh: TxChainRef): BlockHeader
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Generate a new header, a child of the cached `head` (similar to
-  ## `utils.generateHeaderFromParentHeader()`.)
+  ## Generate a new header, a child of the cached `head`
   let gasUsed = if dh.txEnv.receipts.len == 0: 0.GasInt
                 else: dh.txEnv.receipts[^1].cumulativeGasUsed
 

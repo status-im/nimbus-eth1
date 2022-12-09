@@ -54,30 +54,6 @@ func computeGasLimit*(parentGasUsed, parentGasLimit, gasFloor, gasCeil: GasInt):
 
   return limit
 
-proc generateHeaderFromParentHeader*(com: CommonRef, parent: BlockHeader,
-    coinbase: EthAddress, timestamp: Option[EthTime],
-    gasLimit: GasInt, extraData: Blob, baseFee: Option[UInt256]): BlockHeader =
-
-  var lcTimestamp: EthTime
-  if timestamp.isNone:
-    lcTimestamp = max(getTime(), parent.timestamp + 1.milliseconds)  # Note: Py-evm uses +1 second, not ms
-  else:
-    lcTimestamp = timestamp.get()
-
-  if lcTimestamp <= parent.timestamp:
-    raise newException(ValueError, "header.timestamp should be higher than parent.timestamp")
-
-  result = BlockHeader(
-    timestamp: lcTimestamp,
-    blockNumber: (parent.blockNumber + 1),
-    difficulty: com.calcDifficulty(lcTimestamp, parent),
-    gasLimit: gasLimit,
-    stateRoot: parent.stateRoot,
-    coinbase: coinbase,
-    extraData: extraData,
-    fee: baseFee
-  )
-
 # CalcGasLimit1559 calculates the next block gas limit under 1559 rules.
 func calcGasLimit1559*(parentGasLimit, desiredLimit: GasInt): GasInt =
   let delta = parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR - 1.GasInt

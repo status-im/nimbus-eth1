@@ -24,6 +24,11 @@ import
   ../nimbus/common/common
 
 type
+  # trick the rlp decoder
+  # so we can separate the body and header
+  EthHeader = object
+    header: BlockHeader
+
   SealEngine = enum
     NoProof
     Ethash
@@ -31,6 +36,8 @@ type
   TestBlock = object
     goodBlock: bool
     blockRLP : Blob
+    header   : BlockHeader
+    body     : BlockBody
     hasException: bool
 
   Tester = object
@@ -122,14 +129,13 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   result.blocks = parseBlocks(fixture["blocks"])
 
   fixture.fromJson "lastblockhash", result.lastBlockHash
-  result.genesisHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
 
   if "genesisRLP" in fixture:
     var genesisRLP: Blob
     fixture.fromJson "genesisRLP", genesisRLP
-    let genesisBlock = EthBlock(header: result.genesisHeader)
-    check genesisRLP == rlp.encode(genesisBlock)
+    result.genesisHeader = rlp.decode(genesisRLP, EthBlock).header
   else:
+    result.genesisHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
     var goodBlock = true
     for h in result.blocks:
       goodBlock = goodBlock and h.goodBlock
@@ -163,45 +169,27 @@ proc blockWitness(vmState: BaseVMState, chainDB: ChainDBRef) =
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
 proc importBlock(tester: var Tester, com: CommonRef,
-  preminedBlock: EthBlock, tb: TestBlock, checkSeal, validation: bool): EthBlock =
+                 tb: TestBlock, checkSeal, validation: bool) =
 
-  let parentHeader = com.db.getBlockHeader(preminedBlock.header.parentHash)
-  var baseHeaderForImport = generateHeaderFromParentHeader(com,
-      parentHeader,
-      preminedBlock.header.coinbase,
-      some(preminedBlock.header.timestamp),
-      preminedBlock.header.gasLimit,
-      @[],
-      preminedBlock.header.fee
-  )
-
-  deepCopy(result, preminedBlock)
-  let td = some(com.db.getScore(preminedBlock.header.parentHash))
-  com.hardForkTransition(preminedBlock.header.blockNumber, td)
-
-  if com.consensus == ConsensusType.POS:
-    baseHeaderForImport.prevRandao = preminedBlock.header.prevRandao
+  let parentHeader = com.db.getBlockHeader(tb.header.parentHash)
+  let td = some(com.db.getScore(tb.header.parentHash))
+  com.hardForkTransition(tb.header.blockNumber, td)
 
   tester.vmState = BaseVMState.new(
     parentHeader,
-    baseHeaderForImport,
+    tb.header,
     com,
     (if tester.trace: {TracerFlags.EnableTracing} else: {}),
   )
 
-  let body = BlockBody(
-    transactions: result.txs,
-    uncles: result.uncles
-  )
-
   if validation:
     let rc = com.validateHeaderAndKinship(
-      result.header, body, checkSeal, pow)
+      tb.header, tb.body, checkSeal, pow)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
 
-  let res = tester.vmState.processBlockNotPoA(result.header, body)
+  let res = tester.vmState.processBlockNotPoA(tb.header, tb.body)
   if res == ValidationResult.Error:
     if not (tb.hasException or (not tb.goodBlock)):
       raise newException(ValidationError, "process block validation")
@@ -209,17 +197,14 @@ proc importBlock(tester: var Tester, com: CommonRef,
     if tester.vmState.generateWitness():
      blockWitness(tester.vmState, com.db)
 
-  discard com.db.persistHeaderToDb(preminedBlock.header, none(DifficultyInt))
+  discard com.db.persistHeaderToDb(tb.header, none(DifficultyInt))
 
-proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
-  com: CommonRef, checkSeal, validation: bool): (EthBlock, EthBlock, Blob) =
-
-  var
-    preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
-    minedBlock = tester.importBlock(com, preminedBlock, tb, checkSeal, validation)
-    rlpEncodedMinedBlock = rlp.encode(minedBlock)
-
-  result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
+proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
+                              com: CommonRef, checkSeal, validation: bool) =
+  var rlp = rlpFromBytes(tb.blockRLP)
+  tb.header = rlp.read(EthHeader).header
+  tb.body = rlp.readRecordType(BlockBody, false)
+  tester.importBlock(com, tb, checkSeal, validation)
 
 func shouldCheckSeal(tester: Tester): bool =
   if tester.sealEngine.isSome:
@@ -244,20 +229,20 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
   if tester.debugMode:
     tester.debugData = newJArray()
 
-  for idx, testBlock in tester.blocks:
-    if testBlock.goodBlock:
+  for idx, tb in tester.blocks:
+    if tb.goodBlock:
       try:
-        let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
-            testBlock, com, checkSeal, validation = false)
+        tester.applyFixtureBlockToChain(
+          tester.blocks[idx], com, checkSeal, validation = false)
 
         # manually validating
         let res = com.validateHeaderAndKinship(
-          preminedBlock, checkSeal, pow)
+                    tb.header, tb.body, checkSeal, pow)
         check res.isOk
         when defined(noisy):
           if res.isErr:
-            debugEcho "blockNumber  : ", preminedBlock.header.blockNumber
-            debugEcho "fork         : ", com.toHardFork(preminedBlock.header.blockNumber)
+            debugEcho "blockNumber  : ", tb.header.blockNumber
+            debugEcho "fork         : ", com.toHardFork(tb.header.blockNumber)
             debugEcho "error message: ", res.error
             debugEcho "consensusType: ", com.consensus
 
@@ -267,11 +252,11 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
     else:
       var noError = true
       try:
-        let (_, _, _) = tester.applyFixtureBlockToChain(testBlock,
+        tester.applyFixtureBlockToChain(tester.blocks[idx],
           com, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, RlpError:
         # failure is expected on this bad block
-        check (testBlock.hasException or (not testBlock.goodBlock))
+        check (tb.hasException or (not tb.goodBlock))
         noError = false
         if tester.debugMode:
           tester.debugData.add %{
