@@ -8,7 +8,6 @@
 {.push raises: [Defect].}
 
 import
-  std/[options],
   chronicles,
   metrics,
   eth/db/kvstore,
@@ -143,27 +142,27 @@ proc new*(
 
 ## Private KvStoreRef Calls
 
-proc get(kv: KvStoreRef, key: openArray[byte]): Option[seq[byte]] =
-  var res: Option[seq[byte]]
-  proc onData(data: openArray[byte]) = res = some(@data)
+proc get(kv: KvStoreRef, key: openArray[byte]): Opt[seq[byte]] =
+  var res: Opt[seq[byte]]
+  proc onData(data: openArray[byte]) = res = Opt.some(@data)
 
   discard kv.get(key, onData).expectDb()
 
   return res
 
-proc getSszDecoded(kv: KvStoreRef, key: openArray[byte], T: type auto): Option[T] =
+proc getSszDecoded(kv: KvStoreRef, key: openArray[byte], T: type auto): Opt[T] =
   let res = kv.get(key)
   if res.isSome():
     try:
-      some(SSZ.decode(res.get(), T))
+      Opt.some(SSZ.decode(res.get(), T))
     except SszError:
       raiseAssert("Stored data should always be serialized correctly")
   else:
-    none(T)
+    Opt.none(T)
 
 ## Private ContentDB calls
 
-proc get(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
+proc get(db: ContentDB, key: openArray[byte]): Opt[seq[byte]] =
   db.kv.get(key)
 
 proc put(db: ContentDB, key, value: openArray[byte]) =
@@ -176,14 +175,14 @@ proc del(db: ContentDB, key: openArray[byte]) =
   db.kv.del(key).expectDb()
 
 proc getSszDecoded*(
-    db: ContentDB, key: openArray[byte], T: type auto): Option[T] =
+    db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
   db.kv.getSszDecoded(key, T)
 
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
   ## minimal amount of disk space.
   ## Ideal mode of operation, is to run it after several deletes.
-  ## Another options would be to run 'PRAGMA auto_vacuum = FULL;' statement at
+  ## Another option would be to run 'PRAGMA auto_vacuum = FULL;' statement at
   ## the start of db to leave it up to sqlite to clean up
   db.vacStmt.exec().expectDb()
 
@@ -230,7 +229,7 @@ proc contentSize(db: ContentDB): int64 =
 # checked with the Radius/distance of the node anyhow. So lets see how we end up
 # using this mostly in the code.
 
-proc get*(db: ContentDB, key: ContentId): Option[seq[byte]] =
+proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
   db.get(key.toByteArrayBE())
 
@@ -243,7 +242,7 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toByteArrayBE())
 
-proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Option[T] =
+proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
   db.getSszDecoded(key.toByteArrayBE(), T)
 
 proc deleteContentFraction(
@@ -294,8 +293,8 @@ proc put*(
   # fragmented which may impact performance, so at some point in time `VACUUM`
   # will need to be run to defragment the db.
   # 2. Deal with the edge case where a user configures max db size lower than
-  # current db.size(). With such config the database would try to prune itself with
-  # each addition.
+  # current db.size(). With such config the database would try to prune itself
+  # with each addition.
   let dbSize = db.realSize()
 
   if dbSize < int64(db.maxSize):
@@ -354,25 +353,23 @@ proc adjustRadius(
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
-    proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
-      let
-        maybeContent = db.get(contentId)
-
-      if maybeContent.isNone():
+    proc(contentKey: ByteList, contentId: ContentId): Opt[seq[byte]] =
+      let content = db.get(contentId).valueOr:
         return Opt.none(seq[byte])
 
-      return ok(maybeContent.unsafeGet())
+      ok(content)
   )
 
-proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): DbStoreHandler =
+proc createStoreHandler*(
+    db: ContentDB, cfg: RadiusConfig, p: PortalProtocol): DbStoreHandler =
   return (proc(
       contentKey: ByteList,
       contentId: ContentId,
       content: seq[byte]) {.raises: [Defect], gcsafe.} =
-    # always re-check that key is in node range, to make sure that invariant that
-    # all keys in database are always in node range hold.
-    # TODO current silent assumption is that both contentDb and portalProtocol are
-    # using the same xor distance function
+    # always re-check that the key is in the node range to make sure only
+    # content in range is stored.
+    # TODO: current silent assumption is that both ContentDB and PortalProtocol
+    # are using the same xor distance function
     if p.inRange(contentId):
       case cfg.kind:
       of Dynamic:

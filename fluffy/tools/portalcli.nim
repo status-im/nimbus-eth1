@@ -198,10 +198,6 @@ proc testContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   let idHash = sha256.digest("test")
   ok(readUintBE[256](idHash.data))
 
-proc dbGetHandler(db: ContentDB, contentId: ContentId):
-    Option[seq[byte]] =
-  db.get(contentId)
-
 proc run(config: PortalCliConf) =
   let
     rng = newRng()

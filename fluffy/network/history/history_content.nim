@@ -10,12 +10,12 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, math],
-  nimcrypto/[sha2, hash], stew/byteutils, stint,
+  std/math,
+  nimcrypto/[sha2, hash], stew/[byteutils, results], stint,
   ssz_serialization,
   ../../common/common_types
 
-export ssz_serialization, common_types, hash
+export ssz_serialization, common_types, hash, results
 
 ## Types and calls for history network content keys
 
@@ -56,11 +56,11 @@ type
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
-func decode*(contentKey: ByteList): Option[ContentKey] =
+func decode*(contentKey: ByteList): Opt[ContentKey] =
   try:
-    some(SSZ.decode(contentKey.asSeq(), ContentKey))
+    Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
-    return none[ContentKey]()
+    return Opt.none(ContentKey)
 
 func toContentId*(contentKey: ByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
