@@ -37,30 +37,6 @@ type
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
-func encodeKey(k: ContentKey): (ByteList, ContentId) =
-  let keyEncoded = encode(k)
-  return (keyEncoded, toContentId(keyEncoded))
-
-func getEncodedKeyForContent(
-    cType: ContentType, hash: BlockHash):
-    (ByteList, ContentId) =
-  let contentKeyType = BlockKey(blockHash: hash)
-
-  let contentKey =
-    case cType
-    of blockHeader:
-      ContentKey(contentType: cType, blockHeaderKey: contentKeyType)
-    of blockBody:
-      ContentKey(contentType: cType, blockBodyKey: contentKeyType)
-    of receipts:
-      ContentKey(contentType: cType, receiptsKey: contentKeyType)
-    of epochAccumulator:
-      raiseAssert("Not implemented")
-    of blockHeaderWithProof:
-      ContentKey(contentType: cType, blockHeaderWithProofKey: contentKeyType)
-
-  return encodeKey(contentKey)
-
 func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   try:
     ok(rlp.decode(input, T))
@@ -280,8 +256,9 @@ func verifyHeader(
 proc getVerifiedBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
     Future[Opt[BlockHeader]] {.async.} =
-  let (contentKey, contentId) =
-    getEncodedKeyForContent(blockHeaderWithProof, hash)
+  let
+    contentKey = ContentKey.init(blockHeaderWithProof, hash).encode()
+    contentId = contentKey.toContentId()
 
   logScope:
     hash
@@ -291,7 +268,6 @@ proc getVerifiedBlockHeader*(
   # is what is stored. But the proof doesn't need to be verified as it gets
   # gets verified before storing.
   let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
-
   if headerFromDb.isSome():
     info "Fetched block header from database"
     return headerFromDb
@@ -336,8 +312,9 @@ proc getVerifiedBlockHeader*(
 proc getBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
     Future[Opt[BlockHeader]] {.async.} =
-  let (contentKey, contentId) =
-    getEncodedKeyForContent(blockHeader, hash)
+  let
+    contentKey = ContentKey.init(blockHeader, hash).encode()
+    contentId = contentKey.toContentId()
 
   logScope:
     hash
@@ -380,7 +357,9 @@ proc getBlockBody*(
     # Short path for empty body indicated by txRoot and ommersHash
     return Opt.some(BlockBody(transactions: @[], uncles: @[]))
 
-  let (contentKey, contentId) = getEncodedKeyForContent(blockBody, hash)
+  let
+    contentKey = ContentKey.init(blockBody, hash).encode()
+    contentId = contentKey.toContentId()
 
   logScope:
     hash
@@ -443,7 +422,9 @@ proc getReceipts*(
     # Short path for empty receipts indicated by receipts root
     return Opt.some(newSeq[Receipt]())
 
-  let (contentKey, contentId) = getEncodedKeyForContent(receipts, hash)
+  let
+    contentKey = ContentKey.init(receipts, hash).encode()
+    contentId = contentKey.toContentId()
 
   logScope:
     hash
@@ -480,10 +461,8 @@ proc getEpochAccumulator(
     n: HistoryNetwork, epochHash: Digest):
     Future[Opt[EpochAccumulator]] {.async.} =
   let
-    contentKey = encode(ContentKey(
-      contentType: epochAccumulator,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash)))
-    contentId = toContentId(contentKey)
+    contentKey = ContentKey.init(epochAccumulator, epochHash).encode()
+    contentId = contentKey.toContentId()
 
   logScope:
     epochHash

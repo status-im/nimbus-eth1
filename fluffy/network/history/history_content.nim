@@ -53,6 +53,28 @@ type
     of blockHeaderWithProof:
       blockHeaderWithProofKey*: BlockKey
 
+func init*(
+    T: type ContentKey, contentType: ContentType,
+    hash: BlockHash | Digest): T =
+  case contentType
+  of blockHeader:
+    ContentKey(
+      contentType: contentType, blockHeaderKey: BlockKey(blockHash: hash))
+  of blockBody:
+    ContentKey(
+      contentType: contentType, blockBodyKey: BlockKey(blockHash: hash))
+  of receipts:
+    ContentKey(
+      contentType: contentType, receiptsKey: BlockKey(blockHash: hash))
+  of epochAccumulator:
+    ContentKey(
+      contentType: contentType,
+      epochAccumulatorKey: EpochAccumulatorKey(epochHash: hash))
+  of blockHeaderWithProof:
+    ContentKey(
+      contentType: contentType,
+      blockHeaderWithProofKey: BlockKey(blockHash: hash))
+
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
 
