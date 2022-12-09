@@ -53,10 +53,6 @@ const
   # 95% <= #remote-deleted/#remote-present <= 1/95%
   deletedItemsRatioBandPC = 95
 
-  # 70% <= #addr-local/#addr-remote <= 1/70%
-  # note: this ratio might vary due to timing race conditions
-  addrGroupLocalRemotePC = 70
-
   # With a large enough block size, decreasing it should not decrease the
   # profitability (very much) as the the number of blocks availabe increases
   # (and a better choice might be available?) A good value for the next
@@ -65,9 +61,6 @@ const
 
   # Make some percentage of the accounts local accouns.
   accountExtractPC = 10
-
-  # test block chain
-  networkId = GoerliNet # MainNet
 
 var
   minGasPrice = GasPrice.high
@@ -525,9 +518,6 @@ proc runTxPoolTests(noisy = true) =
 
 
 proc runTxPackerTests(noisy = true) =
-  let
-    elapNoisy = true # noisy
-
   suite &"TxPool: Block packer tests":
     var
       ntBaseFee = 0.GasPrice
@@ -535,7 +525,6 @@ proc runTxPackerTests(noisy = true) =
 
     test &"Calculate some non-trivial base fee":
       var
-        xq = bcCom.toTxPool(txList, noisy = noisy)
         feesList = SortedSet[GasPriceEx,bool].init()
 
       # provide a sorted list of gas fees
@@ -737,7 +726,6 @@ proc runTxPackerTests(noisy = true) =
         check xq.smartHead(backHeader) # move insertion point
 
         # make sure that all txs have been added to the pool
-        let nFailed = xq.nItems.disposed - stats.disposed
         check stats.disposed == 0
         check stats.total + backTxs.len == xq.nItems.total
 

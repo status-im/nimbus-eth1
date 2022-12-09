@@ -902,39 +902,5 @@ proc addLocal*(xp: TxPoolRef;
   ok()
 
 # ------------------------------------------------------------------------------
-# Legacy stuff -- will be removed, soon
-# ------------------------------------------------------------------------------
-
-proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
-    {.gcsafe, raises: [Defect,CatchableError],
-      deprecated: "use add() instead".} =
-  xp.add(txs,info)
-
-proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = "")
-    {.gcsafe,raises: [Defect,CatchableError],
-      deprecated: "use add() instead".} =
-   xp.add(tx,info)
-
-proc jobDeltaTxsHead*(xp: TxPoolRef; newHead: BlockHeader): bool
-    {.gcsafe,raises: [Defect,CatchableError],
-      deprecated: "use smartHead() instead " &
-                  "and remove the head= directive follwoing".} =
-  xp.smartHead(newHead)
-
-proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
-    {.deprecated: "this function does nothing and can savely be removed".} =
-  discard
-
-proc nJobs*(xp: TxPoolRef): int
-    {.deprecated: "this function returns always 0 and can savely be removed".} =
-  0
-
-proc `head=`*(xp: TxPoolRef; val: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError],
-      deprecated: "use smartHead(val,blindMode=true) instead although " &
-                  "this function is unneccesary after running smartHead()".} =
-  discard xp.smartHead(val, true)
-
-# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -14,8 +14,6 @@ import
   ./test_txpool/helpers,
   ./macro_assembler
 
-import ../nimbus/utils/debug
-
 const
   baseDir = [".", "tests"]
   repoDir = [".", "customgenesis"]
