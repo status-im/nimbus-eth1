@@ -118,8 +118,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
           return ValidationResult.Error
 
     if NoPersistHeader notin flags:
-      let ttd = c.com.ttd
-      discard c.db.persistHeaderToDb(header, ttd)
+      discard c.db.persistHeaderToDb(header, c.com.consensus == ConsensusType.POS)
 
     if NoSaveTxs notin flags:
       discard c.db.persistTransactions(header.blockNumber, body.transactions)

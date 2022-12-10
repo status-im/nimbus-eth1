@@ -123,7 +123,8 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
-  discard com.db.persistHeaderToDb(header, none(DifficultyInt))
+  discard com.db.persistHeaderToDb(header,
+    com.consensus == ConsensusType.POS)
   com.db.persistFixtureBlock()
   result = TestEnv(
     txHash: signedTx1.rlpHash,

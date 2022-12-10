@@ -53,11 +53,6 @@ proc main() =
         inc stat.skipped
         continue
 
-      # TODO: fix this after #1337 fixed
-      if "Merge" in name:
-        inc stat.skipped
-        continue
-
       let cd = extractChainData(unit)
       let status = processChainData(cd)
       stat.inc(name, status)

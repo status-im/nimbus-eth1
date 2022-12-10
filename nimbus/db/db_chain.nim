@@ -407,29 +407,8 @@ proc getReceipts*(db: ChainDBRef; receiptRoot: Hash256): seq[Receipt] =
     receipts.add(r)
   return receipts
 
-proc readTerminalHash*(db: ChainDBRef; h: var Hash256): bool =
-  let bytes = db.db.get(terminalHashKey().toOpenArray)
-  if bytes.len == 0:
-    return false
-  try:
-    h = rlp.decode(bytes, Hash256)
-  except RlpError:
-    return false
-
-  true
-
-proc writeTerminalHash*(db: ChainDBRef; h: Hash256) =
-  db.db.put(terminalHashKey().toOpenArray, rlp.encode(h))
-
-proc currentTerminalHeader*(db: ChainDBRef; header: var BlockHeader): bool =
-  var terminalHash: Hash256
-  if not db.readTerminalHash(terminalHash):
-    return false
-  if not db.getBlockHeader(terminalHash, header):
-    return false
-  true
-
-proc persistHeaderToDb*(db: ChainDBRef; header: BlockHeader, ttd: Option[DifficultyInt]): seq[BlockHeader] =
+proc persistHeaderToDb*(db: ChainDBRef; header: BlockHeader, 
+                        forceCanonical: bool): seq[BlockHeader] =
   let isGenesis = header.parentHash == GENESIS_PARENT_HASH
   let headerHash = header.blockHash
   if not isGenesis and not db.headerExists(header.parentHash):
@@ -449,14 +428,7 @@ proc persistHeaderToDb*(db: ChainDBRef; header: BlockHeader, ttd: Option[Difficu
   except CanonicalHeadNotFound:
     return db.setAsCanonicalChainHead(headerHash)
 
-  if ttd.isSome:
-    let ttd = ttd.get()
-    if headScore < ttd and score >= ttd:
-      db.writeTerminalHash(headerHash)
-    if score >= ttd:
-      return db.setAsCanonicalChainHead(headerHash)
-
-  if score > headScore:
+  if score > headScore or forceCanonical:
     return db.setAsCanonicalChainHead(headerHash)
 
 proc persistHeaderToDbWithoutSetHead*(db: ChainDBRef; header: BlockHeader) =

@@ -12,7 +12,6 @@ type
     contractHash
     cliqueSnapshot
     transitionStatus
-    terminalHash
     safeHash
     finalizedHash
     skeletonProgress
@@ -72,10 +71,6 @@ proc cliqueSnapshotKey*(h: Hash256): DbKey {.inline.} =
 proc transitionStatusKey*(): DbKey =
   # ETH-2 Transition Status
   result.data[0] = byte ord(transitionStatus)
-  result.dataEndPos = uint8 1
-
-proc terminalHashKey*(): DbKey =
-  result.data[0] = byte ord(terminalHash)
   result.dataEndPos = uint8 1
 
 proc safeHashKey*(): DbKey {.inline.} =

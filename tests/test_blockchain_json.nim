@@ -197,7 +197,8 @@ proc importBlock(tester: var Tester, com: CommonRef,
     if tester.vmState.generateWitness():
      blockWitness(tester.vmState, com.db)
 
-  discard com.db.persistHeaderToDb(tb.header, none(DifficultyInt))
+  discard com.db.persistHeaderToDb(tb.header,
+    com.consensus == ConsensusType.POS)
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
                               com: CommonRef, checkSeal, validation: bool) =
@@ -222,7 +223,8 @@ proc collectDebugData(tester: var Tester) =
   }
 
 proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatus) =
-  discard com.db.persistHeaderToDb(tester.genesisHeader, none(DifficultyInt))
+  discard com.db.persistHeaderToDb(tester.genesisHeader,
+    com.consensus == ConsensusType.POS)
   check com.db.getCanonicalHead().blockHash == tester.genesisHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
 
@@ -371,17 +373,21 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     var success = true
     try:
       tester.runTester(com, testStatusIMPL)
-      let latestBlockHash = com.db.getCanonicalHead().blockHash
-      if latestBlockHash != tester.lastBlockHash:
-        if tester.postStateHash != Hash256():
-          let rootHash = tester.vmState.stateDB.rootHash
-          if tester.postStateHash != rootHash:
-            raise newException(ValidationError, "incorrect postStateHash, expect=" &
-              $rootHash & ", get=" &
-              $tester.postStateHash
-            )
-        else:
-          verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)
+      let header = com.db.getCanonicalHead()
+      let lastBlockHash = header.blockHash
+      check lastBlockHash == tester.lastBlockHash
+      if tester.postStateHash != Hash256():
+        let rootHash = tester.vmState.stateDB.rootHash
+        if tester.postStateHash != rootHash:
+          raise newException(ValidationError, "incorrect postStateHash, expect=" &
+            $rootHash & ", get=" &
+            $tester.postStateHash
+          )
+      elif lastBlockHash == tester.lastBlockHash:
+        # multiple chain, we are using the last valid canonical
+        # state root to test against 'postState'
+        let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
+        verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
     except ValidationError as E:
       echo fixtureName, " ERROR: ", E.msg
       success = false

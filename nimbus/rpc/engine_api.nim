@@ -160,25 +160,35 @@ proc setupEngineApi*(
       blockHash = conf.terminalBlockHash
 
     let db = sealingEngine.chain.db
-    let ttd = com.ttd.get(high(common.BlockNumber))
+    let ttd = com.ttd
 
-    if conf.terminalTotalDifficulty != ttd:
-      raise newException(ValueError, "invalid ttd: EL $1 CL $2" % [$ttd, $conf.terminalTotalDifficulty])
+    if ttd.isNone:
+      raise newException(ValueError, "invalid ttd: EL (none) CL ($2)" % [$conf.terminalTotalDifficulty])
 
-    var header: EthBlockHeader
-    let terminalBlockNumber = uint64(conf.terminalBlockNumber)
+    if conf.terminalTotalDifficulty != ttd.get:
+      raise newException(ValueError, "invalid ttd: EL ($1) CL ($2)" % [$ttd.get, $conf.terminalTotalDifficulty])
+
+    let terminalBlockNumber = uint64(conf.terminalBlockNumber).toBlockNumber
     let terminalBlockHash = conf.terminalBlockHash.asEthHash
-    if db.currentTerminalHeader(header):
-      let headerHash = header.blockHash
 
-      if terminalBlockNumber != 0'u64 and terminalBlockNumber != header.blockNumber.truncate(uint64):
-        raise newException(ValueError, "invalid terminal block number, got $1 want $2" % [$terminalBlockNumber, $header.blockNumber])
+    if terminalBlockHash != Hash256():
+      var headerHash: Hash256
 
-      if terminalBlockHash != Hash256() and terminalBlockHash != headerHash:
-        raise newException(ValueError, "invalid terminal block hash, got $1 want $2" % [$terminalBlockHash, $headerHash])
+      if not db.getBlockHash(terminalBlockNumber, headerHash):
+        raise newException(ValueError, "cannot get terminal block hash, number $1" %
+          [$terminalBlockNumber])
+
+      if terminalBlockHash != headerHash:
+        raise newException(ValueError, "invalid terminal block hash, got $1 want $2" %
+          [$terminalBlockHash, $headerHash])
+
+      var header: EthBlockHeader
+      if not db.getBlockHeader(headerHash, header):
+        raise newException(ValueError, "cannot get terminal block header, hash $1" %
+          [$terminalBlockHash])
 
       return TransitionConfigurationV1(
-        terminalTotalDifficulty: ttd,
+        terminalTotalDifficulty: ttd.get,
         terminalBlockHash      : BlockHash headerHash.data,
         terminalBlockNumber    : Quantity header.blockNumber.truncate(uint64)
       )
@@ -189,7 +199,7 @@ proc setupEngineApi*(
     if terminalBlockHash != Hash256():
       raise newException(ValueError, "invalid terminal block hash, no terminal header set")
 
-    return TransitionConfigurationV1(terminalTotalDifficulty: ttd)
+    return TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)
 
   # ForkchoiceUpdatedV1 has several responsibilities:
   # If the method is called with an empty head block:

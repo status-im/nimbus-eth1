@@ -350,7 +350,8 @@ proc initializeEmptyDb*(com: CommonRef)
     trace "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
-    discard com.db.persistHeaderToDb(com.genesisHeader, none(BlockNumber))
+    discard com.db.persistHeaderToDb(com.genesisHeader,
+      com.consensusType == ConsensusType.POS)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
 # ------------------------------------------------------------------------------

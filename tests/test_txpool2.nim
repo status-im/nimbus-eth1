@@ -275,13 +275,6 @@ proc runTxHeadDelta*(noisy = true) =
           # Commit to block chain
           check chain.persistBlocks([blk.header], [body]).isOk
 
-          # If not for other reason, setting head is irrelevant for this test
-          #
-          # # PoS block canonical head must be explicitly set using setHead.
-          # # The function `persistHeaderToDb()` used in `persistBlocks()`
-          # # does not reliably do so due to scoring.
-          # chainDB.setHead(blk.header)
-
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
           # packer bucket.
