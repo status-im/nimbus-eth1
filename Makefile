@@ -260,6 +260,10 @@ evmstate: | build deps
 evmstate_test: | build deps evmstate
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
+# builds txparse tool
+txparse: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
+
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,fluffy,nimbus_verified_proxy,$(TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,portalcli,blockwalk,eth_data_exporter,utp_test_app,utp_test,*.dSYM}
