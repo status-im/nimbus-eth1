@@ -117,7 +117,7 @@ import
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_trie_nodes],
   ./db/[hexary_desc, hexary_error, snapdb_accounts],
-  ./sub_tries_helper
+  "."/[sub_tries_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -149,8 +149,59 @@ proc healingCtx(
     "nSickSubTries=" & $env.fetchAccounts.sickSubTries.len & "}"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template discardRlpError(info: static[string]; code: untyped) =
+  try:
+    code
+  except RlpError as e:
+    discard
+
+template noExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except Defect as e:
+    raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+
+# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc reorgHealingState(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ) =
+  let
+    ctx = buddy.ctx
+    rootKey = env.stateHeader.stateRoot.to(NodeKey)
+    getFn = ctx.data.snapDb.getAccountFn
+
+    nCheckNodes0 = env.fetchAccounts.checkNodes.len
+    nSickSubTries0 = env.fetchAccounts.sickSubTries.len
+    nProcessed0 = env.fetchAccounts.processed.fullfactor.toPC(3)
+
+  # Reclassify nodes into existing/allocated and dangling ones
+  if buddy.swapInAccounts(env) == 0:
+    # Nothing to swap in, so force reclassification
+    noExceptionOops("reorgHealingState"):
+      var delayed: seq[NodeSpecs]
+      for node in env.fetchAccounts.sickSubTries:
+        if node.nodeKey.ByteArray32.getFn().len == 0:
+          delayed.add node # still subject to healing
+        else:
+          env.fetchAccounts.checkNodes.add node
+      env.fetchAccounts.sickSubTries = delayed
+
+    when extraTraceMessages:
+      let
+        nCheckNodes1 = env.fetchAccounts.checkNodes.len
+        nSickSubTries1 = env.fetchAccounts.sickSubTries.len
+      trace logTxt "sick nodes reclassified", nCheckNodes0, nSickSubTries0,
+        nCheckNodes1, nSickSubTries1, nProcessed0
+
 
 proc updateMissingNodesList(
     buddy: SnapBuddyRef;
@@ -234,15 +285,14 @@ proc getMissingNodesFromNetwork(
   # allows other processes to access the full `sickSubTries` list.
   env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & fetchNodes
 
-  let error = rc.error
-  if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
-    discard
-    when extraTraceMessages:
+  let
+    error = rc.error
+    ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors)
+  when extraTraceMessages:
+    if ok:
       trace logTxt "fetch nodes error => stop", peer,
         ctx=buddy.healingCtx(env), error
-  else:
-    discard
-    when extraTraceMessages:
+    else:
       trace logTxt "fetch nodes error", peer,
         ctx=buddy.healingCtx(env), error
 
@@ -253,23 +303,31 @@ proc kvAccountLeaf(
     buddy: SnapBuddyRef;
     node: NodeSpecs;
     env: SnapPivotRef;
-      ): (bool,NodeKey,Account)
-      {.gcsafe, raises: [Defect,RlpError]} =
+      ): (bool,NodeKey,Account) =
   ## Re-read leaf node from persistent database (if any)
   let
     peer = buddy.peer
+  var
+    nNibbles = -1
 
-    nodeRlp = rlpFromBytes node.data
-    (_,prefix) = hexPrefixDecode node.partialPath
-    (_,segment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-    nibbles = prefix & segment
-  if nibbles.len == 64:
-    let data = nodeRlp.listElem(1).toBytes
-    return (true, nibbles.getBytes.convertTo(NodeKey), rlp.decode(data,Account))
+  discardRlpError("kvAccountLeaf"):
+    let
+      nodeRlp = rlpFromBytes node.data
+      prefix = (hexPrefixDecode node.partialPath)[1]
+      segment = (hexPrefixDecode nodeRlp.listElem(0).toBytes)[1]
+      nibbles = prefix & segment
+
+    nNibbles = nibbles.len
+    if nNibbles == 64:
+      let
+        data = nodeRlp.listElem(1).toBytes
+        nodeKey = nibbles.getBytes.convertTo(NodeKey)
+        accData = rlp.decode(data,Account)
+      return (true, nodeKey, accData)
 
   when extraTraceMessages:
-    trace logTxt "non-leaf node path", peer,
-      ctx=buddy.healingCtx(env), nNibbles=nibbles.len
+    trace logTxt "non-leaf node path or corrupt data", peer,
+      ctx=buddy.healingCtx(env), nNibbles
 
 
 proc registerAccountLeaf(
@@ -313,11 +371,7 @@ proc accountsHealingImpl(
     peer = buddy.peer
 
   # Update for changes since last visit
-  try:
-    db.getAccountFn.subTriesNodesReclassify(
-      env.stateHeader.stateRoot.to(NodeKey), env.fetchAccounts)
-  except Exception as e:
-    raiseAssert "Not possible @ accountsHealingImpl(" & $e.name & "):" & e.msg
+  buddy.reorgHealingState(env)
 
   if env.fetchAccounts.sickSubTries.len == 0:
     # Traverse the hexary trie for more missing nodes. This call is expensive.
