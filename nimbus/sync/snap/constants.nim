@@ -48,17 +48,17 @@ const
 
   snapAccountsSaveProcessedChunksMax* = 1000
     ## Recovery data are stored if the processed ranges list contains no more
-    ## than this many range `chunks`.
+    ## than this many range *chunks*.
     ##
-    ## If there are too many dangling nodes, no data will be saved and restart
-    ## has to perform from scratch.
+    ## If the range set is too much fragmented, no data will be saved and
+    ## restart has to perform from scratch or an earlier checkpoint.
 
   snapAccountsSaveStorageSlotsMax* = 10_000
     ## Recovery data are stored if the oustanding storage slots to process do
     ## not amount to more than this many entries.
     ##
     ## If there are too many dangling nodes, no data will be saved and restart
-    ## has to perform from scratch.
+    ## has to perform from scratch or an earlier checkpoint.
 
 
   snapStorageSlotsFetchMax* = 2 * 1024
@@ -71,6 +71,17 @@ const
     ## For a running worker processing accounts, stop processing accounts
     ## and switch to processing the storage slots queue if the queue has
     ## more than this many items.
+
+  # --------------
+
+  swapInAccountsCoverageTrigger* = 0.30
+    ## Similar to `healAccountsCoverageTrigger` below only for trying to
+    ## swap in from earlier pivots.
+
+  swapInAccountsPivotsMin* = 2
+    ## Require at least this man pivots available before any swap in can
+    ## take place (must be at least 2.) This value is typically combined
+    ## with `swapInAccountsCoverageTrigger`.
 
   # --------------
 
@@ -159,6 +170,7 @@ const
     ## Set 0 to disable.
 
 static:
+  doAssert 1 < swapInAccountsPivotsMin
   doAssert healAccountsCoverageTrigger < 1.0 # larger values make no sense
   doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
   doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax

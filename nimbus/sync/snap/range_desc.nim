@@ -25,10 +25,11 @@ type
 
   NodeKey* = distinct ByteArray32
     ## Hash key without the hash wrapper (as opposed to `NodeTag` which is a
-    ## number)
+    ## number.)
 
   NodeTag* = distinct UInt256
-    ## Trie leaf item, account hash etc.
+    ## Trie leaf item, account hash etc. This data type is a representation
+    ## for a `NodeKey` geared up for arithmetic and comparing keys.
 
   NodeTagRange* = Interval[NodeTag,UInt256]
     ## Interval `[minPt,maxPt]` of` NodeTag` elements, can be managed in an
@@ -248,6 +249,13 @@ proc fullFactor*(lrs: NodeTagRangeSet): float =
     0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
     1.0 # number of points in `lrs` is `2^256 + 1`
+
+proc fullFactor*(iv: NodeTagRange): float =
+  ## Relative covered length of an inetrval, i.e. `#points-covered / 2^256`
+  if 0 < iv.len:
+    iv.len.u256.to(float) / (2.0^256)
+  else:
+    1.0 # number of points in `iv` is `2^256 + 1`
 
 # ------------------------------------------------------------------------------
 # Public functions: printing & pretty printing

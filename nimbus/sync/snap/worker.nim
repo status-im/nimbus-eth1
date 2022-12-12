@@ -73,19 +73,21 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
         return false
       rc.value
 
-  # Cosmetics: allows other processes to log etc.
-  await sleepAsync(1300.milliseconds)
+  # Cosmetics: allow other processes (e.g. ticker) to log the current recovery
+  # state. There is no other intended purpose of this wait state.
+  await sleepAsync 1100.milliseconds
 
-  when extraTraceMessages:
-    trace "Recovery continued ...", checkpoint, topLevel,
-      nAccounts=recov.state.nAccounts, nDangling=recov.state.dangling.len
+  #when extraTraceMessages:
+  #  trace "Recovery continued ...", checkpoint, topLevel,
+  #    nAccounts=recov.state.nAccounts, nDangling=recov.state.dangling.len
 
   # Update pivot data from recovery checkpoint
   env.recoverPivotFromCheckpoint(ctx, topLevel)
 
   # Fetch next recovery record if there is any
   if recov.state.predecessor.isZero:
-    trace "Recovery done", checkpoint, topLevel
+    #when extraTraceMessages:
+    #  trace "Recovery done", checkpoint, topLevel
     return false
   let rc = ctx.data.snapDb.recoverPivot(recov.state.predecessor)
   if rc.isErr:
@@ -290,8 +292,8 @@ proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   ## Enabled while
-  ## * `buddy.ctrl.multiOk` is `true`
-  ## * `buddy.ctrl.poolMode` is `false`
+  ## * `buddy.ctx.multiOk` is `true`
+  ## * `buddy.ctx.poolMode` is `false`
   ##
   let
     ctx = buddy.ctx
@@ -322,29 +324,41 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # point in keeping some older space consuming state data any longer.
   ctx.data.pivotTable.beforeTopMostlyClean()
 
+  when extraTraceMessages:
+    block:
+      let
+        nCheckNodes = env.fetchAccounts.checkNodes.len
+        nSickSubTries = env.fetchAccounts.sickSubTries.len
+        nAccounts = env.nAccounts
+        nSlotLists = env.nSlotLists
+        processed = env.fetchAccounts.processed.fullFactor.toPC(2)
+        nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+        accHealThresh = env.healThresh.toPC(2)
+      trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
+        nStoQu, accHealThresh, nCheckNodes, nSickSubTries
+
   # This one is the syncing work horse which downloads the database
   await env.execSnapSyncAction(buddy)
 
   if env.archived:
     return # pivot has changed
 
-  # Save state so sync can be partially resumed at next start up
-  let
-    nCheckNodes = env.fetchAccounts.checkNodes.len
-    nSickSubTries = env.fetchAccounts.sickSubTries.len
-    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-    processed = env.fetchAccounts.processed.fullFactor.toPC(2)
   block:
-    let rc = env.saveCheckpoint(ctx)
+    # Save state so sync can be partially resumed at next start up
+    let
+      nAccounts = env.nAccounts
+      nSlotLists = env.nSlotLists
+      processed = env.fetchAccounts.processed.fullFactor.toPC(2)
+      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+      accHealThresh = env.healThresh.toPC(2)
+      rc = env.saveCheckpoint(ctx)
     if rc.isErr:
-      error "Failed to save recovery checkpoint", peer, pivot,
-        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-        processed, nStoQu, error=rc.error
+      error "Failed to save recovery checkpoint", peer, pivot, nAccounts,
+       nSlotLists, processed, nStoQu, error=rc.error
     else:
       when extraTraceMessages:
-        trace "Saved recovery checkpoint", peer, pivot,
-          nAccounts=env.nAccounts, nSlotLists=env.nSlotLists,
-          processed, nStoQu, blobSize=rc.value
+        trace "Saved recovery checkpoint", peer, pivot, nAccounts, nSlotLists,
+          processed, nStoQu, blobSize=rc.value, accHealThresh
 
   if buddy.ctrl.stopped:
     return # peer worker has gone

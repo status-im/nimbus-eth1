@@ -40,7 +40,7 @@ import
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
   ./db/[hexary_envelope, snapdb_accounts],
-  ./pivot_helper
+  "."/[pivot_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -128,7 +128,7 @@ proc accountsRangefetchImpl(
   buddy.data.errors.resetComError()
 
   let
-    gotAccounts = dd.data.accounts.len
+    gotAccounts = dd.data.accounts.len # comprises `gotStorage`
     gotStorage = dd.withStorage.len
 
   #when extraTraceMessages:
@@ -180,15 +180,27 @@ proc accountsRangefetchImpl(
   # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
 
+  var nSwapInLaps = 0
   if env.archived:
     # Current pivot just became outdated, rebuild storage slots index (if any)
     if 0 < gotStorage:
       trace logTxt "mothballing", peer, pivot, gotStorage
       env.pivotMothball
 
+  elif swapInAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
+    # Swap in from other pivots
+    when extraTraceMessages:
+      trace logTxt "before swap in", peer, pivot, gotAccounts, gotStorage,
+        coveredHere=covered.fullFactor.toPC(2),
+        processed=fa.processed.fullFactor.toPC(2),
+        nProcessedChunks=fa.processed.chunks.uint.toSI
+
+    if swapInAccountsPivotsMin <= ctx.data.pivotTable.len:
+      nSwapInLaps = buddy.swapInAccounts(env)
+
   when extraTraceMessages:
     trace logTxt "request done", peer, pivot, gotAccounts, gotStorage,
-      coveredHere=covered.fullFactor.toPC(2),
+      nSwapInLaps, coveredHere=covered.fullFactor.toPC(2),
       processed=fa.processed.fullFactor.toPC(2),
       nProcessedChunks=fa.processed.chunks.uint.toSI
 
