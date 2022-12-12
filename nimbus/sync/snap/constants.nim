@@ -11,6 +11,9 @@
 {.push raises: [Defect].}
 
 const
+  pivotTableLruEntriesMax* = 50
+    ## Max depth of pivot table. On overflow, the oldest one will be removed.
+
   pivotBlockDistanceMin* = 128
     ## The minimal depth of two block headers needed to activate a new state
     ## root pivot.
@@ -27,6 +30,10 @@ const
     ##   farther away from the chain head.
     ##
     ##   Note that 128 is the magic distance for snapshots used by *Geth*.
+
+  pivotBlockDistanceThrottledPivotChangeMin* = 256
+    ## Slower pivot change while healing or nearly complete accounts database
+    ## takes place.
 
   pivotEnvStopChangingIfComplete* = true
     ## If set `true`, new peers will not change the pivot even if the

@@ -115,6 +115,14 @@ proc update*(
   ## Note that the pivot table is assumed to be sorted by the block numbers of
   ## the pivot header.
   ##
+  # Calculate minimum block distance.
+  let minBlockDistance = block:
+    let rc = pivotTable.lastValue
+    if rc.isOk and rc.value.pivotAccountsHealingOk(ctx):
+      pivotBlockDistanceThrottledPivotChangeMin
+    else:
+      pivotBlockDistanceMin
+
   # Check whether the new header follows minimum depth requirement. This is
   # where the queue is assumed to have increasing block numbers.
   if reverse or
@@ -144,7 +152,7 @@ proc update*(
 
     else:
       discard pivotTable.lruAppend(
-        header.stateRoot, env, ctx.buddiesMax)
+        header.stateRoot, env, pivotTableLruEntriesMax)
 
     # Update healing threshold
     let
