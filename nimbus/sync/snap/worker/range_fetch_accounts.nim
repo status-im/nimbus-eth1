@@ -39,7 +39,8 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
-  ./db/[hexary_envelope, snapdb_accounts]
+  ./db/[hexary_envelope, snapdb_accounts],
+  ./pivot_helper
 
 {.push raises: [Defect].}
 
@@ -179,10 +180,17 @@ proc accountsRangefetchImpl(
   # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
 
+  if env.archived:
+    # Current pivot just became outdated, rebuild storage slots index (if any)
+    if 0 < gotStorage:
+      trace logTxt "mothballing", peer, pivot, gotStorage
+      env.pivotMothball
+
   when extraTraceMessages:
-    trace logTxt "request done", peer, pivot,
-      covered=covered.fullFactor.toPC(2),
-      processed=fa.processed.fullFactor.toPC(2)
+    trace logTxt "request done", peer, pivot, gotAccounts, gotStorage,
+      coveredHere=covered.fullFactor.toPC(2),
+      processed=fa.processed.fullFactor.toPC(2),
+      nProcessedChunks=fa.processed.chunks.uint.toSI
 
   return true
 
@@ -210,7 +218,7 @@ proc rangeFetchAccounts*(
     var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
           buddy.ctrl.running and
-          not env.obsolete:
+          not env.archived:
       nFetchAccounts.inc
       if not await buddy.accountsRangefetchImpl(env):
         break

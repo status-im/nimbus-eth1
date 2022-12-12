@@ -333,7 +333,7 @@ proc rangeFetchStorageSlots*(
     var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStorageSlotsFetchMax
     while 0 < fullRangeItemsleft and
           buddy.ctrl.running and
-          not env.obsolete:
+          not env.archived:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemsFull(env)
       if req.len == 0:
@@ -344,7 +344,7 @@ proc rangeFetchStorageSlots*(
     var partialRangeItemsLeft = env.fetchStoragePart.len
     while 0 < partialRangeItemsLeft and
           buddy.ctrl.running and
-          not env.obsolete:
+          not env.archived:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemPartial(env)
       if req.len == 0:

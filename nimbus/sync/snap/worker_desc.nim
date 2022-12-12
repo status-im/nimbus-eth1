@@ -11,7 +11,7 @@
 import
   std/hashes,
   eth/[common, p2p],
-  stew/[interval_set, keyed_queue],
+  stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
   ../sync_desc,
   ./worker/com/com_error,
@@ -22,6 +22,9 @@ import
 {.push raises: [Defect].}
 
 type
+  SnapAccountsList* = SortedSet[NodeTag,Hash256]
+    ## Sorted pair of `(account,state-root)` entries
+
   SnapSlotsQueue* = KeyedQueue[Hash256,SnapSlotsQueueItemRef]
     ## Handles list of storage slots data for fetch indexed by storage root.
     ##
@@ -72,7 +75,10 @@ type
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
     nSlotLists*: uint64                ## Imported # of account storage tries
-    obsolete*: bool                    ## Not latest pivot, anymore
+
+    # Mothballing, ready to be swapped into newer pivot record
+    storageAccounts*: SnapAccountsList ## Accounts with missing stortage slots
+    archived*: bool                    ## Not latest pivot, anymore
 
   SnapPivotTable* = KeyedQueue[Hash256,SnapPivotRef]
     ## LRU table, indexed by state root
