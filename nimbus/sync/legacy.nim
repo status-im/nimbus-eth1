@@ -17,7 +17,7 @@ import
   eth/p2p/[private/p2p_types, peer_pool],
   stew/byteutils,
   "."/[protocol, types],
-  ../core/[chain, clique/clique_sealer, gaslimit, withdrawals],
+  ../core/[chain, clique/clique_sealer, eip4844, gaslimit, withdrawals],
   ../core/pow/difficulty,
   ../constants,
   ../utils/utils,
@@ -236,6 +236,12 @@ proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
   res = com.validateWithdrawals(header)
   if res.isErr:
     trace "validate withdrawals error",
+      msg=res.error
+    return false
+
+  res = com.validateEip4844Header(header)
+  if res.isErr:
+    trace "validate eip4844 error",
       msg=res.error
     return false
 

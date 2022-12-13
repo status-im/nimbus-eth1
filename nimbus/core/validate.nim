@@ -13,7 +13,7 @@ import
   ../db/accounts_cache,
   ".."/[transaction, common/common],
   ".."/[vm_state, vm_types, errors],
-  "."/[dao, gaslimit, withdrawals],
+  "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   ./pow,
   chronicles,
@@ -129,7 +129,10 @@ proc validateHeader(com: CommonRef; header, parentHeader: BlockHeader;
     if checkSealOK:
       return pow.validateSeal(header)
 
-  com.validateWithdrawals(header)
+  ? com.validateWithdrawals(header)
+  ? com.validateEip4844Header(header)
+
+  ok()
 
 func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
                                                Result[void,string] =
