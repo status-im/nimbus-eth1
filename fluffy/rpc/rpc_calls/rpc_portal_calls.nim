@@ -33,3 +33,4 @@ proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
   enrs: Option[seq[Record]]]
 proc portal_historyOffer(contentKey: string, content: string): int
 proc portal_historyRecursiveFindNodes(): seq[Record]
+proc portal_historyStore(contentKey: string, content: string): bool

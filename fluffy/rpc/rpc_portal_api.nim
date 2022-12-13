@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -151,3 +151,14 @@ proc installPortalApiHandlers*(
   rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do() -> seq[Record]:
     let discovered = await p.queryRandom()
     return discovered.map(proc(n: Node): Record = n.record)
+
+  rpcServer.rpc("portal_" & network & "Store") do(
+      contentKey: string, content: string) -> bool:
+    let key = ByteList.init(hexToSeqByte(contentKey))
+    let contentId = p.toContentId(key)
+
+    if contentId.isSome():
+      p.storeContent(key, contentId.get(), hexToSeqByte(content))
+      return true
+    else:
+      raise newException(ValueError, "Invalid content key")

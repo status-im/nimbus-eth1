@@ -43,7 +43,7 @@ proc stop(testCase: TestCase) {.async.} =
   await testCase.server.closeWait()
   await testCase.localDiscovery.closeWait()
 
-procSuite "Discovery Rpc":
+procSuite "Discovery RPC":
   let rng = newRng()
 
   asyncTest "Get local node info":
@@ -53,11 +53,11 @@ procSuite "Discovery Rpc":
     check:
       resp.contains("nodeId")
       resp["nodeId"].kind == JString
-      resp.contains("nodeENR")
-      resp["nodeENR"].kind == JString
+      resp.contains("enr")
+      resp["enr"].kind == JString
 
     let nodeId = resp["nodeId"].getStr()
-    let nodeEnr = resp["nodeENR"].getStr()
+    let nodeEnr = resp["enr"].getStr()
 
     check:
       nodeEnr == tc.localDiscovery.localNode.record.toURI()
