@@ -114,7 +114,7 @@ const
     ## serve a maximum number requests (rather than data.)
 
   healAccountsPivotTriggerMinFactor* = 0.17
-    ## Additional condition to meed before starting healing. The current
+    ## Additional condition to meet before starting healing. The current
     ## pivot must have at least this much processed as recorded in the
     ## `processed` ranges set. This is the minimim value (see below.)
 
@@ -178,7 +178,6 @@ const
 
 static:
   doAssert 1 < swapInAccountsPivotsMin
-  doAssert healAccountsCoverageTrigger < 1.0 # larger values make no sense
   doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
   doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
 

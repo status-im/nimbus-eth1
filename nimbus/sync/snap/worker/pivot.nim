@@ -28,7 +28,6 @@ const
     ## Enable some asserts
 
 proc pivotAccountsHealingOk*(env: SnapPivotRef;ctx: SnapCtxRef): bool {.gcsafe.}
-proc pivotAccountsComplete*(env: SnapPivotRef): bool {.gcsafe.}
 proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
@@ -42,7 +41,7 @@ proc init(
       ) =
   ## Returns a pair of account hash range lists with the full range of hashes
   ## smartly spread across the mutually disjunct interval sets.
-  batch.unprocessed.init()
+  batch.unprocessed.init() # full range on the first set of the pair
   batch.processed = NodeTagRangeSet.init()
 
   # Once applicable when the hexary trie is non-empty, healing is started on
@@ -61,25 +60,14 @@ proc init(
   # range sets.
   if ctx.data.coveredAccounts.isFull:
     # All of accounts hashes are covered by completed range fetch processes
-    # for all pivot environments. Do a random split distributing the full
-    # accounts hash range across the pair of range sets.
-    for _ in 0 .. 5:
-      var nodeKey: NodeKey
-      ctx.data.rng[].generate(nodeKey.ByteArray32)
-      let top = nodeKey.to(NodeTag)
-      if low(NodeTag) < top and top < high(NodeTag):
-        # Move covered account ranges (aka intervals) to the second set.
-        batch.unprocessed.merge NodeTagRange.new(low(NodeTag), top)
-        break
-      # Otherwise there is a full single range in `unprocessed[0]`
-  else:
-    # Not all account hashes are covered, yet. So keep the uncovered
-    # account hashes in the first range set, and the other account hashes
-    # in the second range set.
-    for iv in ctx.data.coveredAccounts.increasing:
-      # Move already processed account ranges (aka intervals) to the second set.
-      discard batch.unprocessed[0].reduce iv
-      discard batch.unprocessed[1].merge iv
+    # for all pivot environments. So reset covering and record full-ness level.
+    ctx.data.covAccTimesFull.inc
+    ctx.data.coveredAccounts.clear()
+
+  # Deprioritise already processed ranges by moving it to the second set.
+  for iv in ctx.data.coveredAccounts.increasing:
+    discard batch.unprocessed[0].reduce iv
+    discard batch.unprocessed[1].merge iv
 
   when extraAsserts:
     doAssert batch.unprocessed.verify
@@ -198,7 +186,8 @@ proc tickerStats*(
         sSqSum += sLen * sLen
     let
       env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
-      accCoverage = ctx.data.coveredAccounts.fullFactor
+      accCoverage = (ctx.data.coveredAccounts.fullFactor +
+                     ctx.data.covAccTimesFull.float)
       accFill = meanStdDev(uSum, uSqSum, count)
     var
       pivotBlock = none(BlockNumber)
@@ -250,31 +239,23 @@ proc pivotMothball*(env: SnapPivotRef) =
   env.archived = true
 
 
-proc pivotAccountsComplete*(
-    env: SnapPivotRef;              # Current pivot environment
-      ): bool =
-  ## Returns `true` if accounts are fully available for this this pivot.
-  env.fetchAccounts.processed.isFull
-
 proc pivotAccountsHealingOk*(
     env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): bool =
   ## Returns `true` if accounts healing is enabled for this pivot.
   ##
-  if not env.pivotAccountsComplete():
-    # Only start accounts healing if there is some completion level, already.
-    #
-    # We check against the global coverage factor, i.e. a measure for how much
-    # of the total of all accounts have been processed. Even if the hexary trie
-    # database for the current pivot state root is sparsely filled, there is a
-    # good chance that it can inherit some unchanged sub-trie from an earlier
-    # pivot state root download. The healing process then works like sort of
-    # glue.
-    if healAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
-      # Ditto for pivot.
-      if env.healThresh <= env.fetchAccounts.processed.fullFactor:
-        return true
+  # Only start accounts healing if there is some completion level, already.
+  #
+  # We check against the global coverage factor, i.e. a measure for how much
+  # of the total of all accounts have been processed. Even if the hexary trie
+  # database for the current pivot state root is sparsely filled, there is a
+  # good chance that it can inherit some unchanged sub-trie from an earlier
+  # pivot state root download. The healing process then works like sort of
+  # glue.
+  if healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage():
+    if env.healThresh <= env.fetchAccounts.processed.fullFactor:
+      return true
 
 
 proc execSnapSyncAction*(
@@ -293,7 +274,7 @@ proc execSnapSyncAction*(
       if buddy.ctrl.stopped or env.archived:
         return
 
-  if not env.pivotAccountsComplete():
+  if not env.fetchAccounts.processed.isFull:
     await buddy.rangeFetchAccounts(env)
 
     # Run at least one round fetching storage slosts even if the `archived`
@@ -309,10 +290,10 @@ proc execSnapSyncAction*(
       if buddy.ctrl.stopped or env.archived:
         return
 
-      # Some additional storage slots might have been popped up
-      await buddy.rangeFetchStorageSlots(env)
-      if buddy.ctrl.stopped or env.archived:
-        return
+  # Some additional storage slots might have been popped up
+  await buddy.rangeFetchStorageSlots(env)
+  if buddy.ctrl.stopped or env.archived:
+    return
 
   # Don't bother with storage slots healing before accounts healing takes
   # place. This saves communication bandwidth. The pivot might change soon,

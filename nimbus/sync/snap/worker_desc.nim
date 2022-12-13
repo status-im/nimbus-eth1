@@ -108,6 +108,7 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
+    covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
     noRecovery*: bool                  ## Ignore recovery checkpoints
 
@@ -131,6 +132,14 @@ proc hash*(a: SnapSlotsQueueItemRef): Hash =
 proc hash*(a: Hash256): Hash =
   ## Table/KeyedQueue mixin
   a.data.hash
+
+# ------------------------------------------------------------------------------
+# Public helpers: coverage
+# ------------------------------------------------------------------------------
+
+proc pivotAccountsCoverage*(ctx: SnapCtxRef): float =
+  ## Returns the accounts coverage factor
+  ctx.data.coveredAccounts.fullFactor + ctx.data.covAccTimesFull.float
 
 # ------------------------------------------------------------------------------
 # Public helpers: SnapTodoRanges

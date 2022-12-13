@@ -58,19 +58,6 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
-# proc dumpUnprocessed(
-#     buddy: SnapBuddyRef;
-#     env: SnapPivotRef;
-#       ): string =
-#   ## Debugging ...
-#   let
-#     peer = buddy.peer
-#     pivot = "#" & $env.stateHeader.blockNumber # for logging
-#     moan = proc(overlap: UInt256; iv: NodeTagRange) =
-#       trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
-#
-#   env.fetchAccounts.unprocessed.dump(moan, 5)
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -182,7 +169,7 @@ proc accountsRangefetchImpl(
 
   var nSwapInLaps = 0
   if not env.archived and
-     swapInAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
+     swapInAccountsCoverageTrigger <= ctx.pivotAccountsCoverage():
     # Swap in from other pivots
     when extraTraceMessages:
       trace logTxt "before swap in", peer, pivot, gotAccounts, gotStorage,
@@ -220,7 +207,8 @@ proc rangeFetchAccounts*(
       pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     when extraTraceMessages:
-      trace logTxt "start", peer, pivot
+      trace logTxt "start", peer, pivot,
+        nNodesCheck=fa.nodes.check.len, nNodesMissing=fa.nodes.missing.len
 
     var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
