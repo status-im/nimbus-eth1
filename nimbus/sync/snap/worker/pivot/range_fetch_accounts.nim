@@ -35,11 +35,11 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   stint,
-  ../../../utils/prettify,
-  ../../sync_desc,
-  ".."/[constants, range_desc, worker_desc],
-  ./com/[com_error, get_account_range],
-  ./db/[hexary_envelope, snapdb_accounts],
+  ../../../../utils/prettify,
+  ../../../sync_desc,
+  "../.."/[constants, range_desc, worker_desc],
+  ../com/[com_error, get_account_range],
+  ../db/[hexary_envelope, snapdb_accounts],
   ./swap_in
 
 {.push raises: [Defect].}

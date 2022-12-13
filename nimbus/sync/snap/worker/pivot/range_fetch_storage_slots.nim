@@ -58,10 +58,10 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   stint,
-  ../../sync_desc,
-  ".."/[constants, range_desc, worker_desc],
-  ./com/[com_error, get_storage_ranges],
-  ./db/[hexary_error, snapdb_storage_slots]
+  ../../../sync_desc,
+  "../.."/[constants, range_desc, worker_desc],
+  ../com/[com_error, get_storage_ranges],
+  ../db/[hexary_error, snapdb_storage_slots]
 
 {.push raises: [Defect].}
 

@@ -54,10 +54,10 @@ import
   chronicles,
   eth/[common, p2p],
   stew/[byteutils, interval_set, keyed_queue, sorted_set],
-  ../../../utils/prettify,
-  ".."/[range_desc, worker_desc],
-  ./db/[hexary_desc, hexary_error, hexary_envelope,
-        hexary_paths, snapdb_accounts]
+  ../../../../utils/prettify,
+  "../.."/[range_desc, worker_desc],
+  ../db/[hexary_desc, hexary_error, hexary_envelope,
+         hexary_paths, snapdb_accounts]
 
 {.push raises: [Defect].}
 
@@ -76,7 +76,7 @@ const
     ## Enabled additional logging noise
 
 when extraTraceMessages:
-  import std/math, ../../types
+  import std/math, ../../../types
 
 # ------------------------------------------------------------------------------
 # Private logging helpers

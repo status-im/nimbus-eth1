@@ -18,7 +18,7 @@ import
   ../../utils/prettify,
   ../misc/best_pivot,
   ".."/[handlers, protocol, sync_desc],
-  ./worker/[pivot_helper, ticker],
+  ./worker/[pivot, ticker],
   ./worker/com/com_error,
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   "."/[constants, range_desc, worker_desc]

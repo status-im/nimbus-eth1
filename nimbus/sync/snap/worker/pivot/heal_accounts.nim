@@ -112,11 +112,11 @@ import
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
   stew/[interval_set, keyed_queue],
-  ../../../utils/prettify,
-  ../../sync_desc,
-  ".."/[constants, range_desc, worker_desc],
-  ./com/[com_error, get_trie_nodes],
-  ./db/[hexary_desc, hexary_error, snapdb_accounts],
+  ../../../../utils/prettify,
+  ../../../sync_desc,
+  "../.."/[constants, range_desc, worker_desc],
+  ../com/[com_error, get_trie_nodes],
+  ../db/[hexary_desc, hexary_error, snapdb_accounts],
   "."/[sub_tries_helper, swap_in]
 
 {.push raises: [Defect].}

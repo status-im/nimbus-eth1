@@ -14,8 +14,8 @@ import
   chronos,
   eth/[common, p2p],
   stew/interval_set,
-  ".."/[constants, range_desc, worker_desc],
-  ./db/[hexary_desc, hexary_error, hexary_inspect]
+  "../.."/[constants, range_desc, worker_desc],
+  ../db/[hexary_desc, hexary_error, hexary_inspect]
 
 {.push raises: [Defect].}
 

@@ -17,8 +17,9 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
-  "."/[heal_accounts, heal_storage_slots,
-       range_fetch_accounts, range_fetch_storage_slots, ticker]
+  ./pivot/[heal_accounts, heal_storage_slots,
+           range_fetch_accounts, range_fetch_storage_slots],
+  ./ticker
 
 {.push raises: [Defect].}
 
