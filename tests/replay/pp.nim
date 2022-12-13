@@ -56,7 +56,7 @@ proc pp*(h: BlockHeader; sep = " "): string =
     &"stateRoot={h.stateRoot.pp}{sep}" &
     &"baseFee={h.baseFee}{sep}" &
     &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH)}{sep}" &
-    &"excessDataGas={h.excessDataGas.get(GasInt(0))}"
+    &"excessDataGas={h.excessDataGas.get(0.u256)}"
 
 proc pp*(g: Genesis; sep = " "): string =
   "" &
