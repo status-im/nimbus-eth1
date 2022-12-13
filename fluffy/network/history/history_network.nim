@@ -132,6 +132,9 @@ func validateBlockHeaderBytes*(
 
   let header = ? decodeRlp(bytes, BlockHeader)
 
+  if header.excessDataGas.isSome:
+    return err("EIP-4844 not yet implemented")
+
   if header.withdrawalsRoot.isSome:
     return err("Withdrawals not yet implemented")
 
