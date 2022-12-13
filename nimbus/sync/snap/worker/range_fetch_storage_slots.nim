@@ -330,21 +330,23 @@ proc rangeFetchStorageSlots*(
 
     # Processing the full range will implicitely handle inheritable storage
     # slots first with each batch item (see `getNextSlotItemsFull()`.)
+    #
+    # Run this batch even if `archived` flag is set in order to shrink the
+    # batch queue.
     var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStorageSlotsFetchMax
     while 0 < fullRangeItemsleft and
-          buddy.ctrl.running and
-          not env.archived:
+          buddy.ctrl.running:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemsFull(env)
       if req.len == 0:
         break
+
       fullRangeItemsleft.dec
       await buddy.storeStoragesSingleBatch(req, env)
 
     var partialRangeItemsLeft = env.fetchStoragePart.len
     while 0 < partialRangeItemsLeft and
-          buddy.ctrl.running and
-          not env.archived:
+          buddy.ctrl.running:
       # Pull out the next request list from the queue
       let req = buddy.getNextSlotItemPartial(env)
       if req.len == 0:

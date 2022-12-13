@@ -17,7 +17,8 @@ import
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
-  ./ticker
+  "."/[heal_accounts, heal_storage_slots,
+       range_fetch_accounts, range_fetch_storage_slots, ticker]
 
 {.push raises: [Defect].}
 
@@ -273,6 +274,50 @@ proc pivotAccountsHealingOk*(
       # Ditto for pivot.
       if env.healThresh <= env.fetchAccounts.processed.fullFactor:
         return true
+
+
+proc execSnapSyncAction*(
+    env: SnapPivotRef;              # Current pivot environment
+    buddy: SnapBuddyRef;            # Worker peer
+      ) {.async.} =
+  ## Execute a synchronisation run.
+  let
+    ctx = buddy.ctx
+
+  block:
+    # Clean up storage slots queue first it it becomes too large
+    let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+    if snapStorageSlotsQuPrioThresh < nStoQu:
+      await buddy.rangeFetchStorageSlots(env)
+      if buddy.ctrl.stopped or env.archived:
+        return
+
+  if not env.pivotAccountsComplete():
+    await buddy.rangeFetchAccounts(env)
+
+    # Run at least one round fetching storage slosts even if the `archived`
+    # flag is set in order to keep the batch queue small.
+    if not buddy.ctrl.stopped:
+      await buddy.rangeFetchStorageSlots(env)
+
+    if buddy.ctrl.stopped or env.archived:
+      return
+
+    if env.pivotAccountsHealingOk(ctx):
+      await buddy.healAccounts(env)
+      if buddy.ctrl.stopped or env.archived:
+        return
+
+      # Some additional storage slots might have been popped up
+      await buddy.rangeFetchStorageSlots(env)
+      if buddy.ctrl.stopped or env.archived:
+        return
+
+  # Don't bother with storage slots healing before accounts healing takes
+  # place. This saves communication bandwidth. The pivot might change soon,
+  # anyway.
+  if env.pivotAccountsHealingOk(ctx):
+    await buddy.healStorageSlots(env)
 
 
 proc saveCheckpoint*(

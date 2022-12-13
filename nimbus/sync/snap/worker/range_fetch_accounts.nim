@@ -40,7 +40,7 @@ import
   ".."/[constants, range_desc, worker_desc],
   ./com/[com_error, get_account_range],
   ./db/[hexary_envelope, snapdb_accounts],
-  "."/[pivot_helper, swap_in]
+  ./swap_in
 
 {.push raises: [Defect].}
 
@@ -181,13 +181,8 @@ proc accountsRangefetchImpl(
   env.fetchStorageFull.merge dd.withStorage
 
   var nSwapInLaps = 0
-  if env.archived:
-    # Current pivot just became outdated, rebuild storage slots index (if any)
-    if 0 < gotStorage:
-      trace logTxt "mothballing", peer, pivot, gotStorage
-      env.pivotMothball
-
-  elif swapInAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
+  if not env.archived and
+     swapInAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
     # Swap in from other pivots
     when extraTraceMessages:
       trace logTxt "before swap in", peer, pivot, gotAccounts, gotStorage,

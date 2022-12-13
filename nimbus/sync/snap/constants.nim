@@ -60,7 +60,7 @@ const
     ## If the range set is too much fragmented, no data will be saved and
     ## restart has to perform from scratch or an earlier checkpoint.
 
-  snapAccountsSaveStorageSlotsMax* = 10_000
+  snapAccountsSaveStorageSlotsMax* = 20_000
     ## Recovery data are stored if the oustanding storage slots to process do
     ## not amount to more than this many entries.
     ##

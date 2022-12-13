@@ -17,9 +17,8 @@ import
   ../../db/select_backend,
   ../../utils/prettify,
   ../misc/best_pivot,
-  ".."/[protocol, sync_desc],
-  ./worker/[heal_accounts, heal_storage_slots, pivot_helper,
-            range_fetch_accounts, range_fetch_storage_slots, ticker],
+  ".."/[handlers, protocol, sync_desc],
+  ./worker/[pivot_helper, ticker],
   ./worker/com/com_error,
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   "."/[constants, range_desc, worker_desc]
@@ -127,7 +126,7 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
       let rc = ctx.data.pivotTable.lastValue
       if rc.isOk and rc.value.storageDone:
         # No neede to change
-        if extraTraceMessages:
+        when extraTraceMessages:
           trace "No need to change snap pivot", peer,
             pivot=("#" & $rc.value.stateHeader.blockNumber),
             stateRoot=rc.value.stateHeader.stateRoot,
@@ -140,47 +139,6 @@ proc updateSinglePivot(buddy: SnapBuddyRef): Future[bool] {.async.} =
       multiOk=buddy.ctrl.multiOk, runState=buddy.ctrl.state
 
     return true
-
-proc execSnapSyncAction(
-    env: SnapPivotRef;              # Current pivot environment
-    buddy: SnapBuddyRef;            # Worker peer
-      ) {.async.} =
-  ## Execute a synchronisation run.
-  let
-    ctx = buddy.ctx
-
-  block:
-    # Clean up storage slots queue first it it becomes too large
-    let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-    if snapStorageSlotsQuPrioThresh < nStoQu:
-      await buddy.rangeFetchStorageSlots(env)
-      if buddy.ctrl.stopped or env.archived:
-        return
-
-  if not env.pivotAccountsComplete():
-    await buddy.rangeFetchAccounts(env)
-    if buddy.ctrl.stopped or env.archived:
-      return
-
-    await buddy.rangeFetchStorageSlots(env)
-    if buddy.ctrl.stopped or env.archived:
-      return
-
-    if env.pivotAccountsHealingOk(ctx):
-      await buddy.healAccounts(env)
-      if buddy.ctrl.stopped or env.archived:
-        return
-
-      # Some additional storage slots might have been popped up
-      await buddy.rangeFetchStorageSlots(env)
-      if buddy.ctrl.stopped or env.archived:
-        return
-
-  # Don't bother with storage slots healing before accounts healing takes
-  # place. This saves communication bandwidth. The pivot might change soon,
-  # anyway.
-  if env.pivotAccountsHealingOk(ctx):
-    await buddy.healStorageSlots(env)
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -341,6 +299,14 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   await env.execSnapSyncAction(buddy)
 
   if env.archived:
+    let
+      peer = buddy.peer
+      nAccounts = env.nAccounts
+      nSlotLists = env.nSlotLists
+    when extraTraceMessages:
+      trace "Mothballing", peer, pivot=("#" & $env.stateHeader.blockNumber),
+        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists
+    env.pivotMothball()
     return # pivot has changed
 
   block:
