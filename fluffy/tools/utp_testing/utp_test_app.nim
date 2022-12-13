@@ -42,7 +42,7 @@ type AppConf* = object
     defaultValue: defaultListenAddress
     desc: "RPC listening address"
     name: "rpc-listen-address" .}: ValidIpAddress
- 
+
 proc `%`*(value: enr.Record): JsonNode =
   newJString(value.toURI())
 
@@ -89,14 +89,14 @@ func toSKey(k: UtpSocketKey[NodeAddress]): SKey =
 
 proc installUtpHandlers(
   srv: RpcHttpServer,
-  d: protocol.Protocol, 
-  s: UtpDiscv5Protocol, 
+  d: protocol.Protocol,
+  s: UtpDiscv5Protocol,
   t: ref Table[SKey, UtpSocket[NodeAddress]]) {.raises: [Defect, CatchableError].} =
 
   srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
     let
       nodeRes = newNode(r)
-      
+
     if nodeRes.isOk():
       let node = nodeRes.get()
       let nodeAddress = NodeAddress.init(node).unsafeGet()
@@ -131,7 +131,7 @@ proc installUtpHandlers(
 
     for k in t.keys:
       keys.add(k)
-    
+
     return keys
 
   srv.rpc("utp_read") do(k: SKey, n: int) -> string:
@@ -151,7 +151,7 @@ proc installUtpHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[NodeAddress]]): AcceptConnectionCallback[NodeAddress] = 
+proc buildAcceptConnection(t: ref Table[SKey, UtpSocket[NodeAddress]]): AcceptConnectionCallback[NodeAddress] =
   return (
     proc (server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
       let fut = newFuture[void]()
@@ -170,7 +170,7 @@ when isMainModule:
   let conf = AppConf.load()
   {.push raises: [Defect].}
 
-  let 
+  let
     protName = "test-utp".toBytes()
     la = initTAddress(conf.rpcListenAddress, conf.rpcPort)
     key = PrivateKey.random(rng[])
@@ -189,7 +189,7 @@ when isMainModule:
 
   d.open()
 
-  let 
+  let
     cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
     utp = UtpDiscv5Protocol.new(d, protName, buildAcceptConnection(table), socketConfig = cfg)
 

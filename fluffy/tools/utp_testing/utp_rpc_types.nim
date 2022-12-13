@@ -7,7 +7,7 @@
 {.push raises: [Defect].}
 
 
-import 
+import
   std/hashes,
   json_rpc/jsonmarshal,
   stew/byteutils,

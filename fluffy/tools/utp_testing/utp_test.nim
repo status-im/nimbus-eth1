@@ -77,7 +77,7 @@ procSuite "Utp integration tests":
     let serverInfo = await repeatTillSuccess(() => server.discv5_nodeInfo(), 10)
 
     # nodes need to have established session before the utp try
-    discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.nodeEnr))
+    discard await repeatTillSuccess(() => client.discv5_ping(serverInfo.enr))
 
     return (client, clientInfo, server, serverInfo)
 
@@ -85,7 +85,7 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
+      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
 
@@ -110,7 +110,7 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
+      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
 
@@ -132,7 +132,7 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
+      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
       maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
 
@@ -162,9 +162,9 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
     let
-      clientConnectionKey1 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
-      clientConnectionKey2 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
-      clientConnectionKey3 = await repeatTillSuccess(() => client.utp_connect(serverInfo.nodeEnr))
+      clientConnectionKey1 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+      clientConnectionKey2 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
+      clientConnectionKey3 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
       serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
 
       maybeServerConnectionKey1 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey1.id)
