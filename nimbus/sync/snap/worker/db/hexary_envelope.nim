@@ -371,8 +371,16 @@ proc hexaryEnvelopeTouchedBy*(
   ## returns the complete set of intervals from the argument set `rangeSet`
   ## that have a common point with the envelope (i.e. they are non-disjunct to
   ## the envelope.)
-  result = NodeTagRangeSet.init()
+  ##
+  ## Note that this function always returns a new set (which might be equal to
+  ## the argument set `rangeSet`.)
   let probe = partialPath.hexaryEnvelope
+
+  # `probe.len==0`(mod 2^256) => `probe==[0,high]` as `probe` cannot be empty
+  if probe.len == 0:
+    return rangeSet.clone
+
+  result = NodeTagRangeSet.init() # return empty set unless coverage
 
   if 0 < rangeSet.covered probe:
     # Find an interval `start` that starts before the `probe` interval.
@@ -424,6 +432,8 @@ proc hexaryEnvelopeTouchedBy*(
         discard result.merge w
       elif probe.maxPt < w.minPt:
         break # all the `w` following will be disjuct, too
+    # End if
+
 
 proc hexaryEnvelopeTouchedBy*(
     rangeSet: NodeTagRangeSet;          # Set of intervals (aka ranges)

@@ -172,6 +172,31 @@ proc sortUniq(
     result = nodes.hexaryEnvelopeUniq
 
 
+proc classifyNodes(
+    pivot: SnapRangeBatchRef;          # Healing data support
+    nodeList: seq[NodeSpecs];          # Nodes to be reclassified
+    getFn: HexaryGetFn;                # Abstract database access
+      ): SnapTodoNodes =
+  ## Classify nodes into existing/allocated and dangling ones. This function
+  ## returns the pair of `(checkNodes,sickSubTries)` of node lists equivalent
+  ## to the sub-lists for the `pivot` argument.
+  var delayed: SnapTodoNodes
+
+  for node in nodeList:
+    # Check whether previously missing nodes from the `misiing` list have been
+    # magically added to the database since it was checked last time. These
+    # nodes will me moved to the `check` list for further processing.
+    if node.nodeKey.ByteArray32.getFn().len == 0:
+      delayed.missing.add node # probably subject to healing
+    else:
+      # `iv=[0,high]` => `iv.len==0`(mod 2^256) as `iv` cannot be empty
+      let iv = node.hexaryEnvelope
+      if iv.len == 0 or pivot.processed.covered(iv) < iv.len:
+        delayed.check.add node         # may be swapped in later
+
+  delayed.sortUniq
+
+
 proc decomposeCheckNodes(
     pivot: SnapRangeBatchRef;          # Healing data support
     rootKey: NodeKey;                  # Start node into hexary trie
@@ -288,6 +313,10 @@ proc swapIn*(
   for n in 0 ..< swappedIn.len:
     swappedIn[n] = NodeTagRangeSet.init()
 
+  # Initial nodes reclassification into existing/allocated and dangling ones
+  pivot.nodes = pivot.classifyNodes(
+    pivot.nodes.check & pivot.nodes.missing, getFn)
+
   while notDoneYet and lapCount < loopMax:
     var
       merged = 0.u256
@@ -300,6 +329,7 @@ proc swapIn*(
         when extraTraceMessages:
           trace logTxt "decomposing failed", lapCount,
             nNodesCheck=pivot.nodes.check.len,
+            nNodesMissing=pivot.nodes.missing.len,
             nOtherPivots=otherPivots.len, reason="nothing to do"
         return (lapCount,swappedIn) # nothing to do
       rc.value
@@ -308,19 +338,7 @@ proc swapIn*(
     notDoneYet = false
 
     # Reclassify nodes into existing/allocated and dangling ones
-    var nodes: SnapTodoNodes
-    for node in toBeReclassified:
-      # Check whether previously missing nodes from the `nodes.missing` list
-      # have been magically added to the database since it was checked last
-      # time. These nodes will me moved to `nodes.check` for further
-      # processing.
-      if node.nodeKey.ByteArray32.getFn().len == 0:
-        nodes.missing.add node # probably subject to healing
-      else:
-        let iv = node.hexaryEnvelope
-        if pivot.processed.covered(iv) < iv.len:
-          nodes.check.add node # may be swapped in
-    pivot.nodes = nodes.sortUniq
+    pivot.nodes = pivot.classifyNodes(toBeReclassified, getFn)
 
     nNodesCheckBefore = pivot.nodes.check.len # logging & debugging
 
@@ -334,13 +352,7 @@ proc swapIn*(
     notDoneYet = 0 < merged # loop control
 
     # Remove fully covered nodes
-    block:
-      var delayed: seq[NodeSpecs]
-      for node in pivot.nodes.check:
-        let iv = node.hexaryEnvelope
-        if pivot.processed.covered(iv) < iv.len:
-          delayed.add node # may be swapped in
-      pivot.nodes.check = delayed.sortUniq
+    pivot.nodes.check = pivot.classifyNodes(pivot.nodes.check, getFn).check
 
     when extraTraceMessages:
       let mergedFactor = merged.to(float) / (2.0^256)
@@ -363,12 +375,18 @@ proc swapInAccounts*(
   ## Variant of `swapIn()` for the particular case of accounts database pivots.
   let
     ctx = buddy.ctx
+    fa = env.fetchAccounts
+
+  if fa.processed.isFull:
+    return # nothing to do
+
+  let
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
 
     others = toSeq(ctx.data.pivotTable.nextPairs)
 
-                # Swap in from mothballed pifots different from the current one
+                # Swap in from mothballed pivots different from the current one
                 .filterIt(it.data.archived and it.key.to(NodeKey) != rootKey)
 
                 # Extract relevant parts
@@ -381,7 +399,7 @@ proc swapInAccounts*(
    swappedIn: seq[NodeTagRangeSet]
 
   noExceptionOops("swapInAccounts"):
-    (nLaps,swappedIn) = env.fetchAccounts.swapIn(others,rootKey,getFn,loopMax)
+    (nLaps, swappedIn) = fa.swapIn(others, rootKey, getFn, loopMax)
 
   if 0 < nLaps:
     noKeyErrorOops("swapInAccounts"):

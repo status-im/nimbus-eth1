@@ -208,11 +208,13 @@ proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
 proc verify*(q: var SnapTodoRanges): bool =
   ## Verify consistency, i.e. that the two sets of ranges have no overlap.
   if q[0].chunks == 0 or q[1].chunks == 0:
-    # At least on set is empty
+    # At least one set is empty
     return true
+  # So neither set is empty
   if q[0].total == 0 or q[1].total == 0:
     # At least one set is maximal and the other non-empty
     return false
+  # So neither set is empty, not full
   let (a,b) = if q[0].chunks < q[1].chunks: (0,1) else: (1,0)
   for iv in q[a].increasing:
     if 0 < q[b].covered(iv):

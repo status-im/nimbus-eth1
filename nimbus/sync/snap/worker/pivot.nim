@@ -356,7 +356,7 @@ proc recoverPivotFromCheckpoint*(
   # Handle storage slots
   let stateRoot = recov.state.header.stateRoot
   for w in recov.state.slotAccounts:
-    let pt = NodeTagRange.new(w.to(NodeTag),w.to(NodeTag))
+    let pt = NodeTagRange.new(w.to(NodeTag),w.to(NodeTag)) # => `pt.len == 1`
 
     if 0 < env.fetchAccounts.processed.covered(pt):
       # Ignoring slots that have accounts to be downloaded, anyway
