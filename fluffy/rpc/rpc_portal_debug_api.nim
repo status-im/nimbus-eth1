@@ -15,22 +15,10 @@ import
 
 export rpcserver
 
-# Some RPCs that are (currently) useful for testing & debugging
+# Non-spec-RPCs that are (currently) useful for testing & debugging
 proc installPortalDebugApiHandlers*(
     rpcServer: RpcServer|RpcProxy, p: PortalProtocol, network: static string)
     {.raises: [Defect, CatchableError].} =
-
-  rpcServer.rpc("portal_" & network & "_store") do(
-      contentKey: string, content: string) -> bool:
-    let key = ByteList.init(hexToSeqByte(contentKey))
-    let contentId = p.toContentId(key)
-
-    if contentId.isSome():
-      p.storeContent(key, contentId.get(), hexToSeqByte(content))
-
-      return true
-    else:
-      raise newException(ValueError, "Invalid content key")
 
   rpcServer.rpc("portal_" & network & "_storeContent") do(
       dataFile: string) -> bool:

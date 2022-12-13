@@ -157,7 +157,7 @@ procSuite "Portal testnet tests":
     # error prone
     for client in clients:
       discard await client.discv5_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.nodeENR))
+        proc(x: NodeInfo): Record = x.enr))
       await client.close()
 
     for client in clients:
@@ -174,7 +174,7 @@ procSuite "Portal testnet tests":
     for client in clients:
       var enr: Record
       enr = await client.discv5_lookupEnr(randomNodeInfo.nodeId)
-      check enr == randomNodeInfo.nodeENR
+      check enr == randomNodeInfo.enr
       await client.close()
 
   asyncTest "Portal State - Random node lookup from each node":
@@ -188,7 +188,7 @@ procSuite "Portal testnet tests":
 
     for client in clients:
       discard await client.portal_state_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.nodeENR))
+        proc(x: NodeInfo): Record = x.enr))
       await client.close()
 
     for client in clients:
@@ -211,7 +211,7 @@ procSuite "Portal testnet tests":
       # doesn't converge to the target always with this distance function. To be
       # further investigated.
       skip()
-      # check enr == randomNodeInfo.nodeENR
+      # check enr == randomNodeInfo.enr
       await client.close()
 
   asyncTest "Portal History - Random node lookup from each node":
@@ -225,7 +225,7 @@ procSuite "Portal testnet tests":
 
     for client in clients:
       discard await client.portal_history_addEnrs(nodeInfos.map(
-        proc(x: NodeInfo): Record = x.nodeENR))
+        proc(x: NodeInfo): Record = x.enr))
       await client.close()
 
     for client in clients:
@@ -241,7 +241,7 @@ procSuite "Portal testnet tests":
       var enr: Record
       enr = await client.portal_history_lookupEnr(randomNodeInfo.nodeId)
       await client.close()
-      check enr == randomNodeInfo.nodeENR
+      check enr == randomNodeInfo.enr
 
   asyncTest "Portal History - Propagate blocks and do content lookups":
     const
