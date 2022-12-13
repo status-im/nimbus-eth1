@@ -409,7 +409,7 @@ proc hexaryEnvelopeTouchedBy*(
         #  .. [..rx..] ..
         #        [..probe..]
         #
-        startSearch = rc.value.minPt
+        startSearch = rx.value.minPt
       else:
         # Otherwise there is no interval preceding `probe`, so the zero
         # value for `start` will do the job, e.g.
