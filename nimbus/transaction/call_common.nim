@@ -242,6 +242,8 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   let c = host.computation
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
+  # evm gas used without intrinsic gas
+  host.vmState.tracerGasUsed(host.msg.gas - gasRemaining)
 
   result.isError = c.isError
   result.gasUsed = call.gasLimit - gasRemaining

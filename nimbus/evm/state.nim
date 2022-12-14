@@ -365,6 +365,12 @@ proc removeTracedAccounts*(vmState: BaseVMState, accounts: varargs[EthAddress]) 
   for acc in accounts:
     vmState.tracer.accounts.excl acc
 
+proc tracerGasUsed*(vmState: BaseVMState, gasUsed: GasInt) =
+  vmState.tracer.gasUsed = gasUsed
+
+proc tracerGasUsed*(vmState: BaseVMState): GasInt =
+  vmState.tracer.gasUsed
+
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
 

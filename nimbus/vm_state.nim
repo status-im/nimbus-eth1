@@ -38,6 +38,7 @@ export
   vms.status,
   vms.`status=`,
   vms.tracedAccounts,
-  vms.tracedAccountsPairs
+  vms.tracedAccountsPairs,
+  vms.tracerGasUsed
 
 # End

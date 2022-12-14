@@ -50,6 +50,7 @@ type
   StateResult = object
     name : string
     pass : bool
+    root : Hash256
     fork : string
     error: string
     state: StateDump
@@ -87,14 +88,14 @@ proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
   let obtainedHash = vmState.readOnlyStateDB.rootHash
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
-      [$obtainedHash, $ctx.expectedHash]
+      [($obtainedHash).toLowerAscii, $ctx.expectedHash]
     return
 
   let logEntries = vmState.getAndClearLogEntries()
   let actualLogsHash = rlpHash(logEntries)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got $1, want $2" %
-      [$actualLogsHash, $ctx.expectedLogs]
+      [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]
     return
 
 proc `%`(x: UInt256): JsonNode =
@@ -143,6 +144,7 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
     let z = %{
       "name" : %(res.name),
       "pass" : %(res.pass),
+      "stateRoot" : %(res.root),
       "fork" : %(res.fork),
       "error": %(res.error)
     }
@@ -173,16 +175,37 @@ proc dumpState(vmState: BaseVMState): StateDump =
     accounts: dumpAccounts(vmState.stateDB)
   )
 
+template stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 1 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
+proc encodeHexInt(x: SomeInteger): JsonNode =
+  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
+
 proc writeTraceToStderr(vmState: BaseVMState, pretty: bool) =
   let trace = vmState.getTracingResult()
+  trace["gasUsed"] = encodeHexInt(vmState.tracerGasUsed)
+  trace.delete("gas")
+  let stateRoot = %{
+    "stateRoot": %(vmState.readOnlyStateDB.rootHash)
+  }
   if pretty:
     stderr.writeLine(trace.pretty)
   else:
+    var gasUsed = 0
     let logs = trace["structLogs"]
     trace.delete("structLogs")
     for x in logs:
+      if "error" in x:
+        trace["error"] = x["error"]
+        x.delete("error")
       stderr.writeLine($x)
+
     stderr.writeLine($trace)
+    stderr.writeLine($stateRoot)
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
@@ -213,6 +236,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
+      root : vmState.stateDB.rootHash,
       fork : toString(ctx.fork),
       error: ctx.error
     )
@@ -233,12 +257,13 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       if ctx.fork >= FkSpurious:
         if db.isEmptyAccount(miner):
           db.deleteAccount(miner)
-      db.persist()
+      db.persist(clearCache = false)
 
 proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
   result = {
     TracerFlags.DisableStateDiff,
-    TracerFlags.EnableTracing
+    TracerFlags.EnableTracing,
+    TracerFlags.GethCompatibility
   }
 
   if conf.disableMemory    : result.incl TracerFlags.DisableMemory

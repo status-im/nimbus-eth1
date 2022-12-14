@@ -18,7 +18,6 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace["gas"] = %0
   tracer.trace["failed"] = %false
   tracer.trace["returnValue"] = %""
-
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
   tracer.accounts = initHashSet[EthAddress]()
@@ -44,6 +43,16 @@ iterator storage(tracer: TransactionTracer, compDepth: int): UInt256 =
   for key in tracer.storageKeys[compDepth]:
     yield key
 
+template stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 1 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
+proc encodeHexInt(x: SomeInteger): JsonNode =
+  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
+
 proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op): int =
   if unlikely tracer.trace.isNil:
     tracer.initTracer()
@@ -51,17 +60,34 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op):
   let j = newJObject()
   tracer.trace["structLogs"].add(j)
 
-  j["op"] = %(($op).toUpperAscii)
-  j["pc"] = %(c.code.pc - 1)
-  j["depth"] = %(c.msg.depth + 1)
-  j["gas"] = %c.gasMeter.gasRemaining
+  if TracerFlags.GethCompatibility in tracer.flags:
+    j["pc"] = %(c.code.pc - 1)
+    j["op"] = %(op.int)
+    j["gas"] = encodeHexInt(c.gasMeter.gasRemaining)
+    j["gasCost"] = %("")
+    j["memSize"] = %c.memory.len
+    j["opName"] = %(($op).toUpperAscii)
+    j["depth"] = %(c.msg.depth + 1)
 
-  # log stack
-  if TracerFlags.DisableStack notin tracer.flags:
-    let st = newJArray()
-    for v in c.stack.values:
-      st.add(%v.dumpHex())
-    j["stack"] = st
+    # log stack
+    if TracerFlags.DisableStack notin tracer.flags:
+      let st = newJArray()
+      for v in c.stack.values:
+        st.add(%("0x" & v.dumpHex.stripLeadingZeros))
+      j["stack"] = st
+
+  else:
+    j["op"] = %(($op).toUpperAscii)
+    j["pc"] = %(c.code.pc - 1)
+    j["depth"] = %(c.msg.depth + 1)
+    j["gas"] = %c.gasMeter.gasRemaining
+
+    # log stack
+    if TracerFlags.DisableStack notin tracer.flags:
+      let st = newJArray()
+      for v in c.stack.values:
+        st.add(%v.dumpHex())
+      j["stack"] = st
 
   # log memory
   if TracerFlags.DisableMemory notin tracer.flags:
@@ -101,11 +127,19 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
       var stateDB = c.vmState.stateDB
       for key in tracer.storage(c.msg.depth):
         let value = stateDB.getStorage(c.msg.contractAddress, key)
-        storage[key.dumpHex] = %(value.dumpHex)
+        if TracerFlags.GethCompatibility in tracer.flags:
+          storage["0x" & key.dumpHex.stripLeadingZeros] =
+            %("0x" & value.dumpHex.stripLeadingZeros)
+        else:
+          storage[key.dumpHex] = %(value.dumpHex)
       j["storage"] = storage
 
-  let gasRemaining = j["gas"].getBiggestInt()
-  j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
+  if TracerFlags.GethCompatibility in tracer.flags:
+    let gas = fromHex[GasInt](j["gas"].getStr)
+    j["gasCost"] = encodeHexInt(gas - c.gasMeter.gasRemaining)
+  else:
+    let gas = j["gas"].getBiggestInt()
+    j["gasCost"] = %(gas - c.gasMeter.gasRemaining)
 
   if op in {Return, Revert} and TracerFlags.DisableReturnData notin tracer.flags:
     let returnValue = %("0x" & toHex(c.output, true))
@@ -123,7 +157,11 @@ proc traceError*(tracer: var TransactionTracer, c: Computation) =
     # even though the gasCost is incorrect,
     # we have something to display,
     # it is an error anyway
-    let gasRemaining = j["gas"].getBiggestInt()
-    j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
+    if TracerFlags.GethCompatibility in tracer.flags:
+      let gas = fromHex[GasInt](j["gas"].getStr)
+      j["gasCost"] = encodeHexInt(gas - c.gasMeter.gasRemaining)
+    else:
+      let gas = j["gas"].getBiggestInt()
+      j["gasCost"] = %(gas - c.gasMeter.gasRemaining)
 
   tracer.trace["failed"] = %true

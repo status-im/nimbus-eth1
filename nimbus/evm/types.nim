@@ -65,12 +65,14 @@ type
     DisableStateDiff
     EnableAccount
     DisableReturnData
+    GethCompatibility
 
   TransactionTracer* = object
     trace*: JsonNode
     flags*: set[TracerFlags]
     accounts*: HashSet[EthAddress]
     storageKeys*: seq[HashSet[UInt256]]
+    gasUsed*: GasInt
 
   Computation* = ref object
     # The execution computation
