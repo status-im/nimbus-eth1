@@ -14,7 +14,7 @@ There are few options to build `evmstate` tool like any other nimbus tools.
     ```
 2. Use nimbus shipped Nim compiler and dependencies.
     ```
-    $> make update
+    $> make update deps
     $> ./env.sh nim c -d:release tools/evmstate/evmstate
     $> ./env.sh nim c -r -d:release tools/evmstate/evmstate_test
     ```

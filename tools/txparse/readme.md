@@ -18,7 +18,7 @@ There are few options to build `txparse` tool like any other nimbus tools.
     ```
 2. Use nimbus shipped Nim compiler and dependencies.
     ```
-    $> make update
+    $> make update deps
     $> ./env.sh nim c tools/txparse/txparse
     ```
 3. Use nimbus makefile.

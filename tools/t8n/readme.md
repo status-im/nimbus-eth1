@@ -14,7 +14,7 @@ There are few options to build `t8n` tool like any other nimbus tools.
     ```
 2. Use nimbus shipped Nim compiler and dependencies.
     ```
-    $> make update
+    $> make update deps
     $> ./env.sh nim c -d:release -d:chronicles_default_output_device=stderr tools/t8n/t8n
     $> ./env.sh nim c -r -d:release tools/t8n/t8n_test
     ```
