@@ -50,12 +50,16 @@ type
     ## This data structure is used for coordinating peers that run quasi
     ## parallel.
 
+  SnapTodoNodes* = object
+    ## Pair of node lists subject to swap-in and healing
+    check*: seq[NodeSpecs]             ## Existing nodes, sub-trie unknown
+    missing*: seq[NodeSpecs]           ## Top ref for sub-tries to be healed
+
   SnapRangeBatchRef* = ref object
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapTodoRanges       ## Range of slots to be fetched
-    processed*: NodeTagRangeSet        ## Nodes definitely processed
-    checkNodes*: seq[NodeSpecs]        ## Nodes with prob. dangling child links
-    sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
+    processed*: NodeTagRangeSet        ## Node ranges definitely processed
+    nodes*: SnapTodoNodes              ## Single nodes to double check
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
     lockTriePerusal*: bool             ## Only one process at a time
 

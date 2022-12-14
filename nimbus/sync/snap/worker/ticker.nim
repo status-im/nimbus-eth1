@@ -28,7 +28,7 @@ type
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
-    nAccountStats*: (int,int)          ## #chunks, #dangling/missing nodes
+    nAccountStats*: (int,int,int)      ## #chunks, #dangling, #missing nodes
     nSlotLists*: (float,float)         ## mean and standard deviation
     nStorageQueue*: Option[int]
     nQueues*: int
@@ -40,6 +40,7 @@ type
     ## Account fetching state that is shared among all peers.
     nBuddies:  int
     recovery:  bool
+    lastRecov: bool
     lastStats: TickerStats
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
@@ -116,24 +117,30 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     data = t.statsCb()
     now = Moment.now()
 
-  if data != t.lastStats or tickerLogSuppressMax < (now - t.visited):
-    t.lastStats = data
-    t.visited = now
+  if data != t.lastStats or
+     t.recovery != t.lastRecov or
+     tickerLogSuppressMax < (now - t.visited):
     var
       nAcc, nSto, bulk: string
       pivot = "n/a"
       nStoQue = "n/a"
     let
+      recoveryDone = t.lastRecov
       accCov = data.accountsFill[0].pc99 &
          "(" & data.accountsFill[1].pc99 & ")" &
          "/" & data.accountsFill[2].pc99 &
          "~" & data.nAccountStats[0].uint.toSI &
-         "/" & data.nAccountStats[1].uint.toSI
+         "/" & data.nAccountStats[1].uint.toSI &
+         "+" & data.nAccountStats[2].uint.toSI
       buddies = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
       mem = getTotalMem().uint.toSI
+
+    t.lastStats = data
+    t.visited = now
+    t.lastRecov = t.recovery
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
@@ -148,6 +155,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     if t.recovery:
       info "Snap sync statistics (recovery)",
+        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+    elif recoveryDone:
+      info "Snap sync statistics (recovery done)",
         up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
     else:
       info "Snap sync statistics",

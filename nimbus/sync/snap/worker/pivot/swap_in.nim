@@ -94,7 +94,7 @@ proc decompose(
     iv: NodeTagRange;                  # Proofed range of leaf paths
     rootKey: NodeKey;                  # Start node into hexary trie
     getFn: HexaryGetFn;                # Abstract database access
-      ): Result[seq[NodeSpecs],void] =
+      ): Result[seq[NodeSpecs],HexaryError] =
   ## Decompose, succeed only if there is a change
   var error: HexaryError
 
@@ -105,15 +105,15 @@ proc decompose(
     elif rc.value.len != 1 or rc.value[0].nodeKey != node.nodeKey:
       return ok(rc.value)
     else:
-      return err()
+      return err(rc.error)
   except RlpError:
     error = RlpEncoding
 
   when extraTraceMessages:
     trace logTxt "envelope decomposition failed",
-      node=node.partialPath.toHex, error
+      node=node.partialPath.toHex, iv=iv.fullFactor.toPC(3), error
 
-  err()
+  err(error)
 
 
 proc existsInTrie(
@@ -156,21 +156,37 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc sortUniq(
+    nodes: SnapTodoNodes;
+      ): SnapTodoNodes =
+  ## Convenience wrapper
+  noKeyErrorOops("sortUniq"):
+    result.check = nodes.check.hexaryEnvelopeUniq
+    result.missing = nodes.missing.hexaryEnvelopeUniq
+
+proc sortUniq(
+    nodes: seq[NodeSpecs];
+      ): seq[NodeSpecs] =
+  ## Convenience wrapper
+  noKeyErrorOops("sortUniq"):
+    result = nodes.hexaryEnvelopeUniq
+
+
 proc decomposeCheckNodes(
     pivot: SnapRangeBatchRef;          # Healing data support
     rootKey: NodeKey;                  # Start node into hexary trie
     getFn: HexaryGetFn;                # Abstract database access
       ): Result[seq[NodeSpecs],void] =
-  ## Decompose the `checkNodes` list of the argument `pivot` relative to the
+  ## Decompose the `nodes.check` list of the argument `pivot` relative to the
   ## set `processed` of processed leaf node ranges.
   ##
-  ## The function fails if there wan no change to the `checkNodes` list.
+  ## The function fails if there wan no change to the `nodes.check` list.
   var
     delayed: seq[NodeSpecs]
     didSomething = 0
 
-  # Remove `checkNodes` entries with known complete sub-tries.
-  for node in pivot.checkNodes:
+  # Remove `nodes.check` entries with known complete sub-tries.
+  for node in pivot.nodes.check:
     var paths: seq[NodeSpecs]
 
     # For a Partially processed range, fetch overlapping intervals and
@@ -181,10 +197,18 @@ proc decomposeCheckNodes(
         paths &= rc.value
         didSomething.inc
         when extraTraceMessages:
-          trace logTxt "checkNodes decompose", nDelayed=delayed.len,
-            node=node.partialPath.toHex, nPaths=paths.len,
-            newPaths=rc.value.mapIt(it.partialPath.toHex).join(",")
+          let
+            nDelayed = delayed.len+paths.len
+            nEnvelopes = rc.value.mapIt(it.partialPath.toHex).join(",")
+            nodePath = node.partialPath.toHex
+          trace logTxt "decompose nodes to check", nDelayed, nodePath,
+            nEnvelopes
       # End inner for()
+
+    when extraTraceMessages:
+      if paths.len == 0:
+        trace logTxt "untouched pivot", node=node.partialPath.toHex,
+          nDelayed=delayed.len, processed=pivot.processed.fullFactor.toPC(3)
 
     delayed &= paths
     # End outer for()
@@ -267,12 +291,16 @@ proc swapIn*(
   while notDoneYet and lapCount < loopMax:
     var
       merged = 0.u256
-      nCheckNodesBefore = 0 # debugging
+      nNodesCheckBefore = 0 # debugging
 
-    # Decompose `checkNodes` into sub-tries disjunct from `processed`
+    # Decompose `nodes.check` into sub-tries disjunct from `processed`
     let toBeReclassified = block:
       let rc = pivot.decomposeCheckNodes(rootKey, getFn)
       if rc.isErr:
+        when extraTraceMessages:
+          trace logTxt "decomposing failed", lapCount,
+            nNodesCheck=pivot.nodes.check.len,
+            nOtherPivots=otherPivots.len, reason="nothing to do"
         return (lapCount,swappedIn) # nothing to do
       rc.value
 
@@ -280,48 +308,44 @@ proc swapIn*(
     notDoneYet = false
 
     # Reclassify nodes into existing/allocated and dangling ones
-    noKeyErrorOops("swapIn"):
-      var
-        checkNodes: seq[NodeSpecs]
-        sickNodes: seq[NodeSpecs]
-      for node in toBeReclassified:
-        # Check whether previously missing nodes from the `sickSubTries` list
-        # have been magically added to the database since it was checked last
-        # time. These nodes will me moved to `checkNodes` for further
-        # processing.
-        if node.nodeKey.ByteArray32.getFn().len == 0:
-          sickNodes.add node # probably subject to healing
-        else:
-          let iv = node.hexaryEnvelope
-          if pivot.processed.covered(iv) < iv.len:
-            checkNodes.add node # may be swapped in
-      pivot.checkNodes = checkNodes.hexaryEnvelopeUniq
-      pivot.sickSubTries = sickNodes.hexaryEnvelopeUniq
+    var nodes: SnapTodoNodes
+    for node in toBeReclassified:
+      # Check whether previously missing nodes from the `nodes.missing` list
+      # have been magically added to the database since it was checked last
+      # time. These nodes will me moved to `nodes.check` for further
+      # processing.
+      if node.nodeKey.ByteArray32.getFn().len == 0:
+        nodes.missing.add node # probably subject to healing
+      else:
+        let iv = node.hexaryEnvelope
+        if pivot.processed.covered(iv) < iv.len:
+          nodes.check.add node # may be swapped in
+    pivot.nodes = nodes.sortUniq
 
-      nCheckNodesBefore = pivot.checkNodes.len # logging & debugging
+    nNodesCheckBefore = pivot.nodes.check.len # logging & debugging
 
-      # Swap in node ranges from other pivots
-      for node in pivot.checkNodes:
-        for n,rangeSet in node.otherProcessedRanges(otherPivots,rootKey,getFn):
-          for iv in rangeSet.increasing:
-            discard swappedIn[n].merge iv        # imported range / other pivot
-            merged += pivot.processed.merge iv   # import this range
-            pivot.unprocessed.reduce iv          # no need to fetch it again
-      notDoneYet = 0 < merged # loop control
+    # Swap in node ranges from other pivots
+    for node in pivot.nodes.check:
+      for n,rangeSet in node.otherProcessedRanges(otherPivots,rootKey,getFn):
+        for iv in rangeSet.increasing:
+          discard swappedIn[n].merge iv        # imported range / other pivot
+          merged += pivot.processed.merge iv   # import this range
+          pivot.unprocessed.reduce iv          # no need to fetch it again
+    notDoneYet = 0 < merged # loop control
 
-      # Remove fully covered nodes
-      block:
-        var checkNodes: seq[NodeSpecs]
-        for node in toBeReclassified:
-          let iv = node.hexaryEnvelope
-          if pivot.processed.covered(iv) < iv.len:
-            checkNodes.add node # may be swapped in
-        pivot.checkNodes = checkNodes.hexaryEnvelopeUniq
+    # Remove fully covered nodes
+    block:
+      var delayed: seq[NodeSpecs]
+      for node in pivot.nodes.check:
+        let iv = node.hexaryEnvelope
+        if pivot.processed.covered(iv) < iv.len:
+          delayed.add node # may be swapped in
+      pivot.nodes.check = delayed.sortUniq
 
     when extraTraceMessages:
       let mergedFactor = merged.to(float) / (2.0^256)
-      trace logTxt "inherited ranges", nCheckNodesBefore,
-        nCheckNodes=pivot.checkNodes.len, merged=mergedFactor.toPC(3)
+      trace logTxt "inherited ranges", nNodesCheckBefore,
+        nNodesCheck=pivot.nodes.check.len, merged=mergedFactor.toPC(3)
 
     # End while()
 
@@ -359,31 +383,33 @@ proc swapInAccounts*(
   noExceptionOops("swapInAccounts"):
     (nLaps,swappedIn) = env.fetchAccounts.swapIn(others,rootKey,getFn,loopMax)
 
-  noKeyErrorOops("swapInAccounts"):
-    # Update storage slots
-    doAssert swappedIn.len == others.len
-    for n in 0 ..< others.len:
+  if 0 < nLaps:
+    noKeyErrorOops("swapInAccounts"):
+      # Update storage slots
+      doAssert swappedIn.len == others.len
+      for n in 0 ..< others.len:
 
-      when extraTraceMessages:
-        trace logTxt "post-processing storage slots", inx=n, maxInx=others.len,
-          changes=swappedIn[n].fullFactor.toPC(3), chunks=swappedIn[n].chunks
+        when extraTraceMessages:
+          trace logTxt "post-processing storage slots", inx=n,
+            maxInx=others.len, changes=swappedIn[n].fullFactor.toPC(3),
+            chunks=swappedIn[n].chunks
 
-      # Revisit all imported account key ranges
-      for iv in swappedIn[n].increasing:
+        # Revisit all imported account key ranges
+        for iv in swappedIn[n].increasing:
 
-        # The `storageAccounts` list contains indices for storage slots, mapping
-        # account keys => storage root
-        var rc = others[n].pivot.storageAccounts.ge(iv.minPt)
-        while rc.isOk and rc.value.key <= iv.maxPt:
+          # The `storageAccounts` list contains indices for storage slots,
+          # mapping account keys => storage root
+          var rc = others[n].pivot.storageAccounts.ge(iv.minPt)
+          while rc.isOk and rc.value.key <= iv.maxPt:
 
-          # Fetch storage slots specs from `fetchStorageFull` list
-          let stRoot = rc.value.data
-          if others[n].pivot.fetchStorageFull.hasKey(stRoot):
-            let accKey = others[n].pivot.fetchStorageFull[stRoot].accKey
-            discard env.fetchStorageFull.append(
-              stRoot, SnapSlotsQueueItemRef(acckey: accKey))
+            # Fetch storage slots specs from `fetchStorageFull` list
+            let stRoot = rc.value.data
+            if others[n].pivot.fetchStorageFull.hasKey(stRoot):
+              let accKey = others[n].pivot.fetchStorageFull[stRoot].accKey
+              discard env.fetchStorageFull.append(
+                stRoot, SnapSlotsQueueItemRef(acckey: accKey))
 
-          rc = others[n].pivot.storageAccounts.gt(rc.value.key)
+            rc = others[n].pivot.storageAccounts.gt(rc.value.key)
 
   nLaps
 

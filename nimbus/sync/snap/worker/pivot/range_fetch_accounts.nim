@@ -237,7 +237,7 @@ proc rangeFetchAccounts*(
 
     when extraTraceMessages:
       trace logTxt "done", peer, pivot, nFetchAccounts,
-        nCheckNodes=fa.checkNodes.len, nSickSubTries=fa.sickSubTries.len,
+        nNodesCheck=fa.nodes.check.len, nNodesMissing=fa.nodes.missing.len,
         runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------

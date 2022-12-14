@@ -62,8 +62,8 @@ proc healingCtx(
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "covered=" & slots.unprocessed.emptyFactor.toPC(0) & "," &
-    "nCheckNodes=" & $slots.checkNodes.len & "," &
-    "nSickSubTries=" & $slots.sickSubTries.len & "}"
+    "nNodesCheck=" & $slots.nodes.check.len & "," &
+    "nNodesMissing=" & $slots.nodes.missing.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -99,9 +99,9 @@ proc verifyStillMissingNodes(
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
       ) =
-  ## Check whether previously missing nodes from the `sickSubTries` list
+  ## Check whether previously missing nodes from the `nodes.missing` list
   ## have been magically added to the database since it was checked last
-  ## time. These nodes will me moved to `checkNodes` for further processing.
+  ## time. These nodes will me moved to `nodes.check` for further processing.
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
@@ -111,17 +111,17 @@ proc verifyStillMissingNodes(
     slots = kvp.data.slots
 
   var delayed: seq[NodeSpecs]
-  for w in slots.sickSubTries:
+  for w in slots.nodes.missing:
     let rc = db.getStorageSlotsNodeKey(peer, accKey, storageRoot, w.partialPath)
     if rc.isOk:
       # Check nodes for dangling links
-      slots.checkNodes.add w
+      slots.nodes.check.add w
     else:
       # Node is still missing
       delayed.add w
 
   # Must not modify sequence while looping over it
-  slots.sickSubTries = slots.sickSubTries & delayed
+  slots.nodes.missing = slots.nodes.missing & delayed
 
 
 proc updateMissingNodesList(
@@ -131,8 +131,8 @@ proc updateMissingNodesList(
       ): Future[bool]
       {.async.} =
   ## Starting with a given set of potentially dangling intermediate trie nodes
-  ## `checkNodes`, this set is filtered and processed. The outcome is fed back
-  ## to the vey same list `checkNodes`
+  ## `nodes.check`, this set is filtered and processed. The outcome is fed back
+  ## to the vey same list `nodes.check`.
   let
     ctx = buddy.ctx
     db = ctx.data.snapDb
@@ -166,7 +166,7 @@ proc getMissingNodesFromNetwork(
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ##  Extract from `sickSubTries` the next batch of nodes that need
+  ##  Extract from `nodes.missing` the next batch of nodes that need
   ## to be merged it into the database
   let
     ctx = buddy.ctx
@@ -176,13 +176,13 @@ proc getMissingNodesFromNetwork(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
     slots = kvp.data.slots
 
-    nSickSubTries = slots.sickSubTries.len
+    nSickSubTries = slots.nodes.missing.len
     inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
-  # the rest on the `sickSubTries` queue to be handled later.
-  let fetchNodes = slots.sickSubTries[inxLeft ..< nSickSubTries]
-  slots.sickSubTries.setLen(inxLeft)
+  # the rest on the `nodes.missing` queue to be handled later.
+  let fetchNodes = slots.nodes.missing[inxLeft ..< nSickSubTries]
+  slots.nodes.missing.setLen(inxLeft)
 
   # Initalise for `getTrieNodes()` for fetching nodes from the network
   var
@@ -192,7 +192,7 @@ proc getMissingNodesFromNetwork(
     pathList.add @[w.partialPath]
     nodeKey[w.partialPath] = w.nodeKey
 
-  # Fetch nodes from the network. Note that the remainder of the `sickSubTries`
+  # Fetch nodes from the network. Note that the remainder of the `nodes.missing`
   # list might be used by another process that runs semi-parallel.
   let
     req = @[accKey.to(Blob)] & fetchNodes.mapIt(it.partialPath)
@@ -204,7 +204,7 @@ proc getMissingNodesFromNetwork(
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
       for n in 1 ..< w.len:
-        slots.sickSubTries.add NodeSpecs(
+        slots.nodes.missing.add NodeSpecs(
           partialPath: w[n],
           nodeKey:     nodeKey[w[n]])
     return rc.value.nodes.mapIt(NodeSpecs(
@@ -213,8 +213,8 @@ proc getMissingNodesFromNetwork(
       data:        it.data))
 
   # Restore missing nodes list now so that a task switch in the error checker
-  # allows other processes to access the full `sickSubTries` list.
-  slots.sickSubTries = slots.sickSubTries & fetchNodes
+  # allows other processes to access the full `nodes.missing` list.
+  slots.nodes.missing = slots.nodes.missing & fetchNodes
 
   let error = rc.error
   if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
@@ -364,12 +364,12 @@ proc storageSlotsHealing(
   buddy.verifyStillMissingNodes(kvp, env)
 
   # ???
-  if slots.checkNodes.len != 0:
+  if slots.nodes.check.len != 0:
     if not await buddy.updateMissingNodesList(kvp,env):
       return false
 
   # Check whether the trie is complete.
-  if slots.sickSubTries.len == 0:
+  if slots.nodes.missing.len == 0:
     trace logTxt "complete", peer, itCtx=buddy.healingCtx(kvp,env)
     return true
 
@@ -386,7 +386,7 @@ proc storageSlotsHealing(
     error logTxt "error updating persistent database", peer,
       itCtx=buddy.healingCtx(kvp,env), nSlotLists=env.nSlotLists,
       nStorageQueue, nNodes=nodeSpecs.len, error=report[^1].error
-    slots.sickSubTries = slots.sickSubTries & nodeSpecs
+    slots.nodes.missing = slots.nodes.missing & nodeSpecs
     return false
 
   when extraTraceMessages:
@@ -404,11 +404,11 @@ proc storageSlotsHealing(
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
-        slots.sickSubTries.add nodeSpecs[inx]
+        slots.nodes.missing.add nodeSpecs[inx]
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
-        slots.checkNodes.add nodeSpecs[inx]
+        slots.nodes.check.add nodeSpecs[inx]
 
       else:
         # Node has been stored, double check
@@ -419,7 +419,7 @@ proc storageSlotsHealing(
           buddy.registerStorageSlotsLeaf(kvp, slotKey, env)
           nLeafNodes.inc
         else:
-          slots.checkNodes.add nodeSpecs[inx]
+          slots.nodes.check.add nodeSpecs[inx]
 
   when extraTraceMessages:
     let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
@@ -461,7 +461,9 @@ proc healingIsComplete(
       return true # done
 
     # Full range covered by unprocessed items
-    kvp.data.slots = SnapRangeBatchRef(sickSubTries: rc.value.dangling)
+    kvp.data.slots = SnapRangeBatchRef(
+      nodes: SnapTodoNodes(
+        missing: rc.value.dangling))
     kvp.data.slots.unprocessed.init()
 
   # Proceed with healing

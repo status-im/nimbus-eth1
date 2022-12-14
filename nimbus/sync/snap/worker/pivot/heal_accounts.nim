@@ -47,9 +47,9 @@
 ##
 ## Legend:
 ## * `<..>`: some action, process, etc.
-## * `{missing-nodes}`: list implemented as `env.fetchAccounts.sickSubTries`
+## * `{missing-nodes}`: list implemented as `env.fetchAccounts.nodes.missing`
 ## * `{leaf-nodes}`: list is optimised out
-## * `{check-nodes}`: list implemented as `env.fetchAccounts.checkNodes`
+## * `{check-nodes}`: list implemented as `env.fetchAccounts.nodes.check`
 ## * `{storage-roots}`: list implemented as pair of queues
 ##   `env.fetchStorageFull` and `env.fetchStoragePart`
 ##
@@ -145,8 +145,8 @@ proc healingCtx(
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & env.fetchAccounts.processed.fullFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
-    "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
-    "nSickSubTries=" & $env.fetchAccounts.sickSubTries.len & "}"
+    "nNodesCheck=" & $env.fetchAccounts.nodes.check.len & "," &
+    "nNodesMissing=" & $env.fetchAccounts.nodes.missing.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -179,8 +179,8 @@ proc reorgHealingState(
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
 
-    nCheckNodes0 = env.fetchAccounts.checkNodes.len
-    nSickSubTries0 = env.fetchAccounts.sickSubTries.len
+    nNodesCheck0 = env.fetchAccounts.nodes.check.len
+    nNodesMissing0 = env.fetchAccounts.nodes.missing.len
     nProcessed0 = env.fetchAccounts.processed.fullfactor.toPC(3)
 
   # Reclassify nodes into existing/allocated and dangling ones
@@ -188,19 +188,19 @@ proc reorgHealingState(
     # Nothing to swap in, so force reclassification
     noExceptionOops("reorgHealingState"):
       var delayed: seq[NodeSpecs]
-      for node in env.fetchAccounts.sickSubTries:
+      for node in env.fetchAccounts.nodes.missing:
         if node.nodeKey.ByteArray32.getFn().len == 0:
           delayed.add node # still subject to healing
         else:
-          env.fetchAccounts.checkNodes.add node
-      env.fetchAccounts.sickSubTries = delayed
+          env.fetchAccounts.nodes.check.add node
+      env.fetchAccounts.nodes.missing = delayed
 
     when extraTraceMessages:
       let
-        nCheckNodes1 = env.fetchAccounts.checkNodes.len
-        nSickSubTries1 = env.fetchAccounts.sickSubTries.len
-      trace logTxt "sick nodes reclassified", nCheckNodes0, nSickSubTries0,
-        nCheckNodes1, nSickSubTries1, nProcessed0
+        nNodesCheck1 = env.fetchAccounts.nodes.check.len
+        nNodesMissing1 = env.fetchAccounts.nodes.missing.len
+      trace logTxt "sick nodes reclassified", nNodesCheck0, nNodesMissing0,
+        nNodesCheck1, nNodesMissing1, nProcessed0
 
 
 proc updateMissingNodesList(
@@ -239,7 +239,7 @@ proc getMissingNodesFromNetwork(
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ## Extract from `sickSubTries` the next batch of nodes that need
+  ## Extract from `nodes.missing` the next batch of nodes that need
   ## to be merged it into the database
   let
     ctx = buddy.ctx
@@ -247,13 +247,13 @@ proc getMissingNodesFromNetwork(
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
-    nSickSubTries = env.fetchAccounts.sickSubTries.len
+    nSickSubTries = env.fetchAccounts.nodes.missing.len
     inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
 
   # There is no point in processing too many nodes at the same time. So leave
-  # the rest on the `sickSubTries` queue to be handled later.
-  let fetchNodes = env.fetchAccounts.sickSubTries[inxLeft ..< nSickSubTries]
-  env.fetchAccounts.sickSubTries.setLen(inxLeft)
+  # the rest on the `nodes.missing` queue to be handled later.
+  let fetchNodes = env.fetchAccounts.nodes.missing[inxLeft ..< nSickSubTries]
+  env.fetchAccounts.nodes.missing.setLen(inxLeft)
 
   # Initalise for `getTrieNodes()` for fetching nodes from the network
   var
@@ -264,7 +264,7 @@ proc getMissingNodesFromNetwork(
     nodeKey[w.partialPath] = w.nodeKey
 
   # Fetch nodes from the network. Note that the remainder of the
-  # `sickSubTries` list might be used by another process that runs
+  # `nodes.missing` list might be used by another process that runs
   # semi-parallel.
   let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
@@ -273,7 +273,7 @@ proc getMissingNodesFromNetwork(
 
     # Register unfetched missing nodes for the next pass
     for w in rc.value.leftOver:
-      env.fetchAccounts.sickSubTries.add NodeSpecs(
+      env.fetchAccounts.nodes.missing.add NodeSpecs(
         partialPath: w[0],
         nodeKey:     nodeKey[w[0]])
     return rc.value.nodes.mapIt(NodeSpecs(
@@ -282,8 +282,8 @@ proc getMissingNodesFromNetwork(
       data:        it.data))
 
   # Restore missing nodes list now so that a task switch in the error checker
-  # allows other processes to access the full `sickSubTries` list.
-  env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & fetchNodes
+  # allows other processes to access the full `nodes.missing` list.
+  env.fetchAccounts.nodes.missing = env.fetchAccounts.nodes.missing & fetchNodes
 
   let
     error = rc.error
@@ -369,15 +369,16 @@ proc accountsHealingImpl(
     ctx = buddy.ctx
     db = ctx.data.snapDb
     peer = buddy.peer
+    fa = env.fetchAccounts
 
   # Update for changes since last visit
   buddy.reorgHealingState(env)
 
-  if env.fetchAccounts.sickSubTries.len == 0:
+  if fa.nodes.missing.len == 0:
     # Traverse the hexary trie for more missing nodes. This call is expensive.
     if await buddy.updateMissingNodesList(env):
       # Check whether the trie is complete.
-      if env.fetchAccounts.sickSubTries.len == 0:
+      if fa.nodes.missing.len == 0:
         trace logTxt "complete", peer, ctx=buddy.healingCtx(env)
         return 0 # nothing to do
 
@@ -392,7 +393,7 @@ proc accountsHealingImpl(
     # Storage error, just run the next lap (not much else that can be done)
     error logTxt "error updating persistent database", peer,
       ctx=buddy.healingCtx(env), nNodes=nodeSpecs.len, error=report[^1].error
-    env.fetchAccounts.sickSubTries = env.fetchAccounts.sickSubTries & nodeSpecs
+    fa.nodes.missing = fa.nodes.missing & nodeSpecs
     return -1
 
   # Filter out error and leaf nodes
@@ -403,11 +404,11 @@ proc accountsHealingImpl(
 
       if w.error != NothingSerious or w.kind.isNone:
         # error, try downloading again
-        env.fetchAccounts.sickSubTries.add nodeSpecs[inx]
+        fa.nodes.missing.add nodeSpecs[inx]
 
       elif w.kind.unsafeGet != Leaf:
         # re-check this node
-        env.fetchAccounts.checkNodes.add nodeSpecs[inx]
+        fa.nodes.check.add nodeSpecs[inx]
 
       else:
         # Node has been stored, double check
@@ -417,7 +418,7 @@ proc accountsHealingImpl(
           buddy.registerAccountLeaf(key, acc, env)
           nLeafNodes.inc
         else:
-          env.fetchAccounts.checkNodes.add nodeSpecs[inx]
+          fa.nodes.check.add nodeSpecs[inx]
 
   when extraTraceMessages:
     trace logTxt "merged into database", peer,

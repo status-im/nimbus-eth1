@@ -53,7 +53,7 @@ proc init(
   #
   # Note that `@[]` incidentally has the same effect as `@[0]` although it
   # is formally no partial path.
-  batch.checkNodes.add NodeSpecs(
+  batch.nodes.check.add NodeSpecs(
     partialPath: @[0.byte],
     nodeKey:     stateRoot.to(NodeKey))
 
@@ -203,13 +203,13 @@ proc tickerStats*(
     var
       pivotBlock = none(BlockNumber)
       stoQuLen = none(int)
-      accStats = (0,0)
+      accStats = (0,0,0)
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
       stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
       accStats = (env.fetchAccounts.processed.chunks,
-                  env.fetchAccounts.checkNodes.len +
-                  env.fetchAccounts.sickSubTries.len)
+                  env.fetchAccounts.nodes.check.len,
+                  env.fetchAccounts.nodes.missing.len)
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -228,8 +228,8 @@ proc pivotMothball*(env: SnapPivotRef) =
   ## Clean up most of this argument `env` pivot record and mark it `archived`.
   ## Note that archived pivots will be checked for swapping in already known
   ## accounts and storage slots.
-  env.fetchAccounts.checkNodes.setLen(0)
-  env.fetchAccounts.sickSubTries.setLen(0)
+  env.fetchAccounts.nodes.check.setLen(0)
+  env.fetchAccounts.nodes.missing.setLen(0)
   env.fetchAccounts.unprocessed.init()
 
   # Simplify storage slots queues by resolving partial slots into full list

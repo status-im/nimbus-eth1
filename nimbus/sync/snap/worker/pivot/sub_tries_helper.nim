@@ -61,7 +61,7 @@ proc subTriesFromPartialPaths*(
     getFn: HexaryGetFn;                ## Abstract database access
     stateRoot: Hash256;                ## Start of hexary trie
     batch: SnapRangeBatchRef;          ## Healing data support
-    sickSubTriesMaxLen = high(int);    ## Max length of `sickSubTries`
+    nodesMissingMaxLen = high(int);    ## Max length of `nodes.missing`
       ): Future[Result[void,HexaryError]]
       {.async.} =
   ## Starting with a given set of potentially dangling account nodes
@@ -82,9 +82,9 @@ proc subTriesFromPartialPaths*(
 
   block errorWhenOutside:
     try:
-      while batch.sickSubTries.len < sickSubTriesMaxLen:
+      while batch.nodes.missing.len < nodesMissingMaxLen:
         # Inspect hexary trie for dangling nodes
-        let rc = getFn.doInspect(rootKey, batch.checkNodes, batch.resumeCtx)
+        let rc = getFn.doInspect(rootKey, batch.nodes.check, batch.resumeCtx)
         if rc.isErr:
           error = rc.error
           break errorWhenOutside
@@ -93,10 +93,10 @@ proc subTriesFromPartialPaths*(
 
         # Update context for async threading environment
         batch.resumeCtx = rc.value.resumeCtx
-        batch.checkNodes.setLen(0)
+        batch.nodes.check.setLen(0)
 
         # Collect result
-        batch.sickSubTries = batch.sickSubTries & rc.value.dangling
+        batch.nodes.missing = batch.nodes.missing & rc.value.dangling
 
         # Done unless there is some resumption context
         if rc.value.resumeCtx.isNil:
@@ -106,11 +106,11 @@ proc subTriesFromPartialPaths*(
           trace logTxt "inspection wait", count,
             elapsed=(Moment.now()-start),
             sleep=healInspectionBatchWaitNanoSecs,
-            sickSubTriesLen=batch.sickSubTries.len, sickSubTriesMaxLen,
+            nodesMissingLen=batch.nodes.missing.len, nodesMissingMaxLen,
             resumeCtxLen = batch.resumeCtx.hddCtx.len
 
         # Allow async task switch and continue. Note that some other task might
-        # steal some of the `sickSubTries` var argument.
+        # steal some of the `nodes.missing` var argument.
         await sleepAsync healInspectionBatchWaitNanoSecs.nanoseconds
 
       batch.lockTriePerusal = false
@@ -119,7 +119,7 @@ proc subTriesFromPartialPaths*(
     except RlpError:
       error = RlpEncoding
 
-  batch.sickSubTries = batch.sickSubTries & batch.resumeCtx.to(seq[NodeSpecs])
+  batch.nodes.missing = batch.nodes.missing & batch.resumeCtx.to(seq[NodeSpecs])
   batch.resumeCtx = nil
 
   batch.lockTriePerusal = false
