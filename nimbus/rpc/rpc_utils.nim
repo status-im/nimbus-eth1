@@ -59,7 +59,7 @@ proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt =
   var prices  = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
   for encodedTx in chain.getBlockTransactionData(header.txRoot):
-    let tx = rlp.decode(encodedTx, Transaction)
+    let tx = decodeTx(encodedTx)
     prices.add(tx.gasPrice)
 
   if prices.len > 0:

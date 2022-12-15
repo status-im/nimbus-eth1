@@ -260,7 +260,7 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
     var list = respList()
     var index = 0
     for n in getBlockTransactionData(ctx.chainDB, header.txRoot):
-      let tx = rlp.decode(n, Transaction)
+      let tx = decodeTx(n)
       list.add txNode(ctx, tx, index, header.blockNumber, header.fee)
       inc index
 
@@ -1224,7 +1224,7 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
-    let _      = rlp.decode(data, Transaction) # we want to know if it is a valid tx blob
+    let _      = decodeTx(data) # we want to know if it is a valid tx blob
     let txHash = keccakHash(data)
     resp(txHash)
   except Exception as em:

@@ -177,3 +177,9 @@ func effectiveGasTip*(tx: Transaction; baseFee: Option[UInt256]): GasInt =
     maxFee = tx.gasPrice
 
   min(maxPriorityFee, maxFee - baseFee)
+
+proc decodeTx*(bytes: openArray[byte]): Transaction =
+  var rlp = rlpFromBytes(bytes)
+  result = rlp.read(Transaction)
+  if rlp.hasData:
+    raise newException(RlpError, "rlp: input contains more than one value")

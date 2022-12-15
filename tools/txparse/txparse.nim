@@ -11,14 +11,17 @@
 import
   eth/[common, rlp],
   stew/byteutils,
-  ../../nimbus/transaction
+  ../../nimbus/transaction,
+  ../../nimbus/common/evmforks
 
 proc parseTx(hexLine: string) =
   try:
     let
       bytes = hexToSeqByte(hexLine)
-      tx = rlp.decode(bytes, Transaction)
+      tx = decodeTx(bytes)
       address = tx.getSender()
+
+    tx.validate(FkLondon)
 
     # everything ok
     echo "0x", address.toHex
@@ -29,6 +32,10 @@ proc parseTx(hexLine: string) =
     echo "err: ", ex.msg
   except ValidationError as ex:
     echo "err: ", ex.msg
+  except Exception:
+    # TODO: rlp.hasData assertion should be
+    # changed into RlpError
+    echo "err: malformed rlp"
 
 proc main() =
   for hexLine in stdin.lines:

@@ -268,7 +268,7 @@ proc setupEthRpc*(
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
       txBytes = hexToSeqByte(data.string)
-      signedTx = rlp.decode(txBytes, Transaction)
+      signedTx = decodeTx(txBytes)
 
     txPool.add(signedTx)
     result = keccakHash(txBytes).ethHashStr
