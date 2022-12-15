@@ -1,36 +1,45 @@
 ## Portal State Network json-rpc calls
 proc portal_stateNodeInfo(): NodeInfo
 proc portal_stateRoutingTableInfo(): RoutingTableInfo
-proc portal_stateLookupEnr(nodeId: NodeId): Record
+proc portal_stateAddEnr(enr: Record): bool
 proc portal_stateAddEnrs(enrs: seq[Record]): bool
+proc portal_stateGetEnr(nodeId: NodeId): Record
+proc portal_stateDeleteEnr(nodeId: NodeId): bool
+proc portal_stateLookupEnr(nodeId: NodeId): Record
 proc portal_statePing(enr: Record): tuple[
-  seqNum: uint64, customPayload: string]
+  enrSeq: uint64, customPayload: string]
 proc portal_stateFindNodes(enr: Record): seq[Record]
-proc portal_stateFindContentRaw(enr: Record, contentKey: string): tuple[
+proc portal_stateFindContent(enr: Record, contentKey: string): tuple[
   connectionId: Option[string],
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_stateFindContent(enr: Record, contentKey: string): tuple[
+proc portal_stateFindContentFull(enr: Record, contentKey: string): tuple[
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_stateOffer(enr: Record, contentKey: string): bool
-proc portal_stateRecursiveFindNodes(): seq[Record]
+proc portal_stateOffer(contentKey: string, contentValue: string): int
+proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
+proc portal_stateRecursiveFindContent(contentKey: string): string
+proc portal_stateStore(contentKey: string, contentValue: string): bool
 
 ## Portal History Network json-rpc calls
 proc portal_historyNodeInfo(): NodeInfo
 proc portal_historyRoutingTableInfo(): RoutingTableInfo
-proc portal_historyLookupEnr(nodeId: NodeId): Record
+proc portal_historyAddEnr(enr: Record): bool
 proc portal_historyAddEnrs(enrs: seq[Record]): bool
+proc portal_historyGetEnr(nodeId: NodeId): Record
+proc portal_historyDeleteEnr(nodeId: NodeId): bool
+proc portal_historyLookupEnr(nodeId: NodeId): Record
 proc portal_historyPing(enr: Record): tuple[
-  seqNum: uint64, customPayload: string]
+  enrSeq: uint64, customPayload: string]
 proc portal_historyFindNodes(enr: Record): seq[Record]
-proc portal_historyFindContentRaw(enr: Record, contentKey: string): tuple[
+proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
   connectionId: Option[string],
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
+proc portal_historyFindContentFull(enr: Record, contentKey: string): tuple[
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_historyOffer(contentKey: string, content: string): int
-proc portal_historyRecursiveFindNodes(): seq[Record]
-proc portal_historyStore(contentKey: string, content: string): bool
+proc portal_historyOffer(contentKey: string, contentValue: string): int
+proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
+proc portal_historyRecursiveFindContent(contentKey: string): string
+proc portal_historyStore(contentKey: string, contentValue: string): bool
