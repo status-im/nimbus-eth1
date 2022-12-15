@@ -20,7 +20,7 @@ type
     nodeId*: NodeId
 
   RoutingTableInfo* = object
-    localKey*: NodeId
+    localNodeId*: NodeId
     buckets*: seq[seq[NodeId]]
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
@@ -35,7 +35,7 @@ func getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
 
     info.buckets.add(bucket)
 
-  info.localKey = r.localNode.id
+  info.localNodeId = r.localNode.id
 
   info
 
