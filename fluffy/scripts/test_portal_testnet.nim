@@ -52,8 +52,8 @@ proc buildHeadersWithProof*(
       let
         content = ? buildHeaderWithProof(header, epochAccumulator)
         contentKey = ContentKey(
-          contentType: blockHeaderWithProof,
-          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
+          contentType: blockHeader,
+          blockHeaderKey: BlockKey(blockHash: header.blockHash()))
 
       blockHeadersWithProof.add(
         (encode(contentKey).asSeq(), SSZ.encode(content)))
