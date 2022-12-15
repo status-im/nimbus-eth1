@@ -117,12 +117,15 @@ proc cleanupKnownByPeer(ctx: LegacySyncRef) =
 proc addToKnownByPeer(ctx: LegacySyncRef,
                       blockHash: Hash256,
                       peer: Peer): bool =
+
   var map: HashToTime
-  if not ctx.knownByPeer.take(peer, map):
-    map = newTable[Hash256, Time]()
-    result = false
-  else:
+  ctx.knownByPeer.withValue(peer, val) do:
+    map = val[]
     result = true
+  do:
+    map = newTable[Hash256, Time]()
+    ctx.knownByPeer[peer] = map
+    result = false
 
   map[blockHash] = getTime()
 

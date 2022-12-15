@@ -172,8 +172,11 @@ proc cleanupKnownByPeer(ctx: EthWireRef) =
 
 proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer) =
   var map: HashToTime
-  if not ctx.knownByPeer.take(peer, map):
+  ctx.knownByPeer.withValue(peer, val) do:
+    map = val[]
+  do:
     map = newTable[Hash256, Time]()
+    ctx.knownByPeer[peer] = map
 
   for txHash in txHashes:
     if txHash notin map:
@@ -184,8 +187,11 @@ proc addToKnownByPeer(ctx: EthWireRef,
                       peer: Peer,
                       newHashes: var seq[Hash256]) =
   var map: HashToTime
-  if not ctx.knownByPeer.take(peer, map):
+  ctx.knownByPeer.withValue(peer, val) do:
+    map = val[]
+  do:
     map = newTable[Hash256, Time]()
+    ctx.knownByPeer[peer] = map
 
   newHashes = newSeqOfCap[Hash256](txHashes.len)
   for txHash in txHashes:
