@@ -170,7 +170,13 @@ func verifyHeader*(
   of BlockHeaderProofType.accumulatorProof:
     a.verifyAccumulatorProof(header, proof.accumulatorProof)
   of BlockHeaderProofType.none:
-    err("cannot verify header without proof")
+    # TODO:
+    # Currently there is no proof solution for verifying headers post-merge.
+    # Skipping canonical verification will allow for nodes to push block data
+    # that is not part of the canonical chain.
+    # For now we accept this flaw as the focus lies on testing data availability
+    # up to the head of the chain.
+    ok()
 
 func buildProof*(
     header: BlockHeader,
