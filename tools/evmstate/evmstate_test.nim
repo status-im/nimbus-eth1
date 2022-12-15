@@ -14,8 +14,15 @@ import
   testutils/markdown_reports,
   ../../tests/test_allowed_to_fail
 
+type
+  StatusMap = OrderedTable[string, OrderedTable[string, Status]]
+  TestFile = object
+    fullPath: string
+    dispName: string
+
 const
   inputFolder = "tests" / "fixtures" / "eth_tests" / "GeneralStateTests"
+  testData = "tools" / "evmstate" / "testdata"
 
 proc runTest(filename: string): bool =
   let appDir = getAppDir()
@@ -30,31 +37,37 @@ proc runTest(filename: string): bool =
 template skipTest(folder, name: untyped): bool =
   skipNewGSTTests(folder, name)
 
+proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
+  for filename in walkDirRec(inputPath):
+    if not fileName.endsWith(".json"):
+      continue
+
+    let (folder, name) = fileName.splitPath()
+    let last = folder.splitPath().tail
+    if not map.hasKey(last):
+      map[last] = initOrderedTable[string, Status]()
+    map[last][name] = Status.Skip
+    if skipTest(last, name):
+      continue
+
+    fileNames.add TestFile(
+      fullPath: filename,
+      dispName: substr(filename, inputPath.len+1)
+    )
+
 proc main() =
   suite "evmstate test suite":
     var status = initOrderedTable[string, OrderedTable[string, Status]]()
-    var filenames: seq[string] = @[]
-    for filename in walkDirRec(inputFolder):
-      if not filename.endsWith(".json"):
-        continue
+    var filenames: seq[TestFile] = @[]
+    collectFileNames(testData, status, filenames)
+    collectFileNames(inputFolder, status, filenames)
 
-      let (folder, name) = filename.splitPath()
-      let last = folder.splitPath().tail
-      if not status.hasKey(last):
-        status[last] = initOrderedTable[string, Status]()
-      status[last][name] = Status.Skip
-      if skipTest(last, name):
-        continue
-
-      filenames.add filename
-
-    for inputFile in filenames:
-      let testName = substr(inputFile, inputFolder.len+1)
-      test testName:
-        let (folder, name) = inputFile.splitPath()
+    for input in filenames:
+      test input.dispName:
+        let (folder, name) = input.fullPath.splitPath()
         let last = folder.splitPath().tail
         status[last][name] = Status.Fail
-        let res = runTest(inputFile)
+        let res = runTest(input.fullPath)
         check true == res
         if res:
           status[last][name] = Status.OK

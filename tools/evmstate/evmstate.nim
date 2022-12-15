@@ -55,6 +55,8 @@ type
     error: string
     state: StateDump
 
+  TestVMState = ref object of BaseVMState
+
 proc extractNameAndFixture(ctx: var StateContext, n: JsonNode): JsonNode =
   for label, child in n:
     result = child
@@ -73,15 +75,8 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
-  if blockNumber >= vmState.blockNumber:
-    return
-  elif blockNumber < 0:
-    return
-  elif blockNumber < vmState.blockNumber - 256:
-    return
-  else:
-    return keccakHash(toBytes($blockNumber))
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+  keccakHash(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
   ctx.error = ""
@@ -218,7 +213,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     com     = CommonRef.new(newMemoryDB(), params, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
 
-  let vmState = BaseVMState.new(
+  let vmState = TestVMState()
+  vmState.init(
     parent      = parent,
     header      = ctx.header,
     com         = com,
