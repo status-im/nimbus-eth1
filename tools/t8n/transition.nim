@@ -222,16 +222,14 @@ proc exec(ctx: var TransContext,
       db.persist(clearCache = false)
 
   let miner = ctx.env.currentCoinbase
-  vmState.mutateStateDB:
-    if miner in vmState.selfDestructs:
-      db.deleteAccount miner
-    if vmState.com.forkGTE(Spurious):
-      # EIP158/161 state clearing
+  if vmState.com.forkGTE(Spurious):
+    # EIP158/161 state clearing
+    vmState.mutateStateDB:
       if db.accountExists(miner) and db.isEmptyAccount(miner):
         db.deleteAccount(miner)
-    # do not clear cache, we need the cache when constructing
-    # post state
-    db.persist(clearCache = false)
+        # do not clear cache, we need the cache when constructing
+        # post state
+        db.persist(clearCache = false)
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
@@ -281,7 +279,9 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 
     vmState.hashError = "getAncestorHash($1) invoked, no blockhashes provided" % [$num]
     return h
 
-  if not vmState.blockHashes.take(num, h):
+  vmState.blockHashes.withValue(num, val) do:
+    h = val[]
+  do:
     vmState.hashError = "getAncestorHash($1) invoked, blockhash for that block not provided" % [$num]
 
   return h
@@ -402,11 +402,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     let header  = envToHeader(ctx.env)
 
-    # set parent total difficulty
-    #chainDB.setScore(parent.blockHash, 0.u256)
-
     let vmState = TestVMState(
-      blockHashes: system.move(ctx.env.blockHashes),
+      blockHashes: ctx.env.blockHashes,
       hashError: ""
     )
 

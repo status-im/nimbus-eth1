@@ -158,7 +158,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
     for k, v in w:
-      ctx.env.blockHashes[fromHex[uint64](k)] = Hash256.fromHex(v.getStr())
+      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash256.fromHex(v.getStr())
 
   if n.hasKey("ommers"):
     let w = n["ommers"]

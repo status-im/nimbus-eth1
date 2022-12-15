@@ -367,6 +367,42 @@ const
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "testOpcode 40 Berlin",
+      base  : "testdata/00-507",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "2000000000000000000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "suicideCoinbaseState Berlin",
+      base  : "testdata/00-508",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "2000000000000000000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "BLOCKHASH Bounds",
+      base  : "testdata/00-509",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "2000000000000000000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Suicides Mixing Coinbase",
+      base  : "testdata/00-510",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Berlin", "2000000000000000000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
     )
   ]
 
