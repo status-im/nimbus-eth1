@@ -27,7 +27,6 @@ type
     ## Local descriptor data extension
     pivot: BestPivotWorkerRef       ## Local pivot worker descriptor
     bQueue: BlockQueueWorkerRef     ## Block queue worker
-    bestNumber: Option[BlockNumber] ## Largest block number reported
 
   CtxData* = object
     ## Globally shared data extension
@@ -241,10 +240,10 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
     buddy.ctrl.zombie = true
 
   # Initialise/re-initialise this worker
-  elif await buddy.data.pivot.pivotNegotiate(buddy.data.bestNumber):
+  elif await buddy.data.pivot.pivotNegotiate(buddy.data.bQueue.bestNumber):
     buddy.ctrl.multiOk = true
     # Update/activate `bestNumber` for local use
-    buddy.data.bestNumber =
+    buddy.data.bQueue.bestNumber =
       some(buddy.data.pivot.pivotHeader.value.blockNumber)
 
   elif not buddy.ctrl.stopped:

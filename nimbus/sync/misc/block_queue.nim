@@ -472,6 +472,19 @@ proc init*(
     ctrl:   ctrl)
 
 # ------------------------------------------------------------------------------
+# Public functions -- getter/setter
+# ------------------------------------------------------------------------------
+
+proc bestNumber*(qd: BlockQueueWorkerRef): Option[BlockNumber] =
+  ## Getter
+  qd.bestNumber
+
+proc `bestNumber=`*(qd: BlockQueueWorkerRef; val: Option[BlockNumber]) =
+  ## Setter, needs to be set to something valid so that `blockQueueWorker()`
+  ## does something useful.
+  qd.bestNumber = val
+
+# ------------------------------------------------------------------------------
 # Public functions -- synchronous
 # ------------------------------------------------------------------------------
 
