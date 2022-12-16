@@ -20,6 +20,7 @@ proc portal_stateOffer(contentKey: string, contentValue: string): int
 proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_stateRecursiveFindContent(contentKey: string): string
 proc portal_stateStore(contentKey: string, contentValue: string): bool
+proc portal_stateLocalContent(contentKey: string): string
 
 ## Portal History Network json-rpc calls
 proc portal_historyNodeInfo(): NodeInfo
@@ -43,3 +44,4 @@ proc portal_historyOffer(contentKey: string, contentValue: string): int
 proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_historyRecursiveFindContent(contentKey: string): string
 proc portal_historyStore(contentKey: string, contentValue: string): bool
+proc portal_historyLocalContent(contentKey: string): string
