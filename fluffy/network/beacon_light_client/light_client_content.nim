@@ -226,6 +226,19 @@ proc decodeLightClientUpdatesForked*(
 
   return ok(updates)
 
+
+func bootstrapContentKey*(bh: Digest): ContentKey =
+  ContentKey(
+    contentType: lightClientBootstrap,
+    lightClientBootstrapKey: LightClientBootstrapKey(blockHash: bh)
+  )
+
+func updateContentKey*(startPeriod: uint64, count: uint64): ContentKey =
+  ContentKey(
+    contentType: lightClientUpdate,
+    lightClientUpdateKey: LightClientUpdateKey(startPeriod: startPeriod, count: count)
+  )
+
 func finalityUpdateContentKey*(finalSlot: uint64, optimisticSlot: uint64): ContentKey =
   ContentKey(
     contentType: lightClientFinalityUpdate,
