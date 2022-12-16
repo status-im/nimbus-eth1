@@ -1,7 +1,7 @@
 FROM debian:buster-slim AS build
 
 RUN apt-get update \
- && apt-get install -y --fix-missing build-essential make git libpcre3-dev librocksdb-dev \
+ && apt-get install -y --fix-missing build-essential make git \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -22,11 +22,6 @@ RUN cd nimbus-eth1 && \
 # Starting new image to reduce size #
 # --------------------------------- #
 FROM debian:buster-slim AS deploy
-
-RUN apt-get update \
- && apt-get install -y librocksdb-dev \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY --from=build /usr/bin/fluffy /usr/bin/fluffy
 
