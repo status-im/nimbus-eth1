@@ -279,6 +279,26 @@ proc pivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
 
   err()
 
+proc pivotHeader*(
+    bp: BestPivotWorkerRef;              ## Worker peer
+    relaxedMode: bool;                   ## One time relaxed mode flag
+      ): Result[BlockHeader,void] =
+  ## Variant of `pivotHeader()` with `relaxedMode` flag as function argument.
+  if bp.header.isSome and
+     bp.peer notin bp.global.untrusted:
+
+    if pivotMinPeersToStartSync <= bp.global.trusted.len and
+       bp.peer in bp.global.trusted:
+      return ok(bp.header.unsafeGet)
+
+    if relaxedMode:
+      when extraTraceMessages:
+        trace "Returning not fully trusted pivot", peer=bp.peer,
+           trusted=bp.global.trusted.len, untrusted=bp.global.untrusted.len
+      return ok(bp.header.unsafeGet)
+
+  err()
+
 proc pivotNegotiate*(
     bp: BestPivotWorkerRef;              ## Worker peer
     minBlockNumber: Option[BlockNumber]; ## Minimum block number to expect

@@ -78,7 +78,7 @@ proc runRelease(ctx: FullCtxRef) =
 
 proc runDaemon(ctx: FullCtxRef) {.async.} =
   tracerFrameCtx("runDaemon", ctx):
-    discard
+    await worker.runDaemon(ctx)
 
 proc runStart(buddy: FullBuddyRef): bool =
   tracerFrameBuddy("runStart", buddy):
