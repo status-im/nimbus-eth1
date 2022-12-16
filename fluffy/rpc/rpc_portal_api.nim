@@ -205,3 +205,16 @@ proc installPortalApiHandlers*(
       return true
     else:
       raise newException(ValueError, "Invalid content key")
+
+  rpcServer.rpc("portal_" & network & "LocalContent") do(
+      contentKey: string) -> string:
+    let
+      key = ByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(key).valueOr:
+        raise newException(ValueError, "Invalid content key")
+
+    let contentResult = p.dbGet(key, contentId)
+    if contentResult.isOk():
+      return contentResult.get().toHex()
+    else:
+      return "0x0"
