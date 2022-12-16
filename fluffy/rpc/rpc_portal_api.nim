@@ -168,6 +168,22 @@ proc installPortalApiHandlers*(
           none(string),
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
+  rpcServer.rpc("portal_" & network & "OfferReal") do(
+      enr: Record, contentKey: string, contentValue: string) -> bool:
+    # Note: unspecified RPC, but the spec took over the Offer call to actually
+    # do gossip. This should be adjusted.
+    let
+      node = toNodeWithAddress(enr)
+      key = hexToSeqByte(contentKey)
+      content = hexToSeqByte(contentValue)
+      contentInfo = ContentInfo(contentKey: ByteList.init(key), content: content)
+      res = await p.offer(node, @[contentInfo])
+
+    if res.isOk():
+      return true
+    else:
+      raise newException(ValueError, $res.error)
+
   rpcServer.rpc("portal_" & network & "Offer") do(
       contentKey: string, contentValue: string) -> int:
     let
