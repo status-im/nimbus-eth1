@@ -222,6 +222,9 @@ proc addNode*(p: PortalProtocol, r: Record): bool =
   else:
     false
 
+proc getNode*(p: PortalProtocol, id: NodeId): Option[Node] =
+  p.routingTable.getNode(id)
+
 func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 
 func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
