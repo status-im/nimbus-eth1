@@ -90,7 +90,7 @@ proc runStop(buddy: FullBuddyRef) =
 
 proc runPool(buddy: FullBuddyRef; last: bool): bool =
   tracerFrameBuddy("runPool", buddy):
-    worker.runPool(buddy, last)
+    result = worker.runPool(buddy, last)
 
 proc runSingle(buddy: FullBuddyRef) {.async.} =
   tracerFrameBuddy("runSingle", buddy):

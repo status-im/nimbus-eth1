@@ -250,10 +250,11 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
     await sleepAsync(2.seconds)
 
 
-proc runPool*(buddy: FullBuddyRef; last: bool) =
-  ## Ocne started, the function `runPool()` is called for all worker peers in
-  ## a row (as the body of an iteration.) There will be no other worker peer
-  ## functions activated simultaneously.
+proc runPool*(buddy: FullBuddyRef; last: bool): bool =
+  ## Once started, the function `runPool()` is called for all worker peers in
+  ## sequence as the body of an iteration as long as the function returns
+  ## `false`. There will be no other worker peer functions activated
+  ## simultaneously.
   ##
   ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
   ## `true` (default is `false`.) It is the responsibility of the `runPool()`
@@ -264,13 +265,12 @@ proc runPool*(buddy: FullBuddyRef; last: bool) =
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  let
-    ctx = buddy.ctx
-    bq = buddy.data.bQueue
-  if ctx.poolMode:
-    # Mind the gap, fill in if necessary
-    bq.blockQueueGrout()
-    ctx.poolMode = false
+  # Mind the gap, fill in if necessary (function is peer independent)
+  buddy.data.bQueue.blockQueueGrout()
+
+  # Stop after running once regardless of peer
+  buddy.ctx.poolMode = false
+  true
 
 
 proc runMulti*(buddy: FullBuddyRef) {.async.} =
