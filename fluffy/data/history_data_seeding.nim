@@ -52,7 +52,7 @@ proc propagateEpochAccumulator*(
       # Note: The file actually holds the SSZ encoded accumulator, but we need
       # to decode as we need the root for the content key.
       encodedAccumulator = SSZ.encode(accumulator)
-    info "Gossiping epoch accumulator", rootHash
+    info "Gossiping epoch accumulator", rootHash, contentKey = encKey
 
     p.storeContent(
       encKey,
