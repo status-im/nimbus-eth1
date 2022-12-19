@@ -8,14 +8,16 @@ RUN apt-get update \
 ARG BRANCH_NAME=master
 ENV NPROC=2
 
+ENV NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
+
 RUN git clone https://github.com/status-im/nimbus-eth1.git \
  && cd nimbus-eth1 \
  && git checkout ${BRANCH_NAME} \
  && git pull \
- && make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" V=1 update
+ && make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" V=1 update
 
 RUN cd nimbus-eth1 && \
-    make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" fluffy && \
+    make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" fluffy && \
     mv build/fluffy /usr/bin/
 
 # --------------------------------- #

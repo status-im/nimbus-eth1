@@ -40,13 +40,19 @@ if defined(windows):
 if defined(disableMarchNative):
   if defined(i386) or defined(amd64):
     if defined(macosx):
-      # https://support.apple.com/kb/SP777
-      # "macOS Mojave - Technical Specifications": EOL as of 2021-10 so macOS
-      # users on pre-Nehalem must be running either some Hackintosh, or using
-      # an unsupported macOS version beyond that most recently EOL'd. Nehalem
-      # supports instruction set extensions through SSE4.2 and POPCNT.
-      switch("passC", "-march=nehalem")
-      switch("passL", "-march=nehalem")
+      # https://support.apple.com/kb/sp803
+      # "macOS Catalina - Technical Specifications": EOL as of 2022-09
+      # https://support.apple.com/kb/sp833
+      # "macOS Big Sur - Technical Specifications" lists current oldest
+      # supported models: MacBook (2015 or later), MacBook Air (2013 or later),
+      # MacBook Pro (Late 2013 or later), Mac mini (2014 or later), iMac (2014
+      # or later), iMac Pro (2017 or later), Mac Pro (2013 or later).
+      #
+      # These all have Haswell or newer CPUs.
+      #
+      # This ensures AVX2, AES-NI, PCLMUL, BMI1, and BMI2 instruction set support.
+      switch("passC", "-march=haswell -mtune=generic")
+      switch("passL", "-march=haswell -mtune=generic")
     else:
       switch("passC", "-mssse3")
       switch("passL", "-mssse3")
