@@ -44,18 +44,6 @@ proc init(
   batch.unprocessed.init() # full range on the first set of the pair
   batch.processed = NodeTagRangeSet.init()
 
-  # Once applicable when the hexary trie is non-empty, healing is started on
-  # the full range of all possible accounts. So the partial path batch list
-  # is initialised with the empty partial path encoded as `@[0]` which refers
-  # to the first (typically `Branch`) node. The envelope of `@[0]` covers the
-  # maximum range of accounts.
-  #
-  # Note that `@[]` incidentally has the same effect as `@[0]` although it
-  # is formally no partial path.
-  batch.nodes.check.add NodeSpecs(
-    partialPath: @[0.byte],
-    nodeKey:     stateRoot.to(NodeKey))
-
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
   if ctx.data.coveredAccounts.isFull:
@@ -192,13 +180,9 @@ proc tickerStats*(
     var
       pivotBlock = none(BlockNumber)
       stoQuLen = none(int)
-      accStats = (0,0,0)
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
       stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
-      accStats = (env.fetchAccounts.processed.chunks,
-                  env.fetchAccounts.nodes.check.len,
-                  env.fetchAccounts.nodes.missing.len)
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -206,7 +190,7 @@ proc tickerStats*(
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
-      nAccountStats: accStats,
+      nAccountStats: env.fetchAccounts.processed.chunks,
       nStorageQueue: stoQuLen)
 
 # ------------------------------------------------------------------------------
@@ -217,8 +201,6 @@ proc pivotMothball*(env: SnapPivotRef) =
   ## Clean up most of this argument `env` pivot record and mark it `archived`.
   ## Note that archived pivots will be checked for swapping in already known
   ## accounts and storage slots.
-  env.fetchAccounts.nodes.check.setLen(0)
-  env.fetchAccounts.nodes.missing.setLen(0)
   env.fetchAccounts.unprocessed.init()
 
   # Simplify storage slots queues by resolving partial slots into full list

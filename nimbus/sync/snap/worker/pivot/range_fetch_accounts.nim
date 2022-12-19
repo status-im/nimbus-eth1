@@ -207,8 +207,7 @@ proc rangeFetchAccounts*(
       pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     when extraTraceMessages:
-      trace logTxt "start", peer, pivot,
-        nNodesCheck=fa.nodes.check.len, nNodesMissing=fa.nodes.missing.len
+      trace logTxt "start", peer, pivot
 
     var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
@@ -225,7 +224,6 @@ proc rangeFetchAccounts*(
 
     when extraTraceMessages:
       trace logTxt "done", peer, pivot, nFetchAccounts,
-        nNodesCheck=fa.nodes.check.len, nNodesMissing=fa.nodes.missing.len,
         runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------

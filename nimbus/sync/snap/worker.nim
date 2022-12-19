@@ -285,15 +285,13 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   when extraTraceMessages:
     block:
       let
-        nNodesCheck = env.fetchAccounts.nodes.check.len
-        nNodesMissing = env.fetchAccounts.nodes.missing.len
         nAccounts = env.nAccounts
         nSlotLists = env.nSlotLists
         processed = env.fetchAccounts.processed.fullFactor.toPC(2)
         nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
         accHealThresh = env.healThresh.toPC(2)
       trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
-        nStoQu, accHealThresh, nNodesCheck, nNodesMissing
+        nStoQu, accHealThresh
 
   # This one is the syncing work horse which downloads the database
   await env.execSnapSyncAction(buddy)

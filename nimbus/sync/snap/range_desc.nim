@@ -280,32 +280,18 @@ proc leafRangePp*(a, b: NodeTag): string =
     result &= ',' & $b
   result &= "]"
 
+proc leafRangePp*(iv: NodeTagRange): string =
+  ## Variant of `leafRangePp()`
+  leafRangePp(iv.minPt, iv.maxPt)
+
+
 proc `$`*(a, b: NodeTag): string =
   ## Prettyfied prototype
   leafRangePp(a,b)
 
 proc `$`*(iv: NodeTagRange): string =
-  leafRangePp(iv.minPt, iv.maxPt)
+  leafRangePp iv
 
-proc `$`*(n: NodeSpecs): string =
-  ## Prints `(path,key,node-hash)`
-  let nHash = if n.data.len == 0: NodeKey.default
-              else: n.data.digestTo(NodeKey)
-  result = "("
-  if n.partialPath.len != 0:
-    result &= n.partialPath.toHex
-  result &= ","
-  if n.nodeKey != NodeKey.default:
-    result &= $n.nodeKey
-    if n.nodeKey != nHash:
-      result &= "(!)"
-  result &= ","
-  if nHash != NodeKey.default:
-    if n.nodeKey != nHash:
-      result &= $nHash
-    else:
-      result &= "ditto"
-  result &= ")"
 
 proc dump*(
     ranges: openArray[NodeTagRangeSet];

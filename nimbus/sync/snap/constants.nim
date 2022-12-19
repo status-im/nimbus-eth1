@@ -101,7 +101,7 @@ const
     ## nodes to allow for a pseudo -task switch.
 
 
-  healAccountsCoverageTrigger* = 0.999
+  healAccountsCoverageTrigger* = 1.3
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see

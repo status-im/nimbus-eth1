@@ -28,7 +28,7 @@ type
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## mean and standard deviation
     accountsFill*: (float,float,float) ## mean, standard deviation, merged total
-    nAccountStats*: (int,int,int)      ## #chunks, #dangling, #missing nodes
+    nAccountStats*: int                ## #chunks
     nSlotLists*: (float,float)         ## mean and standard deviation
     nStorageQueue*: Option[int]
     nQueues*: int
@@ -129,9 +129,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       accCov = data.accountsFill[0].pc99 &
          "(" & data.accountsFill[1].pc99 & ")" &
          "/" & data.accountsFill[2].pc99 &
-         "~" & data.nAccountStats[0].uint.toSI &
-         "/" & data.nAccountStats[1].uint.toSI &
-         "+" & data.nAccountStats[2].uint.toSI
+         "~" & data.nAccountStats.uint.toSI
       buddies = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
