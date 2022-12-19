@@ -35,12 +35,12 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   stint,
-  ../../../utils/prettify,
-  ../../sync_desc,
-  ".."/[constants, range_desc, worker_desc],
-  ./com/[com_error, get_account_range],
-  ./db/[hexary_envelope, snapdb_accounts],
-  "."/[pivot_helper, swap_in]
+  ../../../../utils/prettify,
+  ../../../sync_desc,
+  "../.."/[constants, range_desc, worker_desc],
+  ../com/[com_error, get_account_range],
+  ../db/[hexary_envelope, snapdb_accounts],
+  ./swap_in
 
 {.push raises: [Defect].}
 
@@ -57,19 +57,6 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
-
-# proc dumpUnprocessed(
-#     buddy: SnapBuddyRef;
-#     env: SnapPivotRef;
-#       ): string =
-#   ## Debugging ...
-#   let
-#     peer = buddy.peer
-#     pivot = "#" & $env.stateHeader.blockNumber # for logging
-#     moan = proc(overlap: UInt256; iv: NodeTagRange) =
-#       trace logTxt "unprocessed => overlap", peer, pivot, overlap, iv
-#
-#   env.fetchAccounts.unprocessed.dump(moan, 5)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -181,13 +168,8 @@ proc accountsRangefetchImpl(
   env.fetchStorageFull.merge dd.withStorage
 
   var nSwapInLaps = 0
-  if env.archived:
-    # Current pivot just became outdated, rebuild storage slots index (if any)
-    if 0 < gotStorage:
-      trace logTxt "mothballing", peer, pivot, gotStorage
-      env.pivotMothball
-
-  elif swapInAccountsCoverageTrigger <= ctx.data.coveredAccounts.fullFactor:
+  if not env.archived and
+     swapInAccountsCoverageTrigger <= ctx.pivotAccountsCoverage():
     # Swap in from other pivots
     when extraTraceMessages:
       trace logTxt "before swap in", peer, pivot, gotAccounts, gotStorage,
@@ -242,7 +224,6 @@ proc rangeFetchAccounts*(
 
     when extraTraceMessages:
       trace logTxt "done", peer, pivot, nFetchAccounts,
-        nCheckNodes=fa.checkNodes.len, nSickSubTries=fa.sickSubTries.len,
         runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------

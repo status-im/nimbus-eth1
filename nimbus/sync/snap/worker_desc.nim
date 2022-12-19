@@ -50,12 +50,16 @@ type
     ## This data structure is used for coordinating peers that run quasi
     ## parallel.
 
+  SnapTodoNodes* = object
+    ## Pair of node lists subject to swap-in and healing
+    check*: seq[NodeSpecs]             ## Existing nodes, sub-trie unknown
+    missing*: seq[NodeSpecs]           ## Top ref for sub-tries to be healed
+
   SnapRangeBatchRef* = ref object
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapTodoRanges       ## Range of slots to be fetched
-    processed*: NodeTagRangeSet        ## Nodes definitely processed
-    checkNodes*: seq[NodeSpecs]        ## Nodes with prob. dangling child links
-    sickSubTries*: seq[NodeSpecs]      ## Top ref for sub-tries to be healed
+    processed*: NodeTagRangeSet        ## Node ranges definitely processed
+    nodes*: SnapTodoNodes              ## Single nodes to double check
     resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
     lockTriePerusal*: bool             ## Only one process at a time
 
@@ -104,6 +108,7 @@ type
     pivotTable*: SnapPivotTable        ## Per state root environment
     pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
+    covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
     noRecovery*: bool                  ## Ignore recovery checkpoints
 
@@ -127,6 +132,14 @@ proc hash*(a: SnapSlotsQueueItemRef): Hash =
 proc hash*(a: Hash256): Hash =
   ## Table/KeyedQueue mixin
   a.data.hash
+
+# ------------------------------------------------------------------------------
+# Public helpers: coverage
+# ------------------------------------------------------------------------------
+
+proc pivotAccountsCoverage*(ctx: SnapCtxRef): float =
+  ## Returns the accounts coverage factor
+  ctx.data.coveredAccounts.fullFactor + ctx.data.covAccTimesFull.float
 
 # ------------------------------------------------------------------------------
 # Public helpers: SnapTodoRanges
@@ -195,11 +208,13 @@ proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
 proc verify*(q: var SnapTodoRanges): bool =
   ## Verify consistency, i.e. that the two sets of ranges have no overlap.
   if q[0].chunks == 0 or q[1].chunks == 0:
-    # At least on set is empty
+    # At least one set is empty
     return true
+  # So neither set is empty
   if q[0].total == 0 or q[1].total == 0:
     # At least one set is maximal and the other non-empty
     return false
+  # So neither set is empty, not full
   let (a,b) = if q[0].chunks < q[1].chunks: (0,1) else: (1,0)
   for iv in q[a].increasing:
     if 0 < q[b].covered(iv):

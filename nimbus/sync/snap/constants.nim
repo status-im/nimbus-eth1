@@ -60,7 +60,7 @@ const
     ## If the range set is too much fragmented, no data will be saved and
     ## restart has to perform from scratch or an earlier checkpoint.
 
-  snapAccountsSaveStorageSlotsMax* = 10_000
+  snapAccountsSaveStorageSlotsMax* = 20_000
     ## Recovery data are stored if the oustanding storage slots to process do
     ## not amount to more than this many entries.
     ##
@@ -101,7 +101,7 @@ const
     ## nodes to allow for a pseudo -task switch.
 
 
-  healAccountsCoverageTrigger* = 0.999
+  healAccountsCoverageTrigger* = 1.3
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
@@ -114,7 +114,7 @@ const
     ## serve a maximum number requests (rather than data.)
 
   healAccountsPivotTriggerMinFactor* = 0.17
-    ## Additional condition to meed before starting healing. The current
+    ## Additional condition to meet before starting healing. The current
     ## pivot must have at least this much processed as recorded in the
     ## `processed` ranges set. This is the minimim value (see below.)
 
@@ -178,7 +178,6 @@ const
 
 static:
   doAssert 1 < swapInAccountsPivotsMin
-  doAssert healAccountsCoverageTrigger < 1.0 # larger values make no sense
   doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
   doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
 

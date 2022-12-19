@@ -48,8 +48,8 @@ proc accountsCtx(
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & env.fetchAccounts.processed.fullFactor.toPC(0) & "/" &
         ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
-    "nCheckNodes=" & $env.fetchAccounts.checkNodes.len & "," &
-    "nSickSubTries=" & $env.fetchAccounts.sickSubTries.len & "}"
+    "nNodesCheck=" & $env.fetchAccounts.nodes.check.len & "," &
+    "nNodesMissing=" & $env.fetchAccounts.nodes.missing.len & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -76,8 +76,8 @@ proc storageSlotsCtx(
   if not slots.isNil:
     result &= "" &
       "covered=" & slots.processed.fullFactor.toPC(0) &
-      "nCheckNodes=" & $slots.checkNodes.len & "," &
-      "nSickSubTries=" & $slots.sickSubTries.len
+      "nNodesCheck=" & $slots.nodes.check.len & "," &
+      "nNodesMissing=" & $slots.nodes.missing.len
   result &= "}"
 
 # ------------------------------------------------------------------------------

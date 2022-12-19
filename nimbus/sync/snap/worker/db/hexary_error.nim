@@ -39,7 +39,7 @@ type
 
     # envelope
     DecomposeDegenerated
-    DecomposeDisjuct
+    DecomposeDisjunct
 
     # import
     DifferentNodeValueExists
