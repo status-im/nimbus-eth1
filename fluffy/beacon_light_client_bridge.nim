@@ -19,13 +19,13 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  "."/[
+  "."/network/beacon_light_client/[
     light_client_db,
     light_client_network,
     light_client_content,
     beacon_light_client_bridge_conf
   ],
-  ".."/wire/[portal_stream, portal_protocol_config, portal_protocol]
+  "."/network/wire/[portal_stream, portal_protocol_config, portal_protocol]
 
 # TODO Find what can throw exception
 proc run() {.raises: [Exception, Defect].} =
