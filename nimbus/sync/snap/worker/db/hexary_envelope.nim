@@ -43,8 +43,12 @@
 ##
 ## * ``iv`` is a range of leaf node paths (of type ``NodeTagRange``)
 ##
-## and assume further that for `iv` there are left and right *boundary proofs*
-## in the database (e.g. as downloaded via the `snap/1` protocol.)
+## and assume further that
+##
+## * ``partialPath`` points to an allocated node
+##
+## * for `iv` there are left and right *boundary proofs in the database
+##   (e.g. as downloaded via the `snap/1` protocol.)
 ##
 ## The decomposition
 ## ^^^^^^^^^^^^^^^^^
@@ -155,7 +159,7 @@ proc padPartialPath(pfx: NibblesSeq; dblNibble: byte): NodeKey =
   (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 
-proc decomposeLeft(
+proc doDecomposeLeft(
     envPt: RPath|XPath;
     ivPt: RPath|XPath;
       ): Result[seq[NodeSpecs],HexaryError] =
@@ -205,7 +209,7 @@ proc decomposeLeft(
 
   ok(collect)
 
-proc decomposeRight(
+proc doDecomposeRight(
     envPt: RPath|XPath;
     ivPt: RPath|XPath;
       ): Result[seq[NodeSpecs],HexaryError] =
@@ -239,23 +243,19 @@ proc decomposeRight(
   ok(collect)
 
 
-proc decomposeImpl(
-    partialPath: Blob;               # Hex encoded partial path
+proc decomposeLeftImpl(
+    env: NodeTagRange;               # Envelope for some partial path
     rootKey: NodeKey;                # State root
     iv: NodeTagRange;                # Proofed range of leaf paths
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError,KeyError].} =
   ## Database agnostic implementation of `hexaryEnvelopeDecompose()`.
-  let env = partialPath.hexaryEnvelope
-  if iv.maxPt < env.minPt or env.maxPt < iv.minPt:
-    return err(DecomposeDisjuct) # empty result
-
   var nodeSpex: seq[NodeSpecs]
 
   # So ranges do overlap. The case that the `partialPath` envelope is fully
   # contained in `iv` results in `@[]` which is implicitely handled by
-  # non-matching any of the cases, below.
+  # non-matching of the below if clause.
   if env.minPt < iv.minPt:
     let
       envPt = env.minPt.hexaryPath(rootKey, db)
@@ -266,11 +266,23 @@ proc decomposeImpl(
           return err(rc.error)
         rc.value
     block:
-      let rc = envPt.decomposeLeft ivPt
+      let rc = envPt.doDecomposeLeft ivPt
       if rc.isErr:
         return err(rc.error)
       nodeSpex &= rc.value
 
+  ok(nodeSpex)
+
+
+proc decomposeRightImpl(
+    env: NodeTagRange;               # Envelope for some partial path
+    rootKey: NodeKey;                # State root
+    iv: NodeTagRange;                # Proofed range of leaf paths
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): Result[seq[NodeSpecs],HexaryError]
+      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
+  ## Database agnostic implementation of `hexaryEnvelopeDecompose()`.
+  var nodeSpex: seq[NodeSpecs]
   if iv.maxPt < env.maxPt:
     let
       envPt = env.maxPt.hexaryPath(rootKey, db)
@@ -280,7 +292,7 @@ proc decomposeImpl(
           return err(rc.error)
         rc.value
     block:
-      let rc = envPt.decomposeRight ivPt
+      let rc = envPt.doDecomposeRight ivPt
       if rc.isErr:
         return err(rc.error)
       nodeSpex &= rc.value
@@ -313,8 +325,10 @@ proc hexaryEnvelopeUniq*(
       {.gcsafe, raises: [Defect,KeyError].} =
   ## Sort and simplify a list of partial paths by sorting envelopes while
   ## removing nested entries.
-  var tab: Table[NodeTag,(Blob,bool)]
+  if partialPaths.len < 2:
+    return partialPaths.toSeq
 
+  var tab: Table[NodeTag,(Blob,bool)]
   for w in partialPaths:
     let iv = w.hexaryEnvelope
     tab[iv.minPt] = (w,true)    # begin entry
@@ -323,8 +337,8 @@ proc hexaryEnvelopeUniq*(
   # When sorted, nested entries look like
   #
   # 123000000.. (w0, true)
-  # 123400000.. (w1, true)
-  # 1234fffff..  (, false)
+  # 123400000.. (w1, true)  <--- nested
+  # 1234fffff..  (, false)  <--- nested
   # 123ffffff..  (, false)
   # ...
   # 777000000.. (w2, true)
@@ -345,8 +359,10 @@ proc hexaryEnvelopeUniq*(
       {.gcsafe, raises: [Defect,KeyError].} =
   ## Variant of `hexaryEnvelopeUniq` for sorting a `NodeSpecs` list by
   ## partial paths.
-  var tab: Table[NodeTag,(NodeSpecs,bool)]
+  if nodes.len < 2:
+    return nodes.toSeq
 
+  var tab: Table[NodeTag,(NodeSpecs,bool)]
   for w in nodes:
     let iv = w.partialPath.hexaryEnvelope
     tab[iv.minPt] = (w,true)            # begin entry
@@ -464,7 +480,9 @@ proc hexaryEnvelopeDecompose*(
   ##   search may be amended to ignore nodes the envelope of is fully contained
   ##   in some range `iv`. For a fully allocated hexary trie, there will be at
   ##   least one sub-trie of length *N* with leafs not in `iv`. So the number
-  ##   of nodes visited is *O(16^N)* for some *N* at most 63.
+  ##   of nodes visited is *O(16^N)* for some *N* at most 63 (note that *N*
+  ##   itself is *O(log M)* where M is the size of the leaf elements *M*, and
+  ##   *O(16^N)* = *O(M)*.)
   ##
   ##   The function `hexaryEnvelopeDecompose()` take the left or rightmost leaf
   ##   path from `iv`, calculates a chain length *N* of nodes from the state
@@ -488,8 +506,24 @@ proc hexaryEnvelopeDecompose*(
   ##   `hexaryEnvelopeDecompose()` is a fast one and `hexaryInspect()` the
   ##   thorough one of last resort.
   ##
+  let env = partialPath.hexaryEnvelope
+  if iv.maxPt < env.minPt or env.maxPt < iv.minPt:
+    return err(DecomposeDisjunct) # empty result
+
   noRlpErrorOops("in-memory hexaryEnvelopeDecompose"):
-    return partialPath.decomposeImpl(rootKey, iv, db)
+    let left = block:
+      let rc = env.decomposeLeftImpl(rootKey, iv, db)
+      if rc.isErr:
+        return rc
+      rc.value
+    let right = block:
+      let rc = env.decomposeRightImpl(rootKey, iv, db)
+      if rc.isErr:
+        return rc
+      rc.value
+    return ok(left & right)
+  # Notreached
+
 
 proc hexaryEnvelopeDecompose*(
     partialPath: Blob;             # Hex encoded partial path
@@ -498,9 +532,155 @@ proc hexaryEnvelopeDecompose*(
     getFn: HexaryGetFn;            # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [Defect,RlpError].} =
-  ## Variant of `decompose()` for persistent database.
+  ## Variant of `hexaryEnvelopeDecompose()` for persistent database.
+  let env = partialPath.hexaryEnvelope
+  if iv.maxPt < env.minPt or env.maxPt < iv.minPt:
+    return err(DecomposeDisjunct) # empty result
+
   noKeyErrorOops("persistent hexaryEnvelopeDecompose"):
-    return partialPath.decomposeImpl(rootKey, iv, getFn)
+    let left = block:
+      let rc = env.decomposeLeftImpl(rootKey, iv, getFn)
+      if rc.isErr:
+        return rc
+      rc.value
+    let right = block:
+      let rc = env.decomposeRightImpl(rootKey, iv, getFn)
+      if rc.isErr:
+        return rc
+      rc.value
+    return ok(left & right)
+  # Notreached
+
+
+proc hexaryEnvelopeDecompose*(
+    partialPath: Blob;               # Hex encoded partial path
+    ranges: NodeTagRangeSet;         # To be complemented
+    rootKey: NodeKey;                # State root
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): Result[seq[NodeSpecs],HexaryError] =
+  ## Variant of `hexaryEnvelopeDecompose()` for an argument set `ranges` of
+  ## intervals rather than a single one.
+  ##
+  ## Given that for the arguement `partialPath` there is an allocated node,
+  ## and all intervals in the `ranges` argument are boundary proofed, then
+  ## this function compiles the complement of the union of the interval
+  ## elements `ranges` relative to the envelope of the argument `partialPath`.
+  ## The function expresses this complement as a list of envelopes of
+  ## sub-tries. In other words, it finds a list `L` with
+  ##
+  ## * ``L`` is a list of (existing but not necessarily allocated) nodes.
+  ##
+  ## * The union ``U(L)`` of envelopes of elements of ``L`` is a subset of the
+  ##   envelope ``E(partialPath)`` of ``partialPath``.
+  ##
+  ## * ``U(L)`` has no common point with any interval of the set ``ranges``.
+  ##
+  ## * ``L`` is maximal in the sense that any node ``w`` which is prefixed by
+  ##   a node from ``E(partialPath)`` and with an envelope ``E(w)`` without
+  ##   common node for any interval of ``ranges`` is also prefixed by a node
+  ##   from ``L``.
+  ##
+  ## * The envelopes of the nodes in ``L`` are disjunct (i.e. the size of `L`
+  ##   is minimal.)
+  ##
+  ## The function fails if `E(partialPath)` is disjunct from any interval of
+  ## `ranges`. The function returns an empty list if `E(partialPath)` overlaps
+  ## with some interval from `ranges` but there exists no common nodes. Nodes
+  ## that cause *RLP* decoding errors are ignored and will get lost.
+  ##
+  ## Note: Two intervals over the set of nodes might not be disjunct but
+  ##       nevertheless have no node in common simply fot the fact that thre
+  ##       are no such nodes in the database (with a path in the intersection
+  ##       of the two intervals.)
+  ##
+  # Find all intervals from the set of `ranges` ranges that have a point
+  # in common with `partialPath`.
+  let touched = ranges.hexaryEnvelopeTouchedBy partialPath
+  if touched.chunks == 0:
+    return err(DecomposeDisjunct)
+
+  # Decompose the the complement of the `node` envelope off `iv` into
+  # envelopes/sub-tries.
+  let
+    startNode = NodeSpecs(partialPath: partialPath)
+  var
+    leftQueue: seq[NodeSpecs]      # To be appended only in loop below
+    rightQueue = @[startNode]      # To be replaced/modified in loop below
+
+  for iv in touched.increasing:
+    #
+    # For the interval `iv` and the list `rightQueue`, the following holds:
+    # * `iv` is larger (to the right) of its predecessor `iu` (if any)
+    # * all nodes `w` of the list `rightQueue` are larger than `iu` (if any)
+    #
+    # So collect all intervals to the left `iv` and keep going with the
+    # remainder to the right:
+    # ::
+    #   before decomposing:
+    #   v---------v  v---------v    v--------v      -- right queue envelopes
+    #         |-----------|                         -- iv
+    #
+    #   after decomposing the right queue:
+    #   v---v                                       -- left queue envelopes
+    #                     v----v    v--------v      -- right queue envelopes
+    #        |-----------|                          -- iv
+    #
+    var delayed: seq[NodeSpecs]
+    for n,w in rightQueue:
+
+      let env = w.hexaryEnvelope
+      if env.maxPt < iv.minPt:
+        leftQueue.add w            # Envelope fully to the left of `iv`
+        continue
+
+      if iv.maxPt < env.minPt:
+        # All remaining entries are fullly to the right of `iv`.
+        delayed &= rightQueue[n ..< rightQueue.len]
+        # Node that `w` != `startNode` because otherwise `touched` would
+        # have been empty.
+        break
+
+      try:
+        block:
+          let rc = env.decomposeLeftImpl(rootKey, iv, db)
+          if rc.isOk:
+            leftQueue &= rc.value    # Queue left side smaller than `iv`
+        block:
+          let rc = env.decomposeRightImpl(rootKey, iv, db)
+          if rc.isOk:
+            delayed &= rc.value      # Queue right side for next lap
+      except RlpError, KeyError:
+        # Cannot decompose `w`, so just drop it
+        discard
+
+    # At this location in code, `delayed` can never contain `startNode` as it
+    # is decomosed in the algorithm above.
+    rightQueue = delayed
+
+    # End for() loop over `touched`
+
+  ok(leftQueue & rightQueue)
+
+
+proc hexaryEnvelopeDecompose*(
+    node: NodeSpecs;                 # The envelope of which to be complemented
+    ranges: NodeTagRangeSet;         # To be complemented
+    rootKey: NodeKey;                # State root
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): Result[seq[NodeSpecs],HexaryError] =
+  ## Variant of `hexaryEnvelopeDecompose()` for ranges and a `NodeSpecs`
+  ## argument rather than a partial path.
+  node.partialPath.hexaryEnvelopeDecompose(ranges, rootKey, db)
+
+proc hexaryEnvelopeDecompose*(
+    ranges: NodeTagRangeSet;         # To be complemented
+    rootKey: NodeKey;                # State root
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): Result[seq[NodeSpecs],HexaryError] =
+  ## Variant of `hexaryEnvelopeDecompose()` for ranges and an implicit maximal
+  ## partial path envelope.
+  ## argument rather than a partial path.
+  @[0.byte].hexaryEnvelopeDecompose(ranges, rootKey, db)
 
 # ------------------------------------------------------------------------------
 # End
