@@ -11,113 +11,57 @@
 ## Heal accounts DB:
 ## =================
 ##
-## Flow chart for healing algorithm
-## --------------------------------
-## ::
-##      START
-##        |
-##        |   +--------------------------------+
-##        |   |                                |
-##        |   v                                |
-##        | <inspect-trie>                     |
-##        |   |                                |
-##        |   |  +-----------------------+     |
-##        |   |  |  +------------------+ |     |
-##        |   |  |  |                  | |     |
-##        v   v  v  v                  | |     |
-##      {missing-nodes}                | |     |
-##        |                            | |     |
-##        v                            | |     |
-##      <get-trie-nodes-via-snap/1> ---+ |     |
-##        |                              |     |
-##        v                              |     |
-##      <merge-nodes-into-database> -----+     |
-##        |                 |                  |
-##        v                 v                  |
-##      {leaf-nodes}      {check-nodes} -------+
-##        |
-##        v                                 \
-##      <update-accounts-batch>             |
-##        |                                 |  similar actions for single leaf
-##        v                                  \ nodes that otherwise would be
-##      {storage-roots}                      / done for account hash ranges in
-##        |                                 |  the function storeAccounts()
-##        v                                 |
-##      <update-storage-processor-batch>    /
+## This module is a variation of the `swap-in` module in the sense that it
+## searches for missing nodes in the database (which means that links to
+## that nodes must exist for knowing this fact) and then fetches the nodes
+## from the network.
 ##
-## Legend:
-## * `<..>`: some action, process, etc.
-## * `{missing-nodes}`: list implemented as `env.fetchAccounts.nodes.missing`
-## * `{leaf-nodes}`: list is optimised out
-## * `{check-nodes}`: list implemented as `env.fetchAccounts.nodes.check`
-## * `{storage-roots}`: list implemented as pair of queues
-##   `env.fetchStorageFull` and `env.fetchStoragePart`
+## Algorithm
+## ---------
 ##
-## Discussion of flow chart
-## ------------------------
-## * If there are no missing nodes, START proceeds with the `<inspect-trie>`
-##   process.
+## * Run `swapInAccounts()` so that inheritable sub-tries are imported from
+##   previous pivots.
 ##
-## * Nodes of the `{missing-nodes}` list are fetched from the network and
-##   merged into the persistent accounts trie database.
-##   + Successfully merged non-leaf nodes are collected in the `{check-nodes}`
-##     list which is fed back into the `<inspect-trie>` process.
-##   + Successfully merged leaf nodes are processed as single entry accounts
-##     node ranges.
+## * Find nodes with envelopes that have no account in common with any range
+##   interval of the `processed` set of the current pivot. Stop if there are
+##   no such nodes.
 ##
-## * Input nodes for `<inspect-trie>` are checked for dangling child node
-##   links which in turn are collected as output.
+## * Extract the missing nodes from the previous step, i.e. the nodes that
+##   are known to exist but are not allocated. If all nodes are allocated,
+##   employ the `hexaryInspect()` function in a limited mode do find dangling
+##   (i.e. missing) sub-nodes of these allocated nodes. Stop if this function
+##   fails to find any such nodes.
 ##
-## * If there is a problem with a node travelling from the source list
-##   `{missing-nodes}` towards either target list `{leaf-nodes}` or
-##   `{check-nodes}`, this problem node will fed back to the `{missing-nodes}`
-##   source list.
+## * From the nodes of the previous step, extract non-allocated nodes and
+##   fetch them from the network.
 ##
-## * In order to avoid double processing, the `{missing-nodes}` list is
-##   regularly checked for whether nodes are still missing or some other
-##   process has done the magic work of merging some of then into the
-##   trie database.
+## * Install that nodes from the network.
 ##
-## Competing with other trie algorithms
-## ------------------------------------
-## * Healing runs (semi-)parallel to processing *GetAccountRange* network
-##   messages from the `snap/1` protocol (see `storeAccounts()`). Considering
-##   network bandwidth, the *GetAccountRange* message processing is way more
-##   efficient in comparison with the healing algorithm as there are no
-##   intermediate trie nodes involved.
+## * Rinse and repeat
 ##
-## * The healing algorithm visits all nodes of a complete trie unless it is
-##   stopped in between.
+## Discussion:
+## -----------
 ##
-## * If a trie node is missing, it can be fetched directly by the healing
-##   algorithm or one can wait for another process to do the job. Waiting for
-##   other processes to do the job also applies to problem nodes (and vice
-##   versa.)
+## The worst case scenario in the third step might also be solved by allocating
+## more accounts and running this healing algorith again.
 ##
-## * Network bandwidth can be saved if nodes are fetched by the more efficient
-##   *GetAccountRange* message processing (if that is available.) This suggests
-##   that fetching missing trie nodes by the healing algorithm should kick in
-##   very late when the trie database is nearly complete.
+## Due to its potentially poor performance there is no way to recursively
+## search the whole database hexary trie for more dangling nodes using the
+## `hexaryInspect()` function.
 ##
-## * Healing applies to a hexary trie database associated with the currently
-##   latest *state root*, where tha latter may change occasionally. This
-##   suggests to start the healing algorithm very late at a time when most of
-##   the accounts have been updated by any *state root*, already. There is a
-##   good chance that the healing algorithm detects and activates account data
-##   from previous *state roots* that have not changed.
-
 import
-  std/[sequtils, tables],
+  std/[math, sequtils, tables],
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
-  stew/[interval_set, keyed_queue],
+  stew/[byteutils, interval_set, keyed_queue],
   ../../../../utils/prettify,
-  ../../../sync_desc,
+  "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
-  ../db/[hexary_desc, hexary_error, snapdb_accounts],
-  "."/[sub_tries_helper, swap_in]
+  ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
+         snapdb_accounts],
+  ./swap_in
 
 {.push raises: [Defect].}
 
@@ -135,6 +79,19 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts healing " & info
 
+proc `$`(node: NodeSpecs): string =
+  node.partialPath.toHex
+
+proc `$`(rs: NodeTagRangeSet): string =
+  rs.fullFactor.toPC(0)
+
+proc `$`(iv: NodeTagRange): string =
+  iv.fullFactor.toPC(3)
+
+proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
+  let sumUp = w.mapIt(it.hexaryEnvelope.len).foldl(a+b, 0.u256)
+  (sumUp.to(float) / (2.0^256)).toPC(n)
+
 proc healingCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
@@ -143,10 +100,8 @@ proc healingCtx(
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "nAccounts=" & $env.nAccounts & "," &
-    ("covered=" & env.fetchAccounts.processed.fullFactor.toPC(0) & "/" &
-        ctx.data.coveredAccounts.fullFactor.toPC(0)) & "," &
-    "nNodesCheck=" & $env.fetchAccounts.nodes.check.len & "," &
-    "nNodesMissing=" & $env.fetchAccounts.nodes.missing.len & "}"
+    ("covered=" & $env.fetchAccounts.processed & "/" &
+                  $ctx.data.coveredAccounts ) & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -170,72 +125,53 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc reorgHealingState(
+proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ) =
+      ): seq[NodeSpecs] =
+  ## Find some missing glue nodes in current database to be fetched
+  ## individually.
   let
     ctx = buddy.ctx
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
+    fa = env.fetchAccounts
 
-    nNodesCheck0 = env.fetchAccounts.nodes.check.len
-    nNodesMissing0 = env.fetchAccounts.nodes.missing.len
-    nProcessed0 = env.fetchAccounts.processed.fullfactor.toPC(3)
+  # Import from earlier run
+  while buddy.swapInAccounts(env) != 0:
+    discard
 
-  # Reclassify nodes into existing/allocated and dangling ones
-  if buddy.swapInAccounts(env) == 0:
-    # Nothing to swap in, so force reclassification
-    noExceptionOops("reorgHealingState"):
-      var delayed: seq[NodeSpecs]
-      for node in env.fetchAccounts.nodes.missing:
-        if node.nodeKey.ByteArray32.getFn().len == 0:
-          delayed.add node # still subject to healing
-        else:
-          env.fetchAccounts.nodes.check.add node
-      env.fetchAccounts.nodes.missing = delayed
+  var nodes: seq[NodeSpecs]
+  noExceptionOops("getMissingNodesList"):
+    # Get unallocated nodes to be fetched
+    let rc = fa.processed.hexaryEnvelopeDecompose(rootKey, getFn)
+    if rc.isOk:
+      nodes = rc.value
 
-    when extraTraceMessages:
-      let
-        nNodesCheck1 = env.fetchAccounts.nodes.check.len
-        nNodesMissing1 = env.fetchAccounts.nodes.missing.len
-      trace logTxt "sick nodes reclassified", nNodesCheck0, nNodesMissing0,
-        nNodesCheck1, nNodesMissing1, nProcessed0
+      # Remove allocated nodes
+      let missingNodes = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
+      if 0 < missingNodes.len:
+        when extraTraceMessages:
+          trace logTxt "missing nodes", ctx=buddy.healingCtx(env),
+             nResult=missingNodes.len, result=missingNodes.toPC
+        return missingNodes
+
+  # Plan B, carefully employ `hexaryInspect()`
+  if 0 < nodes.len:
+    try:
+      let stats = getFn.hexaryInspectTrie(
+        rootKey, nodes.mapIt(it.partialPath), suspendAfter=healInspectionBatch)
+      if 0 < stats.dangling.len:
+        trace logTxt "missing nodes (plan B)", ctx=buddy.healingCtx(env),
+          nResult=stats.dangling.len, result=stats.dangling.toPC
+        return stats.dangling
+    except:
+      discard
 
 
-proc updateMissingNodesList(
+proc fetchMissingNodes(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
-      ): Future[bool]
-      {.async.} =
-  ## Starting with a given set of potentially dangling account nodes
-  ## `checkNodes`, this set is filtered and processed. The outcome is
-  ## fed back to the vey same list `checkNodes`
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-    db = ctx.data.snapDb
-
-  let rc = await db.getAccountFn.subTriesFromPartialPaths(
-    env.stateHeader.stateRoot,         # State root related to pivot
-    env.fetchAccounts,                 # Account download specs
-    snapRequestTrieNodesFetchMax)      # Maxinmal datagram request size
-  if rc.isErr:
-    if rc.error == TrieIsLockedForPerusal:
-      trace logTxt "failed", peer,
-       ctx=buddy.healingCtx(env), error=rc.error
-    else:
-      error logTxt "failed => stop", peer,
-        ctx=buddy.healingCtx(env), error=rc.error
-      # Attempt to switch pivot, there is not much else one can do here
-      buddy.ctrl.zombie = true
-    return false
-
-  return true
-
-
-proc getMissingNodesFromNetwork(
-    buddy: SnapBuddyRef;
+    missingNodes: seq[NodeSpecs];
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
@@ -247,15 +183,14 @@ proc getMissingNodesFromNetwork(
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
-    nSickSubTries = env.fetchAccounts.nodes.missing.len
-    inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
+    nMissingNodes= missingNodes.len
+    nFetchNodes = max(0, nMissingNodes - snapRequestTrieNodesFetchMax)
 
-  # There is no point in processing too many nodes at the same time. So leave
-  # the rest on the `nodes.missing` queue to be handled later.
-  let fetchNodes = env.fetchAccounts.nodes.missing[inxLeft ..< nSickSubTries]
-  env.fetchAccounts.nodes.missing.setLen(inxLeft)
+    # There is no point in fetching too many nodes as it will be rejected. So
+    # rest of the `missingNodes` list is ignored to be picked up later.
+    fetchNodes = missingNodes[0 ..< nFetchNodes]
 
-  # Initalise for `getTrieNodes()` for fetching nodes from the network
+  # Initalise for fetching nodes from the network via `getTrieNodes()`
   var
     nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
     pathList: seq[seq[Blob]]     # Function argument for `getTrieNodes()`
@@ -263,28 +198,19 @@ proc getMissingNodesFromNetwork(
     pathList.add @[w.partialPath]
     nodeKey[w.partialPath] = w.nodeKey
 
-  # Fetch nodes from the network. Note that the remainder of the
-  # `nodes.missing` list might be used by another process that runs
-  # semi-parallel.
+  # Fetch nodes from the network.
   let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
     # Reset error counts for detecting repeated timeouts, network errors, etc.
     buddy.data.errors.resetComError()
 
-    # Register unfetched missing nodes for the next pass
-    for w in rc.value.leftOver:
-      env.fetchAccounts.nodes.missing.add NodeSpecs(
-        partialPath: w[0],
-        nodeKey:     nodeKey[w[0]])
+    # Forget about unfetched missing nodes, will be picked up later
     return rc.value.nodes.mapIt(NodeSpecs(
       partialPath: it.partialPath,
       nodeKey:     nodeKey[it.partialPath],
       data:        it.data))
 
-  # Restore missing nodes list now so that a task switch in the error checker
-  # allows other processes to access the full `nodes.missing` list.
-  env.fetchAccounts.nodes.missing = env.fetchAccounts.nodes.missing & fetchNodes
-
+  # Process error ...
   let
     error = rc.error
     ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors)
@@ -371,60 +297,59 @@ proc accountsHealingImpl(
     peer = buddy.peer
     fa = env.fetchAccounts
 
-  # Update for changes since last visit
-  buddy.reorgHealingState(env)
+    # Update for changes since last visit
+    missingNodes = buddy.compileMissingNodesList(env)
 
-  if fa.nodes.missing.len == 0:
-    # Traverse the hexary trie for more missing nodes. This call is expensive.
-    if await buddy.updateMissingNodesList(env):
-      # Check whether the trie is complete.
-      if fa.nodes.missing.len == 0:
-        trace logTxt "complete", peer, ctx=buddy.healingCtx(env)
-        return 0 # nothing to do
+  if missingNodes.len == 0:
+    # Nothing to do
+    trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(env)
+    return 0 # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
-  let nodeSpecs = await buddy.getMissingNodesFromNetwork(env)
-  if nodeSpecs.len == 0:
+  let fetchedNodes = await buddy.fetchMissingNodes(missingNodes, env)
+  if fetchedNodes.len == 0:
     return 0
 
   # Store nodes onto disk
-  let report = db.importRawAccountsNodes(peer, nodeSpecs)
+  let
+    nFetchedNodes = fetchedNodes.len
+    report = db.importRawAccountsNodes(peer, fetchedNodes)
+
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
     error logTxt "error updating persistent database", peer,
-      ctx=buddy.healingCtx(env), nNodes=nodeSpecs.len, error=report[^1].error
-    fa.nodes.missing = fa.nodes.missing & nodeSpecs
+      ctx=buddy.healingCtx(env), nFetchedNodes, error=report[^1].error
     return -1
 
   # Filter out error and leaf nodes
-  var nLeafNodes = 0 # for logging
+  var
+    nIgnored = 0
+    nLeafNodes = 0 # for logging
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let inx = w.slot.unsafeGet
 
-      if w.error != NothingSerious or w.kind.isNone:
-        # error, try downloading again
-        fa.nodes.missing.add nodeSpecs[inx]
+      if w.kind.isNone:
+        # Error report without node referenece
+        discard
 
-      elif w.kind.unsafeGet != Leaf:
-        # re-check this node
-        fa.nodes.check.add nodeSpecs[inx]
+      elif w.error != NothingSerious:
+        # Node error, will need to pick up later and download again
+        nIgnored.inc
 
-      else:
-        # Node has been stored, double check
-        let (isLeaf, key, acc) = buddy.kvAccountLeaf(nodeSpecs[inx], env)
+      elif w.kind.unsafeGet == Leaf:
+        # Leaf node has been stored, double check
+        let (isLeaf, key, acc) = buddy.kvAccountLeaf(fetchedNodes[inx], env)
         if isLeaf:
-          # Update `uprocessed` registry, collect storage roots (if any)
+          # Update `unprocessed` registry, collect storage roots (if any)
           buddy.registerAccountLeaf(key, acc, env)
           nLeafNodes.inc
-        else:
-          fa.nodes.check.add nodeSpecs[inx]
 
   when extraTraceMessages:
     trace logTxt "merged into database", peer,
-      ctx=buddy.healingCtx(env), nNodes=nodeSpecs.len, nLeafNodes
+      ctx=buddy.healingCtx(env), nFetchedNodes, nLeafNodes
 
-  return nodeSpecs.len
+  return nFetchedNodes - nIgnored
 
 # ------------------------------------------------------------------------------
 # Public functions
