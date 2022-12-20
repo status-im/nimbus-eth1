@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/tables,
+  std/[sequtils, strutils, tables],
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
@@ -21,11 +21,40 @@ import
 logScope:
   topics = "snap-db"
 
+type
+  TrieNodeStatCtxRef* = ref object
+    ## Context to resume searching for dangling links
+    case persistent*: bool
+    of true:
+      hddCtx*: seq[(NodeKey,NibblesSeq)]
+    else:
+      memCtx*: seq[(RepairKey,NibblesSeq)]
+
+  TrieNodeStat* = object
+    ## Trie inspection report
+    dangling*: seq[NodeSpecs]       ## Referes to nodes with incomplete refs
+    count*: uint64                  ## Number of nodes visited
+    level*: uint8                   ## Maximum nesting depth of dangling nodes
+    stopped*: bool                  ## Potential loop detected if `true`
+    resumeCtx*: TrieNodeStatCtxRef  ## Context for resuming inspection
+
 const
   extraTraceMessages = false # or true
 
 when extraTraceMessages:
   import stew/byteutils
+
+# ------------------------------------------------------------------------------
+# Private helpers, debugging
+# ------------------------------------------------------------------------------
+
+proc ppDangling(a: seq[NodeSpecs]; maxItems = 30): string =
+  proc ppBlob(w: Blob): string =
+    w.mapIt(it.toHex(2)).join.toLowerAscii
+  let
+    q = a.mapIt(it.partialPath.ppBlob)[0 ..< min(maxItems,a.len)]
+    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
+  "{" & q.join(",") & andMore & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -114,34 +143,45 @@ proc to*(resumeCtx: TrieNodeStatCtxRef; T: type seq[NodeSpecs]): T =
 
 
 proc hexaryInspectTrie*(
-    db: HexaryTreeDbRef;                 ## Database
-    root: NodeKey;                       ## State root
-    paths: seq[Blob] = @[];              ## Starting paths for search
-    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
-    suspendAfter = high(uint64);         ## To be resumed
-    stopAtLevel = 64;                    ## Instead of loop detector
+    db: HexaryTreeDbRef;                 # Database
+    root: NodeKey;                       # State root
+    partialPaths: seq[Blob] = @[];       # Starting paths for search
+    resumeCtx: TrieNodeStatCtxRef = nil; # Context for resuming inspection
+    suspendAfter = high(uint64);         # To be resumed
+    stopAtLevel = 64u8;                  # Width-first depth level
+    maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Starting with the argument list `paths`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. The references for these nodes are collected and
   ## returned.
-  ## * Search list `paths` argument entries that do not refer to a hexary node
-  ##   are ignored.
-  ## * For any search list `paths` argument entry, this function stops if
-  ##   the search depth exceeds `stopAtLevel` levels of linked sub-nodes.
-  ## * Argument `paths` list entries and partial paths on the way that do not
-  ##   refer to a valid extension or branch type node are silently ignored.
   ##
-  ## Trie inspection can be automatically suspended after having visited
-  ## `suspendAfter` nodes to be resumed at the last state. An application of
-  ## this feature would look like
-  ## ::
-  ##   var ctx = TrieNodeStatCtxRef()
-  ##   while not ctx.isNil:
-  ##     let state = hexaryInspectTrie(db, root, paths, resumeCtx=ctx, 1024)
-  ##     ...
-  ##     ctx = state.resumeCtx
+  ## * Argument `partialPaths` list entries that do not refer to an existing
+  ##   and allocated hexary trie node are silently ignored. So are enytries
+  ##   that not refer to either a valid extension or a branch type node.
+  ##
+  ## * This function traverses the hexary trie in *width-first* mode
+  ##   simultaneously for any entry of the argument `partialPaths` list. Abart
+  ##   from completing the search there are three conditions when the search
+  ##   pauses to return the current state (via `resumeCtx`, see next bullet
+  ##   point):
+  ##   + The depth level of the running algorithm exceeds `stopAtLevel`.
+  ##   + The number of visited nodes exceeds `suspendAfter`.
+  ##   + Te number of cunnently collected dangling nodes exceeds `maxDangling`.
+  ##   If the function pauses because the current depth exceeds `stopAtLevel`
+  ##   then the `stopped` flag of the result object will be set, as well.
+  ##
+  ## * When paused for some of the reasons listed above, the `resumeCtx` field
+  ##   of the result object contains the current state so that the function
+  ##   can resume searching from where is paused. An application using this
+  ##   feature could look like:
+  ##   ::
+  ##     var ctx = TrieNodeStatCtxRef()
+  ##     while not ctx.isNil:
+  ##       let state = hexaryInspectTrie(db, root, paths, resumeCtx=ctx, 1024)
+  ##       ...
+  ##       ctx = state.resumeCtx
   ##
   let rootKey = root.to(RepairKey)
   if not db.tab.hasKey(rootKey):
@@ -150,7 +190,6 @@ proc hexaryInspectTrie*(
   var
     reVisit: seq[(RepairKey,NibblesSeq)]
     again: seq[(RepairKey,NibblesSeq)]
-    numActions = 0u64
     resumeOk = false
 
   # Initialise lists from previous session
@@ -160,30 +199,32 @@ proc hexaryInspectTrie*(
     resumeOk = true
     reVisit = resumeCtx.memCtx
 
-  if paths.len == 0 and not resumeOk:
+  if partialPaths.len == 0 and not resumeOk:
     reVisit.add (rootKey,EmptyNibbleRange)
   else:
     # Add argument paths
-    for w in paths:
+    for w in partialPaths:
       let (isLeaf,nibbles) = hexPrefixDecode w
       if not isLeaf:
         let rc = nibbles.hexaryPathNodeKey(rootKey, db, missingOk=false)
         if rc.isOk:
           reVisit.add (rc.value.to(RepairKey), nibbles)
 
-  while 0 < reVisit.len and numActions <= suspendAfter:
+  # Stopping on `suspendAfter` has precedence over `stopAtLevel`
+  while 0 < reVisit.len and result.count <= suspendAfter:
     if stopAtLevel < result.level:
       result.stopped = true
       break
 
     for n in 0 ..< reVisit.len:
-      let (rKey,parentTrail) = reVisit[n]
-      if suspendAfter < numActions:
+      if suspendAfter < result.count or
+         maxDangling <= result.dangling.len:
         # Swallow rest
-        again = again & reVisit[n ..< reVisit.len]
+        again &= reVisit[n ..< reVisit.len]
         break
 
       let
+        (rKey, parentTrail) = reVisit[n]
         node = db.tab[rKey]
         parent = rKey.convertTo(NodeKey)
 
@@ -203,7 +244,7 @@ proc hexaryInspectTrie*(
         # Ooops, forget node and key
         discard
 
-      numActions.inc
+      result.count.inc
       # End `for`
 
     result.level.inc
@@ -218,12 +259,13 @@ proc hexaryInspectTrie*(
 
 
 proc hexaryInspectTrie*(
-    getFn: HexaryGetFn;                  ## Database abstraction
-    rootKey: NodeKey;                    ## State root
-    paths: seq[Blob] = @[];              ## Starting paths for search
-    resumeCtx: TrieNodeStatCtxRef = nil; ## Context for resuming inspection
-    suspendAfter = high(uint64);         ## To be resumed
-    stopAtLevel = 64;                    ## Instead of loop detector
+    getFn: HexaryGetFn;                  # Database abstraction
+    rootKey: NodeKey;                    # State root
+    partialPaths: seq[Blob] = @[];       # Starting paths for search
+    resumeCtx: TrieNodeStatCtxRef = nil; # Context for resuming inspection
+    suspendAfter = high(uint64);         # To be resumed
+    stopAtLevel = 64u8;                  # Width-first depth level
+    maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryInspectTrie()` for persistent database.
@@ -240,7 +282,6 @@ proc hexaryInspectTrie*(
   var
     reVisit: seq[(NodeKey,NibblesSeq)]
     again: seq[(NodeKey,NibblesSeq)]
-    numActions = 0u64
     resumeOk = false
 
   # Initialise lists from previous session
@@ -250,18 +291,19 @@ proc hexaryInspectTrie*(
     resumeOk = true
     reVisit = resumeCtx.hddCtx
 
-  if paths.len == 0 and not resumeOk:
+  if partialPaths.len == 0 and not resumeOk:
     reVisit.add (rootKey,EmptyNibbleRange)
   else:
     # Add argument paths
-    for w in paths:
+    for w in partialPaths:
       let (isLeaf,nibbles) = hexPrefixDecode w
       if not isLeaf:
         let rc = nibbles.hexaryPathNodeKey(rootKey, getFn, missingOk=false)
         if rc.isOk:
           reVisit.add (rc.value, nibbles)
 
-  while 0 < reVisit.len and numActions <= suspendAfter:
+  # Stopping on `suspendAfter` has precedence over `stopAtLevel`
+  while 0 < reVisit.len and result.count <= suspendAfter:
     when extraTraceMessages:
       trace "Hexary inspect processing", nPaths, maxLeafPaths,
         level=result.level, nReVisit=reVisit.len, nDangling=result.dangling.len
@@ -271,13 +313,15 @@ proc hexaryInspectTrie*(
       break
 
     for n in 0 ..< reVisit.len:
-      let (parent,parentTrail) = reVisit[n]
-      if suspendAfter < numActions:
+      if suspendAfter < result.count or
+         maxDangling <= result.dangling.len:
         # Swallow rest
         again = again & reVisit[n ..< reVisit.len]
         break
 
-      let parentBlob = parent.to(Blob).getFn()
+      let
+        (parent, parentTrail) = reVisit[n]
+        parentBlob = parent.to(Blob).getFn()
       if parentBlob.len == 0:
         # Ooops, forget node and key
         continue
@@ -301,7 +345,7 @@ proc hexaryInspectTrie*(
         # Ooops, forget node and key
         discard
 
-      numActions.inc
+      result.count.inc
       # End `for`
 
     result.level.inc
@@ -318,6 +362,17 @@ proc hexaryInspectTrie*(
     trace "Hexary inspect finished", nPaths, maxLeafPaths,
       level=result.level, nResumeCtx=reVisit.len, nDangling=result.dangling.len,
       maxLevel=stopAtLevel, stopped=result.stopped
+
+# ------------------------------------------------------------------------------
+# Public functions, debugging
+# ------------------------------------------------------------------------------
+
+proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
+  result = "(" & $a.level
+  if a.stopped:
+    result &= "stopped,"
+  result &= $a.dangling.len & "," &
+    a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # End

@@ -134,21 +134,6 @@ type
     nodeKey*: RepairKey             ## Leaf hash into hexary repair table
     payload*: Blob                  ## Data payload
 
-  TrieNodeStatCtxRef* = ref object
-    ## Context to resume searching for dangling links
-    case persistent*: bool
-    of true:
-      hddCtx*: seq[(NodeKey,NibblesSeq)]
-    else:
-      memCtx*: seq[(RepairKey,NibblesSeq)]
-
-  TrieNodeStat* = object
-    ## Trie inspection report
-    dangling*: seq[NodeSpecs]       ## Referes to nodes with incomplete refs
-    level*: int                     ## Maximum nesting depth of dangling nodes
-    stopped*: bool                  ## Potential loop detected if `true`
-    resumeCtx*: TrieNodeStatCtxRef  ## Context for resuming inspection
-
   HexaryTreeDbRef* = ref object
     ## Hexary trie plus helper structures
     tab*: Table[RepairKey,RNodeRef] ## key-value trie table, in-memory db
@@ -294,14 +279,6 @@ proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
   except Exception as e:
     result &= " ! Ooops ppImpl(): name=" & $e.name & " msg=" & e.msg
 
-proc ppDangling(a: seq[NodeSpecs]; maxItems = 30): string =
-  proc ppBlob(w: Blob): string =
-    w.mapIt(it.toHex(2)).join.toLowerAscii
-  let
-    q = a.mapIt(it.partialPath.ppBlob)[0 ..< min(maxItems,a.len)]
-    andMore = if maxItems < a.len: ", ..[#" & $a.len & "].." else: ""
-  "{" & q.join(",") & andMore & "}"
-
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
@@ -346,13 +323,6 @@ proc pp*(db: HexaryTreeDbRef; root: NodeKey; indent=4): string =
 proc pp*(db: HexaryTreeDbRef; indent=4): string =
   ## varinat of `pp()` above
   db.ppImpl(NodeKey.default).join(indent.toPfx)
-
-proc pp*(a: TrieNodeStat; db: HexaryTreeDbRef; maxItems = 30): string =
-  result = "(" & $a.level
-  if a.stopped:
-    result &= "stopped,"
-  result &= $a.dangling.len & "," &
-    a.dangling.ppDangling(maxItems) & ")"
 
 # ------------------------------------------------------------------------------
 # Public constructor (or similar)

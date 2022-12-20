@@ -15,7 +15,7 @@ import
   ../../db/select_backend,
   ../sync_desc,
   ./worker/com/com_error,
-  ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
+  ./worker/db/[hexary_inspect, snapdb_desc, snapdb_pivot],
   ./worker/ticker,
   ./range_desc
 

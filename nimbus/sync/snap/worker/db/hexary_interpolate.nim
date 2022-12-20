@@ -42,9 +42,6 @@ proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
   let pfx = "\n" & " ".repeat(indent)
   w.mapIt(it.pp(db)).join(pfx)
 
-proc pp(rc: Result[TrieNodeStat, HexaryError]; db: HexaryTreeDbRef): string =
-  if rc.isErr: $rc.error else: rc.value.pp(db)
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
