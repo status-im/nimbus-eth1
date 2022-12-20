@@ -81,17 +81,6 @@ const
 
   # --------------
 
-  swapInAccountsCoverageTrigger* = 0.30
-    ## Similar to `healAccountsCoverageTrigger` below only for trying to
-    ## swap in from earlier pivots.
-
-  swapInAccountsPivotsMin* = 2
-    ## Require at least this man pivots available before any swap in can
-    ## take place (must be at least 2.) This value is typically combined
-    ## with `swapInAccountsCoverageTrigger`.
-
-  # --------------
-
   healInspectionBatch* = 10_000
     ## Number of nodes to inspect in a single batch. In between batches, a
     ## task/thread switch is allowed.
@@ -101,34 +90,12 @@ const
     ## nodes to allow for a pseudo -task switch.
 
 
-  healAccountsCoverageTrigger* = 1.3
+  healAccountsCoverageTrigger* = 1.01
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
-    ## `coveredAccounts` in `CtxData`.)
-    ##
-    ## A small value of this constant leads to early healing. This produces
-    ## stray leaf account records so fragmenting larger intervals of missing
-    ## account ranges. This in turn leads to smaller but more range requests
-    ## over the network. More requests might be a disadvantage if peers only
-    ## serve a maximum number requests (rather than data.)
-
-  healAccountsPivotTriggerMinFactor* = 0.17
-    ## Additional condition to meet before starting healing. The current
-    ## pivot must have at least this much processed as recorded in the
-    ## `processed` ranges set. This is the minimim value (see below.)
-
-  healAccountsPivotTriggerWeight* = 0.01
-  healAccountsPivotTriggerNMax* = 10
-    ## Enable healing not before the `processed` ranges set fill factor has
-    ## at least the following value.
-    ## ::
-    ##   MinFactor + max(0, NMax - pivotTable.len) * Weight
-    ##
-    ## (the `healAccountsPivotTrigger` prefix of the constant names is ommited.)
-    ##
-    ## This effects in favouring late healing when more pivots have been
-    ## downloaded.
+    ## `coveredAccounts` in the object `CtxData`.) Note that a coverage factor
+    ## greater than 100% is not exact but rather a lower bound estimate.
 
   healAccountsBatchFetchMax* = 10 * 1024
     ## Keep on gloing in healing task up until this many nodes have been
@@ -177,7 +144,6 @@ const
     ## Set 0 to disable.
 
 static:
-  doAssert 1 < swapInAccountsPivotsMin
   doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
   doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
 

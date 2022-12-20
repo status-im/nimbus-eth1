@@ -138,7 +138,7 @@ proc compileMissingNodesList(
     fa = env.fetchAccounts
 
   # Import from earlier run
-  while buddy.swapInAccounts(env) != 0:
+  while buddy.ctx.swapInAccounts(env) != 0:
     discard
 
   var nodes: seq[NodeSpecs]

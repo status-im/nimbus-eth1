@@ -140,15 +140,16 @@ proc uncoveredEnvelopes(
   var decomposed = "n/a"
   let rc = processed.hexaryEnvelopeDecompose(rootKey, getFn)
   if rc.isOk:
-    # Remove non-allocated nodes
+    # Return allocated nodes only
     result = rc.value.filterIt(0 < it.nodeKey.ByteArray32.getFn().len)
 
     when extraTraceMessages:
       decomposed = rc.value.toPC
 
   when extraTraceMessages:
-    trace logTxt "uncovered envelopes", processed, nProcessed=processed.chunks,
-      decomposed, nResult=result.len, result=result.toPC
+    trace logTxt "unprocessed envelopes", processed,
+      nProcessed=processed.chunks, decomposed,
+      nResult=result.len, result=result.toPC
 
 
 proc otherProcessedRanges(
@@ -233,16 +234,16 @@ proc swapIn(
           merged += processed.merge iv         # Import range as processed
           unprocessed.reduce iv                # No need to re-fetch
 
-    when extraTraceMessages:
-      trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
-        merged=((merged.to(float) / (2.0^256)).toPC(3)),
-        allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
-
     if merged == 0:                            # Loop control
       break
 
     lapCount.inc
     allMerged += merged                        # Statistics, logging
+
+    when extraTraceMessages:
+      trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
+        merged=((merged.to(float) / (2.0^256)).toPC(3)),
+        allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
 
     # End while()
 
@@ -325,15 +326,6 @@ proc swapInAccounts*(
       nSlotAccounts
 
   nLaps
-
-
-proc swapInAccounts*(
-    buddy: SnapBuddyRef;               # Worker peer
-    env: SnapPivotRef;                 # Current pivot environment
-    loopMax = 100;                     # Prevent from looping too often
-      ): int =
-  ## Variant of `swapInAccounts()`
-  buddy.ctx.swapInAccounts(env, loopMax)
 
 # ------------------------------------------------------------------------------
 # End

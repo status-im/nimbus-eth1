@@ -27,12 +27,31 @@ const
   extraAsserts = false or true
     ## Enable some asserts
 
-proc pivotAccountsHealingOk*(env: SnapPivotRef;ctx: SnapCtxRef): bool {.gcsafe.}
 proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc accountsHealingOk(
+    env: SnapPivotRef;              # Current pivot environment
+    ctx: SnapCtxRef;                # Some global context
+      ): bool =
+  ## Returns `true` if accounts healing is enabled for this pivot.
+  not env.fetchAccounts.processed.isEmpty and
+    healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage()
+
+
+proc coveredAccounts100PcRollOver(
+    ctx: SnapCtxRef;
+      ) =
+  ## Roll over `coveredAccounts` registry when it reaches 100%.
+  if ctx.data.coveredAccounts.isFull:
+    # All of accounts hashes are covered by completed range fetch processes
+    # for all pivot environments. So reset covering and record full-ness level.
+    ctx.data.covAccTimesFull.inc
+    ctx.data.coveredAccounts.clear()
+
 
 proc init(
     batch: SnapRangeBatchRef;
@@ -46,11 +65,7 @@ proc init(
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
   # range sets.
-  if ctx.data.coveredAccounts.isFull:
-    # All of accounts hashes are covered by completed range fetch processes
-    # for all pivot environments. So reset covering and record full-ness level.
-    ctx.data.covAccTimesFull.inc
-    ctx.data.coveredAccounts.clear()
+  ctx.coveredAccounts100PcRollOver()
 
   # Deprioritise already processed ranges by moving it to the second set.
   for iv in ctx.data.coveredAccounts.increasing:
@@ -96,7 +111,7 @@ proc update*(
   # Calculate minimum block distance.
   let minBlockDistance = block:
     let rc = pivotTable.lastValue
-    if rc.isOk and rc.value.pivotAccountsHealingOk(ctx):
+    if rc.isOk and rc.value.accountsHealingOk(ctx):
       pivotBlockDistanceThrottledPivotChangeMin
     else:
       pivotBlockDistanceMin
@@ -112,7 +127,6 @@ proc update*(
       fetchAccounts: SnapRangeBatchRef())
     env.fetchAccounts.init(header.stateRoot, ctx)
     env.storageAccounts.init()
-    var topEnv = env
 
     # Append per-state root environment to LRU queue
     if reverse:
@@ -124,19 +138,9 @@ proc update*(
         let rc = pivotTable.secondKey
         if rc.isOk:
           pivotTable.del rc.value
-
-      # Update healing threshold for top pivot entry
-      topEnv = pivotTable.lastValue.value
-
     else:
       discard pivotTable.lruAppend(
         header.stateRoot, env, pivotTableLruEntriesMax)
-
-    # Update healing threshold
-    let
-      slots = max(0, healAccountsPivotTriggerNMax - pivotTable.len)
-      delta = slots.float * healAccountsPivotTriggerWeight
-    topEnv.healThresh = healAccountsPivotTriggerMinFactor + delta
 
 
 proc tickerStats*(
@@ -223,25 +227,6 @@ proc pivotMothball*(env: SnapPivotRef) =
   env.archived = true
 
 
-proc pivotAccountsHealingOk*(
-    env: SnapPivotRef;              # Current pivot environment
-    ctx: SnapCtxRef;                # Some global context
-      ): bool =
-  ## Returns `true` if accounts healing is enabled for this pivot.
-  ##
-  # Only start accounts healing if there is some completion level, already.
-  #
-  # We check against the global coverage factor, i.e. a measure for how much
-  # of the total of all accounts have been processed. Even if the hexary trie
-  # database for the current pivot state root is sparsely filled, there is a
-  # good chance that it can inherit some unchanged sub-trie from an earlier
-  # pivot state root download. The healing process then works like sort of
-  # glue.
-  if healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage():
-    if env.healThresh <= env.fetchAccounts.processed.fullFactor:
-      return true
-
-
 proc execSnapSyncAction*(
     env: SnapPivotRef;              # Current pivot environment
     buddy: SnapBuddyRef;            # Worker peer
@@ -261,6 +246,9 @@ proc execSnapSyncAction*(
   if not env.fetchAccounts.processed.isFull:
     await buddy.rangeFetchAccounts(env)
 
+    # Update 100% accounting
+    ctx.coveredAccounts100PcRollOver()
+
     # Run at least one round fetching storage slosts even if the `archived`
     # flag is set in order to keep the batch queue small.
     if not buddy.ctrl.stopped:
@@ -269,7 +257,7 @@ proc execSnapSyncAction*(
     if buddy.ctrl.stopped or env.archived:
       return
 
-    if env.pivotAccountsHealingOk(ctx):
+    if env.accountsHealingOk(ctx):
       await buddy.healAccounts(env)
       if buddy.ctrl.stopped or env.archived:
         return
@@ -282,7 +270,7 @@ proc execSnapSyncAction*(
   # Don't bother with storage slots healing before accounts healing takes
   # place. This saves communication bandwidth. The pivot might change soon,
   # anyway.
-  if env.pivotAccountsHealingOk(ctx):
+  if env.accountsHealingOk(ctx):
     await buddy.healStorageSlots(env)
 
 

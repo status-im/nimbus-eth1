@@ -289,43 +289,35 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
         nSlotLists = env.nSlotLists
         processed = env.fetchAccounts.processed.fullFactor.toPC(2)
         nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-        accHealThresh = env.healThresh.toPC(2)
       trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
-        nStoQu, accHealThresh
+        nStoQu
 
   # This one is the syncing work horse which downloads the database
   await env.execSnapSyncAction(buddy)
 
-  if env.archived:
-    let
-      peer = buddy.peer
-      nAccounts = env.nAccounts
-      nSlotLists = env.nSlotLists
-    when extraTraceMessages:
-      trace "Mothballing", peer, pivot=("#" & $env.stateHeader.blockNumber),
-        nAccounts=env.nAccounts, nSlotLists=env.nSlotLists
-    env.pivotMothball()
-    return # pivot has changed
+  # Various logging entries (after accounts and storage slots download)
+  let
+    nAccounts = env.nAccounts
+    nSlotLists = env.nSlotLists
+    processed = env.fetchAccounts.processed.fullFactor.toPC(2)
+    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
 
-  block:
+  if env.archived:
+    # Archive pivot if it became stale
+    when extraTraceMessages:
+      trace "Mothballing", peer, pivot, nAccounts, nSlotLists
+    env.pivotMothball()
+
+  else:
     # Save state so sync can be partially resumed at next start up
-    let
-      nAccounts = env.nAccounts
-      nSlotLists = env.nSlotLists
-      processed = env.fetchAccounts.processed.fullFactor.toPC(2)
-      nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-      accHealThresh = env.healThresh.toPC(2)
-      rc = env.saveCheckpoint(ctx)
+    let rc = env.saveCheckpoint(ctx)
     if rc.isErr:
       error "Failed to save recovery checkpoint", peer, pivot, nAccounts,
        nSlotLists, processed, nStoQu, error=rc.error
     else:
       when extraTraceMessages:
         trace "Saved recovery checkpoint", peer, pivot, nAccounts, nSlotLists,
-          processed, nStoQu, blobSize=rc.value, accHealThresh
-
-  if buddy.ctrl.stopped:
-    return # peer worker has gone
+          processed, nStoQu, blobSize=rc.value
 
 # ------------------------------------------------------------------------------
 # End

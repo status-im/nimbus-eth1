@@ -67,9 +67,8 @@ type
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
-    # Accounts download
+    # Accounts download coverage
     fetchAccounts*: SnapRangeBatchRef  ## Set of accounts ranges to fetch
-    healThresh*: float                 ## Start healing when fill factor reached
 
     # Storage slots download
     fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts

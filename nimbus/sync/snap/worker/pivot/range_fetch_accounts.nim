@@ -14,7 +14,7 @@
 ## Acccount ranges not on the database yet are organised in the set
 ## `env.fetchAccounts.unprocessed` of intervals (of account hashes.)
 ##
-## When processing, the followin happens.
+## When processing, the following happens.
 ##
 ## * Some interval `iv` is removed from the `env.fetchAccounts.unprocessed`
 ##   set. This interval set might then be safely accessed and manipulated by
@@ -27,7 +27,8 @@
 ##   into the persistent database.
 ##
 ## * Data points in `iv` that were invalid or not recevied from the network
-##   are merged back it the set `env.fetchAccounts.unprocessed`.
+##   are merged back it the set `env.fetchAccounts.unprocessed`. The remainder
+##   of successfully added ranges are added to `env.fetchAccounts.processed`.
 ##
 import
   chronicles,
@@ -57,6 +58,25 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
+
+proc `$`(rs: NodeTagRangeSet): string =
+  rs.fullFactor.toPC(0)
+
+proc `$`(iv: NodeTagRange): string =
+  iv.fullFactor.toPC(3)
+
+proc fetchCtx(
+    buddy: SnapBuddyRef;
+    env: SnapPivotRef;
+      ): string =
+  let
+    ctx = buddy.ctx
+    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+  "{" &
+    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
+    "runState=" & $buddy.ctrl.state & "," &
+    "nStoQu=" & $nStoQu & "," &
+    "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -88,26 +108,28 @@ proc accountsRangefetchImpl(
     db = ctx.data.snapDb
     fa = env.fetchAccounts
     stateRoot = env.stateHeader.stateRoot
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
 
   # Get a range of accounts to fetch from
   let iv = block:
     let rc = buddy.getUnprocessed(env)
     if rc.isErr:
       when extraTraceMessages:
-        trace logTxt "currently all processed", peer, pivot
+        trace logTxt "currently all processed", peer, ctx=buddy.fetchCtx(env)
       return
     rc.value
 
   # Process received accounts and stash storage slots to fetch later
   let dd = block:
-    let rc = await buddy.getAccountRange(stateRoot, iv, pivot)
+    let
+      pivot = "#" & $env.stateHeader.blockNumber
+      rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
       fa.unprocessed.merge iv # fail => interval back to pool
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         when extraTraceMessages:
-          trace logTxt "fetch error => stop", peer, pivot, reqLen=iv.len, error
+          trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
+            reqLen=iv.len, error
       return
     rc.value
 
@@ -117,10 +139,6 @@ proc accountsRangefetchImpl(
   let
     gotAccounts = dd.data.accounts.len # comprises `gotStorage`
     gotStorage = dd.withStorage.len
-
-  #when extraTraceMessages:
-  #  trace logTxt "fetched", peer, gotAccounts, gotStorage,
-  #    pivot, reqLen=iv.len, gotLen=dd.consumed.len
 
   # Now, we fully own the scheduler. The original interval will savely be placed
   # back for a moment (the `unprocessed` range set to be corrected below.)
@@ -143,8 +161,8 @@ proc accountsRangefetchImpl(
       # Bad data, just try another peer
       buddy.ctrl.zombie = true
       when extraTraceMessages:
-        trace logTxt "import failed => stop", peer, gotAccounts, gotStorage,
-          pivot, reqLen=iv.len, gotLen=covered.total, error=rc.error
+        trace logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
+          gotAccounts, gotStorage, reqLen=iv.len, covered, error=rc.error
       return
     rc.value
 
@@ -167,23 +185,19 @@ proc accountsRangefetchImpl(
   # Register accounts with storage slots on the storage TODO list.
   env.fetchStorageFull.merge dd.withStorage
 
+  # Swap in from other pivots unless mothballed, already
   var nSwapInLaps = 0
-  if not env.archived and
-     swapInAccountsCoverageTrigger <= ctx.pivotAccountsCoverage():
-    # Swap in from other pivots
+  if not env.archived:
     when extraTraceMessages:
-      trace logTxt "before swap in", peer, pivot, gotAccounts, gotStorage,
-        coveredHere=covered.fullFactor.toPC(2),
-        processed=fa.processed.fullFactor.toPC(2),
+      trace logTxt "before swap in", peer, ctx=buddy.fetchCtx(env), covered,
+        gotAccounts, gotStorage, processed=fa.processed,
         nProcessedChunks=fa.processed.chunks.uint.toSI
 
-    if swapInAccountsPivotsMin <= ctx.data.pivotTable.len:
-      nSwapInLaps = buddy.swapInAccounts(env)
+    nSwapInLaps = ctx.swapInAccounts env
 
   when extraTraceMessages:
-    trace logTxt "request done", peer, pivot, gotAccounts, gotStorage,
-      nSwapInLaps, coveredHere=covered.fullFactor.toPC(2),
-      processed=fa.processed.fullFactor.toPC(2),
+    trace logTxt "request done", peer, ctx=buddy.fetchCtx(env), gotAccounts,
+      gotStorage, nSwapInLaps, covered, processed=fa.processed,
       nProcessedChunks=fa.processed.chunks.uint.toSI
 
   return true
@@ -204,10 +218,9 @@ proc rangeFetchAccounts*(
     let
       ctx = buddy.ctx
       peer = buddy.peer
-      pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     when extraTraceMessages:
-      trace logTxt "start", peer, pivot
+      trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
 
     var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
@@ -223,8 +236,7 @@ proc rangeFetchAccounts*(
         break
 
     when extraTraceMessages:
-      trace logTxt "done", peer, pivot, nFetchAccounts,
-        runState=buddy.ctrl.state
+      trace logTxt "done", peer, ctx=buddy.fetchCtx(env), nFetchAccounts
 
 # ------------------------------------------------------------------------------
 # End
