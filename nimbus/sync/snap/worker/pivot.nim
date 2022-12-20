@@ -180,9 +180,11 @@ proc tickerStats*(
     var
       pivotBlock = none(BlockNumber)
       stoQuLen = none(int)
+      procChunks = 0
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
       stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
+      procChunks = env.fetchAccounts.processed.chunks
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -190,7 +192,7 @@ proc tickerStats*(
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
-      nAccountStats: env.fetchAccounts.processed.chunks,
+      nAccountStats: procChunks,
       nStorageQueue: stoQuLen)
 
 # ------------------------------------------------------------------------------
