@@ -137,14 +137,18 @@ proc uncoveredEnvelopes(
   ## Compile the complement of the union of the `processed` intervals and
   ## express this complement as a list of envelopes of sub-tries.
   ##
+  var decomposed = "n/a"
   let rc = processed.hexaryEnvelopeDecompose(rootKey, getFn)
   if rc.isOk:
     # Remove non-allocated nodes
     result = rc.value.filterIt(0 < it.nodeKey.ByteArray32.getFn().len)
 
+    when extraTraceMessages:
+      decomposed = rc.value.toPC
+
   when extraTraceMessages:
-    trace logTxt "decomposed result", processed, nProcessed=processed.chunks,
-      nResult=result.len, result=result.toPC
+    trace logTxt "uncovered envelopes", processed, nProcessed=processed.chunks,
+      decomposed, nResult=result.len, result=result.toPC
 
 
 proc otherProcessedRanges(
@@ -229,16 +233,16 @@ proc swapIn(
           merged += processed.merge iv         # Import range as processed
           unprocessed.reduce iv                # No need to re-fetch
 
+    when extraTraceMessages:
+      trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
+        merged=((merged.to(float) / (2.0^256)).toPC(3)),
+        allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
+
     if merged == 0:                            # Loop control
       break
 
     lapCount.inc
     allMerged += merged                        # Statistics, logging
-
-    when extraTraceMessages:
-      trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
-        merged=((merged.to(float) / (2.0^256)).toPC(3)),
-        allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
 
     # End while()
 
@@ -259,6 +263,7 @@ proc swapInAccounts*(
     return # nothing to do
 
   let
+    pivot = "#" & $env.stateHeader.blockNumber   # Logging & debugging
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
 
@@ -277,12 +282,11 @@ proc swapInAccounts*(
     return # nothing to do
 
   when extraTraceMessages:
-    let pivot = "#" & $env.stateHeader.blockNumber # for logging
     trace logTxt "accounts start", pivot, nOthers=others.len
 
   var
-   nLaps = 0                           # Logging & debugging
-   nSlotAccounts = 0                   # Logging & debugging
+   nLaps = 0                                     # Logging & debugging
+   nSlotAccounts = 0                             # Logging & debugging
    swappedIn: seq[NodeTagRangeSet]
 
   noKeyErrorOrExceptionOops("swapInAccounts"):
