@@ -159,9 +159,14 @@ proc compileMissingNodesList(
   # Plan B, carefully employ `hexaryInspect()`
   if 0 < nodes.len:
     try:
-      let stats = getFn.hexaryInspectTrie(
-        rootKey, nodes.mapIt(it.partialPath), suspendAfter=healInspectionBatch)
-      if 0 < stats.dangling.len:
+      let
+        paths = nodes.mapIt it.partialPath
+        stats = getFn.hexaryInspectTrie(rootKey, paths,
+          stopAtLevel = healAccountsInspectionPlanBLevel,
+          maxDangling = fetchRequestTrieNodesMax)
+      result = stats.dangling
+
+      when extraTraceMessages:
         trace logTxt "missing nodes (plan B)", ctx=buddy.healingCtx(env),
           nResult=stats.dangling.len, result=stats.dangling.toPC
         return stats.dangling
@@ -184,7 +189,7 @@ proc fetchMissingNodes(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes= missingNodes.len
-    nFetchNodes = max(0, nMissingNodes - snapRequestTrieNodesFetchMax)
+    nFetchNodes = max(0, nMissingNodes - fetchRequestTrieNodesMax)
 
     # There is no point in fetching too many nodes as it will be rejected. So
     # rest of the `missingNodes` list is ignored to be picked up later.
@@ -370,8 +375,8 @@ proc healAccounts*(
   var
     nNodesFetched = 0
     nFetchLoop = 0
-  # Stop after `healAccountsBatchFetchMax` nodes have been fetched
-  while nNodesFetched < healAccountsBatchFetchMax:
+  # Stop after `healAccountsBatchMax` nodes have been fetched
+  while nNodesFetched < healAccountsBatchMax:
     var nNodes = await buddy.accountsHealingImpl(env)
     if nNodes <= 0:
       break

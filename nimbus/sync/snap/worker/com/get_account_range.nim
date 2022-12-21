@@ -45,7 +45,7 @@ proc getAccountRangeReq(
     peer = buddy.peer
   try:
     let reply = await peer.getAccountRange(
-      root, iv.minPt.to(Hash256), iv.maxPt.to(Hash256), snapRequestBytesLimit)
+      root, iv.minPt.to(Hash256), iv.maxPt.to(Hash256), fetchRequestBytesLimit)
     return ok(reply)
   except CatchableError as e:
     trace trSnapRecvError & "waiting for GetAccountRange reply", peer, pivot,
@@ -66,8 +66,7 @@ proc getAccountRange*(
   let
     peer = buddy.peer
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetAccountRange", peer, pivot,
-      accRange=iv, bytesLimit=snapRequestBytesLimit
+    trace trSnapSendSending & "GetAccountRange", peer, pivot, accRange=iv
 
   var dd = block:
     let rc = await buddy.getAccountRangeReq(stateRoot, iv, pivot)

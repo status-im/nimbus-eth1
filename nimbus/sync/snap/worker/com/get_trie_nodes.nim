@@ -43,7 +43,8 @@ proc getTrieNodesReq(
   let
     peer = buddy.peer
   try:
-    let reply = await peer.getTrieNodes(stateRoot, paths, snapRequestBytesLimit)
+    let reply = await peer.getTrieNodes(
+      stateRoot, paths, fetchRequestBytesLimit)
     return ok(reply)
 
   except CatchableError as e:
@@ -74,8 +75,7 @@ proc getTrieNodes*(
   let nTotal = paths.mapIt(it.len).foldl(a+b, 0)
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetTrieNodes", peer, pivot,
-      nPaths, nTotal, bytesLimit=snapRequestBytesLimit
+    trace trSnapSendSending & "GetTrieNodes", peer, pivot, nPaths, nTotal
 
   let trieNodes = block:
     let rc = await buddy.getTrieNodesReq(stateRoot, paths, pivot)

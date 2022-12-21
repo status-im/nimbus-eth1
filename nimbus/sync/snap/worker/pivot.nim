@@ -238,7 +238,7 @@ proc execSnapSyncAction*(
   block:
     # Clean up storage slots queue first it it becomes too large
     let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-    if snapStorageSlotsQuPrioThresh < nStoQu:
+    if storageSlotsQuPrioThresh < nStoQu:
       await buddy.rangeFetchStorageSlots(env)
       if buddy.ctrl.stopped or env.archived:
         return
@@ -285,10 +285,10 @@ proc saveCheckpoint*(
     fa = env.fetchAccounts
     nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
 
-  if snapAccountsSaveProcessedChunksMax < fa.processed.chunks:
+  if accountsSaveProcessedChunksMax < fa.processed.chunks:
     return err(TooManyProcessedChunks)
 
-  if snapAccountsSaveStorageSlotsMax < nStoQu:
+  if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
   ctx.data.snapDb.savePivot SnapDbPivotRegistry(

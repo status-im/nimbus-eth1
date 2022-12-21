@@ -144,7 +144,7 @@ proc updateMissingNodesList(
   let rc = await db.getStorageSlotsFn(accKey).subTriesFromPartialPaths(
     storageRoot,                       # State root related to storage slots
     slots,                             # Storage slots download specs
-    snapRequestTrieNodesFetchMax)      # Maxinmal datagram request size
+    fetchRequestTrieNodesMax)          # Maxinmal datagram request size
   if rc.isErr:
     let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
     if rc.error == TrieIsLockedForPerusal:
@@ -177,7 +177,7 @@ proc getMissingNodesFromNetwork(
     slots = kvp.data.slots
 
     nSickSubTries = slots.nodes.missing.len
-    inxLeft = max(0, nSickSubTries - snapRequestTrieNodesFetchMax)
+    inxLeft = max(0, nSickSubTries - fetchRequestTrieNodesMax)
 
   # There is no point in processing too many nodes at the same time. So leave
   # the rest on the `nodes.missing` queue to be handled later.

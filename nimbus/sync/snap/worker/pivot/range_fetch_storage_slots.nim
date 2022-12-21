@@ -112,7 +112,7 @@ proc getNextSlotItemsFull(
     env.fetchStorageFull.del(kvp.key) # ok to delete this item from batch queue
 
     # Maximal number of items to fetch
-    if snapStorageSlotsFetchMax <= result.len:
+    if fetchRequestStorageSlotsMax <= result.len:
       break
 
   when extraTraceMessages:
@@ -333,7 +333,7 @@ proc rangeFetchStorageSlots*(
     #
     # Run this batch even if `archived` flag is set in order to shrink the
     # batch queue.
-    var fullRangeItemsleft = 1 + (fullRangeLen-1) div snapStorageSlotsFetchMax
+    var fullRangeItemsleft = 1+(fullRangeLen-1) div fetchRequestStorageSlotsMax
     while 0 < fullRangeItemsleft and
           buddy.ctrl.running:
       # Pull out the next request list from the queue

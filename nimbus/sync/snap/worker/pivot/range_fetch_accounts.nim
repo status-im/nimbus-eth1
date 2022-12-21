@@ -232,7 +232,7 @@ proc rangeFetchAccounts*(
 
       # Clean up storage slots queue first it it becomes too large
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-      if snapStorageSlotsQuPrioThresh < nStoQu:
+      if storageSlotsQuPrioThresh < nStoQu:
         break
 
     when extraTraceMessages:
