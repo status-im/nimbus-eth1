@@ -59,34 +59,9 @@ func cleanMemRef*(x: UInt256): int {.inline.} =
     return high(int32) shr 2
   return x.truncate(int)
 
-proc rangeToPadded*[T: StUint](x: openArray[byte], first, last: int, toLen = 0): T =
+proc rangeToPadded*[T: StUint](x: openArray[byte], first, last, size: int): T =
   ## Convert take a slice of a sequence of bytes interpret it as the big endian
-  ## representation of an UInt256. Use padding for sequence shorter than 32 bytes
-  ## including 0-length sequences.
-  const N = T.bits div 8
-
-  let lo = max(0, first)
-  let hi = min(min(x.high, last), (lo+N)-1)
-
-  if not(lo <= hi):
-    return # 0
-
-  if toLen > hi-lo+1:
-    var temp: array[N, byte]
-    temp[0..hi-lo] = x.toOpenArray(lo, hi)
-    result = T.fromBytesBE(
-      temp,
-      allowPadding = false
-    )
-  else:
-    result = T.fromBytesBE(
-      x.toOpenArray(lo, hi),
-      allowPadding = true
-    )
-
-proc rangeToPadded2*[T: StUint](x: openArray[byte], first, last: int, toLen = 0): T =
-  ## Convert take a slice of a sequence of bytes interpret it as the big endian
-  ## representation of an UInt256. Use padding for sequence shorter than 32 bytes
+  ## representation of an UInt-N-bytes. Use padding for sequence shorter than N bytes
   ## including 0-length sequences.
   const N = T.bits div 8
 
@@ -99,7 +74,7 @@ proc rangeToPadded2*[T: StUint](x: openArray[byte], first, last: int, toLen = 0)
   var temp: array[N, byte]
   temp[0..hi-lo] = x.toOpenArray(lo, hi)
   result = T.fromBytesBE(
-    temp.toOpenArray(0, toLen-1),
+    temp.toOpenArray(0, size-1),
     allowPadding = true
   )
 
@@ -117,4 +92,4 @@ func toInt*(x: EthAddress): int =
   type T = uint32
   const len = sizeof(T)
   fromBytesBE(T, makeOpenArray(x[x.len-len].unsafeAddr, len)).int
-  
+

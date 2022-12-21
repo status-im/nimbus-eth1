@@ -37,7 +37,6 @@ export
   vmn.log2,
   vmn.log256,
   vmn.rangeToPadded,
-  vmn.rangeToPadded2,
   vmn.safeInt,
   vmn.setSign,
   vmn.toInt,

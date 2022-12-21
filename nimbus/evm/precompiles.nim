@@ -224,7 +224,7 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork):
       baseL = baseLen.safeInt
       expL = expLen.safeInt
       first32 = if baseL.uint64 + expL.uint64 < high(int32).uint64 and baseL < data.len:
-                  data.rangeToPadded2[:UInt256](96 + baseL, 95 + baseL + expL, min(expL, 32))
+                  data.rangeToPadded[:UInt256](96 + baseL, 95 + baseL + expL, min(expL, 32))
                 else:
                   0.u256
 
@@ -267,9 +267,9 @@ proc modExp*(c: Computation, fork: EVMFork = FkByzantium) =
     c.msg.data
 
   let # lengths Base, Exponent, Modulus
-    baseL = data.rangeToPadded[:UInt256](0, 31)
-    expL  = data.rangeToPadded[:UInt256](32, 63)
-    modL  = data.rangeToPadded[:UInt256](64, 95)
+    baseL = data.rangeToPadded[:UInt256](0, 31, 32)
+    expL  = data.rangeToPadded[:UInt256](32, 63, 32)
+    modL  = data.rangeToPadded[:UInt256](64, 95, 32)
     baseLen = baseL.safeInt
     expLen  = expL.safeInt
     modLen  = modL.safeInt
