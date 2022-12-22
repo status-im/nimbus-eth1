@@ -23,7 +23,7 @@ import
   ],
   stew/shims/net as stewNet,
   eth/[common, net/nat, p2p/bootnodes, p2p/enode],
-  "."/[db/select_backend, 
+  "."/[db/select_backend,
     constants, vm_compile_info, version
   ],
   common/chain_config
@@ -732,6 +732,11 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
 
     result.rpcEnabled = result.rpcEnabled or rpcMustEnabled
     result.wsEnabled = result.wsEnabled or wsMustEnabled
+
+  # see issue #1346
+  if result.keyStore.string == defaultKeystoreDir() and
+     result.dataDir.string != defaultDataDir():
+    result.keyStore = OutDir(result.dataDir.string / "keystore")
 
 when isMainModule:
   # for testing purpose

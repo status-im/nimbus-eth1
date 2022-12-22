@@ -257,5 +257,24 @@ proc configurationMain*() =
       let pkhex2 = rc2.get.seckey.toRaw.to0xHex
       check pkhex1 == pkhex2
 
+    test "default key-store and default data-dir":
+      let conf = makeTestConfig()
+      check conf.keyStore.string == conf.dataDir.string / "keystore"
+
+    test "custom key-store and custom data-dir":
+      let conf = makeConfig(@["--key-store:banana", "--data-dir:apple"])
+      check conf.keyStore.string == "banana"
+      check conf.dataDir.string == "apple"
+
+    test "default key-store and custom data-dir":
+      let conf = makeConfig(@["--data-dir:apple"])
+      check conf.dataDir.string == "apple"
+      check conf.keyStore.string == "apple" / "keystore"
+
+    test "custom key-store and default data-dir":
+      let conf = makeConfig(@["--key-store:banana"])
+      check conf.dataDir.string == defaultDataDir()
+      check conf.keyStore.string == "banana"
+
 when isMainModule:
   configurationMain()
