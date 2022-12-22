@@ -490,34 +490,6 @@ proc inspectStorageSlotsTrie*(
       pathList, resumeCtx, suspendAfter, persistent=true, ignoreError)
 
 
-proc getStorageSlotsNodeKey*(
-    ps: SnapDbStorageSlotsRef;    ## Re-usable session descriptor
-    path: Blob;                   ## Partial node path
-    persistent = false;           ## Read data from disk
-      ): Result[NodeKey,HexaryError] =
-  ## For a partial node path argument `path`, return the raw node key.
-  var rc: Result[NodeKey,void]
-  noRlpExceptionOops("getStorageSlotsNodeKey()"):
-    if persistent:
-      rc = path.hexarypathNodeKey(ps.root, ps.getStorageSlotsFn)
-    else:
-      rc = path.hexarypathNodeKey(ps.root, ps.hexaDb)
-  if rc.isOk:
-    return ok(rc.value)
-  err(NodeNotFound)
-
-proc getStorageSlotsNodeKey*(
-    pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
-    peer: Peer;                   ## For log messages, only
-    accKey: NodeKey;              ## Account key
-    root: Hash256;                ## state root
-    path: Blob;                   ## Partial node path
-      ): Result[NodeKey,HexaryError] =
-  ## Variant of `getStorageSlotsNodeKey()` for persistent storage.
-  SnapDbStorageSlotsRef.init(
-    pv, accKey, root, peer).getStorageSlotsNodeKey(path, persistent=true)
-
-
 proc getStorageSlotsData*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     path: NodeKey;             ## Account to visit
@@ -552,31 +524,6 @@ proc getStorageSlotsData*(
   ## Variant of `getStorageSlotsData()` for persistent storage.
   SnapDbStorageSlotsRef.init(
     pv, accKey, root, peer).getStorageSlotsData(path, persistent=true)
-
-
-proc haveStorageSlotsData*(
-    ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
-    persistent = false;        ## Read data from disk
-      ): bool =
-  ## Return `true` if there is at least one intermediate hexary node for this
-  ## accounts storage slots trie.
-  ##
-  ## Caveat: There is no unit test yet
-  noGenericExOrKeyError("haveStorageSlotsData()"):
-    if persistent:
-      return 0 < ps.getStorageSlotsFn()(ps.root.ByteArray32).len
-    else:
-      return ps.hexaDb.tab.hasKey(ps.root.to(RepairKey))
-
-proc haveStorageSlotsData*(
-    pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
-    peer: Peer,                ## For log messages, only
-    accKey: NodeKey;              ## Account key
-    root: Hash256;             ## state root
-      ): bool =
-  ## Variant of `haveStorageSlotsData()` for persistent storage.
-  SnapDbStorageSlotsRef.init(
-    pv, accKey, root, peer).haveStorageSlotsData(persistent=true)
 
 # ------------------------------------------------------------------------------
 # End

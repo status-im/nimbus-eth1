@@ -15,7 +15,7 @@ import
   ../../db/select_backend,
   ../sync_desc,
   ./worker/com/com_error,
-  ./worker/db/[hexary_inspect, snapdb_desc, snapdb_pivot],
+  ./worker/db/[snapdb_desc, snapdb_pivot],
   ./worker/ticker,
   ./range_desc
 
@@ -41,7 +41,6 @@ type
     ## range + healing support.
     accKey*: NodeKey                   ## Owner account
     slots*: SnapRangeBatchRef          ## slots to fetch, nil => all slots
-    inherit*: bool                     ## mark this trie seen already
 
   SnapTodoRanges* = array[2,NodeTagRangeSet]
     ## Pair of sets of ``unprocessed`` node ranges that need to be fetched and
@@ -50,18 +49,10 @@ type
     ## This data structure is used for coordinating peers that run quasi
     ## parallel.
 
-  SnapTodoNodes* = object
-    ## Pair of node lists subject to swap-in and healing
-    check*: seq[NodeSpecs]             ## Existing nodes, sub-trie unknown
-    missing*: seq[NodeSpecs]           ## Top ref for sub-tries to be healed
-
   SnapRangeBatchRef* = ref object
     ## `NodeTag` ranges to fetch, healing support
     unprocessed*: SnapTodoRanges       ## Range of slots to be fetched
     processed*: NodeTagRangeSet        ## Node ranges definitely processed
-    nodes*: SnapTodoNodes              ## Single nodes to double check
-    resumeCtx*: TrieNodeStatCtxRef     ## State for resuming trie inpection
-    lockTriePerusal*: bool             ## Only one process at a time
 
   SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment

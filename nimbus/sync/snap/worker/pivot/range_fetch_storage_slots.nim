@@ -59,7 +59,7 @@ import
   stew/[interval_set, keyed_queue],
   stint,
   ../../../sync_desc,
-  "../.."/[constants, range_desc, worker_desc],
+  "../.."/[range_desc, worker_desc],
   ../com/[com_error, get_storage_ranges],
   ../db/[hexary_error, snapdb_storage_slots],
   ./storage_queue_helper
@@ -79,44 +79,20 @@ const
 template logTxt(info: static[string]): static[string] =
   "Storage slots range " & info
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc getNextSlotItemsFull(
+proc fetchCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): seq[AccountSlotsHeader] =
-  ## Get list of full work item from the batch queue.
+      ): string =
   let
     ctx = buddy.ctx
-    peer = buddy.peer
-    (rcList, nComplete, nPartial) = ctx.storageQueueFetchFull(env)
-
-  when extraTraceMessages:
-    trace logTxt "fetch full", peer, nSlotLists=env.nSlotLists,
-      nStorageQuFull=env.fetchStorageFull.len, nToProcess=rcList.len,
-      nComplete, nPartial
-
-  rcList
-
-proc getNextSlotItemPartial(
-    buddy: SnapBuddyRef;
-    env: SnapPivotRef;
-      ): Result[AccountSlotsHeader,void] =
-  ## Get partial work item from the batch queue.
-  let rc = env.storageQueueFetchPartial()
-
-  when extraTraceMessages:
-    if rc.isOk:
-      let
-        peer = buddy.peer
-        subRange = rc.value.subRange.get
-        account = rc.value.accKey
-      trace logTxt "fetch partial", peer, nSlotLists=env.nSlotLists,
-        nStorageQuPart=env.fetchStoragePart.len, subRange, account
-
-  rc
+    nStoQu = (env.fetchStorageFull.len +
+              env.fetchStoragePart.len +
+              env.parkedStorage.len)
+  "{" &
+    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
+    "runState=" & $buddy.ctrl.state & "," &
+    "nStoQu=" & $nStoQu & "," &
+    "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -142,9 +118,8 @@ proc storeStoragesSingleBatch(
 
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
-        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-        trace logTxt "fetch error => stop", peer, pivot,
-          nSlotLists=env.nSlotLists, nReq=req.len, nStorageQueue, error
+        trace logTxt "fetch error => stop", peer, ctx=buddy.fetchCtx(env),
+          nReq=req.len, error
       return
     rc.value
 
@@ -152,14 +127,8 @@ proc storeStoragesSingleBatch(
   buddy.data.errors.resetComError()
 
   var gotSlotLists = stoRange.data.storages.len
-
-  #when extraTraceMessages:
-  #  let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-  #  trace logTxt "fetched", peer, pivot, nSlotLists=env.nSlotLists,
-  #    nSlotLists=gotSlotLists, nReq=req.len,
-  #    nStorageQueue, nLeftOvers=stoRange.leftOver.len
-
   if 0 < gotSlotLists:
+
     # Verify/process storages data and save it to disk
     let report = ctx.data.snapDb.importStorageSlots(
       peer, stoRange.data, noBaseBoundCheck = true)
@@ -172,10 +141,8 @@ proc storeStoragesSingleBatch(
         env.storageQueueAppend req
         gotSlotLists.dec(report.len - 1) # for logging only
 
-        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-        error logTxt "import failed", peer, pivot,
-          nSlotLists=env.nSlotLists, nSlotLists=gotSlotLists, nReq=req.len,
-          nStorageQueue, error=report[^1].error
+        error logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
+          nSlotLists=gotSlotLists, nReq=req.len, error=report[^1].error
         return
 
       # Push back error entries to be processed later
@@ -214,10 +181,9 @@ proc storeStoragesSingleBatch(
         # Update local statistics counter for `nSlotLists` counter update
         gotSlotLists.dec
 
-        let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-        error logTxt "processing error", peer, pivot, nSlotLists=env.nSlotLists,
+        error logTxt "processing error", peer, ctx=buddy.fetchCtx(env),
           nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
-          nStorageQueue, nDangling=w.dangling.len, error=w.error
+          nDangling=w.dangling.len, error=w.error
 
     # Update statistics
     if gotSlotLists == 1 and
@@ -244,50 +210,55 @@ proc rangeFetchStorageSlots*(
   ## each work item on the queue at least once.For partial partial slot range
   ## items this means in case of success that the outstanding range has become
   ## at least smaller.
-  let
-    peer = buddy.peer
-    fullRangeLen = env.fetchStorageFull.len
-    partRangeLen = env.fetchStoragePart.len
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # request queues for handling full/partial replies and re-fetch issues. For
   # all practical puroses, this request queue should mostly be empty.
-  if 0 < fullRangeLen or 0 < partRangeLen:
+  if 0 < env.fetchStorageFull.len or 0 < env.fetchStoragePart.len:
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
 
     when extraTraceMessages:
-      trace logTxt "start", peer, nSlotLists=env.nSlotLists,
-        nStorageQueue=(fullRangeLen+partRangeLen)
+      trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
 
-    # Processing the full range will implicitely handle inheritable storage
-    # slots first with each batch item (see `getNextSlotItemsFull()`.)
-    #
-    # Run this batch even if `archived` flag is set in order to shrink the
-    # batch queue.
-    var fullRangeItemsleft = 1+(fullRangeLen-1) div fetchRequestStorageSlotsMax
-    while 0 < fullRangeItemsleft and
-          buddy.ctrl.running:
+
+    # Run batch even if `archived` flag is set in order to shrink the queues.
+    while buddy.ctrl.running:
       # Pull out the next request list from the queue
-      let req = buddy.getNextSlotItemsFull(env)
+      let (req, nComplete, nPartial) = ctx.storageQueueFetchFull(env)
       if req.len == 0:
         break
 
-      fullRangeItemsleft.dec
-      await buddy.storeStoragesSingleBatch(req, env)
+      when extraTraceMessages:
+        trace logTxt "fetch full", peer, ctx=buddy.fetchCtx(env),
+          nStorageQuFull=env.fetchStorageFull.len, nReq=req.len,
+          nPartial, nComplete
 
-    var partialRangeItemsLeft = env.fetchStoragePart.len
-    while 0 < partialRangeItemsLeft and
-          buddy.ctrl.running:
-      # Pull out the next request list from the queue
-      let rc = buddy.getNextSlotItemPartial(env)
+      await buddy.storeStoragesSingleBatch(req, env)
+      for w in req:
+        env.parkedStorage.excl w.accKey                # Done with these items
+
+    # Ditto for partial queue
+    while buddy.ctrl.running:
+      # Pull out the next request item from the queue
+      let rc = env.storageQueueFetchPartial()
       if rc.isErr:
         break
-      partialRangeItemsLeft.dec
+
+      when extraTraceMessages:
+        let
+          subRange = rc.value.subRange.get
+          account = rc.value.accKey
+        trace logTxt "fetch partial", peer, ctx=buddy.fetchCtx(env),
+          nStorageQuPart=env.fetchStoragePart.len, subRange, account
+
       await buddy.storeStoragesSingleBatch(@[rc.value], env)
+      env.parkedStorage.excl rc.value.accKey           # Done with this item
+
 
     when extraTraceMessages:
-      let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
-      trace logTxt "done", peer, nSlotLists=env.nSlotLists, nStorageQueue,
-        fullRangeItemsleft, partialRangeItemsLeft, runState=buddy.ctrl.state
+      trace logTxt "done", peer, ctx=buddy.fetchCtx(env)
 
 # ------------------------------------------------------------------------------
 # End

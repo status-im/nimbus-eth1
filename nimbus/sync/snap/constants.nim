@@ -112,6 +112,9 @@ const
     ## Consider per account storage slost healing if a per-account hexary
     ## sub-trie has reached this factor of completeness.
 
+  healStorageSlotsInspectionPlanBLevel* = 4
+    ## Similar to `healAccountsInspectionPlanBLevel`
+
   healStorageSlotsBatchMax* = 32
     ## Maximal number of storage tries to to heal in a single batch run. Only
     ## this many items will be removed from the batch queue. These items will

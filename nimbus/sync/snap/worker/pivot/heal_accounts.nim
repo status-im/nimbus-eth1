@@ -39,8 +39,8 @@
 ##
 ## * Rinse and repeat
 ##
-## Discussion:
-## -----------
+## Discussion
+## ----------
 ##
 ## The worst case scenario in the third step might also be solved by allocating
 ## more accounts and running this healing algorith again.
@@ -129,32 +129,33 @@ proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): seq[NodeSpecs] =
-  ## Find some missing glue nodes in current database to be fetched
-  ## individually.
+  ## Find some missing glue nodes in accounts database to be fetched.
   let
     ctx = buddy.ctx
+    peer = buddy.peer
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
     fa = env.fetchAccounts
 
   # Import from earlier run
   while buddy.ctx.swapInAccounts(env) != 0:
-    discard
+    if buddy.ctrl.stopped:
+      return
 
   var nodes: seq[NodeSpecs]
-  noExceptionOops("getMissingNodesList"):
+  noExceptionOops("compileMissingNodesList"):
     # Get unallocated nodes to be fetched
     let rc = fa.processed.hexaryEnvelopeDecompose(rootKey, getFn)
     if rc.isOk:
       nodes = rc.value
 
       # Remove allocated nodes
-      let missingNodes = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
-      if 0 < missingNodes.len:
+      let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
+      if 0 < missing.len:
         when extraTraceMessages:
-          trace logTxt "missing nodes", ctx=buddy.healingCtx(env),
-             nResult=missingNodes.len, result=missingNodes.toPC
-        return missingNodes
+          trace logTxt "missing nodes", peer, ctx=buddy.healingCtx(env),
+            nResult=missing.len, result=missing.toPC
+        return missing
 
   # Plan B, carefully employ `hexaryInspect()`
   if 0 < nodes.len:
@@ -167,9 +168,9 @@ proc compileMissingNodesList(
       result = stats.dangling
 
       when extraTraceMessages:
-        trace logTxt "missing nodes (plan B)", ctx=buddy.healingCtx(env),
+        trace logTxt "missing nodes (plan B)", peer, ctx=buddy.healingCtx(env),
+          nLevel=stats.level, nVisited=stats.count,
           nResult=stats.dangling.len, result=stats.dangling.toPC
-        return stats.dangling
     except:
       discard
 
@@ -281,9 +282,7 @@ proc registerAccountLeaf(
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:
-      env.storageQueueAppendFull AccountSlotsHeader(
-        acckey:      accKey,
-        storageRoot: acc.storageRoot)
+      env.storageQueueAppendFull(acc.storageRoot, accKey)
 
 # ------------------------------------------------------------------------------
 # Private functions: do the healing for one round
@@ -302,9 +301,12 @@ proc accountsHealingImpl(
     peer = buddy.peer
     fa = env.fetchAccounts
 
-    # Update for changes since last visit
-    missingNodes = buddy.compileMissingNodesList(env)
+  # Import from earlier runs (if any)
+  while ctx.swapInAccounts(env) != 0:
+    discard
 
+  # Update for changes since last visit
+  let missingNodes = buddy.compileMissingNodesList(env)
   if missingNodes.len == 0:
     # Nothing to do
     trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(env)
