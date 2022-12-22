@@ -35,7 +35,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
   ../db/[hexary_desc, hexary_error, snapdb_storage_slots],
-  ./sub_tries_helper
+  "."/[storage_queue_helper, sub_tries_helper]
 
 {.push raises: [Defect].}
 
@@ -58,12 +58,11 @@ proc healingCtx(
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
       ): string =
-  let slots = kvp.data.slots
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
-    "covered=" & slots.unprocessed.emptyFactor.toPC(0) & "," &
-    "nNodesCheck=" & $slots.nodes.check.len & "," &
-    "nNodesMissing=" & $slots.nodes.missing.len & "}"
+    "runState=" & $buddy.ctrl.state & "," &
+    "nStoQu=" & $env.storageQueueTotal() & "," &
+    "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -503,10 +502,10 @@ proc healStorageSlots*(
           nAcceptedAsIs.inc
           continue
 
-      if kvp.data.slots.isNil:
-        env.fetchStorageFull.merge kvp # should be the exception
-      else:
-        env.fetchStoragePart.merge kvp
+      # Re-queue again unless ready
+      env.parkedStorage.excl kvp.data.accKey        # un-register
+      if not kvp.data.slots.processed.isFull:
+        discard env.fetchStoragePart.append(kvp.key, kvp.data)
 
     when extraTraceMessages:
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len

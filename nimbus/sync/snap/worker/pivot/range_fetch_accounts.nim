@@ -41,7 +41,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_account_range],
   ../db/[hexary_envelope, snapdb_accounts],
-  ./swap_in
+  "."/[storage_queue_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -69,13 +69,10 @@ proc fetchCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): string =
-  let
-    ctx = buddy.ctx
-    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "runState=" & $buddy.ctrl.state & "," &
-    "nStoQu=" & $nStoQu & "," &
+    "nStoQu=" & $env.storageQueueTotal() & "," &
     "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
@@ -183,7 +180,7 @@ proc accountsRangefetchImpl(
     discard fa.processed.merge w
 
   # Register accounts with storage slots on the storage TODO list.
-  env.fetchStorageFull.merge dd.withStorage
+  env.storageQueueAppend dd.withStorage
 
   # Swap in from other pivots unless mothballed, already
   var nSwapInLaps = 0

@@ -73,6 +73,7 @@ type
     # Storage slots download
     fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts
     fetchStoragePart*: SnapSlotsQueue  ## Partial storage trie to com[plete
+    parkedStorage*: HashSet[NodeKey]   ## Storage batch items in use
     storageDone*: bool                 ## Done with storage, block sync next
 
     # Info
@@ -146,7 +147,7 @@ proc pivotAccountsCoverage*(ctx: SnapCtxRef): float =
 
 proc init*(q: var SnapTodoRanges) =
   ## Populate node range sets with maximal range in the first range set. This
-  ## kind of pair or interval sets is manages as follows:
+  ## kind of pair or interval sets is managed as follows:
   ## * As long as possible, fetch and merge back intervals on the first set.
   ## * If the first set is empty and some intervals are to be fetched, swap
   ##   first and second interval lists.
@@ -155,6 +156,11 @@ proc init*(q: var SnapTodoRanges) =
   q[0] = NodeTagRangeSet.init()
   q[1] = NodeTagRangeSet.init()
   discard q[0].merge(low(NodeTag),high(NodeTag))
+
+proc clear*(q: var SnapTodoRanges) =
+  ## Reset argument range sets empty.
+  q[0].clear()
+  q[1].clear()
 
 
 proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
@@ -219,81 +225,6 @@ proc verify*(q: var SnapTodoRanges): bool =
     if 0 < q[b].covered(iv):
       return false
   true
-
-# ------------------------------------------------------------------------------
-# Public helpers: SlotsQueue
-# ------------------------------------------------------------------------------
-
-proc merge*(q: var SnapSlotsQueue; kvp: SnapSlotsQueuePair) =
-  ## Append/prepend a queue item record into the batch queue.
-  let
-    reqKey = kvp.key
-    rc = q.eq(reqKey)
-  if rc.isErr:
-    # Append to list
-    discard q.append(reqKey, kvp.data)
-  else:
-    # Entry exists already
-    let qData = rc.value
-    if not qData.slots.isNil:
-      # So this entry is not maximal and can be extended
-      if kvp.data.slots.isNil:
-        # Remove restriction for this entry and move it to the right end
-        qData.slots = nil
-        discard q.lruFetch reqKey
-      else:
-        # Merge argument intervals into target set
-        for ivSet in kvp.data.slots.unprocessed:
-          for iv in ivSet.increasing:
-            qData.slots.unprocessed.reduce iv
-
-proc merge*(q: var SnapSlotsQueue; fetchReq: AccountSlotsHeader) =
-  ## Append/prepend a slot header record into the batch queue. If there is
-  ## a range merger, the argument range will be sortred in a way so that it
-  ## is processed separately with highest priority.
-  let
-    reqKey = fetchReq.storageRoot
-    rc = q.eq(reqKey)
-  if rc.isOk:
-    # Entry exists already
-    let qData = rc.value
-    if not qData.slots.isNil:
-      # So this entry is not maximal and can be extended
-      if fetchReq.subRange.isNone:
-        # Remove restriction for this entry and move it to the right end
-        qData.slots = nil
-        discard q.lruFetch reqKey
-      else:
-        # Merge argument interval into target separated from the already
-        # existing sets (note that this works only for the last set)
-        for iv in qData.slots.unprocessed[0].increasing:
-          # Move all to second set
-          discard qData.slots.unprocessed[1].merge iv
-        # Clear first set and add argument range
-        qData.slots.unprocessed[0].clear()
-        qData.slots.unprocessed.merge fetchReq.subRange.unsafeGet
-
-  elif fetchReq.subRange.isNone:
-    # Append full range to the list
-    discard q.append(reqKey, SnapSlotsQueueItemRef(
-      accKey: fetchReq.accKey))
-
-  else:
-    # Partial range, add healing support and interval
-    var unprocessed = [NodeTagRangeSet.init(), NodeTagRangeSet.init()]
-    discard unprocessed[0].merge(fetchReq.subRange.unsafeGet)
-    discard q.append(reqKey, SnapSlotsQueueItemRef(
-      accKey: fetchReq.accKey,
-      slots:  SnapRangeBatchRef(
-        unprocessed: unprocessed,
-        processed:   NodeTagRangeSet.init())))
-
-proc merge*(
-    q: var SnapSlotsQueue;
-    reqList: openArray[SnapSlotsQueuePair|AccountSlotsHeader]) =
-  ## Variant fof `merge()` for a list argument
-  for w in reqList:
-    q.merge w
 
 # ------------------------------------------------------------------------------
 # End

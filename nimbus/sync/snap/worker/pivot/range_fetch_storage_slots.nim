@@ -61,7 +61,8 @@ import
   ../../../sync_desc,
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_storage_ranges],
-  ../db/[hexary_error, snapdb_storage_slots]
+  ../db/[hexary_error, snapdb_storage_slots],
+  ./storage_queue_helper
 
 {.push raises: [Defect].}
 
@@ -87,81 +88,35 @@ proc getNextSlotItemsFull(
     env: SnapPivotRef;
       ): seq[AccountSlotsHeader] =
   ## Get list of full work item from the batch queue.
-    ##
-  ## If there is an indication that the storage trie may have some data
-  ## already it is ignored here and marked `inherit` so that it will be
-  ## picked up by the healing process.
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  var
-    nInherit = 0
-  for kvp in env.fetchStorageFull.nextPairs:
-    let it = AccountSlotsHeader(
-      accKey:      kvp.data.accKey,
-      storageRoot: kvp.key)
-
-    # Verify whether a storage sub-trie exists, already
-    if kvp.data.inherit or
-       ctx.data.snapDb.haveStorageSlotsData(peer, it.accKey, it.storageRoot):
-      kvp.data.inherit = true
-      nInherit.inc # update for logging
-      continue
-
-    result.add it
-    env.fetchStorageFull.del(kvp.key) # ok to delete this item from batch queue
-
-    # Maximal number of items to fetch
-    if fetchRequestStorageSlotsMax <= result.len:
-      break
+    (rcList, nComplete, nPartial) = ctx.storageQueueFetchFull(env)
 
   when extraTraceMessages:
     trace logTxt "fetch full", peer, nSlotLists=env.nSlotLists,
-       nStorageQuFull=env.fetchStorageFull.len, nToProcess=result.len, nInherit
+      nStorageQuFull=env.fetchStorageFull.len, nToProcess=rcList.len,
+      nComplete, nPartial
 
+  rcList
 
 proc getNextSlotItemPartial(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): seq[AccountSlotsHeader] =
-  ## Get work item from the batch queue.
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
+      ): Result[AccountSlotsHeader,void] =
+  ## Get partial work item from the batch queue.
+  let rc = env.storageQueueFetchPartial()
 
-  for kvp in env.fetchStoragePart.nextPairs:
-    if not kvp.data.slots.isNil:
-      # Extract range and return single item request queue
-      let rc = kvp.data.slots.unprocessed.fetch(maxLen = high(UInt256))
-      if rc.isOk:
+  when extraTraceMessages:
+    if rc.isOk:
+      let
+        peer = buddy.peer
+        subRange = rc.value.subRange.get
+        account = rc.value.accKey
+      trace logTxt "fetch partial", peer, nSlotLists=env.nSlotLists,
+        nStorageQuPart=env.fetchStoragePart.len, subRange, account
 
-        # Delete from batch queue if the range set becomes empty
-        if kvp.data.slots.unprocessed.isEmpty:
-          env.fetchStoragePart.del(kvp.key)
-
-        when extraTraceMessages:
-          trace logTxt "fetch partial", peer,
-            nSlotLists=env.nSlotLists,
-            nStorageQuPart=env.fetchStoragePart.len,
-            subRange=rc.value, account=kvp.data.accKey
-
-        return @[AccountSlotsHeader(
-          accKey:      kvp.data.accKey,
-          storageRoot: kvp.key,
-          subRange:    some rc.value)]
-
-    # Oops, empty range set? Remove range and move item to the full requests
-    kvp.data.slots = nil
-    env.fetchStorageFull.merge kvp
-
-
-proc backToSlotItemsQueue(env: SnapPivotRef; req: seq[AccountSlotsHeader]) =
-  if 0 < req.len:
-    if req[^1].subRange.isSome:
-      env.fetchStoragePart.merge req[^1]
-      env.fetchStorageFull.merge req[0 ..< req.len-1]
-    else:
-      env.fetchStorageFull.merge req
+  rc
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -183,7 +138,7 @@ proc storeStoragesSingleBatch(
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
-      env.backToSlotItemsQueue req
+      env.storageQueueAppend req
 
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
@@ -214,7 +169,7 @@ proc storeStoragesSingleBatch(
 
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
-        env.backToSlotItemsQueue req
+        env.storageQueueAppend req
         gotSlotLists.dec(report.len - 1) # for logging only
 
         let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len
@@ -234,44 +189,19 @@ proc storeStoragesSingleBatch(
         if w.error == RootNodeMismatch:
           # Some pathological case, needs further investigation. For the
           # moment, provide partial fetches.
-          const
-            halfTag = (high(UInt256) div 2).NodeTag
-            halfTag1 = halfTag + 1.u256
-          env.fetchStoragePart.merge [
-            AccountSlotsHeader(
-              accKey:      acc.accKey,
-              storageRoot: acc.storageRoot,
-              subRange:    some NodeTagRange.new(low(NodeTag), halfTag)),
-            AccountSlotsHeader(
-              accKey:      acc.accKey,
-              storageRoot: acc.storageRoot,
-              subRange:    some NodeTagRange.new(halfTag1, high(NodeTag)))]
+          env.storageQueueAppendPartialBisect acc
 
         elif w.error == RightBoundaryProofFailed and
              acc.subRange.isSome and 1 < acc.subRange.unsafeGet.len:
           # Some pathological case, needs further investigation. For the
           # moment, provide a partial fetches.
-          let
-            iv = acc.subRange.unsafeGet
-            halfTag = iv.minPt + (iv.len div 2)
-            halfTag1 = halfTag + 1.u256
-          env.fetchStoragePart.merge [
-            AccountSlotsHeader(
-              accKey:      acc.accKey,
-              storageRoot: acc.storageRoot,
-              subRange:    some NodeTagRange.new(iv.minPt, halfTag)),
-            AccountSlotsHeader(
-              accKey:      acc.accKey,
-              storageRoot: acc.storageRoot,
-              subRange:    some NodeTagRange.new(halfTag1, iv.maxPt))]
+          env.storageQueueAppendPartialBisect acc
 
         else:
           # Reset any partial result (which would be the last entry) to
           # requesting the full interval. So all the storage slots are
           # re-fetched completely for this account.
-          env.fetchStorageFull.merge AccountSlotsHeader(
-            accKey:      acc.accKey,
-            storageRoot: acc.storageRoot)
+          env.storageQueueAppendFull acc
 
           # Last entry might be partial (if any)
           #
@@ -299,7 +229,7 @@ proc storeStoragesSingleBatch(
     env.nSlotLists.inc(gotSlotLists)
 
   # Return unprocessed left overs to batch queue
-  env.backToSlotItemsQueue stoRange.leftOver
+  env.storageQueueAppend(stoRange.leftOver, req[^1].subRange)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -348,11 +278,11 @@ proc rangeFetchStorageSlots*(
     while 0 < partialRangeItemsLeft and
           buddy.ctrl.running:
       # Pull out the next request list from the queue
-      let req = buddy.getNextSlotItemPartial(env)
-      if req.len == 0:
+      let rc = buddy.getNextSlotItemPartial(env)
+      if rc.isErr:
         break
       partialRangeItemsLeft.dec
-      await buddy.storeStoragesSingleBatch(req, env)
+      await buddy.storeStoragesSingleBatch(@[rc.value], env)
 
     when extraTraceMessages:
       let nStorageQueue = env.fetchStorageFull.len + env.fetchStoragePart.len

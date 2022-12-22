@@ -61,7 +61,7 @@ import
   ../com/[com_error, get_trie_nodes],
   ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
          snapdb_accounts],
-  ./swap_in
+  "."/[storage_queue_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -281,7 +281,7 @@ proc registerAccountLeaf(
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:
-      env.fetchStorageFull.merge AccountSlotsHeader(
+      env.storageQueueAppendFull AccountSlotsHeader(
         acckey:      accKey,
         storageRoot: acc.storageRoot)
 

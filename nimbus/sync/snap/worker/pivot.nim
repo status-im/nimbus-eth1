@@ -9,8 +9,7 @@
 # except according to those terms.
 
 import
-  std/[math, sequtils],
-  bearssl/rand,
+  std/[math, sets, sequtils],
   chronos,
   eth/[common, trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
@@ -18,7 +17,8 @@ import
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
-           range_fetch_accounts, range_fetch_storage_slots],
+           range_fetch_accounts, range_fetch_storage_slots,
+           storage_queue_helper],
   ./ticker
 
 {.push raises: [Defect].}
@@ -187,8 +187,8 @@ proc tickerStats*(
       procChunks = 0
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
-      stoQuLen = some(env.fetchStorageFull.len + env.fetchStoragePart.len)
       procChunks = env.fetchAccounts.processed.chunks
+      stoQuLen = some(env.storageQueueTotal())
 
     TickerStats(
       pivotBlock:    pivotBlock,
@@ -283,7 +283,7 @@ proc saveCheckpoint*(
   ##
   let
     fa = env.fetchAccounts
-    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+    nStoQu = env.storageQueueTotal()
 
   if accountsSaveProcessedChunksMax < fa.processed.chunks:
     return err(TooManyProcessedChunks)
@@ -298,7 +298,8 @@ proc saveCheckpoint*(
     processed:    toSeq(env.fetchAccounts.processed.increasing)
                     .mapIt((it.minPt,it.maxPt)),
     slotAccounts: (toSeq(env.fetchStorageFull.nextKeys) &
-                   toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)))
+                   toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)) &
+                   toSeq(env.parkedStorage.items))
 
 
 proc recoverPivotFromCheckpoint*(
@@ -338,9 +339,7 @@ proc recoverPivotFromCheckpoint*(
         discard env.fetchAccounts.processed.reduce pt
         env.fetchAccounts.unprocessed.merge pt
       elif rc.value.storageRoot != emptyRlpHash:
-        env.fetchStorageFull.merge AccountSlotsHeader(
-          accKey:      w,
-          storageRoot: rc.value.storageRoot)
+        env.storageQueueAppendFull(rc.value.storageRoot, w)
 
   # Handle mothballed pivots for swapping in (see `pivotMothball()`)
   if not topLevel:
