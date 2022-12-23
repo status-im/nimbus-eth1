@@ -49,17 +49,6 @@ proc accountsHealingOk(
     healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage()
 
 
-proc coveredAccounts100PcRollOver(
-    ctx: SnapCtxRef;
-      ) =
-  ## Roll over `coveredAccounts` registry when it reaches 100%.
-  if ctx.data.coveredAccounts.isFull:
-    # All of accounts hashes are covered by completed range fetch processes
-    # for all pivot environments. So reset covering and record full-ness level.
-    ctx.data.covAccTimesFull.inc
-    ctx.data.coveredAccounts.clear()
-
-
 proc init(
     batch: SnapRangeBatchRef;
     stateRoot: Hash256;
@@ -70,11 +59,11 @@ proc init(
   batch.unprocessed.init() # full range on the first set of the pair
   batch.processed = NodeTagRangeSet.init()
 
-  # Initialise accounts range fetch batch, the pair of `fetchAccounts[]`
-  # range sets.
-  ctx.coveredAccounts100PcRollOver()
+  # Update coverage level roll over
+  ctx.pivotAccountsCoverage100PcRollOver()
 
-  # Deprioritise already processed ranges by moving it to the second set.
+  # Initialise accounts range fetch batch, the pair of `fetchAccounts[]` range
+  # sets. Deprioritise already processed ranges by moving it to the second set.
   for iv in ctx.data.coveredAccounts.increasing:
     discard batch.unprocessed[0].reduce iv
     discard batch.unprocessed[1].merge iv
@@ -254,7 +243,7 @@ proc execSnapSyncAction*(
     await buddy.rangeFetchAccounts(env)
 
     # Update 100% accounting
-    ctx.coveredAccounts100PcRollOver()
+    ctx.pivotAccountsCoverage100PcRollOver()
 
     # Run at least one round fetching storage slosts even if the `archived`
     # flag is set in order to keep the batch queue small.
@@ -332,6 +321,7 @@ proc recoverPivotFromCheckpoint*(
       env.fetchAccounts.unprocessed.reduce(minPt, maxPt)
     discard env.fetchAccounts.processed.merge(minPt, maxPt)
     discard ctx.data.coveredAccounts.merge(minPt, maxPt)
+    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
 
   # Handle storage slots
   let stateRoot = recov.state.header.stateRoot
