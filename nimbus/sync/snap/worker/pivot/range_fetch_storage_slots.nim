@@ -8,50 +8,59 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Fetch storage slots
-## ===================
+## Fetch storage slots DB ranges
+## =============================
 ##
-## Flow chart for storage slots download
-## -------------------------------------
-## ::
-##   {missing-storage-slots} <-----------------+
-##     |                                       |
-##     v                                       |
-##   <fetch-storage-slots-from-network>        |
-##     |                                       |
-##     v                                       |
-##   {storage-slots}                           |
-##     |                                       |
-##     v                                       |
-##   <merge-to-persistent-database>            |
-##     |              |                        |
-##     v              v                        |
-##   {completed}    {partial}                  |
-##     |              |                        |
-##     |              +------------------------+
-##     v
-##   <done-for-this-account>
+## In principle, this algorithm is a generalised version of the one for
+## installing on the accounts hexary trie database. The difference is that
+## there are many such storage slots hexary trie database which are typically
+## quite small. So the normal action is to download and install a full hexary
+## trie rather than merging a partial one.
 ##
-## Legend:
-## * `<..>`: some action, process, etc.
-## * `{missing-storage-slots}`: list implemented as pair of queues
-##   `env.fetchStorageFull` and `env.fetchStoragePart`
-## * `(storage-slots}`: list is optimised out
-## * `{completed}`: list is optimised out
-## * `{partial}`: list is optimised out
+## Algorithm
+## ---------
+##
+## * Handle full storage slot hexary trie entries
+##
+##   + Remove a list of full storage slot hexary trie entries from the queue of
+##     full requests `env.fetchStorageFull`.
+##
+##     The *full* adjective indicates that a complete trie will be installed
+##     rather an a partial one merged. Stop if there are no more full entries
+##     and proceed with handling partial entries.
+##
+##   + Fetch and install the full trie entries of that list from the network.
+##
+##   + For a list entry that was partially received (there is only one per
+##     reply message), store the remaining parts to install on the queue of
+##     partial storage slot hexary trie entries `env.fetchStoragePart`.
+##
+##   + Rinse and repeat
+##
+## * Handle partial storage slot hexary trie entries
+##
+##   + Remove a single partial storage slot hexary trie entry from the queue
+##     of partial requests `env.fetchStoragePart`.
+##
+##     The detailed handling of this entry resembles the algorithm described
+##     for fetching accounts regarding sets of ranges `processed` and
+##     `unprocessed`. Stop if there are no more entries.
+##
+##   + Fetch and install the partial trie entry from the network.
+##
+##   + Rinse and repeat
 ##
 ## Discussion
 ## ----------
-## Handling storage slots can be seen as an generalisation of handling account
-## ranges (see `range_fetch_accounts` module.) Contrary to the situation with
-## accounts, storage slots are typically downloaded in the size of a full list
-## that can be expanded to a full hexary trie for the given storage root.
 ##
-## Only in rare cases a storage slots list is incomplete, a partial hexary
-## trie. In that case, the list of storage slots is processed as described
-## for accounts (see `range_fetch_accounts` module.)
+## If there is a hexary trie integrity problem when storing a response to a
+## full or partial entry request, re-queue the entry on the queue of partial
+## requests `env.fetchStoragePart` with the next partial range to fetch half
+## of the current request.
 ##
-
+## In general, if  an error occurs, the entry that caused the error is moved
+## or re-stored onto the queue of partial requests `env.fetchStoragePart`.
+##
 import
   chronicles,
   chronos,

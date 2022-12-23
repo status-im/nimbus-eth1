@@ -8,27 +8,38 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Fetch account ranges
-## ====================
+## Fetch accounts DB ranges
+## ========================
 ##
-## Acccount ranges not on the database yet are organised in the set
-## `env.fetchAccounts.unprocessed` of intervals (of account hashes.)
+## Acccount ranges allocated on the database are organised in the set
+## `env.fetchAccounts.processed` and the ranges that can be fetched are in
+## the pair of range sets `env.fetchAccounts.unprocessed`. The ranges of these
+## sets are mutually disjunct yet the union of all ranges does not fully
+## comprise the complete `[0,2^256]` range. The missing parts are the ranges
+## currently processed by worker peers.
 ##
-## When processing, the following happens.
+## Algorithm
+## ---------
 ##
 ## * Some interval `iv` is removed from the `env.fetchAccounts.unprocessed`
-##   set. This interval set might then be safely accessed and manipulated by
-##   other worker instances.
+##   pair of set (so the interval `iv` is protected from other worker
+##   instances and might be safely accessed and manipulated by this function.)
+##   Stop if there are no more intervals.
 ##
-## * The data points in the interval `iv` (aka ccount hashes) are fetched from
-##   another peer over the network.
+## * The accounts data points in the interval `iv` (aka account hashes) are
+##   fetched from the network. This results in *key-value* pairs for accounts.
 ##
-## * The received data points of the interval `iv` are verified and merged
-##   into the persistent database.
+## * The received *key-value* pairs from the previous step are verified and
+##   merged into the accounts hexary trie persistent database.
 ##
-## * Data points in `iv` that were invalid or not recevied from the network
-##   are merged back it the set `env.fetchAccounts.unprocessed`. The remainder
-##   of successfully added ranges are added to `env.fetchAccounts.processed`.
+## * *Key-value* pairs that were invalid or were not recevied from the network
+##   are merged back into the range set `env.fetchAccounts.unprocessed`. The
+##   remainder of successfully added ranges (and verified key gaps) are merged
+##   into `env.fetchAccounts.processed`.
+##
+## * For *Key-value* pairs that have an active account storage slot sub-trie,
+##   the account including administrative data is queued in
+##   `env.fetchStorageFull`.
 ##
 import
   chronicles,

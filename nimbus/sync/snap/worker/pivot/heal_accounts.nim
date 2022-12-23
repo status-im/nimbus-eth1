@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Heal accounts DB:
-## =================
+## Heal accounts DB
+## ================
 ##
 ## This module is a variation of the `swap-in` module in the sense that it
 ## searches for missing nodes in the database (which means that links to
@@ -22,18 +22,20 @@
 ## * Run `swapInAccounts()` so that inheritable sub-tries are imported from
 ##   previous pivots.
 ##
-## * Find nodes with envelopes that have no account in common with any range
-##   interval of the `processed` set of the current pivot. Stop if there are
-##   no such nodes.
+## * Find dangling nodes in the current account trie by trying plan A, and
+##   continuing with plan B only if A fails.
 ##
-## * Extract the missing nodes from the previous step, i.e. the nodes that
-##   are known to exist but are not allocated. If all nodes are allocated,
-##   employ the `hexaryInspect()` function in a limited mode do find dangling
-##   (i.e. missing) sub-nodes of these allocated nodes. Stop if this function
-##   fails to find any such nodes.
+##   A. Try to find nodes with envelopes that have no account in common with
+##   any range interval of the `processed` set of the accounts trie. This
+##   action will
+##   + either determine that there are no such envelopes implying that the
+##     accounts trie is complete (then stop here)
+##   + or result in envelopes related to nodes that are all allocated on the
+##     accounts trie (fail, use *plan B* below)
+##   + or result in some envelopes related to dangling nodes.
 ##
-## * From the nodes of the previous step, extract non-allocated nodes and
-##   fetch them from the network.
+##   B. Employ the `hexaryInspect()` trie perusal function in a limited mode
+##   for finding dangling (i.e. missing) sub-nodes below the allocated nodes.
 ##
 ## * Install that nodes from the network.
 ##
@@ -42,12 +44,12 @@
 ## Discussion
 ## ----------
 ##
-## The worst case scenario in the third step might also be solved by allocating
-## more accounts and running this healing algorith again.
+## A worst case scenario of a failing *plan B* must be solved by fetching and
+## storing more accounts and running this healing algorithm again.
 ##
-## Due to its potentially poor performance there is no way to recursively
-## search the whole database hexary trie for more dangling nodes using the
-## `hexaryInspect()` function.
+## Due to the potentially poor performance using `hexaryInspect()`.there is no
+## general solution for *plan B* by recursively searching the whole accounts
+## hexary trie database for more dangling nodes.
 ##
 import
   std/[math, sequtils, tables],
@@ -148,6 +150,13 @@ proc compileMissingNodesList(
     let rc = fa.processed.hexaryEnvelopeDecompose(rootKey, getFn)
     if rc.isOk:
       nodes = rc.value
+
+      # Check whether the hexary trie is complete
+      if nodes.len == 0:
+        # Fill gaps
+        discard fa.processed.merge(low(NodeTag),high(NodeTag))
+        fa.unprocessed.clear()
+        return
 
       # Remove allocated nodes
       let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
