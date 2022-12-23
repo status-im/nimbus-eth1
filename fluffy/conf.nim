@@ -12,6 +12,8 @@ import
   uri, confutils, confutils/std/net, chronicles,
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
   json_rpc/rpcproxy,
+  nimcrypto/hash,
+  stew/byteutils,
   ./network/wire/portal_protocol_config
 
 proc defaultDataDir*(): string =
@@ -40,6 +42,8 @@ const
   defaultStorageSizeDesc* = $defaultStorageSize
 
 type
+  TrustedDigest* = MDigest[32 * 8]
+
   PortalCmd* = enum
     noCommand
 
@@ -208,11 +212,24 @@ type
       defaultValueDesc: $defaultStorageSizeDesc
       name: "storage-size" .}: uint32
 
+    trustedBlockRoot* {.
+      desc: "Recent trusted finalized block root to initialize the consensus light client from. " &
+            "If not provided by the user, portal light client will be disabled."
+      defaultValue: none(TrustedDigest)
+      name: "trusted-block-root" .}: Option[TrustedDigest]
+
     case cmd* {.
       command
       defaultValue: noCommand .}: PortalCmd
     of noCommand:
       discard
+
+func parseCmdArg*(T: type TrustedDigest, input: string): T
+                 {.raises: [ValueError, Defect].} =
+  TrustedDigest.fromHex(input)
+
+func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
+  return @[]
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T
     {.raises: [Defect, ConfigurationError].} =

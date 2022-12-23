@@ -14,7 +14,11 @@ import
   eth/[common/eth_types, rlp],
   ../../nimbus/rpc/[rpc_types, hexstrings, filters],
   ../../nimbus/transaction,
-  ../../nimbus/common/chain_config,
+  # TODO: this is a bit weird but having this import makes beacon_light_client
+  # to fail compilation due throwing undeclared `CatchableError` in
+  # `vendor/nimbus-eth2/beacon_chain/spec/keystore.nim`. This is most probably
+  # caused by `readValue` clashing ?
+  # ../../nimbus/common/chain_config
   ../network/history/[history_network, history_content]
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
@@ -190,8 +194,9 @@ proc installEthApiHandlers*(
   # Supported API through the Portal Network
 
   rpcServerWithProxy.rpc("eth_chainId") do() -> HexQuantityStr:
-    # The Portal Network can only support MainNet at the moment
-    return encodeQuantity(distinctBase(MainNet.ChainId))
+    # The Portal Network can only support MainNet at the moment, so always return
+    # 1
+    return encodeQuantity(uint64(1))
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
       data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:
