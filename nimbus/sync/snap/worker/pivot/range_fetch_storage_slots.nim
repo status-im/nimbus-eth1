@@ -111,7 +111,8 @@ proc storeStoragesSingleBatch(
     buddy: SnapBuddyRef;
     req: seq[AccountSlotsHeader];
     env: SnapPivotRef;
-      ) {.async.} =
+      ): Future[bool]
+      {.async.} =
   ## Fetch account storage slots and store them in the database.
   let
     ctx = buddy.ctx
@@ -123,13 +124,11 @@ proc storeStoragesSingleBatch(
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
-      env.storageQueueAppend req
-
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
         trace logTxt "fetch error => stop", peer, ctx=buddy.fetchCtx(env),
           nReq=req.len, error
-      return
+      return false # all of `req` failed
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
@@ -147,12 +146,11 @@ proc storeStoragesSingleBatch(
 
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
-        env.storageQueueAppend req
         gotSlotLists.dec(report.len - 1) # for logging only
 
         error logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
           nSlotLists=gotSlotLists, nReq=req.len, error=report[^1].error
-        return
+        return false # all of `req` failed
 
       # Push back error entries to be processed later
       for w in report:
@@ -205,6 +203,7 @@ proc storeStoragesSingleBatch(
 
   # Return unprocessed left overs to batch queue
   env.storageQueueAppend(stoRange.leftOver, req[^1].subRange)
+  return true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -233,6 +232,7 @@ proc rangeFetchStorageSlots*(
 
 
     # Run batch even if `archived` flag is set in order to shrink the queues.
+    var delayed: seq[AccountSlotsHeader]
     while buddy.ctrl.running:
       # Pull out the next request list from the queue
       let (req, nComplete, nPartial) = ctx.storageQueueFetchFull(env)
@@ -244,11 +244,15 @@ proc rangeFetchStorageSlots*(
           nStorageQuFull=env.fetchStorageFull.len, nReq=req.len,
           nPartial, nComplete
 
-      await buddy.storeStoragesSingleBatch(req, env)
-      for w in req:
-        env.parkedStorage.excl w.accKey                # Done with these items
+      if await buddy.storeStoragesSingleBatch(req, env):
+        for w in req:
+          env.parkedStorage.excl w.accKey              # Done with these items
+      else:
+        delayed &= req
+    env.storageQueueAppend delayed
 
     # Ditto for partial queue
+    delayed.setLen(0)
     while buddy.ctrl.running:
       # Pull out the next request item from the queue
       let rc = env.storageQueueFetchPartial()
@@ -262,9 +266,11 @@ proc rangeFetchStorageSlots*(
         trace logTxt "fetch partial", peer, ctx=buddy.fetchCtx(env),
           nStorageQuPart=env.fetchStoragePart.len, subRange, account
 
-      await buddy.storeStoragesSingleBatch(@[rc.value], env)
-      env.parkedStorage.excl rc.value.accKey           # Done with this item
-
+      if await buddy.storeStoragesSingleBatch(@[rc.value], env):
+        env.parkedStorage.excl rc.value.accKey         # Done with this item
+      else:
+        delayed.add rc.value
+    env.storageQueueAppend delayed
 
     when extraTraceMessages:
       trace logTxt "done", peer, ctx=buddy.fetchCtx(env)
