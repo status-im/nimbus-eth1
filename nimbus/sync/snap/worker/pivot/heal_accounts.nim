@@ -12,9 +12,9 @@
 ## ================
 ##
 ## This module is a variation of the `swap-in` module in the sense that it
-## searches for missing nodes in the database (which means that links to
-## that nodes must exist for knowing this fact) and then fetches the nodes
-## from the network.
+## searches for missing nodes in the database (which means that nodes which
+## link to missing ones must exist), and then fetches the nodes from the
+## network.
 ##
 ## Algorithm
 ## ---------
@@ -22,20 +22,7 @@
 ## * Run `swapInAccounts()` so that inheritable sub-tries are imported from
 ##   previous pivots.
 ##
-## * Find dangling nodes in the current account trie by trying plan A, and
-##   continuing with plan B only if A fails.
-##
-##   A. Try to find nodes with envelopes that have no account in common with
-##   any range interval of the `processed` set of the accounts trie. This
-##   action will
-##   + either determine that there are no such envelopes implying that the
-##     accounts trie is complete (then stop here)
-##   + or result in envelopes related to nodes that are all allocated on the
-##     accounts trie (fail, use *plan B* below)
-##   + or result in some envelopes related to dangling nodes.
-##
-##   B. Employ the `hexaryInspect()` trie perusal function in a limited mode
-##   for finding dangling (i.e. missing) sub-nodes below the allocated nodes.
+## * Find dangling nodes in the current account trie via `findMissingNodes()`.
 ##
 ## * Install that nodes from the network.
 ##
@@ -44,26 +31,22 @@
 ## Discussion
 ## ----------
 ##
-## A worst case scenario of a failing *plan B* must be solved by fetching and
-## storing more accounts and running this healing algorithm again.
-##
-## Due to the potentially poor performance using `hexaryInspect()`.there is no
-## general solution for *plan B* by recursively searching the whole accounts
-## hexary trie database for more dangling nodes.
+## A worst case scenario of a portentally failing `findMissingNodes()` call
+## must be solved by fetching and storing more accounts and running this
+## healing algorithm again.
 ##
 import
-  std/[math, sequtils, tables],
+  std/[math, sequtils],
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
-  stew/[byteutils, interval_set, keyed_queue],
+  stew/[byteutils, interval_set],
   ../../../../utils/prettify,
   "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
-  ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
-         snapdb_accounts],
-  "."/[storage_queue_helper, swap_in]
+  ../db/[hexary_desc, hexary_envelope, hexary_error, snapdb_accounts],
+  "."/[find_missing_nodes, storage_queue_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -131,7 +114,7 @@ proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): seq[NodeSpecs] =
-  ## Find some missing glue nodes in accounts database to be fetched.
+  ## Find some missing glue nodes in accounts database.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -140,48 +123,20 @@ proc compileMissingNodesList(
     fa = env.fetchAccounts
 
   # Import from earlier run
-  while buddy.ctx.swapInAccounts(env) != 0:
-    if buddy.ctrl.stopped:
-      return
+  if ctx.swapInAccounts(env) != 0:
+    discard ctx.swapInAccounts(env)
 
-  var nodes: seq[NodeSpecs]
-  noExceptionOops("compileMissingNodesList"):
-    # Get unallocated nodes to be fetched
-    let rc = fa.processed.hexaryEnvelopeDecompose(rootKey, getFn)
-    if rc.isOk:
-      nodes = rc.value
-
-      # Check whether the hexary trie is complete
-      if nodes.len == 0:
-        # Fill gaps
-        discard fa.processed.merge(low(NodeTag),high(NodeTag))
-        fa.unprocessed.clear()
-        return
-
-      # Remove allocated nodes
-      let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
-      if 0 < missing.len:
-        when extraTraceMessages:
-          trace logTxt "missing nodes", peer, ctx=buddy.healingCtx(env),
-            nResult=missing.len, result=missing.toPC
-        return missing
-
-  # Plan B, carefully employ `hexaryInspect()`
-  if 0 < nodes.len:
-    try:
-      let
-        paths = nodes.mapIt it.partialPath
-        stats = getFn.hexaryInspectTrie(rootKey, paths,
-          stopAtLevel = healAccountsInspectionPlanBLevel,
-          maxDangling = fetchRequestTrieNodesMax)
-      result = stats.dangling
+  if not fa.processed.isFull:
+    noExceptionOops("compileMissingNodesList"):
+      let (missing, nLevel, nVisited) = fa.findMissingNodes(
+        rootKey, getFn, healAccountsInspectionPlanBLevel)
 
       when extraTraceMessages:
-        trace logTxt "missing nodes (plan B)", peer, ctx=buddy.healingCtx(env),
-          nLevel=stats.level, nVisited=stats.count,
-          nResult=stats.dangling.len, result=stats.dangling.toPC
-    except:
-      discard
+        trace logTxt "missing nodes", peer,
+          ctx=buddy.healingCtx(env), nLevel, nVisited,
+          nResult=missing.len, result=missing.toPC
+
+      result = missing
 
 
 proc fetchMissingNodes(

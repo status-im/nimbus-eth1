@@ -15,7 +15,7 @@
 ## storage slots hexary trie. These per-account trie work items  are stored in
 ## the queue `env.fetchStoragePart`.
 ##
-## Theere is another such queue `env.fetchStorageFull` which is not used here.
+## There is another such queue `env.fetchStorageFull` which is not used here.
 ##
 ## In order to be able to checkpoint the current list of storage accounts (by
 ## a parallel running process), unfinished storage accounts are temporarily
@@ -24,20 +24,7 @@
 ## Algorithm applied to each entry of `env.fetchStoragePart`
 ## --------------------------------------------------------
 ##
-## * Find dangling nodes in the current slot trie by trying plan A, and
-##   continuing with plan B only if A fails.
-##
-##   A. Try to find nodes with envelopes that have no slot in common with
-##   any range interval of the `processed` set of the current slot trie. This
-##   action will
-##   + either determine that there are no such envelopes implying that the
-##     current slot trie is complete (then stop here)
-##   + or result in envelopes related to nodes that are all allocated on the
-##     current slot trie (fail, use *plan B* below)
-##   + or result in some envelopes related to dangling nodes.
-##
-##   B. Employ the `hexaryInspect()` trie perusal function in a limited mode
-##   for finding dangling (i.e. missing) sub-nodes below the allocated nodes.
+## * Find dangling nodes in the current slot trie  via `findMissingNodes()`.
 ##
 ## * Install that nodes from the network.
 ##
@@ -46,25 +33,22 @@
 ## Discussion
 ## ----------
 ##
-## A worst case scenario of a failing *plan B* must be solved by fetching
-## and storing more slots and running this healing algorithm again.
-##
-## Due to the potentially poor performance using `hexaryInspect()`.there is
-## no general solution for *plan B* by recursively searching the whole slot
-## hexary trie database for more dangling nodes.
+## A worst case scenario of a portentally failing `findMissingNodes()` call
+## must be solved by fetching and storing more storage slots and running this
+## healing algorithm again.
 ##
 import
-  std/[math, sequtils, tables],
+  std/[math, sequtils],
   chronicles,
   chronos,
-  eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, keyed_queue],
   ../../../../utils/prettify,
   "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
-  ../db/[hexary_desc, hexary_envelope, hexary_inspect, snapdb_storage_slots],
-  ./storage_queue_helper
+  ../db/[hexary_desc, hexary_envelope, snapdb_storage_slots],
+  "."/[find_missing_nodes, storage_queue_helper]
 
 {.push raises: [Defect].}
 
@@ -144,7 +128,7 @@ proc compileMissingNodesList(
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
       ): seq[NodeSpecs] =
-  ## Find some missing glue nodes in storage slots database to be fetched.
+  ## Find some missing glue nodes in storage slots database.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -152,45 +136,17 @@ proc compileMissingNodesList(
     rootKey = kvp.key.to(NodeKey)
     getFn = ctx.data.snapDb.getStorageSlotsFn(kvp.data.accKey)
 
-  var nodes: seq[NodeSpecs]
-  noExceptionOops("compileMissingNodesList"):
-    if not slots.processed.isEmpty:
-      # Get unallocated nodes to be fetched
-      let rc = slots.processed.hexaryEnvelopeDecompose(rootKey, getFn)
-      if rc.isOk:
-        nodes = rc.value
-
-        # Check whether the hexary trie is complete
-        if nodes.len == 0:
-          # Fill gaps
-          discard slots.processed.merge(low(NodeTag),high(NodeTag))
-          slots.unprocessed.clear()
-          return
-
-        # Remove allocated nodes
-        let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
-        if 0 < missing.len:
-          when extraTraceMessages:
-            trace logTxt "missing nodes", peer, ctx=buddy.healingCtx(kvp,env),
-              nResult=missing.len, result=missing.toPC
-          return missing
-
-  # Plan B, carefully employ `hexaryInspect()`
-  if 0 < nodes.len:
-    try:
-      let
-        paths = nodes.mapIt it.partialPath
-        stats = getFn.hexaryInspectTrie(rootKey, paths,
-          stopAtLevel = healStorageSlotsInspectionPlanBLevel,
-          maxDangling = fetchRequestTrieNodesMax)
-      result = stats.dangling
+  if not slots.processed.isFull:
+    noExceptionOops("compileMissingNodesList"):
+      let (missing, nLevel, nVisited) = slots.findMissingNodes(
+        rootKey, getFn, healStorageSlotsInspectionPlanBLevel)
 
       when extraTraceMessages:
-        trace logTxt "missing nodes (plan B)", peer,
-          ctx=buddy.healingCtx(kvp,env), nLevel=stats.level,
-          nVisited=stats.count,  nResult=stats.dangling.len
-    except:
-      discard
+        trace logTxt "missing nodes", peer,
+          ctx=buddy.healingCtx(env), nLevel, nVisited,
+          nResult=missing.len, result=missing.toPC
+
+      result = missing
 
 
 proc getNodesFromNetwork(
