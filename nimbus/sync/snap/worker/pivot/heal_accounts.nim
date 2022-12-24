@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Heal accounts DB:
-## =================
+## Heal accounts DB
+## ================
 ##
 ## This module is a variation of the `swap-in` module in the sense that it
 ## searches for missing nodes in the database (which means that links to
@@ -22,32 +22,34 @@
 ## * Run `swapInAccounts()` so that inheritable sub-tries are imported from
 ##   previous pivots.
 ##
-## * Find nodes with envelopes that have no account in common with any range
-##   interval of the `processed` set of the current pivot. Stop if there are
-##   no such nodes.
+## * Find dangling nodes in the current account trie by trying plan A, and
+##   continuing with plan B only if A fails.
 ##
-## * Extract the missing nodes from the previous step, i.e. the nodes that
-##   are known to exist but are not allocated. If all nodes are allocated,
-##   employ the `hexaryInspect()` function in a limited mode do find dangling
-##   (i.e. missing) sub-nodes of these allocated nodes. Stop if this function
-##   fails to find any such nodes.
+##   A. Try to find nodes with envelopes that have no account in common with
+##   any range interval of the `processed` set of the accounts trie. This
+##   action will
+##   + either determine that there are no such envelopes implying that the
+##     accounts trie is complete (then stop here)
+##   + or result in envelopes related to nodes that are all allocated on the
+##     accounts trie (fail, use *plan B* below)
+##   + or result in some envelopes related to dangling nodes.
 ##
-## * From the nodes of the previous step, extract non-allocated nodes and
-##   fetch them from the network.
+##   B. Employ the `hexaryInspect()` trie perusal function in a limited mode
+##   for finding dangling (i.e. missing) sub-nodes below the allocated nodes.
 ##
 ## * Install that nodes from the network.
 ##
 ## * Rinse and repeat
 ##
-## Discussion:
-## -----------
+## Discussion
+## ----------
 ##
-## The worst case scenario in the third step might also be solved by allocating
-## more accounts and running this healing algorith again.
+## A worst case scenario of a failing *plan B* must be solved by fetching and
+## storing more accounts and running this healing algorithm again.
 ##
-## Due to its potentially poor performance there is no way to recursively
-## search the whole database hexary trie for more dangling nodes using the
-## `hexaryInspect()` function.
+## Due to the potentially poor performance using `hexaryInspect()`.there is no
+## general solution for *plan B* by recursively searching the whole accounts
+## hexary trie database for more dangling nodes.
 ##
 import
   std/[math, sequtils, tables],
@@ -61,7 +63,7 @@ import
   ../com/[com_error, get_trie_nodes],
   ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
          snapdb_accounts],
-  ./swap_in
+  "."/[storage_queue_helper, swap_in]
 
 {.push raises: [Defect].}
 
@@ -129,42 +131,55 @@ proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): seq[NodeSpecs] =
-  ## Find some missing glue nodes in current database to be fetched
-  ## individually.
+  ## Find some missing glue nodes in accounts database to be fetched.
   let
     ctx = buddy.ctx
+    peer = buddy.peer
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
     fa = env.fetchAccounts
 
   # Import from earlier run
-  while buddy.swapInAccounts(env) != 0:
-    discard
+  while buddy.ctx.swapInAccounts(env) != 0:
+    if buddy.ctrl.stopped:
+      return
 
   var nodes: seq[NodeSpecs]
-  noExceptionOops("getMissingNodesList"):
+  noExceptionOops("compileMissingNodesList"):
     # Get unallocated nodes to be fetched
     let rc = fa.processed.hexaryEnvelopeDecompose(rootKey, getFn)
     if rc.isOk:
       nodes = rc.value
 
+      # Check whether the hexary trie is complete
+      if nodes.len == 0:
+        # Fill gaps
+        discard fa.processed.merge(low(NodeTag),high(NodeTag))
+        fa.unprocessed.clear()
+        return
+
       # Remove allocated nodes
-      let missingNodes = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
-      if 0 < missingNodes.len:
+      let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
+      if 0 < missing.len:
         when extraTraceMessages:
-          trace logTxt "missing nodes", ctx=buddy.healingCtx(env),
-             nResult=missingNodes.len, result=missingNodes.toPC
-        return missingNodes
+          trace logTxt "missing nodes", peer, ctx=buddy.healingCtx(env),
+            nResult=missing.len, result=missing.toPC
+        return missing
 
   # Plan B, carefully employ `hexaryInspect()`
   if 0 < nodes.len:
     try:
-      let stats = getFn.hexaryInspectTrie(
-        rootKey, nodes.mapIt(it.partialPath), suspendAfter=healInspectionBatch)
-      if 0 < stats.dangling.len:
-        trace logTxt "missing nodes (plan B)", ctx=buddy.healingCtx(env),
+      let
+        paths = nodes.mapIt it.partialPath
+        stats = getFn.hexaryInspectTrie(rootKey, paths,
+          stopAtLevel = healAccountsInspectionPlanBLevel,
+          maxDangling = fetchRequestTrieNodesMax)
+      result = stats.dangling
+
+      when extraTraceMessages:
+        trace logTxt "missing nodes (plan B)", peer, ctx=buddy.healingCtx(env),
+          nLevel=stats.level, nVisited=stats.count,
           nResult=stats.dangling.len, result=stats.dangling.toPC
-        return stats.dangling
     except:
       discard
 
@@ -184,7 +199,7 @@ proc fetchMissingNodes(
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
     nMissingNodes= missingNodes.len
-    nFetchNodes = max(0, nMissingNodes - snapRequestTrieNodesFetchMax)
+    nFetchNodes = max(0, nMissingNodes - fetchRequestTrieNodesMax)
 
     # There is no point in fetching too many nodes as it will be rejected. So
     # rest of the `missingNodes` list is ignored to be picked up later.
@@ -276,9 +291,7 @@ proc registerAccountLeaf(
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:
-      env.fetchStorageFull.merge AccountSlotsHeader(
-        acckey:      accKey,
-        storageRoot: acc.storageRoot)
+      env.storageQueueAppendFull(acc.storageRoot, accKey)
 
 # ------------------------------------------------------------------------------
 # Private functions: do the healing for one round
@@ -297,9 +310,12 @@ proc accountsHealingImpl(
     peer = buddy.peer
     fa = env.fetchAccounts
 
-    # Update for changes since last visit
-    missingNodes = buddy.compileMissingNodesList(env)
+  # Import from earlier runs (if any)
+  while ctx.swapInAccounts(env) != 0:
+    discard
 
+  # Update for changes since last visit
+  let missingNodes = buddy.compileMissingNodesList(env)
   if missingNodes.len == 0:
     # Nothing to do
     trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(env)
@@ -370,8 +386,8 @@ proc healAccounts*(
   var
     nNodesFetched = 0
     nFetchLoop = 0
-  # Stop after `healAccountsBatchFetchMax` nodes have been fetched
-  while nNodesFetched < healAccountsBatchFetchMax:
+  # Stop after `healAccountsBatchMax` nodes have been fetched
+  while nNodesFetched < healAccountsBatchMax:
     var nNodes = await buddy.accountsHealingImpl(env)
     if nNodes <= 0:
       break

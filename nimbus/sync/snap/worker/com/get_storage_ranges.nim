@@ -61,13 +61,13 @@ proc getStorageRangesReq(
         root, accounts,
         # here the interval bounds are an `array[32,byte]`
         iv.get.minPt.to(Hash256).data, iv.get.maxPt.to(Hash256).data,
-        snapRequestBytesLimit)
+        fetchRequestBytesLimit)
     else:
       reply = await peer.getStorageRanges(
         root, accounts,
         # here the interval bounds are of empty `Blob` type
         emptyBlob, emptyBlob,
-        snapRequestBytesLimit)
+        fetchRequestBytesLimit)
     return ok(reply)
 
   except CatchableError as e:
@@ -101,8 +101,7 @@ proc getStorageRanges*(
     return err(ComEmptyAccountsArguments)
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetStorageRanges", peer, pivot,
-      nAccounts, bytesLimit=snapRequestBytesLimit
+    trace trSnapSendSending & "GetStorageRanges", peer, pivot, nAccounts
 
   let
     iv = accounts[0].subRange

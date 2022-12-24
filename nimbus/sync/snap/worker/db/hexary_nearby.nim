@@ -355,10 +355,10 @@ proc hexaryNearbyRight*(
   ## with non-decreasing path value). This is similar to the
   ## `hexary_path.next()` function, only that this algorithm does not
   ## backtrack if there are dangling links in between and rather returns
-  ## a error.
+  ## an error.
   ##
-  ## This code is intended be used for verifying a left-bound proof to verify
-  ## that there is no leaf node.
+  ## This code is intended to be used for verifying a left-bound proof to
+  ## verify that there is no leaf node *right* of a boundary path value.
 
   # Some easy cases
   if path.path.len == 0:
@@ -543,8 +543,8 @@ proc hexaryNearbyLeft*(
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Similar to `hexaryNearbyRight()`.
   ##
-  ## This code is intended be used for verifying a right-bound proof to verify
-  ## that there is no leaf node.
+  ## This code is intended to be used for verifying a right-bound proof to
+  ## verify that there is no leaf node *left* to a boundary path value.
 
   # Some easy cases
   if path.path.len == 0:

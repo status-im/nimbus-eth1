@@ -41,26 +41,30 @@ const
 
   # --------------
 
-  snapRequestBytesLimit* = 2 * 1024 * 1024
-    ## Soft bytes limit to request in `snap` protocol calls.
+  fetchRequestBytesLimit* = 2 * 1024 * 1024
+    ## Soft bytes limit to request in `snap/1` protocol calls.
 
-  snapRequestTrieNodesFetchMax* = 1024
-    ## Informal maximal number of trie nodes to fetch at once in `snap`
+  fetchRequestTrieNodesMax* = 1024
+    ## Informal maximal number of trie nodes to fetch at once in `snap/1`
     ## protocol calls. This is not an official limit but found with several
     ## implementations (e.g. Geth.)
     ##
-    ## Resticting the fetch list length early allows to better paralellise
+    ## Resticting the fetch list length early allows to better parallelise
     ## healing.
 
+  fetchRequestStorageSlotsMax* = 2 * 1024
+    ## Maximal number of storage tries to fetch with a single request message.
 
-  snapAccountsSaveProcessedChunksMax* = 1000
+  # --------------
+
+  accountsSaveProcessedChunksMax* = 1000
     ## Recovery data are stored if the processed ranges list contains no more
     ## than this many range *chunks*.
     ##
     ## If the range set is too much fragmented, no data will be saved and
     ## restart has to perform from scratch or an earlier checkpoint.
 
-  snapAccountsSaveStorageSlotsMax* = 20_000
+  accountsSaveStorageSlotsMax* = 20_000
     ## Recovery data are stored if the oustanding storage slots to process do
     ## not amount to more than this many entries.
     ##
@@ -68,10 +72,12 @@ const
     ## has to perform from scratch or an earlier checkpoint.
 
 
-  snapStorageSlotsFetchMax* = 2 * 1024
-    ## Maximal number of storage tries to fetch with a single message.
+  storageSlotsTrieInheritPerusalMax* = 30_000
+    ## Maximal number of nodes to visit in order to find out whether this
+    ## storage slots trie is complete. This allows to *inherit* the full trie
+    ## for an existing root node if the trie is small enough.
 
-  snapStorageSlotsQuPrioThresh* = 5_000
+  storageSlotsQuPrioThresh* = 5_000
     ## For a new worker, prioritise processing the storage slots queue over
     ## processing accounts if the queue has more than this many items.
     ##
@@ -81,68 +87,33 @@ const
 
   # --------------
 
-  swapInAccountsCoverageTrigger* = 0.30
-    ## Similar to `healAccountsCoverageTrigger` below only for trying to
-    ## swap in from earlier pivots.
-
-  swapInAccountsPivotsMin* = 2
-    ## Require at least this man pivots available before any swap in can
-    ## take place (must be at least 2.) This value is typically combined
-    ## with `swapInAccountsCoverageTrigger`.
-
-  # --------------
-
-  healInspectionBatch* = 10_000
-    ## Number of nodes to inspect in a single batch. In between batches, a
-    ## task/thread switch is allowed.
-
-  healInspectionBatchWaitNanoSecs* = 500
-    ## Wait some time asynchroneously after processing `healInspectionBatch`
-    ## nodes to allow for a pseudo -task switch.
-
-
-  healAccountsCoverageTrigger* = 1.3
+  healAccountsCoverageTrigger* = 1.01
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
-    ## `coveredAccounts` in `CtxData`.)
-    ##
-    ## A small value of this constant leads to early healing. This produces
-    ## stray leaf account records so fragmenting larger intervals of missing
-    ## account ranges. This in turn leads to smaller but more range requests
-    ## over the network. More requests might be a disadvantage if peers only
-    ## serve a maximum number requests (rather than data.)
+    ## `coveredAccounts` in the object `CtxData`.) Note that a coverage factor
+    ## greater than 100% is not exact but rather a lower bound estimate.
 
-  healAccountsPivotTriggerMinFactor* = 0.17
-    ## Additional condition to meet before starting healing. The current
-    ## pivot must have at least this much processed as recorded in the
-    ## `processed` ranges set. This is the minimim value (see below.)
-
-  healAccountsPivotTriggerWeight* = 0.01
-  healAccountsPivotTriggerNMax* = 10
-    ## Enable healing not before the `processed` ranges set fill factor has
-    ## at least the following value.
-    ## ::
-    ##   MinFactor + max(0, NMax - pivotTable.len) * Weight
+  healAccountsInspectionPlanBLevel* = 4
+    ## Search this level deep for missing nodes if `hexaryEnvelopeDecompose()`
+    ## only produces existing nodes.
     ##
-    ## (the `healAccountsPivotTrigger` prefix of the constant names is ommited.)
-    ##
-    ## This effects in favouring late healing when more pivots have been
-    ## downloaded.
+    ## The maximal number of nodes visited at level 3 is *4KiB* and at level 4
+    ## is *64Kib*.
 
-  healAccountsBatchFetchMax* = 10 * 1024
+  healAccountsBatchMax* = 10 * 1024
     ## Keep on gloing in healing task up until this many nodes have been
     ## fetched from the network or some error contition terminates the task.
     ##
-    ## This constant should be larger than `snapStorageSlotsFetchMax`
+    ## This constant should be larger than `fetchRequestStorageSlotsMax`
 
 
   healSlorageSlotsTrigger* = 0.70
     ## Consider per account storage slost healing if a per-account hexary
     ## sub-trie has reached this factor of completeness.
 
-  healStorageSlotsInspectionBatch* = 10_000
-    ## Similar to `healAccountsInspectionBatch` but for storage slots.
+  healStorageSlotsInspectionPlanBLevel* = 4
+    ## Similar to `healAccountsInspectionPlanBLevel`
 
   healStorageSlotsBatchMax* = 32
     ## Maximal number of storage tries to to heal in a single batch run. Only
@@ -177,9 +148,19 @@ const
     ## Set 0 to disable.
 
 static:
-  doAssert 1 < swapInAccountsPivotsMin
-  doAssert snapStorageSlotsQuPrioThresh < snapAccountsSaveStorageSlotsMax
-  doAssert snapStorageSlotsFetchMax < healAccountsBatchFetchMax
+  doAssert storageSlotsQuPrioThresh < accountsSaveStorageSlotsMax
+  doAssert fetchRequestTrieNodesMax < healAccountsBatchMax
+
+
+# Deprecated, to be expired
+const
+  healInspectionBatch* = 10_000
+    ## Number of nodes to inspect in a single batch. In between batches, a
+    ## task/thread switch is allowed.
+
+  healInspectionBatchWaitNanoSecs* = 500
+    ## Wait some time asynchroneously after processing `healInspectionBatch`
+    ## nodes to allow for a pseudo -task switch.
 
 # ------------------------------------------------------------------------------
 # End
