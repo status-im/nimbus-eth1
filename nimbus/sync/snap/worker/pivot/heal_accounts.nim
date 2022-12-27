@@ -36,7 +36,7 @@
 ## healing algorithm again.
 ##
 import
-  std/[math, sequtils],
+  std/[math, sequtils, tables],
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],

@@ -36,13 +36,6 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
   vmState.gasCosts = vmState.fork.forkToSchedule
 
 
-proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
-  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
-  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
-  c.vmState.mutateStateDB:
-    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
-
-
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
 # not to have too much duplicated code between sync and async.
