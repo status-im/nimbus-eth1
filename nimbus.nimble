@@ -74,6 +74,9 @@ task test_evm, "Run EVM tests":
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false"
 
+task lc_bridge, "Build light client bridge":
+  buildBinary "beacon_light_client_bridge", "fluffy/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"
+
 task fluffy_test, "Run fluffy tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
   # start from, even though it only uses the MemoryDb.
