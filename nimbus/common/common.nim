@@ -15,6 +15,7 @@ import
   ./hardforks,
   ./evmforks,
   ./genesis,
+  ./eips,
   ../utils/[utils, ec_recover],
   ../db/[db_chain, storage_types],
   ../core/[pow, clique, casper]
@@ -26,7 +27,8 @@ export
   evmforks,
   hardforks,
   genesis,
-  utils
+  utils,
+  eips.EIP
 
 type
   SyncProgress = object
@@ -74,6 +76,8 @@ type
 
     pos: CasperRef
       ## Proof Of Stake descriptor
+
+    eips: ForkToEIP
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -150,6 +154,9 @@ proc init(com      : CommonRef,
   com.pow = PowRef.new
   com.pos = CasperRef.new
 
+  # allow runtime configuration of EIPs
+  com.eips = ForkToEipList
+
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
@@ -204,7 +211,8 @@ proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
     consensusType: com.consensusType,
     pow          : com.pow,
     poa          : com.poa,
-    pos          : com.pos
+    pos          : com.pos,
+    eips         : com.eips
   )
 
 proc clone*(com: CommonRef): CommonRef =
@@ -462,3 +470,16 @@ proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
   result = com.currentFork
   com.currentFork = fork
   com.consensusTransition(fork)
+
+# ------------------------------------------------------------------------------
+# EIPs procs
+# ------------------------------------------------------------------------------
+
+proc activate*(com: CommonRef, fork: HardFork, eip: EIP) =
+  com.eips[fork].incl eip
+
+proc deactivate*(com: CommonRef, fork: HardFork, eip: EIP) =
+  com.eips[fork].excl eip
+
+func activated*(com: CommonRef, eip: EIP): bool =
+  eip in com.eips[com.currentFork]
