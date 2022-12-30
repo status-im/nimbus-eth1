@@ -99,6 +99,11 @@ proc initialAccessListEIP2929(call: CallParams) =
     # access list itself, after calculating the new contract address.
     if not call.isCreate:
       db.accessList(call.to)
+
+    # EIP3651 adds coinbase to the list of addresses that should start warm.
+    if vmState.fork >= FkShanghai:
+      db.accessList(vmState.coinbase)
+
     # TODO: Check this only adds the correct subset of precompiles.
     for c in activePrecompiles():
       db.accessList(c)
