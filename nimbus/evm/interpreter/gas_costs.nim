@@ -620,7 +620,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           ReturnSub:      fixed GasLow,
           JumpSub:        fixed GasHigh,
 
-          # 60s & 70s: Push Operations
+          # 5f, 60s & 70s: Push Operations
+          Push0:          fixed GasBase,
           Push1:          fixed GasVeryLow,
           Push2:          fixed GasVeryLow,
           Push3:          fixed GasVeryLow,

@@ -34,6 +34,7 @@ const
     (vm2OpExecBlockData,  "BlockData"),
     (vm2OpExecMemory,     "Memory"),
     (vm2OpExecPush,       "Push"),
+    (vm2OpExecPushZero,   "PushZero"),
     (vm2OpExecDup,        "Dup"),
     (vm2OpExecSwap,       "Swap"),
     (vm2OpExecLog,        "Log"),
