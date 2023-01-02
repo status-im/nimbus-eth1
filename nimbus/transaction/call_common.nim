@@ -73,6 +73,8 @@ func intrinsicGas*(call: CallParams, fork: EVMFork): GasInt {.inline.} =
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
     gas += gasFees[fork][GasTXCreate]
+    if fork >= FkShanghai:
+      gas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let gasZero    = gasFees[fork][GasTXDataZero]

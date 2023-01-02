@@ -91,6 +91,11 @@ const
 
     k.cpt.stack.top(0)
 
+    # EIP-3860
+    if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+      trace "Initcode size exceeds maximum", initcodeSize = memLen
+      return
+
     let gasParams = GasParams(
       kind:              Create,
       cr_currentMemSize: k.cpt.memory.len,
@@ -163,6 +168,11 @@ const
 
     k.cpt.stack.top(0)
 
+    # EIP-3860
+    if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+      trace "Initcode size exceeds maximum", initcodeSize = memLen
+      return
+    
     let gasParams = GasParams(
       kind:              Create,
       cr_currentMemSize: k.cpt.memory.len,

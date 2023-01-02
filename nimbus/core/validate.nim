@@ -259,6 +259,10 @@ proc validateTransaction*(
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
+  if fork >= FkShanghai and tx.contractCreation and tx.payload.len >= EIP3860_MAX_INITCODE_SIZE:
+    debug "invalid tx: initcode size exceeds maximum"
+    return false
+
   # Note that the following check bears some plausibility but is _not_
   # covered by the eip-1559 reference (sort of) pseudo code, for details
   # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_

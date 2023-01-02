@@ -52,7 +52,8 @@ type
     GasSha3Word,        # Paid for each word (rounded up) for input data to a SHA3 operation.
     GasCopy,            # Partial payment for COPY operations, multiplied by words copied, rounded up.
     GasBlockhash,       # Payment for BLOCKHASH operation.
-    GasExtCodeHash      # Payment for contract's code hashing
+    GasExtCodeHash,     # Payment for contract's code hashing
+    GasInitcodeWord     # Payment for each word (rounded up) for initcode
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
@@ -278,6 +279,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       result.gasCost = static(FeeSchedule[GasCodeDeposit]) * gasParams.cr_memLength
     else:
       result.gasCost = static(FeeSchedule[GasCreate]) +
+                       (static(FeeSchedule[GasInitcodeWord]) * gasParams.cr_memLength.wordCount) +
                        `prefix gasMemoryExpansion`(
                           gasParams.cr_currentMemSize,
                           gasParams.cr_memOffset,
@@ -750,7 +752,8 @@ const
     GasSha3Word:        6,
     GasCopy:            3,
     GasBlockhash:       20,
-    GasExtCodeHash:     400
+    GasExtCodeHash:     400,
+    GasInitcodeWord:    0       # Changed to 2 in EIP-3860
   ]
 
 # Create the schedule for each forks
@@ -803,6 +806,10 @@ func londonGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
     5000 - ColdSloadCost +
     ACCESS_LIST_STORAGE_KEY_COST
 
+func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
+  result = previousFees
+  result[GasInitcodeWord] = 2.GasInt  # INITCODE_WORD_COST from EIP-3860
+
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
@@ -810,6 +817,7 @@ const
   IstanbulGasFees = SpuriousGasFees.istanbulGasFees
   BerlinGasFees = IstanbulGasFees.berlinGasFees
   LondonGasFees = BerlinGasFees.londonGasFees
+  ShanghaiGasFees = LondonGasFees.shanghaiGasFees
 
   gasFees*: array[EVMFork, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
@@ -823,8 +831,8 @@ const
     FkBerlin: BerlinGasFees,
     FkLondon: LondonGasFees,
     FkParis: LondonGasFees,
-    FkShanghai: LondonGasFees,
-    FkCancun: LondonGasFees,
+    FkShanghai: ShanghaiGasFees,
+    FkCancun: ShanghaiGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)
@@ -835,6 +843,7 @@ gasCosts(FkConstantinople, constantinople, ConstantinopleGasCosts)
 gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
 gasCosts(FkBerlin, berlin, BerlinGasCosts)
 gasCosts(FkLondon, london, LondonGasCosts)
+gasCosts(FkShanghai, shanghai, ShanghaiGasCosts)
 
 proc forkToSchedule*(fork: EVMFork): GasCosts =
   if fork < FkHomestead:
@@ -851,8 +860,10 @@ proc forkToSchedule*(fork: EVMFork): GasCosts =
     IstanbulGasCosts
   elif fork < FkLondon:
     BerlinGasCosts
-  else:
+  elif fork < FkShanghai:
     LondonGasCosts
+  else:
+    ShanghaiGasCosts
 
 const
   ## Precompile costs
