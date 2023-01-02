@@ -10,7 +10,7 @@
 import
   std/os,
   uri, confutils, confutils/std/net, chronicles,
-  eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
+  eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node, routing_table],
   json_rpc/rpcproxy,
   nimcrypto/hash,
   stew/byteutils,
@@ -41,6 +41,9 @@ const
   defaultStorageSize* = uint32(1000 * 1000 * 100)
   defaultStorageSizeDesc* = $defaultStorageSize
 
+  defaultTableIpLimitDesc* = $DefaultTableIpLimit
+  defaultBucketIpLimitDesc* = $DefaultBucketIpLimit
+
 type
   TrustedDigest* = MDigest[32 * 8]
 
@@ -53,8 +56,8 @@ type
 
   PortalConf* = object
     logLevel* {.
-      defaultValue: LogLevel.DEBUG
-      defaultValueDesc: $LogLevel.DEBUG
+      defaultValue: LogLevel.INFO
+      defaultValueDesc: $LogLevel.INFO
       desc: "Sets the log level"
       name: "log-level" .}: LogLevel
 
@@ -71,10 +74,9 @@ type
 
     portalNetwork* {.
       desc:
-        "Select which Portal network to join. This will currently only " &
-        "set the network specific bootstrap nodes automatically"
+        "Select which Portal network to join. This will set the " &
+        "network specific bootstrap nodes automatically"
       defaultValue: PortalNetwork.none
-      defaultValueDesc: "none"
       name: "network" }: PortalNetwork
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
@@ -162,6 +164,7 @@ type
       name: "rpc-address" .}: ValidIpAddress
 
     bridgeUri* {.
+      hidden
       defaultValue: none(string)
       defaultValueDesc: ""
       desc: "if provided, enables getting data from bridge node"
@@ -172,19 +175,23 @@ type
     proxyUri* {.
       defaultValue: defaultClientConfig
       defaultValueDesc: $defaultClientConfigDesc
-      desc: "URI of eth client where to proxy unimplemented rpc methods to"
+      desc: "URI of eth client where to proxy unimplemented JSON-RPC methods to"
       name: "proxy-uri" .}: ClientConfig
 
     tableIpLimit* {.
-      hidden
-      desc: "Maximum amount of nodes with the same IP in the routing tables"
+      desc: "Maximum amount of nodes with the same IP in the routing table. " &
+          "This option is currently required as many nodes are running from " &
+          "the same machines. The option will be removed/adjusted in the future"
       defaultValue: DefaultTableIpLimit
+      defaultValueDesc: $defaultTableIpLimitDesc
       name: "table-ip-limit" .}: uint
 
     bucketIpLimit* {.
-      hidden
-      desc: "Maximum amount of nodes with the same IP in the routing tables buckets"
+      desc: "Maximum amount of nodes with the same IP in the routing table's buckets. " &
+            "This option is currently required as many nodes are running from " &
+            "the same machines. The option will be removed/adjusted in the future"
       defaultValue: DefaultBucketIpLimit
+      defaultValueDesc: $defaultBucketIpLimitDesc
       name: "bucket-ip-limit" .}: uint
 
     bitsPerHop* {.
