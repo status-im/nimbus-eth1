@@ -1,6 +1,6 @@
 # Fluffy: The Nimbus Portal Network Client
 
-[![fluffy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
+[![Fluffy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 [![License: Apache](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@
 
 ## Introduction
 This folder holds the development of the Nimbus client implementation supporting
-the Portal Network: fluffy. The Portal Network is a project still heavily in
+the Portal Network: Fluffy. The Portal Network is a project still heavily in
 research phase and fully in flux. This client is thus still highly experimental.
 
 Current status of specifications can be found in the
@@ -30,7 +30,7 @@ Monthly development updates are shared
 ### Prerequisites
 - GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
-### Build fluffy client
+### Build the Fluffy client
 ```bash
 git clone git@github.com:status-im/nimbus-eth1.git
 cd nimbus-eth1
@@ -43,7 +43,7 @@ make fluffy
 ./build/fluffy --bootstrap-node:enr:<base64 encoding of ENR>
 ```
 
-### Update and rebuild fluffy client
+### Update and rebuild the Fluffy client
 ```bash
 # From the nimbus-eth1 repository
 git pull
@@ -53,30 +53,34 @@ make update
 make fluffy
 ```
 
-### Run fluffy on public testnet
+### Run a Fluffy client on the public testnet
 
-There is a fleet of fluffy nodes deployed, and to easily join these, the
-`--network:testnet0` option can be used.
+There is a public [Portal testnet](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#portal-network-testnet) which contains nodes of different clients.
+We run a fleet of Fluffy nodes that are part of this testnet.
+
+Provide the `--network:testnet0` option to join this network.
 
 ```bash
-./build/fluffy --network:testnet0 --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
+# Connect to the Portal testnet and enable the JSON-RPC APIs
+./build/fluffy --network:testnet0 --rpc --table-ip-limit:1024 --bucket-ip-limit:24
 ```
 
-> **_Note:_** This `--network` option will merely select a static set of
+The `table-ip-limit` and `bucket-ip-limit` options are needed to allow more
+nodes with the same IPs in the routing tables. The default limits are there
+as security measure. It is currently needed to increase the limits for the testnet
+because the fleet of Fluffy nodes runs on only 2 machines / network interfaces.
+
+
+> **_Note:_** The `--network` option selects automatically a static set of
 specific bootstrap nodes belonging to a "testnet". Currently `testnet0` is the
 only option, which results in connecting to the
 [testnet bootstrap nodes](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#bootnodes).
-It should be noted that there is no real way to distinguish a "specific" Portal
+It should be noted that there is currently no real way to distinguish a "specific" Portal
 network, and as long as the same Portal protocols are supported, nodes can
 simply connect to it and no real separation can be made.
 
-The `table-ip-limit` and `bucket-ip-limit` options are needed to allow more
-nodes with the same IPs in the routing tables. This is needed because the fleet
-of fluffy nodes runs on only 2 machines / network interfaces.
-
-
-The network is currently storing only the first 25000 mainnet blocks. This can be
-tested by using the JSON-RPC call `eth_getBlockByHash`:
+The testnet is currently storing only the first 25000 mainnet blocks. This can
+be tested by using the JSON-RPC call `eth_getBlockByHash`:
 ```
 # Get the hash of a block from your favorite block explorer, e.g.:
 # 0x8dda3a641653c0454569c3b5be529f58b14d2a5b5d87956664c746ce1e367c21
@@ -91,13 +95,13 @@ make fluffy-tools
 ./build/blockwalk --block-hash:0xf6bfad56d1a45d1661506343dd1e511b5d7e17565b3ec293125ff0890b9709e5
 ```
 
-### Run fluffy test suite
+### Run Fluffy test suite
 ```bash
 # From the nimbus-eth1 repository
 make fluffy-test
 ```
 
-### Run fluffy local testnet script
+### Run Fluffy local testnet script
 ```bash
 ./fluffy/scripts/launch_local_testnet.sh
 ```
