@@ -32,6 +32,12 @@
 # protocols. Thus a light client cannot really be build using these proofs,
 # which makes it rather useless for now.
 #
+# Caveat:
+#
+# Roots in historical_roots are only added every `SLOTS_PER_HISTORICAL_ROOT`
+# slots. Recent blocks that are not part of a historical_root cannot be proven
+# through this mechanism. They need to be directly looked up in the block_roots
+# BeaconState field.
 #
 # Alternative:
 #
