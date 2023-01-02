@@ -16,4 +16,5 @@ import
   ./test_history_network,
   ./test_content_db,
   ./test_discovery_rpc,
-  ./test_bridge_parser
+  ./test_bridge_parser,
+  ./test_beacon_chain_block_proof
