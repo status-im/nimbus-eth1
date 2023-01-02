@@ -1,0 +1,27 @@
+name: Fluffy nightly Docker build
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  # Keeping it simple and only providing AMD64 latest image as that is what is
+  # needed for testing Portal-Hive
+  build-amd64:
+    name: Linux AMD64 Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push a nightly Docker image
+        run: |
+          REFNAME="${{ github.ref }}"
+          TAG="${REFNAME#refs/tags/}"
+          DOCKER_BUILDKIT=1 docker build -f ./fluffy/tools/docker/Dockerfile -t statusim/fluffy:amd64-${TAG} -t statusim/fluffy:amd64-latest .
+          docker push statusim/fluffy:amd64-${TAG}
+          docker push statusim/fluffy:amd64-latest
