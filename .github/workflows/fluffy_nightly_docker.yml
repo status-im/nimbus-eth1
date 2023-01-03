@@ -1,7 +1,7 @@
 name: Fluffy nightly Docker build
 on:
   schedule:
-    - cron: "30 10 * * *"
+    - cron: "30 3 * * *"
   workflow_dispatch:
 
 jobs:
@@ -21,5 +21,5 @@ jobs:
       - name: Build and push a nightly Docker image
         run: |
           REFNAME="${{ github.ref_name }}"
-          DOCKER_BUILDKIT=1 docker build -f ./fluffy/tools/docker/Dockerfile -t statusim/fluffy:amd64-${REFNAME}-latest .
-          docker push statusim/fluffy:amd64-${REFNAME}-latest
+          DOCKER_BUILDKIT=1 docker build -f ./fluffy/tools/docker/Dockerfile -t statusim/nimbus-fluffy:amd64-${REFNAME}-latest .
+          docker push statusim/nimbus-fluffy:amd64-${REFNAME}-latest
