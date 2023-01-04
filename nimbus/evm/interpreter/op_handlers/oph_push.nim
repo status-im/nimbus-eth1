@@ -58,6 +58,28 @@ genOphHandlers fnName, fnInfo, inxRange, pushImpl
 
 genOphList fnName, fnInfo, inxRange, "vm2OpExecPush", opName
 
+
+# Push0 needs to be slightly different because it's only available after
+# Shanghai (EIP-3855). But it still seems like it belongs in this file.
+# (Alternatively, we could make genOphList accept some more information
+# about which opcodes are for which forks, but that seems uglier than
+# just adding Push0 here as a special case.)
+
+const
+  push0Op: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x5f, push 0 onto the stack
+    k.cpt.stack.push(0)
+  
+  vm2OpExecPushZero*: seq[Vm2OpExec] = @[
+
+    (opCode: Push0,       ## 0x5f, push 0 onto the stack
+     forks: Vm2OpShanghaiAndLater,
+     name: "Push0",
+     info: "Push 0 on the stack",
+     exec: (prep: vm2OpIgnore,
+            run:  push0Op,
+            post: vm2OpIgnore))]
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -129,9 +129,9 @@ type
     BeginSub =       0x5c, ## Marks the entry point to a subroutine
     ReturnSub =      0x5d, ## Returns control to the caller of a subroutine.
     JumpSub =        0x5e, ## Transfers control to a subroutine.
-    Nop0x5F =        0x5f, ## ..
 
-    # 60s & 70s: Push Operations.
+    # 5f, 60s & 70s: Push Operations.
+    Push0 =          0x5f, ## Place 0 on stack. EIP-3855
     Push1 =          0x60, ## Place 1-byte item on stack.
     Push2 =          0x61, ## Place 2-byte item on stack.
 

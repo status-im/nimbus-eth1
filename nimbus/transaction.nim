@@ -28,6 +28,8 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
 
   if tx.contractCreation:
     result = result + gasFees[fork][GasTXCreate]
+    if fork >= FkShanghai:
+      result = result + (gasFees[fork][GasInitcodeWord] * tx.payload.len)
 
   if tx.txType > TxLegacy:
     result = result + tx.accessList.len * ACCESS_LIST_ADDRESS_COST
@@ -120,6 +122,9 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
+
+  if fork >= FkShanghai and tx.contractCreation and tx.payload.len >= EIP3860_MAX_INITCODE_SIZE:
+    raise newException(ValidationError, "Initcode size exceeds max")
 
   # check signature validity
   var sender: EthAddress

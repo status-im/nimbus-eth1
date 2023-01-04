@@ -56,6 +56,10 @@ const
   # contract is not subject to this limit.
   EIP170_MAX_CODE_SIZE* =                   0x6000
 
+  # See EIP-3860 (https://eips.ethereum.org/EIPS/eip-3860). Maximum initcode
+  # size when creating a new contract.
+  EIP3860_MAX_INITCODE_SIZE* =              2 * EIP170_MAX_CODE_SIZE
+
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF
 

@@ -73,6 +73,8 @@ func intrinsicGas*(call: CallParams, fork: EVMFork): GasInt {.inline.} =
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
     gas += gasFees[fork][GasTXCreate]
+    if fork >= FkShanghai:
+      gas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let gasZero    = gasFees[fork][GasTXDataZero]
@@ -99,6 +101,11 @@ proc initialAccessListEIP2929(call: CallParams) =
     # access list itself, after calculating the new contract address.
     if not call.isCreate:
       db.accessList(call.to)
+
+    # EIP3651 adds coinbase to the list of addresses that should start warm.
+    if vmState.fork >= FkShanghai:
+      db.accessList(vmState.coinbase)
+
     # TODO: Check this only adds the correct subset of precompiles.
     for c in activePrecompiles():
       db.accessList(c)
