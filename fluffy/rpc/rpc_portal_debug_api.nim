@@ -11,6 +11,7 @@ import
   json_rpc/[rpcproxy, rpcserver], stew/byteutils,
   ../network/wire/portal_protocol,
   ../network/network_seed,
+  ../eth_data/history_data_seeding,
   ".."/[content_db, seed_db]
 
 export rpcserver
