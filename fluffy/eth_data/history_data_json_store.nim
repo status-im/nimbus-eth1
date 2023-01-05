@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,16 +11,15 @@ import
   json_serialization, json_serialization/std/tables,
   stew/[byteutils, io2, results], chronicles,
   eth/[rlp, common/eth_types],
-  ncli/e2store,
   ../../nimbus/common/[chain_config, genesis],
   ../network/history/[history_content, accumulator]
 
 export results, tables
 
-# Helper calls to parse history data from json files. Format currently
-# unspecified and likely to change.
-# Perhaps https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
-# can be interesting here too.
+# Helper calls to read/write history data from/to json files.
+# Format is currently unspecified and likely to change.
+
+# Reading JSON history data
 
 type
   BlockData* = object
@@ -188,64 +187,43 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
   except RlpError:
     raise (ref Defect)(msg: "Genesis should be valid")
 
-proc toString*(v: IoErrorCode): string =
-  try: ioErrorMsg(v)
-  except Exception as e: raiseAssert e.msg
 
-proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+# Writing JSON history data
 
-  try:
-    ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
-  except SszError as e:
-    err("Failed decoding accumulator: " & e.msg)
+type
+  HeaderRecord* = object
+    header: string
+    number: uint64
 
+  BlockRecord* = object
+    header: string
+    body: string
+    receipts: string
+    number: uint64
 
-proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+proc writeHeaderRecord*(
+    writer: var JsonWriter, header: BlockHeader)
+    {.raises: [IOError, Defect].} =
+  let
+    dataRecord = HeaderRecord(
+      header: rlp.encode(header).to0xHex(),
+      number: header.blockNumber.truncate(uint64))
 
-  try:
-    ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
-  except SszError as e:
-    err("Decoding epoch accumulator failed: " & e.msg)
+    headerHash = to0xHex(rlpHash(header).data)
 
-proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
-  let encodedAccumulator = ? readAllFile(file).mapErr(toString)
+  writer.writeField(headerHash, dataRecord)
 
-  try:
-    ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
-  except SszError as e:
-    err("Decoding epoch accumulator failed: " & e.msg)
+proc writeBlockRecord*(
+    writer: var JsonWriter,
+    header: BlockHeader, body: BlockBody, receipts: seq[Receipt])
+    {.raises: [IOError, Defect].} =
+  let
+    dataRecord = BlockRecord(
+      header: rlp.encode(header).to0xHex(),
+      body: encode(body).to0xHex(),
+      receipts: encode(receipts).to0xHex(),
+      number: header.blockNumber.truncate(uint64))
 
-const
-  # Using the e2s format to store data, but without the specific structure
-  # like in an era file, as we currently don't really need that.
-  # See: https://github.com/status-im/nimbus-eth2/blob/stable/docs/e2store.md
-  # Added one type for now, with numbers not formally specified.
-  # Note:
-  # Snappy compression for `ExecutionBlockHeaderRecord` only helps for the
-  # first ~1M (?) block headers, after that there is no gain so we don't do it.
-  ExecutionBlockHeaderRecord* = [byte 0xFF, 0x00]
+    headerHash = to0xHex(rlpHash(header).data)
 
-proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
-  let fh = ? openFile(file, {OpenFlags.Read}).mapErr(toString)
-  defer: discard closeFile(fh)
-
-  var data: seq[byte]
-  var blockHeaders: seq[BlockHeader]
-  while true:
-    let header = readRecord(fh, data).valueOr:
-      break
-
-    if header.typ == ExecutionBlockHeaderRecord:
-      let blockHeader =
-        try:
-          rlp.decode(data, BlockHeader)
-        except RlpError as e:
-          return err("Invalid block header in " & file & ": " & e.msg)
-
-      blockHeaders.add(blockHeader)
-    else:
-      warn "Skipping record, not a block header", typ = toHex(header.typ)
-
-  ok(blockHeaders)
+  writer.writeField(headerHash, dataRecord)

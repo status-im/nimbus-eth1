@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -49,7 +49,7 @@ import
   ../seed_db,
   ../../premix/[downloader, parser],
   ../network/history/[history_content, accumulator],
-  ../data/history_data_parser
+  ../eth_data/[history_data_json_store, history_data_ssz_e2s]
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
@@ -184,16 +184,6 @@ type
         desc: "Number of the last block header to be exported"
         name: "end-block" .}: uint64
 
-  HeaderRecord = object
-    header: string
-    number: uint64
-
-  BlockRecord = object
-    header: string
-    body: string
-    receipts: string
-    number: uint64
-
 proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
     {.raises: [Defect, ConfigurationError].} =
   if p == "db":
@@ -206,32 +196,6 @@ proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
 
 proc completeCmdArg*(T: type StorageMode, val: TaintedString): seq[string] =
   return @[]
-
-proc writeHeaderRecord(
-    writer: var JsonWriter, header: BlockHeader)
-    {.raises: [IOError, Defect].} =
-  let
-    dataRecord = HeaderRecord(
-      header: rlp.encode(header).to0xHex(),
-      number: header.blockNumber.truncate(uint64))
-
-    headerHash = to0xHex(rlpHash(header).data)
-
-  writer.writeField(headerHash, dataRecord)
-
-proc writeBlockRecord(
-    writer: var JsonWriter, blck: Block)
-    {.raises: [IOError, Defect].} =
-  let
-    dataRecord = BlockRecord(
-      header: rlp.encode(blck.header).to0xHex(),
-      body: encode(blck.body).to0xHex(),
-      receipts: encode(blck.receipts).to0xHex(),
-      number: blck.header.blockNumber.truncate(uint64))
-
-    headerHash = to0xHex(rlpHash(blck.header).data)
-
-  writer.writeField(headerHash, dataRecord)
 
 proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
   let blockNumber = u256(i)
@@ -309,7 +273,7 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
     writer.beginRecord()
     for i in config.startBlock..config.endBlock:
       let blck = downloadBlock(i, client)
-      writer.writeBlockRecord(blck)
+      writer.writeBlockRecord(blck.header, blck.body, blck.receipts)
       if ((i - config.startBlock) mod 8192) == 0 and i != config.startBlock:
         info "Downloaded 8192 new blocks", currentBlock = i
     writer.endRecord()
