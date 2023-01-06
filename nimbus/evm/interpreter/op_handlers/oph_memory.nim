@@ -315,6 +315,39 @@ const
 
     k.cpt.memory.copy(dstPos, srcPos, len)
 
+  rjumpOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0xe0, Relative jump (EIP4200)
+    let relativeOffset = k.cpt.code.readInt16()
+    k.cpt.code.pc += relativeOffset
+
+  rjumpiOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0xe1, Conditional relative jump (EIP4200)
+    let condition = k.cpt.stack.popInt()
+    if condition.isZero:
+      # Not branching, just skip over immediate argument.
+      k.cpt.code.pc += 2
+      return
+
+    k.rjumpOp()
+
+  rjumpvOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0xe2, Relative jump via jump table (EIP4200)
+    let count = k.cpt.code.readByte().int
+    let savedPC = k.cpt.code.pc
+    let idx = k.cpt.stack.popInt().truncate(int)
+    if idx >= count:
+      # Index out-of-bounds, don't branch, just skip over immediate
+      # argument.
+      k.cpt.code.pc += count * 2
+      return
+
+    # get jump table entry
+    k.cpt.code.pc += idx * 2
+    let relativeOffset = k.cpt.code.readInt16()
+
+    # move pc past operand(1 + count * 2) and relativeOffset
+    k.cpt.code.pc = savedPC + count * 2 + relativeOffset
+
 #[
   EIP-2315: temporary disabled
   Reason  : not included in berlin hard fork
@@ -527,6 +560,30 @@ const
      info: "Copy memory",
      exec: (prep: vm2OpIgnore,
             run:  mCopyOp,
+            post: vm2OpIgnore)),
+
+    (opCode: RJump,     ## 0xe0, Relative jump (EIP4200)
+     forks: Vm2OpEOFAndLater,
+     name: "RJump",
+     info: "Relative jump via jump table",
+     exec: (prep: vm2OpIgnore,
+            run:  rjumpOp,
+            post: vm2OpIgnore)),
+
+    (opCode: RJumpI,    ## 0xe1, Conditional relative jump (EIP4200)
+     forks: Vm2OpEOFAndLater,
+     name: "RJumpI",
+     info: "Relative jump via jump table",
+     exec: (prep: vm2OpIgnore,
+            run:  rjumpiOp,
+            post: vm2OpIgnore)),
+
+    (opCode: RJumpV,    ## 0xe2, Relative jump via jump table (EIP4200)
+     forks: Vm2OpEOFAndLater,
+     name: "RJumpV",
+     info: "Relative jump via jump table",
+     exec: (prep: vm2OpIgnore,
+            run:  rjumpvOp,
             post: vm2OpIgnore))]
 
 #[

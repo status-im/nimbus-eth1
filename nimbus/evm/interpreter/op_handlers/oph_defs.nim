@@ -89,6 +89,8 @@ const
   Vm2OpCancunAndLater* =
     Vm2OpShanghaiAndLater - {FkShanghai}
 
+  Vm2OpEOFAndLater* = Vm2OpCancunAndLater
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

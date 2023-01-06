@@ -20,6 +20,7 @@ type
     GasZero,            # Nothing paid for operations of the set Wzero.
     GasBase,            # Amount of gas to pay for operations of the set Wbase.
     GasVeryLow,         # Amount of gas to pay for operations of the set Wverylow.
+    GasMidLow,          # Introduced in Shanghai EIP4200
     GasLow,             # Amount of gas to pay for operations of the set Wlow.
     GasMid,             # Amount of gas to pay for operations of the set Wmid.
     GasHigh,            # Amount of gas to pay for operations of the set Whigh.
@@ -721,6 +722,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
 
+          # e0s: Static jumps
+          RJump:          fixed GasBase,
+          RJumpI:         fixed GasMidLow,
+          RJumpV:         fixed GasMidLow,
+
           # f0s: System operations
           Create:         complex `prefix gasCreate`,
           Call:           complex `prefix gasCall`,
@@ -741,6 +747,7 @@ const
     GasZero:            0'i64,
     GasBase:            2,
     GasVeryLow:         3,
+    GasMidLow:          4,      # Introduced in Shanghai (EIP4200)
     GasLow:             5,
     GasMid:             8,
     GasHigh:            10,

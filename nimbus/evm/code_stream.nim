@@ -64,6 +64,14 @@ proc readVmWord*(c: var CodeStream, n: int): UInt256 =
   for i in 0 ..< toWrite : result_bytes[i] = c.bytes[last - i - 1]
   c.pc = last
 
+proc readInt16*(c: var CodeStream): int =
+  result = (c.bytes[c.pc].int shl 8) or c.bytes[c.pc+1].int
+  c.pc += 2
+
+proc readByte*(c: var CodeStream): byte =
+  result = c.bytes[c.pc]
+  inc c.pc
+
 proc len*(c: CodeStream): int =
   len(c.bytes)
 
