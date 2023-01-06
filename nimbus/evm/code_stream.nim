@@ -6,31 +6,56 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, parseutils, sets, macros,
+  std/[strformat, strutils, sequtils, parseutils, sets],
+  chronicles,
   eth/common,
+  stew/[results, endians2],
+  stew/ranges/ptr_arith,
+  ../utils/eof,
   ./interpreter/op_codes
 
 logScope:
   topics = "vm code_stream"
 
 type
+  CodeView = ptr UncheckedArray[byte]
+
   CodeStream* = ref object
-    bytes*: seq[byte]
+    # pre EOF byte code
+    legacyCode*: seq[byte]
+
+    # view into legacyCode or
+    # into one of EOF code section
+    codeView: CodeView
+
+    # length of legacy code or
+    # one of EOF code section
+    codeLen: int
+
     depthProcessed: int
     invalidPositions: HashSet[int]
     pc*: int
     cached: seq[(int, Op, string)]
+
+    # EOF container
+    container*: Container
+
+    # EOF code section index
+    section: int
 
 proc `$`*(b: byte): string =
   $(b.int)
 
 proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   new(result)
-  shallowCopy(result.bytes, codeBytes)
+  shallowCopy(result.legacyCode, codeBytes)
   result.pc = 0
   result.invalidPositions = initHashSet[int]()
   result.depthProcessed = 0
   result.cached = @[]
+  result.codeLen = result.legacyCode.len
+  if result.codeLen > 0:
+    result.codeView = cast[CodeView](addr result.legacyCode[0])
 
 proc newCodeStream*(codeBytes: string): CodeStream =
   newCodeStream(codeBytes.mapIt(it.byte))
@@ -47,37 +72,56 @@ proc newCodeStreamFromUnescaped*(code: string): CodeStream =
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
   # TODO: use openArray[bytes]
-  if c.pc + size - 1 < c.bytes.len:
-    result = c.bytes[c.pc .. c.pc + size - 1]
+  if c.pc + size - 1 < c.codeLen:
+    result = @(makeOpenArray(addr c.codeView[c.pc], byte, size))
     c.pc += size
   else:
     result = @[]
-    c.pc = c.bytes.len
+    c.pc = c.codeLen
 
 proc readVmWord*(c: var CodeStream, n: int): UInt256 =
   ## Reads `n` bytes from the code stream and pads
   ## the remaining bytes with zeros.
-  let result_bytes = cast[ptr array[32, byte]](addr result)
+  let resultBytes = cast[ptr array[32, byte]](addr result)
 
-  let last = min(c.pc + n, c.bytes.len)
+  let last = min(c.pc + n, c.codeLen)
   let toWrite = last - c.pc
-  for i in 0 ..< toWrite : result_bytes[i] = c.bytes[last - i - 1]
+  for i in 0 ..< toWrite : resultBytes[i] = c.codeView[last - i - 1]
   c.pc = last
 
 proc readInt16*(c: var CodeStream): int =
-  result = (c.bytes[c.pc].int shl 8) or c.bytes[c.pc+1].int
+  let x = uint16.fromBytesBE(makeOpenArray(addr c.codeView[c.pc], byte, 2))
+  result = cast[int16](x).int
   c.pc += 2
 
 proc readByte*(c: var CodeStream): byte =
-  result = c.bytes[c.pc]
+  result = c.codeView[c.pc]
   inc c.pc
 
 proc len*(c: CodeStream): int =
-  len(c.bytes)
+  if c.container.code.len > 0:
+    c.container.size
+  else:
+    c.legacyCode.len
+
+proc setSection*(c: CodeStream, sec: int) =
+  if sec < c.container.code.len:
+    c.codeLen = c.container.code[sec].len
+    if c.codeLen > 0:
+      c.codeView = cast[CodeView](addr c.container.code[sec][0])
+    c.section = sec
+
+proc parseEOF*(c: CodeStream): Result[void, EOFV1Error] =
+  result = decode(c.container, c.legacyCode)
+  if result.isOk:
+    c.setSection(0)
+
+func hasEOFCode*(c: CodeStream): bool =
+  hasEOFMagic(c.legacyCode)
 
 proc next*(c: var CodeStream): Op =
-  if c.pc != c.bytes.len:
-    result = Op(c.bytes[c.pc])
+  if c.pc != c.codeLen:
+    result = Op(c.codeView[c.pc])
     inc c.pc
   else:
     result = Stop
@@ -89,11 +133,11 @@ iterator items*(c: var CodeStream): Op =
     nextOpcode = c.next()
 
 proc `[]`*(c: CodeStream, offset: int): Op =
-  Op(c.bytes[offset])
+  Op(c.codeView[offset])
 
 proc peek*(c: var CodeStream): Op =
-  if c.pc < c.bytes.len:
-    result = Op(c.bytes[c.pc])
+  if c.pc < c.codeLen:
+    result = Op(c.codeView[c.pc])
   else:
     result = Stop
 
@@ -111,7 +155,7 @@ when false:
       cs.pc = anchorPc
 
 proc isValidOpcode*(c: CodeStream, position: int): bool =
-  if position >= len(c):
+  if position >= c.codeLen:
     return false
   if position in c.invalidPositions:
     return false
@@ -141,7 +185,12 @@ proc decompile*(original: var CodeStream): seq[(int, Op, string)] =
   if original.cached.len > 0:
     return original.cached
   result = @[]
-  var c = newCodeStream(original.bytes)
+  var c = newCodeStream(original.legacyCode)
+  if c.hasEOFCode:
+    let res = c.parseEOF
+    if res.isErr:
+      return
+
   while true:
     var op = c.next
     if op >= Push1 and op <= Push32:
@@ -165,4 +214,4 @@ proc hasSStore*(c: var CodeStream): bool =
   result = opcodes.anyIt(it[1] == Sstore)
 
 proc atEnd*(c: CodeStream): bool =
-  result = c.pc >= c.bytes.len
+  result = c.pc >= c.codeLen

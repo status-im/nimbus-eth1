@@ -14,7 +14,7 @@ import
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ../common/[common, evmforks],
-  ../utils/utils,
+  ../utils/[utils, eof],
   chronicles, chronos,
   eth/[keys],
   sets
@@ -45,6 +45,7 @@ when defined(evmc_enabled):
 
 const
   evmc_enabled* = defined(evmc_enabled)
+  ErrLegacyCode* = "invalid code: EOF contract must not deploy legacy code"
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -313,11 +314,24 @@ proc writeContract*(c: Computation)
   if len == 0:
     return
 
-  # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-  if fork >= FkLondon and c.output[0] == 0xEF.byte:
-    withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
-    c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
+  # Reject legacy contract deployment from EOF.
+  if c.initCodeEOF and not hasEOFMagic(c.output):
+    c.setError(ErrLegacyCode, true)
     return
+
+  # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+  if hasEOFByte(c.output):
+    if fork >= FkEOF:
+      var con: Container
+      let res = con.decode(c.output)
+      if res.isErr:
+        c.setError("EOF retcode parse error: " & res.error.toString, true)
+        return
+
+    elif fork >= FkLondon:
+      withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
+      c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
+      return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:

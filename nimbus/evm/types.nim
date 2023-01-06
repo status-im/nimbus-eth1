@@ -96,6 +96,7 @@ type
     pendingAsyncOperation*: Future[void]
     continuation*:          proc() {.gcsafe, raises: [CatchableError].}
     sysCall*:               bool
+    initcodeEOF*:           bool
 
   Error* = ref object
     statusCode*: evmc_status_code

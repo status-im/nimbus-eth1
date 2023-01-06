@@ -11,6 +11,7 @@
 import
   std/[tables, hashes, sets],
   eth/[common, rlp],
+  ../constants, ../utils/[utils, eof], storage_types,
   ../../stateless/multi_keys,
   ../constants,
   ../utils/utils,
@@ -376,6 +377,18 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
 
+proc loadCode(acc: RefAccount, ac: AccountsCache) =
+  if CodeLoaded in acc.flags or CodeChanged in acc.flags:
+    return
+
+  when defined(geth):
+    let data = ac.db.get(acc.account.codeHash.data)
+  else:
+    let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+
+  acc.code = data
+  acc.flags.incl CodeLoaded
+
 proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -394,7 +407,18 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
     result = acc.code
 
 proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
-  ac.getCode(address).len
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.loadCode(ac)
+  acc.code.len
+
+proc hasEOFCode*(ac: AccountsCache, address: EthAddress): bool =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  acc.loadCode(ac)
+  eof.hasEOFMagic(acc.code)
 
 proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
   let acc = ac.getAccount(address, false)
@@ -744,6 +768,7 @@ proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt2
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
+proc hasEOFCode*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

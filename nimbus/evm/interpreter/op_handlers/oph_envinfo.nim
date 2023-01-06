@@ -145,7 +145,7 @@ const
         cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
         reason = "CodeCopy fee")
 
-      cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
+      cpt.memory.writePadded(k.cpt.code.legacyCode, memPos, copyPos, len)
 
 
   gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =

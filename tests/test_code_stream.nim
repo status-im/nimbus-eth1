@@ -5,8 +5,12 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest2, sequtils,
-        ../nimbus/vm_internals
+import
+  std/sequtils,
+  unittest2,
+  stew/[byteutils, results],
+  ../nimbus/vm_internals,
+  ../nimbus/utils/eof
 
 proc codeStreamMain*() =
   suite "parse bytecode":
@@ -116,3 +120,57 @@ proc codeStreamMain*() =
       check(not codeStream.isValidOpcode(3))
       check(codeStream.isValidOpcode(4))
       check(not codeStream.isValidOpcode(5))
+
+  suite "EOF decode":
+    type
+      EOFVector = object
+        name: string
+        data: string
+        err : EOFV1ErrorKind
+
+    proc ev(name: string, data: string, err: EOFV1ErrorKind): EOFVector =
+      EOFVector(name: name, data: data, err: err)
+
+    const EOFVectors = [
+      ev("no magic", "", ErrUnexpectedEOF),
+      ev("bad magic 1", "EF", ErrUnexpectedEOF),
+      ev("bad magic 2", "EF11", ErrInvalidMagic),
+      ev("bad version 1", "EF00", ErrInvalidVersion),
+      ev("bad version 2", "EF0033", ErrInvalidVersion),
+      ev("bad version 3", "EF0033", ErrInvalidVersion),
+      ev("no type section 1", "EF0001", ErrUnexpectedEOF),
+      ev("bad type section 2", "EF0001020000", ErrMissingTypeHeader),
+      ev("bad type section 3", "EF0001010000", ErrInvalidTypeSize),
+      ev("bad type section 4", "EF000101", ErrUnexpectedEOF),
+      ev("bad type section 5", "EF000101FFFC", ErrInvalidTypeSize),
+      ev("no code section", "EF0001010004", ErrUnexpectedEOF),
+      ev("bad code section", "EF000101000402000200010001", ErrInvalidCodeSize),
+      ev("no data section", "EF00010100040200010001", ErrUnexpectedEOF),
+      ev("bad data section", "EF00010100040200010001040001", ErrMissingDataHeader),
+      ev("no terminator", "EF00010100040200010001030001", ErrUnexpectedEOF),
+      ev("bad size", "EF0001010004020001000103000100", ErrInvalidContainerSize),
+    ]
+
+    var c: Container
+    template parseERR(x: string, k: EOFV1ErrorKind) =
+      let res = c.decode(hexToSeqByte(x))
+      check res.isErr
+      check res.error.kind == k
+
+    template parseOK(x: string) =
+      let res = c.decode(hexToSeqByte(x))
+      check res.isOK
+
+    for x in EOFVectors:
+      test x.name:
+        parseERR(x.data, x.err)
+
+    test "parse ok":
+      parseOK("EF000101000402000100010300010000000001BBAA")
+      check c.code[0].len == 1
+      check c.code[0][0] == 0xBB.byte
+      check c.data.len == 1
+      check c.data[0] == 0xAA.byte
+
+when isMainModule:
+  codeStreamMain()
