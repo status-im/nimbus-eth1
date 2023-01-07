@@ -56,6 +56,20 @@ type
     ErrTooLargeMaxStackHeight = "invalid type content, max stack height exceeds limit"
     ErrInvalidContainerSize   = "invalid container size"
 
+    # validation error
+    ErrUndefinedInstruction   = "undefined instrustion"
+    ErrTruncatedImmediate     = "truncated immediate"
+    ErrInvalidSectionArgument = "invalid section argument"
+    ErrInvalidJumpDest        = "invalid jump destination"
+    ErrConflictingStack       = "conflicting stack height"
+    ErrInvalidBranchCount     = "invalid number of branches in jump table"
+    ErrInvalidOutputs         = "invalid number of outputs"
+    ErrInvalidMaxStackHeight  = "invalid max stack height"
+    ErrInvalidCodeTermination = "invalid code termination"
+    ErrUnreachableCode        = "unreachable code"
+    ErrStackUnderflow         = "stack underflow"
+    ErrStackOverflow          = "stack overflow"
+
   EOFV1Error* = object
     kind*: EOFV1ErrorKind
     pos* : int

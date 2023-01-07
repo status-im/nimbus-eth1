@@ -10,7 +10,9 @@ import
   unittest2,
   stew/[byteutils, results],
   ../nimbus/vm_internals,
-  ../nimbus/utils/eof
+  ../nimbus/utils/eof,
+  ../nimbus/evm/[analysis, validate],
+  ../nimbus/evm/interpreter/op_codes
 
 proc codeStreamMain*() =
   suite "parse bytecode":
@@ -171,6 +173,214 @@ proc codeStreamMain*() =
       check c.code[0][0] == 0xBB.byte
       check c.data.len == 1
       check c.data[0] == 0xAA.byte
+
+  suite "code analysis":
+    type
+      Spec = object
+        code : seq[byte]
+        exp  : byte
+        which: int
+
+    proc spec(code: openArray[byte], exp: byte, which: int): Spec =
+      Spec(code: @code, exp: exp, which: which)
+
+    const vectors = [
+      spec(@[byte(PUSH1), 0x01, 0x01, 0x01], 0b0000_0010, 0),
+      spec(@[byte(PUSH1), byte(PUSH1), byte(PUSH1), byte(PUSH1)], 0b0000_1010, 0),
+      spec(@[byte(0x00), byte(PUSH1), 0x00, byte(PUSH1), 0x00, byte(PUSH1), 0x00, byte(PUSH1)], 0b0101_0100, 0),
+      spec(@[byte(PUSH8), byte(PUSH8), byte(PUSH8), byte(PUSH8), byte(PUSH8),
+        byte(PUSH8), byte(PUSH8), byte(PUSH8), 0x01, 0x01, 0x01], 0xFE, 0),
+      spec(@[byte(PUSH8), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b0000_0001, 1),
+      spec(@[byte(0x01), 0x01, 0x01, 0x01, 0x01, byte(PUSH2), byte(PUSH2), byte(PUSH2), 0x01, 0x01, 0x01], 0b1100_0000, 0),
+      spec(@[byte(0x01), 0x01, 0x01, 0x01, 0x01, byte(PUSH2), 0x01, 0x01, 0x01, 0x01, 0x01], 0b0000_0000, 1),
+      spec(@[byte(PUSH3), 0x01, 0x01, 0x01, byte(PUSH1), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b0010_1110, 0),
+      spec(@[byte(PUSH3), 0x01, 0x01, 0x01, byte(PUSH1), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b0000_0000, 1),
+      spec(@[byte(0x01), byte(PUSH8), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b1111_1100, 0),
+      spec(@[byte(0x01), byte(PUSH8), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b0000_0011, 1),
+      spec(@[byte(PUSH16), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b1111_1110, 0),
+      spec(@[byte(PUSH16), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b1111_1111, 1),
+      spec(@[byte(PUSH16), 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01], 0b0000_0001, 2),
+      spec(@[byte(PUSH8), 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, byte(PUSH1), 0x01], 0b1111_1110, 0),
+      spec(@[byte(PUSH8), 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, byte(PUSH1), 0x01], 0b0000_0101, 1),
+      spec(@[byte(PUSH32)], 0b1111_1110, 0),
+      spec(@[byte(PUSH32)], 0b1111_1111, 1),
+      spec(@[byte(PUSH32)], 0b1111_1111, 2),
+      spec(@[byte(PUSH32)], 0b1111_1111, 3),
+      spec(@[byte(PUSH32)], 0b0000_0001, 4),
+    ]
+
+    const eofVectors = [
+      spec(@[byte(RJUMP), 0x01, 0x01, 0x01], 0b0000_0110, 0),
+      spec(@[byte(RJUMPI), byte(RJUMP), byte(RJUMP), byte(RJUMPI)], 0b0011_0110, 0),
+      spec(@[byte(RJUMPV), 0x02, byte(RJUMP), 0x00, byte(RJUMPI), 0x00], 0b0011_1110, 0),
+    ]
+
+    test "jump dest analysis":
+      for x in vectors:
+        let z = codeBitmap(x.code)
+        check z[x.which] == x.exp
+        let y = eofCodeBitmap(x.code)
+        check y[x.which] == x.exp
+
+    test "eof analysis":
+      for x in eofVectors:
+        let z = eofCodeBitmap(x.code)
+        check z[x.which] == x.exp
+
+  suite "validate code tests":
+    type
+      ValidateVector = object
+        code: seq[byte]
+        section: int
+        metadata: seq[FunctionMetadata]
+        err: EOFV1ErrorKind
+
+    proc vv(code: openArray[byte], section: int,
+            met: openArray[FunctionMetaData],
+            err = ErrNoEOFErr): ValidateVector =
+      ValidateVector(code: @code, section: section,
+        metadata: @met, err: err)
+
+    proc fm(input, output, max: int): FunctionMetadata =
+      FunctionMetadata(input: input.uint8,
+        output: output.uint8, maxStackHeight: max.uint16)
+
+    const
+      ValidateVectors = [
+        vv([byte(CALLER), byte(POP), byte(STOP)], 0, [fm(0, 0, 1)]),
+
+        vv([byte(CALLF), 0x00, 0x00, byte(STOP)], 0, [fm(0, 0, 0)]),
+
+        vv([
+          byte(ADDRESS), byte(CALLF), 0x00, 0x00, byte(STOP)], 0,
+        [fm(0, 0, 1)]),
+
+        vv([byte(CALLER), byte(POP),], 0,
+        [fm(0, 0, 1)],
+        ErrInvalidCodeTermination),
+
+        vv([
+          byte(RJUMP),
+          byte(0x00),
+          byte(0x01),
+          byte(CALLER),
+          byte(STOP)], 0,
+        [fm(0, 0, 0)],
+        ErrUnreachableCode),
+
+        vv([
+          byte(PUSH1), byte(0x42), byte(ADD), byte(STOP)], 0,
+        [fm(0, 0, 1)],
+        ErrStackUnderflow),
+
+        vv([
+          byte(PUSH1), byte(0x42), byte(POP), byte(STOP)], 0,
+        [fm(0, 0, 2)],
+        ErrInvalidMaxStackHeight),
+
+        vv([
+          byte(PUSH0),
+          byte(RJUMPI),
+          byte(0x00),
+          byte(0x01),
+          byte(PUSH1),
+          byte(0x42), # jumps to here
+          byte(POP),
+          byte(STOP)], 0,
+        [fm(0, 0, 1)],
+        ErrInvalidJumpDest),
+
+        vv([
+          byte(PUSH0),
+          byte(RJUMPV),
+          byte(0x02),
+          byte(0x00),
+          byte(0x01),
+          byte(0x00),
+          byte(0x02),
+          byte(PUSH1),
+          byte(0x42), # jumps to here
+          byte(POP),  # and here
+          byte(STOP)], 0,
+        [fm(0, 0, 1)],
+        ErrInvalidJumpDest),
+
+        vv([
+          byte(PUSH0), byte(RJUMPV), byte(0x00), byte(STOP)], 0,
+        [fm(0, 0, 1)],
+        ErrInvalidBranchCount),
+
+        vv([
+          byte(RJUMP), 0x00, 0x03,
+          byte(JUMPDEST),
+          byte(JUMPDEST),
+          byte(RETURN),
+          byte(PUSH1), 20,
+          byte(PUSH1), 39,
+          byte(PUSH1), 0x00,
+          byte(CODECOPY),
+          byte(PUSH1), 20,
+          byte(PUSH1), 0x00,
+          byte(RJUMP), 0xff, 0xef], 0,
+        [fm(0, 0, 3)]),
+
+        vv([
+          byte(PUSH1), 1,
+          byte(RJUMPI), 0x00, 0x03,
+          byte(JUMPDEST),
+          byte(JUMPDEST),
+          byte(STOP),
+          byte(PUSH1), 20,
+          byte(PUSH1), 39,
+          byte(PUSH1), 0x00,
+          byte(CODECOPY),
+          byte(PUSH1), 20,
+          byte(PUSH1), 0x00,
+          byte(RETURN)], 0,
+        [fm(0, 0, 3)]),
+
+        vv([
+          byte(PUSH1), 1,
+          byte(RJUMPV), 0x02, 0x00, 0x03, 0xff, 0xf8,
+          byte(JUMPDEST),
+          byte(JUMPDEST),
+          byte(STOP),
+          byte(PUSH1), 20,
+          byte(PUSH1), 39,
+          byte(PUSH1), 0x00,
+          byte(CODECOPY),
+          byte(PUSH1), 20,
+          byte(PUSH1), 0x00,
+          byte(RETURN)], 0,
+        [fm(0, 0, 3)]),
+
+        vv([byte(STOP), byte(STOP), byte(INVALID)], 0,
+        [fm(0, 0, 0)],
+        ErrUnreachableCode),
+
+        vv([byte(RETF)], 0, [fm(0, 1, 0)], ErrInvalidOutputs),
+
+        vv([byte(RETF)], 0, [fm(3, 3, 3)]),
+
+        vv([byte(CALLF), 0x00, 0x01, byte(POP), byte(STOP)], 0,
+        [fm(0, 0, 1), fm(0, 1, 0)]),
+
+        vv([
+          byte(ORIGIN),
+          byte(ORIGIN),
+          byte(CALLF), 0x00, 0x01,
+          byte(POP),
+          byte(RETF)], 0,
+        [fm(0, 0, 2), fm(2, 1, 2)]),
+      ]
+
+    for i, x in ValidateVectors:
+      test "validate code " & $i:
+        let res = validateCode(x.code, x.section, x.metadata)
+        if res.isErr:
+          check res.error.kind == x.err
+        else:
+          check x.err == ErrNoEOFErr
 
 when isMainModule:
   codeStreamMain()

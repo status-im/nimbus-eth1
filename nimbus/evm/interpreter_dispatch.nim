@@ -17,7 +17,7 @@ import
   std/[macros, sets, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, db/accounts_cache],
-  "."/[code_stream, computation],
+  "."/[code_stream, computation, validate],
   "."/[message, precompiles, state, types],
   ../utils/[utils, eof],
   ./interpreter/[op_dispatcher, gas_costs],
@@ -168,6 +168,11 @@ proc beforeExecCreate(c: Computation): bool
       let res = c.code.parseEOF()
       if res.isErr:
         c.setError("EOF initcode parse error: " & res.error.toString, false)
+        return true
+
+      let vres = c.code.container.validateCode()
+      if vres.isErr:
+        c.setError("EOF initcode validation error: " & vres.error.toString, false)
         return true
 
   c.snapshot()

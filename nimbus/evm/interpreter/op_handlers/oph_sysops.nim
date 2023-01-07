@@ -209,7 +209,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: Vm2OpBerlinAndLater - Vm2OpEOFAndLater,
      name: "selfDestructEIP2929",
      info: "EIP2929: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,

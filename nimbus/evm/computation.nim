@@ -11,7 +11,7 @@
 import
   ".."/[db/accounts_cache, constants],
   "."/[code_stream, memory, message, stack, state],
-  "."/[types],
+  "."/[types, validate],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ../common/[common, evmforks],
   ../utils/[utils, eof],
@@ -338,6 +338,11 @@ proc writeContract*(c: Computation)
       let res = con.decode(c.output)
       if res.isErr:
         c.setError("EOF retcode parse error: " & res.error.toString, true)
+        return
+
+      let vres = con.validateCode()
+      if vres.isErr:
+        c.setError("EOF retcode validate error: " & vres.error.toString, true)
         return
 
     elif fork >= FkLondon:

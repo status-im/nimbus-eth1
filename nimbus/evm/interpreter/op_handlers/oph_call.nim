@@ -519,7 +519,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpEOFAndLater,
      name: "callCode",
      info: "Message-call into this account with alternative account's code",
      exec: (prep: vm2OpIgnore,
