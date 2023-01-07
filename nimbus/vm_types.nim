@@ -23,7 +23,8 @@ export
   vmt.TracerRef,
   vmt.VMFlag,
   vmt.BlockContext,
-  vmt.TxContext
+  vmt.TxContext,
+  vmt.ReturnContext
 
 when defined(evmc_enabled):
   import

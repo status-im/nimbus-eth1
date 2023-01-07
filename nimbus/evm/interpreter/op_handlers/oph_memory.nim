@@ -488,7 +488,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Jump,      ## 0x56, Jump
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpEOFAndLater,
      name: "jump",
      info: "Alter the program counter",
      exec: (prep: vm2OpIgnore,
@@ -496,7 +496,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: JumpI,     ## 0x57, Conditional jump
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpEOFAndLater,
      name: "jumpI",
      info: "Conditionally alter the program counter",
      exec: (prep: vm2OpIgnore,
@@ -504,7 +504,7 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpEOFAndLater,
      name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",

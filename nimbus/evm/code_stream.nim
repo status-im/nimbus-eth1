@@ -119,6 +119,12 @@ proc parseEOF*(c: CodeStream): Result[void, EOFV1Error] =
 func hasEOFCode*(c: CodeStream): bool =
   hasEOFMagic(c.legacyCode)
 
+func getType*(c: CodeStream, idx: int): FunctionMetaData =
+  c.container.types[idx]
+
+func section*(c: CodeStream): int =
+  c.section
+
 proc next*(c: var CodeStream): Op =
   if c.pc != c.codeLen:
     result = Op(c.codeView[c.pc])

@@ -722,6 +722,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
 
+          # b0s: Function Operations
+          CallF:          fixed GasLow,
+          RetF:           fixed GasVeryLow,
+
           # e0s: Static jumps
           RJump:          fixed GasBase,
           RJumpI:         fixed GasMidLow,

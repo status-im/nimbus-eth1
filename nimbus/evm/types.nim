@@ -72,13 +72,20 @@ type
     gasCosts*         : GasCosts
     asyncFactory*     : AsyncOperationFactory
 
+  # EIP-4750
+  ReturnContext* = object
+    section*: int
+    pc*: int
+    stackHeight*: int
+
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
     memory*:                Memory
     stack*:                 Stack
-    returnStack*:           seq[int]
+    # disable EIP-2315
+    # returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
     output*:                seq[byte]
@@ -97,6 +104,7 @@ type
     continuation*:          proc() {.gcsafe, raises: [CatchableError].}
     sysCall*:               bool
     initcodeEOF*:           bool
+    returnStack*:           seq[ReturnContext]
 
   Error* = ref object
     statusCode*: evmc_status_code

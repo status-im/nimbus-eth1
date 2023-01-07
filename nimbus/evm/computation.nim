@@ -226,7 +226,8 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.returnStack = @[]
+  # disable EIP-2315
+  # result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.sysCall = sysCall
 
@@ -238,6 +239,11 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     result.code = newCodeStream(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
+  # EIP-4750
+  result.returnStack = @[
+    ReturnContext(section: 0, pc: 0, stackHeight: 0)
+  ]
+
 proc newComputation*(vmState: BaseVMState, sysCall: bool,
                      message: Message, code: seq[byte]): Computation =
   new result
@@ -245,10 +251,16 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool,
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.returnStack = @[]
+  # disable EIP-2315
+  # result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.code = newCodeStream(code)
   result.sysCall = sysCall
+
+  # EIP-4750
+  result.returnStack = @[
+    ReturnContext(section: 0, pc: 0, stackHeight: 0)
+  ]
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
