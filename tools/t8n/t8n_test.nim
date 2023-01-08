@@ -498,6 +498,7 @@ const
       expOut: "exp.json",
     ),
     TestSpec(
+<<<<<<< HEAD
       name  : "EVM tracer nil stack crash bug",
       base  : "testdata/00-519",
       input : t8nInput(
@@ -568,6 +569,15 @@ const
       ),
       output: T8nOutput(trace: true, result: true),
       expOut: "istanbul.txt",
+    ),
+    TestSpec(
+      name: "Validate pre-allocated EOF code",
+      base: "testdata/01-501",
+      input: t8nInput(
+        "alloc.json", "txs.json", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: false),
+      expExitCode: 3,
     ),
   ]
 
