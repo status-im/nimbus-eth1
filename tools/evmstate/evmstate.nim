@@ -21,7 +21,8 @@ import
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
   ../common/helpers as chp,
-  "."/[config, helpers]
+  "."/[config, helpers],
+  ../common/state_clearing
 
 type
   StateContext = object
@@ -235,13 +236,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     gasUsed = rc.value
 
   let miner = ctx.header.coinbase
-  if miner in vmState.selfDestructs:
-    vmState.mutateStateDB:
-      db.addBalance(miner, 0.u256)
-      if fork >= FkSpurious:
-        if db.isEmptyAccount(miner):
-          db.deleteAccount(miner)
-      db.persist(clearCache = false)
+  coinbaseStateClearing(vmState, miner, fork)
 
 proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
   result = {

@@ -295,6 +295,9 @@ func toEVMFork*(com: CommonRef, number: BlockNumber): EVMFork =
   let fork = com.toHardFork(number)
   ToEVMFork[fork]
 
+func toEVMFork*(com: CommonRef): EVMFork =
+  ToEVMFork[com.currentFork]
+
 func isLondon*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number) >= London

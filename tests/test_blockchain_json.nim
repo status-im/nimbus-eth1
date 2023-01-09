@@ -390,6 +390,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
         # state root to test against 'postState'
         let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
         verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
+
+      success = lastBlockHash == tester.lastBlockHash
     except ValidationError as E:
       echo fixtureName, " ERROR: ", E.msg
       success = false

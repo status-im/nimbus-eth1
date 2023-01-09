@@ -16,6 +16,7 @@ import
   ../nimbus/utils/utils,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
+  ../tools/common/state_clearing,
   chronicles,
   eth/rlp,
   eth/trie/trie_defs,
@@ -124,28 +125,8 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   if rc.isOk:
     gasUsed = rc.value
 
-  # This is necessary due to the manner in which the state tests are
-  # generated. State tests are generated from the BlockChainTest tests
-  # in which these transactions are included in the larger context of a
-  # block and thus, the mechanisms which would touch/create/clear the
-  # coinbase account based on the mining reward are present during test
-  # generation, but not part of the execution, thus we must artificially
-  # create the account in VMs prior to the state clearing rules,
-  # as well as conditionally cleaning up the coinbase account when left
-  # empty in VMs after the state clearing rules came into effect.
   let miner = tester.header.coinbase
-  if miner in vmState.selfDestructs:
-    vmState.mutateStateDB:
-      db.addBalance(miner, 0.u256)
-      if fork >= FkSpurious:
-        if db.isEmptyAccount(miner):
-          db.deleteAccount(miner)
-
-      # this is an important step when using accounts_cache
-      # it will affect the account storage's location
-      # during the next call to `getComittedStorage`
-      # and the result of rootHash
-      db.persist()
+  coinbaseStateClearing(vmState, miner, fork)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
