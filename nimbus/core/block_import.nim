@@ -9,7 +9,9 @@
 
 import
   chronicles,
-  eth/rlp, stew/io2,
+  eth/common/eth_types_rlp,  # we need the BlockBody specialization of readRecordType
+  eth/rlp,
+  stew/io2,
   ./chain,
   ../db/select_backend,
   ../common/common

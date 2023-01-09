@@ -7,6 +7,57 @@ import eth/common/eth_types except BlockHeader
 
 export merger, eth_types
 
+
+# The next few conversion functions are needed for responding
+# to Engine API V1 requests. (For now, at least, it seems like
+# the V1 API can be handled by the handler for the V2 API.)
+
+func toPayloadV1*(p: ExecutionPayloadV2): ExecutionPayloadV1 =
+  ExecutionPayloadV1(
+    parentHash: p.parentHash,
+    feeRecipient: p.feeRecipient,
+    stateRoot: p.stateRoot,
+    receiptsRoot: p.receiptsRoot,
+    logsBloom: p.logsBloom,
+    prevRandao: p.prevRandao,
+    blockNumber: p.blockNumber,
+    gasLimit: p.gasLimit,
+    gasUsed: p.gasUsed,
+    timestamp: p.timestamp,
+    extraData: p.extraData,
+    baseFeePerGas: p.baseFeePerGas,
+    blockHash: p.blockHash,
+    transactions: p.transactions
+  )
+
+func toPayloadV2*(p: ExecutionPayloadV1): ExecutionPayloadV2 =
+  ExecutionPayloadV2(
+    parentHash: p.parentHash,
+    feeRecipient: p.feeRecipient,
+    stateRoot: p.stateRoot,
+    receiptsRoot: p.receiptsRoot,
+    logsBloom: p.logsBloom,
+    prevRandao: p.prevRandao,
+    blockNumber: p.blockNumber,
+    gasLimit: p.gasLimit,
+    gasUsed: p.gasUsed,
+    timestamp: p.timestamp,
+    extraData: p.extraData,
+    baseFeePerGas: p.baseFeePerGas,
+    blockHash: p.blockHash,
+    transactions: p.transactions,
+    withdrawals: none[seq[WithdrawalV1]]()
+  )
+
+func toPayloadAttributesV2*(a: PayloadAttributesV1): PayloadAttributesV2 =
+  PayloadAttributesV2(
+    timestamp: a.timestamp,
+    prevRandao: a.prevRandao,
+    suggestedFeeRecipient: a.suggestedFeeRecipient,
+    withdrawals: none[seq[WithdrawalV1]]()
+  )
+
+
 type
   EthBlockHeader* = eth_types.BlockHeader
 
@@ -31,7 +82,7 @@ type
 
   PayloadItem = object
     id: PayloadID
-    payload: ExecutionPayloadV1
+    payload: ExecutionPayloadV2
 
   HeaderItem = object
     hash: Hash256
@@ -72,15 +123,24 @@ proc get*(api: EngineApiRef, hash: Hash256, header: var EthBlockHeader): bool =
       return true
   false
 
-proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1) =
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV2) =
   api.payloadQueue.put(PayloadItem(id: id, payload: payload))
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1) =
+  put(api, id, payload.toPayloadV2)
+
+proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV2): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
       return true
   false
+
+proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+  var payloadV2: ExecutionPayloadV2
+  let found = get(api, id, payloadV2)
+  payload = payloadV2.toPayloadV1
+  found
 
 proc merger*(api: EngineApiRef): MergerRef =
   api.merger

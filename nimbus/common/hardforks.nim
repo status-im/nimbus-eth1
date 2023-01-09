@@ -72,6 +72,8 @@ type
     arrowGlacierBlock*  : Option[BlockNumber]
     grayGlacierBlock*   : Option[BlockNumber]
     mergeForkBlock*     : Option[BlockNumber]
+    # FIXME-Adam: I'm guessing I need to change these to EthTime
+    # instead of BlockNumber, then propagate that change through.
     shanghaiBlock*      : Option[BlockNumber]
     cancunBlock*        : Option[BlockNumber]
 

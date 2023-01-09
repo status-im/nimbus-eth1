@@ -31,7 +31,7 @@ import
 
 
 from web3/ethtypes as web3types import nil
-from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1
+from web3/engine_api_types import PayloadAttributesV2, ExecutionPayloadV2
 
 type
   EngineState* = enum
@@ -140,8 +140,8 @@ template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
 
 proc generateExecutionPayload*(engine: SealingEngineRef,
-                               payloadAttrs: PayloadAttributesV1,
-                               payloadRes: var ExecutionPayloadV1): Result[void, string] =
+                               payloadAttrs: PayloadAttributesV2,
+                               payloadRes: var ExecutionPayloadV2): Result[void, string] =
   let
     headBlock = try: engine.chain.db.getCanonicalHead()
                 except CatchableError: return err "No head block in database"
@@ -161,7 +161,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
     error "sealing engine generateBlock error", msg = res.error
     return res
 
-  # make sure both generated block header and payloadRes(ExecutionPayloadV1)
+  # make sure both generated block header and payloadRes(ExecutionPayloadV2)
   # produce the same blockHash
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
@@ -186,6 +186,8 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   for tx in blk.txs:
     let txData = rlp.encode(tx)
     payloadRes.transactions.add web3types.TypedTransaction(txData)
+
+  payloadRes.withdrawals = payloadAttrs.withdrawals
 
   return ok()
 

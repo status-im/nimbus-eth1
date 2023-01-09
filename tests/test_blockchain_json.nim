@@ -11,7 +11,7 @@
 import
   std/[json, os, tables, strutils, sets, options],
   unittest2,
-  eth/rlp, eth/trie/trie_defs,
+  eth/rlp, eth/common/eth_types_rlp, eth/trie/trie_defs,
   stew/[endians2, byteutils],
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
