@@ -123,7 +123,7 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
 
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len >= EIP3860_MAX_INITCODE_SIZE:
+  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     raise newException(ValidationError, "Initcode size exceeds max")
 
   # check signature validity

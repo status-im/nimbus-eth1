@@ -68,3 +68,7 @@ type
 
   VmStateError* = object of VMError
     ## VM state error relay
+
+  InitcodeError* = object of EVMError
+    ## Error to signal inicode size > EIP3860_MAX_INITCODE_SIZE
+    
