@@ -1,6 +1,7 @@
 import
+  std/options,
   chronicles,
-  eth/[common, p2p, p2p/private/p2p_types],
+  eth/[common, p2p, p2p/private/p2p_types, rlp],
   ../../types
 
 type
@@ -25,11 +26,37 @@ type
     bestBlockHash*: Hash256
     bestDifficulty*: DifficultyInt
 
+  PooledTx* = Option[Transaction]
+
 const
   maxStateFetch* = 384
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
+
+proc read*(rlp: var Rlp, T: type seq[PooledTx]): T =
+  ## RLP Mixin
+  if not rlp.isList:
+    raise newException(RlpTypeMismatch,
+      "Pooled transactions list expected, but source RLP is not a list")
+  for w in rlp:
+    if w.hasData:
+      result.add some(w.read(Transaction))
+    else:
+      result.add none(Transaction)
+
+proc append*(writer: var RlpWriter; txs: openArray[PooledTx]) =
+  ## RLP Mixin
+  writer.startList(txs.len)
+  for w in txs:
+    if w.isNone:
+      writer.append rlp.encode(seq[byte].default)
+    else:
+      let tx = w.unsafeGet
+      if tx.txType == TxLegacy:
+        writer.append tx
+      else:
+        writer.append rlp.encode(tx)
 
 proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
@@ -40,7 +67,7 @@ method getStatus*(ctx: EthWireBase): EthState {.base.} =
 method getReceipts*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[seq[Receipt]] {.base.} =
   notImplemented("getReceipts")
 
-method getPooledTxs*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[Transaction] {.base.} =
+method getPooledTxs*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[PooledTx] {.base.} =
   notImplemented("getPooledTxs")
 
 method getBlockBodies*(ctx: EthWireBase, hashes: openArray[Hash256]): seq[BlockBody] {.base.} =

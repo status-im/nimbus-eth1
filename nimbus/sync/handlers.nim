@@ -250,16 +250,18 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
       error "not able to get pooled transactions"
       return
 
-    let txs = res.get()
-    debug "fetchTx: received requested txs",
-      number = txs.transactions.len
+    let txs = res.unsafeGet.transactions
 
     # Remove from pending list regardless if tx is in result
-    for tx in txs.transactions:
-      let txHash = rlpHash(tx)
-      ctx.pending.excl txHash
+    var poolTxs: seq[Transaction]
+    for w in txs:
+      if w.isSome:
+        let tx = w.unsafeGet
+        ctx.pending.excl rlpHash(tx)
+        poolTxs.add tx
 
-    ctx.txPool.add(txs.transactions)
+    debug "fetchTx: received requested txs", slots=txs.len, usable=poolTxs.len
+    ctx.txPool.add(poolTxs)
 
   except TransportError:
     debug "Transport got closed during fetchTransactions"
@@ -385,15 +387,22 @@ method getReceipts*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[seq[Receip
       result.add @[]
       trace "handlers.getReceipts: blockHeader not found", blockHash
 
-method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transaction] {.gcsafe.} =
+method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[PooledTx] {.gcsafe.} =
   let txPool = ctx.txPool
+  var someActive = false
   for txHash in hashes:
     let res = txPool.getItem(txHash)
     if res.isOk:
-      result.add res.value.tx
+      someActive = true
+      result.add some(res.value.tx)
     else:
-      result.add Transaction()
+      result.add none(Transaction)
       trace "handlers.getPooledTxs: tx not found", txHash
+  # github.com/ethereum/devp2p/blob/master/caps/eth.md#pooledtransactions-0x0a:
+  #   A peer may respond with an empty list iff none of the hashes match
+  #   transactions in its pool.
+  if someActive:
+    return @[]
 
 method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBody] {.gcsafe.} =
   let db = ctx.db
