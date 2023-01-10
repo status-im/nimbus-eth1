@@ -131,6 +131,13 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   let secretKey = required(PrivateKey, "secretKey")
   signTransaction(tx, secretKey, tx.chainId, false)
 
+proc parseTx*(txData, index: JsonNode): Transaction =
+  let
+    dataIndex = index["data"].getInt
+    gasIndex  = index["gas"].getInt
+    valIndex  = index["value"].getInt
+  parseTx(txData, dataIndex, gasIndex, valIndex)
+
 proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
   for ac, accountData in wantedState:
     let account = hexToByteArray[20](ac)
@@ -140,36 +147,3 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
     stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
     stateDB.setCode(account, fromJson(Blob, accountData["code"]))
     stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
-
-proc parseFork*(x: string): Option[EVMFork] =
-  case x
-  of "Frontier"         : some(FkFrontier)
-  of "Homestead"        : some(FkHomestead)
-  of "EIP150"           : some(FkTangerine)
-  of "EIP158"           : some(FkSpurious)
-  of "Byzantium"        : some(FkByzantium)
-  of "Constantinople"   : some(FkConstantinople)
-  of "ConstantinopleFix": some(FkPetersburg)
-  of "Istanbul"         : some(FkIstanbul)
-  of "Berlin"           : some(FkBerlin)
-  of "London"           : some(FkLondon)
-  of "Merge"            : some(FkParis)
-  of "Shanghai"         : some(FkShanghai)
-  of "Cancun"           : some(FkCancun)
-  else: none(EVMFork)
-
-proc toString*(x: EVMFork): string =
-  case x
-  of FkFrontier      : "Frontier"
-  of FkHomestead     : "Homestead"
-  of FkTangerine     : "EIP150"
-  of FkSpurious      : "EIP158"
-  of FkByzantium     : "Byzantium"
-  of FkConstantinople: "Constantinople"
-  of FkPetersburg    : "ConstantinopleFix"
-  of FkIstanbul      : "Istanbul"
-  of FkBerlin        : "Berlin"
-  of FkLondon        : "London"
-  of FkParis         : "Merge"
-  of FkShanghai      : "Shanghai"
-  of FkCancun        : "Cancun"

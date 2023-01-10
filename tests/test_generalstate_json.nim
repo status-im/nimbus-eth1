@@ -14,6 +14,8 @@ import
   ../nimbus/db/accounts_cache,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
+  ../tools/common/helpers as chp,
+  ../tools/evmstate/helpers,
   chronicles,
   eth/rlp,
   eth/trie/trie_defs,
@@ -26,9 +28,9 @@ type
     header: BlockHeader
     pre: JsonNode
     tx: Transaction
-    expectedHash: string
-    expectedLogs: string
-    fork: EVMFork
+    expectedHash: Hash256
+    expectedLogs: Hash256
+    chainConfig: ChainConfig
     debugMode: bool
     trace: bool
     index: int
@@ -83,18 +85,9 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
 
-# using only one networkParams will reduce execution
-# time ~90% instead of create it for every test
-let params = chainConfigForNetwork(MainNet)
-
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
-  if tester.fork == FkParis:
-    params.terminalTotalDifficulty = some(0.u256)
-  else:
-    params.terminalTotalDifficulty = none(BlockNumber)
-
   let
-    com    = CommonRef.new(newMemoryDB(), params, getConfiguration().pruning)
+    com    = CommonRef.new(newMemoryDB(), tester.chainConfig, getConfiguration().pruning)
     parent = BlockHeader(stateRoot: emptyRlpHash)
 
   let vmState = BaseVMState.new(
@@ -106,6 +99,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
 
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
+  let fork = com.toEVMFork(tester.header.blockNumber)
 
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
@@ -116,18 +110,17 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     db.persist()
 
   defer:
-    let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii
+    let obtainedHash = vmState.readOnlyStateDB.rootHash
     check obtainedHash == tester.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
     let actualLogsHash = hashLogEntries(logEntries)
-    let expectedLogsHash = toLowerAscii(tester.expectedLogs)
-    check(expectedLogsHash == actualLogsHash)
+    check(tester.expectedLogs == actualLogsHash)
     if tester.debugMode:
-      let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
+      let success = tester.expectedLogs == actualLogsHash and obtainedHash == tester.expectedHash
       tester.dumpDebugData(vmState, sender, gasUsed, success)
 
   let rc = vmState.processTransaction(
-                tester.tx, sender, tester.header, tester.fork)
+                tester.tx, sender, tester.header, fork)
   if rc.isOk:
     gasUsed = rc.value
 
@@ -144,7 +137,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   if miner in vmState.selfDestructs:
     vmState.mutateStateDB:
       db.addBalance(miner, 0.u256)
-      if tester.fork >= FkSpurious:
+      if fork >= FkSpurious:
         if db.isEmptyAccount(miner):
           db.deleteAccount(miner)
 
@@ -155,7 +148,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       db.persist()
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
-                 trace = false, debugMode = false, supportedForks: set[EVMFork] = supportedForks) =
+                 trace = false, debugMode = false) =
   var tester: Tester
   var fixture: JsonNode
   for label, child in fixtures:
@@ -163,57 +156,53 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     tester.name = label
     break
 
-  let fenv = fixture["env"]
-  tester.header = BlockHeader(
-    coinbase   : fenv["currentCoinbase"].getStr.ethAddressFromHex,
-    difficulty : fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
-    blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
-    gasLimit   : fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
-    timestamp  : fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
-    stateRoot  : emptyRlpHash
-    )
-
-  if "currentBaseFee" in fenv:
-    tester.header.baseFee = fromHex(UInt256, fenv{"currentBaseFee"}.getStr)
-
-  if "currentRandom" in fenv:
-    tester.header.prevRandao.data = hexToByteArray[32](fenv{"currentRandom"}.getStr)
-
-  let specifyIndex = getConfiguration().index
+  tester.pre = fixture["pre"]
+  tester.header = parseHeader(fixture["env"])
   tester.trace = trace
   tester.debugMode = debugMode
-  let ftrans = fixture["transaction"]
-  var testedInFork = false
-  var numIndex = -1
-  for fork in supportedForks:
-    if fixture["post"].hasKey(forkNames[fork]):
-      numIndex = fixture["post"][forkNames[fork]].len
-      for expectation in fixture["post"][forkNames[fork]]:
-        inc tester.index
-        if specifyIndex > 0 and tester.index != specifyIndex:
-          continue
-        testedInFork = true
-        tester.expectedHash = expectation["hash"].getStr
-        tester.expectedLogs = expectation["logs"].getStr
-        let
-          indexes = expectation["indexes"]
-          dataIndex = indexes["data"].getInt
-          gasIndex = indexes["gas"].getInt
-          valueIndex = indexes["value"].getInt
-        tester.tx = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
-        tester.pre = fixture["pre"]
-        tester.fork = fork
-        testFixtureIndexes(tester, testStatusIMPL)
 
-  if not testedInFork:
-    echo "test subject '", tester.name, "' not tested in any forks/subtests"
-    if specifyIndex <= 0 or specifyIndex > numIndex:
-      echo "Maximum subtest available: ", numIndex
+  let
+    post   = fixture["post"]
+    txData = fixture["transaction"]
+    conf   = getConfiguration()
+
+  template prepareFork(forkName: string) =
+    try:
+      tester.chainConfig = getChainConfig(forkName)
+    except ValueError as ex:
+      debugEcho ex.msg
+      return
+
+  template runSubTest(subTest: JsonNode) =
+    tester.expectedHash = Hash256.fromJson(subTest["hash"])
+    tester.expectedLogs = Hash256.fromJson(subTest["logs"])
+    tester.tx = parseTx(txData, subTest["indexes"])
+    tester.testFixtureIndexes(testStatusIMPL)
+
+  if conf.fork.len > 0:
+    if not post.hasKey(conf.fork):
+      debugEcho "selected fork not available: " & conf.fork
+      return
+
+    let forkData = post[conf.fork]
+    prepareFork(conf.fork)
+    if conf.index.isNone:
+      for subTest in forkData:
+        runSubTest(subTest)
     else:
-      echo "available forks in this test:"
-      for fork in test_helpers.supportedForks:
-        if fixture["post"].hasKey(forkNames[fork]):
-          echo fork
+      let index = conf.index.get()
+      if index > forkData.len or index < 0:
+        debugEcho "selected index out of range(0-$1), requested $2" %
+          [$forkData.len, $index]
+        return
+
+      let subTest = forkData[index]
+      runSubTest(subTest)
+  else:
+    for forkName, forkData in post:
+      prepareFork(forkName)
+      for subTest in forkData:
+        runSubTest(subTest)
 
 proc generalStateJsonMain*(debugMode = false) =
   const
@@ -239,9 +228,7 @@ proc generalStateJsonMain*(debugMode = false) =
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    var forks: set[EVMFork] = {}
-    forks.incl config.fork
-    testFixture(n, testStatusIMPL, config.trace, true, forks)
+    testFixture(n, testStatusIMPL, config.trace, true)
 
 when isMainModule:
   var message: string

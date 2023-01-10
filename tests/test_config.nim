@@ -1,7 +1,6 @@
 import
-  std/[parseopt, strutils, tables],
-  ../nimbus/common/evmforks,
-  ./test_helpers
+  std/[parseopt, strutils, options],
+  ../nimbus/common/evmforks
 
 type
   ConfigStatus* = enum
@@ -15,8 +14,8 @@ type
 
   Configuration = ref object
     testSubject*: string
-    fork*: EVMFork
-    index*: int
+    fork*: string
+    index*: Option[int]
     trace*: bool
     legacy*: bool
     pruning*: bool
@@ -25,8 +24,6 @@ var testConfig {.threadvar.}: Configuration
 
 proc initConfiguration(): Configuration =
   result = new Configuration
-  result.fork = FkFrontier
-  result.index = 0
   result.trace = true
   result.pruning = true
 
@@ -47,8 +44,8 @@ proc processArguments*(msg: var string): ConfigStatus =
       config.testSubject = key
     of cmdLongOption, cmdShortOption:
       case key.toLowerAscii()
-      of "fork": config.fork = nameToFork[strip(value)]
-      of "index": config.index = parseInt(value)
+      of "fork": config.fork = value
+      of "index": config.index = some(parseInt(value))
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)
       of "pruning": config.pruning = parseBool(value)

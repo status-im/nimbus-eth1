@@ -20,7 +20,8 @@ import
   ../nimbus/utils/utils,
   ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
-  ../tools/common/helpers,
+  ../tools/common/helpers as chp,
+  ../tools/evmstate/helpers,
   ../nimbus/common/common
 
 type
@@ -344,7 +345,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   #     - mine block
   # 3 - diff resulting state with expected state
   # 4 - check that all previous blocks were valid
-  let specifyIndex = test_config.getConfiguration().index
+  let specifyIndex = test_config.getConfiguration().index.get(0)
   var fixtureIndex = 0
   var fixtureTested = false
 
