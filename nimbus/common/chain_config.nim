@@ -322,7 +322,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
-    const mainNetTTD = UInt256.fromHex("58750000000000000000000")
+    const mainNetTTD = parse("58750000000000000000000",UInt256)
     ChainConfig(
       consensusType:       ConsensusType.POW,
       chainId:             MainNet.ChainId,
