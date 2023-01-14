@@ -7,7 +7,7 @@
 
 import
   ./constants, ./errors, eth/[common, keys], ./utils/utils,
-  common/evmforks, ./vm_gas_costs
+  common/evmforks, ./vm_gas_costs, ./vm_internals
 
 import eth/common/transaction as common_transaction
 export common_transaction, errors
@@ -29,7 +29,7 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
   if tx.contractCreation:
     result = result + gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
-      result = result + (gasFees[fork][GasInitcodeWord] * tx.payload.len)
+      result = result + (gasFees[fork][GasInitcodeWord] * tx.payload.len.wordCount)
 
   if tx.txType > TxLegacy:
     result = result + tx.accessList.len * ACCESS_LIST_ADDRESS_COST
