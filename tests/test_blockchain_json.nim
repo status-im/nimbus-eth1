@@ -377,6 +377,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       let header = com.db.getCanonicalHead()
       let lastBlockHash = header.blockHash
       check lastBlockHash == tester.lastBlockHash
+      success = lastBlockHash == tester.lastBlockHash
       if tester.postStateHash != Hash256():
         let rootHash = tester.vmState.stateDB.rootHash
         if tester.postStateHash != rootHash:
