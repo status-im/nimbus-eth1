@@ -7,10 +7,18 @@
 
 import
   ./constants, ./errors, eth/[common, keys], ./utils/utils,
-  common/evmforks, ./vm_gas_costs, ./vm_internals
+  common/evmforks, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction, errors
+
+proc toWordSize(size: GasInt): GasInt =
+  # Round input to the nearest bigger multiple of 32
+  # tx validation will ensure the value is not too big
+  if size > GasInt.high-31:
+    return (GasInt.high shr 5) + 1
+
+  (size + 31) shr 5
 
 func intrinsicGas*(data: openArray[byte], fork: EVMFork): GasInt =
   result = gasFees[fork][GasTransaction]
@@ -29,7 +37,9 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
   if tx.contractCreation:
     result = result + gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
-      result = result + (gasFees[fork][GasInitcodeWord] * tx.payload.len.wordCount)
+      # cannot use wordCount here, it will raise unlisted exception
+      let numWords = toWordSize(tx.payload.len)
+      result = result + (gasFees[fork][GasInitcodeWord] * numWords)
 
   if tx.txType > TxLegacy:
     result = result + tx.accessList.len * ACCESS_LIST_ADDRESS_COST
