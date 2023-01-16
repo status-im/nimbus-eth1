@@ -166,8 +166,8 @@ proc tickerStats*(
       pivotBlock = some(env.stateHeader.blockNumber)
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
-    if 0 < ctx.data.beaconNumber:
-      beaconBlock = some(ctx.data.beaconNumber)
+    if 0 < ctx.data.beaconHeader.blockNumber:
+      beaconBlock = some(ctx.data.beaconHeader.blockNumber)
 
     TickerStats(
       beaconBlock:   beaconBlock,
@@ -343,102 +343,56 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-
-    # Cache beacon header data, iyt  might change while waiting for a peer
-    # reply message
-    beaconNumber = ctx.data.beaconNumber
-    beaconHash = ctx.data.beaconHash
-
+    beaconHeader = ctx.data.beaconHeader
   var
     pivotHeader: BlockHeader
-    pivotNumber: BlockNumber
-    peerNumber: BlockNumber # for error message
 
   block:
     let rc = ctx.data.pivotTable.lastValue
     if rc.isOk:
       pivotHeader = rc.value.stateHeader
-      pivotNumber = pivotHeader.blockNumber
 
   # Check whether the pivot needs to be updated
-  if pivotNumber + pivotBlockDistanceMin < beaconNumber:
-    let rc = await buddy.getBlockHeader(beaconHash)
-    if rc.isErr:
-      buddy.ctrl.zombie = true
-      return
+  if pivotHeader.blockNumber + pivotBlockDistanceMin < beaconHeader.blockNumber:
+    # If the entry before the previous entry is unused, then run a pool mode
+    # based session (which should enable a pivot table purge).
+    block:
+      let rc = ctx.data.pivotTable.beforeLast
+      if rc.isOk and rc.value.data.fetchAccounts.processed.isEmpty:
+        ctx.poolMode = true
 
-    # Sanity check => append a new pivot environment
-    if rc.value.blockNumber == beaconNumber:
-
-      # If the entry before the previous entry is unused, then run a pool mode
-      # based session (which should enable a pivot table purge).
-      block:
-        let rx = ctx.data.pivotTable.beforeLast
-        if rx.isOk and rx.value.data.fetchAccounts.processed.isEmpty:
-          ctx.poolMode = true
-
-      when extraTraceMessages:
-        trace "New pivot from beacon chein", peer, pivotNumber,
-          beaconNumber, beaconHash, poolMode=ctx.poolMode
-
-      discard ctx.data.pivotTable.lruAppend(
-        rc.value.stateRoot, SnapPivotRef.init(ctx, rc.value),
-        pivotTableLruEntriesMax)
-
-      # Done, buddy runs on updated environment. It has proved already that it
-      # supports the current header.
-      return
-
-    # Header/block number mismatch => process at the end of function
-    peerNumber = rc.value.blockNumber
-
-  elif 0 < pivotNumber:
-    # So there was no reason to update update then pivot. Verify that
-    # the pivot header can be fetched from peer.
-    let
-      pivotHash = pivotHeader.hash
-      rc = await buddy.getBlockHeader(pivotHash)
-    if rc.isErr:
-      when extraTraceMessages:
-        trace "Header unsupported by peer", peer, pivotNumber, pivotHash
-      buddy.ctrl.zombie = true
-      return
-
-    # Sanity check
-    if rc.value.blockNumber == beaconNumber:
-      return
-
-    # Header/block number mismatch => process at the end of function
-    peerNumber = rc.value.blockNumber
-
-  else:
-    # Not ready yet for initialising. Currently there is no pivot, at all
     when extraTraceMessages:
-      trace "Beacon chain header not ready yet", peer
+      trace "New pivot from beacon chain", peer,
+        pivot=("#" & $pivotHeader.blockNumber),
+        beacon=("#" & $beaconHeader.blockNumber), poolMode=ctx.poolMode
+
+    discard ctx.data.pivotTable.lruAppend(
+      beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
+      pivotTableLruEntriesMax)
+
+    pivotHeader = beaconHeader
+
+  let pvNumber = pivotHeader.blockNumber
+  if pvNumber == 0:
+    # Not ready yet
     buddy.ctrl.stopped = true
-    return
-
-  # Header/block number mismatch
-  trace "Oops, cannot approve peer due to header mismatch", peer, peerNumber,
-    beaconNumber, hash=beaconHash
-
-  # Reset cache
-  ctx.data.beaconNumber = 0.u256
-  ctx.data.beaconHash = Hash256.default
-
-  # See you later :)
-  buddy.ctrl.stopped = true
+  else:
+    # So there is a pivot. Verify that the header can be fetched from the peer.
+    let rc = await buddy.getBlockHeader(pivotHeader.hash)
+    if rc.isErr:
+      when extraTraceMessages:
+        trace "Pivot header unsupported by peer", peer, pivot=("#" & $pvNumber)
+      buddy.ctrl.zombie = true
 
 
 proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  result = proc(number: BlockNumber; hash: Hash256) {.gcsafe.} =
-    if ctx.data.beaconNumber < number:
+  result = proc(h: BlockHeader) {.gcsafe.} =
+    if ctx.data.beaconHeader.blockNumber < h.blockNumber:
       when extraTraceMessages:
-        trace "External beacon info update", number, hash
-      ctx.data.beaconNumber = number
-      ctx.data.beaconHash = hash
+        trace "External beacon info update", header=("#" & $h.blockNumber)
+      ctx.data.beaconHeader = h
 
 # ------------------------------------------------------------------------------
 # End

@@ -250,7 +250,7 @@ proc setupEngineApi*(
         hash = blockHash
 
       # Update sync header (if any)
-      com.syncReqNewHead(header.blockNumber, blockHash)
+      com.syncReqNewHead(header)
 
       return simpleFCU(PayloadExecutionStatus.syncing)
 
