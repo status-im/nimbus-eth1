@@ -51,9 +51,9 @@ type
     genesisHash: KeccakHash
     genesisHeader: BlockHeader
 
-    # map block number and ttd to
+    # map block number and ttd and time to
     # HardFork
-    forkToBlock: ForkToBlockNumber
+    forkTransitionTable: ForkTransitionTable
     blockToFork: BlockToForks
 
     # Eth wire protocol need this
@@ -84,8 +84,7 @@ type
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc hardForkTransition*(com: CommonRef,
-  number: BlockNumber, td: Option[DifficultyInt]) {.gcsafe.}
+proc hardForkTransition*(com: CommonRef, forkDeterminer: ForkDeterminationInfo) {.gcsafe.}
 
 func cliquePeriod*(com: CommonRef): int
 
@@ -128,8 +127,8 @@ proc init(com      : CommonRef,
   com.db          = ChainDBRef.new(db)
   com.pruneTrie   = pruneTrie
   com.config      = config
-  com.forkToBlock = config.toForkToBlockNumber()
-  com.blockToFork = config.blockToForks(com.forkToBlock)
+  com.forkTransitionTable = config.toForkTransitionTable()
+  com.blockToFork = config.blockToForks(com.forkTransitionTable)
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
 
@@ -138,7 +137,8 @@ proc init(com      : CommonRef,
   # set it before creating genesis block
   # TD need to be some(0.u256) because it can be the genesis
   # already at the MergeFork
-  com.hardForkTransition(0.toBlockNumber, some(0.u256))
+  let optionalGenesisTime = if genesis.isNil: none[EthTime]() else: some(genesis.timestamp)
+  com.hardForkTransition(ForkDeterminationInfo(blockNumber: 0.toBlockNumber, td: some(0.u256), time: optionalGenesisTime))
 
   # com.forkIds and com.blockZeroHash is set
   # by setForkId
@@ -154,6 +154,28 @@ proc init(com      : CommonRef,
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
   com.pos = CasperRef.new
+
+func matchesFork(com: CommonRef, fork: HardFork, number, td, time: UInt256): bool =
+  let x = com.blockToFork[fork]
+  x.toFork(x.data, number, td, time)
+
+proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+  var td: DifficultyInt
+  if not com.db.getTd(blockHash, td):
+    # TODO: Is this really ok?
+    none[DifficultyInt]()
+  else:
+    some(td)
+
+proc needTdForHardForkDetermination(com: CommonRef): bool =
+  let t = com.forkTransitionTable.mergeForkTransitionThreshold
+  t.blockNumber.isNone and t.ttd.isSome
+
+proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+  if needTdForHardForkDetermination(com):
+    getTd(com, blockHash)
+  else:
+    none[DifficultyInt]()
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -198,7 +220,7 @@ proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
     db           : ChainDBRef.new(db),
     pruneTrie    : com.pruneTrie,
     config       : com.config,
-    forkToBlock  : com.forkToBlock,
+    forkTransitionTable: com.forkTransitionTable,
     blockToFork  : com.blockToFork,
     forkIds      : com.forkIds,
     genesisHash  : com.genesisHash,
@@ -219,85 +241,42 @@ proc clone*(com: CommonRef): CommonRef =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func toHardFork*(com: CommonRef, number: BlockNumber): HardFork =
-  ## doesn't do transition
-  ## only want to know a particular block number
-  ## belongs to which fork without considering TD or TTD
-  ## MergeFork: assume the MergeForkBlock isSome,
-  ## if there is a MergeFork, thus bypassing the TD >= TTD
-  ## comparison
-  toHardFork(com.forkToBlock, number)
+func toHardFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
+  toHardFork(com.forkTransitionTable, forkDeterminer)
 
-proc hardForkTransition(com: CommonRef,
-     number: BlockNumber, td: Option[DifficultyInt])
+proc hardForkTransition(com: CommonRef, forkDeterminer: ForkDeterminationInfo)
       {.gcsafe, raises: [Defect, CatchableError].} =
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
   ## at that time, TD is no longer needed to find a fork
   ## TD only needed during transition from POW/POA to POS.
   ## Same thing happen before London block, TD can be ignored.
+  let fork = toHardFork(com.forkTransitionTable, forkDeterminer)
+  com.currentFork = fork
+  com.consensusTransition(fork)
 
-  if td.isNone:
-    # fork transition ignoring TD
-    let fork = com.toHardFork(number)
-    com.currentFork = fork
-    com.consensusTransition(fork)
-    return
+proc hardForkTransition*(com: CommonRef,
+                         number: BlockNumber,
+                         td: Option[DifficultyInt],
+                         time: Option[EthTime])
+      {.gcsafe, raises: [Defect, CatchableError].} =
+  com.hardForkTransition(ForkDeterminationInfo(blockNumber: number, time: time, td: td))
 
-  # fork transition considering TD
-  let td = td.get()
-  for fork in countdown(HardFork.high, HardFork.low):
-    let x = com.blockToFork[fork]
-    if x.toFork(x.data, number, td):
-      com.currentFork = fork
-      com.consensusTransition(fork)
-      return
-
-  # should always have a match
-  doAssert(false, "unreachable code")
-
-proc hardForkTransition*(com: CommonRef, parentHash: Hash256,
-                         number: BlockNumber)
-                         {.gcsafe, raises: [Defect, CatchableError].} =
-
-  # if mergeForkBlock is present, it has higher
-  # priority than TTD
-  if com.config.mergeForkBlock.isSome or
-     com.config.terminalTotalDifficulty.isNone:
-    let fork = com.toHardFork(number)
-    com.currentFork = fork
-    com.consensusTransition(fork)
-    return
-
-  var td: DifficultyInt
-  if not com.db.getTd(parentHash, td):
-    # TODO: Is this really ok?
-    let fork = com.toHardFork(number)
-    com.currentFork = fork
-    com.consensusTransition(fork)
-    return
-
-  for fork in countdown(HardFork.high, HardFork.low):
-    let x = com.blockToFork[fork]
-    if x.toFork(x.data, number, td):
-      com.currentFork = fork
-      com.consensusTransition(fork)
-      return
-
-  # should always have a match
-  doAssert(false, "unreachable code")
+proc hardForkTransition*(com: CommonRef,
+                         parentHash: Hash256,
+                         number: BlockNumber,
+                         time: Option[EthTime])
+      {.gcsafe, raises: [Defect, CatchableError].} =
+  com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
 proc hardForkTransition*(com: CommonRef, header: BlockHeader)
                         {.gcsafe, raises: [Defect, CatchableError].} =
 
-  com.hardForkTransition(header.parentHash, header.blockNumber)
+  com.hardForkTransition(header.parentHash, header.blockNumber, some(header.timestamp))
 
-func toEVMFork*(com: CommonRef, number: BlockNumber): EVMFork =
+func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
-  ## be aware that if MergeFork is not set in
-  ## chain config, this function probably give wrong
-  ## result because no TD is put into consideration
-  let fork = com.toHardFork(number)
+  let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
 
 func toEVMFork*(com: CommonRef): EVMFork =
@@ -305,7 +284,7 @@ func toEVMFork*(com: CommonRef): EVMFork =
 
 func isLondon*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
-  com.toHardFork(number) >= London
+  com.toHardFork(number.blockNumberToForkDeterminationInfo) >= London
 
 func forkGTE*(com: CommonRef, fork: HardFork): bool =
   com.currentFork >= fork
@@ -325,9 +304,9 @@ proc minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
 
   account.value
 
-func forkId*(com: CommonRef, number: BlockNumber): ForkID {.gcsafe.} =
+func forkId*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): ForkID {.gcsafe.} =
   ## EIP 2364/2124
-  let fork = com.toHardFork(number)
+  let fork = com.toHardFork(forkDeterminer)
   com.forkIds[fork]
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
@@ -468,7 +447,7 @@ proc setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
   com.config.terminalTotalDifficulty = ttd
   # rebuild blockToFork
   # TODO: Fix me, only need to rebuild MergeFork comparator
-  com.blockToFork = com.config.blockToForks(com.forkToBlock)
+  com.blockToFork = com.config.blockToForks(com.forkTransitionTable)
 
 proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
   ## useful for testing

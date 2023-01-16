@@ -24,8 +24,8 @@ proc genesisToTrie(filePath: string): HexaryTrie =
     quit(1)
 
   let sdb  = newStateDB(newMemoryDB(), false)
-  let map  = toForkToBlockNumber(cn.config)
-  let fork = map.toHardFork(0.toBlockNumber)
+  let map  = toForkTransitionTable(cn.config)
+  let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, cn.genesis.timestamp))
   discard toGenesisHeader(cn.genesis, sdb, fork)
 
   sdb.getTrie

@@ -129,7 +129,10 @@ proc processTransaction*(
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Variant of `processTransaction()` with `*fork* derived
   ## from the `vmState` argument.
-  let fork = vmState.com.toEVMFork(header.blockNumber)
+  ##
+  ## FIXME-Adam: Hmm, I'm getting the block number and timestamp from
+  ## the header; is that incorrect?
+  let fork = vmState.com.toEVMFork(header.forkDeterminationInfoForHeader)
   vmState.processTransaction(tx, sender, header, fork)
 
 # ------------------------------------------------------------------------------

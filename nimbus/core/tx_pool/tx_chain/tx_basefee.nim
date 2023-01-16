@@ -35,8 +35,9 @@ proc baseFeeGet*(com: CommonRef; parent: BlockHeader): GasPrice =
 
   # Note that the baseFee is calculated for the next header
   let
-    parentFork = com.toEVMFork(parent.blockNumber)
-    nextFork = com.toEVMFork(parent.blockNumber + 1)
+    forkDeterminer = forkDeterminationInfoForHeader(parent)
+    parentFork = com.toEVMFork(forkDeterminer)
+    nextFork = com.toEVMFork(forkDeterminer.adjustForNextBlock)
 
   if nextFork < FkLondon:
     return 0.GasPrice
