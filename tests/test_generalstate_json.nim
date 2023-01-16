@@ -100,7 +100,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
 
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
-  let fork = com.toEVMFork(tester.header.blockNumber)
+  let fork = com.toEVMFork(tester.header.forkDeterminationInfoForHeader)
 
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
