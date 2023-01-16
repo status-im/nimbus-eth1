@@ -9,9 +9,10 @@
 # except according to those terms.
 
 import
-  std/[math, sets, sequtils],
+  std/[math, sets, sequtils, strutils],
+  chronicles,
   chronos,
-  eth/[common, trie/trie_defs],
+  eth/[common, p2p, trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
@@ -23,9 +24,15 @@ import
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "snap-pivot"
+
 const
   extraAsserts = false or true
     ## Enable some asserts
+
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
 
 proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
 
@@ -348,6 +355,20 @@ proc recoverPivotFromCheckpoint*(
       if rc.isOk:
         rc.value.data = kvp.key
     env.archived = true
+
+# ------------------------------------------------------------------------------
+# Public function, manage new peer and pivot update
+# ------------------------------------------------------------------------------
+
+proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
+  ## Update beacon header. This function is intended as a call back function
+  ## for the RPC module.
+  result = proc(number: BlockNumber; hash: Hash256) {.gcsafe.} =
+    if ctx.data.beaconNumber < number:
+      when extraTraceMessages:
+        trace "External beacon info update", number, hash
+      ctx.data.beaconNumber = number
+      ctx.data.beaconHash = hash
 
 # ------------------------------------------------------------------------------
 # End
