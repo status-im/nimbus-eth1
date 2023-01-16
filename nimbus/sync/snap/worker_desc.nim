@@ -86,7 +86,6 @@ type
   BuddyData* = object
     ## Per-worker local descriptor data extension
     errors*: ComErrorStatsRef          ## For error handling
-    pivotFinder*: RootRef              ## Opaque object reference for sub-module
     pivotEnv*: SnapPivotRef            ## Environment containing state root
 
   CtxData* = object
@@ -97,7 +96,6 @@ type
 
     # Pivot table
     pivotTable*: SnapPivotTable        ## Per state root environment
-    pivotFinderCtx*: RootRef           ## Opaque object reference for sub-module
     beaconNumber*: BlockNumber         ## Running on beacon chain
     beaconHash*: Hash256               ## Ditto
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts

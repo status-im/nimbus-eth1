@@ -16,6 +16,7 @@ import
   stew/[interval_set, keyed_queue, sorted_set],
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
+  ./com/get_block_header,
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
            range_fetch_accounts, range_fetch_storage_slots,
@@ -28,9 +29,6 @@ logScope:
   topics = "snap-pivot"
 
 const
-  extraAsserts = false or true
-    ## Enable some asserts
-
   extraTraceMessages = false or true
     ## Enabled additional logging noise
 
@@ -50,14 +48,13 @@ proc accountsHealingOk(
 
 
 proc init(
-    batch: SnapRangeBatchRef;
-    stateRoot: Hash256;
-    ctx: SnapCtxRef;
-      ) =
-  ## Returns a pair of account hash range lists with the full range of hashes
-  ## smartly spread across the mutually disjunct interval sets.
-  batch.unprocessed.init() # full range on the first set of the pair
-  batch.processed = NodeTagRangeSet.init()
+    T: type SnapRangeBatchRef;      # Collection of sets of account ranges
+    ctx: SnapCtxRef;                # Some global context
+      ): T =
+  ## Account ranges constructor
+  new result
+  result.unprocessed.init() # full range on the first set of the pair
+  result.processed = NodeTagRangeSet.init()
 
   # Update coverage level roll over
   ctx.pivotAccountsCoverage100PcRollOver()
@@ -65,11 +62,19 @@ proc init(
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]` range
   # sets. Deprioritise already processed ranges by moving it to the second set.
   for iv in ctx.data.coveredAccounts.increasing:
-    discard batch.unprocessed[0].reduce iv
-    discard batch.unprocessed[1].merge iv
+    discard result.unprocessed[0].reduce iv
+    discard result.unprocessed[1].merge iv
 
-  when extraAsserts:
-    doAssert batch.unprocessed.verify
+proc init(
+    T: type SnapPivotRef;           # Privot descriptor type
+    ctx: SnapCtxRef;                # Some global context
+    header: BlockHeader;            # Header to generate new pivot from
+      ): T =
+  ## Pivot constructor.
+  result = T(
+    stateHeader:   header,
+    fetchAccounts: SnapRangeBatchRef.init(ctx))
+  result.storageAccounts.init()
 
 # ------------------------------------------------------------------------------
 # Public functions: pivot table related
@@ -91,52 +96,27 @@ proc topNumber*(pivotTable: var SnapPivotTable): BlockNumber =
     return rc.value.stateHeader.blockNumber
 
 
-proc update*(
+proc reverseUpdate*(
     pivotTable: var SnapPivotTable; # Pivot table
     header: BlockHeader;            # Header to generate new pivot from
     ctx: SnapCtxRef;                # Some global context
-    reverse = false;                # Update from bottom (e.g. for recovery)
       ) =
-  ## Activate environment for state root implied by `header` argument. This
-  ## function appends a new environment unless there was any not far enough
-  ## apart.
+  ## Activate environment for earlier state root implied by `header` argument.
   ##
   ## Note that the pivot table is assumed to be sorted by the block numbers of
   ## the pivot header.
   ##
-  # Calculate minimum block distance.
-  let minBlockDistance = block:
-    let rc = pivotTable.lastValue
-    if rc.isOk and rc.value.accountsHealingOk(ctx):
-      pivotBlockDistanceThrottledPivotChangeMin
-    else:
-      pivotBlockDistanceMin
+  # Append per-state root environment to LRU queue
+  discard pivotTable.prepend(
+    header.stateRoot, SnapPivotRef.init(ctx, header))
 
-  # Check whether the new header follows minimum depth requirement. This is
-  # where the queue is assumed to have increasing block numbers.
-  if reverse or
-     pivotTable.topNumber() + pivotBlockDistanceMin < header.blockNumber:
-
-    # Ok, append a new environment
-    let env = SnapPivotRef(
-      stateHeader:   header,
-      fetchAccounts: SnapRangeBatchRef())
-    env.fetchAccounts.init(header.stateRoot, ctx)
-    env.storageAccounts.init()
-
-    # Append per-state root environment to LRU queue
-    if reverse:
-      discard pivotTable.prepend(header.stateRoot, env)
-      # Make sure that the LRU table does not grow too big.
-      if max(3, ctx.buddiesMax) < pivotTable.len:
-        # Delete second entry rather thanthe first which might currently
-        # be needed.
-        let rc = pivotTable.secondKey
-        if rc.isOk:
-          pivotTable.del rc.value
-    else:
-      discard pivotTable.lruAppend(
-        header.stateRoot, env, pivotTableLruEntriesMax)
+  # Make sure that the LRU table does not grow too big.
+  if max(3, ctx.buddiesMax) < pivotTable.len:
+    # Delete second entry rather than the first which might currently
+    # be needed.
+    let rc = pivotTable.secondKey
+    if rc.isOk:
+      pivotTable.del rc.value
 
 
 proc tickerStats*(
@@ -178,6 +158,7 @@ proc tickerStats*(
                      ctx.data.covAccTimesFull.float)
       accFill = meanStdDev(uSum, uSqSum, count)
     var
+      beaconBlock = none(BlockNumber)
       pivotBlock = none(BlockNumber)
       stoQuLen = none(int)
       procChunks = 0
@@ -185,8 +166,11 @@ proc tickerStats*(
       pivotBlock = some(env.stateHeader.blockNumber)
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
+    if 0 < ctx.data.beaconNumber:
+      beaconBlock = some(ctx.data.beaconNumber)
 
     TickerStats(
+      beaconBlock:   beaconBlock,
       pivotBlock:    pivotBlock,
       nQueues:       ctx.data.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
@@ -281,6 +265,9 @@ proc saveCheckpoint*(
     fa = env.fetchAccounts
     nStoQu = env.storageQueueTotal()
 
+  if fa.processed.isEmpty:
+    return err(NoAccountsYet)
+
   if accountsSaveProcessedChunksMax < fa.processed.chunks:
     return err(TooManyProcessedChunks)
 
@@ -349,6 +336,99 @@ proc recoverPivotFromCheckpoint*(
 # ------------------------------------------------------------------------------
 # Public function, manage new peer and pivot update
 # ------------------------------------------------------------------------------
+
+proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
+  ## Approve peer and update pivot. On failure, the `buddy` will be stopped so
+  ## it will not proceed to the next scheduler task.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+
+    # Cache beacon header data, iyt  might change while waiting for a peer
+    # reply message
+    beaconNumber = ctx.data.beaconNumber
+    beaconHash = ctx.data.beaconHash
+
+  var
+    pivotHeader: BlockHeader
+    pivotNumber: BlockNumber
+    peerNumber: BlockNumber # for error message
+
+  block:
+    let rc = ctx.data.pivotTable.lastValue
+    if rc.isOk:
+      pivotHeader = rc.value.stateHeader
+      pivotNumber = pivotHeader.blockNumber
+
+  # Check whether the pivot needs to be updated
+  if pivotNumber + pivotBlockDistanceMin < beaconNumber:
+    let rc = await buddy.getBlockHeader(beaconHash)
+    if rc.isErr:
+      buddy.ctrl.zombie = true
+      return
+
+    # Sanity check => append a new pivot environment
+    if rc.value.blockNumber == beaconNumber:
+
+      # If the entry before the previous entry is unused, then run a pool mode
+      # based session (which should enable a pivot table purge).
+      block:
+        let rx = ctx.data.pivotTable.beforeLast
+        if rx.isOk and rx.value.data.fetchAccounts.processed.isEmpty:
+          ctx.poolMode = true
+
+      when extraTraceMessages:
+        trace "New pivot from beacon chein", peer, pivotNumber,
+          beaconNumber, beaconHash, poolMode=ctx.poolMode
+
+      discard ctx.data.pivotTable.lruAppend(
+        rc.value.stateRoot, SnapPivotRef.init(ctx, rc.value),
+        pivotTableLruEntriesMax)
+
+      # Done, buddy runs on updated environment. It has proved already that it
+      # supports the current header.
+      return
+
+    # Header/block number mismatch => process at the end of function
+    peerNumber = rc.value.blockNumber
+
+  elif 0 < pivotNumber:
+    # So there was no reason to update update then pivot. Verify that
+    # the pivot header can be fetched from peer.
+    let
+      pivotHash = pivotHeader.hash
+      rc = await buddy.getBlockHeader(pivotHash)
+    if rc.isErr:
+      when extraTraceMessages:
+        trace "Header unsupported by peer", peer, pivotNumber, pivotHash
+      buddy.ctrl.zombie = true
+      return
+
+    # Sanity check
+    if rc.value.blockNumber == beaconNumber:
+      return
+
+    # Header/block number mismatch => process at the end of function
+    peerNumber = rc.value.blockNumber
+
+  else:
+    # Not ready yet for initialising. Currently there is no pivot, at all
+    when extraTraceMessages:
+      trace "Beacon chain header not ready yet", peer
+    buddy.ctrl.stopped = true
+    return
+
+  # Header/block number mismatch
+  trace "Oops, cannot approve peer due to header mismatch", peer, peerNumber,
+    beaconNumber, hash=beaconHash
+
+  # Reset cache
+  ctx.data.beaconNumber = 0.u256
+  ctx.data.beaconHash = Hash256.default
+
+  # See you later :)
+  buddy.ctrl.stopped = true
+
 
 proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
