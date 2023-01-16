@@ -92,7 +92,7 @@ template runTest(network: untyped, name: string) =
       com    = CommonRef.new(newMemoryDB(), true, network, params)
 
     for x in `network IDs`:
-      let id = com.forkId(x.blockNumber.toBlockNumber)
+      let id = com.forkId(x.blockNumber.toBlockNumber.blockNumberToForkDeterminationInfo)
       check id.crc == x.id.crc
       check id.nextFork == x.id.nextFork
 

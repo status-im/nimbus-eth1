@@ -390,7 +390,7 @@ proc setupEthRpc*(
     var
       idx = 0
       prevGasUsed = GasInt(0)
-      fork = com.toEVMFork(header.blockNumber)
+      fork = com.toEVMFork(header.forkDeterminationInfoForHeader)
 
     for receipt in chainDB.getReceipts(header.receiptRoot):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed

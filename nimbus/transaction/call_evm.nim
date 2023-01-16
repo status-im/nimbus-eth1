@@ -90,13 +90,14 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallRe
 
 proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCap: GasInt): GasInt =
   # Binary search the gas requirement, as it may be higher than the amount used
+  let timestamp = getTime().utc.toTime
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
-    timestamp:  getTime().utc.toTime,
+    timestamp:  timestamp,
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, com)
-  let fork    = com.toEVMFork(header.blockNumber)
+  let fork    = com.toEVMFork(forkDeterminationInfo(header.blockNumber, timestamp))
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = toCallParams(vmState, cd, gasCap, header.fee)
 

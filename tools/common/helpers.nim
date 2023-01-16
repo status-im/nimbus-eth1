@@ -49,7 +49,9 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.grayGlacierBlock    = number[HardFork.GrayGlacier]
     c.mergeForkBlock      = number[HardFork.MergeFork]
     c.shanghaiBlock       = number[HardFork.Shanghai]
-    c.cancunBlock         = number[HardFork.Cancun]
+    # FIXME-Adam: I don't understand how these tests are supposed
+    # to work. Will they specify timestamps for Shanghai/Cancun?
+    # c.cancunBlock         = number[HardFork.Cancun]
 
   c.daoForkSupport = false
   c.chainId = 1.ChainId

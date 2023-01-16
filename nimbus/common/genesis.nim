@@ -97,8 +97,8 @@ proc toGenesisHeader*(genesis: Genesis, fork: HardFork, db: TrieDatabaseRef = ni
 proc toGenesisHeader*(params: NetworkParams, db: TrieDatabaseRef = nil): BlockHeader
     {.raises: [Defect, RlpError].} =
   ## Generate the genesis block header from the `genesis` and `config` argument value.
-  let map  = toForkToBlockNumber(params.config)
-  let fork = map.toHardFork(0.toBlockNumber)
+  let map  = toForkTransitionTable(params.config)
+  let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
   toGenesisHeader(params.genesis, fork, db)
 
 

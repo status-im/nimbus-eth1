@@ -21,6 +21,7 @@ export
   vms.coinbase,
   vms.difficulty,
   vms.disableTracing,
+  vms.forkDeterminationInfoForVMState,
   vms.enableTracing,
   vms.tracingEnabled,
   vms.baseFee,

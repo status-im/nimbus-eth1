@@ -173,7 +173,7 @@ proc importBlock(tester: var Tester, com: CommonRef,
 
   let parentHeader = com.db.getBlockHeader(tb.header.parentHash)
   let td = some(com.db.getScore(tb.header.parentHash))
-  com.hardForkTransition(tb.header.blockNumber, td)
+  com.hardForkTransition(tb.header.blockNumber, td, some(tb.header.timestamp))
 
   tester.vmState = BaseVMState.new(
     parentHeader,
