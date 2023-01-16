@@ -392,7 +392,6 @@ method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transacti
     if res.isOk:
       result.add res.value.tx
     else:
-      result.add Transaction()
       trace "handlers.getPooledTxs: tx not found", txHash
 
 method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBody] {.gcsafe.} =

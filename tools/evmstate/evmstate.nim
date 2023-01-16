@@ -20,7 +20,9 @@ import
   ../../nimbus/transaction,
   ../../nimbus/core/executor,
   ../../nimbus/common/common,
-  "."/[config, helpers]
+  ../common/helpers as chp,
+  "."/[config, helpers],
+  ../common/state_clearing
 
 type
   StateContext = object
@@ -29,7 +31,7 @@ type
     tx: Transaction
     expectedHash: Hash256
     expectedLogs: Hash256
-    fork: EVMFork
+    chainConfig: ChainConfig
     index: int
     tracerFlags: set[TracerFlags]
     error: string
@@ -63,13 +65,6 @@ proc extractNameAndFixture(ctx: var StateContext, n: JsonNode): JsonNode =
     ctx.name = label
     return
   doAssert(false, "unreachable")
-
-proc parseTx(txData, index: JsonNode): Transaction =
-  let
-    dataIndex = index["data"].getInt
-    gasIndex  = index["gas"].getInt
-    valIndex  = index["value"].getInt
-  parseTx(txData, dataIndex, gasIndex, valIndex)
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
@@ -190,7 +185,6 @@ proc writeTraceToStderr(vmState: BaseVMState, pretty: bool) =
   if pretty:
     stderr.writeLine(trace.pretty)
   else:
-    var gasUsed = 0
     let logs = trace["structLogs"]
     trace.delete("structLogs")
     for x in logs:
@@ -204,14 +198,9 @@ proc writeTraceToStderr(vmState: BaseVMState, pretty: bool) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    params  = chainConfigForNetwork(MainNet)
-
-  if ctx.fork == FkParis:
-    params.terminalTotalDifficulty = some(0.u256)
-
-  let
-    com     = CommonRef.new(newMemoryDB(), params, pruneTrie = false)
+    com     = CommonRef.new(newMemoryDB(), ctx.chainConfig, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
+    fork    = com.toEVMFork(ctx.header.blockNumber)
 
   let vmState = TestVMState()
   vmState.init(
@@ -233,7 +222,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       name : ctx.name,
       pass : ctx.error.len == 0,
       root : vmState.stateDB.rootHash,
-      fork : toString(ctx.fork),
+      fork : $fork,
       error: ctx.error
     )
     if conf.dumpEnabled:
@@ -242,18 +231,12 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       writeTraceToStderr(vmState, conf.pretty)
 
   let rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header, ctx.fork)
+                ctx.tx, sender, ctx.header, fork)
   if rc.isOk:
     gasUsed = rc.value
 
   let miner = ctx.header.coinbase
-  if miner in vmState.selfDestructs:
-    vmState.mutateStateDB:
-      db.addBalance(miner, 0.u256)
-      if ctx.fork >= FkSpurious:
-        if db.isEmptyAccount(miner):
-          db.deleteAccount(miner)
-      db.persist(clearCache = false)
+  coinbaseStateClearing(vmState, miner, fork)
 
 proc toTracerFlags(conf: Stateconf): set[TracerFlags] =
   result = {
@@ -289,9 +272,11 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
     hasError = false
 
   template prepareFork(forkName: string) =
-    let fork = parseFork(forkName)
-    doAssert(fork.isSome, "unsupported fork: " & forkName)
-    ctx.fork = fork.get()
+    try:
+      ctx.chainConfig = getChainConfig(forkName)
+    except ValueError as ex:
+      debugEcho ex.msg
+      return false
     ctx.index = index
     inc index
 
@@ -332,14 +317,15 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
   not hasError
 
 when defined(chronicles_runtime_filtering):
-  proc toLogLevel(v: int): LogLevel =
+  type Lev = chronicles.LogLevel
+  proc toLogLevel(v: int): Lev =
     case v
-    of 1: LogLevel.ERROR
-    of 2: LogLevel.WARN
-    of 3: LogLevel.INFO
-    of 4: LogLevel.DEBUG
-    of 5: LogLevel.TRACE
-    else: LogLevel.NONE
+    of 1: Lev.ERROR
+    of 2: Lev.WARN
+    of 3: Lev.INFO
+    of 4: Lev.DEBUG
+    of 5: Lev.TRACE
+    else: Lev.NONE
 
   proc setVerbosity(v: int) =
     let level = v.toLogLevel

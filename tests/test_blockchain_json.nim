@@ -20,7 +20,8 @@ import
   ../nimbus/utils/utils,
   ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
-  ../tools/common/helpers,
+  ../tools/common/helpers as chp,
+  ../tools/evmstate/helpers,
   ../nimbus/common/common
 
 type
@@ -344,7 +345,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   #     - mine block
   # 3 - diff resulting state with expected state
   # 4 - check that all previous blocks were valid
-  let specifyIndex = test_config.getConfiguration().index
+  let specifyIndex = test_config.getConfiguration().index.get(0)
   var fixtureIndex = 0
   var fixtureTested = false
 
@@ -376,6 +377,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       let header = com.db.getCanonicalHead()
       let lastBlockHash = header.blockHash
       check lastBlockHash == tester.lastBlockHash
+      success = lastBlockHash == tester.lastBlockHash
       if tester.postStateHash != Hash256():
         let rootHash = tester.vmState.stateDB.rootHash
         if tester.postStateHash != rootHash:
@@ -388,6 +390,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
         # state root to test against 'postState'
         let stateDB = AccountsCache.init(memDB, header.stateRoot, pruneTrie)
         verifyStateDB(fixture["postState"], ReadOnlyStateDB(stateDB))
+
+      success = lastBlockHash == tester.lastBlockHash
     except ValidationError as E:
       echo fixtureName, " ERROR: ", E.msg
       success = false

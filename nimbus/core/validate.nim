@@ -259,7 +259,7 @@ proc validateTransaction*(
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len >= EIP3860_MAX_INITCODE_SIZE:
+  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     debug "invalid tx: initcode size exceeds maximum"
     return false
 

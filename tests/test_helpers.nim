@@ -34,19 +34,6 @@ const
     FkParis: "Merge"
   }.toTable
 
-  supportedForks* = {
-    FkFrontier,
-    FkHomestead,
-    FkTangerine,
-    FkSpurious,
-    FkByzantium,
-    FkConstantinople,
-    FkPetersburg,
-    FkIstanbul,
-    FkBerlin,
-    FkLondon,
-    FkParis}
-
   nameToFork* = revmap(forkNames)
 
 func skipNothing*(folder: string, name: string): bool = false
@@ -121,20 +108,6 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUint[64], j.getStr)
   result = cast[int64](data)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: AccountsCache) =
-  for ac, accountData in wantedState:
-    let account = ethAddressFromHex(ac)
-    for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
-
-    let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
-    let code = accountData{"code"}.getStr.safeHexToSeqByte
-    let balance = UInt256.fromHex accountData{"balance"}.getStr
-
-    stateDB.setNonce(account, nonce)
-    stateDB.setCode(account, code)
-    stateDB.setBalance(account, balance)
-
 proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
@@ -165,93 +138,8 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
     if wantedNonce != actualNonce:
       raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
-proc parseAccessList(n: JsonNode): AccessList =
-  if n.kind == JNull:
-    return
-
-  for x in n:
-    var ap = AccessPair(
-      address: parseAddress(x["address"].getStr)
-    )
-    let sks = x["storageKeys"]
-    for sk in sks:
-      ap.storageKeys.add hexToByteArray[32](sk.getStr())
-    result.add ap
-
-proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  let dynamicFeeTx = "gasPrice" notin j
-  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce
-  let gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
-
-  var toAddr: Option[EthAddress]
-  # Fixture transactions with `"to": ""` are contract creations.
-  #
-  # Fixture transactions with `"to": "0x..."` or `"to": "..."` where `...` are
-  # 40 hex digits are call/transfer transactions.  Even if the digits are all
-  # zeros, because the all-zeros address is a legitimate account.
-  #
-  # There are no other formats.  The number of digits if present is always 40,
-  # "0x" prefix is used in some but not all fixtures, and upper case hex digits
-  # occur in a few.
-  let rawTo = j["to"].getStr
-  if rawTo != "":
-    toAddr = some(rawTo.parseAddress)
-
-  let hexStr = j["value"][valueIndex].getStr
-  # stTransactionTest/ValueOverflow.json
-  # prevent parsing exception and subtitute it with max uint256
-  let value = if ':' in hexStr: high(UInt256) else: fromHex(UInt256, hexStr)
-  let payload = j["data"][dataIndex].getStr.safeHexToSeqByte
-
-  var secretKey = j["secretKey"].getStr
-  removePrefix(secretKey, "0x")
-  let privateKey = PrivateKey.fromHex(secretKey).tryGet()
-
-  if dynamicFeeTx:
-    let accList = j["accessLists"][dataIndex]
-    var tx = Transaction(
-      txType: TxEip1559,
-      nonce: nonce,
-      maxFee: j["maxFeePerGas"].getHexadecimalInt,
-      maxPriorityFee: j["maxPriorityFeePerGas"].getHexadecimalInt,
-      gasLimit: gasLimit,
-      to: toAddr,
-      value: value,
-      payload: payload,
-      accessList: parseAccessList(accList),
-      chainId: ChainId(1)
-    )
-    return signTransaction(tx, privateKey, ChainId(1), false)
-
-  let gasPrice = j["gasPrice"].getHexadecimalInt
-  if j.hasKey("accessLists"):
-    let accList = j["accessLists"][dataIndex]
-    var tx = Transaction(
-      txType: TxEip2930,
-      nonce: nonce,
-      gasPrice: gasPrice,
-      gasLimit: gasLimit,
-      to: toAddr,
-      value: value,
-      payload: payload,
-      accessList: parseAccessList(accList),
-      chainId: ChainId(1)
-    )
-    signTransaction(tx, privateKey, ChainId(1), false)
-  else:
-    var tx = Transaction(
-      txType: TxLegacy,
-      nonce: nonce,
-      gasPrice: gasPrice,
-      gasLimit: gasLimit,
-      to: toAddr,
-      value: value,
-      payload: payload
-    )
-    signTransaction(tx, privateKey, ChainId(1), false)
-
-proc hashLogEntries*(logs: seq[Log]): string =
-  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
+proc hashLogEntries*(logs: seq[Log]): Hash256 =
+  keccakHash(rlp.encode(logs))
 
 proc setupEthNode*(
     conf: NimbusConf, ctx: EthContext,
