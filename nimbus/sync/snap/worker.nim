@@ -146,10 +146,8 @@ proc start*(buddy: SnapBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
   if peer.supports(protocol.snap) and
+     peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    when extraTraceMessages:
-      if not peer.supports(protocol.eth):
-        trace "Peer does not support " & prettyEthProtoName, peer
     buddy.data.errors = ComErrorStatsRef()
     if not ctx.data.ticker.isNil:
       ctx.data.ticker.startBuddy()
