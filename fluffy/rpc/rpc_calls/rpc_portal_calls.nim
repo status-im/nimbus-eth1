@@ -16,13 +16,13 @@ proc portal_stateFindContent(enr: Record, contentKey: string): tuple[
 proc portal_stateFindContentFull(enr: Record, contentKey: string): tuple[
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_stateOfferReal(
-  enr: Record, contentKey: string, contentValue: string): bool
-proc portal_stateOffer(contentKey: string, contentValue: string): int
+proc portal_stateOffer(
+  enr: Record, contentKey: string, contentValue: string): string
 proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_stateRecursiveFindContent(contentKey: string): string
 proc portal_stateStore(contentKey: string, contentValue: string): bool
 proc portal_stateLocalContent(contentKey: string): string
+proc portal_stateGossip(contentKey: string, contentValue: string): int
 
 ## Portal History Network json-rpc calls
 proc portal_historyNodeInfo(): NodeInfo
@@ -42,10 +42,10 @@ proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
 proc portal_historyFindContentFull(enr: Record, contentKey: string): tuple[
   content: Option[string],
   enrs: Option[seq[Record]]]
-proc portal_historyOfferReal(
-  enr: Record, contentKey: string, contentValue: string): bool
-proc portal_historyOffer(contentKey: string, contentValue: string): int
+proc portal_historyOffer(
+  enr: Record, contentKey: string, contentValue: string): string
 proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
 proc portal_historyRecursiveFindContent(contentKey: string): string
 proc portal_historyStore(contentKey: string, contentValue: string): bool
 proc portal_historyLocalContent(contentKey: string): string
+proc portal_historyGossip(contentKey: string, contentValue: string): int

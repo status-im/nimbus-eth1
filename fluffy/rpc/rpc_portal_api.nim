@@ -16,6 +16,9 @@ import
 
 export rpcserver
 
+# Portal Network JSON-RPC impelentation as per specification:
+# https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
+
 # Note:
 # Using a string for the network parameter will give an error in the rpc macro:
 # Error: Invalid node kind nnkInfix for macros.`$`
@@ -25,9 +28,6 @@ export rpcserver
 proc installPortalApiHandlers*(
     rpcServer: RpcServer|RpcProxy, p: PortalProtocol, network: static string)
     {.raises: [Defect, CatchableError].} =
-  ## Portal routing table and portal wire json-rpc API is not yet defined but
-  ## will look something similar as what exists here now:
-  ## https://github.com/ethereum/portal-network-specs/pull/88
 
   rpcServer.rpc("portal_" & network & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
@@ -73,7 +73,7 @@ proc installPortalApiHandlers*(
   rpcServer.rpc("portal_" & network & "LookupEnr") do(nodeId: NodeId) -> Record:
     # TODO: Not fully according to spec, missing optional enrSeq
     # Can add `enrSeq: Option[uint64]` as parameter but Option appears to be
-    # not implemented as an option parameter in nim-json-rpc?
+    # not implemented as an optional parameter in nim-json-rpc?
     let lookup = await p.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record
@@ -168,10 +168,8 @@ proc installPortalApiHandlers*(
           none(string),
           some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
 
-  rpcServer.rpc("portal_" & network & "OfferReal") do(
-      enr: Record, contentKey: string, contentValue: string) -> bool:
-    # Note: unspecified RPC, but the spec took over the Offer call to actually
-    # do gossip. This should be adjusted.
+  rpcServer.rpc("portal_" & network & "Offer") do(
+      enr: Record, contentKey: string, contentValue: string) -> string:
     let
       node = toNodeWithAddress(enr)
       key = hexToSeqByte(contentKey)
@@ -180,19 +178,9 @@ proc installPortalApiHandlers*(
       res = await p.offer(node, @[contentInfo])
 
     if res.isOk():
-      return true
+      return "0x" & SSZ.encode(res.get()).toHex()
     else:
       raise newException(ValueError, $res.error)
-
-  rpcServer.rpc("portal_" & network & "Offer") do(
-      contentKey: string, contentValue: string) -> int:
-    let
-      key = hexToSeqByte(contentKey)
-      content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ByteList.init(key)])
-      numberOfPeers = await p.neighborhoodGossip(contentKeys, @[content])
-
-    return numberOfPeers
 
   rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do(
       nodeId: NodeId) -> seq[Record]:
@@ -234,3 +222,13 @@ proc installPortalApiHandlers*(
       return contentResult.get().toHex()
     else:
       return "0x0"
+
+  rpcServer.rpc("portal_" & network & "Gossip") do(
+      contentKey: string, contentValue: string) -> int:
+    let
+      key = hexToSeqByte(contentKey)
+      content = hexToSeqByte(contentValue)
+      contentKeys = ContentKeysList(@[ByteList.init(key)])
+      numberOfPeers = await p.neighborhoodGossip(contentKeys, @[content])
+
+    return numberOfPeers
