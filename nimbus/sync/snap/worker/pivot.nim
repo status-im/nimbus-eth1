@@ -390,8 +390,8 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe.} =
     if ctx.data.beaconHeader.blockNumber < h.blockNumber:
-      when extraTraceMessages:
-        trace "External beacon info update", header=("#" & $h.blockNumber)
+      #when extraTraceMessages:
+      #  trace "External beacon info update", header=("#" & $h.blockNumber)
       ctx.data.beaconHeader = h
 
 # ------------------------------------------------------------------------------

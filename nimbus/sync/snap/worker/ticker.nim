@@ -123,8 +123,8 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
      tickerLogSuppressMax < (now - t.visited):
     var
       nAcc, nSto, bulk: string
-      pivot = "n/a"
-      beacon = "n/a"
+      pv = "n/a"
+      bc = "n/a"
       nStoQue = "n/a"
     let
       recoveryDone = t.lastRecov
@@ -132,7 +132,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
          "(" & data.accountsFill[1].pc99 & ")" &
          "/" & data.accountsFill[2].pc99 &
          "~" & data.nAccountStats.uint.toSI
-      buddies = t.nBuddies
+      nInst = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
@@ -144,9 +144,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
-        pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
+        pv = &"#{data.pivotBlock.get}/{data.nQueues}"
       if data.beaconBlock.isSome:
-        beacon = &"#{data.beaconBlock.get}"
+        bc = &"#{data.beaconBlock.get}"
       nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
               &"({(data.nAccounts[1]+0.5).int64})")
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
@@ -157,13 +157,13 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     if t.recovery:
       info "Snap sync statistics (recovery)",
-        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
     elif recoveryDone:
       info "Snap sync statistics (recovery done)",
-        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
     else:
       info "Snap sync statistics",
-        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
 
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
