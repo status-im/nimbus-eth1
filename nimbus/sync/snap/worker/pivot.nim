@@ -16,7 +16,6 @@ import
   stew/[interval_set, keyed_queue, sorted_set],
   ../../sync_desc,
   ".."/[constants, range_desc, worker_desc],
-  ./com/get_block_header,
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
            range_fetch_accounts, range_fetch_storage_slots,
@@ -372,17 +371,9 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
 
     pivotHeader = beaconHeader
 
-  let pvNumber = pivotHeader.blockNumber
-  if pvNumber == 0:
-    # Not ready yet
+  # Not ready yet?
+  if pivotHeader.blockNumber == 0:
     buddy.ctrl.stopped = true
-  else:
-    # So there is a pivot. Verify that the header can be fetched from the peer.
-    let rc = await buddy.getBlockHeader(pivotHeader.hash)
-    if rc.isErr:
-      when extraTraceMessages:
-        trace "Pivot header unsupported by peer", peer, pivot=("#" & $pvNumber)
-      buddy.ctrl.zombie = true
 
 
 proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
@@ -390,8 +381,8 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe.} =
     if ctx.data.beaconHeader.blockNumber < h.blockNumber:
-      #when extraTraceMessages:
-      #  trace "External beacon info update", header=("#" & $h.blockNumber)
+      # when extraTraceMessages:
+      #   trace "External beacon info update", header=("#" & $h.blockNumber)
       ctx.data.beaconHeader = h
 
 # ------------------------------------------------------------------------------
