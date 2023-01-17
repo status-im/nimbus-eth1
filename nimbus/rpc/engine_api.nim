@@ -249,6 +249,9 @@ proc setupEngineApi*(
         number = header.blockNumber,
         hash = blockHash
 
+      # Update sync header (if any)
+      com.syncReqNewHead(header.blockNumber, blockHash)
+
       return simpleFCU(PayloadExecutionStatus.syncing)
 
     # Block is known locally, just sanity check that the beacon client does not

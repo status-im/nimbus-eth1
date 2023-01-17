@@ -31,7 +31,7 @@ type
     ComNetworkProblem
     ComNoAccountsForStateRoot
     ComNoByteCodesAvailable
-    #ComNoHeaderAvailable -- unused, see get_block_header.nim
+    ComNoHeaderAvailable
     ComNoStorageForAccounts
     ComNoTrieNodesAvailable
     ComResponseTimeout
@@ -78,7 +78,7 @@ proc stopAfterSeriousComError*(
   of ComNoAccountsForStateRoot,
      ComNoByteCodesAvailable,
      ComNoStorageForAccounts,
-     #ComNoHeaderAvailable,
+     ComNoHeaderAvailable,
      ComNoTrieNodesAvailable:
     stats.nNoData.inc
     if comErrorsNoDataMax < stats.nNoData:

@@ -25,11 +25,12 @@ logScope:
 
 type
   TickerStats* = object
+    beaconBlock*: Option[BlockNumber]
     pivotBlock*: Option[BlockNumber]
-    nAccounts*: (float,float)          ## mean and standard deviation
-    accountsFill*: (float,float,float) ## mean, standard deviation, merged total
+    nAccounts*: (float,float)          ## Mean and standard deviation
+    accountsFill*: (float,float,float) ## Mean, standard deviation, merged total
     nAccountStats*: int                ## #chunks
-    nSlotLists*: (float,float)         ## mean and standard deviation
+    nSlotLists*: (float,float)         ## Mean and standard deviation
     nStorageQueue*: Option[int]
     nQueues*: int
 
@@ -123,6 +124,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     var
       nAcc, nSto, bulk: string
       pivot = "n/a"
+      beacon = "n/a"
       nStoQue = "n/a"
     let
       recoveryDone = t.lastRecov
@@ -143,6 +145,8 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
         pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
+      if data.beaconBlock.isSome:
+        beacon = &"#{data.beaconBlock.get}"
       nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
               &"({(data.nAccounts[1]+0.5).int64})")
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
@@ -153,13 +157,13 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     if t.recovery:
       info "Snap sync statistics (recovery)",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
     elif recoveryDone:
       info "Snap sync statistics (recovery done)",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
     else:
       info "Snap sync statistics",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, buddies, beacon, pivot, nAcc, accCov, nSto, nStoQue, mem
 
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
