@@ -169,7 +169,7 @@ type
         "- default -- legacy sync mode\n" &
         "- full    -- full blockchain archive\n" &
         "- snap    -- experimental snap mode (development only)\n" &
-        "- snapCtx -- snap considering possible recovery context\n"
+        "- snapCtx -- snap considering possible recovery context"
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default
       abbr: "y"
@@ -347,7 +347,8 @@ type
       name: "agent-string" .}: string
 
     protocols {.
-      desc: "Enable specific set of protocols (available: Eth, Les)"
+      desc: "Enable specific set of server protocols (available: Eth, " &
+            " Les.) This will not affect any sync mode settings"
       defaultValue: @[]
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
