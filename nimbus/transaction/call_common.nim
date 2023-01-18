@@ -109,8 +109,8 @@ proc initialAccessListEIP2929(call: CallParams) =
     if vmState.fork >= FkShanghai:
       db.accessList(vmState.coinbase)
 
-    # TODO: Check this only adds the correct subset of precompiles.
-    for c in activePrecompiles():
+    # Adds the correct subset of precompiles.
+    for c in activePrecompiles(fork):
       db.accessList(c)
 
     # EIP2930 optional access list.

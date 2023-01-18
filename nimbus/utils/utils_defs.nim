@@ -42,6 +42,10 @@ type
       ## database lookup failed
       "not found"
 
+    errTxEncError = ##\
+      ## TRansaction encoding error
+      "tx enc error"
+
   UtilsError* = ##\
     ## Error message, tinned component + explanatory text (if any)
     (UtilsErrorType,string)

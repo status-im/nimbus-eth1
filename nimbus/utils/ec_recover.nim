@@ -119,7 +119,10 @@ proc ecRecover*(tx: var Transaction): EcAddrResult =
   let txSig = tx.vrsSerialised
   if txSig.isErr:
     return err(txSig.error)
-  txSig.value.recoverImpl(tx.txHashNoSignature)
+  try:
+    result = txSig.value.recoverImpl(tx.txHashNoSignature)
+  except ValueError as ex:
+    return err((errTxEncError, ex.msg))
 
 proc ecRecover*(tx: Transaction): EcAddrResult =
   ## Variant of `ecRecover()` for call-by-value header.
