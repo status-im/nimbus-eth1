@@ -133,6 +133,7 @@ proc setupHost(call: CallParams): TransactionHost =
   vmState.setupTxContext(
     origin       = call.origin.get(call.sender),
     gasPrice     = call.gasPrice,
+    versionedHashes = call.versionedHashes,
     forkOverride = call.forkOverride
   )
 

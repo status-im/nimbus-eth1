@@ -23,7 +23,11 @@ import
 
 {.push raises: [].}
 
-proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(EVMFork)) =
+proc setupTxContext*(vmState: BaseVMState,
+                     origin: EthAddress,
+                     gasPrice: GasInt,
+                     versionedHashes: openArray[VersionedHash],
+                     forkOverride=none(EVMFork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
   vmState.txOrigin = origin
@@ -34,6 +38,7 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     else:
       vmState.determineFork
   vmState.gasCosts = vmState.fork.forkToSchedule
+  vmState.txVersionedHashes = @versionedHashes
 
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
