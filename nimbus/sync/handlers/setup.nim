@@ -12,7 +12,7 @@ import
   eth/p2p,
   ../../core/[chain, tx_pool],
   ../protocol,
-  ./eth as handlers_et
+  ./eth as handlers_eth
 
 {.used, push raises: [Defect].}
 
@@ -43,6 +43,8 @@ proc addEthHandlerCapability*(
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
+
+# To do ...
 
 # ------------------------------------------------------------------------------
 # End
