@@ -155,6 +155,10 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.txPool)
     of ProtocolFlag.Les:
       nimbus.ethNode.addCapability les
+    of ProtocolFlag.Snap:
+      nimbus.ethNode.addSnapHandlerCapability(
+        nimbus.ethNode.peerPool,
+        nimbus.chainRef)
 
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
@@ -171,7 +175,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK)
     of SyncMode.Snap, SyncMode.SnapCtx:
-      nimbus.ethNode.addCapability protocol.snap
+      if ProtocolFlag.Snap notin protocols:
+        # Minimal capability needed for sync only
+        nimbus.ethNode.addCapability protocol.snap
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         nimbus.dbBackend, tickerOK, noRecovery = (conf.syncMode==SyncMode.Snap))

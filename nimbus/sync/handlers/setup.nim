@@ -46,7 +46,13 @@ proc addEthHandlerCapability*(
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
-# To do ...
+proc addSnapHandlerCapability*(
+    node: var EthereumNode;
+    peerPool: PeerPool;
+    chain: ChainRef;
+     ) =
+  ## Install handler stub, not functional yet
+  discard
 
 # ------------------------------------------------------------------------------
 # End
