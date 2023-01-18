@@ -96,8 +96,7 @@ type
 
     # Pivot table
     pivotTable*: SnapPivotTable        ## Per state root environment
-    beaconNumber*: BlockNumber         ## Running on beacon chain
-    beaconHash*: Hash256               ## Ditto
+    beaconHeader*: BlockHeader         ## Running on beacon chain
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context

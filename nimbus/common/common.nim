@@ -34,7 +34,7 @@ type
     current: BlockNumber
     highest: BlockNumber
 
-  SyncReqNewHeadCB* = proc(number: BlockNumber; hash: Hash256) {.gcsafe.}
+  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe.}
     ## Update head for syncing
 
   CommonRef* = ref object
@@ -362,10 +362,10 @@ proc initializeEmptyDb*(com: CommonRef)
       com.consensusType == ConsensusType.POS)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
-proc syncReqNewHead*(com: CommonRef; number: BlockNumber; hash: Hash256) =
+proc syncReqNewHead*(com: CommonRef; header: BlockHeader) =
   ## Used by RPC to update the beacon head for snap sync
   if not com.syncReqNewHead.isNil:
-    com.syncReqNewHead(number, hash)
+    com.syncReqNewHead(header)
 
 # ------------------------------------------------------------------------------
 # Getters

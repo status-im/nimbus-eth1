@@ -17,7 +17,7 @@ import
   ../../common as nimcom,
   ../../db/select_backend,
   ../../utils/prettify,
-  ".."/[protocol, sync_desc],
+  ".."/[handlers, protocol, sync_desc],
   ./worker/[pivot, ticker],
   ./worker/com/com_error,
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
@@ -106,6 +106,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.coveredAccounts = NodeTagRangeSet.init()
   noExceptionOops("worker.setup()"):
+    ctx.ethWireCtx.txPoolEnabled false
     ctx.chain.com.syncReqNewHead = ctx.pivotUpdateBeaconHeaderCB
   ctx.data.snapDb =
     if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
@@ -135,6 +136,8 @@ proc release*(ctx: SnapCtxRef) =
   if not ctx.data.ticker.isNil:
     ctx.data.ticker.stop()
     ctx.data.ticker = nil
+  noExceptionOops("worker.release()"):
+    ctx.ethWireCtx.txPoolEnabled true
   ctx.chain.com.syncReqNewHead = nil
 
 proc start*(buddy: SnapBuddyRef): bool =
