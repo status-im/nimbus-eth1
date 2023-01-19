@@ -18,7 +18,7 @@ import
   std/[sets, tables],
   ../../../db/accounts_cache,
   ../../../common/common,
-  "../.."/[dao, executor, validate],
+  "../.."/[dao, executor, validate, eip4844],
   ../../../transaction/call_evm,
   ../../../transaction,
   ../../../vm_state,
@@ -43,6 +43,7 @@ type
     tr: HexaryTrie
     cleanState: bool
     balance: UInt256
+    dataGasUsed: uint64
 
 const
   receiptsExtensionSize = ##\
@@ -136,6 +137,10 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+
+  # EIP-4844, count dataGasUsed
+  if item.tx.txType >= TxEip4844:
+    pst.dataGasUsed += item.tx.getTotalDataGas
 
   # Update txRoot
   pst.tr.put(rlp.encode(inx), rlp.encode(item.tx))
@@ -240,6 +245,11 @@ proc vmExecCommit(pst: TxPackerStateRef)
   xp.chain.receipts = vmState.receipts
   xp.chain.txRoot = pst.tr.rootHash
   xp.chain.stateRoot = vmState.stateDB.rootHash
+
+  if vmState.com.forkGTE(Cancun):
+    # EIP-4844
+    let excessDataGas = calcExcessDataGas(vmState.parent)
+    xp.chain.excessDataGas = some(excessDataGas)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)
