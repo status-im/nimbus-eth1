@@ -222,8 +222,6 @@ proc run() {.raises: [Exception, Defect].} =
 
     blocksGossipState = targetGossipState
 
-  var nextExchangeTransitionConfTime: Moment
-
   proc onSecond(time: Moment) =
     let wallSlot = getBeaconTime().slotOrZero()
     updateBlocksGossipStatus(wallSlot + 1)

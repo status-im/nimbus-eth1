@@ -161,3 +161,6 @@ type
 
 func init*(T: type BlockHeaderProof, proof: AccumulatorProof): T =
   BlockHeaderProof(proofType: accumulatorProof, accumulatorProof: proof)
+
+func init*(T: type BlockHeaderProof): T =
+  BlockHeaderProof(proofType: none)
