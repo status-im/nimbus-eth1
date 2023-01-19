@@ -164,8 +164,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   block:
     let tickerOK =
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
+    # Minimal capability needed for sync only
     if ProtocolFlag.Eth notin protocols:
-      # Minimal capability needed for sync only
       nimbus.ethNode.addEthHandlerCapability(
         nimbus.ethNode.peerPool,
         nimbus.chainRef)
@@ -175,9 +175,10 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK)
     of SyncMode.Snap, SyncMode.SnapCtx:
+      # Minimal capability needed for sync only
       if ProtocolFlag.Snap notin protocols:
-        # Minimal capability needed for sync only
-        nimbus.ethNode.addCapability protocol.snap
+        nimbus.ethNode.addSnapHandlerCapability(
+          nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         nimbus.dbBackend, tickerOK, noRecovery = (conf.syncMode==SyncMode.Snap))

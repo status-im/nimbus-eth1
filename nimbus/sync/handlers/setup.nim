@@ -12,7 +12,8 @@ import
   eth/p2p,
   ../../core/[chain, tx_pool],
   ../protocol,
-  ./eth as handlers_eth
+  ./eth as handlers_eth,
+  ./snap as handlers_snap
 
 {.used, push raises: [Defect].}
 
@@ -36,7 +37,7 @@ proc addEthHandlerCapability*(
     chain: ChainRef;
     txPool = TxPoolRef(nil);
       ) =
-  ## Install handler, passing `txPool` as `nil` installs the handler
+  ## Install `eth` handlers. Passing `txPool` as `nil` installs the handler
   ## in minimal/outbound mode.
   node.addCapability(
     protocol.eth,
@@ -49,10 +50,14 @@ proc addEthHandlerCapability*(
 proc addSnapHandlerCapability*(
     node: var EthereumNode;
     peerPool: PeerPool;
-    chain: ChainRef;
+    chain = ChainRef(nil);
      ) =
-  ## Install handler stub, not functional yet
-  discard
+  ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
+  ## in minimal/outbound mode.
+  if chain.isNil:
+    node.addCapability protocol.snap
+  else:
+    node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End
