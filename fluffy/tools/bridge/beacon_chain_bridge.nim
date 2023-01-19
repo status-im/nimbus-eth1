@@ -231,7 +231,7 @@ proc run() {.raises: [Exception, Defect].} =
               blockhash = history_content.`$`hash
 
             block: # gossip header
-              let contentKey = ContentKey.init(blockHeaderWithProof, hash)
+              let contentKey = ContentKey.init(blockHeader, hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
