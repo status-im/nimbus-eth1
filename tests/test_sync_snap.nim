@@ -24,11 +24,12 @@ import
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
-    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot],
+    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_decompose, test_inspect, test_storage, test_db_timing, test_types]
+    test_decompose, test_inspect, test_pivot, test_storage, test_db_timing,
+    test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -353,61 +354,16 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
     test &"Decompose path prefix envelopes on {info}":
       if db.persistent:
-        # Store accounts persistent accounts DB
         accKeys.test_decompose(root.to(NodeKey), desc.getAccountFn, desc.hexaDB)
       else:
         accKeys.test_decompose(root.to(NodeKey), desc.hexaDB, desc.hexaDB)
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent pivot/checkpoint registry":
-      if not persistent:
-        skip()
+      if persistent:
+        accKeys.test_pivotStoreRead(db.cdb[0])
       else:
-        let
-          dbBase = SnapDbRef.init(db.cdb[0])
-          processed = @[(1.to(NodeTag),2.to(NodeTag)),
-                        (4.to(NodeTag),5.to(NodeTag)),
-                        (6.to(NodeTag),7.to(NodeTag))]
-          slotAccounts = seq[NodeKey].default
-        for n,w in accKeys:
-          check dbBase.savePivot(
-            SnapDbPivotRegistry(
-              header:       BlockHeader(stateRoot: w.to(Hash256)),
-              nAccounts:    n.uint64,
-              nSlotLists:   n.uint64,
-              processed:    processed,
-              slotAccounts: slotAccounts)).isOk
-          # verify latest state root
-          block:
-            let rc = dbBase.recoverPivot()
-            check rc.isOk
-            if rc.isOk:
-              check rc.value.nAccounts == n.uint64
-              check rc.value.nSlotLists == n.uint64
-              check rc.value.processed == processed
-        for n,w in accKeys:
-          block:
-            let rc = dbBase.recoverPivot(w)
-            check rc.isOk
-            if rc.isOk:
-              check rc.value.nAccounts == n.uint64
-              check rc.value.nSlotLists == n.uint64
-          # Update record in place
-          check dbBase.savePivot(
-            SnapDbPivotRegistry(
-              header:       BlockHeader(stateRoot: w.to(Hash256)),
-              nAccounts:    n.uint64,
-              nSlotLists:   0,
-              processed:    @[],
-              slotAccounts: @[])).isOk
-          block:
-            let rc = dbBase.recoverPivot(w)
-            check rc.isOk
-            if rc.isOk:
-              check rc.value.nAccounts == n.uint64
-              check rc.value.nSlotLists == 0
-              check rc.value.processed == seq[(NodeTag,NodeTag)].default
-
+        skip()
 
 proc storagesRunner(
     noisy = true;
