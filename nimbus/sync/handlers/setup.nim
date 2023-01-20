@@ -12,7 +12,8 @@ import
   eth/p2p,
   ../../core/[chain, tx_pool],
   ../protocol,
-  ./eth as handlers_eth
+  ./eth as handlers_eth,
+  ./snap as handlers_snap
 
 {.used, push raises: [Defect].}
 
@@ -24,27 +25,39 @@ proc setEthHandlerNewBlocksAndHashes*(
     node: var EthereumNode;
     blockHandler: NewBlockHandler;
     hashesHandler: NewBlockHashesHandler;
-    arg: pointer)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    arg: pointer;
+      ) {.gcsafe, raises: [Defect,CatchableError].} =
   let w = EthWireRef(node.protocolState protocol.eth)
   w.setNewBlockHandler(blockHandler, arg)
   w.setNewBlockHashesHandler(hashesHandler, arg)
 
 proc addEthHandlerCapability*(
     node: var EthereumNode;
+    peerPool: PeerPool;
     chain: ChainRef;
-    txPool: TxPoolRef;
-    peerPool: PeerPool) =
-  ## Install handler
+    txPool = TxPoolRef(nil);
+      ) =
+  ## Install `eth` handlers. Passing `txPool` as `nil` installs the handler
+  ## in minimal/outbound mode.
   node.addCapability(
     protocol.eth,
     EthWireRef.new(chain, txPool, peerPool))
-  
+
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
-# To do ...
+proc addSnapHandlerCapability*(
+    node: var EthereumNode;
+    peerPool: PeerPool;
+    chain = ChainRef(nil);
+     ) =
+  ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
+  ## in minimal/outbound mode.
+  if chain.isNil:
+    node.addCapability protocol.snap
+  else:
+    node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End

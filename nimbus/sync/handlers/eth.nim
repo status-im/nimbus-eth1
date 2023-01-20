@@ -44,12 +44,17 @@ type
     arg: pointer
     handler: NewBlockHashesHandler
 
+  EthWireRunState = enum
+    Enabled
+    Suspended
+    NotAvailable
+
   EthWireRef* = ref object of EthWireBase
     db: ChainDBRef
     chain: ChainRef
     txPool: TxPoolRef
     peerPool: PeerPool
-    disableTxPool: bool
+    enableTxPool: EthWireRunState
     knownByPeer: Table[Peer, HashToTime]
     pending: HashSet[Hash256]
     lastCleanup: Time
@@ -296,7 +301,9 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
 # ------------------------------------------------------------------------------
 
 proc onPeerConnected(ctx: EthWireRef, peer: Peer) =
-  if ctx.disableTxPool:
+  if ctx.enableTxPool != Enabled:
+    when trMissingOrDisabledGossipOk:
+      notEnabled("onPeerConnected")
     return
 
   var txHashes = newSeqOfCap[Hash256](ctx.txPool.numTxs)
@@ -341,8 +348,11 @@ proc new*(_: type EthWireRef,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
-    lastCleanup: getTime(),
-  )
+    lastCleanup: getTime())
+  if txPool.isNil:
+    ctx.enableTxPool = NotAvailable
+    when trMissingOrDisabledGossipOk:
+      trace "New eth handler, minimal/outbound support only"
 
   ctx.setupPeerObserver()
   ctx
@@ -368,7 +378,8 @@ proc setNewBlockHashesHandler*(ctx: EthWireRef, handler: NewBlockHashesHandler, 
 # ------------------------------------------------------------------------------
 
 proc txPoolEnabled*(ctx: EthWireRef; ena: bool) =
-  ctx.disableTxPool = not ena
+  if ctx.enableTxPool != NotAvailable:
+    ctx.enableTxPool = if ena: Enabled else: Suspended
 
 method getStatus*(ctx: EthWireRef): EthState
     {.gcsafe, raises: [Defect,RlpError,EVMError].} =
@@ -440,7 +451,7 @@ method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
 
 method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction])
     {.gcsafe, raises: [Defect,CatchableError].} =
-  if ctx.disableTxPool:
+  if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxs")
     return
@@ -482,7 +493,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transacti
 
 method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256])
     {.gcsafe, raises: [Defect,CatchableError].} =
-  if ctx.disableTxPool:
+  if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxsHashes")
     return

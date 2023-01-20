@@ -20,7 +20,7 @@ type
     bestBlockHash*: Hash256
     forkId*: ChainForkId
 
-  PeerState* = ref object of RootRef
+  EthPeerState* = ref object of RootRef
     initialized*: bool
     bestBlockHash*: Hash256
     bestDifficulty*: DifficultyInt

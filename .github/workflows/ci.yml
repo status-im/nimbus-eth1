@@ -129,6 +129,13 @@ jobs:
           chmod 755 external/bin/gcc external/bin/g++
           echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
 
+      - name: Install build dependencies (Macos)
+        # Some home brew modules were reported missing
+        if: runner.os == 'Macos'
+        run: |
+          HOMEBREW_NO_INSTALL_CLEANUP=1 brew install gnu-getopt
+          brew link --force gnu-getopt
+
       - name: Restore rocksdb from cache (Macos/Linux)
         if: runner.os != 'Windows'
         id: rocksdb-cache

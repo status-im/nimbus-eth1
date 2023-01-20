@@ -139,25 +139,14 @@ import
   chronos,
   eth/[common, p2p, p2p/private/p2p_types],
   nimcrypto/hash,
-  stew/byteutils,
-  ../../constants,
-  ./trace_config
+  ./snap/snap_types,
+  ../../constants
+
+export
+  snap_types
 
 logScope:
-  topics = "datax"
-
-type
-  SnapAccount* = object
-    accHash*: Hash256
-    accBody* {.rlpCustomSerialization.}: Account
-
-  SnapAccountProof* = seq[Blob]
-
-  SnapStorage* = object
-    slotHash*: Hash256
-    slotData*: Blob
-
-  SnapStorageProof* = seq[Blob]
+  topics = "snap1"
 
 const
   snapVersion* = 1
@@ -245,98 +234,145 @@ proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
 
 p2pProtocol snap1(version = snapVersion,
                   rlpxName = "snap",
+                  peerState = SnapPeerState,
+                  networkState = SnapWireBase,
                   useRequestIds = true):
 
   requestResponse:
     # User message 0x00: GetAccountRange.
     # Note: `origin` and `limit` differs from the specification to match Geth.
-    proc getAccountRange(peer: Peer, rootHash: Hash256, origin: Hash256,
-                         limit: Hash256, responseBytes: uint64) =
-      trace trSnapRecvReceived & "GetAccountRange (0x00)", peer,
-        accountRange=[origin,limit], stateRoot=($rootHash), responseBytes
+    proc getAccountRange(
+        peer: Peer;
+        root: Hash256;
+        origin: Hash256;
+        limit: Hash256;
+        replySizeMax: uint64;
+          ) =
+      trace trSnapRecvReceived & "GetAccountRange (0x00)", peer, root,
+        origin, limit, replySizeMax
 
-      trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer, sent=0
-      await response.send(@[], @[])
+      let
+        ctx = peer.networkState()
+        (accounts, proof) = ctx.getAccountRange(
+          root, origin, limit, replySizeMax)
+
+        # For logging only
+        nAccounts = accounts.len
+        nProof = proof.len
+
+      if nAccounts == 0 and nProof == 0:
+        trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer
+      else:
+        trace trSnapSendReplying & "AccountRange (0x01)", peer,
+          nAccounts, nProof
+
+      await response.send(accounts, proof)
 
     # User message 0x01: AccountRange.
-    proc accountRange(peer: Peer, accounts: seq[SnapAccount],
-                      proof: SnapAccountProof)
+    proc accountRange(
+        peer: Peer;
+        accounts: seq[SnapAccount];
+        proof: SnapAccountProof)
+
 
   requestResponse:
     # User message 0x02: GetStorageRanges.
     # Note: `origin` and `limit` differs from the specification to match Geth.
-    proc getStorageRanges(peer: Peer, rootHash: Hash256,
-                          accounts: openArray[Hash256], origin: openArray[byte],
-                          limit: openArray[byte], responseBytes: uint64) =
-      when trSnapTracePacketsOk:
-        var definiteFullRange = ((origin.len == 32 or origin.len == 0) and
-                                 (limit.len == 32 or limit.len == 0))
-        if definiteFullRange:
-          for i in 0 ..< origin.len:
-            if origin[i] != 0x00:
-              definiteFullRange = false
-              break
-        if definiteFullRange:
-          for i in 0 ..< limit.len:
-            if limit[i] != 0xff:
-              definiteFullRange = false
-              break
+    proc getStorageRanges(
+        peer: Peer;
+        root: Hash256;
+        accounts: openArray[Hash256];
+        origin: openArray[byte];
+        limit: openArray[byte];
+        replySizeMax: uint64;
+          ) =
+      trace trSnapRecvReceived & "GetStorageRanges (0x02)", peer, root,
+        nAccounts=accounts.len, nOrigin=origin.len, nLimit=limit.len,
+        replySizeMax
 
-        template describe(value: openArray[byte]): string =
-          if value.len == 0: "(empty)"
-          elif value.len == 32: value.toHex
-          else: "(non-standard-len=" & $value.len & ')' & value.toHex
+      let
+        ctx = peer.networkState()
+        (slots, proof) = ctx.getStorageRanges(
+          root, accounts, origin, limit, replySizeMax)
 
-        if definiteFullRange:
-          # Fetching storage for multiple accounts.
-          trace trSnapRecvReceived & "GetStorageRanges/A (0x02)", peer,
-            accountPaths=accounts.len,
-            stateRoot=($rootHash), responseBytes
-        elif accounts.len == 1:
-          # Fetching partial storage for one account, aka. "large contract".
-          trace trSnapRecvReceived & "GetStorageRanges/S (0x02)", peer,
-            accountPaths=1,
-            storageRange=(describe(origin) & '-' & describe(limit)),
-            stateRoot=($rootHash), responseBytes
-        else:
-          # This branch is separated because these shouldn't occur.  It's not
-          # really specified what happens when there are multiple accounts and
-          # non-default path range.
-          trace trSnapRecvReceived & "GetStorageRanges/AS?? (0x02)", peer,
-            accountPaths=accounts.len,
-            storageRange=(describe(origin) & '-' & describe(limit)),
-            stateRoot=($rootHash), responseBytes
+        # For logging only
+        nSlots = slots.len
+        nProof = proof.len
 
-      trace trSnapSendReplying & "EMPTY StorageRanges (0x03)", peer, sent=0
-      await response.send(@[], @[])
+      if nSlots == 0 and nProof == 0:
+        trace trSnapSendReplying & "EMPTY StorageRanges (0x03)", peer
+      else:
+        trace trSnapSendReplying & "StorageRanges (0x03)", peer,
+          nSlots, nProof
+
+      await response.send(slots, proof)
 
     # User message 0x03: StorageRanges.
     # Note: See comments in this file for a list of Geth quirks to expect.
-    proc storageRanges(peer: Peer, slotLists: openArray[seq[SnapStorage]],
-                       proof: SnapStorageProof)
+    proc storageRanges(
+        peer: Peer;
+        slotLists: openArray[seq[SnapStorage]];
+        proof: SnapStorageProof)
 
-  # User message 0x04: GetByteCodes.
+
   requestResponse:
-    proc getByteCodes(peer: Peer, nodeHashes: openArray[Hash256],
-                      responseBytes: uint64) =
+    # User message 0x04: GetByteCodes.
+    proc getByteCodes(
+        peer: Peer;
+        nodes: openArray[Hash256];
+        replySizeMax: uint64;
+          ) =
       trace trSnapRecvReceived & "GetByteCodes (0x04)", peer,
-        hashes=nodeHashes.len, responseBytes
+        nNodes=nodes.len, replySizeMax
 
-      trace trSnapSendReplying & "EMPTY ByteCodes (0x05)", peer, sent=0
+      let
+        ctx = peer.networkState()
+        codes = ctx.getByteCodes(nodes, replySizeMax)
+
+        # For logging only
+        nCodes = codes.len
+
+      if nCodes == 0:
+        trace trSnapSendReplying & "EMPTY ByteCodes (0x05)", peer
+      else:
+        trace trSnapSendReplying & "ByteCodes (0x05)", peer, nCodes
+        
       await response.send(@[])
 
     # User message 0x05: ByteCodes.
-    proc byteCodes(peer: Peer, codes: openArray[Blob])
+    proc byteCodes(
+        peer: Peer;
+        codes: openArray[Blob])
 
-  # User message 0x06: GetTrieNodes.
+
   requestResponse:
-    proc getTrieNodes(peer: Peer, rootHash: Hash256,
-                      paths: openArray[seq[Blob]], responseBytes: uint64) =
-      trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer,
-        nodePaths=paths.len, stateRoot=($rootHash), responseBytes
+    # User message 0x06: GetTrieNodes.
+    proc getTrieNodes(
+        peer: Peer;
+        root: Hash256;
+        paths: openArray[seq[Blob]];
+        replySizeMax: uint64;
+          ) =
+      trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer, root,
+        nPaths=paths.len, replySizeMax
 
-      trace trSnapSendReplying & "EMPTY TrieNodes (0x07)", peer, sent=0
-      await response.send(@[])
+      let
+        ctx = peer.networkState()
+        nodes = ctx.getTrieNodes(root, paths, replySizeMax)
+
+        # For logging only
+        nNodes = nodes.len
+
+      if nNodes == 0:
+        trace trSnapSendReplying & "EMPTY TrieNodes (0x07)", peer
+      else:
+        trace trSnapSendReplying & "TrieNodes (0x07)", peer, nNodes
+
+      await response.send(nodes)
 
     # User message 0x07: TrieNodes.
-    proc trieNodes(peer: Peer, nodes: openArray[Blob])
+    proc trieNodes(
+        peer: Peer;
+        nodes: openArray[Blob])
+
+# End

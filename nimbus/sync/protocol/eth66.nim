@@ -75,7 +75,7 @@ const
 
 p2pProtocol eth66(version = ethVersion,
                   rlpxName = "eth",
-                  peerState = PeerState,
+                  peerState = EthPeerState,
                   networkState = EthWireBase,
                   useRequestIds = true):
 

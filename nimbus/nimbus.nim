@@ -57,6 +57,7 @@ type
     networkLoop: Future[void]
     dbBackend: ChainDB
     peerManager: PeerManagerRef
+    legaSyncRef: LegacySyncRef
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
     merger: MergerRef
@@ -145,38 +146,45 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     rng = nimbus.ctx.rng)
 
   # Add protocol capabilities based on protocol flags
-  if ProtocolFlag.Eth in protocols:
-    nimbus.ethNode.addEthHandlerCapability(
-      nimbus.chainRef,
-      nimbus.txPool,
-      nimbus.ethNode.peerPool
-    )
-    case conf.syncMode:
-    of SyncMode.Snap, SyncMode.SnapCtx:
-      nimbus.ethNode.addCapability protocol.snap
-    of SyncMode.Full, SyncMode.Default:
-      discard
-
-  if ProtocolFlag.Les in protocols:
-    nimbus.ethNode.addCapability les
+  for w in protocols:
+    case w: # handle all possibilities
+    of ProtocolFlag.Eth:
+      nimbus.ethNode.addEthHandlerCapability(
+        nimbus.ethNode.peerPool,
+        nimbus.chainRef,
+        nimbus.txPool)
+    of ProtocolFlag.Les:
+      nimbus.ethNode.addCapability les
+    of ProtocolFlag.Snap:
+      nimbus.ethNode.addSnapHandlerCapability(
+        nimbus.ethNode.peerPool,
+        nimbus.chainRef)
 
   # Early-initialise "--snap-sync" before starting any network connections.
-  if ProtocolFlag.Eth in protocols:
+  block:
     let tickerOK =
       conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
+    # Minimal capability needed for sync only
+    if ProtocolFlag.Eth notin protocols:
+      nimbus.ethNode.addEthHandlerCapability(
+        nimbus.ethNode.peerPool,
+        nimbus.chainRef)
     case conf.syncMode:
     of SyncMode.Full:
       nimbus.fullSyncRef = FullSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK)
-      nimbus.fullSyncRef.start
     of SyncMode.Snap, SyncMode.SnapCtx:
+      # Minimal capability needed for sync only
+      if ProtocolFlag.Snap notin protocols:
+        nimbus.ethNode.addSnapHandlerCapability(
+          nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         nimbus.dbBackend, tickerOK, noRecovery = (conf.syncMode==SyncMode.Snap))
-      nimbus.snapSyncRef.start
     of SyncMode.Default:
-      discard
+      nimbus.legaSyncRef = LegacySyncRef.new(
+        nimbus.ethNode, nimbus.chainRef)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -406,20 +414,18 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, protocols)
     localServices(nimbus, conf, com, protocols)
 
-    if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
+    if conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        let syncer = LegacySyncRef.new(nimbus.ethNode, nimbus.chainRef)
-        syncer.start
-
+        nimbus.legaSyncRef.start
         nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
           legacy.newBlockHandler,
           legacy.newBlockHashesHandler,
-          cast[pointer](syncer)
-        )
-
-      of SyncMode.Full, SyncMode.Snap, SyncMode.SnapCtx:
-        discard
+          cast[pointer](nimbus.legaSyncRef))
+      of SyncMode.Full:
+        nimbus.fullSyncRef.start
+      of SyncMode.Snap, SyncMode.SnapCtx:
+        nimbus.snapSyncRef.start
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C
