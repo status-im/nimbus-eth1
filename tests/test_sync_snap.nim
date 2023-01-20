@@ -12,14 +12,10 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[algorithm, distros, hashes, math, os, sets,
-       sequtils, strformat, strutils, tables, times],
+  std/[algorithm, distros, os, sets, sequtils, strformat, strutils, tables],
   chronicles,
-  eth/[common, p2p, rlp],
-  eth/trie/[nibbles],
+  eth/[common, p2p, rlp, trie/nibbles],
   rocksdb,
-  stint,
-  stew/[byteutils, interval_set, results],
   unittest2,
   ../nimbus/common/common as nimbus_common, # avoid name clash
   ../nimbus/db/[select_backend, storage_types],
@@ -32,7 +28,8 @@ import
     snapdb_storage_slots],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
-    bulk_test_xx, snap_test_xx, test_decompose, test_db_timing, test_types]
+    bulk_test_xx, snap_test_xx,
+    test_decompose, test_inspect, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -492,7 +489,6 @@ proc inspectionRunner(
     cascaded = true;
     sample: openArray[AccountsSample] = snapTestList) =
   let
-    peer = Peer.new
     inspectList = sample.mapIt(it.to(seq[UndumpAccounts]))
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample[0].name) else: testDbs()
@@ -510,203 +506,49 @@ proc inspectionRunner(
       tmpDir.flushDbDir(sample[0].name)
 
   suite &"SyncSnap: inspect {fileInfo} lists for {info} for healing":
-    let
-      memBase = SnapDbRef.init(newMemoryDB())
-      memDesc = SnapDbAccountsRef.init(memBase, Hash256(), peer)
     var
       singleStats: seq[(int,TrieNodeStat)]
       accuStats: seq[(int,TrieNodeStat)]
-      perBase,altBase: SnapDbRef
-      perDesc,altDesc: SnapDbAccountsRef
-    if persistent:
-      perBase = SnapDbRef.init(db.cdb[0])
-      perDesc = SnapDbAccountsRef.init(perBase, Hash256(), peer)
-      altBase = SnapDbRef.init(db.cdb[1])
-      altDesc = SnapDbAccountsRef.init(altBase, Hash256(), peer)
+    let
+      ingerprinting = &"ingerprinting {inspectList.len}"
+      singleAcc = &"F{ingerprinting} single accounts lists"
+      accumAcc = &"F{ingerprinting} accumulated accounts"
+      cascAcc = &"Cascaded f{ingerprinting} accumulated accounts lists"
 
-    test &"Fingerprinting {inspectList.len} single accounts lists " &
-        "for in-memory-db":
-      for n,accList in inspectList:
-        # Separate storage
-        let
-          root = accList[0].root
-          rootKey = root.to(NodeKey)
-          desc = SnapDbAccountsRef.init(memBase, root, peer)
-        for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
-        let stats = desc.hexaDb.hexaryInspectTrie(rootKey)
-        check not stats.stopped
-        let
-          dangling = stats.dangling.mapIt(it.partialPath)
-          keys = dangling.hexaryPathNodeKeys(
-            rootKey, desc.hexaDb, missingOk=true)
-        check dangling.len == keys.len
-        singleStats.add (desc.hexaDb.tab.len,stats)
+      memBase = SnapDbRef.init(newMemoryDB())
+      dbSlot = proc(n: int): SnapDbRef =
+        if 2+n < nTestDbInstances and not db.cdb[2+n].rocksStoreRef.isNil:
+          return SnapDbRef.init(db.cdb[2+n])
 
-        # Verify piecemeal approach for `hexaryInspectTrie()` ...
-        var
-          ctx = TrieNodeStatCtxRef()
-          piecemeal: HashSet[Blob]
-        while not ctx.isNil:
-          let stat2 = desc.hexaDb.hexaryInspectTrie(
-            rootKey, resumeCtx=ctx, suspendAfter=128)
-          check not stat2.stopped
-          ctx = stat2.resumeCtx
-          piecemeal.incl stat2.dangling.mapIt(it.partialPath).toHashSet
-        # Must match earlier all-in-one result
-        check dangling.len == piecemeal.len
-        check dangling.toHashSet == piecemeal
+    test &"{singleAcc} for in-memory-db":
+      inspectList.test_inspectSingleAccountsMemDb(memBase, singleStats)
 
-    test &"Fingerprinting {inspectList.len} single accounts lists " &
-        "for persistent db":
-      if not persistent:
-        skip()
+    test &"{singleAcc} for persistent db":
+      if persistent:
+        inspectList.test_inspectSingleAccountsPersistent(dbSlot, singleStats)
       else:
-        for n,accList in inspectList:
-          if nTestDbInstances <= 2+n or db.cdb[2+n].rocksStoreRef.isNil:
-            continue
-          # Separate storage on persistent DB (leaving first db slot empty)
-          let
-            root = accList[0].root
-            rootKey = root.to(NodeKey)
-            dbBase = SnapDbRef.init(db.cdb[2+n])
-            desc = SnapDbAccountsRef.init(dbBase, root, peer)
-
-          for w in accList:
-            check desc.importAccounts(w.base,w.data, persistent=true).isImportOk
-          let stats = desc.getAccountFn.hexaryInspectTrie(rootKey)
-          check not stats.stopped
-          let
-            dangling = stats.dangling.mapIt(it.partialPath)
-            keys = dangling.hexaryPathNodeKeys(
-              rootKey, desc.hexaDb, missingOk=true)
-          check dangling.len == keys.len
-          # Must be the same as the in-memory fingerprint
-          let ssn1 = singleStats[n][1].dangling.mapIt(it.partialPath)
-          check ssn1.toHashSet == dangling.toHashSet
-
-          # Verify piecemeal approach for `hexaryInspectTrie()` ...
-          var
-            ctx = TrieNodeStatCtxRef()
-            piecemeal: HashSet[Blob]
-          while not ctx.isNil:
-            let stat2 = desc.getAccountFn.hexaryInspectTrie(
-              rootKey, resumeCtx=ctx, suspendAfter=128)
-            check not stat2.stopped
-            ctx = stat2.resumeCtx
-            piecemeal.incl stat2.dangling.mapIt(it.partialPath).toHashSet
-          # Must match earlier all-in-one result
-          check dangling.len == piecemeal.len
-          check dangling.toHashSet == piecemeal
-
-    test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
-        "for in-memory-db":
-      for n,accList in inspectList:
-        # Accumulated storage
-        let
-          root = accList[0].root
-          rootKey = root.to(NodeKey)
-          desc = memDesc.dup(root,Peer())
-        for w in accList:
-          check desc.importAccounts(w.base, w.data, persistent=false).isImportOk
-        let stats = desc.hexaDb.hexaryInspectTrie(rootKey)
-        check not stats.stopped
-        let
-          dangling = stats.dangling.mapIt(it.partialPath)
-          keys = dangling.hexaryPathNodeKeys(
-            rootKey, desc.hexaDb, missingOk=true)
-        check dangling.len == keys.len
-        accuStats.add (desc.hexaDb.tab.len, stats)
-
-    test &"Fingerprinting {inspectList.len} accumulated accounts lists " &
-        "for persistent db":
-      if not persistent:
         skip()
-      else:
-        for n,accList in inspectList:
-          # Accumulated storage on persistent DB (using first db slot)
-          let
-            root = accList[0].root
-            rootKey = root.to(NodeKey)
-            rootSet = [rootKey].toHashSet
-            desc = perDesc.dup(root,Peer())
-          for w in accList:
-            check desc.importAccounts(w.base, w.data, persistent).isImportOk
-          let stats = desc.getAccountFn.hexaryInspectTrie(rootKey)
-          check not stats.stopped
-          let
-            dangling = stats.dangling.mapIt(it.partialPath)
-            keys = dangling.hexaryPathNodeKeys(
-              rootKey, desc.hexaDb, missingOk=true)
-          check dangling.len == keys.len
-          check accuStats[n][1] == stats
 
-    test &"Cascaded fingerprinting {inspectList.len} accumulated accounts " &
-        "lists for in-memory-db":
-      if not cascaded:
-        skip()
-      else:
-        let
-          cscBase = SnapDbRef.init(newMemoryDB())
-          cscDesc = SnapDbAccountsRef.init(cscBase, Hash256(), peer)
-        var
-          cscStep: Table[NodeKey,(int,seq[Blob])]
-        for n,accList in inspectList:
-          # Accumulated storage
-          let
-            root = accList[0].root
-            rootKey = root.to(NodeKey)
-            desc = cscDesc.dup(root,Peer())
-          for w in accList:
-            check desc.importAccounts(w.base,w.data,persistent=false).isImportOk
-          if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
-            cscStep[rootKey][0].inc
-          let
-            stat0 = desc.hexaDb.hexaryInspectTrie(rootKey)
-            stats = desc.hexaDb.hexaryInspectTrie(rootKey,cscStep[rootKey][1])
-          check not stat0.stopped
-          check not stats.stopped
-          let
-            accumulated = stat0.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = stats.dangling.mapIt(it.partialPath).toHashSet
-          check accumulated == cascaded
-        # Make sure that there are no trivial cases
-        let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
-        check trivialCases == 0
+    test &"{accumAcc} for in-memory-db":
+      inspectList.test_inspectAccountsInMemDb(memBase, accuStats)
 
-    test &"Cascaded fingerprinting {inspectList.len} accumulated accounts " &
-        "for persistent db":
-      if not cascaded or not persistent:
-        skip()
+    test &"{accumAcc} for persistent db":
+      if persistent:
+        inspectList.test_inspectAccountsPersistent(db.cdb[0], accuStats)
       else:
-        let
-          cscBase = altBase
-          cscDesc = altDesc
-        var
-          cscStep: Table[NodeKey,(int,seq[Blob])]
-        for n,accList in inspectList:
-          # Accumulated storage
-          let
-            root = accList[0].root
-            rootKey = root.to(NodeKey)
-            desc = cscDesc.dup(root,Peer())
-          for w in accList:
-            check desc.importAccounts(w.base,w.data, persistent).isImportOk
-          if cscStep.hasKeyOrPut(rootKey,(1,seq[Blob].default)):
-            cscStep[rootKey][0].inc
-          let
-            stat0 = desc.getAccountFn.hexaryInspectTrie(rootKey)
-            stats = desc.getAccountFn.hexaryInspectTrie(rootKey,
-                                                        cscStep[rootKey][1])
-          check not stat0.stopped
-          check not stats.stopped
-          let
-            accumulated = stat0.dangling.mapIt(it.partialPath).toHashSet
-            cascaded = stats.dangling.mapIt(it.partialPath).toHashSet
-          check accumulated == cascaded
-        # Make sure that there are no trivial cases
-        let trivialCases = toSeq(cscStep.values).filterIt(it[0] <= 1).len
-        check trivialCases == 0
+        skip()
+
+    test &"{cascAcc} for in-memory-db":
+      if cascaded:
+        inspectList.test_inspectCascadedMemDb()
+      else:
+        skip()
+
+    test &"{cascAcc} for persistent db":
+      if cascaded and persistent:
+        inspectList.test_inspectCascadedPersistent(db.cdb[1])
+      else:
+        skip()
 
 # ------------------------------------------------------------------------------
 # Test Runners: database timing tests
