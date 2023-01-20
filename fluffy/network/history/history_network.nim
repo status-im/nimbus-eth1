@@ -260,7 +260,7 @@ proc getVerifiedBlockHeader*(
     n: HistoryNetwork, hash: BlockHash):
     Future[Opt[BlockHeader]] {.async.} =
   let
-    contentKey = ContentKey.init(blockHeaderWithProof, hash).encode()
+    contentKey = ContentKey.init(blockHeader, hash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
@@ -295,49 +295,6 @@ proc getVerifiedBlockHeader*(
     if (let r = n.verifyHeader(header, headerWithProof.proof); r.isErr):
       warn "Verification of block header failed", error = r.error
       continue
-
-    info "Fetched valid block header from the network"
-    # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
-    n.portalProtocol.triggerPoke(
-      headerContent.nodesInterestedInContent,
-      contentKey,
-      headerContent.content
-    )
-
-    return Opt.some(header)
-
-  # Headers were requested `requestRetries` times and all failed on validation
-  return Opt.none(BlockHeader)
-
-# TODO: To be deprecated or not? Should there be the case for requesting a
-# block header without proofs?
-proc getBlockHeader*(
-    n: HistoryNetwork, hash: BlockHash):
-    Future[Opt[BlockHeader]] {.async.} =
-  let
-    contentKey = ContentKey.init(blockHeader, hash).encode()
-    contentId = contentKey.toContentId()
-
-  logScope:
-    hash
-    contentKey
-
-  let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
-  if headerFromDb.isSome():
-    info "Fetched block header from database"
-    return headerFromDb
-
-  for i in 0..<requestRetries:
-    let
-      headerContent = (await n.portalProtocol.contentLookup(
-          contentKey, contentId)).valueOr:
-        warn "Failed fetching block header from the network"
-        return Opt.none(BlockHeader)
-
-      header = validateBlockHeaderBytes(headerContent.content, hash).valueOr:
-        warn "Validation of block header failed", error
-        continue
 
     info "Fetched valid block header from the network"
     # Content is valid, it can be stored and propagated to interested peers
@@ -528,19 +485,20 @@ proc validateContent(
 
   case key.contentType:
   of blockHeader:
-    # Note: For now we still accept regular block header type to remain
-    # compatible with the current specs. However, a verification is done by
-    # basically requesting the header with proofs from somewhere else.
-    # This all doesn't make much sense aside from compatibility and should
-    # eventually be removed.
-    let header = validateBlockHeaderBytes(
-        content, key.blockHeaderKey.blockHash).valueOr:
-      warn "Invalid block header offered", error
-      return false
+    let
+      headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
+        warn "Failed decoding header with proof", error
+        return false
+      header = validateBlockHeaderBytes(
+          headerWithProof.header.asSeq(),
+          key.blockHeaderKey.blockHash).valueOr:
+        warn "Invalid block header offered", error
+        return false
 
-    let res = await n.getVerifiedBlockHeader(key.blockHeaderKey.blockHash)
-    if res.isNone():
-      warn "Block header failed canonical verification"
+    let res = n.verifyHeader(header, headerWithProof.proof)
+    if res.isErr():
+      warn "Failed on check if header is part of canonical chain",
+        error = res.error
       return false
     else:
       return true
@@ -590,25 +548,6 @@ proc validateContent(
     let hash = hash_tree_root(epochAccumulator)
     if hash != epochHash:
       warn "Epoch accumulator has invalid root hash"
-      return false
-    else:
-      return true
-
-  of blockHeaderWithProof:
-    let
-      headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
-        warn "Failed decoding header with proof", error
-        return false
-      header = validateBlockHeaderBytes(
-          headerWithProof.header.asSeq(),
-          key.blockHeaderWithProofKey.blockHash).valueOr:
-        warn "Invalid block header offered", error
-        return false
-
-    let res = n.verifyHeader(header, headerWithProof.proof)
-    if res.isErr():
-      warn "Failed on check if header is part of canonical chain",
-        error = res.error
       return false
     else:
       return true

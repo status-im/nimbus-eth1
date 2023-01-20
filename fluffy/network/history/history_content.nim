@@ -32,7 +32,6 @@ type
     blockBody = 0x01
     receipts = 0x02
     epochAccumulator = 0x03
-    blockHeaderWithProof = 0x04
 
   BlockKey* = object
     blockHash*: BlockHash
@@ -50,8 +49,6 @@ type
       receiptsKey*: BlockKey
     of epochAccumulator:
       epochAccumulatorKey*: EpochAccumulatorKey
-    of blockHeaderWithProof:
-      blockHeaderWithProofKey*: BlockKey
 
 func init*(
     T: type ContentKey, contentType: ContentType,
@@ -70,10 +67,6 @@ func init*(
     ContentKey(
       contentType: contentType,
       epochAccumulatorKey: EpochAccumulatorKey(epochHash: hash))
-  of blockHeaderWithProof:
-    ContentKey(
-      contentType: contentType,
-      blockHeaderWithProofKey: BlockKey(blockHash: hash))
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))
@@ -111,8 +104,6 @@ func `$`*(x: ContentKey): string =
   of epochAccumulator:
     let key = x.epochAccumulatorKey
     res.add("epochHash: " & $key.epochHash)
-  of blockHeaderWithProof:
-    res.add($x.blockHeaderWithProofKey)
 
   res.add(")")
 

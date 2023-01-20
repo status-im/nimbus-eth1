@@ -70,7 +70,7 @@ proc headersToContentInfo(
       headerHash = header.blockHash()
       blockKey = BlockKey(blockHash: headerHash)
       contentKey = encode(ContentKey(
-        contentType: blockHeaderWithProof, blockHeaderWithProofKey: blockKey))
+        contentType: blockHeader, blockHeaderKey: blockKey))
       contentInfo = ContentInfo(
         contentKey: contentKey, content: SSZ.encode(headerWithProof))
     contentInfos.add(contentInfo)
@@ -119,7 +119,7 @@ procSuite "History Content Network":
         headerHash = header.blockHash()
         blockKey = BlockKey(blockHash: headerHash)
         contentKey = ContentKey(
-          contentType: blockHeaderWithProof, blockHeaderWithProofKey: blockKey)
+          contentType: blockHeader, blockHeaderKey: blockKey)
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
