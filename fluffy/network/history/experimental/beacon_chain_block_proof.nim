@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -31,6 +31,9 @@
 # is currently in no way available over any of the consensus layer libp2p
 # protocols. Thus a light client cannot really be build using these proofs,
 # which makes it rather useless for now.
+# - The historical_roots could be put available on the network together with
+# a proof against the right state root. An example of this can be seen in
+# ./fluffy/network/history/experimental/beacon_chain_historical_roots.nim
 #
 # Caveat:
 #
@@ -68,9 +71,10 @@
 # TODO: Probably needs to make usage of forks instead of just bellatrix.
 #
 
-{.used.}
-
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   stew/results,
