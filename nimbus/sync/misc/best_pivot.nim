@@ -30,10 +30,10 @@ const
   extraTraceMessages = false or true
     ## Additional trace commands
 
-  pivotMinPeersToStartSync* = 2
+  minPeersToStartSync = 2
     ## Wait for consensus of at least this number of peers before syncing.
 
-  pivotFailCountMax* = 3
+  failCountMax = 3
     ## Stop after a peer fails too often while negotiating. This happens if
     ## a peer responses repeatedly with useless data.
 
@@ -41,9 +41,12 @@ type
   BestPivotCtxRef* = ref object of RootRef
     ## Data shared by all peers.
     rng: ref HmacDrbgContext    ## Random generator
-    untrusted: seq[Peer]        ## Clean up list
+    untrusted: HashSet[Peer]    ## Clean up list
     trusted: HashSet[Peer]      ## Peers ready for delivery
+    relaxed: HashSet[Peer]      ## Peers accepted in relaxed mode
     relaxedMode: bool           ## Not using strictly `trusted` set
+    minPeers: int               ## Minimum peers needed in non-relaxed mode
+    comFailMax: int             ## Stop peer after too many communication errors
 
   BestPivotWorkerRef* = ref object of RootRef
     ## Data for this peer only
@@ -146,8 +149,8 @@ proc getBestHeader(
   if hdrResp.isNone:
     bp.comFailCount.inc
     trace trEthRecvReceivedBlockHeaders, peer, reqLen,
-      response="n/a", comFailCount=bp.comFailCount
-    if pivotFailCountMax < bp.comFailCount:
+      hdrRespLen="n/a", comFailCount=bp.comFailCount
+    if bp.global.comFailMax < bp.comFailCount:
       bp.ctrl.zombie = true
     return err()
 
@@ -160,7 +163,11 @@ proc getBestHeader(
     bp.comFailCount = 0 # reset fail count
     return ok(header)
 
-  trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
+  bp.comFailCount.inc
+  trace trEthRecvReceivedBlockHeaders, peer, reqLen,
+    hdrRespLen, comFailCount=bp.comFailCount
+  if bp.global.comFailMax < bp.comFailCount:
+    bp.ctrl.zombie = true
   return err()
 
 proc agreesOnChain(
@@ -228,9 +235,18 @@ proc agreesOnChain(
 proc init*(
     T: type BestPivotCtxRef;            ## Global data descriptor type
     rng: ref HmacDrbgContext;           ## Random generator
+    minPeers = minPeersToStartSync;     ## Consensus of at least this #of peers
+    failMax = failCountMax;             ## Stop peer after too many com. errors
       ): T =
-  ## Global constructor, shared data
-  T(rng: rng)
+  ## Global constructor, shared data. If `minPeers` is smaller that `2`,
+  ## relaxed mode will be enabled (see also `pivotRelaxedMode()`.)
+  result = T(rng:        rng,
+             minPeers:   minPeers,
+             comFailMax: failCountMax)
+  if minPeers < 2:
+    result.minPeers = minPeersToStartSync
+    result.relaxedMode = true
+
 
 proc init*(
     T: type BestPivotWorkerRef;         ## Global data descriptor type
@@ -246,12 +262,16 @@ proc init*(
 
 proc clear*(bp: BestPivotWorkerRef) =
   ## Reset descriptor
-  bp.global.untrusted.add bp.peer
+  bp.global.untrusted.incl bp.peer
   bp.header = none(BlockHeader)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc nPivotApproved*(ctx: BestPivotCtxRef): int =
+  ## Number of trusted or relax mode approved pivots
+  (ctx.trusted + ctx.relaxed - ctx.untrusted).len
 
 proc pivotRelaxedMode*(ctx: BestPivotCtxRef; enable = false) =
   ## Controls relaxed mode. In relaxed mode, the *best header* is fetched
@@ -267,7 +287,7 @@ proc pivotHeader*(bp: BestPivotWorkerRef): Result[BlockHeader,void] =
   if bp.header.isSome and
      bp.peer notin bp.global.untrusted:
 
-    if pivotMinPeersToStartSync <= bp.global.trusted.len and
+    if bp.global.minPeers <= bp.global.trusted.len and
        bp.peer in bp.global.trusted:
       return ok(bp.header.unsafeGet)
 
@@ -287,7 +307,7 @@ proc pivotHeader*(
   if bp.header.isSome and
      bp.peer notin bp.global.untrusted:
 
-    if pivotMinPeersToStartSync <= bp.global.trusted.len and
+    if bp.global.minPeers <= bp.global.trusted.len and
        bp.peer in bp.global.trusted:
       return ok(bp.header.unsafeGet)
 
@@ -322,8 +342,9 @@ proc pivotNegotiate*(
     when extraTraceMessages:
       trace "Removing untrusted peers", peer, trusted=bp.global.trusted.len,
         untrusted=bp.global.untrusted.len, runState=bp.ctrl.state
-    bp.global.trusted = bp.global.trusted - bp.global.untrusted.toHashSet
-    bp.global.untrusted.setLen(0)
+    bp.global.trusted = bp.global.trusted - bp.global.untrusted
+    bp.global.relaxed = bp.global.relaxed - bp.global.untrusted
+    bp.global.untrusted.clear()
 
   if bp.header.isNone:
     when extraTraceMessages:
@@ -348,9 +369,10 @@ proc pivotNegotiate*(
 
   # No further negotiation if in relaxed mode
   if bp.global.relaxedMode:
+    bp.global.relaxed.incl bp.peer
     return true
 
-  if pivotMinPeersToStartSync <= bp.global.trusted.len:
+  if bp.global.minPeers <= bp.global.trusted.len:
     # We have enough trusted peers. Validate new peer against trusted
     let rc = bp.getRandomTrustedPeer()
     if rc.isOK:
@@ -441,7 +463,7 @@ proc pivotNegotiate*(
     discard
 
   # Evaluate status, finally
-  if pivotMinPeersToStartSync <= bp.global.trusted.len:
+  if bp.global.minPeers <= bp.global.trusted.len:
     when extraTraceMessages:
       let bestHeader =
         if bp.header.isSome: "#" & $bp.header.get.blockNumber

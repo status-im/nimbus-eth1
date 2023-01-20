@@ -25,6 +25,7 @@ type
     TrieIsLockedForPerusal
     TooManyProcessedChunks
     TooManySlotAccounts
+    NoAccountsYet
 
     # nearby/boundary proofs
     NearbyExtensionError

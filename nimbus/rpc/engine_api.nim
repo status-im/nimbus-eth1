@@ -234,6 +234,7 @@ proc handle_forkchoiceUpdatedV2(
        com: CommonRef,
        update: ForkchoiceStateV1,
        payloadAttributes: Option[PayloadAttributesV2]): ForkchoiceUpdatedResponse =
+
   let
     chain = sealingEngine.chain
     db = chain.db
@@ -267,6 +268,9 @@ proc handle_forkchoiceUpdatedV2(
     info "Forkchoice requested sync to new head",
       number = header.blockNumber,
       hash = blockHash
+
+    # Update sync header (if any)
+    com.syncReqNewHead(header)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 

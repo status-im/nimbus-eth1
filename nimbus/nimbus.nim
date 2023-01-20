@@ -146,12 +146,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Add protocol capabilities based on protocol flags
   if ProtocolFlag.Eth in protocols:
-    let ethWireHandler = EthWireRef.new(
+    nimbus.ethNode.addEthHandlerCapability(
       nimbus.chainRef,
       nimbus.txPool,
       nimbus.ethNode.peerPool
     )
-    nimbus.ethNode.addCapability(protocol.eth, ethWireHandler)
     case conf.syncMode:
     of SyncMode.Snap, SyncMode.SnapCtx:
       nimbus.ethNode.addCapability protocol.snap
@@ -413,16 +412,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
         let syncer = LegacySyncRef.new(nimbus.ethNode, nimbus.chainRef)
         syncer.start
 
-        let wireHandler = EthWireRef(
-          nimbus.ethNode.protocolState(eth)
-        )
-
-        wireHandler.setNewBlockHandler(
+        nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
           legacy.newBlockHandler,
-          cast[pointer](syncer)
-        )
-
-        wireHandler.setNewBlockHashesHandler(
           legacy.newBlockHashesHandler,
           cast[pointer](syncer)
         )

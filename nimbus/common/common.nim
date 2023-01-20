@@ -34,6 +34,9 @@ type
     current: BlockNumber
     highest: BlockNumber
 
+  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe.}
+    ## Update head for syncing
+
   CommonRef* = ref object
     # all purpose storage
     db: ChainDBRef
@@ -65,6 +68,8 @@ type
 
     # one of POW/POA/POS, updated after calling `hardForkTransition`
     consensusType: ConsensusType
+
+    syncReqNewHead: SyncReqNewHeadCB
 
     pow: PowRef ##\
       ## Wrapper around `hashimotoLight()` and lookup cache
@@ -295,6 +300,9 @@ func toEVMFork*(com: CommonRef, number: BlockNumber): EVMFork =
   let fork = com.toHardFork(number)
   ToEVMFork[fork]
 
+func toEVMFork*(com: CommonRef): EVMFork =
+  ToEVMFork[com.currentFork]
+
 func isLondon*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number) >= London
@@ -353,6 +361,11 @@ proc initializeEmptyDb*(com: CommonRef)
     discard com.db.persistHeaderToDb(com.genesisHeader,
       com.consensusType == ConsensusType.POS)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
+
+proc syncReqNewHead*(com: CommonRef; header: BlockHeader) =
+  ## Used by RPC to update the beacon head for snap sync
+  if not com.syncReqNewHead.isNil:
+    com.syncReqNewHead(header)
 
 # ------------------------------------------------------------------------------
 # Getters
@@ -462,3 +475,10 @@ proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
   result = com.currentFork
   com.currentFork = fork
   com.consensusTransition(fork)
+
+proc `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
+  com.syncReqNewHead = cb
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

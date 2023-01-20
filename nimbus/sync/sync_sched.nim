@@ -250,6 +250,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`
+  worker.ctrl.stopped = true
   worker.runStop()
 
 
@@ -289,8 +290,8 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       # somehow hanging runners.
       trace "Peer table full! Dequeuing least used entry",
         oldest=leastPeer.worker, nPeers, nWorkers=dsc.buddies.len, maxWorkers
-      leastPeer.worker.runStop()
       leastPeer.worker.ctrl.zombie = true
+      leastPeer.worker.runStop()
 
   # Add peer entry
   discard dsc.buddies.lruAppend(peer.hash, buddy, dsc.ctx.buddiesMax)

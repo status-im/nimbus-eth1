@@ -187,8 +187,9 @@ proc accountsRangefetchImpl(
     # Remove the processed range from the batch of unprocessed ones.
     fa.unprocessed.reduce w
     # Register consumed intervals on the accumulators over all state roots.
-    discard buddy.ctx.data.coveredAccounts.merge w
     discard fa.processed.merge w
+    discard ctx.data.coveredAccounts.merge w
+    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
 
   # Register accounts with storage slots on the storage TODO list.
   env.storageQueueAppend dd.withStorage

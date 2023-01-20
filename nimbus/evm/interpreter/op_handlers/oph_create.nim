@@ -94,7 +94,8 @@ const
     # EIP-3860
     if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
-      return
+      raise newException(InitcodeError,
+        &"CREATE: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
 
     let gasParams = GasParams(
       kind:              Create,
@@ -171,8 +172,9 @@ const
     # EIP-3860
     if k.cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
       trace "Initcode size exceeds maximum", initcodeSize = memLen
-      return
-    
+      raise newException(InitcodeError,
+        &"CREATE2: have {memLen}, max {EIP3860_MAX_INITCODE_SIZE}")
+
     let gasParams = GasParams(
       kind:              Create,
       cr_currentMemSize: k.cpt.memory.len,
@@ -183,7 +185,7 @@ const
     gasCost = gasCost + k.cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
     k.cpt.gasMeter.consumeGas(
-      gasCost, reason = &"CREATE: GasCreate + {memLen} * memory expansion")
+      gasCost, reason = &"CREATE2: GasCreate + {memLen} * memory expansion")
     k.cpt.memory.extend(memPos, memLen)
     k.cpt.returnData.setLen(0)
 
@@ -206,7 +208,7 @@ const
     var createMsgGas = k.cpt.gasMeter.gasRemaining
     if k.cpt.fork >= FkTangerine:
       createMsgGas -= createMsgGas div 64
-    k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
+    k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2")
 
     when evmc_enabled:
       let

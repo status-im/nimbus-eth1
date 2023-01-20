@@ -13,6 +13,7 @@ import
   eth/[rlp, trie, eip1559],
   stint, chronicles, stew/results,
   "."/[config, types, helpers],
+  ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],
   ../../nimbus/common/common,
   ../../nimbus/db/accounts_cache,
@@ -222,14 +223,8 @@ proc exec(ctx: var TransContext,
       db.persist(clearCache = false)
 
   let miner = ctx.env.currentCoinbase
-  if vmState.com.forkGTE(Spurious):
-    # EIP158/161 state clearing
-    vmState.mutateStateDB:
-      if db.accountExists(miner) and db.isEmptyAccount(miner):
-        db.deleteAccount(miner)
-        # do not clear cache, we need the cache when constructing
-        # post state
-        db.persist(clearCache = false)
+  let fork = vmState.com.toEVMFork
+  coinbaseStateClearing(vmState, miner, fork, stateReward.isSome())
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)

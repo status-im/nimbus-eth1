@@ -25,11 +25,12 @@ logScope:
 
 type
   TickerStats* = object
+    beaconBlock*: Option[BlockNumber]
     pivotBlock*: Option[BlockNumber]
-    nAccounts*: (float,float)          ## mean and standard deviation
-    accountsFill*: (float,float,float) ## mean, standard deviation, merged total
+    nAccounts*: (float,float)          ## Mean and standard deviation
+    accountsFill*: (float,float,float) ## Mean, standard deviation, merged total
     nAccountStats*: int                ## #chunks
-    nSlotLists*: (float,float)         ## mean and standard deviation
+    nSlotLists*: (float,float)         ## Mean and standard deviation
     nStorageQueue*: Option[int]
     nQueues*: int
 
@@ -122,7 +123,8 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
      tickerLogSuppressMax < (now - t.visited):
     var
       nAcc, nSto, bulk: string
-      pivot = "n/a"
+      pv = "n/a"
+      bc = "n/a"
       nStoQue = "n/a"
     let
       recoveryDone = t.lastRecov
@@ -130,7 +132,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
          "(" & data.accountsFill[1].pc99 & ")" &
          "/" & data.accountsFill[2].pc99 &
          "~" & data.nAccountStats.uint.toSI
-      buddies = t.nBuddies
+      nInst = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
@@ -142,7 +144,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     noFmtError("runLogTicker"):
       if data.pivotBlock.isSome:
-        pivot = &"#{data.pivotBlock.get}/{data.nQueues}"
+        pv = &"#{data.pivotBlock.get}/{data.nQueues}"
+      if data.beaconBlock.isSome:
+        bc = &"#{data.beaconBlock.get}"
       nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
               &"({(data.nAccounts[1]+0.5).int64})")
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
@@ -153,13 +157,13 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
     if t.recovery:
       info "Snap sync statistics (recovery)",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
     elif recoveryDone:
       info "Snap sync statistics (recovery done)",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
     else:
       info "Snap sync statistics",
-        up, buddies, pivot, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
 
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 

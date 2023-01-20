@@ -19,11 +19,11 @@ Current status of specifications can be found in the
 
 ## Development Updates
 
-To keep up to date with changes and development progress, follow the
-[Nimbus blog](https://our.status.im/tag/nimbus/).
-
 Monthly development updates are shared
 [here](https://hackmd.io/jRpxY4WBQJ-hnsKaPDYqTw).
+
+To keep up to date with changes and development progress, follow the
+[Nimbus blog](https://our.status.im/tag/nimbus/).
 
 ## How to Build & Run
 
@@ -79,6 +79,8 @@ It should be noted that there is currently no real way to distinguish a "specifi
 network, and as long as the same Portal protocols are supported, nodes can
 simply connect to it and no real separation can be made.
 
+<!-- TODO: Update this once we have the headersWithProof type merged and data on the network -->
+
 The testnet is currently storing only the first 25000 mainnet blocks. This can
 be tested by using the JSON-RPC call `eth_getBlockByHash`:
 ```
@@ -109,39 +111,37 @@ make fluffy-test
 Find more details on the usage and workings of the local testnet script
 [here](./docs/local_testnet.md).
 
-### Seeding history (=block) data into the Portal network
-
-1. Set-up access to an Ethereum JSON-RPC endpoint (e.g. local geth instance)
-that can serve the data.
-2. Use the `eth-data-exporter` tool to download history data through the
-JSON-RPC endpoint into the format which is suitable for reading data into
-Fluffy client and propagating into the network:
-
-```bash
-make fluffy-tools
-
-./build/eth_data_exporter --initial-block:1 --end-block:10 --data-dir:"/user_data_dir/"
-```
-
-This will store blocks 1 to 10 into a json file located at
-`./user_data_dir/eth-history-data.json`.
-
-> Note: Currently only hardcoded address `ws://127.0.0.1:8546` works for the
-Ethereum JSON-RPC endpoint.
-
-3. Run Fluffy and trigger the propagation of data with the
-`portal_history_propagate` JSON-RPC API call:
-
-```bash
-./build/fluffy --network:testnet0 --table-ip-limit:1024 --bucket-ip-limit:24 --log-level:info --rpc
-
-# From another shell
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagate","params":["./user_data_dir/eth-history-data.json"]}' http://localhost:8545 | jq
-```
-
 ### Windows support
 
 Follow the steps outlined [here](../README.md#windows) to build fluffy on Windows.
+
+
+## Development tools and documentation
+
+- [Content seeding](./docs/content_seeding.md): Documentation on how to retrieve & generate history data and how to seed it into the network
+- [Manual protocol interop testing](./docs/protocol_interop.md): commands on how to manually test the discv5 and Portal protocol request and responses
+- [Local testnet script](./docs/local_testnet.md): Documentation on the local testnet script and how to use it
+
+
+## The basics for developers
+
+When working on this repository, you can run the `env.sh` script to run a
+command with the right environment variables set. This means the vendored
+Nim and Nim modules will be used, just as when you use `make`.
+
+E.g.:
+
+```bash
+# start a new interactive shell with the right env vars set
+./env.sh bash
+```
+
+More [development tips](../README.md#devel-tips)
+can be found on the general nimbus-eth1 readme.
+
+The code follows the
+[Status Nim Style Guide](https://status-im.github.io/nim-style-guide/).
+
 
 ## Metrics and their visualisation
 
@@ -168,28 +168,6 @@ constant value.
 
 The other option would be to remove those variables and remove their usage in
 each panel query.
-
-## For Developers
-
-When working on this repository, you can run the `env.sh` script to run a
-command with the right environment variables set. This means the vendored
-Nim and Nim modules will be used, just as when you use `make`.
-
-E.g.:
-
-```bash
-# start a new interactive shell with the right env vars set
-./env.sh bash
-```
-
-More [development tips](../README.md#devel-tips)
-can be found on the general nimbus-eth1 readme.
-
-The code follows the
-[Status Nim Style Guide](https://status-im.github.io/nim-style-guide/).
-
-Detailed document showing commands to
-[test client protocol interoperability](./docs/protocol_interop.md).
 
 ## License
 

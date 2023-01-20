@@ -269,7 +269,7 @@ procSuite "Portal testnet tests":
     # Gossiping all block headers with proof first, as bodies and receipts
     # require them for validation.
     for (content, contentKey) in blockHeadersWithProof:
-      discard (await clients[0].portal_history_offer(
+      discard (await clients[0].portal_history_gossip(
         content.toHex(), contentKey.toHex()))
 
     # This will fill the first node its db with blocks from the data file. Next,

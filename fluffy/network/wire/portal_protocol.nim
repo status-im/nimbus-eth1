@@ -711,7 +711,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   )
 
 proc offer(p: PortalProtocol, o: OfferRequest):
-  Future[PortalResult[void]] {.async.} =
+  Future[PortalResult[ContentKeysBitList]] {.async.} =
   ## Offer triggers offer-accept interaction with one peer
   ## Whole flow has two phases:
   ## 1. Come to an agreement on what content to transfer, by using offer and
@@ -762,7 +762,7 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     if acceptedKeysAmount == 0:
       debug "No content accepted"
       # Don't open an uTP stream if no content was requested
-      return ok()
+      return ok(m.contentKeys)
 
     let nodeAddress = NodeAddress.init(o.dst)
     if nodeAddress.isNone():
@@ -837,27 +837,25 @@ proc offer(p: PortalProtocol, o: OfferRequest):
     debug "Content successfully offered"
 
     await socket.closeWait()
-    return ok()
+    return ok(m.contentKeys)
   else:
     warn "Offer failed due to accept request failure ",
       error = acceptMessageResponse.error
     return err("No accept response")
 
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
-    Future[PortalResult[void]] {.async.} =
-    let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
-    let res = await p.offer(req)
-    return res
+    Future[PortalResult[ContentKeysBitList]] {.async.} =
+  let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
+  return await p.offer(req)
 
 proc offer*(p: PortalProtocol, dst: Node, content: seq[ContentInfo]):
-    Future[PortalResult[void]] {.async.} =
-    if len(content) > contentKeysLimit:
-      return err("Cannot offer more than 64 content items")
+    Future[PortalResult[ContentKeysBitList]] {.async.} =
+  if len(content) > contentKeysLimit:
+    return err("Cannot offer more than 64 content items")
 
-    let contentList = List[ContentInfo, contentKeysLimit].init(content)
-    let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
-    let res = await p.offer(req)
-    return res
+  let contentList = List[ContentInfo, contentKeysLimit].init(content)
+  let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
+  return await p.offer(req)
 
 proc offerWorker(p: PortalProtocol) {.async.} =
   while true:
@@ -1157,7 +1155,7 @@ proc neighborhoodGossip*(
   # 1. Select the closest neighbours in the routing table
   # 2. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= 4) nodes are in range, offer these nodes the content
+  # 3. If more than n (= 8) nodes are in range, offer these nodes the content
   # (max nodes set at 8).
   # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
   # returned from the lookup the content (max nodes set at 8)
