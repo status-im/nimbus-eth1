@@ -82,7 +82,7 @@ proc toWithdrawal(w: WithdrawalV1): Withdrawal =
     index: uint64(w.index),
     validatorIndex: uint64(w.validatorIndex),
     address: distinctBase(w.address),
-    amount: w.amount
+    amount: uint64(w.amount)
   )
 
 proc toBlockBody*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): BlockBody =

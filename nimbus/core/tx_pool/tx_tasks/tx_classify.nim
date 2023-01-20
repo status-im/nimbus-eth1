@@ -12,9 +12,9 @@
 ## ===============================================
 ##
 
+import ../../../transaction except GasPrice, GasPriceEx  # already in tx_item
 import
   ../../../common/common,
-  ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
   ../../validate,

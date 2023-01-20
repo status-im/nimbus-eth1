@@ -73,7 +73,7 @@ proc procBlkPreamble(vmState: BaseVMState;
       return false
 
     for withdrawal in body.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount)
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.u256)
     
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",

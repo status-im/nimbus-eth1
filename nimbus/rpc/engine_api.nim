@@ -165,7 +165,7 @@ proc handle_getPayloadV2(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2R
   var payload: ExecutionPayloadV2
   if not api.get(payloadId, payload):
     raise unknownPayload("Unknown payload")
-  let blockValue = sumOfBlockPriorityFees(payload)
+  let blockValue: Quantity = Quantity(sumOfBlockPriorityFees(payload).truncate(uint64))
   return GetPayloadV2Result(
     executionPayload: payload,
     blockValue: blockValue
