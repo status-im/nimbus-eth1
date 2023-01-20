@@ -24,12 +24,11 @@ import
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
-    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot,
-    snapdb_storage_slots],
+    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_decompose, test_inspect, test_db_timing, test_types]
+    test_decompose, test_inspect, test_storage, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -64,7 +63,6 @@ else:
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
   OkHexDb = Result[void,HexaryError].ok()
-  OkStoDb = Result[void,seq[(int,HexaryError)]].ok()
 
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent ChainDBRef initialisation
@@ -88,12 +86,6 @@ proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
     check rc.value.innerGaps == seq[NodeSpecs].default
   else:
     return true
-
-proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryError)]]=
-  ## Kludge: map error report to (older version) return code
-  if r.len != 0:
-    return err(r.mapIt((it.slot.get(otherwise = -1),it.error)))
-  ok()
 
 proc findFilePath(file: string;
                   baseDir, repoDir: openArray[string]): Result[string,void] =
@@ -432,7 +424,7 @@ proc storagesRunner(
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
     info = if db.persistent: &"persistent db on \"{dbDir}\""
            else: "in-memory db"
-    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+    idPfx = sample.file.splitPath.tail.replace(".txt.gz","")
 
   defer:
     if db.persistent:
@@ -440,48 +432,19 @@ proc storagesRunner(
         db.cdb[0].rocksStoreRef.store.db.rocksdb_close
       tmpDir.flushDbDir(sample.name)
 
-  suite &"SyncSnap: {fileInfo} accounts storage for {info}":
+  suite &"SyncSnap: {idPfx} accounts storage for {info}":
     let
-      dbBase = if persistent: SnapDbRef.init(db.cdb[0])
-               else: SnapDbRef.init(newMemoryDB())
+      xdb = if persistent: SnapDbRef.init(db.cdb[0])
+            else: SnapDbRef.init(newMemoryDB())
 
     test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
-      for w in accountsList:
-        let desc = SnapDbAccountsRef.init(dbBase, root, peer)
-        check desc.importAccounts(w.base, w.data, persistent).isImportOk
+      accountsList.test_storageAccountsImport(xdb, persistent)
 
     test &"Merging {storagesList.len} storages lists":
-      let
-        dbDesc = SnapDbStorageSlotsRef.init(
-          dbBase, Hash256().to(NodeKey), Hash256(), peer)
-        ignore = knownFailures.toTable
-      for n,w in storagesList:
-        let
-          testId = fileInfo & "#" & $n
-          expRc = if ignore.hasKey(testId):
-                    Result[void,seq[(int,HexaryError)]].err(ignore[testId])
-                  else:
-                    OkStoDb
-        check dbDesc.importStorageSlots(w.data, persistent).toStoDbRc == expRc
+      storagesList.test_storageSlotsImport(xdb, persistent, knownFailures,idPfx)
 
     test &"Inspecting {storagesList.len} imported storages lists sub-tries":
-      let ignore = knownFailures.toTable
-      for n,w in storagesList:
-        let
-          testId = fileInfo & "#" & $n
-          errInx = if ignore.hasKey(testId): ignore[testId][0][0]
-                   else: high(int)
-        for m in 0 ..< w.data.storages.len:
-          let
-            accKey = w.data.storages[m].account.accKey
-            root = w.data.storages[m].account.storageRoot
-            dbDesc = SnapDbStorageSlotsRef.init(dbBase, accKey, root, peer)
-            rc = dbDesc.inspectStorageSlotsTrie(persistent=persistent)
-          if m == errInx:
-            check rc == Result[TrieNodeStat,HexaryError].err(TrieIsEmpty)
-          else:
-            check rc.isOk # ok => level > 0 and not stopped
-
+      storagesList.test_storageSlotsTries(xdb, persistent, knownFailures,idPfx)
 
 proc inspectionRunner(
     noisy = true;
