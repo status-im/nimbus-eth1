@@ -569,8 +569,7 @@ const logProcs = {
 proc txHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let
     tx = TxNode(parent)
-    encodedTx = rlp.encode(tx.tx)
-    txHash = keccakHash(encodedTx)
+    txHash = rlpHash(tx.tx) # beware EIP-4844
   resp(txHash)
 
 proc txNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1249,8 +1248,8 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
-    let _      = decodeTx(data) # we want to know if it is a valid tx blob
-    let txHash = keccakHash(data)
+    let tx     = decodeTx(data) # we want to know if it is a valid tx blob
+    let txHash = rlpHash(tx) # beware EIP-4844
     resp(txHash)
   except CatchableError as em:
     return err("failed to process raw transaction: " & em.msg)

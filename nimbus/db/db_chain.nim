@@ -186,8 +186,8 @@ proc persistTransactions*(db: ChainDBRef, blockNumber:
   var trie = initHexaryTrie(db.db)
   for idx, tx in transactions:
     let
-      encodedTx = rlp.encode(tx)
-      txHash = keccakHash(encodedTx)
+      encodedTx = rlp.encode(tx.removeNetworkPayload)
+      txHash = rlpHash(tx) # beware EIP-4844
       txKey: TransactionKey = (blockNumber, idx)
     trie.put(rlp.encode(idx), encodedTx)
     db.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
@@ -219,7 +219,8 @@ iterator getBlockTransactionHashes*(db: ChainDBRef, blockHeader: BlockHeader): H
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
-    yield keccakHash(encodedTx)
+    let tx = rlp.decode(encodedTx, Transaction)
+    yield rlpHash(tx) # beware EIP-4844
 
 proc getTransactionCount*(chain: ChainDBRef, txRoot: Hash256): int =
   var trie = initHexaryTrie(chain.db, txRoot)

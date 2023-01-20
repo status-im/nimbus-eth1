@@ -72,9 +72,6 @@ proc asyncProcessTransactionImpl(
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
-  #trace "Sender", sender
-  #trace "txHash", rlpHash = ty.rlpHash
-
   let
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)

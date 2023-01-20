@@ -117,7 +117,7 @@ proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
     isValid = isValid and tx.S < SECPK1_N div 2
 
   if not isValid:
-    raise newException(ValidationError, "Invalid transaction")
+    raise newException(ValidationError, "Invalid legacy transaction")
 
 proc validateTxEip2930(tx: Transaction) =
   var isValid = tx.V in {0'i64, 1'i64}
@@ -126,7 +126,7 @@ proc validateTxEip2930(tx: Transaction) =
   isValid = isValid and tx.R < SECPK1_N
 
   if not isValid:
-    raise newException(ValidationError, "Invalid transaction")
+    raise newException(ValidationError, "Invalid typed transaction")
 
 proc validateTxEip4844(tx: Transaction) =
   validateTxEip2930(tx)
@@ -144,6 +144,9 @@ proc validateTxEip4844(tx: Transaction) =
   for bv in tx.versionedHashes:
     isValid = isValid and
       bv.data[0] == BLOB_COMMITMENT_VERSION_KZG
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid EIP-4844 transaction")
 
 proc validate*(tx: Transaction, fork: EVMFork) =
   # parameters pass validation rules
@@ -163,7 +166,7 @@ proc validate*(tx: Transaction, fork: EVMFork) =
     validateTxLegacy(tx, fork)
   of TxEip4844:
     validateTxEip4844(tx)
-  else:
+  of TxEip2930, TxEip1559:
     validateTxEip2930(tx)
 
 proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool): Transaction =
