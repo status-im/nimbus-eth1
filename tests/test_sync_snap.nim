@@ -30,9 +30,9 @@ import
     hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
     hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc, snapdb_pivot,
     snapdb_storage_slots],
-  ../nimbus/utils/prettify,
-  ./replay/[pp, undump_blocks, undump_accounts, undump_storages],
-  ./test_sync_snap/[bulk_test_xx, snap_test_xx, test_decompose, test_types]
+  ./replay/[pp, undump_accounts, undump_storages],
+  ./test_sync_snap/[
+    bulk_test_xx, snap_test_xx, test_decompose, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -79,15 +79,10 @@ var
   xDbs: TestDbs                   # for repeated storage/overwrite tests
   xTab32: Table[ByteArray32,Blob] # extracted data
   xTab33: Table[ByteArray33,Blob]
-  xVal32Sum, xVal32SqSum: float   # statistics
-  xVal33Sum, xVal33SqSum: float
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
-
-proc isOk(rc: ValidationResult): bool =
-  rc == ValidationResult.OK
 
 proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
   if rc.isErr:
@@ -116,16 +111,6 @@ proc findFilePath(file: string;
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
 
-proc pp(d: Duration): string =
-  if 40 < d.inSeconds:
-    d.ppMins
-  elif 200 < d.inMilliseconds:
-    d.ppSecs
-  elif 200 < d.inMicroseconds:
-    d.ppMs
-  else:
-    d.ppUs
-
 proc pp(rc: Result[Account,HexaryError]): string =
   if rc.isErr: $rc.error else: rc.value.pp
 
@@ -137,9 +122,6 @@ proc pp(rc: Result[TrieNodeStat,HexaryError]; db: SnapDbBaseRef): string =
 
 proc pp(a: NodeKey; collapse = true): string =
   a.to(Hash256).pp(collapse)
-
-proc ppKvPc(w: openArray[(string,int)]): string =
-  w.mapIt(&"{it[0]}={it[1]}%").join(", ")
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
@@ -213,17 +195,6 @@ proc to(b: openArray[byte]; T: type ByteArray33): T =
 proc to(b: ByteArray32|ByteArray33; T: type Blob): T =
   b.toSeq
 
-proc to(b: openArray[byte]; T: type NodeTag): T =
-  ## Convert from serialised equivalent
-  UInt256.fromBytesBE(b).T
-
-proc to(w: (byte, NodeTag); T: type Blob): T =
-  let (b,t) = w
-  @[b] & toSeq(t.UInt256.toBytesBE)
-
-proc to(t: NodeTag; T: type Blob): T =
-  toSeq(t.UInt256.toBytesBE)
-
 proc flushDbDir(s: string; subDir = "") =
   if s != "":
     let baseDir = s / "tmp"
@@ -259,22 +230,6 @@ proc lastTwo(a: openArray[string]): seq[string] =
 proc flatten(list: openArray[seq[Blob]]): seq[Blob] =
   for w in list:
     result.add w
-
-proc thisRecord(r: rocksdb_iterator_t): (Blob,Blob) =
-  var kLen, vLen:  csize_t
-  let
-    kData = r.rocksdb_iter_key(addr kLen)
-    vData = r.rocksdb_iter_value(addr vLen)
-  if not kData.isNil and not vData.isNil:
-    let
-      key = string.fromBytes(toOpenArrayByte(kData,0,int(kLen)-1))
-      value = string.fromBytes(toOpenArrayByte(vData,0,int(vLen)-1))
-    return (key.mapIt(it.byte),value.mapIt(it.byte))
-
-proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
-  if 0 < length:
-    result[0] = sum / length.float
-    result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -764,8 +719,8 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
     filePath = capture.file.findFilePath(baseDir,repoDir).value
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(capture.name) else: testDbs()
-    numBlocksInfo = if capture.numBlocks == high(int): ""
-                    else: $capture.numBlocks & " "
+    numBlocks = capture.numBlocks
+    numBlocksInfo = if numBlocks == high(int): "" else: $numBlocks & " "
     loadNoise = noisy
 
   defer:
@@ -773,81 +728,27 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
       tmpDir.flushDbDir(capture.name)
 
   suite &"SyncSnap: using {fileInfo} capture for testing db timings":
-    var
-      ddb: CommonRef         # perstent DB on disk
-      chn: ChainRef
+    var ddb: CommonRef         # perstent DB on disk
 
     test &"Create persistent ChainDBRef on {tmpDir}":
-      let chainDb = if db.persistent: db.cdb[0].trieDB
-                    else: newMemoryDB()
-
-      # Constructor ...
       ddb = CommonRef.new(
-        chainDb,
+        db = if db.persistent: db.cdb[0].trieDB else: newMemoryDB(),
         networkId = capture.network,
         pruneTrie = true,
         params = capture.network.networkParams)
-
       ddb.initializeEmptyDb
-      chn = ddb.newChain
 
     test &"Storing {numBlocksInfo}persistent blocks from dump":
-      for w in filePath.undumpNextGroup:
-        let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
-        if fromBlock == 0.u256:
-          doAssert w[0][0] == ddb.db.getBlockHeader(0.u256)
-          continue
-        # Message if [fromBlock,toBlock] contains a multiple of 700
-        if fromBlock + (toBlock mod 900) <= toBlock:
-          loadNoise.say "***", &"processing ...[#{fromBlock},#{toBlock}]..."
-        check chn.persistBlocks(w[0], w[1]).isOk
-        if capture.numBlocks.toBlockNumber <= w[0][^1].blockNumber:
-          break
+      noisy.test_dbTimingUndumpBlocks(filePath, ddb, numBlocks, loadNoise)
 
     test "Extract key-value records into memory tables via rocksdb iterator":
-      # Implicit test: if not persistent => db.cdb[0] is nil
       if db.cdb[0].rocksStoreRef.isNil:
-        skip()
+        skip() # not persistent => db.cdb[0] is nil
       else:
-        let
-          rdb = db.cdb[0].rocksStoreRef
-          rop = rdb.store.readOptions
-          rit = rdb.store.db.rocksdb_create_iterator(rop)
-        check not rit.isNil
-
-        xTab32.clear
-        xTab33.clear
-
-        rit.rocksdb_iter_seek_to_first()
-        while rit.rocksdb_iter_valid() != 0:
-          let (key,val) = rit.thisRecord()
-          rit.rocksdb_iter_next()
-          if key.len == 32:
-            xTab32[key.to(ByteArray32)] = val
-            xVal32Sum += val.len.float
-            xVal32SqSum += val.len.float * val.len.float
-            check key.to(ByteArray32).to(Blob) == key
-          elif key.len == 33:
-            xTab33[key.to(ByteArray33)] = val
-            xVal33Sum += val.len.float
-            xVal33SqSum += val.len.float * val.len.float
-            check key.to(ByteArray33).to(Blob) == key
-          else:
-            noisy.say "***", "ignoring key=", key.toHex
-
-        rit.rocksdb_iter_destroy()
-
-        var
-          (mean32, stdv32) = meanStdDev(xVal32Sum, xVal32SqSum, xTab32.len)
-          (mean33, stdv33) = meanStdDev(xVal33Sum, xVal33SqSum, xTab33.len)
-        noisy.say "***",
-          "key 32 table: ",
-          &"size={xTab32.len} valLen={(mean32+0.5).int}({(stdv32+0.5).int})",
-          ", key 33 table: ",
-          &"size={xTab33.len} valLen={(mean33+0.5).int}({(stdv33+0.5).int})"
+        noisy.test_dbTimingRockySetup(xTab32, xTab33, db.cdb[0])
 
 
-proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
+proc dbTimingRunner(noisy = true;  persistent = true; cleanUp = true) =
   let
     fullNoise = false
   var
@@ -891,307 +792,51 @@ proc storeRunner(noisy = true;  persistent = true; cleanUp = true) =
     doAssert 9 <= nTestDbInstances
     doAssert not xDbs.cdb[8].isNil
 
+    let
+      storeDir32 = &"Directly store {xTab32.len} records"
+      storeDir33 = &"Directly store {xTab33.len} records"
+      storeTx32 = &"Transactionally store directly {xTab32.len} records"
+      storeTx33 = &"Transactionally store directly {xTab33.len} records"
+      intoTrieDb = &"into {emptyDb} trie db"
+
+      storeRks32 = &"Store {xTab32.len} records"
+      storeRks33 = &"Store {xTab33.len} records"
+      intoRksDb = &"into {emptyDb} rocksdb table"
+
     if xTab32.len == 0 or xTab33.len == 0:
       test &"Both tables with 32 byte keys(size={xTab32.len}), " &
           &"33 byte keys(size={xTab32.len}) must be non-empty":
         skip()
     else:
-      # cdb[0] -- direct db, key length 32, no transaction
-      test &"Directly store {xTab32.len} records " &
-          &"(key length 32) into {emptyDb} trie database":
-        var ela: Duration
-        let tdb = xDbs.cdb[0].trieDB
+      test &"{storeDir32} (key length 32) {intoTrieDb}":
+        noisy.test_dbTimingStoreDirect32(xTab32, xDbs.cdb[0])
 
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(keyLen 32)", ela):
-          for (key,val) in xTab32.pairs:
-            tdb.put(key, val)
+      test &"{storeDir32} (key length 33) {intoTrieDb}":
+        noisy.test_dbTimingStoreDirectly32as33(xTab32, xDbs.cdb[1])
 
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab32.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab32.len, ", ",
-            "perRecord=", perRec.pp
+      test &"{storeTx32} (key length 32) {intoTrieDb}":
+        noisy.test_dbTimingStoreTx32(xTab32, xDbs.cdb[2])
 
-      # cdb[1] -- direct db, key length 32 as 33, no transaction
-      test &"Directly store {xTab32.len} records " &
-          &"(key length 33) into {emptyDb} trie database":
-        var ela = initDuration()
-        let tdb = xDbs.cdb[1].trieDB
+      test &"{storeTx32} (key length 33) {intoTrieDb}":
+        noisy.test_dbTimingStoreTx32as33(xTab32, xDbs.cdb[3])
 
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(keyLen 32 as 33)", ela):
-          for (key,val) in xTab32.pairs:
-            tdb.put(@[99.byte] & key.toSeq, val)
+      test &"{storeDir33} (key length 33) {intoTrieDb}":
+        noisy.test_dbTimingDirect33(xTab33, xDbs.cdb[4])
 
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab32.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab32.len, ", ",
-            "perRecord=", perRec.pp
-
-      # cdb[2] -- direct db, key length 32, transaction based
-      test &"Transactionally store {xTab32.len} records " &
-          &"(key length 32) into {emptyDb} trie database":
-        var ela: Duration
-        let tdb = xDbs.cdb[2].trieDB
-
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(tx,keyLen 32)", ela):
-          let dbTx = tdb.beginTransaction
-          defer: dbTx.commit
-
-          for (key,val) in xTab32.pairs:
-            tdb.put(key, val)
-
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab32.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab32.len, ", ",
-            "perRecord=", perRec.pp
-
-      # cdb[3] -- direct db, key length 32 as 33, transaction based
-      test &"Transactionally store {xTab32.len} records " &
-          &"(key length 33) into {emptyDb} trie database":
-        var ela: Duration
-        let tdb = xDbs.cdb[3].trieDB
-
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(tx,keyLen 32 as 33)", ela):
-          let dbTx = tdb.beginTransaction
-          defer: dbTx.commit
-
-          for (key,val) in xTab32.pairs:
-            tdb.put(@[99.byte] & key.toSeq, val)
-
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab32.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab32.len, ", ",
-            "perRecord=", perRec.pp
-
-      # cdb[4] -- direct db, key length 33, no transaction
-      test &"Directly store {xTab33.len} records " &
-          &"(key length 33) into {emptyDb} trie database":
-        var ela: Duration
-        let tdb = xDbs.cdb[4].trieDB
-
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(keyLen 33)", ela):
-          for (key,val) in xTab33.pairs:
-            tdb.put(key, val)
-
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab33.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab33.len, ", ",
-            "perRecord=", perRec.pp
-
-      # cdb[5] -- direct db, key length 33, transaction based
-      test &"Transactionally store {xTab33.len} records " &
-          &"(key length 33) into {emptyDb} trie database":
-        var ela: Duration
-        let tdb = xDbs.cdb[5].trieDB
-
-        if noisy: echo ""
-        noisy.showElapsed("Standard db loader(tx,keyLen 33)", ela):
-          let dbTx = tdb.beginTransaction
-          defer: dbTx.commit
-
-          for (key,val) in xTab33.pairs:
-            tdb.put(key, val)
-
-        if ela.inNanoseconds != 0:
-          let
-            elaNs = ela.inNanoseconds.float
-            perRec = ((elaNs / xTab33.len.float) + 0.5).int.initDuration
-          noisy.say "***",
-            "nRecords=", xTab33.len, ", ",
-            "perRecord=", perRec.pp
+      test &"{storeTx33} (key length 33) {intoTrieDb}":
+        noisy.test_dbTimingTx33(xTab33, xDbs.cdb[5])
 
       if xDbs.cdb[0].rocksStoreRef.isNil:
         test "The rocksdb interface must be available": skip()
       else:
-        # cdb[6] -- rocksdb, key length 32
-        test &"Store {xTab32.len} records " &
-            "(key length 32) into empty rocksdb table":
-          var
-            ela: array[4,Duration]
-            size: int64
-          let
-            rdb = xDbs.cdb[6].rocksStoreRef
+        test &"{storeRks32} (key length 32) {intoRksDb}":
+          noisy.test_dbTimingRocky32(xTab32, xDbs.cdb[6], fullNoise)
 
-          # Note that 32 and 33 size keys cannot be usefiully merged into the
-          # same SST file. The keys must be added in a sorted mode. So playing
-          # safe, key sizes should be of
-          # equal length.
+        test &"{storeRks32} (key length 33) {intoRksDb}":
+          noisy.test_dbTimingRocky32as33(xTab32, xDbs.cdb[7], fullNoise)
 
-          if noisy: echo ""
-          noisy.showElapsed("Rocky bulk loader(keyLen 32)", ela[0]):
-            let bulker = RockyBulkLoadRef.init(rdb)
-            defer: bulker.destroy()
-            check bulker.begin("rocky-bulk-cache")
-
-            var
-              keyList = newSeq[NodeTag](xTab32.len)
-
-            fullNoise.showElapsed("Rocky bulk loader/32, sorter", ela[1]):
-              var inx = 0
-              for key in xTab32.keys:
-                keyList[inx] = key.to(NodeTag)
-                inx.inc
-              keyList.sort(cmp)
-
-            fullNoise.showElapsed("Rocky bulk loader/32, append", ela[2]):
-              for n,nodeTag in keyList:
-                let key = nodeTag.to(Blob)
-                check bulker.add(key, xTab32[key.to(ByteArray32)])
-
-            fullNoise.showElapsed("Rocky bulk loader/32, slurp", ela[3]):
-              let rc = bulker.finish()
-              if rc.isOk:
-                 size = rc.value
-              else:
-                check bulker.lastError == "" # force printing error
-
-          fullNoise.say "***", " ela[]=", $ela.toSeq.mapIt(it.pp)
-          if ela[0].inNanoseconds != 0:
-            let
-              elaNs = ela.toSeq.mapIt(it.inNanoseconds.float)
-              elaPc = elaNs.mapIt(((it / elaNs[0]) * 100 + 0.5).int)
-              perRec = ((elaNs[0] / xTab32.len.float) + 0.5).int.initDuration
-            noisy.say "***",
-              "nRecords=", xTab32.len, ", ",
-              "perRecord=", perRec.pp, ", ",
-              "sstSize=", size.uint64.toSI, ", ",
-              "perRecord=", ((size.float / xTab32.len.float) + 0.5).int, ", ",
-             ["Total","Sorter","Append","Ingest"].zip(elaPc).ppKvPc
-
-        # cdb[7] -- rocksdb, key length 32 as 33
-        test &"Store {xTab32.len} records " &
-            "(key length 33) into empty rocksdb table":
-          var
-            ela: array[4,Duration]
-            size: int64
-          let
-            rdb = xDbs.cdb[7].rocksStoreRef
-
-          # Note that 32 and 33 size keys cannot be usefiully merged into the
-          # same SST file. The keys must be added in a sorted mode. So playing
-          # safe, key sizes should be of
-          # equal length.
-
-          if noisy: echo ""
-          noisy.showElapsed("Rocky bulk loader(keyLen 32 as 33)", ela[0]):
-            let bulker = RockyBulkLoadRef.init(rdb)
-            defer: bulker.destroy()
-            check bulker.begin("rocky-bulk-cache")
-
-            var
-              keyList = newSeq[NodeTag](xTab32.len)
-
-            fullNoise.showElapsed("Rocky bulk loader/32 as 33, sorter", ela[1]):
-              var inx = 0
-              for key in xTab32.keys:
-                keyList[inx] = key.to(NodeTag)
-                inx.inc
-              keyList.sort(cmp)
-
-            fullNoise.showElapsed("Rocky bulk loader/32 as 33, append", ela[2]):
-              for n,nodeTag in keyList:
-                let key = nodeTag.to(Blob)
-                check bulker.add(@[99.byte] & key, xTab32[key.to(ByteArray32)])
-
-            fullNoise.showElapsed("Rocky bulk loader/32 as 33, slurp", ela[3]):
-              let rc = bulker.finish()
-              if rc.isOk:
-                 size = rc.value
-              else:
-                check bulker.lastError == "" # force printing error
-
-          fullNoise.say "***", " ela[]=", $ela.toSeq.mapIt(it.pp)
-          if ela[0].inNanoseconds != 0:
-            let
-              elaNs = ela.toSeq.mapIt(it.inNanoseconds.float)
-              elaPc = elaNs.mapIt(((it / elaNs[0]) * 100 + 0.5).int)
-              perRec = ((elaNs[0] / xTab32.len.float) + 0.5).int.initDuration
-            noisy.say "***",
-              "nRecords=", xTab32.len, ", ",
-              "perRecord=", perRec.pp, ", ",
-              "sstSize=", size.uint64.toSI, ", ",
-              "perRecord=", ((size.float / xTab32.len.float) + 0.5).int, ", ",
-             ["Total","Sorter","Append","Ingest"].zip(elaPc).ppKvPc
-
-
-        # cdb[8] -- rocksdb, key length 33
-        test &"Store {xTab33.len} records " &
-            &"(key length 33) into {emptyDb} rocksdb table":
-          var
-            ela: array[4,Duration]
-            size: int64
-          let rdb = xDbs.cdb[8].rocksStoreRef
-
-          # Note that 32 and 33 size keys cannot be usefiully merged into the
-          # same SST file. The keys must be added in a sorted mode. So playing
-          # safe, key sizes should be of equal length.
-
-          if noisy: echo ""
-          noisy.showElapsed("Rocky bulk loader(keyLen 33)", ela[0]):
-            let bulker = RockyBulkLoadRef.init(rdb)
-            defer: bulker.destroy()
-            check bulker.begin("rocky-bulk-cache")
-
-            var
-              kKeys: seq[byte] # need to cacscade
-              kTab: Table[byte,seq[NodeTag]]
-
-            fullNoise.showElapsed("Rocky bulk loader/33, sorter", ela[1]):
-              for key in xTab33.keys:
-                if kTab.hasKey(key[0]):
-                  kTab[key[0]].add key.toOpenArray(1,32).to(NodeTag)
-                else:
-                  kTab[key[0]] = @[key.toOpenArray(1,32).to(NodeTag)]
-
-              kKeys = toSeq(kTab.keys).sorted
-              for w in kKeys:
-                kTab[w].sort(cmp)
-
-            fullNoise.showElapsed("Rocky bulk loader/33, append", ela[2]):
-              for w in kKeys:
-                fullNoise.say "***", " prefix=", w, " entries=", kTab[w].len
-                for n,nodeTag in kTab[w]:
-                  let key = (w,nodeTag).to(Blob)
-                  check bulker.add(key, xTab33[key.to(ByteArray33)])
-
-            fullNoise.showElapsed("Rocky bulk loader/33, slurp", ela[3]):
-              let rc = bulker.finish()
-              if rc.isOk:
-                 size = rc.value
-              else:
-                check bulker.lastError == "" # force printing error
-
-          fullNoise.say "***", " ela[]=", $ela.toSeq.mapIt(it.pp)
-          if ela[0].inNanoseconds != 0:
-            let
-              elaNs = ela.toSeq.mapIt(it.inNanoseconds.float)
-              elaPc = elaNs.mapIt(((it / elaNs[0]) * 100 + 0.5).int)
-              perRec = ((elaNs[0] / xTab33.len.float) + 0.5).int.initDuration
-            noisy.say "***",
-              "nRecords=", xTab33.len, ", ",
-              "perRecord=", perRec.pp, ", ",
-              "sstSize=", size.uint64.toSI, ", ",
-              "perRecord=", ((size.float / xTab33.len.float) + 0.5).int, ", ",
-              ["Total","Cascaded-Sorter","Append","Ingest"].zip(elaPc).ppKvPc
+        test &"{storeRks33} (key length 33) {intoRksDb}":
+          noisy.test_dbTimingRocky33(xTab33, xDbs.cdb[8], fullNoise)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -1202,7 +847,7 @@ proc syncSnapMain*(noisy = defined(debug)) =
   noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
   noisy.inspectionRunner()
-  noisy.storeRunner()
+  noisy.dbTimingRunner()
 
 when isMainModule:
   const
@@ -1298,9 +943,9 @@ when isMainModule:
     noisy.showElapsed("importRunner()"):
       noisy.importRunner(capture = bulkTest0)
 
-    noisy.showElapsed("storeRunner()"):
-      true.storeRunner(cleanUp = false)
-      true.storeRunner()
+    noisy.showElapsed("dbTimingRunner()"):
+      true.dbTimingRunner(cleanUp = false)
+      true.dbTimingRunner()
 
 # ------------------------------------------------------------------------------
 # End
