@@ -14,7 +14,6 @@
 
 import
   ../../../common/common,
-  ../../../transaction,
   ../../../vm_state,
   ../../../vm_types,
   ../../validate,
@@ -24,6 +23,8 @@ import
   ../tx_tabs,
   chronicles,
   eth/keys
+
+import ../../../transaction except GasPrice, GasPriceEx  # already in tx_item
 
 {.push raises: [Defect].}
 

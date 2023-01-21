@@ -9,12 +9,15 @@ import
   ../nimbus/evm/[async_operations, types],
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
-  ../nimbus/[transaction, vm_types, vm_state],
+  ../nimbus/[vm_types, vm_state],
   ../nimbus/core/pow/difficulty
 
 # Need to exclude ServerCommand because it contains something
 # called Stop that interferes with the EVM operation named Stop.
 import chronos except ServerCommand
+
+# Ditto, for GasPrice.
+import ../nimbus/transaction except GasPrice
 
 export byteutils
 {.experimental: "dynamicBindSym".}
