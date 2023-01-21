@@ -13,6 +13,9 @@ proc calcRootHash[T](items: openArray[T]): Hash256 =
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
   calcRootHash(transactions)
 
+template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
+  calcRootHash(withdrawals)
+
 template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
 
