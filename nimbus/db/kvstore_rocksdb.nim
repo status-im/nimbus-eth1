@@ -26,11 +26,8 @@ proc put*(db: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
 proc contains*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
   db.store.contains(key)
 
-proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
+proc del*(db: RocksStoreRef, key: openArray[byte]): KvResult[void] =
   db.store.del(key)
-
-proc clear*(db: RocksStoreRef): KvResult[bool] =
-  db.store.clear()
 
 proc close*(db: RocksStoreRef) =
   db.store.close

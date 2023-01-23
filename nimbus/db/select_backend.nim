@@ -42,7 +42,7 @@ proc put*(db: ChainDB, key, value: openArray[byte]) =
 proc contains*(db: ChainDB, key: openArray[byte]): bool =
   db.kv.contains(key).expect("working database")
 
-proc del*(db: ChainDB, key: openArray[byte]): bool =
+proc del*(db: ChainDB, key: openArray[byte]) =
   db.kv.del(key).expect("working database")
 
 when dbBackend == sqlite:
