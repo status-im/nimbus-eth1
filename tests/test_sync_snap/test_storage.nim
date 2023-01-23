@@ -13,14 +13,15 @@
 
 import
   std/[sequtils, strformat, strutils, tables],
-  eth/[common, p2p, trie/db],
+  eth/[common, p2p],
   unittest2,
   ../../nimbus/db/select_backend,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_error, hexary_inspect,
     snapdb_accounts, snapdb_desc, snapdb_storage_slots],
-  ../replay/[pp, undump_accounts, undump_storages]
+  ../replay/[pp, undump_accounts, undump_storages],
+  ./test_helpers
 
 let
   # Forces `check()` to print the error (as opposed when using `isOk()`)
@@ -29,14 +30,6 @@ let
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
-  if rc.isErr:
-    check rc.error == NothingSerious # prints an error if different
-  elif 0 < rc.value.innerGaps.len:
-    check rc.value.innerGaps == seq[NodeSpecs].default
-  else:
-    return true
 
 proc toStoDbRc(r: seq[HexaryNodeReport]): Result[void,seq[(int,HexaryError)]]=
   ## Kludge: map error report to (older version) return code

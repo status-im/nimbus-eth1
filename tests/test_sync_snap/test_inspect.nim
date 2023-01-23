@@ -18,21 +18,10 @@ import
   ../../nimbus/db/select_backend,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_error, hexary_inspect, hexary_paths,
+    hexary_desc, hexary_inspect, hexary_paths,
     rocky_bulk_load, snapdb_accounts, snapdb_desc],
-  ../replay/[pp, undump_accounts]
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
-  if rc.isErr:
-    check rc.error == NothingSerious # prints an error if different
-  elif 0 < rc.value.innerGaps.len:
-    check rc.value.innerGaps == seq[NodeSpecs].default
-  else:
-    return true
+  ../replay/[pp, undump_accounts],
+  ./test_helpers
 
 # ------------------------------------------------------------------------------
 # Public test function
