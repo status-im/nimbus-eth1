@@ -54,7 +54,6 @@ type
     # map block number and ttd and time to
     # HardFork
     forkTransitionTable: ForkTransitionTable
-    blockToFork: BlockToForks
 
     # Eth wire protocol need this
     forkIds: array[HardFork, ForkID]
@@ -128,7 +127,6 @@ proc init(com      : CommonRef,
   com.pruneTrie   = pruneTrie
   com.config      = config
   com.forkTransitionTable = config.toForkTransitionTable()
-  com.blockToFork = config.blockToForks(com.forkTransitionTable)
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
 
@@ -154,10 +152,6 @@ proc init(com      : CommonRef,
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
   com.pos = CasperRef.new
-
-func matchesFork(com: CommonRef, fork: HardFork, number, td, time: UInt256): bool =
-  let x = com.blockToFork[fork]
-  x.toFork(x.data, number, td, time)
 
 proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
   var td: DifficultyInt
@@ -221,7 +215,6 @@ proc clone*(com: CommonRef, db: TrieDatabaseRef): CommonRef =
     pruneTrie    : com.pruneTrie,
     config       : com.config,
     forkTransitionTable: com.forkTransitionTable,
-    blockToFork  : com.blockToFork,
     forkIds      : com.forkIds,
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
@@ -251,7 +244,7 @@ proc hardForkTransition(com: CommonRef, forkDeterminer: ForkDeterminationInfo)
   ## at that time, TD is no longer needed to find a fork
   ## TD only needed during transition from POW/POA to POS.
   ## Same thing happen before London block, TD can be ignored.
-  let fork = toHardFork(com.forkTransitionTable, forkDeterminer)
+  let fork = com.toHardFork(forkDeterminer)
   com.currentFork = fork
   com.consensusTransition(fork)
 
@@ -445,9 +438,8 @@ proc `syncHighest=`*(com: CommonRef, number: BlockNumber) =
 proc setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
   ## useful for testing
   com.config.terminalTotalDifficulty = ttd
-  # rebuild blockToFork
-  # TODO: Fix me, only need to rebuild MergeFork comparator
-  com.blockToFork = com.config.blockToForks(com.forkTransitionTable)
+  # rebuild the MergeFork piece of the forkTransitionTable
+  com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
 proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
   ## useful for testing
