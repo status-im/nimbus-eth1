@@ -230,10 +230,10 @@ const
     "cancunTime",
   ]
 
-func mergeForkTransitionThreshold(conf: ChainConfig): MergeForkTransitionThreshold =
+func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(blockNumber: conf.mergeForkBlock, ttd: conf.terminalTotalDifficulty)
 
-func shanghaiTransitionThreshold(conf: ChainConfig): BlockNumberOrTimeTransitionThreshold =
+func shanghaiTransitionThreshold*(conf: ChainConfig): BlockNumberOrTimeTransitionThreshold =
   BlockNumberOrTimeTransitionThreshold(blockNumber: conf.shanghaiBlock, time: conf.shanghaiTime)
 
 proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
@@ -396,109 +396,6 @@ func calculateForkIds*(c: ChainConfig,
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
 
-# ------------------------------------------------------------------------------
-# BlockNumber + TD comparator
-# ------------------------------------------------------------------------------
-
-type
-  BlockToForkFunc* = proc(data, number, td, time: UInt256): bool
-    {.gcsafe, noSideEffect, nimcall, raises: [Defect, CatchableError].}
-
-  BlockToFork* = object
-    # `data` can be blockNumber or time or TTD
-    data*  : UInt256
-    toFork*: BlockToForkFunc
-
-  BlockToForks* = array[HardFork, BlockToFork]
-
-func forkTrue(data, number, td, time: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
-  # frontier always return true
-  true
-
-func forkFalse(data, number, td, time: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
-  # forkBlock.isNone always return false
-  false
-
-func blockNumberMaybe(data, number, td, time: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
-  # data is a blockNumber
-  number >= data
-
-func mergeMaybe(data, number, td, time: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
-  # data is a TTD
-  td >= data
-
-func timeMaybe(data, number, td, time: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
-  # data is a time
-  time >= data
-
-func blockNumber_blockToFork(n: Option[BlockNumber]): BlockToFork =
-  if n.isSome:
-    result.data = n.get
-    result.toFork = blockNumberMaybe
-  else:
-    result.toFork = forkFalse
-
-func mergeFork_blockToFork(t: MergeForkTransitionThreshold): BlockToFork =
-  # special case for MergeFork
-  # if mergeForkBlock.isSome, it takes precedence over TTD
-  # if mergeForkBlock.isNone, compare TD with TTD
-  if t.blockNumber.isSome:
-    result.data = t.blockNumber.get
-    result.toFork = blockNumberMaybe
-  elif t.ttd.isSome:
-    result.data = t.ttd.get
-    result.toFork = mergeMaybe
-  else:
-    result.toFork = forkFalse
-
-func blockNumberOrTime_blockToFork(t: BlockNumberOrTimeTransitionThreshold): BlockToFork =
-  if t.blockNumber.isSome:
-    result.data = t.blockNumber.get
-    result.toFork = blockNumberMaybe
-  elif t.time.isSome:
-    result.data = t.time.get.toUnix.u256
-    result.toFork = timeMaybe
-  else:
-    result.toFork = forkFalse
-
-func time_blockToFork(t: Option[EthTime]): BlockToFork =
-  if t.isSome:
-    result.data = t.get.toUnix.u256
-    result.toFork = timeMaybe
-  else:
-    result.toFork = forkFalse
-
-# FIXME: is BlockToForks even necessary anymore? I feel like
-# we could just use the ForkTransitionTable, now that TTD is
-# part of it; just have callers call isGTETransitionThreshold
-# instead of the BlockToForkFunc.
-
-func blockToForks*(conf: ChainConfig, map: ForkTransitionTable): BlockToForks =
-  # between Frontier and latest HardFork
-  # can be a match or not
-  for fork, n in map.blockNumberThresholds:
-    result[fork] = blockNumber_blockToFork(n)
-
-  # Special cases, in between the old block-number-based ones and the new
-  # time-based ones.
-  result[MergeFork] = mergeFork_blockToFork(map.mergeForkTransitionThreshold)
-  result[Shanghai] = blockNumberOrTime_blockToFork(map.shanghaiTransitionThreshold)
-  
-  for fork, t in map.timeThresholds:
-    result[fork] = time_blockToFork(t)
-  
-  # There used to be a special case here for MergeFork, but now it's
-  # incorporated into mergeFork_blockToFork.
-  
-  # Frontier always return true.
-  # Is this special case necessary, given that Frontier's block number
-  # is always 0?
-  result[Frontier].toFork = forkTrue
 
 # ------------------------------------------------------------------------------
 # End
