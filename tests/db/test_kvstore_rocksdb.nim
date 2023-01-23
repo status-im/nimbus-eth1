@@ -17,4 +17,4 @@ suite "RocksStoreRef":
     defer:
       db.close()
 
-    testKvStore(kvStore db, false, false)
+    testKvStore(kvStore db, false)
