@@ -323,7 +323,31 @@ proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
     result = rPath.path.mapIt(it.pp(ps.hexaDb)) & @["(" & rPath.tail.pp & ")"]
 
 proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =
-  ## Dump the entries from the a generic accounts trie.
+  ## Dump the entries from the a generic accounts trie. These are
+  ## key value pairs for
+  ## ::
+  ##   Branch:    ($1,b(<$2,$3,..,$17>,))
+  ##   Extension: ($18,e(832b5e..06e697,$19))
+  ##   Leaf:      ($20,l(cc9b5d..1c3b4,f84401..f9e5129d[#70]))
+  ##
+  ## where keys are typically represented as `$<id>` or `¶<id>` or `ø`
+  ## depending on whether a key is final (`$<id>`), temporary (`¶<id>`)
+  ## or unset/missing (`ø`).
+  ##
+  ## The node types are indicated by a letter after the first key before
+  ## the round brackets
+  ## ::
+  ##   Branch:    'b', 'þ', or 'B'
+  ##   Extension: 'e', '€', or 'E'
+  ##   Leaf:      'l', 'ł', or 'L'
+  ##
+  ## Here a small letter indicates a `Static` node which was from the
+  ## original `proofs` list, a capital letter indicates a `Mutable` node
+  ## added on the fly which might need some change, and the decorated
+  ## letters stand for `Locked` nodes which are like `Static` ones but
+  ## added later (typically these nodes are update `Mutable` nodes.)
+  ##
+  ## Beware: dumping a large database is not recommended
   ps.hexaDb.pp(ps.root,indent)
 
 proc hexaryPpFn*(ps: SnapDbBaseRef): HexaryPpFn =
