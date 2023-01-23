@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/endians2, stew/ranges/ptr_arith,
+  stew/endians2,
   eth/common/eth_types,
   ../../../constants
 
@@ -91,5 +91,4 @@ func safeInt*(x: UInt256): int {.inline.} =
 func toInt*(x: EthAddress): int =
   type T = uint32
   const len = sizeof(T)
-  fromBytesBE(T, makeOpenArray(x[x.len-len].unsafeAddr, len)).int
-
+  fromBytesBE(T, x.toOpenArray(x.len-len, x.len-1)).int
