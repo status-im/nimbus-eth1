@@ -66,10 +66,10 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
 
     doAssert(filenames.len > 0)
     for fname in filenames:
+      let filename = fname
       test fname.subStr(inputPath.len + 1):
         {.gcsafe.}:
           let
-            filename = fname
             (folder, name) = filename.splitPath()
             last = folder.splitPath().tail
           # we set this here because exceptions might be raised in the handler:

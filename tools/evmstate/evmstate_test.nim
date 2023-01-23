@@ -62,7 +62,8 @@ proc main() =
     collectFileNames(testData, status, filenames)
     collectFileNames(inputFolder, status, filenames)
 
-    for input in filenames:
+    for filename in filenames:
+      let input = filename
       test input.dispName:
         let (folder, name) = input.fullPath.splitPath()
         let last = folder.splitPath().tail

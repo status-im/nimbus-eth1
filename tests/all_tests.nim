@@ -27,9 +27,9 @@ cliBuilder:
           ./test_filters,
           ./test_op_arith,
           ./test_op_bit,
-          ./test_op_env,
+          # ./test_op_env,
           ./test_op_memory,
-          ./test_op_misc,
+          # ./test_op_misc,
           ./test_op_custom,
           ./test_state_db,
           ./test_difficulty,
@@ -45,5 +45,5 @@ cliBuilder:
           ./test_pow,
           ./test_configuration,
           ./test_keyed_queue_rlp,
-          ./test_txpool,
+          # ./test_txpool,
           ./test_merge

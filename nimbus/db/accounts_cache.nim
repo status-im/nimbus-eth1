@@ -135,13 +135,20 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     sp = sp.parentSavepoint
 
   # not found in cache, look into state trie
-  let recordFound = ac.trie.get(address)
+  let recordFound =
+    try:
+      ac.trie.get(address)
+    except RlpError:
+      raiseAssert("No RlpError should occur on trie access for an address")
   if recordFound.len > 0:
     # we found it
-    result = RefAccount(
-      account: rlp.decode(recordFound, Account),
-      flags: {IsAlive}
-      )
+    try:
+      result = RefAccount(
+        account: rlp.decode(recordFound, Account),
+        flags: {IsAlive}
+        )
+    except RlpError:
+      raiseAssert("No RlpError should occur on decoding account from trie")
   else:
     if not shouldCreate:
       return

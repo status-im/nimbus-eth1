@@ -505,7 +505,9 @@ proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   byte32Node(val)
 
 const accountProcs = {
-  "address": accountAddress,
+  # Note: Need to define it as ResolverProc else a proc with noSideEffect is
+  # assumed and this fails for accountCode and accountStorage.
+  "address": ResolverProc accountAddress,
   "balance": accountBalance,
   "transactionCount": accountTxCount,
   "code": accountCode,
