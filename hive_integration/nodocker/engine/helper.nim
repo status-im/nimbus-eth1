@@ -19,7 +19,7 @@ type
     gasLimit*     : GasInt
     gasUsed*      : GasInt
     timestamp*    : EthTime
-    extraData*    : Blob
+    extraData*    : common.Blob
     baseFeePerGas*: UInt256
     blockHash*    : Hash256
     transactions* : seq[Transaction]
@@ -35,7 +35,7 @@ type
     gasLimit*     : Option[GasInt]
     gasUsed*      : Option[GasInt]
     timestamp*    : Option[EthTime]
-    extraData*    : Option[Blob]
+    extraData*    : Option[common.Blob]
     baseFeePerGas*: Option[UInt256]
     blockHash*    : Option[Hash256]
     transactions* : Option[seq[Transaction]]
@@ -299,6 +299,6 @@ proc generateInvalidPayload*(basePayload: ExecutionPayloadV1,
 
 proc txInPayload*(payload: ExecutionPayloadV1, txHash: Hash256): bool =
   for txBytes in payload.transactions:
-    let currTx = rlp.decode(Blob txBytes, Transaction)
+    let currTx = rlp.decode(common.Blob txBytes, Transaction)
     if rlpHash(currTx) == txHash:
       return true
