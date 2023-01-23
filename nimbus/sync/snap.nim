@@ -122,7 +122,7 @@ proc init*(
   result.ctx.data.rng = rng
   result.ctx.data.dbBackend = dbBackend
   result.ctx.data.noRecovery = noRecovery
-  # Required to have been initialised via `addCapability()`
+  # Required to have been initialised via `addEthHandlerCapability()`
   doAssert not result.ctx.ethWireCtx.isNil
 
 proc start*(ctx: SnapSyncRef) =

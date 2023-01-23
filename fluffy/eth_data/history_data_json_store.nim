@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 4):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   json_serialization, json_serialization/std/tables,
@@ -33,14 +36,16 @@ type
 
   BlockDataTable* = Table[string, BlockData]
 
+proc toString(v: IoErrorCode): string =
+  try: ioErrorMsg(v)
+  except Exception as e: raiseAssert e.msg
+
 proc readJsonType*(dataFile: string, T: type): Result[T, string] =
-  let data = readAllFile(dataFile)
-  if data.isErr(): # TODO: map errors
-    return err("Failed reading data-file")
+  let data = ? readAllFile(dataFile).mapErr(toString)
 
   let decoded =
     try:
-      Json.decode(data.get(), T)
+      Json.decode(data, T)
     except SerializationError as e:
       return err("Failed decoding json data-file: " & e.msg)
 

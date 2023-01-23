@@ -19,7 +19,8 @@ import
     history_data_json_store,
     history_data_ssz_e2s],
   ../network/history/[history_content, accumulator],
-  ../seed_db
+  ../seed_db,
+  ../tests/test_history_util
 
 type
   FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
@@ -41,24 +42,6 @@ type
       defaultValue: 7000
       desc: "Port of the JSON-RPC service of the bootstrap (first) node"
       name: "base-rpc-port" .}: uint16
-
-proc buildHeadersWithProof*(
-    blockHeaders: seq[BlockHeader],
-    epochAccumulator: EpochAccumulatorCached):
-    Result[seq[(seq[byte], seq[byte])], string] =
-  var blockHeadersWithProof: seq[(seq[byte], seq[byte])]
-  for header in blockHeaders:
-    if header.isPreMerge():
-      let
-        content = ? buildHeaderWithProof(header, epochAccumulator)
-        contentKey = ContentKey(
-          contentType: blockHeaderWithProof,
-          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
-
-      blockHeadersWithProof.add(
-        (encode(contentKey).asSeq(), SSZ.encode(content)))
-
-  ok(blockHeadersWithProof)
 
 proc connectToRpcServers(config: PortalTestnetConf):
     Future[seq[RpcClient]] {.async.} =
@@ -269,7 +252,7 @@ procSuite "Portal testnet tests":
     # Gossiping all block headers with proof first, as bodies and receipts
     # require them for validation.
     for (content, contentKey) in blockHeadersWithProof:
-      discard (await clients[0].portal_history_offer(
+      discard (await clients[0].portal_history_gossip(
         content.toHex(), contentKey.toHex()))
 
     # This will fill the first node its db with blocks from the data file. Next,

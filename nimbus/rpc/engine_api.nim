@@ -41,21 +41,15 @@ proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedRespon
   let blockHash = latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
   invalidFCU(blockHash)
 
-proc setupEngineApi*(
-    sealingEngine: SealingEngineRef,
-    server: RpcServer,
-    merger: MergerRef) =
+# I created these handle_whatever procs to eliminate duplicated code
+# between the V1 and V2 RPC endpoint implementations. (I believe
+# they're meant to be implementable in that way. e.g. The V2 specs
+# explicitly say "here's what to do if the `withdrawals` field is
+# null.) --Adam
 
-  let
-    api = EngineApiRef.new(merger)
-    com = sealingEngine.chain.com
 
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
-  # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
-  server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    trace "Engine API request received",
-      meth = "newPayloadV1", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
-
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
+proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1): PayloadStatusV1 =
     var header = toBlockHeader(payload)
     let blockHash = payload.blockHash.asEthHash
     var res = header.validateBlockHash(blockHash)
@@ -141,24 +135,16 @@ proc setupEngineApi*(
 
     return validStatus(blockHash)
 
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_getpayloadv1
-  server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
-    trace "Engine API request received",
-      meth = "GetPayload", id = payloadId.toHex
 
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/paris.md#engine_getpayloadv1
+proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): ExecutionPayloadV1 =
     var payload: ExecutionPayloadV1
     if not api.get(payloadId, payload):
       raise unknownPayload("Unknown payload")
     return payload
 
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_exchangetransitionconfigurationv1
-  server.rpc("engine_exchangeTransitionConfigurationV1") do(conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
-    trace "Engine API request received",
-      meth = "exchangeTransitionConfigurationV1",
-      ttd = conf.terminalTotalDifficulty,
-      number = uint64(conf.terminalBlockNumber),
-      blockHash = conf.terminalBlockHash
-
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/paris.md#engine_exchangetransitionconfigurationv1
+proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com: CommonRef, conf: TransitionConfigurationV1): TransitionConfigurationV1 =
     let db = sealingEngine.chain.db
     let ttd = com.ttd
 
@@ -201,20 +187,24 @@ proc setupEngineApi*(
 
     return TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)
 
-  # ForkchoiceUpdatedV1 has several responsibilities:
-  # If the method is called with an empty head block:
-  #     we return success, which can be used to check if the catalyst mode is enabled
-  # If the total difficulty was not reached:
-  #     we return INVALID
-  # If the finalizedBlockHash is set:
-  #     we check if we have the finalizedBlockHash in our db, if not we start a sync
-  # We try to set our blockchain to the headBlock
-  # If there are payloadAttributes:
-  #     we try to assemble a block with the payloadAttributes and return its payloadID
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_forkchoiceupdatedv1
-  server.rpc("engine_forkchoiceUpdatedV1") do(
-      update: ForkchoiceStateV1,
-      payloadAttributes: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
+
+# ForkchoiceUpdatedV1 has several responsibilities:
+# If the method is called with an empty head block:
+#     we return success, which can be used to check if the catalyst mode is enabled
+# If the total difficulty was not reached:
+#     we return INVALID
+# If the finalizedBlockHash is set:
+#     we check if we have the finalizedBlockHash in our db, if not we start a sync
+# We try to set our blockchain to the headBlock
+# If there are payloadAttributes:
+#     we try to assemble a block with the payloadAttributes and return its payloadID
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_forkchoiceupdatedv1
+proc handle_forkchoiceUpdated(
+       sealingEngine: SealingEngineRef,
+       api: EngineApiRef,
+       com: CommonRef,
+       update: ForkchoiceStateV1,
+       payloadAttributes: Option[PayloadAttributesV1]): ForkchoiceUpdatedResponse =
     let
       chain = sealingEngine.chain
       db = chain.db
@@ -248,6 +238,9 @@ proc setupEngineApi*(
       info "Forkchoice requested sync to new head",
         number = header.blockNumber,
         hash = blockHash
+
+      # Update sync header (if any)
+      com.syncReqNewHead(header)
 
       return simpleFCU(PayloadExecutionStatus.syncing)
 
@@ -360,3 +353,41 @@ proc setupEngineApi*(
       return validFCU(some(id), blockHash)
 
     return validFCU(none(PayloadID), blockHash)
+
+
+# I'm trying to keep the handlers below very thin, and move the
+# bodies up to the various procs above. Once we have multiple
+# versions, they'll need to be able to share code.
+proc setupEngineApi*(
+    sealingEngine: SealingEngineRef,
+    server: RpcServer,
+    merger: MergerRef) =
+
+  let
+    api = EngineApiRef.new(merger)
+    com = sealingEngine.chain.com
+
+  # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
+  
+  server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
+    trace "Engine API request received",
+      meth = "newPayloadV1", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
+    return handle_newPayload(sealingEngine, api, com, payload)
+
+  server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
+    trace "Engine API request received",
+      meth = "GetPayload", id = payloadId.toHex
+    return handle_getPayload(api, payloadId)
+
+  server.rpc("engine_exchangeTransitionConfigurationV1") do(conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
+    trace "Engine API request received",
+      meth = "exchangeTransitionConfigurationV1",
+      ttd = conf.terminalTotalDifficulty,
+      number = uint64(conf.terminalBlockNumber),
+      blockHash = conf.terminalBlockHash
+    return handle_exchangeTransitionConfiguration(sealingEngine, com, conf)
+
+  server.rpc("engine_forkchoiceUpdatedV1") do(
+      update: ForkchoiceStateV1,
+      payloadAttributes: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
+    return handle_forkchoiceUpdated(sealingEngine, api, com, update, payloadAttributes)

@@ -181,8 +181,8 @@ proc historyPropagateHeadersWithProof*(
       let
         content = headerWithProof.get()
         contentKey = ContentKey(
-          contentType: blockHeaderWithProof,
-          blockHeaderWithProofKey: BlockKey(blockHash: header.blockHash()))
+          contentType: blockHeader,
+          blockHeaderKey: BlockKey(blockHash: header.blockHash()))
         encKey = history_content.encode(contentKey)
         contentId = history_content.toContentId(encKey)
         encodedContent = SSZ.encode(content)
