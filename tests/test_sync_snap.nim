@@ -27,7 +27,7 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_accounts, test_decompose, test_inspect, test_pivot, test_storage,
+    test_accounts, test_node_range, test_inspect, test_pivot, test_storage,
     test_db_timing, test_types]
 
 const
@@ -192,8 +192,8 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   let
     peer = Peer.new
-    accountsList = sample.to(seq[UndumpAccounts])
-    root = accountsList[0].root
+    accLst = sample.to(seq[UndumpAccounts])
+    root = accLst[0].root
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name, instances=2) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
@@ -209,18 +209,23 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
-    test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
+    test &"Proofing {accLst.len} items for state root ..{root.pp}":
       let desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
-      accountsList.test_accountsImport(desc, db.persistent)
+      accLst.test_accountsImport(desc, db.persistent)
 
     var accKeys: seq[NodeKey]
 
     block:
-      var desc: SnapDbAccountsRef
-
-      test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
+      let
+        # Common descriptor for this group of tests
         desc = db.cdb[1].snapDbAccountsRef(root, db.persistent)
-        accountsList.test_accountsMergeProofs(desc, accKeys)
+
+        # Database abstractions
+        getFn = desc.getAccountFn # pestistent case
+        hexaDB = desc.hexaDB      # in-memory, and debugging setup
+
+      test &"Merging {accLst.len} proofs for state root ..{root.pp}":
+        accLst.test_accountsMergeProofs(desc, accKeys) # set up `accKeys`
 
       test &"Revisiting {accKeys.len} stored items on ChainDBRef":
         accKeys.test_accountsRevisitStoredItems(desc, noisy)
@@ -229,9 +234,9 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
       test &"Decompose path prefix envelopes on {info}":
         if db.persistent:
-          accKeys.test_decompose(root, desc.getAccountFn, desc.hexaDB)
+          accKeys.test_NodeRangeDecompose(root, getFn, hexaDB)
         else:
-          accKeys.test_decompose(root, desc.hexaDB, desc.hexaDB)
+          accKeys.test_NodeRangeDecompose(root, hexaDB, hexaDB)
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent pivot/checkpoint registry":
@@ -239,7 +244,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         accKeys.test_pivotStoreRead(db.cdb[0])
       else:
         skip()
-
 
 proc storagesRunner(
     noisy = true;

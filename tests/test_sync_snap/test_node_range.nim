@@ -82,7 +82,7 @@ proc print_data(
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc test_decompose*(
+proc test_NodeRangeDecompose*(
     accKeys: seq[NodeKey];                  ## Accounts key range
     root: Hash256;                          ## State root
     db: HexaryTreeDbRef|HexaryGetFn;        ## Database abstraction
