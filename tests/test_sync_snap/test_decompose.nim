@@ -84,7 +84,7 @@ proc print_data(
 
 proc test_decompose*(
     accKeys: seq[NodeKey];                  ## Accounts key range
-    rootKey: NodeKey;                       ## State root
+    root: Hash256;                          ## State root
     db: HexaryTreeDbRef|HexaryGetFn;        ## Database abstraction
     dbg: HexaryTreeDbRef;                   ## Debugging env
       ) =
@@ -96,6 +96,7 @@ proc test_decompose*(
   const
     isPersistent = db.type is HexaryTreeDbRef
   let
+    rootKey = root.to(NodeKey)
     baseTag = accKeys[0].to(NodeTag) + 1.u256
     firstTag = baseTag.hexaryNearbyRight(rootKey, db).get(
                   otherwise = low(Nodetag))

@@ -12,13 +12,12 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[algorithm, distros, os, sets, sequtils, strformat, strutils, tables],
+  std/[distros, os, sets, sequtils, strformat, strutils, tables],
   chronicles,
-  eth/[common, p2p, rlp, trie/nibbles],
+  eth/[common, p2p],
   rocksdb,
   unittest2,
-  ../nimbus/common/common as nimbus_common, # avoid name clash
-  ../nimbus/db/[select_backend, storage_types],
+  ../nimbus/db/select_backend,
   ../nimbus/core/chain,
   ../nimbus/sync/types,
   ../nimbus/sync/snap/range_desc,
@@ -28,8 +27,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_decompose, test_inspect, test_pivot, test_storage, test_db_timing,
-    test_types]
+    test_accounts, test_decompose, test_inspect, test_pivot, test_storage,
+    test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -80,14 +79,6 @@ var
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc isImportOk(rc: Result[SnapAccountsGaps,HexaryError]): bool =
-  if rc.isErr:
-    check rc.error == NothingSerious # prints an error if different
-  elif 0 < rc.value.innerGaps.len:
-    check rc.value.innerGaps == seq[NodeSpecs].default
-  else:
-    return true
-
 proc findFilePath(file: string;
                   baseDir, repoDir: openArray[string]): Result[string,void] =
   for dir in baseDir:
@@ -100,18 +91,6 @@ proc findFilePath(file: string;
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
-
-proc pp(rc: Result[Account,HexaryError]): string =
-  if rc.isErr: $rc.error else: rc.value.pp
-
-proc pp(rc: Result[Hash256,HexaryError]): string =
-  if rc.isErr: $rc.error else: $rc.value.to(NodeTag)
-
-proc pp(rc: Result[TrieNodeStat,HexaryError]; db: SnapDbBaseRef): string =
-  if rc.isErr: $rc.error else: rc.value.pp(db.hexaDb)
-
-proc pp(a: NodeKey; collapse = true): string =
-  a.to(Hash256).pp(collapse)
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:
@@ -168,23 +147,6 @@ proc to(sample: AccountsSample; T: type seq[UndumpStorages]): T =
       break
     result.add w
 
-proc to(b: openArray[byte]; T: type ByteArray32): T =
-  ## Convert to other representation (or exception)
-  if b.len == 32:
-    (addr result[0]).copyMem(unsafeAddr b[0], 32)
-  else:
-    doAssert b.len == 32
-
-proc to(b: openArray[byte]; T: type ByteArray33): T =
-  ## Convert to other representation (or exception)
-  if b.len == 33:
-    (addr result[0]).copyMem(unsafeAddr b[0], 33)
-  else:
-    doAssert b.len == 33
-
-proc to(b: ByteArray32|ByteArray33; T: type Blob): T =
-  b.toSeq
-
 proc flushDbDir(s: string; subDir = "") =
   if s != "":
     let baseDir = s / "tmp"
@@ -217,9 +179,11 @@ proc testDbs(workDir = ""; subDir = ""; instances = nTestDbInstances): TestDbs =
 proc lastTwo(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
-proc flatten(list: openArray[seq[Blob]]): seq[Blob] =
-  for w in list:
-    result.add w
+proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
+  if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())
+
+proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
+  SnapDbAccountsRef.init(cdb.snapDbRef(pers), root, Peer())
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -245,125 +209,37 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
-    var
-      desc: SnapDbAccountsRef
-      accKeys: seq[NodeKey]
-
     test &"Snap-proofing {accountsList.len} items for state root ..{root.pp}":
-      let
-        dbBase = if persistent: SnapDbRef.init(db.cdb[0])
-                 else: SnapDbRef.init(newMemoryDB())
-        dbDesc = SnapDbAccountsRef.init(dbBase, root, peer)
-      for n,w in accountsList:
-        check dbDesc.importAccounts(w.base, w.data, persistent).isImportOk
+      let desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
+      accountsList.test_accountsImport(desc, db.persistent)
 
-    test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
-      let dbBase = if persistent: SnapDbRef.init(db.cdb[1])
-                   else: SnapDbRef.init(newMemoryDB())
-      desc = SnapDbAccountsRef.init(dbBase, root, peer)
+    var accKeys: seq[NodeKey]
 
-      # Load/accumulate data from several samples (needs some particular sort)
-      let baseTag = accountsList.mapIt(it.base).sortMerge
-      let packed = PackedAccountRange(
-        accounts: accountsList.mapIt(it.data.accounts).sortMerge,
-        proof:    accountsList.mapIt(it.data.proof).flatten)
-      # Merging intervals will produce gaps, so the result is expected OK but
-      # different from `.isImportOk`
-      check desc.importAccounts(baseTag, packed, true).isOk
+    block:
+      var desc: SnapDbAccountsRef
 
-      # check desc.merge(lowerBound, accounts) == OkHexDb
-      desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
+      test &"Merging {accountsList.len} proofs for state root ..{root.pp}":
+        desc = db.cdb[1].snapDbAccountsRef(root, db.persistent)
+        accountsList.test_accountsMergeProofs(desc, accKeys)
 
-      # Update list of accounts. There might be additional accounts in the set
-      # of proof nodes, typically before the `lowerBound` of each block. As
-      # there is a list of account ranges (that were merged for testing), one
-      # need to check for additional records only on either end of a range.
-      var keySet = packed.accounts.mapIt(it.accKey).toHashSet
-      for w in accountsList:
-        var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accKey)
-        while key.isOk and key.value notin keySet:
-          keySet.incl key.value
-          let newKey = desc.prevAccountsChainDbKey(key.value)
-          check newKey != key
-          key = newKey
-        key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accKey)
-        while key.isOk and key.value notin keySet:
-          keySet.incl key.value
-          let newKey = desc.nextAccountsChainDbKey(key.value)
-          check newKey != key
-          key = newKey
-      accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
-                             .mapIt(it.to(NodeKey))
-      check packed.accounts.len <= accKeys.len
+      test &"Revisiting {accKeys.len} stored items on ChainDBRef":
+        accKeys.test_accountsRevisitStoredItems(desc, noisy)
+        # Beware: dumping a large database is not recommended
+        # true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
-    test &"Revisiting {accKeys.len} items stored items on ChainDBRef":
-      var
-        nextAccount = accKeys[0]
-        prevAccount: NodeKey
-        count = 0
-      for accKey in accKeys:
-        count.inc
-        let
-          pfx = $count & "#"
-          byChainDB = desc.getAccountsChainDb(accKey)
-          byNextKey = desc.nextAccountsChainDbKey(accKey)
-          byPrevKey = desc.prevAccountsChainDbKey(accKey)
-        noisy.say "*** find",
-          "<", count, "> byChainDb=", byChainDB.pp
-        check byChainDB.isOk
-
-        # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
-        # `nextAccount` value is still the old one and will be different from
-        # the account in the next for-loop cycle (if any.)
-        check pfx & accKey.pp(false) == pfx & nextAccount.pp(false)
-        if byNextKey.isOk:
-          nextAccount = byNextKey.get(otherwise = NodeKey.default)
-
-        # Check `prev` traversal funcionality
-        if prevAccount != NodeKey.default:
-          check byPrevKey.isOk
-          if byPrevKey.isOk:
-            check pfx & byPrevKey.value.pp(false) == pfx & prevAccount.pp(false)
-        prevAccount = accKey
-
-      # Hexary trie memory database dump. These are key value pairs for
-      # ::
-      #   Branch:    ($1,b(<$2,$3,..,$17>,))
-      #   Extension: ($18,e(832b5e..06e697,$19))
-      #   Leaf:      ($20,l(cc9b5d..1c3b4,f84401..f9e5129d[#70]))
-      #
-      # where keys are typically represented as `$<id>` or `¶<id>` or `ø`
-      # depending on whether a key is final (`$<id>`), temporary (`¶<id>`)
-      # or unset/missing (`ø`).
-      #
-      # The node types are indicated by a letter after the first key before
-      # the round brackets
-      # ::
-      #   Branch:    'b', 'þ', or 'B'
-      #   Extension: 'e', '€', or 'E'
-      #   Leaf:      'l', 'ł', or 'L'
-      #
-      # Here a small letter indicates a `Static` node which was from the
-      # original `proofs` list, a capital letter indicates a `Mutable` node
-      # added on the fly which might need some change, and the decorated
-      # letters stand for `Locked` nodes which are like `Static` ones but
-      # added later (typically these nodes are update `Mutable` nodes.)
-      #
-      # Beware: dumping a large database is not recommended
-      #true.say "***", "database dump\n    ", desc.dumpHexaDB()
-
-    test &"Decompose path prefix envelopes on {info}":
-      if db.persistent:
-        accKeys.test_decompose(root.to(NodeKey), desc.getAccountFn, desc.hexaDB)
-      else:
-        accKeys.test_decompose(root.to(NodeKey), desc.hexaDB, desc.hexaDB)
+      test &"Decompose path prefix envelopes on {info}":
+        if db.persistent:
+          accKeys.test_decompose(root, desc.getAccountFn, desc.hexaDB)
+        else:
+          accKeys.test_decompose(root, desc.hexaDB, desc.hexaDB)
 
     test &"Storing/retrieving {accKeys.len} items " &
         "on persistent pivot/checkpoint registry":
-      if persistent:
+      if db.persistent:
         accKeys.test_pivotStoreRead(db.cdb[0])
       else:
         skip()
+
 
 proc storagesRunner(
     noisy = true;
@@ -371,10 +247,8 @@ proc storagesRunner(
     sample = storSample;
     knownFailures: seq[(string,seq[(int,HexaryError)])] = @[]) =
   let
-    peer = Peer.new
-    accountsList = sample.to(seq[UndumpAccounts])
-    storagesList = sample.to(seq[UndumpStorages])
-    root = accountsList[0].root
+    accLst = sample.to(seq[UndumpAccounts])
+    stoLst = sample.to(seq[UndumpStorages])
     tmpDir = getTmpDir()
     db = if persistent: tmpDir.testDbs(sample.name, instances=1) else: testDbs()
     dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
@@ -389,18 +263,16 @@ proc storagesRunner(
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {idPfx} accounts storage for {info}":
-    let
-      xdb = if persistent: SnapDbRef.init(db.cdb[0])
-            else: SnapDbRef.init(newMemoryDB())
+    let xdb = db.cdb[0].snapDbRef(db.persistent)
 
-    test &"Merging {accountsList.len} accounts for state root ..{root.pp}":
-      accountsList.test_storageAccountsImport(xdb, persistent)
+    test &"Merging {accLst.len} accounts for state root ..{accLst[0].root.pp}":
+      accLst.test_storageAccountsImport(xdb, db.persistent)
 
-    test &"Merging {storagesList.len} storages lists":
-      storagesList.test_storageSlotsImport(xdb, persistent, knownFailures,idPfx)
+    test &"Merging {stoLst.len} storages lists":
+      stoLst.test_storageSlotsImport(xdb, db.persistent, knownFailures,idPfx)
 
-    test &"Inspecting {storagesList.len} imported storages lists sub-tries":
-      storagesList.test_storageSlotsTries(xdb, persistent, knownFailures,idPfx)
+    test &"Inspecting {stoLst.len} imported storages lists sub-tries":
+      stoLst.test_storageSlotsTries(xdb, db.persistent, knownFailures,idPfx)
 
 proc inspectionRunner(
     noisy = true;
