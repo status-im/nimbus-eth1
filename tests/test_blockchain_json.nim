@@ -39,6 +39,7 @@ type
     blockRLP : Blob
     header   : BlockHeader
     body     : BlockBody
+    withdrawals: Option[seq[Withdrawal]]
     hasException: bool
 
   Tester = object
@@ -95,11 +96,29 @@ func normalizeBlockHeader(node: JsonNode): JsonNode =
     else: discard
   result = node
 
+func normalizeWithdrawal(node: JsonNode): JsonNode =
+  for k, v in node:
+    case k
+    of "address", "amount", "index", "validatorIndex":
+      node[k] = normalizeNumber(v)
+    else: discard
+  result = node
+
 proc parseHeader(blockHeader: JsonNode, testStatusIMPL: var TestStatus): BlockHeader =
   result = normalizeBlockHeader(blockHeader).parseBlockHeader
   var blockHash: Hash256
   blockHeader.fromJson "hash", blockHash
   check blockHash == hash(result)
+
+proc parseWithdrawals(withdrawals: JsonNode): Option[seq[Withdrawal]] =
+  case withdrawals.kind
+  of JArray:
+    var ws: seq[Withdrawal]
+    for v in withdrawals:
+      ws.add(parseWithdrawal(normalizeWithdrawal(v)))
+    some(ws)
+  else:
+    none[seq[Withdrawal]]()
 
 proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
   for fixture in blocks:
@@ -120,6 +139,8 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
           let valid = tx["valid"].getStr == "true"
           noError = noError and valid
         doAssert(noError == false, "NOT A VALID TEST CASE")
+      of "withdrawals":
+        t.withdrawals = parseWithdrawals(value)
       else:
         doAssert("expectException" in key, key)
         t.hasException = true
@@ -206,6 +227,7 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
   var rlp = rlpFromBytes(tb.blockRLP)
   tb.header = rlp.read(EthHeader).header
   tb.body = rlp.readRecordType(BlockBody, false)
+  tb.body.withdrawals = tb.withdrawals
   tester.importBlock(com, tb, checkSeal, validation)
 
 func shouldCheckSeal(tester: Tester): bool =

@@ -259,6 +259,30 @@ proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.shanghaiTransitionThreshold           = conf.shanghaiTransitionThreshold
   result.timeThresholds[Cancun] = conf.cancunTime
 
+proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
+  conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
+  conf.daoForkBlock        = t.blockNumberThresholds[HardFork.DAOFork]
+  conf.eip150Block         = t.blockNumberThresholds[HardFork.Tangerine]
+  conf.eip155Block         = t.blockNumberThresholds[HardFork.Spurious]
+  conf.eip158Block         = t.blockNumberThresholds[HardFork.Spurious]
+  conf.byzantiumBlock      = t.blockNumberThresholds[HardFork.Byzantium]
+  conf.constantinopleBlock = t.blockNumberThresholds[HardFork.Constantinople]
+  conf.petersburgBlock     = t.blockNumberThresholds[HardFork.Petersburg]
+  conf.istanbulBlock       = t.blockNumberThresholds[HardFork.Istanbul]
+  conf.muirGlacierBlock    = t.blockNumberThresholds[HardFork.MuirGlacier]
+  conf.berlinBlock         = t.blockNumberThresholds[HardFork.Berlin]
+  conf.londonBlock         = t.blockNumberThresholds[HardFork.London]
+  conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
+  conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
+
+  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.blockNumber
+  conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
+  
+  conf.shanghaiBlock       = t.shanghaiTransitionThreshold.blockNumber
+  conf.shanghaiTime        = t.shanghaiTransitionThreshold.time
+  
+  conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
+
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM/EVMC Fork
 # ------------------------------------------------------------------------------

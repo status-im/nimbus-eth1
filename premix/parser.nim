@@ -108,6 +108,7 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "mixHash", result.mixDigest
   n.fromJson "nonce", result.nonce
   n.fromJson "baseFeePerGas", result.fee
+  n.fromJson "withdrawalsRoot", result.withdrawalsRoot
 
   if result.baseFee == 0.u256:
     # probably geth bug
@@ -153,6 +154,12 @@ proc parseTransaction*(n: JsonNode): Transaction =
       for acn in accessList:
         tx.accessList.add parseAccessPair(acn)
   tx
+
+proc parseWithdrawal*(n: JsonNode): Withdrawal =
+  n.fromJson "index", result.index
+  n.fromJson "validatorIndex", result.validatorIndex
+  n.fromJson "address", result.address
+  n.fromJson "amount", result.amount
 
 proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
   var sender = tx.getSender()

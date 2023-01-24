@@ -33,6 +33,7 @@ type
     Merge
     ArrowGlacierToMergeAtDiffC0000
     Shanghai
+    MergeToShanghaiAtTime15k
     Cancun
 
   LogLevel* = enum
