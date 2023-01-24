@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, random, sequtils, strformat, strutils, tables, times],
+  std/[algorithm, sequtils, strformat, strutils, tables, times],
   eth/[keys, rlp],
   ethash,
   secp256k1/abi,
@@ -31,6 +31,7 @@ export
 
 const
   prngSeed = 42
+    ## The `TestSpecs` sample depends on this seed,
 
 type
   XSealKey = array[EXTRA_SEAL,byte]
@@ -42,7 +43,7 @@ type
                            ## mapped from textual names used in the tests below
                            ## to actual Ethereum private keys capable of signing
                            ## transactions.
-    prng: Rand
+    prng: uint32                       ## random state
     accounts: Table[string,PrivateKey] ## accounts table
     networkId: NetworkId
     boot: NetworkParams                ## imported Genesis configuration
@@ -52,6 +53,25 @@ type
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
     noisy*: bool
+
+# ------------------------------------------------------------------------------
+# Private Prng (Clique keeps generated addresses sorted)
+# ------------------------------------------------------------------------------
+
+proc posixPrngInit(state: var uint32; seed: uint32) =
+  state = seed
+
+proc posixPrngRand(state: var uint32): byte =
+  ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
+  ##
+  ## Clique relies on the even/odd position of an address after sorting. For
+  ## address generation, the Nim PRNG was used which seems to have changed
+  ## with Nim 1.6.11 (Linux, Windoes only.)
+  ##
+  ## The `TestSpecs` sample depends on `prngSeed` and `posixPrngRand()`.
+  state = state * 1103515245 + 12345;
+  let val = (state shr 16) and 32767    # mod 2^31
+  (val shr 8).byte                      # Extract second byte
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -72,7 +92,7 @@ proc isZero(a: openArray[byte]): bool =
       return false
 
 proc rand(ap: TesterPool): byte =
-  ap.prng.rand(255).byte
+  ap.prng.posixPrngRand().byte
 
 proc newPrivateKey(ap: TesterPool): PrivateKey =
   ## Roughly modelled after `random(PrivateKey,getRng()[])` with
@@ -257,7 +277,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result = ap
-  result.prng = initRand(prngSeed)
+  result.prng.posixPrngInit(prngSeed)
   result.batch = @[newSeq[BlockHeader]()]
   result.accounts = initTable[string,PrivateKey]()
   result.xSeals = initTable[XSealKey,XSealValue]()

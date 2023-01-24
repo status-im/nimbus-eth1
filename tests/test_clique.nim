@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat, strutils, times, tables],
+  std/[algorithm, os, sequtils, strformat, strutils, times],
   chronicles,
   eth/keys,
   stint,

@@ -101,7 +101,7 @@ const
       votes:   @[TesterVote(signer: "A", voted: "C", auth: true),
                  TesterVote(signer: "B", voted: "C", auth: true),
                  TesterVote(signer: "A", voted: "D", auth: true, noTurn: true),
-                 TesterVote(signer: "B", voted: "D", auth: true, noTurn: true),
+                 TesterVote(signer: "B", voted: "D", auth: true),
                  TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A", voted: "E", auth: true, noTurn: true),
                  TesterVote(signer: "B", voted: "E", auth: true, noTurn: true)],
@@ -201,10 +201,10 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A", voted: "D",             noTurn: true),
-                 TesterVote(signer: "B",                         noTurn: true),
-                 TesterVote(signer: "C"),
+                 TesterVote(signer: "B"),
+                 TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "D"),
+                 TesterVote(signer: "B", voted: "D",             noTurn: true),
                  TesterVote(signer: "C", voted: "D",             noTurn: true),
                  TesterVote(signer: "A",                         noTurn: true),
                  TesterVote(signer: "B", voted: "C",             noTurn: true)],
@@ -215,9 +215,9 @@ const
       info:    "Votes from deauthorized signers are discarded immediately " &
                "(deauth votes)",
       signers: @["A", "B", "C"],
-      votes:   @[TesterVote(signer: "C", voted: "B"),
+      votes:   @[TesterVote(signer: "C", voted: "B",             noTurn: true),
                  TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B", voted: "C"),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true),
                  TesterVote(signer: "A", voted: "B",             noTurn: true)],
       results: @["A", "B"]),
 
@@ -226,9 +226,9 @@ const
       info:    "Votes from deauthorized signers are discarded immediately " &
                "(auth votes)",
       signers: @["A", "B", "C"],
-      votes:   @[TesterVote(signer: "C", voted: "D", auth: true),
+      votes:   @[TesterVote(signer: "C", voted: "D", auth: true, noTurn: true),
                  TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B", voted: "C"),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true),
                  TesterVote(signer: "A", voted: "D", auth: true, noTurn: true)],
       results: @["A", "B"]),
 
@@ -241,10 +241,10 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A", voted: "D",             noTurn: true),
-                 TesterVote(signer: "B", voted: "C",             noTurn: true),
-                 TesterVote(signer: "C"),
+                 TesterVote(signer: "B", voted: "C"),
+                 TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "D"),
+                 TesterVote(signer: "B", voted: "D",             noTurn: true),
                  TesterVote(signer: "C", voted: "D",             noTurn: true)],
       results: @["A", "B", "C"]),
 
@@ -257,10 +257,10 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A", voted: "D",             noTurn: true),
-                 TesterVote(signer: "B", voted: "C",             noTurn: true),
-                 TesterVote(signer: "C"),
+                 TesterVote(signer: "B", voted: "C"),
+                 TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "D"),
+                 TesterVote(signer: "B", voted: "D",             noTurn: true),
                  TesterVote(signer: "C", voted: "D",             noTurn: true),
                  TesterVote(signer: "A",                         noTurn: true),
                  TesterVote(signer: "C", voted: "C", auth: true, noTurn: true)],
@@ -275,10 +275,10 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A", voted: "D",             noTurn: true),
-                 TesterVote(signer: "B", voted: "C",             noTurn: true),
-                 TesterVote(signer: "C"),
+                 TesterVote(signer: "B", voted: "C"),
+                 TesterVote(signer: "C",                         noTurn: true),
                  TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "D"),
+                 TesterVote(signer: "B", voted: "D",             noTurn: true),
                  TesterVote(signer: "C", voted: "D",             noTurn: true),
                  TesterVote(signer: "A",                         noTurn: true),
                  TesterVote(signer: "B", voted: "C", auth: true, noTurn: true)],
@@ -296,22 +296,22 @@ const
       votes:   @[
         # Authorize F, 3 votes needed
         TesterVote(signer: "A", voted: "F", auth: true,          noTurn: true),
-        TesterVote(signer: "B", voted: "F", auth: true,          noTurn: true),
+        TesterVote(signer: "B", voted: "F", auth: true),
         TesterVote(signer: "C", voted: "F", auth: true,          noTurn: true),
 
         # Deauthorize F, 4 votes needed (leave A's previous vote "unchanged")
         TesterVote(signer: "D", voted: "F",                      noTurn: true),
         TesterVote(signer: "E", voted: "F",                      noTurn: true),
-        TesterVote(signer: "B", voted: "F"),
-        TesterVote(signer: "C", voted: "F",                      noTurn: true),
+        TesterVote(signer: "B", voted: "F",                      noTurn: true),
+        TesterVote(signer: "C", voted: "F"),
 
         # Almost authorize F, 2/3 votes needed
-        TesterVote(signer: "D", voted: "F", auth: true,          noTurn: true),
+        TesterVote(signer: "D", voted: "F", auth: true),
         TesterVote(signer: "E", voted: "F", auth: true,          noTurn: true),
 
         # Deauthorize A, 3 votes needed
-        TesterVote(signer: "B", voted: "A"),
-        TesterVote(signer: "C", voted: "A",                      noTurn: true),
+        TesterVote(signer: "B", voted: "A",                      noTurn: true),
+        TesterVote(signer: "C", voted: "A"),
         TesterVote(signer: "D", voted: "A",                      noTurn: true),
 
         # Finish authorizing F, 3/3 votes needed
