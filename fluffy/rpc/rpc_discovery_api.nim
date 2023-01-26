@@ -35,7 +35,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     # It is currently as in
     # https://ddht.readthedocs.io/en/latest/jsonrpc.html#discv5-updatenodeinfo
     let enrFields = kvPairs.map(
-      proc(n: (string, string)): (string, seq[byte]) =
+      proc(n: (string, string)): (string, seq[byte]) {.raises: [ValueError].} =
         (n[0], hexToSeqByte(n[1]))
       )
     let updated = d.updateRecord(enrFields)

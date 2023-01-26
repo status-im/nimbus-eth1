@@ -22,10 +22,10 @@ logScope:
   topics = "snap-db"
 
 type
-  AccountsGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
+  AccountsGetFn* = proc(key: openArray[byte]): Blob {.gcsafe, raises:[Defect].}
     ## The `get()` function for the accounts trie
 
-  StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob {.gcsafe.}
+  StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob {.gcsafe, raises: [Defect].}
     ## The `get()` function for the storage trie depends on the current account
 
   StateRootRegistry* = object

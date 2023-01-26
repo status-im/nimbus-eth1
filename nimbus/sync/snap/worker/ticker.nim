@@ -24,7 +24,13 @@ logScope:
   topics = "snap-tick"
 
 type
-  TickerStats* = object
+  # TODO: Seems like a compiler name mangling bug or so. If this is named
+  # `TickerStats` then `eqeq___syncZsnapZworkerZticker_97` complains
+  # that the TickerStats object does not have beaconBlock and pivotBlock
+  # members. So I'm assuming here it seems to take the wrong function, meaning
+  # the one of the `TickerStats` of full sync, because it has the same name and
+  # the same module name. Not sure..
+  SnapTickerStats* = object
     beaconBlock*: Option[BlockNumber]
     pivotBlock*: Option[BlockNumber]
     nAccounts*: (float,float)          ## Mean and standard deviation
@@ -35,14 +41,14 @@ type
     nQueues*: int
 
   TickerStatsUpdater* =
-    proc: TickerStats {.gcsafe, raises: [Defect].}
+    proc: SnapTickerStats {.gcsafe, raises: [Defect].}
 
   TickerRef* = ref object
     ## Account fetching state that is shared among all peers.
     nBuddies:  int
     recovery:  bool
     lastRecov: bool
-    lastStats: TickerStats
+    lastStats: SnapTickerStats
     statsCb:   TickerStatsUpdater
     logTicker: TimerCallback
     started:   Moment

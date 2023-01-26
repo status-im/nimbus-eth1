@@ -130,7 +130,7 @@ proc tickerStats*(
       result[0] = sum / length.float
       result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
-  result = proc: TickerStats =
+  result = proc: SnapTickerStats =
     var
       aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
       count = 0
@@ -168,7 +168,7 @@ proc tickerStats*(
     if 0 < ctx.data.beaconHeader.blockNumber:
       beaconBlock = some(ctx.data.beaconHeader.blockNumber)
 
-    TickerStats(
+    SnapTickerStats(
       beaconBlock:   beaconBlock,
       pivotBlock:    pivotBlock,
       nQueues:       ctx.data.pivotTable.len,

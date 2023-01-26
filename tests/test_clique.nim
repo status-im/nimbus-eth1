@@ -96,8 +96,8 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
       setTraceLevel()
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
-    for tt in voterSamples.filterIt(it.id in testIds):
-
+    for voterSample in voterSamples.filterIt(it.id in testIds):
+      let tt = voterSample
       test &"Snapshots {tt.id:2}: {tt.info.substr(0,50)}...":
         pool.say "\n"
 

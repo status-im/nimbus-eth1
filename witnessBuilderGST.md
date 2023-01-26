@@ -617,8 +617,9 @@ OK: 28/28 Fail: 0/28 Skip: 0/28
 + Transaction64Rule_d64e0.json                                    OK
 + Transaction64Rule_d64m1.json                                    OK
 + Transaction64Rule_d64p1.json                                    OK
++ Transaction64Rule_integerBoundaries.json                        OK
 ```
-OK: 13/13 Fail: 0/13 Skip: 0/13
+OK: 14/14 Fail: 0/14 Skip: 0/14
 ## stEIP150singleCodeGasPrices
 ```diff
 + RawBalanceGas.json                                              OK
@@ -2858,4 +2859,4 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2608/2608 Fail: 0/2608 Skip: 0/2608
+OK: 2609/2609 Fail: 0/2609 Skip: 0/2609
