@@ -172,7 +172,8 @@ proc contains(db: ContentDB, key: openArray[byte]): bool =
   db.kv.contains(key).expectDb()
 
 proc del(db: ContentDB, key: openArray[byte]) =
-  db.kv.del(key).expectDb()
+  # TODO: Do we want to return the bool here too?
+  discard db.kv.del(key).expectDb()
 
 proc getSszDecoded*(
     db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =

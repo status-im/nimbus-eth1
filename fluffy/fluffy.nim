@@ -14,22 +14,22 @@ import
   json_rpc/rpcproxy, stew/[byteutils, io2],
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  beacon_chain/beacon_clock,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
-  beacon_chain/gossip_processing/light_client_processor,
+  # beacon_chain/beacon_clock,
+  # beacon_chain/spec/forks,
+  # beacon_chain/spec/datatypes/altair,
+  # beacon_chain/gossip_processing/light_client_processor,
   ./conf, ./network_metadata, ./common/common_utils,
   ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api,
     rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
-  ./network/beacon_light_client/[
-    light_client_init_loader,
-    light_client_content,
-    beacon_light_client,
-    light_client_db,
-    light_client_network
-  ],
+  # ./network/beacon_light_client/[
+  #   light_client_init_loader,
+  #   light_client_content,
+  #   beacon_light_client,
+  #   light_client_db,
+  #   light_client_network
+  # ],
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
   ./content_db
@@ -177,74 +177,74 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   # TODO: Currently disabled by default as it is not stable/polished enough,
   # ultimatetely this should probably be always on.
-  if config.trustedBlockRoot.isSome():
-    # fluffy light client works only over mainnet data
-    let
-      networkData = loadNetworkData("mainnet")
+  # if config.trustedBlockRoot.isSome():
+  #   # fluffy light client works only over mainnet data
+  #   let
+  #     networkData = loadNetworkData("mainnet")
 
-      db = LightClientDb.new(config.dataDir / "lightClientDb")
+  #     db = LightClientDb.new(config.dataDir / "lightClientDb")
 
-      lightClientNetwork = LightClientNetwork.new(
-        d,
-        db,
-        streamManager,
-        networkData.forks,
-        bootstrapRecords = bootstrapRecords)
+  #     lightClientNetwork = LightClientNetwork.new(
+  #       d,
+  #       db,
+  #       streamManager,
+  #       networkData.forks,
+  #       bootstrapRecords = bootstrapRecords)
 
-      getBeaconTime = networkData.clock.getBeaconTimeFn()
+  #     getBeaconTime = networkData.clock.getBeaconTimeFn()
 
-      refDigests = newClone networkData.forks
+  #     refDigests = newClone networkData.forks
 
-      lc = LightClient.new(
-        lightClientNetwork,
-        rng,
-        networkData.metadata.cfg,
-        refDigests,
-        getBeaconTime,
-        networkData.genesis_validators_root,
-        LightClientFinalizationMode.Optimistic
-      )
+  #     lc = LightClient.new(
+  #       lightClientNetwork,
+  #       rng,
+  #       networkData.metadata.cfg,
+  #       refDigests,
+  #       getBeaconTime,
+  #       networkData.genesis_validators_root,
+  #       LightClientFinalizationMode.Optimistic
+  #     )
 
-    # TODO: For now just log headers. Ultimately we should also use callbacks for each
-    # lc object to save them to db and offer them to the network.
-    proc onFinalizedHeader(
-        lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
-      info "New LC finalized header",
-        finalized_header = shortLog(finalizedHeader)
+  #   # TODO: For now just log headers. Ultimately we should also use callbacks for each
+  #   # lc object to save them to db and offer them to the network.
+  #   proc onFinalizedHeader(
+  #       lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
+  #     info "New LC finalized header",
+  #       finalized_header = shortLog(finalizedHeader)
 
-    proc onOptimisticHeader(
-        lightClient: LightClient, optimisticHeader: BeaconBlockHeader) =
-      info "New LC optimistic header",
-        optimistic_header = shortLog(optimisticHeader)
+  #   proc onOptimisticHeader(
+  #       lightClient: LightClient, optimisticHeader: BeaconBlockHeader) =
+  #     info "New LC optimistic header",
+  #       optimistic_header = shortLog(optimisticHeader)
 
-    lc.onFinalizedHeader = onFinalizedHeader
-    lc.onOptimisticHeader = onOptimisticHeader
-    lc.trustedBlockRoot = config.trustedBlockRoot
+  #   lc.onFinalizedHeader = onFinalizedHeader
+  #   lc.onOptimisticHeader = onOptimisticHeader
+  #   lc.trustedBlockRoot = config.trustedBlockRoot
 
-    proc onSecond(time: Moment) =
-      let wallSlot = getBeaconTime().slotOrZero()
-      # TODO this is a place to enable/disable gossip based on the current status
-      # of light client
-      # lc.updateGossipStatus(wallSlot + 1)
+  #   proc onSecond(time: Moment) =
+  #     let wallSlot = getBeaconTime().slotOrZero()
+  #     # TODO this is a place to enable/disable gossip based on the current status
+  #     # of light client
+  #     # lc.updateGossipStatus(wallSlot + 1)
 
-    proc runOnSecondLoop() {.async.} =
-      let sleepTime = chronos.seconds(1)
-      while true:
-        let start = chronos.now(chronos.Moment)
-        await chronos.sleepAsync(sleepTime)
-        let afterSleep = chronos.now(chronos.Moment)
-        let sleepTime = afterSleep - start
-        onSecond(start)
-        let finished = chronos.now(chronos.Moment)
-        let processingTime = finished - afterSleep
-        trace "onSecond task completed", sleepTime, processingTime
+  #   proc runOnSecondLoop() {.async.} =
+  #     let sleepTime = chronos.seconds(1)
+  #     while true:
+  #       let start = chronos.now(chronos.Moment)
+  #       await chronos.sleepAsync(sleepTime)
+  #       let afterSleep = chronos.now(chronos.Moment)
+  #       let sleepTime = afterSleep - start
+  #       onSecond(start)
+  #       let finished = chronos.now(chronos.Moment)
+  #       let processingTime = finished - afterSleep
+  #       trace "onSecond task completed", sleepTime, processingTime
 
-    onSecond(Moment.now())
+  #   onSecond(Moment.now())
 
-    lightClientNetwork.start()
-    lc.start()
+  #   lightClientNetwork.start()
+  #   lc.start()
 
-    asyncSpawn runOnSecondLoop()
+  #   asyncSpawn runOnSecondLoop()
 
   historyNetwork.start()
   stateNetwork.start()

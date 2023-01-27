@@ -1,6 +1,6 @@
 import
   std/[os],
-  unittest2, stew/byteutils,
+  unittest2,
   eth/common/eth_types,
   ../nimbus/vm_internals,
   ../nimbus/core/pow/header

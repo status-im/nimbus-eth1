@@ -99,7 +99,7 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2):
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3):
     (common_types.BlockHash, BlockHeaderWithProof, BlockBodySSZ) =
   proc calculateTransactionData(
       items: openArray[TypedTransaction]):
@@ -120,6 +120,7 @@ proc asPortalBlockData*(
   let
     txRoot = calculateTransactionData(payload.transactions)
 
+    # TODO: update according to payload type
     header = etypes.BlockHeader(
       parentHash: payload.parentHash.asEthHash,
       ommersHash: EMPTY_UNCLE_HASH,
@@ -298,31 +299,33 @@ proc run() {.raises: [Exception, Defect].} =
   waitFor network.start()
 
   proc onFinalizedHeader(
-      lightClient: LightClient, finalizedHeader: BeaconBlockHeader) =
-    info "New LC finalized header",
-      finalized_header = shortLog(finalizedHeader)
+      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+    withForkyHeader(finalizedHeader):
+      when lcDataFork > LightClientDataFork.None:
+        info "New LC finalized header",
+          finalized_header = shortLog(forkyHeader)
 
   proc onOptimisticHeader(
-      lightClient: LightClient, optimisticHeader: BeaconBlockHeader) =
-    info "New LC optimistic header",
-      optimistic_header = shortLog(optimisticHeader)
-    optimisticProcessor.setOptimisticHeader(optimisticHeader)
+      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+    withForkyHeader(optimisticHeader):
+      when lcDataFork > LightClientDataFork.None:
+        info "New LC optimistic header",
+          optimistic_header = shortLog(forkyHeader)
+        optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
 
   func shouldSyncOptimistically(wallSlot: Slot): bool =
-    # Check whether light client is used
-    let optimisticHeader = lightClient.optimisticHeader.valueOr:
-      return false
-
-    # Check whether light client has synced sufficiently close to wall slot
-    const maxAge = 2 * SLOTS_PER_EPOCH
-    if optimisticHeader.slot < max(wallSlot, maxAge.Slot) - maxAge:
-      return false
-
-    true
+    let optimisticHeader = lightClient.optimisticHeader
+    withForkyHeader(optimisticHeader):
+      when lcDataFork > LightClientDataFork.None:
+        # Check whether light client has synced sufficiently close to wall slot
+        const maxAge = 2 * SLOTS_PER_EPOCH
+        forkyHeader.beacon.slot >= max(wallSlot, maxAge.Slot) - maxAge
+      else:
+        false
 
   var blocksGossipState: GossipState = {}
   proc updateBlocksGossipStatus(slot: Slot) =
