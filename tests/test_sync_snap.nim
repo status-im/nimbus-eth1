@@ -201,6 +201,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
         hexaDb = desc.hexaDb
         getFn = desc.getAccountFn
+        dbg = if noisy: hexaDb else: nil
 
       desc.assignPrettyKeys() # debugging, make sure that state root ~ "$0"
 
@@ -210,15 +211,15 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       test &"Retrieve accounts & proofs for previous account ranges":
         let nPart = 3
         if db.persistent:
-          accLst.test_NodeRangeRightProofs(getFn, nPart, hexaDB)
+          accLst.test_NodeRangeRightProofs(getFn, nPart, dbg)
         else:
-          accLst.test_NodeRangeRightProofs(hexaDB, nPart, hexaDB)
+          accLst.test_NodeRangeRightProofs(hexaDB, nPart, dbg)
 
       test &"Verify left boundary checks":
         if db.persistent:
-          accLst.test_NodeRangeLeftBoundary(getFn, hexaDB)
+          accLst.test_NodeRangeLeftBoundary(getFn, dbg)
         else:
-          accLst.test_NodeRangeLeftBoundary(hexaDB, hexaDB)
+          accLst.test_NodeRangeLeftBoundary(hexaDB, dbg)
 
     block:
       # List of keys to be shared by sub-group
