@@ -36,7 +36,7 @@ type
     withdrawals*: seq[WithdrawalV1]
 
 proc asExecutionData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2): ExecutionData =
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3): ExecutionData =
   when payload is ExecutionPayloadV1:
     return ExecutionData(
       parentHash: payload.parentHash,
@@ -56,6 +56,7 @@ proc asExecutionData*(
       withdrawals: @[]
     )
   else:
+    # TODO: Deal with different payload types
     return ExecutionData(
       parentHash: payload.parentHash,
       feeRecipient: payload.feeRecipient,
