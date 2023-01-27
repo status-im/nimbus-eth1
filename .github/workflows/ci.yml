@@ -22,7 +22,7 @@ jobs:
             evmc: evmc
           # - os: linux
           #   cpu: i386
-            evmc: evmc
+          #   evmc: evmc
           - os: macos
             cpu: amd64
             evmc: evmc
@@ -35,7 +35,7 @@ jobs:
             evmc: nimvm2
           # - os: linux
           #   cpu: i386
-            evmc: nimvm2
+          #   evmc: nimvm2
           - os: windows
             cpu: amd64
             evmc: nimvm2
