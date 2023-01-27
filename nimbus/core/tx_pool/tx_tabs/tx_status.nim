@@ -18,7 +18,7 @@ import
   eth/[common],
   stew/[results, keyed_queue, keyed_queue/kq_debug, sorted_set]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxStatusNonceRef* = ref object ##\
@@ -46,18 +46,18 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc `$`(rq: TxStatusNonceRef): string =
+proc `$`(rq: TxStatusNonceRef): string {.gcsafe, raises: [].} =
   ## Needed by `rq.verify()` for printing error messages
   $rq.nonceList.len
 
-proc nActive(sq: TxStatusTab): int =
+proc nActive(sq: TxStatusTab): int {.gcsafe, raises: [].} =
   ## Number of non-nil items
   for status in TxItemStatus:
     if not sq.statusList[status].isNil:
       result.inc
 
 proc mkInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Fails if item exists, already
   var inx: TxStatusInx
 
@@ -86,7 +86,7 @@ proc mkInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
 
 
 proc getInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   var inx: TxStatusInx
 
   # array of buckets (aka status) => senders
@@ -105,14 +105,14 @@ proc getInxImpl(sq: var TxStatusTab; item: TxItemRef): Result[TxStatusInx,void]
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc init*(sq: var TxStatusTab; size = 10) =
+proc init*(sq: var TxStatusTab; size = 10) {.gcsafe, raises: [].} =
   ## Optional constructor
   sq.size = 0
   sq.statusList.reset
 
 
 proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already (apart from returning `false`.)
   let rc = sq.mkInxImpl(item)
@@ -125,7 +125,7 @@ proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
 
 
 proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   let rc = sq.getInxImpl(item)
   if rc.isOk:
     let inx = rc.value
@@ -145,7 +145,7 @@ proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
 
 
 proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## walk `TxItemStatus` > `EthAddress` > `AccountNonce`
 
   var totalCount = 0
@@ -161,7 +161,8 @@ proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
         addrCount = 0
         gasLimits = 0.GasInt
       for p in addrData.addrList.nextPairs:
-        let (addrKey, nonceData) = (p.key, p.data)
+        # let (addrKey, nonceData) = (p.key, p.data) -- notused
+        let nonceData = p.data
 
         block:
           let rc = nonceData.nonceList.verify
@@ -233,14 +234,14 @@ proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt =
 
 proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
        SortedSetResult[EthAddress,TxStatusNonceRef]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   if addrData.addrList.hasKey(sender):
     return toSortedSetResult(key = sender, data = addrData.addrList[sender])
   err(rbNotFound)
 
 proc eq*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
          sender: EthAddress): SortedSetResult[EthAddress,TxStatusNonceRef]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   if rc.isOk:
     return rc.value.data.eq(sender)
   err(rc.error)

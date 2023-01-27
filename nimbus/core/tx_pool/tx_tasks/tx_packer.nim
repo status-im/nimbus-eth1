@@ -32,7 +32,7 @@ import
   eth/[keys, rlp, trie, trie/db],
   stew/[sorted_set]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxPackerError* = object of CatchableError
@@ -68,7 +68,7 @@ template safeExecutor(info: string; code: untyped) =
     raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc persist(pst: TxPackerStateRef)
-    {.gcsafe,raises: [Defect,RlpError].} =
+    {.gcsafe,raises: [RlpError].} =
   ## Smart wrapper
   if not pst.cleanState:
     pst.xp.chain.vmState.stateDB.persist(clearCache = false)
@@ -79,7 +79,7 @@ proc persist(pst: TxPackerStateRef)
 # ------------------------------------------------------------------------------
 
 proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -96,7 +96,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
 
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
@@ -154,7 +154,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 # ------------------------------------------------------------------------------
 
 proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
 
   # Flush `packed` bucket
   xp.bucketFlushPacked
@@ -173,7 +173,7 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
 
 
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
-    {.gcsafe,raises: [Defect,CatchableError].}  =
+    {.gcsafe,raises: [CatchableError].}  =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
   let
@@ -199,7 +199,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   vmState.stateDB.commit(accTx)
 
   vmState.stateDB.persist(clearCache = false)
-  let midRoot = vmState.stateDB.rootHash
+  # let midRoot = vmState.stateDB.rootHash -- notused
 
   # Finish book-keeping and move item to `packed` bucket
   pst.runTxCommit(item, gasUsed)
@@ -208,7 +208,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
 
 proc vmExecCommit(pst: TxPackerStateRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   let
     xp = pst.xp
     vmState = xp.chain.vmState
@@ -247,7 +247,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [Defect,CatchableError].} =
+proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db

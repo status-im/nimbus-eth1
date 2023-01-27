@@ -15,7 +15,7 @@
 import
   metrics
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 const
   # Provide some fall-back counters available for unit tests
@@ -82,7 +82,7 @@ declareGauge localGauge, "n/a"
 declareGauge slotsGauge, "n/a"
 
 # core/tx_pool.go(129): reheapTimer = metrics.NewRegisteredTimer(..
-declareGauge reheapTimer, "n/a"
+# declareGauge reheapTimer, "n/a" -- notused
 
 # ----------------------
 
