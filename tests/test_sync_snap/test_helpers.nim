@@ -105,5 +105,26 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, args.toSeq.join
 
 # ------------------------------------------------------------------------------
+# Public free parking
+# ------------------------------------------------------------------------------
+
+proc rangeAccountSizeMax*(n: int): int =
+  ## Max number of bytes needed to store `n` RLP encoded `Account()` type
+  ## entries. Note that this is an upper bound.
+  ##
+  ## The maximum size of a single RLP encoded account item can be determined
+  ## by setting every field of `Account()` to `high()` or `0xff`.
+  if 127 < n:
+    3 + n * 110
+  elif 0 < n:
+    2 + n * 110
+  else:
+    1
+
+proc rangeNumAccounts*(size: int): int =
+  ## ..
+  (size - 3) div 110
+
+# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -194,22 +194,42 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
-    test &"Proofing {accLst.len} items for state root ..{root.pp}":
-      let desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
-      accLst.test_accountsImport(desc, db.persistent)
-
-    var accKeys: seq[NodeKey]
 
     block:
+      # New common descriptor for this sub-group of tests
       let
-        # Common descriptor for this group of tests
-        desc = db.cdb[1].snapDbAccountsRef(root, db.persistent)
+        desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
+        hexaDb = desc.hexaDb
+        getFn = desc.getAccountFn
 
-        # Database abstractions
-        getFn = desc.getAccountFn # pestistent case
-        hexaDB = desc.hexaDB      # in-memory, and debugging setup
+      desc.assignPrettyKeys() # debugging, make sure that state root ~ "$0"
 
-      test &"Merging {accLst.len} proofs for state root ..{root.pp}":
+      test &"Proofing {accLst.len} list items for state root ..{root.pp}":
+        accLst.test_accountsImport(desc, db.persistent)
+
+      test &"Retrieve accounts & proofs for previous account ranges":
+        let nPart = 3
+        if db.persistent:
+          accLst.test_NodeRangeRightProofs(getFn, nPart, hexaDB)
+        else:
+          accLst.test_NodeRangeRightProofs(hexaDB, nPart, hexaDB)
+
+      test &"Verify left boundary checks":
+        if db.persistent:
+          accLst.test_NodeRangeLeftBoundary(getFn, hexaDB)
+        else:
+          accLst.test_NodeRangeLeftBoundary(hexaDB, hexaDB)
+
+    block:
+      # List of keys to be shared by sub-group
+      var accKeys: seq[NodeKey]
+
+      # New common descriptor for this sub-group of tests
+      let
+        cdb = db.cdb[1]
+        desc = cdb.snapDbAccountsRef(root, db.persistent)
+
+      test &"Merging {accLst.len} accounts/proofs lists into single list":
         accLst.test_accountsMergeProofs(desc, accKeys) # set up `accKeys`
 
       test &"Revisiting {accKeys.len} stored items on ChainDBRef":
@@ -218,17 +238,19 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
       test &"Decompose path prefix envelopes on {info}":
+        let hexaDb = desc.hexaDb
         if db.persistent:
-          accKeys.test_NodeRangeDecompose(root, getFn, hexaDB)
+          accKeys.test_NodeRangeDecompose(root, desc.getAccountFn, hexaDb)
         else:
-          accKeys.test_NodeRangeDecompose(root, hexaDB, hexaDB)
+          accKeys.test_NodeRangeDecompose(root, hexaDb, hexaDb)
 
-    test &"Storing/retrieving {accKeys.len} items " &
-        "on persistent pivot/checkpoint registry":
-      if db.persistent:
-        accKeys.test_pivotStoreRead(db.cdb[0])
-      else:
-        skip()
+      test &"Storing/retrieving {accKeys.len} stored items " &
+          "on persistent pivot/checkpoint registry":
+        if db.persistent:
+          accKeys.test_pivotStoreRead(cdb)
+        else:
+          skip()
+
 
 proc storagesRunner(
     noisy = true;
@@ -524,14 +546,16 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
-        false.accountsRunner(persistent=true, sam)
-    noisy.showElapsed("inspectRunner()"):
-      for n,sam in snapOtherHealingList:
-        false.inspectionRunner(persistent=true, cascaded=false, sam)
+        if n notin {99}: # {6,7,9,13,14,15,16,19,20}:
+          false.accountsRunner(persistent=true, sam)
+          #if true: quit()
+    #noisy.showElapsed("inspectRunner()"):
+    #  for n,sam in snapOtherHealingList:
+    #    false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -549,14 +573,14 @@ when isMainModule:
 
   # This one uses readily available dumps
   when true: # and false:
-    false.inspectionRunner()
+  #  false.inspectionRunner()
     for n,sam in snapTestList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
     for n,sam in snapTestStorageList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
-      false.storagesRunner(persistent=true, sam)
+  #    false.storagesRunner(persistent=true, sam)
 
   # This one uses readily available dumps
   when true and false:
