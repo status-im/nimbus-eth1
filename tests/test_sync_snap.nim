@@ -27,8 +27,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_accounts, test_node_range, test_inspect, test_pivot, test_storage,
-    test_db_timing, test_types]
+    test_accounts, test_helpers, test_node_range, test_inspect, test_pivot,
+    test_storage, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -61,9 +61,6 @@ else:
   const isUbuntu32bit = false
 
 let
-  # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkHexDb = Result[void,HexaryError].ok()
-
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent ChainDBRef initialisation
   # was present, see `test_custom_network` for more details.
@@ -91,15 +88,6 @@ proc findFilePath(file: string;
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
-
-proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
-  if noisy:
-    if args.len == 0:
-      echo "*** ", pfx
-    elif 0 < pfx.len and pfx[^1] != ' ':
-      echo pfx, " ", args.toSeq.join
-    else:
-      echo pfx, args.toSeq.join
 
 proc setTraceLevel =
   discard
@@ -175,9 +163,6 @@ proc testDbs(workDir = ""; subDir = ""; instances = nTestDbInstances): TestDbs =
     result.dbDir.flushDbDir
     for n in 0 ..< min(result.cdb.len, instances):
       result.cdb[n] = (result.dbDir / $n).newChainDB
-
-proc lastTwo(a: openArray[string]): seq[string] =
-  if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
 proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
   if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())

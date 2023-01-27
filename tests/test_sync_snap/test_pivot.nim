@@ -34,7 +34,8 @@ proc test_pivotStoreRead*(
                   (4.to(NodeTag),5.to(NodeTag)),
                   (6.to(NodeTag),7.to(NodeTag))]
     slotAccounts = seq[NodeKey].default
-  for n,w in accKeys:
+  for n in 0 ..< accKeys.len:
+    let w = accKeys[n]
     check dbBase.savePivot(
       SnapDbPivotRegistry(
         header:       BlockHeader(stateRoot: w.to(Hash256)),
@@ -50,7 +51,13 @@ proc test_pivotStoreRead*(
         check rc.value.nAccounts == n.uint64
         check rc.value.nSlotLists == n.uint64
         check rc.value.processed == processed
-  for n,w in accKeys:
+        # Stop gossiping (happens whith corrupted database)
+        if rc.value.nAccounts != n.uint64 or
+           rc.value.nSlotLists != n.uint64 or
+           rc.value.processed != processed:
+          return
+  for n in 0 ..< accKeys.len:
+    let w = accKeys[n]
     block:
       let rc = dbBase.recoverPivot(w)
       check rc.isOk

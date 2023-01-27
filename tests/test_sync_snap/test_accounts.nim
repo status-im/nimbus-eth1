@@ -36,7 +36,7 @@ proc flatten(list: openArray[seq[Blob]]): seq[Blob] =
 proc test_accountsImport*(
     inList: seq[UndumpAccounts];
     desc: SnapDbAccountsRef;
-    persistent: bool
+    persistent: bool;
       ) =
   ## Import accounts
   for n,w in inList:

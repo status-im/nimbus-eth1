@@ -420,9 +420,9 @@ proc leafData*(path: RPath): Blob =
 # ------------------------------------------------------------------------------
 
 proc hexaryPath*(
-    partialPath: NibblesSeq;        ## partial path to resolve
-    rootKey: NodeKey|RepairKey;             ## State root
-    db: HexaryTreeDbRef;            ## Database
+    partialPath: NibblesSeq;        # partial path to resolve
+    rootKey: NodeKey|RepairKey;     # State root
+    db: HexaryTreeDbRef;            # Database
       ): RPath
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Compute the longest possible repair tree `db` path matching the `nodeKey`
@@ -460,9 +460,9 @@ proc hexaryPath*(
 
 
 proc hexaryPath*(
-    partialPath: NibblesSeq;        ## partial path to resolve
-    rootKey: NodeKey;               ## State root
-    getFn: HexaryGetFn;             ## Database abstraction
+    partialPath: NibblesSeq;        # partial path to resolve
+    rootKey: NodeKey;               # State root
+    getFn: HexaryGetFn;             # Database abstraction
       ): XPath
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Compute the longest possible path on an arbitrary hexary trie.
@@ -500,10 +500,10 @@ proc hexaryPath*(
 # ------------------------------------------------------------------------------
 
 proc hexaryPathNodeKey*(
-    partialPath: NibblesSeq;       ## Hex encoded partial path
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPath: NibblesSeq;       # Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Returns the `NodeKey` equivalent for the argment `partialPath` if this
@@ -524,10 +524,10 @@ proc hexaryPathNodeKey*(
   err()
 
 proc hexaryPathNodeKey*(
-    partialPath: Blob;             ## Hex encoded partial path
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPath: Blob;             # Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Variant of `hexaryPathNodeKey()` for hex encoded partial path.
@@ -535,10 +535,10 @@ proc hexaryPathNodeKey*(
 
 
 proc hexaryPathNodeKey*(
-    partialPath: NibblesSeq;       ## Hex encoded partial path
-    rootKey: NodeKey;              ## State root
-    getFn: HexaryGetFn;            ## Database abstraction
-    missingOk = false;             ## Also return key for missing node
+    partialPath: NibblesSeq;       # Hex encoded partial path
+    rootKey: NodeKey;              # State root
+    getFn: HexaryGetFn;            # Database abstraction
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database.
@@ -556,10 +556,10 @@ proc hexaryPathNodeKey*(
   err()
 
 proc hexaryPathNodeKey*(
-    partialPath: Blob;             ## Partial database path
-    rootKey: NodeKey;              ## State root
-    getFn: HexaryGetFn;            ## Database abstraction
-    missingOk = false;             ## Also return key for missing node
+    partialPath: Blob;             # Partial database path
+    rootKey: NodeKey;              # State root
+    getFn: HexaryGetFn;            # Database abstraction
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database and
@@ -568,10 +568,10 @@ proc hexaryPathNodeKey*(
 
 
 proc hexaryPathNodeKeys*(
-    partialPaths: seq[Blob];       ## Partial paths segments
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPaths: seq[Blob];       # Partial paths segments
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): HashSet[NodeKey]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Convert a list of path segments to a set of node keys
