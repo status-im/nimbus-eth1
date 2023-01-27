@@ -11,9 +11,9 @@
 import
   chronicles,
   chronos,
-  eth/[p2p, p2p/peer_pool],
+  eth/p2p,
   ../protocol,
-  ../protocol/[snap/snap_types, trace_config],
+  ../protocol/snap/snap_types,
   ../../core/chain
 
 {.push raises: [Defect].}

@@ -15,7 +15,7 @@
 ## re-factored database layer.
 
 import
-  std/[sequtils, sets, strutils, tables],
+  std/[sequtils, strutils, tables],
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,

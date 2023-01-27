@@ -119,7 +119,7 @@ proc open*(state: var GUnzip; fileName: string):
   state.gzIn = fileName.open(fmRead)
   state.gzOpenOK = true
   state.gzMax = state.gzIn.getFileSize
-  state.gzCount = state.gzIn.readChars(strBuf, 0, strBuf.len)
+  state.gzCount = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
 
   # Parse GZIP header (RFC 1952)
   doAssert 18 < state.gzCount
@@ -157,7 +157,7 @@ proc nextChunk*(state: var GUnzip):
   result = ok("")
 
   while state.gzCount < state.gzMax:
-    var strLen = state.gzIn.readChars(strBuf, 0, strBuf.len)
+    var strLen = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
     if state.gzMax < state.gzCount + strLen:
       strLen = (state.gzMax - state.gzCount).int
     state.gzCount += strLen

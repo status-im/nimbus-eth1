@@ -550,9 +550,7 @@ when isMainModule:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
-        if n notin {99}: # {6,7,9,13,14,15,16,19,20}:
-          false.accountsRunner(persistent=true, sam)
-          #if true: quit()
+        false.accountsRunner(persistent=true, sam)
     #noisy.showElapsed("inspectRunner()"):
     #  for n,sam in snapOtherHealingList:
     #    false.inspectionRunner(persistent=true, cascaded=false, sam)

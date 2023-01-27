@@ -12,8 +12,8 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[algorithm, sequtils, strformat, strutils, tables],
-  eth/[common, p2p, trie/db],
+  std/algorithm,
+  eth/[common, p2p],
   unittest2,
   ../../nimbus/db/select_backend,
   ../../nimbus/sync/snap/range_desc,

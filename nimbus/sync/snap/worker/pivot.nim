@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[math, sets, sequtils, strutils],
+  std/[math, sets, sequtils],
   chronicles,
   chronos,
   eth/[common, p2p, trie/trie_defs],
