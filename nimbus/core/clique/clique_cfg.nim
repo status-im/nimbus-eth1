@@ -21,7 +21,6 @@
 import
   std/[random, times],
   ethash,
-  stew/results,
   ../../db/db_chain,
   ../../utils/ec_recover,
   ./clique_defs
@@ -73,7 +72,7 @@ type
       ## Time interval after which the `snapshotApply()` function main loop
       ## produces logging entries.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -95,8 +94,11 @@ proc newCliqueCfg*(db: ChainDBRef): CliqueCfg =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(145): func ecrecover(header [..]
-proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
-                                   {.gcsafe, raises: [Defect,CatchableError].} =
+proc ecRecover*(
+    cfg: CliqueCfg;
+    header: BlockHeader;
+      ): auto
+      =
   cfg.signatures.ecRecover(header)
 
 # ------------------------------------------------------------------------------
@@ -132,7 +134,7 @@ proc `logInterval=`*(cfg: CliqueCfg; duration: Duration) =
 # Public PRNG, may be overloaded
 # ------------------------------------------------------------------------------
 
-method rand*(cfg: CliqueCfg; max: Natural): int {.gcsafe,base.} =
+method rand*(cfg: CliqueCfg; max: Natural): int {.gcsafe, base, raises: [].} =
   ## The method returns a random number base on an internal PRNG providing a
   ## reproducible stream of random data. This function is supposed to be used
   ## exactly when repeatability comes in handy. Never to be used for crypto key

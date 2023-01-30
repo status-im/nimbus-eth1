@@ -24,7 +24,7 @@ import
   ./clique_defs,
   ./snapshot/snapshot_desc,
   chronicles,
-  eth/[keys, rlp],
+  eth/keys,
   stew/[keyed_queue, results]
 
 type
@@ -88,7 +88,7 @@ type
       ## before have been vetted already regardless of the current branch. So
       ## the nearest `epoch` header is used.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "clique PoA constructor"
@@ -119,7 +119,10 @@ proc `$`*(e: CliqueError): string =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc recents*(c: Clique): var KeyedQueue[CliqueSnapKey,Snapshot] =
+proc recents*(
+    c: Clique;
+      ): var KeyedQueue[CliqueSnapKey,Snapshot]
+      =
   ## Getter
   c.recents
 

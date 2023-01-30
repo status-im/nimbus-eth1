@@ -45,7 +45,7 @@ type
     authRemoved: bool               ## last `addVote()` action was removing an
                                     ## authorised signer from the `authSig` list
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Public debugging/pretty-printer support
@@ -115,7 +115,7 @@ proc isAuthSigner*(t: var Ballot; address: EthAddress): bool =
   address in t.authSig
 
 proc delVote*(t: var Ballot; signer, address: EthAddress) {.
-              gcsafe, raises: [Defect,KeyError].} =
+              gcsafe, raises: [KeyError].} =
   ## Remove a particular previously added vote.
   if address in t.votes:
     if signer in t.votes[address].signers:
@@ -137,7 +137,7 @@ proc isValidVote*(t: var Ballot; address: EthAddress; authorize: bool): bool =
 
 
 proc addVote*(t: var Ballot; vote: Vote) {.
-              gcsafe, raises: [Defect,KeyError].} =
+              gcsafe, raises: [KeyError].} =
   ## Add a new vote collecting the signers for the particular voting address.
   ##
   ## Unless it is the first vote for this address, the authorisation type
