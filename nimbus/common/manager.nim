@@ -10,10 +10,11 @@
 import
   std/[os, json, tables, strutils],
   stew/[byteutils, results],
-  eth/[keyfile, common, keys],
-  chronicles
+  eth/[keyfile, common, keys]
 
 from nimcrypto/utils import burnMem
+
+{.push raises: [].}
 
 type
   NimbusAccount* = object
@@ -27,7 +28,8 @@ type
 proc init*(_: type AccountsManager): AccountsManager =
   discard
 
-proc loadKeystores*(am: var AccountsManager, path: string): Result[void, string] =
+proc loadKeystores*(am: var AccountsManager, path: string): Result[void, string]
+    {.gcsafe, raises: [OSError].}=
   try:
     createDir(path)
   except OSError, IOError:
