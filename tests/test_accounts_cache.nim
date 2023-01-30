@@ -10,6 +10,7 @@
 
 import
   std/[os, sequtils, strformat, strutils, tables],
+  chronicles,
   ../nimbus/db/accounts_cache,
   ../nimbus/common/common,
   ../nimbus/core/chain,
@@ -77,6 +78,16 @@ proc pp*(tx: Transaction; vmState: BaseVMState): string =
     ";" & $vmState.readOnlyStateDB.getNonce(address) &
     "," & $vmState.readOnlyStateDB.getBalance(address) &
     ")"
+
+proc setTraceLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -203,7 +214,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
 
       try:
         vmState.stateDB.persist(clearCache = false)
-      except AssertionError as e:
+      except AssertionDefect as e:
         if noisy:
           let msg = e.msg.rsplit($DirSep,1)[^1]
           echo &"*** runVmExec({eAddr.pp}): {e.name}: {msg}"
@@ -339,7 +350,7 @@ proc runner(noisy = true; capture = goerliCapture) =
       defer: dbTx.dispose()
       for n in txi:
         let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
-        expect AssertionError:
+        expect AssertionDefect:
           vmState.runTrial3crash(n, noisy)
 
     test &"Run {txi.len} tree-step trials without rollback":
@@ -367,6 +378,7 @@ when isMainModule:
   var noisy = defined(debug)
   #noisy = true
 
+  setErrorLevel()
   noisy.runner # mainCapture
   # noisy.runner goerliCapture2
 
