@@ -27,8 +27,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_accounts, test_node_range, test_inspect, test_pivot, test_storage,
-    test_db_timing, test_types]
+    test_accounts, test_helpers, test_node_range, test_inspect, test_pivot,
+    test_storage, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -61,9 +61,6 @@ else:
   const isUbuntu32bit = false
 
 let
-  # Forces `check()` to print the error (as opposed when using `isOk()`)
-  OkHexDb = Result[void,HexaryError].ok()
-
   # There was a problem with the Github/CI which results in spurious crashes
   # when leaving the `runner()` if the persistent ChainDBRef initialisation
   # was present, see `test_custom_network` for more details.
@@ -91,15 +88,6 @@ proc findFilePath(file: string;
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
-
-proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
-  if noisy:
-    if args.len == 0:
-      echo "*** ", pfx
-    elif 0 < pfx.len and pfx[^1] != ' ':
-      echo pfx, " ", args.toSeq.join
-    else:
-      echo pfx, args.toSeq.join
 
 proc setTraceLevel =
   discard
@@ -176,9 +164,6 @@ proc testDbs(workDir = ""; subDir = ""; instances = nTestDbInstances): TestDbs =
     for n in 0 ..< min(result.cdb.len, instances):
       result.cdb[n] = (result.dbDir / $n).newChainDB
 
-proc lastTwo(a: openArray[string]): seq[string] =
-  if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
-
 proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
   if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())
 
@@ -209,22 +194,43 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       tmpDir.flushDbDir(sample.name)
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
-    test &"Proofing {accLst.len} items for state root ..{root.pp}":
-      let desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
-      accLst.test_accountsImport(desc, db.persistent)
-
-    var accKeys: seq[NodeKey]
 
     block:
+      # New common descriptor for this sub-group of tests
       let
-        # Common descriptor for this group of tests
-        desc = db.cdb[1].snapDbAccountsRef(root, db.persistent)
+        desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
+        hexaDb = desc.hexaDb
+        getFn = desc.getAccountFn
+        dbg = if noisy: hexaDb else: nil
 
-        # Database abstractions
-        getFn = desc.getAccountFn # pestistent case
-        hexaDB = desc.hexaDB      # in-memory, and debugging setup
+      desc.assignPrettyKeys() # debugging, make sure that state root ~ "$0"
 
-      test &"Merging {accLst.len} proofs for state root ..{root.pp}":
+      test &"Proofing {accLst.len} list items for state root ..{root.pp}":
+        accLst.test_accountsImport(desc, db.persistent)
+
+      test &"Retrieve accounts & proofs for previous account ranges":
+        let nPart = 3
+        if db.persistent:
+          accLst.test_NodeRangeRightProofs(getFn, nPart, dbg)
+        else:
+          accLst.test_NodeRangeRightProofs(hexaDB, nPart, dbg)
+
+      test &"Verify left boundary checks":
+        if db.persistent:
+          accLst.test_NodeRangeLeftBoundary(getFn, dbg)
+        else:
+          accLst.test_NodeRangeLeftBoundary(hexaDB, dbg)
+
+    block:
+      # List of keys to be shared by sub-group
+      var accKeys: seq[NodeKey]
+
+      # New common descriptor for this sub-group of tests
+      let
+        cdb = db.cdb[1]
+        desc = cdb.snapDbAccountsRef(root, db.persistent)
+
+      test &"Merging {accLst.len} accounts/proofs lists into single list":
         accLst.test_accountsMergeProofs(desc, accKeys) # set up `accKeys`
 
       test &"Revisiting {accKeys.len} stored items on ChainDBRef":
@@ -233,17 +239,19 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         # true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
       test &"Decompose path prefix envelopes on {info}":
+        let hexaDb = desc.hexaDb
         if db.persistent:
-          accKeys.test_NodeRangeDecompose(root, getFn, hexaDB)
+          accKeys.test_NodeRangeDecompose(root, desc.getAccountFn, hexaDb)
         else:
-          accKeys.test_NodeRangeDecompose(root, hexaDB, hexaDB)
+          accKeys.test_NodeRangeDecompose(root, hexaDb, hexaDb)
 
-    test &"Storing/retrieving {accKeys.len} items " &
-        "on persistent pivot/checkpoint registry":
-      if db.persistent:
-        accKeys.test_pivotStoreRead(db.cdb[0])
-      else:
-        skip()
+      test &"Storing/retrieving {accKeys.len} stored items " &
+          "on persistent pivot/checkpoint registry":
+        if db.persistent:
+          accKeys.test_pivotStoreRead(cdb)
+        else:
+          skip()
+
 
 proc storagesRunner(
     noisy = true;
@@ -539,14 +547,14 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
         false.accountsRunner(persistent=true, sam)
-    noisy.showElapsed("inspectRunner()"):
-      for n,sam in snapOtherHealingList:
-        false.inspectionRunner(persistent=true, cascaded=false, sam)
+    #noisy.showElapsed("inspectRunner()"):
+    #  for n,sam in snapOtherHealingList:
+    #    false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -564,14 +572,14 @@ when isMainModule:
 
   # This one uses readily available dumps
   when true: # and false:
-    false.inspectionRunner()
+  #  false.inspectionRunner()
     for n,sam in snapTestList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
     for n,sam in snapTestStorageList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
-      false.storagesRunner(persistent=true, sam)
+  #    false.storagesRunner(persistent=true, sam)
 
   # This one uses readily available dumps
   when true and false:

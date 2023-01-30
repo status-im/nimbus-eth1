@@ -27,6 +27,10 @@ type
     TooManySlotAccounts
     NoAccountsYet
 
+    # range
+    LeafNodeExpected
+    FailedNextNode
+
     # nearby/boundary proofs
     NearbyExtensionError
     NearbyBranchError

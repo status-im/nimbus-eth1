@@ -10,7 +10,7 @@
 
 import
   chronicles,
-  eth/[common, p2p, p2p/private/p2p_types]
+  eth/[common, p2p/private/p2p_types]
 #  ../../types
 
 type

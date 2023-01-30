@@ -12,7 +12,7 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[algorithm, math, sequtils, strformat, strutils, times],
+  std/[algorithm, math, sequtils, strformat, times],
   stew/byteutils,
   rocksdb,
   unittest2,

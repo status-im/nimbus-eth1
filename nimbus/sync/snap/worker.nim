@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/[hashes, options, sets, strutils],
+  std/[options, sets, strutils],
   chronicles,
   chronos,
   eth/[common, p2p],

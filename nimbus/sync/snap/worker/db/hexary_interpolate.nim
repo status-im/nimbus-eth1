@@ -15,7 +15,7 @@
 ## re-factored database layer.
 
 import
-  std/[sequtils, sets, strutils, tables],
+  std/[sequtils, strutils, tables],
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
@@ -508,10 +508,10 @@ proc rTreeSquashRootNode(
 # ------------------------------------------------------------------------------
 
 proc hexaryInterpolate*(
-    db: HexaryTreeDbRef;           ## Database
-    rootKey: NodeKey;              ## Root node hash
-    dbItems: var seq[RLeafSpecs];  ## List of path and leaf items
-    bootstrap = false;             ## Can create root node on-the-fly
+    db: HexaryTreeDbRef;           # Database
+    rootKey: NodeKey;              # Root node hash
+    dbItems: var seq[RLeafSpecs];  # List of path and leaf items
+    bootstrap = false;             # Can create root node on-the-fly
       ): Result[void,HexaryError]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## From the argument list `dbItems`, leaf nodes will be added to the hexary

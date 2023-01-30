@@ -322,7 +322,7 @@ proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
     let rPath= key.hexaryPath(ps.root, ps.hexaDb)
     result = rPath.path.mapIt(it.pp(ps.hexaDb)) & @["(" & rPath.tail.pp & ")"]
 
-proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =
+proc dumpHexaDB*(xDb: HexaryTreeDbRef; root: NodeKey; indent = 4): string =
   ## Dump the entries from the a generic accounts trie. These are
   ## key value pairs for
   ## ::
@@ -348,7 +348,11 @@ proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =
   ## added later (typically these nodes are update `Mutable` nodes.)
   ##
   ## Beware: dumping a large database is not recommended
-  ps.hexaDb.pp(ps.root,indent)
+  xDb.pp(root, indent)
+
+proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =
+  ## Ditto
+  ps.hexaDb.pp(ps.root, indent)
 
 proc hexaryPpFn*(ps: SnapDbBaseRef): HexaryPpFn =
   ## Key mapping function used in `HexaryTreeDB`
