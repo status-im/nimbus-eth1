@@ -10,8 +10,9 @@
 
 import
   chronicles,
-  eth/[common, p2p/private/p2p_types]
-#  ../../types
+  eth/common
+
+{.push raises: [].}
 
 type
   SnapAccount* = object

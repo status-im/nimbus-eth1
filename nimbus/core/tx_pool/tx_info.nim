@@ -11,7 +11,7 @@
 ## Transaction Pool Info Symbols & Error Codes
 ## ===========================================
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxInfo* = enum

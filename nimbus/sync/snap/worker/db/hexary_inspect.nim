@@ -16,7 +16,7 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -78,7 +78,7 @@ proc processLink(
     inspect: var seq[(RepairKey,NibblesSeq)];
     trail: NibblesSeq;
     child: RepairKey;
-      ) {.gcsafe, raises: [Defect,KeyError]} =
+      ) =
   ## Helper for `hexaryInspect()`
   if not child.isZero:
     if not child.isNodeKey:
@@ -99,7 +99,7 @@ proc processLink(
     inspect: var seq[(NodeKey,NibblesSeq)];
     trail: NibblesSeq;
     child: Rlp;
-      ) {.gcsafe, raises: [Defect,RlpError]} =
+      ) {.gcsafe, raises: [RlpError]} =
   ## Ditto
   if not child.isEmpty:
     let childBlob = child.toBytes
@@ -151,7 +151,7 @@ proc hexaryInspectTrie*(
     stopAtLevel = 64u8;                  # Width-first depth level
     maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Starting with the argument list `paths`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. The references for these nodes are collected and
@@ -226,7 +226,7 @@ proc hexaryInspectTrie*(
       let
         (rKey, parentTrail) = reVisit[n]
         node = db.tab[rKey]
-        parent = rKey.convertTo(NodeKey)
+        # parent = rKey.convertTo(NodeKey) -- unused
 
       case node.kind:
       of Extension:
@@ -267,7 +267,7 @@ proc hexaryInspectTrie*(
     stopAtLevel = 64u8;                  # Width-first depth level
     maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryInspectTrie()` for persistent database.
   when extraTraceMessages:
     let nPaths = paths.len

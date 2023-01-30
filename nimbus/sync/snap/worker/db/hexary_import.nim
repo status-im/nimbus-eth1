@@ -9,19 +9,19 @@
 # except according to those terms.
 
 import
-  std/[sequtils, sets, strutils, tables],
+  std/[sets, tables],
   eth/[common, trie/nibbles],
   ../../range_desc,
   "."/[hexary_desc, hexary_error]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(q: openArray[byte]): string =
-  q.toSeq.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
+#proc pp(q: openArray[byte]): string =
+#  q.toSeq.mapIt(it.toHex(2)).join.toLowerAscii.pp(hex = true)
 
 # ------------------------------------------------------------------------------
 # Public
@@ -33,7 +33,7 @@ proc hexaryImport*(
     unrefNodes: var HashSet[RepairKey]; ## Keep track of freestanding nodes
     nodeRefs: var HashSet[RepairKey];   ## Ditto
       ): HexaryNodeReport
-      {.gcsafe, raises: [Defect, RlpError, KeyError].} =
+      {.gcsafe, raises: [RlpError, KeyError].} =
   ## Decode a single trie item for adding to the table and add it to the
   ## database. Branch and exrension record links are collected.
   if recData.len == 0:
@@ -128,7 +128,7 @@ proc hexaryImport*(
     db: HexaryTreeDbRef;                ## Contains node table
     rec: NodeSpecs;                     ## Expected key and value data pair
       ): HexaryNodeReport
-      {.gcsafe, raises: [Defect, RlpError, KeyError].} =
+      {.gcsafe, raises: [RlpError, KeyError].} =
   ## Ditto without referece checks but expected node key argument.
   if rec.data.len == 0:
     return HexaryNodeReport(error: RlpNonEmptyBlobExpected)

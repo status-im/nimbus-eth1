@@ -14,12 +14,12 @@
 
 import
   std/[hashes, sequtils, strutils, times],
-  ../../utils/[ec_recover, utils_defs],
+  ../../utils/ec_recover,
   ./tx_info,
   eth/[common, keys],
   stew/results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   GasPrice* = ##|
@@ -112,7 +112,7 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   item.reject = txInfoOk
 
 proc new*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
-          status: TxItemStatus; info: string): Result[T,void] =
+          status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
   let rc = tx.ecRecover
   if rc.isErr:
@@ -125,7 +125,7 @@ proc new*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
        status:    status))
 
 proc new*(T: type TxItemRef; tx: Transaction;
-          reject: TxInfo; status: TxItemStatus; info: string): T =
+          reject: TxInfo; status: TxItemStatus; info: string): T {.gcsafe,raises: [].} =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
   T(tx:        tx,

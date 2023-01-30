@@ -12,10 +12,12 @@ import
   stew/results,
   ../common/common
 
+{.push raises: [].}
+
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
     com: CommonRef, header: BlockHeader
-): Result[void, string] {.raises: [Defect].} =
+): Result[void, string] =
   if header.excessDataGas.isSome:
     return err("EIP-4844 not yet implemented")
   return ok()

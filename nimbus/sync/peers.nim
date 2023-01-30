@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  std/[tables],
   chronicles,
   chronos,
   eth/p2p,

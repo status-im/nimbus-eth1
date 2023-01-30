@@ -24,7 +24,7 @@ import
   ./clique/snapshot/[ballot, snapshot_desc],
   stew/results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # Note that mining is unsupported. Unused code ported from the Go
 # implementation is stashed into the `clique_unused` module.
@@ -82,7 +82,7 @@ proc cliqueDispose*(c: Clique; state: var CliqueState) =
   ## `cliqueRestore()` was wrapped in a `defer:` statement.
   state = err(CliqueState)
 
-proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
+proc cliqueSigners*(c: Clique): seq[EthAddress] =
   ## Retrieve the sorted list of authorized signers for the current state
   ## of the `Clique` descriptor.
   ##
@@ -90,7 +90,7 @@ proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
   ## function is invoked.
   c.snapshot.ballot.authSigners
 
-proc cliqueSignersLen*(c: Clique): int {.inline.} =
+proc cliqueSignersLen*(c: Clique): int =
   ## Get the number of authorized signers for the current state of the
   ## `Clique` descriptor. The result is equivalent to `c.cliqueSigners.len`.
   c.snapshot.ballot.authSignersLen

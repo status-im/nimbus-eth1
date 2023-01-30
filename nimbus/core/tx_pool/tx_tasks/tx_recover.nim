@@ -21,7 +21,7 @@ import
   eth/[common, keys],
   stew/keyed_queue
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "tx-pool recover item"
@@ -36,8 +36,7 @@ let
 # ------------------------------------------------------------------------------
 
 proc recoverItem*(xp: TxPoolRef; tx: Transaction; status = txItemPending;
-                  info = ""; acceptExisting = false): Result[TxItemRef,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                  info = ""; acceptExisting = false): Result[TxItemRef,TxInfo] =
   ## Recover item from waste basket or create new. It is an error if the item
   ## is in the buckets database, already.
   ##

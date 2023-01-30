@@ -15,7 +15,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ../db/[hexary_inspect, snapdb_storage_slots]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -247,8 +247,8 @@ proc storageQueueFetchFull*(
           # node. So it is complete and can be fully removed from the batch.
           nComplete.inc                          # Update for logging
         else:
-          # This item becomes a partially available slot
-          let data = env.storageQueueGetOrMakePartial accItem
+          # This item becomes a partially available slot 
+          #let data = env.storageQueueGetOrMakePartial accItem -- notused
           nPartial.inc                           # Update for logging
 
   (rcList, nComplete, nPartial)

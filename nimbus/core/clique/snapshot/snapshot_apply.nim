@@ -19,14 +19,14 @@
 ##
 
 import
-  std/[strutils, times],
+  std/times,
   chronicles,
-  eth/[common, rlp],
+  eth/common,
   stew/results,
   ".."/[clique_cfg, clique_defs],
   "."/[ballot, snapshot_desc]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "clique PoA snapshot-apply"
@@ -66,7 +66,7 @@ template doWalkIt(first, last: int; code: untyped) =
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
 proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
                        first, last: int): CliqueOkResult
-                         {.gcsafe, raises: [Defect,CatchableError].} =
+                         {.gcsafe, raises: [CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
@@ -172,7 +172,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
 
 
 proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader]): CliqueOkResult
-                   {.gcsafe, raises: [Defect,CatchableError].} =
+                   {.gcsafe, raises: [CatchableError].} =
   if headers.len == 0:
     return ok()
   s.snapshotApplySeq(headers, 0, headers.len - 1)

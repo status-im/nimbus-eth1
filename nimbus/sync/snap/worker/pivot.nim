@@ -22,7 +22,7 @@ import
            storage_queue_helper],
   ./ticker
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-pivot"
@@ -341,7 +341,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   ## it will not proceed to the next scheduler task.
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     beaconHeader = ctx.data.beaconHeader
   var
     pivotHeader: BlockHeader

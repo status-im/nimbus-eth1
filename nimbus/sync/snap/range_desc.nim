@@ -17,7 +17,7 @@ import
   ../protocol,
   ../types
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   ByteArray32* = array[32,byte]
@@ -157,7 +157,7 @@ proc init*(tag: var NodeTag; data: openArray[byte]): bool =
 # ------------------------------------------------------------------------------
 
 proc read*[T: NodeTag|NodeKey](rlp: var Rlp, W: type T): T
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   rlp.read(Hash256).to(T)
 
 proc append*(writer: var RlpWriter, val: NodeTag|NodeKey) =

@@ -45,7 +45,7 @@ import
   ../db/[hexary_desc, hexary_envelope, hexary_error,
          hexary_paths, snapdb_accounts]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-swapin"
@@ -264,7 +264,7 @@ proc swapInAccounts*(
     return # nothing to do
 
   let
-    pivot = "#" & $env.stateHeader.blockNumber   # Logging & debugging
+    pivot {.used.} = "#" & $env.stateHeader.blockNumber # Logging & debugging
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
 

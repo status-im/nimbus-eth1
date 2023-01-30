@@ -19,7 +19,7 @@ import
        hexary_inspect, hexary_interpolate, hexary_paths, snapdb_desc,
        snapdb_persistent]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -39,15 +39,15 @@ type
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
 
-proc convertTo(data: openArray[byte]; T: type Hash256): T =
-  discard result.data.NodeKey.init(data) # size error => zero
+#proc convertTo(data: openArray[byte]; T: type Hash256): T =
+#  discard result.data.NodeKey.init(data) # size error => zero
 
 
-template noKeyError(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
+#template noKeyError(info: static[string]; code: untyped) =
+#  try:
+#    code
+#  except KeyError as e:
+#    raiseAssert "Not possible (" & info & "): " & e.msg
 
 template noRlpExceptionOops(info: static[string]; code: untyped) =
   try:
@@ -61,15 +61,15 @@ template noRlpExceptionOops(info: static[string]; code: untyped) =
   except Exception as e:
     raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
-template noGenericExOrKeyError(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+#template noGenericExOrKeyError(info: static[string]; code: untyped) =
+#  try:
+#    code
+#  except KeyError as e:
+#    raiseAssert "Not possible (" & info & "): " & e.msg
+#  except Defect as e:
+#    raise e
+#  except Exception as e:
+#    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -79,7 +79,7 @@ proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentStorageSlotsPut(ps.kvDb)
@@ -94,8 +94,7 @@ proc collectStorageSlots(
     peer: Peer;               ## for log messages
     base: NodeTag;            ## before or at first account entry in `data`
     slotLists: seq[SnapStorage];
-      ): Result[seq[RLeafSpecs],HexaryError]
-      {.gcsafe, raises: [Defect, RlpError].} =
+      ): Result[seq[RLeafSpecs],HexaryError] =
   ## Similar to `collectAccounts()`
   var rcSlots: seq[RLeafSpecs]
 
@@ -138,7 +137,7 @@ proc importStorageSlots(
     proof: SnapStorageProof;   ## Storage slots proof data
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
+      {.gcsafe, raises: [RlpError,KeyError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
   let
@@ -226,8 +225,6 @@ proc init*(
     peer: Peer = nil
       ): T =
   ## Constructor, starts a new accounts session.
-  let db = pv.kvDb
-
   new result
   result.init(pv, root.to(NodeKey))
   result.peer = peer
@@ -446,7 +443,7 @@ proc inspectStorageSlotsTrie*(
   ##     ...
   ##     ctx = rc.value.resumeCtx
   ##
-  let peer = ps.peer
+  let peer {.used.} = ps.peer
   var stats: TrieNodeStat
   noRlpExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
@@ -498,7 +495,7 @@ proc getStorageSlotsData*(
   ## Fetch storage slots data.
   ##
   ## Caveat: There is no unit test yet
-  let peer = ps.peer
+  let peer {.used.} = ps.peer
   var acc: Account
 
   noRlpExceptionOops("getStorageSlotsData()"):

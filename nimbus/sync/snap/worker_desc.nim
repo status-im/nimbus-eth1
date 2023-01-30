@@ -19,7 +19,7 @@ import
   ./worker/ticker,
   ./range_desc
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   SnapAccountsList* = SortedSet[NodeTag,Hash256]

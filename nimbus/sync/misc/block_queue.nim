@@ -66,7 +66,7 @@ import
   ../../utils/utils,
   ".."/[protocol, sync_desc, types]
 
-{.push raises:[Defect].}
+{.push raises:[].}
 
 logScope:
   topics = "block-queue"
@@ -334,7 +334,7 @@ proc fetchHeaders(
   # Fetch headers from peer
   var hdrResp: Option[blockHeadersObj]
   block:
-    let reqLen = hdrReq.maxResults
+    let reqLen {.used.} = hdrReq.maxResults
     qd.safeTransport("Error fetching block headers"):
       hdrResp = await peer.getBlockHeaders(hdrReq)
     # Beware of peer terminating the session
@@ -507,7 +507,7 @@ proc blockQueueFetchStaged*(
     return err(EmptyQueue)
 
   let
-    peer = qd.peer
+    peer {.used.} = qd.peer
     wi = rc.value.data
     topAccepted = qd.global.topAccepted
     startNumber = wi.headers[0].blockNumber
@@ -618,7 +618,7 @@ proc blockQueueBacktrackWorker*(
   var error = BacktrackDisabled
   if qd.global.backtrack.isSome:
     let
-      peer = qd.peer
+      peer {.used.} = qd.peer
       wi = BlockItemRef(
         # This dummy interval can savely merged back without any effect
         blocks:  highBlockRange,

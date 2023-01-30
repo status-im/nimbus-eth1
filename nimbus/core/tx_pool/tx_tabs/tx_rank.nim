@@ -18,7 +18,7 @@ import
   eth/[common],
   stew/[results, sorted_set]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxRank* = ##\
@@ -61,7 +61,7 @@ proc clear*(rt: var TxRankTab) =
 # ------------------------------------------------------------------------------
 
 proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Add or update a new ranked address. This function returns `true` it the
   ## address exists already with the current rank.
 
@@ -93,7 +93,7 @@ proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
 
 
 proc delete*(rt: var TxRankTab; sender: EthAddress): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Delete argument address `sender` from rank table.
   if rt.addrTab.hasKey(sender):
     let
@@ -111,7 +111,7 @@ proc delete*(rt: var TxRankTab; sender: EthAddress): bool
 
 
 proc verify*(rt: var TxRankTab): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
 
   var
     seen: Table[EthAddress,TxRank]
@@ -177,7 +177,7 @@ proc nItems*(rt: var TxRankTab): int =
 
 proc eq*(rt: var TxRankTab; sender: EthAddress):
        SortedSetResult[EthAddress,TxRank]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   if rt.addrTab.hasKey(sender):
     return toSortedSetResult(key = sender, data = rt.addrTab[sender])
   err(rbNotFound)

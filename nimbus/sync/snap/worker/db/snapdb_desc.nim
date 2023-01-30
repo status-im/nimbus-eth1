@@ -17,7 +17,7 @@ import
   "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
        hexary_paths, rocky_bulk_load]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -70,8 +70,8 @@ proc toKey(a: RepairKey; ps: SnapDbBaseRef): uint =
 proc toKey(a: NodeKey; ps: SnapDbBaseRef): uint =
   a.to(RepairKey).toKey(ps)
 
-proc toKey(a: NodeTag; ps: SnapDbBaseRef): uint =
-  a.to(NodeKey).toKey(ps)
+#proc toKey(a: NodeTag; ps: SnapDbBaseRef): uint =
+#  a.to(NodeKey).toKey(ps)
 
 proc ppImpl(a: RepairKey; pv: SnapDbRef): string =
   if a.isZero: "ø" else:"$" & $a.toKey(pv)
@@ -216,7 +216,7 @@ proc mergeProofs*(
     proof: seq[Blob];         ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
+      {.gcsafe, raises: [RlpError,KeyError].} =
   ## Import proof records (as received with snap message) into a hexary trie
   ## of the repair table. These hexary trie records can be extended to a full
   ## trie at a later stage and used for validating account data.
@@ -255,7 +255,7 @@ proc verifyLowerBound*(
     base: NodeTag;            ## Before or at first account entry in `data`
     first: NodeTag;           ## First account key
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect, KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
   var error: HexaryError
@@ -279,7 +279,7 @@ proc verifyNoMoreRight*(
     peer: Peer;               ## For log messages
     base: NodeTag;            ## Before or at first account entry in `data`
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect, KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.
   let

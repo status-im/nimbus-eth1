@@ -22,7 +22,7 @@ import
   ./tx_tabs/tx_sender, # for verify()
   eth/keys
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxPoolCallBackRecursion* = object of Defect
@@ -127,7 +127,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc init*(xp: TxPoolRef; com: CommonRef; miner: EthAddress)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Constructor, returns new tx-pool descriptor. The `miner` argument is
   ## the fee beneficiary for informational purposes only.
   xp.startDate = getTime().utc.toTime
@@ -221,7 +221,7 @@ proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
 # ------------------------------------------------------------------------------
 
 proc verify*(xp: TxPoolRef): Result[void,TxInfo]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 
   block:

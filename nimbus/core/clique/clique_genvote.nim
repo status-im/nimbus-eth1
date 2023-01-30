@@ -28,7 +28,7 @@ import
   ./clique_desc,
   ./clique_helpers
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -162,7 +162,7 @@ proc cliqueGenvote*(
     voteInOk = false;
     outOfTurn = false;
     checkPoint: seq[EthAddress] = @[]): BlockHeader
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `clique_genvote()` where the `parent` is the canonical head
   ## on the the block chain database.
   ##

@@ -16,7 +16,7 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   RangeLeaf* = object

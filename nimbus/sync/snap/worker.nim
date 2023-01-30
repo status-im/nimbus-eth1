@@ -23,7 +23,7 @@ import
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   "."/[range_desc, worker_desc]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-buddy"
@@ -239,10 +239,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   when extraTraceMessages:
     block:
       let
-        nAccounts = env.nAccounts
-        nSlotLists = env.nSlotLists
-        processed = env.fetchAccounts.processed.fullFactor.toPC(2)
-        nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+        nAccounts {.used.} = env.nAccounts
+        nSlotLists {.used.} = env.nSlotLists
+        processed {.used.} = env.fetchAccounts.processed.fullFactor.toPC(2)
+        nStoQu {.used.} = env.fetchStorageFull.len + env.fetchStoragePart.len
       trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
         nStoQu
 

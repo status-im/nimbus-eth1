@@ -13,9 +13,7 @@ import
   ../../utils/utils,
   ../pow,
   ../clique,
-  ../validate,
-  chronicles,
-  stew/endians2
+  ../validate
 
 export
   common
@@ -38,14 +36,13 @@ type
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private constructor helper
 # ------------------------------------------------------------------------------
 
-proc initChain(c: ChainRef; com: CommonRef; extraValidation: bool)
-                  {.gcsafe, raises: [Defect,CatchableError].} =
+proc initChain(c: ChainRef; com: CommonRef; extraValidation: bool) =
   ## Constructor for the `Chain` descriptor object.
   c.com = com
 
@@ -56,16 +53,14 @@ proc initChain(c: ChainRef; com: CommonRef; extraValidation: bool)
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newChain*(com: CommonRef, extraValidation: bool): ChainRef
-                 {.gcsafe, raises: [Defect,CatchableError].} =
+proc newChain*(com: CommonRef, extraValidation: bool): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
   new result
   result.initChain(com, extraValidation)
 
-proc newChain*(com: CommonRef): ChainRef
-                 {.gcsafe, raises: [Defect,CatchableError].} =
+proc newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
   ##  * `enabled` for PoA networks (such as Goerli)
@@ -105,7 +100,7 @@ proc verifyFrom*(c: ChainRef): BlockNumber =
   c.verifyFrom
 
 proc currentBlock*(c: ChainRef): BlockHeader
-  {.gcsafe, raises: [Defect,CatchableError].} =
+  {.gcsafe, raises: [CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
   ## Ideally the block should be retrieved from the blockchain's internal cache.
   ## but now it's enough to retrieve it from database

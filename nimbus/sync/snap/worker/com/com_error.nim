@@ -13,6 +13,8 @@ import
   ../../../sync_desc,
   ../../constants
 
+{.push raises: [].}
+
 type
   ComErrorStatsRef* = ref object
     ## particular error counters so connections will not be cut immediately

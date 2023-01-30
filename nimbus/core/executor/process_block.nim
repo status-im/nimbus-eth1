@@ -24,7 +24,7 @@ import
   chronicles,
   stew/results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -32,7 +32,7 @@ import
 
 proc procBlkPreamble(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
 
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == header.blockNumber:
@@ -82,7 +82,7 @@ proc procBlkPreamble(vmState: BaseVMState;
 
 proc procBlkEpilogue(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:
@@ -122,7 +122,7 @@ proc processBlockNotPoA*(
     vmState: BaseVMState; ## Parent environment of header/body block
     header:  BlockHeader; ## Header/body block to add to the blockchain
     body:    BlockBody): ValidationResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Processes `(header,body)` pair for a non-PoA network, only. This function
   ## will fail when applied to a PoA network like `Goerli`.
   if vmState.com.consensus == ConsensusType.POA:
@@ -159,7 +159,7 @@ proc processBlock*(
     poa:     Clique;       ## PoA descriptor (if needed, at all)
     header:  BlockHeader;  ## Header/body block to add to the blockchain
     body:    BlockBody): ValidationResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not. Currently there is no mining support so this
   ## function is mostly the same as `processBlockNotPoA()`.
