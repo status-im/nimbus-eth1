@@ -94,7 +94,8 @@ proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
-proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult =
+proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
+    {.gcsafe, raises: [CatchableError].} =
   ## Check whether the signature contained in the header satisfies the
   ## consensus protocol requirements. The method accepts an optional list of
   ## parent headers that aren't yet part of the local blockchain to generate

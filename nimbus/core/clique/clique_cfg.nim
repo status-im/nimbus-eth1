@@ -31,6 +31,8 @@ export
 const
   prngSeed = 42
 
+{.push raises: [].}
+
 type
   CliqueCfg* = ref object of RootRef
     db*: ChainDBRef ##\
@@ -72,8 +74,6 @@ type
       ## Time interval after which the `snapshotApply()` function main loop
       ## produces logging entries.
 
-{.push raises: [].}
-
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
@@ -98,7 +98,7 @@ proc ecRecover*(
     cfg: CliqueCfg;
     header: BlockHeader;
       ): auto
-      =
+      {.gcsafe, raises: [CatchableError].} =
   cfg.signatures.ecRecover(header)
 
 # ------------------------------------------------------------------------------
