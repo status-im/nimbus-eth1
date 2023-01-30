@@ -3,7 +3,7 @@
 import
   eth/common/eth_types
 
-proc default(t: typedesc): t = discard
+# proc default(t: typedesc): t = discard -- notused
 
 # constants
 const

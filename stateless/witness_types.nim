@@ -1,4 +1,6 @@
-import nimcrypto/hash, stew/bitops2
+import stew/bitops2
+
+{.push raises: [].}
 
 type
   TrieNodeType* = enum
@@ -35,15 +37,16 @@ const
   BlockWitnessVersion* = 0x01
   ShortRlpPrefix*      = 0.byte
 
-proc setBranchMaskBit*(x: var uint, i: int) {.inline.} =
+proc setBranchMaskBit*(x: var uint, i: int) =
   assert(i >= 0 and i < 17)
   x = x or (1 shl i).uint
 
-func branchMaskBitIsSet*(x: uint, i: int): bool {.inline.} =
+func branchMaskBitIsSet*(x: uint, i: int): bool =
   assert(i >= 0 and i < 17)
   result = ((x shr i.uint) and 1'u) == 1'u
 
-func constructBranchMask*(b1, b2: byte): uint {.inline.} =
+func constructBranchMask*(b1, b2: byte): uint
+    {.gcsafe, raises: [ParsingError].} =
   result = uint(b1) shl 8 or uint(b2)
   if countOnes(result) < 2 or ((result and (not 0x1FFFF'u)) != 0):
     raise newException(ParsingError, "Invalid branch mask pattern " & $result)

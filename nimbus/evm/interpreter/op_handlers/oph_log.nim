@@ -27,7 +27,6 @@ import
   ./oph_gen_handlers,
   ./oph_helpers,
   eth/common,
-  eth/common,
   sequtils,
   stint,
   strformat
