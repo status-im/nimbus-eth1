@@ -16,7 +16,7 @@ import
   ../../utils/prettify,
   ../misc/timer_helper
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "full-ticker"

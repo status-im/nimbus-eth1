@@ -15,7 +15,7 @@ import
   ../../range_desc,
   ./hexary_error
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   HexaryPpFn* = proc(key: RepairKey): string {.gcsafe.}

@@ -15,7 +15,7 @@ import
   ./eth as handlers_eth,
   ./snap as handlers_snap
 
-{.used, push raises: [Defect].}
+{.used, push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
@@ -26,7 +26,7 @@ proc setEthHandlerNewBlocksAndHashes*(
     blockHandler: NewBlockHandler;
     hashesHandler: NewBlockHashesHandler;
     arg: pointer;
-      ) {.gcsafe, raises: [Defect,CatchableError].} =
+      ) {.gcsafe, raises: [CatchableError].} =
   let w = EthWireRef(node.protocolState protocol.eth)
   w.setNewBlockHandler(blockHandler, arg)
   w.setNewBlockHashesHandler(hashesHandler, arg)

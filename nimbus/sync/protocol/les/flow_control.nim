@@ -138,20 +138,20 @@ proc init(s: var FlowControlState,
   s.minRecharge = minRecharge
   s.lastUpdate = t
 
-func canMakeRequest(s: FlowControlState,
-                    maxCost: ReqCostInt): (LesTime, float64) =
-  ## Returns the required waiting time before sending a request and
-  ## the estimated buffer level afterwards (as a fraction of the limit)
-  const safetyMargin = 50
-
-  var maxCost = min(
-    maxCost + safetyMargin * s.minRecharge,
-    s.bufLimit)
-
-  if s.bufValue >= maxCost:
-    result[1] = float64(s.bufValue - maxCost) / float64(s.bufLimit)
-  else:
-    result[0] = (maxCost - s.bufValue) / s.minRecharge
+#func canMakeRequest(s: FlowControlState,
+#                    maxCost: ReqCostInt): (LesTime, float64) =
+#  ## Returns the required waiting time before sending a request and
+#  ## the estimated buffer level afterwards (as a fraction of the limit)
+#  const safetyMargin = 50
+#
+#  var maxCost = min(
+#    maxCost + safetyMargin * s.minRecharge,
+#    s.bufLimit)
+#
+#  if s.bufValue >= maxCost:
+#    result[1] = float64(s.bufValue - maxCost) / float64(s.bufLimit)
+#  else:
+#    result[0] = (maxCost - s.bufValue) / s.minRecharge
 
 func canServeRequest(srv: LesNetwork): bool =
   result = srv.reqCount < srv.maxReqCount and
@@ -267,9 +267,9 @@ proc initFlowControl*(network: LesNetwork, les: ProtocolInfo,
     warn "Failed to load persisted LES message stats. " &
          "Flow control will be re-initilized."
 
-proc canMakeRequest(peer: var LesPeer, maxCost: int): (LesTime, float64) =
-  peer.localFlowState.update now()
-  return peer.localFlowState.canMakeRequest(maxCost)
+#proc canMakeRequest(peer: var LesPeer, maxCost: int): (LesTime, float64) =
+#  peer.localFlowState.update now()
+#  return peer.localFlowState.canMakeRequest(maxCost)
 
 template getRequestCost(peer: LesPeer, localOrRemote: untyped,
                         msgId, costQuantity: int): ReqCostInt =

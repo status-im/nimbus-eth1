@@ -18,7 +18,7 @@ import
   ../../../utils/prettify,
   ../../misc/timer_helper
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-tick"
@@ -128,7 +128,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
      t.recovery != t.lastRecov or
      tickerLogSuppressMax < (now - t.visited):
     var
-      nAcc, nSto, bulk: string
+      nAcc, nSto: string
       pv = "n/a"
       bc = "n/a"
       nStoQue = "n/a"

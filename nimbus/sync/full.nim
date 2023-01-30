@@ -15,7 +15,7 @@ import
   stew/[interval_set, sorted_set],
   "."/[full/worker, sync_desc, sync_sched, protocol]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "full-sync"

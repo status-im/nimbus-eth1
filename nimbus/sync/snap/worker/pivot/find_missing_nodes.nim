@@ -60,7 +60,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ../db/[hexary_desc, hexary_envelope, hexary_inspect]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers

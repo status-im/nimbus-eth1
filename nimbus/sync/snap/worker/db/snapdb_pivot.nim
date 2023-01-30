@@ -14,7 +14,7 @@ import
   ../../range_desc,
   "."/[hexary_error, snapdb_desc, snapdb_persistent]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   SnapDbPivotRegistry* = object
@@ -28,7 +28,7 @@ type
     slotAccounts*: seq[NodeKey]   ## List of accounts with storage slots
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages {.used.} = false or true
 
 # ------------------------------------------------------------------------------
 # Private helpers

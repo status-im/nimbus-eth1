@@ -17,7 +17,7 @@ import
   ../misc/[best_pivot, block_queue],
   ./ticker
 
-{.push raises:[Defect].}
+{.push raises:[].}
 
 logScope:
   topics = "full-buddy"
@@ -112,7 +112,7 @@ proc processStaged(buddy: FullBuddyRef): bool =
   ## Fetch a work item from the `staged` queue an process it to be
   ## stored on the persistent block chain.
   let
-    ctx = buddy.ctx
+    ctx {.used.} = buddy.ctx
     peer = buddy.peer
     chainDb = buddy.ctx.chain.db
     chain = buddy.ctx.chain
@@ -125,7 +125,7 @@ proc processStaged(buddy: FullBuddyRef): bool =
         return false
       rc.value
 
-    startNumber = wi.headers[0].blockNumber
+    #startNumber = wi.headers[0].blockNumber -- unused
 
   # Store in persistent database
   try:
@@ -296,7 +296,7 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
   ##
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     bq = buddy.data.bQueue
     pv = buddy.data.pivot
 
@@ -416,7 +416,7 @@ proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ##
   # Fetch work item
   let
-    ctx = buddy.ctx
+    ctx {.used.} = buddy.ctx
     bq = buddy.data.bQueue
     rc = await bq.blockQueueWorker()
   if rc.isErr:

@@ -73,7 +73,7 @@ import
   ../db/[hexary_error, snapdb_storage_slots],
   ./storage_queue_helper
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-range"
@@ -93,7 +93,6 @@ proc fetchCtx(
     env: SnapPivotRef;
       ): string =
   let
-    ctx = buddy.ctx
     nStoQu = (env.fetchStorageFull.len +
               env.fetchStoragePart.len +
               env.parkedStorage.len)
@@ -142,8 +141,6 @@ proc storeStoragesSingleBatch(
       peer, stoRange.data, noBaseBoundCheck = true)
 
     if 0 < report.len:
-      let topStoRange = stoRange.data.storages.len - 1
-
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
         gotSlotLists.dec(report.len - 1) # for logging only
@@ -225,7 +222,7 @@ proc rangeFetchStorageSlots*(
   if 0 < env.fetchStorageFull.len or 0 < env.fetchStoragePart.len:
     let
       ctx = buddy.ctx
-      peer = buddy.peer
+      peer {.used.} = buddy.peer
 
     when extraTraceMessages:
       trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
@@ -235,7 +232,8 @@ proc rangeFetchStorageSlots*(
     var delayed: seq[AccountSlotsHeader]
     while buddy.ctrl.running:
       # Pull out the next request list from the queue
-      let (req, nComplete, nPartial) = ctx.storageQueueFetchFull(env)
+      let (req, nComplete {.used.}, nPartial {.used.}) =
+        ctx.storageQueueFetchFull(env)
       if req.len == 0:
         break
 
@@ -261,8 +259,8 @@ proc rangeFetchStorageSlots*(
 
       when extraTraceMessages:
         let
-          subRange = rc.value.subRange.get
-          account = rc.value.accKey
+          subRange {.used.} = rc.value.subRange.get
+          account {.used.} = rc.value.accKey
         trace logTxt "fetch partial", peer, ctx=buddy.fetchCtx(env),
           nStorageQuPart=env.fetchStoragePart.len, subRange, account
 

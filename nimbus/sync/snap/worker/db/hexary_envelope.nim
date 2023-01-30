@@ -77,7 +77,7 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -241,7 +241,7 @@ proc decomposeLeftImpl(
     iv: NodeTagRange;                # Proofed range of leaf paths
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
+      {.gcsafe, raises: [RlpError,KeyError].} =
   ## Database agnostic implementation of `hexaryEnvelopeDecompose()`.
   var nodeSpex: seq[NodeSpecs]
 
@@ -272,7 +272,7 @@ proc decomposeRightImpl(
     iv: NodeTagRange;                # Proofed range of leaf paths
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [Defect,RlpError,KeyError].} =
+      {.gcsafe, raises: [RlpError,KeyError].} =
   ## Database agnostic implementation of `hexaryEnvelopeDecompose()`.
   var nodeSpex: seq[NodeSpecs]
   if iv.maxPt < env.maxPt:
@@ -314,7 +314,7 @@ proc hexaryEnvelope*(node: NodeSpecs): NodeTagRange =
 proc hexaryEnvelopeUniq*(
     partialPaths: openArray[Blob];
       ): seq[Blob]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Sort and simplify a list of partial paths by sorting envelopes while
   ## removing nested entries.
   if partialPaths.len < 2:
@@ -348,7 +348,7 @@ proc hexaryEnvelopeUniq*(
 proc hexaryEnvelopeUniq*(
     nodes: openArray[NodeSpecs];
       ): seq[NodeSpecs]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Variant of `hexaryEnvelopeUniq` for sorting a `NodeSpecs` list by
   ## partial paths.
   if nodes.len < 2:
@@ -460,7 +460,7 @@ proc hexaryEnvelopeDecompose*(
     iv: NodeTagRange;              # Proofed range of leaf paths
     db: HexaryTreeDbRef;           # Database
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## This function computes the decomposition of the argument `partialPath`
   ## relative to the argument range `iv`.
   ##
@@ -523,7 +523,7 @@ proc hexaryEnvelopeDecompose*(
     iv: NodeTagRange;              # Proofed range of leaf paths
     getFn: HexaryGetFn;            # Database abstraction
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [Defect,RlpError].} =
+      {.gcsafe, raises: [RlpError].} =
   ## Variant of `hexaryEnvelopeDecompose()` for persistent database.
   let env = partialPath.hexaryEnvelope
   if iv.maxPt < env.minPt or env.maxPt < iv.minPt:

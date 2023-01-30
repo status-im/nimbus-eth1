@@ -54,7 +54,7 @@ import
   ../db/[hexary_envelope, snapdb_accounts],
   "."/[storage_queue_helper, swap_in]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-range"
@@ -70,8 +70,8 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
-proc `$`(rs: NodeTagRangeSet): string =
-  rs.fullFactor.toPC(0)
+#proc `$`(rs: NodeTagRangeSet): string =
+#  rs.fullFactor.toPC(0)
 
 proc `$`(iv: NodeTagRange): string =
   iv.fullFactor.toPC(3)
@@ -79,7 +79,7 @@ proc `$`(iv: NodeTagRange): string =
 proc fetchCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): string =
+      ): string {.used.} =
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "runState=" & $buddy.ctrl.state & "," &
@@ -146,7 +146,7 @@ proc accountsRangefetchImpl(
 
   let
     gotAccounts = dd.data.accounts.len # comprises `gotStorage`
-    gotStorage = dd.withStorage.len
+    gotStorage {.used.} = dd.withStorage.len
 
   # Now, we fully own the scheduler. The original interval will savely be placed
   # back for a moment (the `unprocessed` range set to be corrected below.)
@@ -225,8 +225,8 @@ proc rangeFetchAccounts*(
 
   if not fa.processed.isFull():
     let
-      ctx = buddy.ctx
-      peer = buddy.peer
+      ctx {.used.} = buddy.ctx
+      peer {.used.} = buddy.peer
 
     when extraTraceMessages:
       trace logTxt "start", peer, ctx=buddy.fetchCtx(env)

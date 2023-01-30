@@ -18,7 +18,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -71,8 +71,9 @@ proc getStorageRangesReq(
     return ok(reply)
 
   except CatchableError as e:
+    let error {.used.} = e.msg
     trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
-      error=e.msg
+      error
     return err()
 
 # ------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ proc getStorageRanges*(
   ## accounts are asked for without a range (non-zero `firstSlot` fields are
   ## ignored of later sequence items.)
   let
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
   var
     nAccounts = accounts.len
 

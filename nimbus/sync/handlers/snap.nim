@@ -16,7 +16,7 @@ import
   ../protocol/snap/snap_types,
   ../../core/chain
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "wire-protocol"

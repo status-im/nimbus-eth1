@@ -16,13 +16,13 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 proc hexaryNearbyRight*(path: RPath; db: HexaryTreeDbRef;
-    ): Result[RPath,HexaryError] {.gcsafe, raises: [Defect,KeyError]}
+    ): Result[RPath,HexaryError] {.gcsafe, raises: [KeyError]}
 
 proc hexaryNearbyRight*(path: XPath; getFn: HexaryGetFn;
-    ): Result[XPath,HexaryError] {.gcsafe, raises: [Defect,RlpError]}
+    ): Result[XPath,HexaryError] {.gcsafe, raises: [RlpError]}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -31,7 +31,7 @@ proc hexaryNearbyRight*(path: XPath; getFn: HexaryGetFn;
 proc toBranchNode(
     rlp: Rlp
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   var rlp = rlp
   XNodeObj(kind: Branch, bLink: rlp.read(array[17,Blob]))
 
@@ -39,14 +39,14 @@ proc toLeafNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Leaf, lPfx: pSegm, lData: rlp.listElem(1).toBytes)
 
 proc toExtensionNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
 
 proc `<=`(a, b: NibblesSeq): bool =
@@ -91,7 +91,7 @@ proc hexaryNearbyRightImpl(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError,RlpError]} =
+      {.gcsafe, raises: [KeyError,RlpError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyRight(db)
@@ -111,7 +111,7 @@ proc hexaryNearbyLeftImpl(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError,RlpError]} =
+      {.gcsafe, raises: [KeyError,RlpError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyLeft(db)
@@ -136,7 +136,7 @@ proc completeLeast(
     db: HexaryTreeDbRef;
     pathLenMax = 64;
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Extend path using least nodes without recursion.
   var rPath = RPath(path: path.path)
 
@@ -184,7 +184,7 @@ proc completeLeast(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError].} =
+      {.gcsafe, raises: [RlpError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -243,7 +243,7 @@ proc completeMost(
     db: HexaryTreeDbRef;
     pathLenMax = 64;
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Extend path using max nodes without recursion.
   var rPath = RPath(path: path.path)
 
@@ -290,7 +290,7 @@ proc completeMost(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError].} =
+      {.gcsafe, raises: [RlpError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -539,7 +539,7 @@ proc hexaryNearbyRightMissing*(
     path: RPath;
     db: HexaryTreeDbRef;
       ): bool
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Returns `true` if the maximally extended argument nodes `path` is the
   ## rightmost on the hexary trie database. It verifies that there is no more
   ## leaf entry to the right of the argument `path`.
@@ -577,7 +577,7 @@ proc hexaryNearbyLeft*(
     path: RPath;                   # Partially expanded path
     db: HexaryTreeDbRef;           # Database
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Similar to `hexaryNearbyRight()`.
   ##
   ## This code is intended to be used for verifying a right-bound proof to
@@ -619,10 +619,7 @@ proc hexaryNearbyLeft*(
 
       let nextNibble = rPath.tail[0].int8
       if 0 < nextNibble:
-        let
-          nextNode = db.tab[topLink]
-          rPathLen = rPath.path.len # in case of backtracking
-          rPathTail = rPath.tail
+        let nextNode = db.tab[topLink]
         case nextNode.kind
         of Leaf:
           if nextNode.lPfx <= rPath.tail:
@@ -675,7 +672,7 @@ proc hexaryNearbyLeft*(
     path: XPath;                   # Partially expanded path
     getFn: HexaryGetFn;            # Database abstraction
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyLeft()` for persistant database
 
   # Some easy cases
@@ -714,10 +711,7 @@ proc hexaryNearbyLeft*(
 
       let nextNibble = xPath.tail[0].int8
       if 0 < nextNibble:
-        let
-          nextNodeRlp = rlpFromBytes topLink.getFn()
-          xPathLen = xPath.path.len # in case of backtracking
-          xPathTail = xPath.tail
+        let nextNodeRlp = rlpFromBytes topLink.getFn()
         case nextNodeRlp.listLen:
         of 2:
           if nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1] <= xPath.tail:
@@ -773,7 +767,7 @@ proc hexaryNearbyRight*(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef;              # Database
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryNearbyRight()` working with `NodeTag` arguments rather
   ## than `RPath()` ones.
   noRlpErrorOops("hexaryNearbyRight"):
@@ -784,7 +778,7 @@ proc hexaryNearbyRight*(
     rootKey: NodeKey;                 # State root
     getFn: HexaryGetFn;               # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyRight()` for persistant database
   noKeyErrorOops("hexaryNearbyRight"):
     return baseTag.hexaryNearbyRightImpl(rootKey, getFn)
@@ -795,7 +789,7 @@ proc hexaryNearbyLeft*(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef;              # Database
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Similar to `hexaryNearbyRight()` for `NodeKey` arguments.
   noRlpErrorOops("hexaryNearbyLeft"):
     return baseTag.hexaryNearbyLeftImpl(rootKey, db)
@@ -805,7 +799,7 @@ proc hexaryNearbyLeft*(
     rootKey: NodeKey;                 # State root
     getFn: HexaryGetFn;               # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyLeft()` for persistant database
   noKeyErrorOops("hexaryNearbyLeft"):
     return baseTag.hexaryNearbyLeftImpl(rootKey, getFn)

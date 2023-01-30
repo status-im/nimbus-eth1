@@ -23,7 +23,7 @@ export
   chain,
   db_chain
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   BuddyRunState* = enum

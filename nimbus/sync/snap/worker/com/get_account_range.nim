@@ -21,7 +21,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -48,8 +48,9 @@ proc getAccountRangeReq(
       root, iv.minPt.to(Hash256), iv.maxPt.to(Hash256), fetchRequestBytesLimit)
     return ok(reply)
   except CatchableError as e:
+    let error {.used.} = e.msg
     trace trSnapRecvError & "waiting for GetAccountRange reply", peer, pivot,
-      error=e.msg
+      error
     return err()
 
 # ------------------------------------------------------------------------------
@@ -64,7 +65,7 @@ proc getAccountRange*(
       ): Future[Result[GetAccountRange,ComError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   let
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer, pivot, accRange=iv
 

@@ -11,7 +11,7 @@
 import
   chronos
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # Use `safeSetTimer` consistently, with a `ref T` argument if including one.
 type

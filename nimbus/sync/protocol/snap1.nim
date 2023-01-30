@@ -175,7 +175,7 @@ const
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
 proc snapRead*(rlp: var Rlp; T: type Account; strict: static[bool] = false): T
-    {.gcsafe, raises: [Defect, RlpError]} =
+    {.gcsafe, raises: [RlpError]} =
   ## RLP decoding for `Account`. The `snap` RLP representation of the account
   ## differs from standard `Account` RLP. Empty storage hash and empty code
   ## hash are each represented by an RLP zero-length string instead of the
