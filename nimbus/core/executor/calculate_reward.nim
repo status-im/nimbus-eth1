@@ -14,12 +14,10 @@ import
   ../../vm_state,
   ../../vm_types
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 proc calculateReward*(vmState: BaseVMState; account: EthAddress;
-                      number: BlockNumber; uncles: openArray[BlockHeader])
-    {.gcsafe, raises: [Defect,CatchableError].} =
-
+                      number: BlockNumber; uncles: openArray[BlockHeader]) =
   let blockReward = vmState.com.blockReward()
   var mainReward = blockReward
 
@@ -37,8 +35,7 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
 
 
 proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; body: BlockBody)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+                      header: BlockHeader; body: BlockBody) =
   vmState.calculateReward(header.coinbase, header.blockNumber, body.uncles)
 
 # End

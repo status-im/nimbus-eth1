@@ -10,16 +10,15 @@
 
 import
   std/[sequtils, sets, times],
+  ../common/common,
   ../db/accounts_cache,
-  ".."/[transaction, common/common],
-  ".."/[vm_state, vm_types, errors],
+  ".."/[errors, transaction, vm_state, vm_types],
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   ./pow,
   chronicles,
-  eth/[rlp],
   nimcrypto/utils,
-  stew/[objects, results, endians2]
+  stew/[objects, results]
 
 from stew/byteutils
   import nil
@@ -29,7 +28,7 @@ export
   pow.new,
   results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 const
   daoForkBlockExtraData* =
@@ -404,7 +403,7 @@ proc validateHeaderAndKinship*(
     header: BlockHeader;
     body: BlockBody;
     checkSealOK: bool;
-    pow: PowRef): Result[void, string] {.gcsafe,raises: [CatchableError, Defect].} =
+    pow: PowRef): Result[void, string] =
 
   com.validateHeaderAndKinship(
     header, body.uncles, body.transactions.len, checkSealOK, pow)

@@ -12,10 +12,12 @@ import
   stew/results,
   ../common/common
 
+{.push raises: [].}
+
 # https://eips.ethereum.org/EIPS/eip-4895
 func validateWithdrawals*(
     com: CommonRef, header: BlockHeader
-): Result[void, string] {.raises: [Defect].} =
+): Result[void, string] =
   if header.withdrawalsRoot.isSome:
     return err("Withdrawals not yet implemented")
   return ok()

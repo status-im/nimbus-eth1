@@ -17,12 +17,13 @@ import
 export
   eip1559
 
+{.push raises: [].}
+
 # ------------------------------------------------------------------------------
 # Pre Eip 1559 gas limit validation
 # ------------------------------------------------------------------------------
 
-proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string]
-                     {.raises: [Defect].} =
+proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
   let diff = if limit > header.gasLimit:
                limit - header.gasLimit
              else:
@@ -40,8 +41,7 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string]
     return err("invalid gas limit below 5000")
   ok()
 
-proc validateGasLimit(com: CommonRef; header: BlockHeader): Result[void, string]
-                     {.raises: [Defect].} =
+proc validateGasLimit(com: CommonRef; header: BlockHeader): Result[void, string] =
   let parent = try:
     com.db.getBlockHeader(header.parentHash)
   except CatchableError:
@@ -66,7 +66,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: BlockHeader): UInt256 =
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(com: CommonRef;
                          parent, header: BlockHeader): Result[void, string]
-                        {.raises: [Defect].} =
+                        {.raises: [].} =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if com.isLondon(parent.blockNumber):
                 parent.gasLimit
@@ -96,8 +96,7 @@ proc verifyEip1559Header(com: CommonRef;
   return ok()
 
 proc validateGasLimitOrBaseFee*(com: CommonRef;
-                                header, parent: BlockHeader): Result[void, string]
-                               {.gcsafe, raises: [Defect].} =
+                                header, parent: BlockHeader): Result[void, string] =
 
   if not com.isLondon(header.blockNumber):
     # Verify BaseFee not present before EIP-1559 fork.

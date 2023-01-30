@@ -19,7 +19,7 @@ import
   ethash,
   stew/keyed_queue
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   PowCacheItemRef* = ref object
@@ -69,8 +69,7 @@ proc new*(T: type PowCacheRef; maxItems = nItemsMax): T =
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef
-    {.gcsafe, raises: [Defect, CatchableError].} =
+proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef =
   ## Return a cache derived from argument `blockNumber` ready to be used
   ## for the `hashimotoLight()` method.
   let
@@ -90,18 +89,15 @@ proc get*(pc: var PowCache; bn: BlockNumber): PowCacheItemRef
 
   pc.cache.lruAppend(key, pair, pc.cacheMax)
 
-proc get*(pcr: PowCacheRef; bn: BlockNumber): PowCacheItemRef
-    {.gcsafe, raises: [Defect, CatchableError].} =
+proc get*(pcr: PowCacheRef; bn: BlockNumber): PowCacheItemRef =
   ## Variant of `getCache()`
   pcr[].get(bn)
 
-proc hasItem*(pc: var PowCache; bn: BlockNumber): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc hasItem*(pc: var PowCache; bn: BlockNumber): bool =
   ## Returns true if there is a cache entry for argument `bn`.
   pc.cache.hasKey(bn.toKey)
 
-proc hasItem*(pcr: PowCacheRef; bn: BlockNumber): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc hasItem*(pcr: PowCacheRef; bn: BlockNumber): bool =
   ## Variant of `hasItem()`
   pcr[].hasItem(bn)
 
