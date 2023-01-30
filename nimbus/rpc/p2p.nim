@@ -22,6 +22,8 @@ import
   ../utils/utils,
   ./filters
 
+{.push raises: [].}
+
 #[
   Note:
     * Hexstring types (HexQuantitySt, HexDataStr, EthAddressStr, EthHashStr)
@@ -42,7 +44,8 @@ proc setupEthRpc*(
     let ac = newAccountStateDB(chainDB.db, header.stateRoot, com.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
-  proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
+  proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB
+      {.gcsafe, raises: [CatchableError].} =
     result = getStateDB(chainDB.headerFromTag(tag))
 
   server.rpc("eth_protocolVersion") do() -> Option[string]:
@@ -440,7 +443,8 @@ proc setupEthRpc*(
       chain: ChainDBRef,
       hash: Hash256,
       header: BlockHeader,
-      opts: FilterOptions): seq[FilterLog] =
+      opts: FilterOptions): seq[FilterLog]
+        {.gcsafe, raises: [RlpError,ValueError].} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let blockBody = chain.getBlockBody(hash)
       let receipts = chain.getReceipts(header.receiptRoot)
@@ -458,7 +462,8 @@ proc setupEthRpc*(
       chain: ChainDBRef,
       start: UInt256,
       finish: UInt256,
-      opts: FilterOptions): seq[FilterLog] =
+      opts: FilterOptions): seq[FilterLog]
+        {.gcsafe, raises: [RlpError,ValueError].} =
     var logs = newSeq[FilterLog]()
     var i = start
     while i <= finish:
