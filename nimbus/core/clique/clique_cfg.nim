@@ -97,8 +97,7 @@ proc newCliqueCfg*(db: ChainDBRef): CliqueCfg =
 proc ecRecover*(
     cfg: CliqueCfg;
     header: BlockHeader;
-      ): auto
-      {.gcsafe, raises: [CatchableError].} =
+      ): auto =
   cfg.signatures.ecRecover(header)
 
 # ------------------------------------------------------------------------------

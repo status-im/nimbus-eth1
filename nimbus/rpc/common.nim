@@ -8,11 +8,13 @@
 # those terms.
 
 import
-  std/[strutils, tables],
+  std/strutils,
   nimcrypto/utils, eth/common as eth_common,
   stint, json_rpc/server, json_rpc/errors,
   eth/p2p, eth/p2p/enode,
   ../config, ./hexstrings
+
+{.push raises: [].}
 
 type
   NodePorts = object

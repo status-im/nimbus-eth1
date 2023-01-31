@@ -1,12 +1,14 @@
 import
   json_rpc/jsonmarshal,
   stew/byteutils,
-  hexstrings, options, eth/[common, rlp], json
+  hexstrings, options, eth/common, json
 
 from
   web3/ethtypes import FixedBytes
 
 export FixedBytes, common
+
+{.push raises: [].}
 
 #[
   Notes:
@@ -130,8 +132,10 @@ type
     topics*: seq[Option[seq[Hash256]]]  # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
     blockHash*: Option[Hash256]         # (optional) hash of the block. If its present, fromBlock and toBlock, should be none. Introduced in EIP234
 
-proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
-  proc getOptionString(argName: string): Option[string] =
+proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions)
+    {.gcsafe, raises: [KeyError,ValueError].} =
+  proc getOptionString(argName: string): Option[string]
+      {.gcsafe, raises: [KeyError,ValueError].} =
     let s = n.getOrDefault(argName)
     if s == nil:
       return none[string]()
@@ -141,7 +145,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
       s.kind.expect(JString, argName)
       return some[string](s.getStr())
 
-  proc getAddress(): seq[EthAddress] =
+  proc getAddress(): seq[EthAddress] {.gcsafe, raises: [ValueError].} =
     ## Address can by provided in two formats:
     ## 1. {"address": "hexAddress"}
     ## 2. {"address": ["hexAddress1", "hexAddress2" ...]}
@@ -170,7 +174,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
       else:
         raise newException(ValueError, "Parameter 'address` should be either string or of array of strings")
 
-  proc getTopics(): seq[Option[seq[Hash256]]] =
+  proc getTopics(): seq[Option[seq[Hash256]]] {.gcsafe, raises: [ValueError].} =
     ## Topics can be provided in many forms:
     ## [] "anything"
     ## [A] "A in first position (and anything after)"
@@ -222,7 +226,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var FilterOptions) =
           raise newException(ValueError, msg)
       return filterArr
 
-  proc getBlockHash(): Option[Hash256] =
+  proc getBlockHash(): Option[Hash256] {.gcsafe, raises: [KeyError,ValueError].} =
     let s = getOptionString("blockHash")
     if s.isNone():
       return none[Hash256]()

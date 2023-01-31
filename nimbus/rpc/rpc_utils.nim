@@ -9,22 +9,28 @@
 
 import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils,
   ../db/db_chain, strutils, algorithm, options, times, json,
-  ../constants, stint, hexstrings, rpc_types,
+  ../constants, stint, rpc_types,
   ../utils/utils, ../transaction,
   ../transaction/call_evm, ../common/evmforks
+
+{.push raises: [].}
 
 const
   defaultTag = "latest"
 
-func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
+func toAddress*(value: EthAddressStr): EthAddress
+    {.gcsafe, raises: [ValueError].} =
+  hexToPaddedByteArray[20](value.string)
 
-func toHash*(value: array[32, byte]): Hash256 {.inline.} =
+func toHash*(value: array[32, byte]): Hash256 =
   result.data = value
 
-func toHash*(value: EthHashStr): Hash256 {.inline.} =
+func toHash*(value: EthHashStr): Hash256
+    {.gcsafe, raises: [ValueError].} =
   result = hexToPaddedByteArray[32](value.string).toHash
 
-func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
+func hexToInt*(s: string, T: typedesc[SomeInteger]): T
+    {.gcsafe, raises: [ValueError].} =
   var i = 0
   if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
   if s.len - i > sizeof(T) * 2:
@@ -33,7 +39,8 @@ func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
     result = result shl 4 or readHexChar(s[i]).T
     inc(i)
 
-proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader =
+proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader
+    {.gcsafe, raises: [CatchableError].} =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
@@ -49,13 +56,15 @@ proc headerFromTag*(chain: ChainDBRef, blockTag: string): BlockHeader =
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
 
-proc headerFromTag*(chain: ChainDBRef, blockTag: Option[string]): BlockHeader =
+proc headerFromTag*(chain: ChainDBRef, blockTag: Option[string]): BlockHeader
+    {.gcsafe, raises: [CatchableError].} =
   if blockTag.isSome():
     return chain.headerFromTag(blockTag.unsafeGet())
   else:
     return chain.headerFromTag(defaultTag)
 
-proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt =
+proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt
+    {.gcsafe, raises: [CatchableError].} =
   var prices  = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
   for encodedTx in chain.getBlockTransactionData(header.txRoot):
@@ -72,7 +81,8 @@ proc calculateMedianGasPrice*(chain: ChainDBRef): GasInt =
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: ChainDBRef, defaultNonce: AccountNonce): Transaction =
+proc unsignedTx*(tx: TxSend, chain: ChainDBRef, defaultNonce: AccountNonce): Transaction
+    {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = some(toAddress(tx.to.get))
 
@@ -114,7 +124,8 @@ template optionalBytes(src, dst: untyped) =
   if src.isSome:
     dst = hexToSeqByte(src.get.string)
 
-proc callData*(call: EthCall): RpcCallData =
+proc callData*(call: EthCall): RpcCallData
+    {.gcsafe, raises: [ValueError].} =
   optionalAddress(call.source, result.source)
   optionalAddress(call.to, result.to)
   optionalGas(call.gas, result.gasLimit)
@@ -124,7 +135,8 @@ proc callData*(call: EthCall): RpcCallData =
   optionalU256(call.value, result.value)
   optionalBytes(call.data, result.data)
 
-proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject =
+proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject
+    {.gcsafe, raises: [ValidationError].} =
   result.blockHash = some(header.hash)
   result.blockNumber = some(encodeQuantity(header.blockNumber))
   result.`from` = tx.getSender()
@@ -140,7 +152,8 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.r = encodeQuantity(tx.R)
   result.s = encodeQuantity(tx.S)
 
-proc populateBlockObject*(header: BlockHeader, chain: ChainDBRef, fullTx: bool, isUncle = false): BlockObject =
+proc populateBlockObject*(header: BlockHeader, chain: ChainDBRef, fullTx: bool, isUncle = false): BlockObject
+    {.gcsafe, raises: [CatchableError].} =
   let blockHash = header.blockHash
 
   result.number = some(encodeQuantity(header.blockNumber))
@@ -182,7 +195,8 @@ proc populateBlockObject*(header: BlockHeader, chain: ChainDBRef, fullTx: bool, 
         result.transactions.add %(x)
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: int, header: BlockHeader, fork: EVMFork): ReceiptObject =
+                      txIndex: int, header: BlockHeader, fork: EVMFork): ReceiptObject
+    {.gcsafe, raises: [ValidationError].} =
   result.transactionHash = tx.rlpHash
   result.transactionIndex = encodeQuantity(txIndex.uint)
   result.blockHash = header.hash

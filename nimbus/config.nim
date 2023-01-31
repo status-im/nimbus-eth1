@@ -534,7 +534,7 @@ proc parseCmdArg(T: type NetworkParams, p: TaintedString): T =
   try:
     if not loadNetworkParams(p.string, result):
       raise newException(ValueError, "failed to load customNetwork")
-  except Exception as exc:
+  except Exception: #  as exc: -- notused
     # on linux/mac, nim compiler refuse to compile
     # with unlisted exception error
     raise newException(ValueError, "failed to load customNetwork")

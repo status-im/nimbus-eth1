@@ -12,11 +12,10 @@
 ## ====================================
 
 import
-  std/[base64, json, options, os, strutils, tables, times],
+  std/[base64, json, options, os, strutils, times],
   ../nimbus/config,
   ../nimbus/rpc/jwt_auth,
   ./replay/pp,
-  confutils/defs,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
   chronos/apps/http/httptable,

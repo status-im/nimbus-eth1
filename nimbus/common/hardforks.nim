@@ -14,6 +14,8 @@ import
   ../utils/utils,
   ./evmforks
 
+{.push raises: [].}
+
 type
   ConsensusType* {.pure.} = enum
     # Proof of Work
@@ -265,22 +267,22 @@ type
   BlockToForks* = array[HardFork, BlockToFork]
 
 func forkTrue(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
+  {.gcsafe, nimcall, raises: [].} =
   # frontier always return true
   true
 
 func forkFalse(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
+  {.gcsafe, nimcall, raises: [].} =
   # forkBlock.isNone always return false
   false
 
 func forkMaybe(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
+  {.gcsafe, nimcall, raises: [].} =
   # data is a blockNumber
   number >= data
 
 func mergeMaybe(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [Defect, CatchableError].} =
+  {.gcsafe, nimcall, raises: [].} =
   # data is a TTD
   td >= data
 

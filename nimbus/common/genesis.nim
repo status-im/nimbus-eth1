@@ -1,21 +1,29 @@
 import
   std/tables,
   eth/[common, rlp, eip1559],
-  chronicles, eth/trie/[db, trie_defs],
+  eth/trie/[db, trie_defs],
   ../db/state_db,
   ../constants,
   ./chain_config
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-proc newStateDB*(db: TrieDatabaseRef, pruneTrie: bool): AccountStateDB =
+proc newStateDB*(
+    db: TrieDatabaseRef;
+    pruneTrie: bool;
+      ): AccountStateDB
+      {.gcsafe, raises: [].}=
   newAccountStateDB(db, emptyRlpHash, pruneTrie)
 
-proc toGenesisHeader*(g: Genesis, sdb: AccountStateDB, fork: HardFork): BlockHeader
-    {.raises: [Defect, RlpError].} =
+proc toGenesisHeader*(
+    g: Genesis;
+    sdb: AccountStateDB;
+    fork: HardFork;
+      ): BlockHeader
+      {.gcsafe, raises: [RlpError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
   ##
@@ -86,21 +94,29 @@ proc toGenesisHeader*(g: Genesis, sdb: AccountStateDB, fork: HardFork): BlockHea
   if g.difficulty.isZero and fork <= London:
     result.difficulty = GENESIS_DIFFICULTY
 
-proc toGenesisHeader*(genesis: Genesis, fork: HardFork, db: TrieDatabaseRef = nil): BlockHeader
-    {.raises: [Defect, RlpError].} =
+proc toGenesisHeader*(
+    genesis: Genesis;
+    fork: HardFork;
+    db = TrieDatabaseRef(nil);
+      ): BlockHeader
+      {.gcsafe, raises: [RlpError].} =
   ## Generate the genesis block header from the `genesis` and `config` argument value.
   let
     db  = if db.isNil: newMemoryDB() else: db
     sdb = newStateDB(db, pruneTrie = true)
   toGenesisHeader(genesis, sdb, fork)
 
-proc toGenesisHeader*(params: NetworkParams, db: TrieDatabaseRef = nil): BlockHeader
-    {.raises: [Defect, RlpError].} =
+proc toGenesisHeader*(
+    params: NetworkParams;
+    db = TrieDatabaseRef(nil);
+      ): BlockHeader
+      {.raises: [RlpError].} =
   ## Generate the genesis block header from the `genesis` and `config` argument value.
   let map  = toForkToBlockNumber(params.config)
   let fork = map.toHardFork(0.toBlockNumber)
   toGenesisHeader(params.genesis, fork, db)
 
+# End
 
 
 

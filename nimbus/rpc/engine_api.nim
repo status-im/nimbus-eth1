@@ -9,8 +9,8 @@
 
 import
   std/[typetraits, times, strutils],
-  stew/[objects, results, byteutils],
-  json_rpc/[rpcserver, errors],
+  stew/[results, byteutils],
+  json_rpc/rpcserver,
   web3/[conversions, engine_api_types],
   eth/rlp,
   ../common/common,
@@ -24,7 +24,10 @@ import
   # if chronicles import is in the middle
   chronicles
 
-proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
+{.push raises: [].}
+
+proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
+    {.gcsafe, raises: [RlpError].} =
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:
     parent.blockHash
@@ -33,7 +36,8 @@ proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt)
     # latestValidHash MUST be set to ZERO
     Hash256()
 
-proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedResponse =
+proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedResponse
+    {.gcsafe, raises: [RlpError].} =
   var parent: EthBlockHeader
   if not com.db.getBlockHeader(header.parentHash, parent):
     return invalidFCU(Hash256())

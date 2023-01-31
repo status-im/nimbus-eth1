@@ -27,7 +27,7 @@ import
 export
   utils_defs, results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 const
   INMEMORY_SIGNATURES* = ##\
@@ -153,7 +153,7 @@ proc len*(er: var EcRecover): int =
 # ------------------------------------------------------------------------------
 
 proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    =
   ## Extract account address from `extraData` field (last 65 bytes) of the
   ## argument header. The result is kept in a LRU cache to re-purposed for
   ## improved result delivery avoiding calculations.
@@ -169,13 +169,13 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
     err(rc.error)
 
 proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    =
   ## Variant of `ecRecover()` for call-by-value header
   var hdr = header
   er.ecRecover(hdr)
 
 proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
@@ -188,7 +188,7 @@ proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
 # ------------------------------------------------------------------------------
 
 proc append*(rw: var RlpWriter; data: EcRecover)
-    {.raises: [Defect,KeyError].} =
+    {.raises: [KeyError].} =
   ## Generic support for `rlp.encode()`
   rw.append((data.size,data.q))
 
@@ -202,8 +202,7 @@ proc read*(rlp: var Rlp; Q: type EcRecover): Q
 # Debugging
 # ------------------------------------------------------------------------------
 
-iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress) =
   var rc = er.q.first
   while rc.isOk:
     yield (rc.value.key, rc.value.data)

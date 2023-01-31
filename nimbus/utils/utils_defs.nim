@@ -13,6 +13,8 @@
 ## ===================================
 ##
 
+{.push raises: [].}
+
 type
   UtilsErrorType* = enum
     resetUtilsError = ##\
@@ -50,8 +52,7 @@ const
     ## No-error constant
     (resetUtilsError, "")
 
-
-proc `$`*(e: UtilsError): string {.inline.} =
+proc `$`*(e: UtilsError): string =
   ## Join text fragments
   result = $e[0]
   if e[1] != "":

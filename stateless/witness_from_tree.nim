@@ -6,6 +6,8 @@ import
   ./witness_types, ../nimbus/constants,
   ../nimbus/db/storage_types, ./multi_keys
 
+{.push raises: [].}
+
 type
   DB = TrieDatabaseRef
 
@@ -31,7 +33,7 @@ proc initWitnessBuilder*(db: DB, rootHash: KeccakHash, flags: WitnessFlags = {})
 template extensionNodeKey(r: Rlp): auto =
   hexPrefixDecode r.listElem(0).toBytes
 
-proc expectHash(r: Rlp): seq[byte] =
+proc expectHash(r: Rlp): seq[byte] {.gcsafe, raises: [RlpError].} =
   result = r.toBytes
   if result.len != 32:
     raise newException(RlpTypeMismatch,
@@ -41,7 +43,7 @@ template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
   else: @(get(wb.db, elem.expectHash))
 
-proc rlpListToBitmask(r: var Rlp): uint =
+proc rlpListToBitmask(r: var Rlp): uint {.gcsafe, raises: [RlpError].} =
   # only bit 1st to 16th are valid
   # the 1st bit is the rightmost bit
   var i = 0
@@ -64,7 +66,8 @@ when defined(debugHash):
 template writeByte(wb: var WitnessBuilder, x: untyped) =
   wb.write(byte(x))
 
-proc writeUVarint(wb: var WitnessBuilder, x: SomeUnsignedInt) =
+proc writeUVarint(wb: var WitnessBuilder, x: SomeUnsignedInt)
+    {.gcsafe, raises: [IOError].} =
   # LEB128 varint encoding
   var value = x
   while true:
@@ -78,7 +81,8 @@ proc writeUVarint(wb: var WitnessBuilder, x: SomeUnsignedInt) =
 template writeUVarint32(wb: var WitnessBuilder, x: untyped) =
   wb.writeUVarint(uint32(x))
 
-proc writeUVarint(wb: var WitnessBuilder, x: UInt256) =
+proc writeUVarint(wb: var WitnessBuilder, x: UInt256)
+    {.gcsafe, raises: [IOError].} =
   # LEB128 varint encoding
   var value = x
   while true:
@@ -90,7 +94,8 @@ proc writeUVarint(wb: var WitnessBuilder, x: UInt256) =
     wb.writeByte(b)
     if value == 0: break
 
-proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
+proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true)
+    {.gcsafe, raises: [IOError].} =
   # convert the NibblesSeq into left aligned byte seq
   # perhaps we can optimize it if the NibblesSeq already left aligned
   let nibblesLen = n.len
@@ -109,7 +114,8 @@ proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
   # write nibbles
   wb.write(bytes.toOpenArray(0, numBytes-1))
 
-proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node: openArray[byte]) =
+proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node: openArray[byte])
+    {.gcsafe, raises: [IOError].} =
   # write type
   wb.writeByte(ExtensionNodeType)
   # write nibbles
@@ -121,7 +127,8 @@ proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node:
   when defined(debugHash):
     wb.write(keccakHash(node).data)
 
-proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
+proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte])
+    {.gcsafe, raises: [IOError].} =
   # write type
   # branch node 17th elem should always empty
   doAssert mask.branchMaskBitIsSet(16) == false
@@ -137,7 +144,8 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   when defined(debugHash):
     wb.write(keccakHash(node).data)
 
-proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
+proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool)
+    {.gcsafe, raises: [IOError].} =
   # usually a hash node means the recursion will not go deeper
   # and the information can be represented by the hash
   # for chunked witness, a hash node can be a root to another
@@ -147,16 +155,18 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, st
     wb.writeByte(ShortRlpPrefix)
   wb.write(node)
 
-proc writeShortRlp(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
+proc writeShortRlp(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool)
+    {.gcsafe, raises: [IOError].} =
   doAssert(node.len < 32 and depth >= 9 and storageMode)
   wb.writeByte(HashNodeType)
   wb.writeByte(ShortRlpPrefix)
   wb.writeByte(node.len)
   wb.write(node)
 
-proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].}
+proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) {.gcsafe, raises: [CatchableError].}
 
-proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int) =
+proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int)
+    {.gcsafe, raises: [IOError,ContractCodeError].} =
   if not kd.codeTouched:
     # the account have code but not touched by the EVM
     # in current block execution
@@ -182,7 +192,8 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int
   wb.writeUVarint32(code.len)
   wb.write(code)
 
-proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int) =
+proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int)
+    {.gcsafe, raises: [CatchableError].} =
   if kd.storageKeys.isNil:
     # the account have storage but not touched by EVM
     wb.writeHashNode(acc.storageRoot.data, depth, true)
@@ -201,7 +212,7 @@ proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int)
     wb.writeHashNode(emptyRlpHash.data, depth, true)
 
 proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account,
-  node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
+  node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, CatchableError].} =
 
   # write type
   wb.writeByte(AccountNodeType)
@@ -228,7 +239,8 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account,
   #0x00 address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
 
-proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, node: openArray[byte], depth: int) =
+proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, node: openArray[byte], depth: int)
+    {.gcsafe, raises: [IOError].} =
   wb.writeByte(StorageLeafNodeType)
 
   when defined(debugHash):
@@ -324,7 +336,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
                        "HexaryTrie node with an unexpected number of children")
 
 proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): seq[byte]
-  {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
+  {.raises: [CatchableError].} =
 
   # witness version
   wb.writeByte(BlockWitnessVersion)
