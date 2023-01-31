@@ -18,7 +18,7 @@ import
   ../tx_item,
   eth/eip1559
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 const
   INITIAL_BASE_FEE = EIP1559_INITIAL_BASE_FEE.truncate(uint64)

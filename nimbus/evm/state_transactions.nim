@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,19 +9,18 @@
 # according to those terms.
 
 import
+  std/sets,
+  chronos,
+  eth/common/eth_types,
   ../constants,
   ../db/accounts_cache,
   ../transaction,
   ./computation,
   ./interpreter_dispatch,
-  ./interpreter/[gas_costs, gas_meter],
+  ./interpreter/gas_costs,
   ./message,
   ./state,
-  ./types,
-  chronicles,
-  chronos,
-  eth/common/eth_types,
-  sets
+  ./types
 
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(EVMFork)) =
   ## this proc will be called each time a new transaction

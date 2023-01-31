@@ -1,10 +1,10 @@
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 
 import
@@ -27,7 +27,7 @@ proc `%`*(value: SKey): JsonNode =
   newJString(finalStr)
 
 proc fromJson*(n: JsonNode, argName: string, result: var SKey)
-    {.raises: [Defect, ValueError].} =
+    {.raises: [ValueError].} =
   n.kind.expect(JString, argName)
   let str = n.getStr()
   let strLen = len(str)

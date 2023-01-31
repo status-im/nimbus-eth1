@@ -21,12 +21,14 @@ import
   eth/rlp,
   stew/keyed_queue
 
+{.push raises: [].}
+
 # ------------------------------------------------------------------------------
 # Public functions, RLP support
 # ------------------------------------------------------------------------------
 
 proc append*[K,V](rw: var RlpWriter; kq: KeyedQueue[K,V])
-    {.raises: [Defect,KeyError].} =
+    {.raises: [KeyError].} =
   ## Generic support for `rlp.encode(kq)` for serialising a queue.
   ##
   ## :CAVEAT:

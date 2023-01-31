@@ -1,14 +1,11 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
 import
   std/os,
@@ -169,9 +166,8 @@ type VerifiedProxyConf* = object
     name: "direct-peer" .}: seq[string]
 
 
-
-proc parseCmdArg*(T: type ValidatedWeb3Url, p: TaintedString): T
-      {.raises: [Defect, ConfigurationError].} =
+proc parseCmdArg*(T: type ValidatedWeb3Url, p: string): T
+      {.raises: [ConfigurationError].} =
   let url = parseUri(p)
   let normalizedScheme = url.scheme.toLowerAscii()
   if (normalizedScheme == "http" or normalizedScheme == "https"):
@@ -183,7 +179,7 @@ proc parseCmdArg*(T: type ValidatedWeb3Url, p: TaintedString): T
       ConfigurationError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
 
-proc completeCmdArg*(T: type ValidatedWeb3Url, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type ValidatedWeb3Url, val: string): seq[string] =
   return @[]
 
 func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =

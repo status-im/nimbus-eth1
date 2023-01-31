@@ -20,7 +20,7 @@ import
   ethash,
   stint
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   PowDigest = tuple ##\
@@ -77,7 +77,7 @@ proc append(w: var RlpWriter; specs: PowSpecs) =
   w.append(specs.difficulty)
 
 proc read(rlp: var Rlp; Q: type PowSpecs): Q
-    {.raises: [Defect,RlpError].} =
+    {.raises: [RlpError].} =
   ## RLP support
   rlp.tryEnterList()
   result.blockNumber = rlp.read(HashOrNum).number
@@ -90,7 +90,7 @@ proc rlpTextEncode(specs: PowSpecs): string =
   "specs #" & $specs.blockNumber & " " & rlp.encode(specs).toHex
 
 proc decodeRlpText(data: string): PowSpecs
-    {.raises: [Defect,CatchableError].} =
+    {.raises: [CatchableError].} =
   if 180 < data.len and data[0 .. 6] == "specs #":
     let hexData = data.split
     if hexData.len == 3:
@@ -132,8 +132,7 @@ proc tryNonceFull(nonce: uint64;
   return value
 
 proc mineFull(tm: PowRef; blockNumber: BlockNumber; powHeaderDigest: Hash256,
-                difficulty: DifficultyInt; startNonce: BlockNonce): uint64
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                difficulty: DifficultyInt; startNonce: BlockNonce): uint64 =
   ## Returns a valid nonce. This function was inspired by the function
   ## python function `mine()` from
   ## `ethash <https://eth.wiki/en/concepts/ethash/ethash>`_.
@@ -226,7 +225,7 @@ proc getPowSpecs*(header: BlockHeader): PowSpecs =
 
 proc getPowCacheLookup*(tm: PowRef;
                         blockNumber: BlockNumber): (uint64, Hash256)
-    {.gcsafe, raises: [KeyError, Defect, CatchableError].} =
+    {.gcsafe, raises: [KeyError].} =
   ## Returns the pair `(size,digest)` derived from the lookup cache for the
   ## `hashimotoLight()` function for the given block number. The `size` is the
   ## full size of the dataset (the cache represents) as passed on to the
@@ -247,8 +246,7 @@ proc getPowCacheLookup*(tm: PowRef;
 # ------------------------
 
 proc getPowDigest*(tm: PowRef; blockNumber: BlockNumber;
-                   powHeaderDigest: Hash256; nonce: BlockNonce): PowDigest
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                   powHeaderDigest: Hash256; nonce: BlockNonce): PowDigest =
   ## Calculate the expected value of `header.mixDigest` using the
   ## `hashimotoLight()` library method.
   let
@@ -256,21 +254,18 @@ proc getPowDigest*(tm: PowRef; blockNumber: BlockNumber;
     u64Nonce = uint64.fromBytesBE(nonce)
   hashimotoLight(ds.size, ds.data, powHeaderDigest, u64Nonce)
 
-proc getPowDigest*(tm: PowRef; header: BlockHeader): PowDigest
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getPowDigest*(tm: PowRef; header: BlockHeader): PowDigest =
   ## Variant of `getPowDigest()`
   tm.getPowDigest(header.blockNumber, header.miningHash, header.nonce)
 
-proc getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getPowDigest*(tm: PowRef; specs: PowSpecs): PowDigest =
   ## Variant of `getPowDigest()`
   tm.getPowDigest(specs.blockNumber, specs.miningHash, specs.nonce)
 
 # ------------------
 
 proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
-               difficulty: DifficultyInt; startNonce: BlockNonce): BlockNonce
-      {.gcsafe,raises: [Defect,CatchableError].} =
+               difficulty: DifficultyInt; startNonce: BlockNonce): BlockNonce =
   ## Mining function that calculates the value of a `nonce` satisfying the
   ## difficulty challenge. This is the most basic function of the
   ## `getNonce()` series with explicit argument `startNonce`. If this is
@@ -286,20 +281,17 @@ proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
   tm.mineFull(number, powHeaderDigest, difficulty, startNonce).toBytesBE
 
 proc getNonce*(tm: PowRef; number: BlockNumber; powHeaderDigest: Hash256;
-                  difficulty: DifficultyInt): BlockNonce
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                  difficulty: DifficultyInt): BlockNonce =
   ## Variant of `getNonce()`
   var startNonce: array[8,byte]
   tm.rng[].generate(startNonce)
   tm.getNonce(number, powHeaderDigest, difficulty, startNonce)
 
-proc getNonce*(tm: PowRef; header: BlockHeader): BlockNonce
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getNonce*(tm: PowRef; header: BlockHeader): BlockNonce =
   ## Variant of `getNonce()`
   tm.getNonce(header.blockNumber, header.miningHash, header.difficulty)
 
-proc getNonce*(tm: PowRef; specs: PowSpecs): BlockNonce
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getNonce*(tm: PowRef; specs: PowSpecs): BlockNonce =
   ## Variant of `getNonce()`
   tm.getNonce(specs.blockNumber, specs.miningHash, specs.difficulty)
 
@@ -310,8 +302,7 @@ proc nGetNonce*(tm: PowRef): uint64 =
 
 # ------------------
 
-proc generatePowDataset*(tm: PowRef; number: BlockNumber)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc generatePowDataset*(tm: PowRef; number: BlockNumber) =
   ## Prepare dataset for the `getNonce()` mining function. This dataset
   ## changes with the epoch of the argument `number` so it is applicable for
   ## the full epoch. If not generated explicitely, it will be done so by the
@@ -337,7 +328,7 @@ proc dumpPowSpecs*(header: BlockHeader): string =
   header.getPowSpecs.dumpPowSpecs
 
 proc undumpPowSpecs*(data: string): PowSpecs
-    {.raises: [Defect,CatchableError].} =
+    {.raises: [CatchableError].} =
   ## Recover `PowSpecs` object from text representation
   data.decodeRlpText
 

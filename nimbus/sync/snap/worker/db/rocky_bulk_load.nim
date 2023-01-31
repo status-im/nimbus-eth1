@@ -16,7 +16,7 @@ import
   rocksdb,
   ../../../../db/[kvstore_rocksdb, select_backend]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   RockyBulkLoadRef* = ref object of RootObj
@@ -54,7 +54,7 @@ proc init*(T: type RockyBulkLoadRef; db: RocksStoreRef): T =
   RockyBulkLoadRef.init(db, rocksdb_envoptions_create())
 
 proc clearCacheFile*(db: RocksStoreRef; fileName: string): bool
-    {.gcsafe, raises: [Defect,OSError].} =
+    {.gcsafe, raises: [OSError].} =
   ## Remove left-over cache file from an imcomplete previous session. The
   ## return value `true` indicated that a cache file was detected.
   discard
@@ -64,7 +64,7 @@ proc clearCacheFile*(db: RocksStoreRef; fileName: string): bool
       filePath.removeFile
       return true
 
-proc destroy*(rbl: RockyBulkLoadRef) {.gcsafe, raises: [Defect,OSError].} =
+proc destroy*(rbl: RockyBulkLoadRef) {.gcsafe, raises: [OSError].} =
   ## Destructor, free memory resources and delete temporary file. This function
   ## can always be called even though `finish()` will call `destroy()`
   ## automatically if successful.
@@ -159,7 +159,7 @@ proc add*(
 proc finish*(
     rbl: RockyBulkLoadRef
       ): Result[int64,void]
-      {.gcsafe, raises: [Defect,OSError].} =
+      {.gcsafe, raises: [OSError].} =
   ## Commit collected and cached data to the database. This function implies
   ## `destroy()` if successful. Otherwise `destroy()` must be called
   ## explicitely, e.g. after error analysis.

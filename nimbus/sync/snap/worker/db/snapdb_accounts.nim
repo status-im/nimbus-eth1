@@ -18,7 +18,7 @@ import
        hexary_interpolate, hexary_inspect, hexary_paths, snapdb_desc,
        snapdb_persistent]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -70,7 +70,7 @@ proc persistentAccounts(
     db: HexaryTreeDbRef;      ## Current table
     ps: SnapDbAccountsRef;    ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentAccountsPut(ps.kvDb)
@@ -85,8 +85,7 @@ proc collectAccounts(
     peer: Peer,               ## for log messages
     base: NodeTag;
     acc: seq[PackedAccount];
-      ): Result[seq[RLeafSpecs],HexaryError]
-      {.gcsafe, raises: [Defect, RlpError].} =
+      ): Result[seq[RLeafSpecs],HexaryError] =
   ## Repack account records into a `seq[RLeafSpecs]` queue. The argument data
   ## `acc` are as received with the snap message `AccountRange`).
   ##

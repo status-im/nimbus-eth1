@@ -52,7 +52,7 @@ type
     cfg: CliqueCfg            ## parameters to fine tune behavior
     data*: SnapshotData       ## real snapshot
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "clique PoA snapshot"
@@ -67,7 +67,7 @@ proc append[K,V](rw: var RlpWriter; tab: Table[K,V]) =
     rw.append((key,value))
 
 proc read[K,V](rlp: var Rlp;
-        Q: type Table[K,V]): Q {.raises: [Defect,CatchableError].} =
+        Q: type Table[K,V]): Q {.gcsafe, raises: [CatchableError].} =
   for w in rlp.items:
     let (key,value) = w.read((K,V))
     result[key] = value

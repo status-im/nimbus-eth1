@@ -16,7 +16,7 @@ import
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -48,8 +48,9 @@ proc getTrieNodesReq(
     return ok(reply)
 
   except CatchableError as e:
+    let error {.used.} = e.msg
     trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
-      error=e.msg
+      error
     return err()
 
 # ------------------------------------------------------------------------------
@@ -66,7 +67,7 @@ proc getTrieNodes*(
   ## Fetch data using the `snap#` protocol, returns the trie nodes requested
   ## (if any.)
   let
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     nPaths = paths.len
 
   if nPaths == 0:

@@ -34,7 +34,7 @@ import
   chronicles,
   stew/results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "clique PoA verify header"
@@ -45,7 +45,7 @@ logScope:
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
 proc verifyForkHashes(com: CommonRef; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,ValueError].} =
+                        {.gcsafe, raises: [ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 
@@ -94,8 +94,7 @@ proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
-proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
-                     {.gcsafe, raises: [Defect,CatchableError].} =
+proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult =
   ## Check whether the signature contained in the header satisfies the
   ## consensus protocol requirements. The method accepts an optional list of
   ## parent headers that aren't yet part of the local blockchain to generate
@@ -141,7 +140,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
 proc verifyCascadingFields(c: Clique; com: CommonRef; header: BlockHeader;
                            parents: var seq[BlockHeader]): CliqueOkResult
-                                {.gcsafe, raises: [Defect,CatchableError].} =
+                                {.gcsafe, raises: [CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
   ## batch of previous headers. The caller may optionally pass in a batch of
   ## parents (ascending order) to avoid looking those up from the database.
@@ -201,8 +200,7 @@ proc verifyCascadingFields(c: Clique; com: CommonRef; header: BlockHeader;
   return c.verifySeal(header)
 
 
-proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
-                            {.gcsafe, raises: [Defect,CatchableError].} =
+proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult =
   ## Check header fields, the ones that do not depend on a parent block.
   # clique/clique.go(250): number := header.Number.Uint64()
 
@@ -267,7 +265,7 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
 proc cliqueVerifyImpl(c: Clique; com: CommonRef; header: BlockHeader;
                       parents: var seq[BlockHeader]): CliqueOkResult
-                  {.gcsafe, raises: [Defect,CatchableError].} =
+                  {.gcsafe, raises: [CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
   ## those up from the database. This is useful for concurrently verifying
@@ -295,7 +293,7 @@ proc cliqueVerifyImpl(c: Clique; com: CommonRef; header: BlockHeader;
 
 proc cliqueVerifySeq*(c: Clique; com: CommonRef; header: BlockHeader;
                       parents: var seq[BlockHeader]): CliqueOkResult
-                  {.gcsafe, raises: [Defect,CatchableError].} =
+                  {.gcsafe, raises: [CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
   ## those up from the database. This is useful for concurrently verifying
@@ -324,7 +322,7 @@ proc cliqueVerifySeq*(c: Clique; com: CommonRef; header: BlockHeader;
 
 proc cliqueVerifySeq(c: Clique; com: CommonRef;
                  headers: var seq[BlockHeader]): CliqueOkResult
-                 {.gcsafe, raises: [Defect,CatchableError].} =
+                 {.gcsafe, raises: [CatchableError].} =
   ## This function verifies a batch of headers checking each header for
   ## consensus rules conformance. The `headers` list is supposed to
   ## contain a chain of headers, i e. `headers[i]` is parent to `headers[i+1]`.
@@ -369,7 +367,7 @@ proc cliqueVerifySeq(c: Clique; com: CommonRef;
 
 proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader;
                   parents: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
+                        {.gcsafe, raises: [CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass on a batch of parents (ascending order) to avoid looking
   ## those up from the database. This function updates the list of authorised
@@ -391,14 +389,14 @@ proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader;
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
 proc cliqueVerify*(c: Clique; com: CommonRef; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
+                        {.gcsafe, raises: [CatchableError].} =
   ## Consensus rules verifier without optional parents list.
   var blind: seq[BlockHeader]
   c.cliqueVerifySeq(com, header, blind)
 
 proc cliqueVerify*(c: Clique; com: CommonRef;
                    headers: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
+                        {.gcsafe, raises: [CatchableError].} =
   ## This function verifies a batch of headers checking each header for
   ## consensus rules conformance (see also the other `cliqueVerify()` function
   ## instance.) The `headers` list is supposed to contain a chain of headers,

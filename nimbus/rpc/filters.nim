@@ -5,8 +5,6 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
-
 import
   std/options,
   eth/common/[eth_types, eth_types_rlp],
@@ -16,6 +14,8 @@ import
   ./hexstrings
 
 export rpc_types
+
+{.push raises: [].}
 
 proc topicToDigest(t: seq[Topic]): seq[Hash256] =
   var resSeq: seq[Hash256] = @[]

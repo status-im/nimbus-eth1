@@ -39,7 +39,7 @@ type
     lnList: seq[string]
     lnInx: int
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private deflate helpers:
@@ -101,7 +101,7 @@ proc explode(state: var GUnzip; data: openArray[char];
 # ------------------------------------------------------------------------------
 
 proc open*(state: var GUnzip; fileName: string):
-                      Result[void,ZError] {.gcsafe, raises: [Defect,IOError].} =
+                      Result[void,ZError] {.gcsafe, raises: [IOError].} =
   ## Open gzipped file with path `fileName` and prepare for deflating and
   ## extraction.
 
@@ -119,7 +119,7 @@ proc open*(state: var GUnzip; fileName: string):
   state.gzIn = fileName.open(fmRead)
   state.gzOpenOK = true
   state.gzMax = state.gzIn.getFileSize
-  state.gzCount = state.gzIn.readChars(strBuf, 0, strBuf.len)
+  state.gzCount = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
 
   # Parse GZIP header (RFC 1952)
   doAssert 18 < state.gzCount
@@ -142,7 +142,7 @@ proc open*(state: var GUnzip; fileName: string):
   return ok()
 
 
-proc close*(state: var GUnzip) {.gcsafe.} =
+proc close*(state: var GUnzip) =
   ## Close any open files and free resources
   if state.gzOpenOK:
     state.gzIn.close
@@ -150,14 +150,14 @@ proc close*(state: var GUnzip) {.gcsafe.} =
 
 
 proc nextChunk*(state: var GUnzip):
-                Result[string,ZError] {.gcsafe, raises: [Defect,IOError].} =
+                Result[string,ZError] {.gcsafe, raises: [IOError].} =
   ## Fetch next unzipped data chunk, return and empty string if input
   ## is exhausted.
   var strBuf = 4096.newString
   result = ok("")
 
   while state.gzCount < state.gzMax:
-    var strLen = state.gzIn.readChars(strBuf, 0, strBuf.len)
+    var strLen = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
     if state.gzMax < state.gzCount + strLen:
       strLen = (state.gzMax - state.gzCount).int
     state.gzCount += strLen
@@ -170,14 +170,14 @@ proc nextChunk*(state: var GUnzip):
       return
 
 
-proc nextChunkOk*(state: var GUnzip): bool {.inline,gcsafe.} =
+proc nextChunkOk*(state: var GUnzip): bool =
   ## True if there is another chunk of data so that `nextChunk()` might
   ## fetch another non-empty unzipped data chunk.
   state.gzCount < state.gzMax
 
 
 proc nextLine*(state: var GUnzip):
-             Result[string,ZError] {.gcsafe, raises: [Defect,IOError].} =
+             Result[string,ZError] {.gcsafe, raises: [IOError].} =
   ## Assume that the `state` argument descriptor referes to a gzipped text
   ## file with lines separated by a newline character. Then fetch the next
   ## unzipped line and return it.
@@ -216,13 +216,13 @@ proc nextLine*(state: var GUnzip):
     state.lnInx = 1
 
 
-proc nextLineOk*(state: var GUnzip): bool {.inline,gcsafe.} =
+proc nextLineOk*(state: var GUnzip): bool =
   ## True if there is another unzipped line available with `nextLine()`.
   state.nextChunkOk or state.lnInx + 1 < state.lnList.len
 
 
 iterator gunzipLines*(state: var GUnzip):
-                            (int,string) {.gcsafe, raises: [Defect,IOError].} =
+                            (int,string) {.gcsafe, raises: [IOError].} =
   ## Iterate over all lines of gzipped text file `fileName` and return
   ## the pair `(line-number,line-text)`
   var lno = 0
@@ -235,7 +235,7 @@ iterator gunzipLines*(state: var GUnzip):
 
 
 iterator gunzipLines*(fileName: string):
-                            (int,string) {.gcsafe, raises: [Defect,IOError].} =
+                            (int,string) {.gcsafe, raises: [IOError].} =
   ## Open a gzipped text file, iterate over its lines (using the other
   ## version of `gunzipLines()`) and close it.
   var state: GUnzip

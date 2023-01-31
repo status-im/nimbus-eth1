@@ -23,7 +23,7 @@ import
   eth/[common, keys],
   stew/keyed_queue
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "tx-pool dispose expired"
@@ -43,8 +43,8 @@ proc utcNow: Time =
 # ------------------------------------------------------------------------------
 
 proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = xp.txDB.bySender.eq(item.sender).any
+    {.gcsafe,raises: [KeyError].} =
+  let rc = xp.txDB.bySender.eq(item.sender).sub
   if rc.isOk:
     for other in rc.value.data.incNonce(item.tx.nonce):
       # only delete non-expired items
@@ -58,7 +58,7 @@ proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [Defect,KeyError].} =
+proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
   ## Any non-local transaction old enough will be removed. This will not
   ## apply to items in the packed queue.
   let
@@ -96,12 +96,12 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [Defect,KeyError].} =
 
 proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
                                  reason, otherReason: TxInfo): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Move item and higher nonces per sender to wastebasket.
   if xp.txDB.dispose(item, reason):
     result = 1
     # For the current sender, delete all items with higher nonces
-    let rc = xp.txDB.bySender.eq(item.sender).any
+    let rc = xp.txDB.bySender.eq(item.sender).sub
     if rc.isOk:
       let nonceList = rc.value.data
 
@@ -111,7 +111,7 @@ proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
 
 
 proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash256]; reason: TxInfo)
-    {.gcsafe,raises: [Defect,KeyError].}=
+    {.gcsafe,raises: [KeyError].}=
   ## Dispose items by item ID wihtout checking whether this makes other items
   ## unusable (e.g. with higher nonces for the same sender.)
   for itemID in itemIDs:

@@ -18,7 +18,6 @@ import
   ./chain_desc,
   ./chain_helpers,
   chronicles,
-  stew/endians2,
   stint
 
 when not defined(release):
@@ -34,7 +33,7 @@ type
 
   PersistBlockFlags = set[PersistBlockFlag]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -139,7 +138,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
 proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
                                 body: BlockBody): ValidationResult
-                                {.gcsafe, raises: [Defect,CatchableError].} =
+                                {.gcsafe, raises: [CatchableError].} =
 
   safeP2PChain("persistBlocks"):
     result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveReceipts})
@@ -147,7 +146,7 @@ proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
       c.db.persistHeaderToDbWithoutSetHead(header)
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
-                                {.gcsafe, raises: [Defect,CatchableError].} =
+                                {.gcsafe, raises: [CatchableError].} =
 
   if header.parentHash == Hash256():
     discard c.db.setHead(header.blockHash)
@@ -165,7 +164,7 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
       discard c.db.setHead(header.blockHash)
 
 proc setCanonical*(c: ChainRef, blockHash: Hash256): ValidationResult
-                                {.gcsafe, raises: [Defect,CatchableError].} =
+                                {.gcsafe, raises: [CatchableError].} =
   var header: BlockHeader
   if not c.db.getBlockHeader(blockHash, header):
     debug "Failed to get BlockHeader",
@@ -176,7 +175,7 @@ proc setCanonical*(c: ChainRef, blockHash: Hash256): ValidationResult
 
 proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
                       bodies: openArray[BlockBody]): ValidationResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
+                        {.gcsafe, raises: [CatchableError].} =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"

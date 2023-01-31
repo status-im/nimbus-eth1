@@ -32,7 +32,7 @@ type
     EthDescending = SortOrder.Descending.ord
     EthAscending = SortOrder.Ascending.ord
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -56,7 +56,7 @@ proc sorted*(e: openArray[EthAddress]; order = EthAscending): seq[EthAddress] =
         return -1
       elif y[n] < x[n]:
         return 1
-  e.sorted(cmp = eCmp, order = order.SortOrder)
+  e.sorted(cmp = eCmp, order = order.ord.SortOrder)
 
 
 proc cliqueResultErr*(w: CliqueError): CliqueOkResult =

@@ -9,8 +9,8 @@
 
 import
   std/[typetraits, times, strutils],
-  stew/[objects, results, byteutils],
-  json_rpc/[rpcserver, errors],
+  stew/[results, byteutils],
+  json_rpc/rpcserver,
   web3/[conversions, engine_api_types],
   eth/rlp,
   ../common/common,
@@ -24,7 +24,10 @@ import
   # if chronicles import is in the middle
   chronicles
 
-proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256 =
+{.push raises: [].}
+
+proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
+    {.gcsafe, raises: [RlpError].} =
   let ptd = db.getScore(parent.parentHash)
   if ptd >= ttd:
     parent.blockHash
@@ -33,7 +36,8 @@ proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt)
     # latestValidHash MUST be set to ZERO
     Hash256()
 
-proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedResponse =
+proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedResponse
+    {.gcsafe, raises: [RlpError].} =
   var parent: EthBlockHeader
   if not com.db.getBlockHeader(header.parentHash, parent):
     return invalidFCU(Hash256())
@@ -49,7 +53,7 @@ proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedRespon
 
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
-proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1): PayloadStatusV1 =
+proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1): PayloadStatusV1 {.raises: [RlpError, CatchableError]} =
     var header = toBlockHeader(payload)
     let blockHash = payload.blockHash.asEthHash
     var res = header.validateBlockHash(blockHash)
@@ -137,14 +141,14 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
 
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/paris.md#engine_getpayloadv1
-proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): ExecutionPayloadV1 =
+proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): ExecutionPayloadV1 {.raises: [InvalidRequest, ValueError].} =
     var payload: ExecutionPayloadV1
     if not api.get(payloadId, payload):
       raise unknownPayload("Unknown payload")
     return payload
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/paris.md#engine_exchangetransitionconfigurationv1
-proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com: CommonRef, conf: TransitionConfigurationV1): TransitionConfigurationV1 =
+proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com: CommonRef, conf: TransitionConfigurationV1): TransitionConfigurationV1 {.raises: [ValueError, RlpError].} = #
     let db = sealingEngine.chain.db
     let ttd = com.ttd
 
@@ -204,7 +208,8 @@ proc handle_forkchoiceUpdated(
        api: EngineApiRef,
        com: CommonRef,
        update: ForkchoiceStateV1,
-       payloadAttributes: Option[PayloadAttributesV1]): ForkchoiceUpdatedResponse =
+       payloadAttributes: Option[PayloadAttributesV1]): ForkchoiceUpdatedResponse
+    {.raises: [CatchableError, RlpError].} =
     let
       chain = sealingEngine.chain
       db = chain.db

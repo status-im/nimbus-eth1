@@ -9,9 +9,9 @@
 # according to those terms.
 
 import
-  std/[json, strutils, times, tables, os, sets],
+  std/[json, strutils, times, tables, os],
   eth/[rlp, trie, eip1559],
-  stint, chronicles, stew/results,
+  stint, stew/results,
   "."/[config, types, helpers],
   ../common/state_clearing,
   ../../nimbus/[vm_types, vm_state, transaction],

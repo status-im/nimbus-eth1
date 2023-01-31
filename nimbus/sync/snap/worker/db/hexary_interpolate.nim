@@ -15,13 +15,13 @@
 ## re-factored database layer.
 
 import
-  std/[sequtils, sets, strutils, tables],
+  std/[tables],
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   RPathXStep = object
@@ -34,13 +34,13 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =
-  let y = if w.canLock: "lockOk" else: "noLock"
-  "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
+#proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =
+#  let y = if w.canLock: "lockOk" else: "noLock"
+#  "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
 
-proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
-  let pfx = "\n" & " ".repeat(indent)
-  w.mapIt(it.pp(db)).join(pfx)
+#proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
+#  let pfx = "\n" & " ".repeat(indent)
+#  w.mapIt(it.pp(db)).join(pfx)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,14 +72,14 @@ proc `xPfx=`(node: RNodeRef, val: NibblesSeq) =
   of Branch:
     doAssert node.kind != Branch # Ooops
 
-proc xData(node: RNodeRef): Blob =
-  case node.kind:
-  of Branch:
-    return node.bData
-  of Leaf:
-    return node.lData
-  of Extension:
-    doAssert node.kind != Extension # Ooops
+#proc xData(node: RNodeRef): Blob =
+#  case node.kind:
+#  of Branch:
+#    return node.bData
+#  of Leaf:
+#    return node.lData
+#  of Extension:
+#    doAssert node.kind != Extension # Ooops
 
 proc `xData=`(node: RNodeRef; val: Blob) =
   case node.kind:
@@ -200,7 +200,7 @@ proc rTreeInterpolate(
     rPath: RPath;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Extend path, add missing nodes to tree. The last node added will be
   ## a `Leaf` node if this function succeeds.
   ##
@@ -273,7 +273,7 @@ proc rTreeInterpolate(
     db: HexaryTreeDbRef;
     payload: Blob;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `rTreeExtend()` which completes a `Leaf` record.
   result = rPath.rTreeInterpolate(db)
   if 0 < result.path.len and result.tail.len == 0:
@@ -285,8 +285,7 @@ proc rTreeInterpolate(
 proc rTreeUpdateKeys(
     rPath: RPath;
     db: HexaryTreeDbRef;
-      ): Result[void,bool]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      ): Result[void,bool] =
   ## The argument `rPath` is assumed to organise database nodes as
   ##
   ##    root -> ... -> () -> () -> ... -> () -> () ...
@@ -442,7 +441,7 @@ proc rTreePrefill(
     db: HexaryTreeDbRef;
     rootKey: NodeKey;
     dbItems: var seq[RLeafSpecs];
-      ) {.gcsafe, raises: [Defect,KeyError].} =
+      ) =
   ## Fill missing root node.
   let nibbles = dbItems[^1].pathTag.to(NodeKey).ByteArray32.initNibbleRange
   if dbItems.len == 1:
@@ -452,7 +451,7 @@ proc rTreePrefill(
       lPfx:  nibbles,
       lData: dbItems[^1].payload)
   else:
-    let key = db.newRepairKey()
+    # let key = db.newRepairKey() -- notused
     var node = RNodeRef(
       state: TmpRoot,
       kind:  Branch)
@@ -463,7 +462,7 @@ proc rTreeSquashRootNode(
     db: HexaryTreeDbRef;
     rootKey: NodeKey;
       ): RNodeRef
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Handle fringe case and return root node. This function assumes that the
   ## root node has been installed, already. This function will check the root
   ## node for a combination `Branch->Extension/Leaf` for a single child root
@@ -508,12 +507,12 @@ proc rTreeSquashRootNode(
 # ------------------------------------------------------------------------------
 
 proc hexaryInterpolate*(
-    db: HexaryTreeDbRef;           ## Database
-    rootKey: NodeKey;              ## Root node hash
-    dbItems: var seq[RLeafSpecs];  ## List of path and leaf items
-    bootstrap = false;             ## Can create root node on-the-fly
+    db: HexaryTreeDbRef;           # Database
+    rootKey: NodeKey;              # Root node hash
+    dbItems: var seq[RLeafSpecs];  # List of path and leaf items
+    bootstrap = false;             # Can create root node on-the-fly
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## From the argument list `dbItems`, leaf nodes will be added to the hexary
   ## trie while interpolating the path for the leaf nodes by adding  missing
   ## nodes. This action is typically not a full trie rebuild. Some partial node

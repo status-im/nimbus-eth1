@@ -12,7 +12,7 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[sequtils, strformat, strutils, tables],
+  std/[sequtils, tables],
   eth/[common, p2p],
   unittest2,
   ../../nimbus/db/select_backend,

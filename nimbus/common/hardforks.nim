@@ -14,6 +14,8 @@ import
   ../utils/utils,
   ./evmforks
 
+{.push raises: [].}
+
 type
   ConsensusType* {.pure.} = enum
     # Proof of Work

@@ -74,9 +74,9 @@ const
   keyGenesisHash = "genesisHash"
     ## B_32: the hash of the Genesis block.
 
-  keyServeHeaders = "serveHeaders"
-    ## (optional, no value)
-    ## present if the peer can serve header chain downloads.
+  #keyServeHeaders = "serveHeaders"
+  #  ## (optional, no value)
+  #  ## present if the peer can serve header chain downloads.
 
   keyServeChainSince = "serveChainSince"
     ## P (optional)
@@ -160,7 +160,8 @@ proc getCostQuantity(fn: NimNode): tuple[quantityExpr, maxQuantity: NimNode] =
 
 macro outgoingRequestDecorator(n: untyped): untyped =
   result = n
-  let (costQuantity, maxQuantity) = n.getCostQuantity
+  #let (costQuantity, maxQuantity) = n.getCostQuantity
+  let (costQuantity, _) = n.getCostQuantity
 
   result.body.add quote do:
     trackOutgoingRequest(peer.networkState(les),

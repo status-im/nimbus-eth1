@@ -68,8 +68,8 @@ suite "Portal Wire Protocol Message Encodings":
 
     let message = decoded.get()
     check:
-      message.kind == findnodes
-      message.findnodes.distances == distances
+      message.kind == findNodes
+      message.findNodes.distances == distances
 
   test "Nodes Response - empty enr list":
     let
@@ -126,8 +126,8 @@ suite "Portal Wire Protocol Message Encodings":
 
     let message = decoded.get()
     check:
-      message.kind == findcontent
-      message.findcontent.contentKey == contentKey
+      message.kind == findContent
+      message.findContent.contentKey == contentKey
 
   test "Content Response - connection id":
     let

@@ -60,15 +60,12 @@
 # proofs would be slighty more cumbersome.
 #
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
 import
   std/[os, strutils, options],
   web3/ethtypes,
-  chronicles, chronicles/chronos_tools, chronos,
+  chronicles, chronos,
   eth/[keys, rlp], eth/[trie, trie/db],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
@@ -79,7 +76,7 @@ import
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  beacon_chain/[light_client, nimbus_binary_common, version],
+  beacon_chain/[light_client, nimbus_binary_common],
   # Weirdness. Need to import this to be able to do errors.ValidationResult as
   # else we get an ambiguous identifier, ValidationResult from eth & libp2p.
   libp2p/protocols/pubsub/errors,
@@ -103,7 +100,7 @@ proc asPortalBlockData*(
     (common_types.BlockHash, BlockHeaderWithProof, BlockBodySSZ) =
   proc calculateTransactionData(
       items: openArray[TypedTransaction]):
-      Hash256 {.raises: [Defect].} =
+      Hash256 {.raises: [].} =
 
     var tr = initHexaryTrie(newMemoryDB())
     for i, t in items:
@@ -159,11 +156,11 @@ proc asPortalBlockData*(
   (hash, headerWithProof, body)
 
 # TODO Find what can throw exception
-proc run() {.raises: [Exception, Defect].} =
+proc run() {.raises: [Exception].} =
   {.pop.}
   var config = makeBannerAndConfig(
     "Nimbus beacon chain bridge", BeaconBridgeConf)
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()

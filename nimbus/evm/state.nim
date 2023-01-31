@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,20 +10,15 @@
 
 import
   std/[json, macros, options, sets, strformat, tables],
+  eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
   ../db/accounts_cache,
   ../common/[common, evmforks],
   ../errors,
   ./transaction_tracer,
-  ./types,
-  eth/[keys]
+  ./types
 
-{.push raises: [Defect].}
-
-const
-  nilHash = block:
-    var rc: Hash256
-    rc
+{.push raises: [].}
 
 template safeExecutor(info: string; code: untyped) =
   try:
@@ -48,7 +43,7 @@ proc init(
       miner:       EthAddress;
       com:         CommonRef;
       tracer:      TransactionTracer)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe.} =
   ## Initialisation helper
   self.prevHeaders = @[]
   self.parent = parent
@@ -76,7 +71,7 @@ proc init(
       miner:       EthAddress;
       com:         CommonRef;
       tracerFlags: set[TracerFlags])
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe.} =
   var tracer: TransactionTracer
   tracer.initTracer(tracerFlags)
   self.init(
@@ -94,7 +89,7 @@ proc init(
 # --------------
 
 proc `$`*(vmState: BaseVMState): string
-    {.gcsafe, raises: [Defect,ValueError].} =
+    {.gcsafe, raises: [ValueError].} =
   if vmState.isNil:
     result = "nil"
   else:
@@ -112,7 +107,7 @@ proc new*(
       miner:       EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
       com:         CommonRef;       ## block chain config
       tracerFlags: set[TracerFlags] = {}): T
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe.} =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -142,7 +137,7 @@ proc reinit*(self:      BaseVMState;     ## Object descriptor
              difficulty:UInt256,         ## tx env: difficulty
              miner:     EthAddress;      ## tx env: coinbase(PoW) or signer(PoA)
              ): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe.} =
   ## Re-initialise state descriptor. The `AccountsCache` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset.
@@ -177,7 +172,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
              parent:    BlockHeader; ## parent header, account sync pos.
              header:    BlockHeader; ## header with tx environment data fields
              ): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
   ## `gasLimit`, and `fee` values.
@@ -196,7 +191,7 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
 proc reinit*(self:      BaseVMState; ## Object descriptor
              header:    BlockHeader; ## header with tx environment data fields
              ): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## This is a variant of the `reinit()` function above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
@@ -212,7 +207,7 @@ proc init*(
       header:      BlockHeader;     ## header with tx environment data fields
       com:         CommonRef;       ## block chain config
       tracerFlags: set[TracerFlags] = {})
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -238,7 +233,7 @@ proc new*(
       header:      BlockHeader;     ## header with tx environment data fields
       com:         CommonRef;       ## block chain config
       tracerFlags: set[TracerFlags] = {}): T
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -257,7 +252,7 @@ proc new*(
       header:      BlockHeader;     ## header with tx environment data fields
       com:         CommonRef;       ## block chain config
       tracerFlags: set[TracerFlags] = {}): T
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
@@ -272,7 +267,7 @@ proc init*(
       header:      BlockHeader;     ## header with tx environment data fields
       com:         CommonRef;       ## block chain config
       tracerFlags: set[TracerFlags] = {}): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
@@ -308,7 +303,9 @@ method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
 when defined(geth):
   import db/geth_db
 
-method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe, raises: [Defect,CatchableError,Exception].} =
+method getAncestorHash*(
+    vmState: BaseVMState, blockNumber: BlockNumber):
+    Hash256 {.base, gcsafe, raises: [CatchableError].} =
   let db = vmState.com.db
   when defined(geth):
     result = db.headerHash(blockNumber.truncate(uint64))
@@ -386,7 +383,7 @@ proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
  else: vmState.flags.excl GenerateWitness
 
 proc buildWitness*(vmState: BaseVMState): seq[byte]
-    {.raises: [Defect, CatchableError].} =
+    {.raises: [CatchableError].} =
   let rootHash = vmState.stateDB.rootHash
   let mkeys = vmState.stateDB.makeMultiKeys()
   let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}

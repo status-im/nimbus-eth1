@@ -461,7 +461,7 @@ export
   tx_tabs.local,
   tx_tabs.remote
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "tx-pool"
@@ -471,7 +471,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc maintenanceProcessing(xp: TxPoolRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Tasks to be done after add/del txs processing
 
   # Purge expired items
@@ -490,7 +490,7 @@ proc maintenanceProcessing(xp: TxPoolRef)
       xp.pDirtyBuckets = false
 
 proc setHead(xp: TxPoolRef; val: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Update cached block chain insertion point. This will also update the
   ## internally cached `baseFee` (depends on the block chain state.)
   if xp.chain.head != val:
@@ -504,7 +504,7 @@ proc setHead(xp: TxPoolRef; val: BlockHeader)
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TxPoolRef; com: CommonRef; miner: EthAddress): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Constructor, returns a new tx-pool descriptor. The `miner` argument is
   ## the fee beneficiary for informational purposes only.
   new result
@@ -517,7 +517,7 @@ proc new*(T: type TxPoolRef; com: CommonRef; miner: EthAddress): T
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Add a list of transactions to be processed and added to the buckets
   ## database. It is OK pass an empty list in which case some maintenance
   ## check can be forced.
@@ -533,12 +533,12 @@ proc add*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 proc add*(xp: TxPoolRef; tx: Transaction; info = "")
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Variant of `add()` for a single transaction.
   xp.add(@[tx], info)
 
 proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## This function moves the internal head cache (i.e. tx insertion point,
   ## vmState) and ponts it to a now block on the chain.
   ##
@@ -582,7 +582,7 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader; blindMode = false): bool
     return true
 
 proc triggerReorg*(xp: TxPoolRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## This function triggers a tentative bucket re-org action by setting the
   ## `dirtyBuckets` parameter. This re-org action eventually happens only if
   ## the `autoUpdateBucketsDB` flag is also set.
@@ -603,7 +603,7 @@ proc dirtyBuckets*(xp: TxPoolRef): bool =
   xp.pDirtyBuckets
 
 proc ethBlock*(xp: TxPoolRef): EthBlock
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
   ## tuning parameters. The following block header fields are left
@@ -621,14 +621,12 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
   for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemPacked):
     result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
 
-proc gasCumulative*(xp: TxPoolRef): GasInt
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc gasCumulative*(xp: TxPoolRef): GasInt =
   ## Getter, retrieves the gas that will be burned in the block after
   ## retrieving it via `ethBlock`.
   xp.chain.gasUsed
 
-proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
@@ -679,8 +677,7 @@ proc minTipPrice*(xp: TxPoolRef): GasPrice =
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
-proc nItems*(xp: TxPoolRef): TxTabsItemsCount
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc nItems*(xp: TxPoolRef): TxTabsItemsCount =
   ## Getter, retrieves the current number of items per bucket and
   ## some totals.
   xp.txDB.nItems
@@ -706,7 +703,7 @@ proc trgGasLimit*(xp: TxPoolRef): GasInt =
 # ------------------------------------------------------------------------------
 
 proc `baseFee=`*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Setter, sets `baseFee` explicitely witout triggering a packer update.
   ## Stil a database update might take place when updating account ranks.
   ##
@@ -726,8 +723,7 @@ proc `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
       gasCeil: xp.chain.lhwm.gasCeil
     )
 
-proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags])
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
 
@@ -747,8 +743,7 @@ proc `maxRejects=`*(xp: TxPoolRef; val: int) =
   xp.txDB.maxRejects = val
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
   ## Setter for `minFeePrice`.  If there was a value change, this function
   ## implies `triggerReorg()`.
   if xp.pMinFeePrice != val:
@@ -777,15 +772,14 @@ proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void] =
   ## Returns a transaction if it is contained in the pool.
   xp.txDB.byItemID.eq(hash)
 
 proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
                    reason = txInfoExplicitDisposal;
                    otherReason = txInfoImpliedDisposal): int
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
+    {.discardable,gcsafe,raises: [CatchableError].} =
   ## Move item to wastebasket. All items for the same sender with nonces
   ## greater than the current one are deleted, as well. The function returns
   ## the number of items eventally removed.
@@ -835,7 +829,7 @@ proc accountRanks*(xp: TxPoolRef): TxTabsLocality =
 
 proc addRemote*(xp: TxPoolRef;
                 tx: Transaction; force = false): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Adds the argument transaction `tx` to the buckets database.
   ##
   ## If the argument `force` is set `false` and the sender account of the
@@ -869,7 +863,7 @@ proc addRemote*(xp: TxPoolRef;
 
 proc addLocal*(xp: TxPoolRef;
                tx: Transaction; force = false): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Adds the argument transaction `tx` to the buckets database.
   ##
   ## If the argument `force` is set `false` and the sender account of the

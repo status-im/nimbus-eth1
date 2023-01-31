@@ -4,7 +4,10 @@ import
 
 export eth_types_rlp
 
-proc calcRootHash[T](items: openArray[T]): Hash256 =
+{.push raises: [].}
+
+proc calcRootHash[T](items: openArray[T]): Hash256
+    {.gcsafe, raises: [RlpError]} =
   var tr = initHexaryTrie(newMemoryDB())
   for i, t in items:
     tr.put(rlp.encode(i), rlp.encode(t))

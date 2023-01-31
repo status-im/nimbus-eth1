@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, times, os, sets, options],
+  std/[strutils, tables, json, os, sets, options],
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
@@ -17,8 +17,6 @@ import
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
-  chronicles,
-  eth/rlp,
   eth/trie/trie_defs,
   unittest2,
   stew/[results, byteutils]

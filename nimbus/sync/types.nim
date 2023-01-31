@@ -13,7 +13,7 @@ import
   eth/common/eth_types_rlp,
   stew/byteutils
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   BlockHash* = distinct Hash256

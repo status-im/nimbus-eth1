@@ -15,6 +15,8 @@ import
 
 export manager
 
+{.push raises: [].}
+
 type
   EthContext* = ref object
     am*: AccountsManager
@@ -40,7 +42,8 @@ proc containsOnlyHexDigits(hex: string): bool =
       return false
   true
 
-proc getNetKeys*(ctx: EthContext, netKey, dataDir: string): Result[KeyPair, string] =
+proc getNetKeys*(ctx: EthContext, netKey, dataDir: string): Result[KeyPair, string]
+    {.gcsafe, raises: [OSError]} =
   if netKey.len == 0 or netKey == "random":
     let privateKey = ctx.randomPrivateKey()
     return ok(privateKey.toKeyPair())

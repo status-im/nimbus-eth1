@@ -16,7 +16,7 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -140,7 +140,7 @@ proc persistentStateRootPut*(
     db: TrieDatabaseRef;
     root: NodeKey;
     data: Blob;
-      ) {.gcsafe, raises: [Defect, RlpError].} =
+      ) {.gcsafe, raises: [RlpError].} =
   ## Save or update state root registry data.
   const
     zeroKey = NodeKey.default
@@ -180,7 +180,7 @@ proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:
     return err(NoRocksDbBackend)
@@ -229,7 +229,7 @@ proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [Defect,OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:
     return err(NoRocksDbBackend)

@@ -12,7 +12,7 @@
 import
   std/times,
   eth/common,
-  stew/results,
+  stew/[interval_set, results],
   unittest2,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/hexary_error,
@@ -30,6 +30,9 @@ proc isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
     check rc.value.innerGaps == seq[NodeSpecs].default
   else:
     return true
+
+proc lastTwo*(a: openArray[string]): seq[string] =
+  if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
 # ------------------------------------------------------------------------------
 # Public type conversions
@@ -63,6 +66,12 @@ proc to*(w: (byte, NodeTag); T: type Blob): T =
 proc to*(t: NodeTag; T: type Blob): T =
   toSeq(t.UInt256.toBytesBE)
 
+# ----------
+
+proc convertTo*(key: RepairKey; T: type NodeKey): T =
+  ## Might be lossy, check before use (if at all, unless debugging)
+  (addr result.ByteArray32[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
+
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing
 # ------------------------------------------------------------------------------
@@ -94,6 +103,27 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, " ", args.toSeq.join
     else:
       echo pfx, args.toSeq.join
+
+# ------------------------------------------------------------------------------
+# Public free parking
+# ------------------------------------------------------------------------------
+
+proc rangeAccountSizeMax*(n: int): int =
+  ## Max number of bytes needed to store `n` RLP encoded `Account()` type
+  ## entries. Note that this is an upper bound.
+  ##
+  ## The maximum size of a single RLP encoded account item can be determined
+  ## by setting every field of `Account()` to `high()` or `0xff`.
+  if 127 < n:
+    3 + n * 110
+  elif 0 < n:
+    2 + n * 110
+  else:
+    1
+
+proc rangeNumAccounts*(size: int): int =
+  ## ..
+  (size - 3) div 110
 
 # ------------------------------------------------------------------------------
 # End

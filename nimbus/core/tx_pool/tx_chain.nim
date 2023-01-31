@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[sets, times],
+  std/times,
   ../../common/common,
   ../../constants,
   ../../db/accounts_cache,
@@ -31,7 +31,7 @@ export
   TxChainGasLimits,
   TxChainGasLimitsPc
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 const
   TRG_THRESHOLD_PER_CENT = ##\
@@ -71,7 +71,7 @@ type
 # Private functions
 # ------------------------------------------------------------------------------
 proc prepareHeader(dh: TxChainRef; parent: BlockHeader)
-     {.gcsafe, raises: [Defect, CatchableError].} =
+     {.gcsafe, raises: [CatchableError].} =
 
   case dh.com.consensus
   of ConsensusType.POW:
@@ -90,7 +90,7 @@ proc prepareHeader(dh: TxChainRef; parent: BlockHeader)
   of ConsensusType.POS:
     dh.com.pos.prepare(dh.prepHeader)
 
-proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) =
+proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [].} =
   case dh.com.consensus
   of ConsensusType.POW:
     # do nothing, tx pool was designed with POW in mind
@@ -101,7 +101,7 @@ proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) =
     dh.com.pos.prepareForSeal(header)
 
 proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
-  {.gcsafe,raises: [Defect,CatchableError].} =
+  {.gcsafe,raises: [CatchableError].} =
   dh.txEnv.reset
 
   # do hardfork transition before
@@ -125,7 +125,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   dh.txEnv.stateRoot = dh.txEnv.vmState.parent.stateRoot
 
 proc update(dh: TxChainRef; parent: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
 
   let
     db  = dh.com.db
@@ -146,7 +146,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TxChainRef; com: CommonRef; miner: EthAddress): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Constructor
   new result
 
@@ -162,8 +162,7 @@ proc new*(T: type TxChainRef; com: CommonRef; miner: EthAddress): T
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getBalance*(dh: TxChainRef; account: EthAddress): UInt256
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getBalance*(dh: TxChainRef; account: EthAddress): UInt256 =
   ## Wrapper around `vmState.readOnlyStateDB.getBalance()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
   ## `dh.vmState.readOnlyStateDB.getBalance()` which returnes the current
@@ -171,8 +170,7 @@ proc getBalance*(dh: TxChainRef; account: EthAddress): UInt256
   ## procedure.
   dh.roAcc.getBalance(account)
 
-proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce =
   ## Wrapper around `vmState.readOnlyStateDB.getNonce()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
   ## `dh.vmState.readOnlyStateDB.getNonce()` which returnes the current balance
@@ -180,7 +178,7 @@ proc getNonce*(dh: TxChainRef; account: EthAddress): AccountNonce
   dh.roAcc.getNonce(account)
 
 proc getHeader*(dh: TxChainRef): BlockHeader
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Generate a new header, a child of the cached `head`
   let gasUsed = if dh.txEnv.receipts.len == 0: 0.GasInt
                 else: dh.txEnv.receipts[^1].cumulativeGasUsed
@@ -206,7 +204,7 @@ proc getHeader*(dh: TxChainRef): BlockHeader
   dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Reset transaction environment, e.g. before packing a new block
   dh.resetTxEnv(dh.txEnv.vmState.parent, dh.txEnv.vmState.fee)
 
@@ -296,7 +294,7 @@ proc `baseFee=`*(dh: TxChainRef; val: GasPrice) =
     dh.txEnv.vmState.fee = UInt256.none()
 
 proc `head=`*(dh: TxChainRef; val: BlockHeader)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Setter, updates descriptor. This setter re-positions the `vmState` and
   ## account caches to a new insertion point on the block chain database.
   dh.update(val)

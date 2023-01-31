@@ -23,7 +23,7 @@ import
   ../utils/utils,
   ../common/common
 
-{.push raises:[Defect].}
+{.push raises:[].}
 
 logScope:
   topics = "legacy-sync"
@@ -181,7 +181,7 @@ proc validateDifficulty(ctx: LegacySyncRef,
 
 proc validateHeader(ctx: LegacySyncRef, header: BlockHeader,
                     height = none(BlockNumber)): bool
-                    {.raises: [Defect,CatchableError].} =
+                    {.raises: [CatchableError].} =
   if header.parentHash == GENESIS_PARENT_HASH:
     return true
 
@@ -476,8 +476,7 @@ proc appendWorkItem(ctx: LegacySyncRef, hash: Hash256,
     numBlocks : numBlocks,
     state     : Initial)
 
-proc persistWorkItem(ctx: LegacySyncRef, wi: var WantedBlocks): ValidationResult
-    {.gcsafe, raises:[Defect,CatchableError].} =
+proc persistWorkItem(ctx: LegacySyncRef, wi: var WantedBlocks): ValidationResult =
   try:
     result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
   except CatchableError as e:
@@ -504,8 +503,7 @@ proc persistWorkItem(ctx: LegacySyncRef, wi: var WantedBlocks): ValidationResult
   wi.headers = @[]
   wi.bodies = @[]
 
-proc persistPendingWorkItems(ctx: LegacySyncRef): (int, ValidationResult)
-    {.gcsafe, raises:[Defect,CatchableError].} =
+proc persistPendingWorkItems(ctx: LegacySyncRef): (int, ValidationResult) =
   var nextStartIndex = ctx.finalizedBlock + 1
   var keepRunning = true
   var hasOutOfOrderBlocks = false
@@ -533,12 +531,11 @@ proc persistPendingWorkItems(ctx: LegacySyncRef): (int, ValidationResult)
 
   ctx.hasOutOfOrderBlocks = hasOutOfOrderBlocks
 
-proc returnWorkItem(ctx: LegacySyncRef, workItem: int): ValidationResult
-    {.gcsafe, raises:[Defect,CatchableError].} =
+proc returnWorkItem(ctx: LegacySyncRef, workItem: int): ValidationResult =
   let wi = addr ctx.workQueue[workItem]
   let askedBlocks = wi.numBlocks.int
   let receivedBlocks = wi.headers.len
-  let start = wi.startIndex
+  let start {.used.} = wi.startIndex
 
   if askedBlocks == receivedBlocks:
     trace "Work item complete",
@@ -813,8 +810,8 @@ proc peersAgreeOnChain(a, b: Peer): Future[bool] {.async.} =
 
   result = latestBlock.isSome and latestBlock.get.headers.len > 0
   if latestBlock.isSome:
-    let blockNumber = if result: $latestBlock.get.headers[0].blockNumber
-                      else: "missing"
+    let blockNumber {.used.} = if result: $latestBlock.get.headers[0].blockNumber
+                               else: "missing"
     trace trEthRecvReceivedBlockHeaders, peer=a,
       count=latestBlock.get.headers.len, blockNumber
 
@@ -937,7 +934,7 @@ proc onPeerDisconnected(ctx: LegacySyncRef, p: Peer) =
 # ------------------------------------------------------------------------------
 
 proc new*(T: type LegacySyncRef; ethNode: EthereumNode; chain: ChainRef): T
-    {.gcsafe, raises:[Defect,CatchableError].} =
+    {.gcsafe, raises:[CatchableError].} =
   result = LegacySyncRef(
     # workQueue:           n/a
     # endBlockNumber:      n/a
@@ -994,8 +991,7 @@ proc start*(ctx: LegacySyncRef) =
 
 proc handleNewBlockHashes(ctx: LegacySyncRef,
                           peer: Peer,
-                          hashes: openArray[NewBlockHashesAnnounce]) {.
-                            gcsafe, raises: [Defect, CatchableError].} =
+                          hashes: openArray[NewBlockHashesAnnounce]) =
 
   trace trEthRecvNewBlockHashes,
     numHash=hashes.len
@@ -1049,7 +1045,7 @@ proc handleNewBlock(ctx: LegacySyncRef,
                     peer: Peer,
                     blk: EthBlock,
                     totalDifficulty: DifficultyInt) {.
-                      gcsafe, raises: [Defect, CatchableError].} =
+                      gcsafe, raises: [CatchableError].} =
 
   trace trEthRecvNewBlock,
     number=blk.header.blockNumber,
@@ -1118,8 +1114,7 @@ proc handleNewBlock(ctx: LegacySyncRef,
 
 proc newBlockHashesHandler*(arg: pointer,
                             peer: Peer,
-                            hashes: openArray[NewBlockHashesAnnounce]) {.
-                              gcsafe, raises: [Defect, CatchableError].} =
+                            hashes: openArray[NewBlockHashesAnnounce]) =
   let ctx = cast[LegacySyncRef](arg)
   ctx.handleNewBlockHashes(peer, hashes)
 
@@ -1127,7 +1122,7 @@ proc newBlockHandler*(arg: pointer,
                       peer: Peer,
                       blk: EthBlock,
                       totalDifficulty: DifficultyInt) {.
-                        gcsafe, raises: [Defect, CatchableError].} =
+                        gcsafe, raises: [CatchableError].} =
 
   let ctx = cast[LegacySyncRef](arg)
   ctx.handleNewBlock(peer, blk, totalDifficulty)

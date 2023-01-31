@@ -8,7 +8,6 @@
 
 import
   std/[strformat, times],
-  eth/[rlp],
   ./difficulty
 
 export BlockHeader

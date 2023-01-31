@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,11 +8,12 @@
 # those terms.
 
 import
-  std/[strutils, tables],
   nimcrypto/utils, eth/common as eth_common,
   stint, json_rpc/server, json_rpc/errors,
   eth/p2p, eth/p2p/enode,
   ../config, ./hexstrings
+
+{.push raises: [].}
 
 type
   NodePorts = object

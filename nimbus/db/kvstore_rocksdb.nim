@@ -1,4 +1,4 @@
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/os,
@@ -40,7 +40,7 @@ proc init*(
     readOnly = false): KvResult[T] =
   let
     dataDir = basePath / name / "data"
-    tmpDir = basePath / name / "tmp"
+    # tmpDir = basePath / name / "tmp" -- notused
     backupsDir = basePath / name / "backups"
 
   try:

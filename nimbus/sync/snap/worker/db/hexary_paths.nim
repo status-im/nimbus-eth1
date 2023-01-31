@@ -17,18 +17,22 @@ import
   ../../range_desc,
   ./hexary_desc
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc pp(w: Blob; db: HexaryTreeDbRef): string =
-  w.convertTo(RepairKey).pp(db)
+#proc pp(w: Blob; db: HexaryTreeDbRef): string =
+#  w.convertTo(RepairKey).pp(db)
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc to(a: RepairKey; T: type RepairKey): RepairKey =
+  ## Needed for generic function
+  a
 
 proc convertTo(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use
@@ -63,7 +67,7 @@ proc getNibblesImpl(path: XPath|RPath; start, maxLen: int): NibblesSeq =
 proc toBranchNode(
     rlp: Rlp
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   var rlp = rlp
   XNodeObj(kind: Branch, bLink: rlp.read(array[17,Blob]))
 
@@ -71,14 +75,14 @@ proc toLeafNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Leaf, lPfx: pSegm, lData: rlp.listElem(1).toBytes)
 
 proc toExtensionNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
 
 # ------------------------------------------------------------------------------
@@ -90,7 +94,7 @@ proc pathExtend(
     key: RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## For the given path, extend to the longest possible repair tree `db`
   ## path following the argument `path.tail`.
   result = path
@@ -128,7 +132,7 @@ proc pathExtend(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Ditto for `XPath` rather than `RPath`
   result = path
   var key = key
@@ -189,7 +193,7 @@ proc pathLeast(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## For the partial path given, extend by branch nodes with least node
   ## indices.
   result = path
@@ -279,7 +283,7 @@ proc pathMost(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## For the partial path given, extend by branch nodes with greatest node
   ## indices.
   result = path
@@ -420,15 +424,14 @@ proc leafData*(path: RPath): Blob =
 # ------------------------------------------------------------------------------
 
 proc hexaryPath*(
-    partialPath: NibblesSeq;        ## partial path to resolve
-    rootKey: NodeKey|RepairKey;             ## State root
-    db: HexaryTreeDbRef;            ## Database
+    partialPath: NibblesSeq;        # partial path to resolve
+    rootKey: NodeKey|RepairKey;     # State root
+    db: HexaryTreeDbRef;            # Database
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Compute the longest possible repair tree `db` path matching the `nodeKey`
   ## nibbles. The `nodeNey` path argument comes before the `db` one for
   ## supporting a more functional notation.
-  proc to(a: RepairKey; T: type RepairKey): RepairKey = a
   RPath(tail: partialPath).pathExtend(rootKey.to(RepairKey), db)
 
 proc hexaryPath*(
@@ -436,7 +439,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryPath` for a node key.
   nodeKey.to(NibblesSeq).hexaryPath(rootKey, db)
 
@@ -445,7 +448,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryPath` for a node tag.
   nodeTag.to(NodeKey).hexaryPath(rootKey, db)
 
@@ -460,11 +463,11 @@ proc hexaryPath*(
 
 
 proc hexaryPath*(
-    partialPath: NibblesSeq;        ## partial path to resolve
-    rootKey: NodeKey;               ## State root
-    getFn: HexaryGetFn;             ## Database abstraction
+    partialPath: NibblesSeq;        # partial path to resolve
+    rootKey: NodeKey;               # State root
+    getFn: HexaryGetFn;             # Database abstraction
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Compute the longest possible path on an arbitrary hexary trie.
   XPath(tail: partialPath).pathExtend(rootKey.to(Blob), getFn)
 
@@ -473,7 +476,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryPath` for a node key..
   nodeKey.to(NibblesSeq).hexaryPath(rootKey, getFn)
 
@@ -482,7 +485,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryPath` for a node tag..
   nodeTag.to(NodeKey).hexaryPath(rootKey, getFn)
 
@@ -491,7 +494,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryPath` for a hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPath(rootKey, getFn)
 
@@ -500,12 +503,12 @@ proc hexaryPath*(
 # ------------------------------------------------------------------------------
 
 proc hexaryPathNodeKey*(
-    partialPath: NibblesSeq;       ## Hex encoded partial path
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPath: NibblesSeq;       # Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Returns the `NodeKey` equivalent for the argment `partialPath` if this
   ## node is available in the database. If the argument flag `missingOk` is
   ## set`true` and the last node addressed by the argument path is missing,
@@ -524,23 +527,23 @@ proc hexaryPathNodeKey*(
   err()
 
 proc hexaryPathNodeKey*(
-    partialPath: Blob;             ## Hex encoded partial path
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPath: Blob;             # Hex encoded partial path
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryPathNodeKey()` for hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, db, missingOk)
 
 
 proc hexaryPathNodeKey*(
-    partialPath: NibblesSeq;       ## Hex encoded partial path
-    rootKey: NodeKey;              ## State root
-    getFn: HexaryGetFn;            ## Database abstraction
-    missingOk = false;             ## Also return key for missing node
+    partialPath: NibblesSeq;       # Hex encoded partial path
+    rootKey: NodeKey;              # State root
+    getFn: HexaryGetFn;            # Database abstraction
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database.
   let steps = partialPath.hexaryPath(rootKey, getFn)
   if 0 < steps.path.len and steps.tail.len == 0:
@@ -556,22 +559,22 @@ proc hexaryPathNodeKey*(
   err()
 
 proc hexaryPathNodeKey*(
-    partialPath: Blob;             ## Partial database path
-    rootKey: NodeKey;              ## State root
-    getFn: HexaryGetFn;            ## Database abstraction
-    missingOk = false;             ## Also return key for missing node
+    partialPath: Blob;             # Partial database path
+    rootKey: NodeKey;              # State root
+    getFn: HexaryGetFn;            # Database abstraction
+    missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database and
   ## hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, getFn, missingOk)
 
 
 proc hexaryPathNodeKeys*(
-    partialPaths: seq[Blob];       ## Partial paths segments
-    rootKey: NodeKey|RepairKey;    ## State root
-    db: HexaryTreeDbRef;           ## Database
-    missingOk = false;             ## Also return key for missing node
+    partialPaths: seq[Blob];       # Partial paths segments
+    rootKey: NodeKey|RepairKey;    # State root
+    db: HexaryTreeDbRef;           # Database
+    missingOk = false;             # Also return key for missing node
       ): HashSet[NodeKey]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Convert a list of path segments to a set of node keys
@@ -590,7 +593,7 @@ proc next*(
     getFn: HexaryGetFn;
     minDepth = 64;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Advance the argument `path` to the next leaf node (if any.). The
   ## `minDepth` argument requires the result of `next()` to satisfy
   ## `minDepth <= next().getNibbles.len`.
@@ -621,7 +624,7 @@ proc prev*(
     getFn: HexaryGetFn;
     minDepth = 64;
       ): XPath
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Advance the argument `path` to the previous leaf node (if any.) The
   ## `minDepth` argument requires the result of `next()` to satisfy
   ## `minDepth <= next().getNibbles.len`.

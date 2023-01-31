@@ -48,7 +48,7 @@ import
   ../db/[hexary_desc, hexary_envelope, hexary_error, snapdb_accounts],
   "."/[find_missing_nodes, storage_queue_helper, swap_in]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-heal"
@@ -95,7 +95,7 @@ proc healingCtx(
 template discardRlpError(info: static[string]; code: untyped) =
   try:
     code
-  except RlpError as e:
+  except RlpError:
     discard
 
 template noExceptionOops(info: static[string]; code: untyped) =
@@ -117,10 +117,10 @@ proc compileMissingNodesList(
   ## Find some missing glue nodes in accounts database.
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.data.snapDb.getAccountFn
-    fa = env.fetchAccounts
+    fa {.used.} = env.fetchAccounts
 
   # Import from earlier run
   if ctx.swapInAccounts(env) != 0:
@@ -128,7 +128,7 @@ proc compileMissingNodesList(
 
   if not fa.processed.isFull:
     noExceptionOops("compileMissingNodesList"):
-      let (missing, nLevel, nVisited) = fa.findMissingNodes(
+      let (missing, nLevel {.used.}, nVisited {.used.}) = fa.findMissingNodes(
         rootKey, getFn, healAccountsInspectionPlanBLevel)
 
       when extraTraceMessages:
@@ -148,8 +148,8 @@ proc fetchMissingNodes(
   ## Extract from `nodes.missing` the next batch of nodes that need
   ## to be merged it into the database
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
+    ctx {.used.} = buddy.ctx
+    peer {.used.} = buddy.peer
     stateRoot = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
@@ -202,7 +202,7 @@ proc kvAccountLeaf(
       ): (bool,NodeKey,Account) =
   ## Re-read leaf node from persistent database (if any)
   let
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
   var
     nNibbles = -1
 
@@ -235,7 +235,7 @@ proc registerAccountLeaf(
   ## Process single account node as would be done with an interval by
   ## the `storeAccounts()` function
   let
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     pt = accKey.to(NodeTag)
 
   # Register isolated leaf node
@@ -263,7 +263,6 @@ proc accountsHealingImpl(
     ctx = buddy.ctx
     db = ctx.data.snapDb
     peer = buddy.peer
-    fa = env.fetchAccounts
 
   # Import from earlier runs (if any)
   while ctx.swapInAccounts(env) != 0:
@@ -332,8 +331,8 @@ proc healAccounts*(
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
+    ctx {.used.} = buddy.ctx
+    peer {.used.} = buddy.peer
 
   when extraTraceMessages:
     trace logTxt "started", peer, ctx=buddy.healingCtx(env)

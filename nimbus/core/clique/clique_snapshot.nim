@@ -23,7 +23,7 @@ import
   chronicles,
   eth/[keys],
   stew/[keyed_queue, results],
-  "../.."/[utils/prettify],
+  ../../utils/prettify,
   "."/[clique_cfg, clique_defs, clique_desc],
   ./snapshot/[snapshot_apply, snapshot_desc]
 
@@ -52,10 +52,13 @@ type
     parents: seq[BlockHeader]  ## explicit parents
 
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "clique PoA snapshot"
+
+static:
+  const stopCompilerGossip {.used.} = 42.toSI
 
 # ------------------------------------------------------------------------------
 # Private debugging functions, pretty printing
@@ -66,51 +69,51 @@ template say(d: var LocalSnaps; v: varargs[untyped]): untyped =
   # uncomment body to enable, note that say() prints on <stderr>
   # d.c.cfg.say v
 
-proc pp(a: Hash256): string =
-  if a == EMPTY_ROOT_HASH:
-    "*blank-root*"
-  elif a == EMPTY_SHA3:
-    "*empty-sha3*"
-  else:
-    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
+#proc pp(a: Hash256): string =
+#  if a == EMPTY_ROOT_HASH:
+#    "*blank-root*"
+#  elif a == EMPTY_SHA3:
+#    "*empty-sha3*"
+#  else:
+#    a.data.mapIt(it.toHex(2)).join[56 .. 63].toLowerAscii
 
-proc pp(q: openArray[BlockHeader]; n: int): string =
-  result = "["
-  if 5 < n:
-    result &= toSeq(q[0 .. 2]).mapIt("#" & $it.blockNumber).join(", ")
-    result &= " .." & $n &  ".. #" & $q[n-1].blockNumber
-  else:
-    result &= toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ")
-  result &= "]"
+#proc pp(q: openArray[BlockHeader]; n: int): string =
+#  result = "["
+#  if 5 < n:
+#    result &= toSeq(q[0 .. 2]).mapIt("#" & $it.blockNumber).join(", ")
+#    result &= " .." & $n &  ".. #" & $q[n-1].blockNumber
+#  else:
+#    result &= toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ")
+#  result &= "]"
 
-proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string =
-  "#" & $b & " + " & q.pp(n)
-
-
-proc pp(q: openArray[BlockHeader]): string =
-  q.pp(q.len)
-
-proc pp(b: BlockNumber, q: openArray[BlockHeader]): string =
-  b.pp(q, q.len)
+#proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string =
+#  "#" & $b & " + " & q.pp(n)
 
 
-proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string =
-  "headers=(" & h.blockNumber.pp(q,n) & ")"
+#proc pp(q: openArray[BlockHeader]): string =
+#  q.pp(q.len)
 
-proc pp(h: BlockHeader, q: openArray[BlockHeader]): string =
-  h.pp(q,q.len)
+#proc pp(b: BlockNumber, q: openArray[BlockHeader]): string =
+#  b.pp(q, q.len)
 
-proc pp(t: var LocalPath; w: var LocalSubChain): string =
-  var (a, b) = (w.first, w.top)
-  if a == 0 and b == 0: b = t.chain.len
-  "trail=(#" & $t.snaps.blockNumber & " + " & t.chain[a ..< b].pp & ")"
 
-proc pp(t: var LocalPath): string =
-  var w = LocalSubChain()
-  t.pp(w)
+#proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string =
+#  "headers=(" & h.blockNumber.pp(q,n) & ")"
 
-proc pp(err: CliqueError): string =
-  "(" & $err[0] & "," & err[1] & ")"
+#proc pp(h: BlockHeader, q: openArray[BlockHeader]): string =
+#  h.pp(q,q.len)
+
+#proc pp(t: var LocalPath; w: var LocalSubChain): string =
+#  var (a, b) = (w.first, w.top)
+#  if a == 0 and b == 0: b = t.chain.len
+#  "trail=(#" & $t.snaps.blockNumber & " + " & t.chain[a ..< b].pp & ")"
+
+#proc pp(t: var LocalPath): string =
+#  var w = LocalSubChain()
+#  t.pp(w)
+
+#proc pp(err: CliqueError): string =
+#  "(" & $err[0] & "," & err[1] & ")"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -147,8 +150,7 @@ proc isSnapshotPosition(d: var LocalSnaps; number: BlockNumber): bool =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc findSnapshot(d: var LocalSnaps): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+proc findSnapshot(d: var LocalSnaps): bool =
   ## Search for a snapshot starting at current header starting at the pivot
   ## value `d.start`. The snapshot returned in `trail` is a clone of the
   ## cached snapshot and can be modified later.
@@ -232,7 +234,7 @@ proc findSnapshot(d: var LocalSnaps): bool
 
 
 proc applyTrail(d: var LocalSnaps): CliqueOkResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Apply any `trail` headers on top of the snapshot `snap`
   if d.subChn.first < d.subChn.top:
     block:
@@ -263,7 +265,7 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
 
 
 proc updateSnapshot(d: var LocalSnaps): SnapshotResult
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Find snapshot for header `d.start.header` and assign it to the LRU cache.
   ## This function was expects thet the LRU cache already has a slot allocated
   ## for the snapshot having run `getLruSnaps()`.
@@ -323,7 +325,7 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
 
 proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
                         parents: var seq[BlockHeader]): SnapshotResult
-                           {.gcsafe, raises: [Defect,CatchableError].} =
+                           {.gcsafe, raises: [CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
   ## if successful.
@@ -359,7 +361,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: BlockHeader;
 
 proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
                         parents: var seq[BlockHeader]): SnapshotResult
-                          {.gcsafe,raises: [Defect,CatchableError].} =
+                          {.gcsafe,raises: [CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
   ## if successful.
@@ -400,24 +402,24 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
 proc cliqueSnapshot*(c: Clique; header: BlockHeader;
                      parents: var seq[BlockHeader]): SnapshotResult
-                         {.gcsafe, raises: [Defect,CatchableError].} =
+                         {.gcsafe, raises: [CatchableError].} =
   var list = toSeq(parents)
   c.cliqueSnapshotSeq(header,list)
 
 proc cliqueSnapshot*(c: Clique;hash: Hash256;
                      parents: openArray[BlockHeader]): SnapshotResult
-                         {.gcsafe, raises: [Defect,CatchableError].} =
+                         {.gcsafe, raises: [CatchableError].} =
   var list = toSeq(parents)
   c.cliqueSnapshotSeq(hash,list)
 
 proc cliqueSnapshot*(c: Clique; header: BlockHeader): SnapshotResult
-                         {.gcsafe,raises: [Defect,CatchableError].} =
+                         {.gcsafe,raises: [CatchableError].} =
   ## Short for `cliqueSnapshot(c,header,@[])`
   var blind: seq[BlockHeader]
   c.cliqueSnapshotSeq(header, blind)
 
 proc cliqueSnapshot*(c: Clique; hash: Hash256): SnapshotResult
-                         {.gcsafe,raises: [Defect,CatchableError].} =
+                         {.gcsafe,raises: [CatchableError].} =
   ## Short for `cliqueSnapshot(c,hash,@[])`
   var blind: seq[BlockHeader]
   c.cliqueSnapshot(hash, blind)

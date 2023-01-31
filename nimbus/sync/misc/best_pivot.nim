@@ -21,7 +21,7 @@ import
   stew/byteutils,
   ".."/[protocol, sync_desc, types]
 
-{.push raises:[Defect].}
+{.push raises:[].}
 
 logScope:
   topics = "best-pivot"
@@ -60,9 +60,9 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hash(peer: Peer): Hash =
-  ## Mixin `HashSet[Peer]` handler
-  hash(cast[pointer](peer))
+#proc hash(peer: Peer): Hash =
+#  ## Mixin `HashSet[Peer]` handler
+#  hash(cast[pointer](peer))
 
 template safeTransport(
     bp: BestPivotWorkerRef;
@@ -158,7 +158,7 @@ proc getBestHeader(
   if hdrRespLen == 1:
     let
       header = hdrResp.get.headers[0]
-      blockNumber = header.blockNumber
+      blockNumber {.used.} = header.blockNumber
     trace trEthRecvReceivedBlockHeaders, peer, hdrRespLen, blockNumber
     bp.comFailCount = 0 # reset fail count
     return ok(header)
@@ -219,7 +219,7 @@ proc agreesOnChain(
   if hdrResp.isSome:
     let hdrRespLen = hdrResp.get.headers.len
     if 0 < hdrRespLen:
-      let blockNumber = hdrResp.get.headers[0].blockNumber
+      let blockNumber {.used.} = hdrResp.get.headers[0].blockNumber
       trace trEthRecvReceivedBlockHeaders, peer, start, fetch,
         hdrRespLen, blockNumber
     return ok()
@@ -380,7 +380,7 @@ proc pivotNegotiate*(
       if rx.isOk:
         bp.global.trusted.incl peer
         when extraTraceMessages:
-          let bestHeader =
+          let bestHeader {.used.} =
             if bp.header.isSome: "#" & $bp.header.get.blockNumber
             else: "nil"
           trace "Accepting peer", peer, trusted=bp.global.trusted.len,
@@ -397,7 +397,7 @@ proc pivotNegotiate*(
   if bp.global.trusted.len == 0:
     bp.global.trusted.incl peer
     when extraTraceMessages:
-      let bestHeader =
+      let bestHeader {.used.} =
         if bp.header.isSome: "#" & $bp.header.get.blockNumber
         else: "nil"
       trace "Assume initial trusted peer", peer,
@@ -465,7 +465,7 @@ proc pivotNegotiate*(
   # Evaluate status, finally
   if bp.global.minPeers <= bp.global.trusted.len:
     when extraTraceMessages:
-      let bestHeader =
+      let bestHeader {.used.} =
         if bp.header.isSome: "#" & $bp.header.get.blockNumber
         else: "nil"
       trace "Peer trusted now", peer,

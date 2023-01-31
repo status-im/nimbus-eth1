@@ -93,7 +93,7 @@ import
   stew/keyed_queue,
   "."/[handlers, sync_desc]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 static:
   # type `EthWireRef` is needed in `initSync()`
@@ -258,8 +258,8 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   mixin runStart, runStop
   # Check for known entry (which should not exist.)
   let
-    maxWorkers = dsc.ctx.buddiesMax
-    nPeers = dsc.pool.len
+    maxWorkers {.used.} = dsc.ctx.buddiesMax
+    nPeers {.used.} = dsc.pool.len
     nWorkers = dsc.buddies.len
   if dsc.buddies.hasKey(peer.hash):
     trace "Reconnecting zombie peer ignored", peer, nPeers, nWorkers, maxWorkers

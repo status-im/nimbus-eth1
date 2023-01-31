@@ -24,7 +24,7 @@ import
   eth/keys,
   stew/keyed_queue
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxHeadDiffRef* = ref object ##\
@@ -47,13 +47,13 @@ logScope:
 
 # use it as a stack/lifo as the ordering is reversed
 proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     kq.addTxs[tx.itemID] = tx
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     kq.remTxs[tx.itemID] = true
@@ -68,7 +68,7 @@ proc new(T: type TxHeadDiffRef): T =
 # core/tx_pool.go(218): func (pool *TxPool) reset(oldHead, newHead ...
 proc headDiff*(xp: TxPoolRef;
                newHead: BlockHeader): Result[TxHeadDiffRef,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## This function caclulates the txs differences between the cached block
   ## chain head to a new head implied by the argument `newHeader`. Differences
   ## are returned as two tables for adding and removing txs. The tables table

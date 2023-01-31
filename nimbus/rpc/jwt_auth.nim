@@ -25,7 +25,7 @@ import
   stew/[byteutils, objects, results],
   ../config
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "Jwt/HS256 auth"
@@ -95,7 +95,7 @@ proc base64urlEncode(x: auto): string =
   base64.encode(x, safe = true).replace("=", "")
 
 proc base64urlDecode(data: string): string
-    {.gcsafe, raises: [Defect, CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Decodes a JWT specific base64url, optionally encoding with stripped
   ## padding.
   let l = data.len mod 4
@@ -254,7 +254,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
 
 proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
                     Result[JwtSharedKey, JwtError]
-    {.gcsafe, raises: [Defect,JwtExcept].} =
+    {.gcsafe, raises: [JwtExcept].} =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
   safeExecutor("jwtSharedSecret"):
     result = rng.jwtGenSecret.jwtSharedSecret(config)

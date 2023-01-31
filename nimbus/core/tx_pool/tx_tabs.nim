@@ -20,11 +20,11 @@ import
   eth/[common, keys],
   stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 export
   # bySender/byStatus index operations
-  any, eq, ge, gt, le, len, lt, nItems, gasLimits
+  sub, eq, ge, gt, le, len, lt, nItems, gasLimits
 
 type
   TxTabsItemsCount* = tuple
@@ -82,7 +82,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Delete transaction (and wrapping container) from the database. If
   ## successful, the function returns the wrapping container that was just
   ## removed.
@@ -100,7 +100,7 @@ proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
     return true
 
 proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   if not xp.bySender.insert(item):
     return err(txInfoErrSenderNonceIndex)
 
@@ -118,7 +118,7 @@ proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxTabsRef): T =
+proc new*(T: type TxTabsRef): T {.gcsafe,raises: [].} =
   ## Constructor, returns new tx-pool descriptor.
   new result
   result.maxRejects = txTabMaxRejects
@@ -141,7 +141,7 @@ proc insert*(
     tx: var Transaction;
     status = txItemPending;
     info = ""): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
   ## this transaction direcly via `tx[key].tx`. The following holds for the
@@ -173,7 +173,7 @@ proc insert*(
   ok()
 
 proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Variant of `insert()` with fully qualified `item` argument.
   if xp.byItemID.hasKey(item.itemID):
     return err(txInfoErrAlreadyKnown)
@@ -181,7 +181,7 @@ proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
 
 
 proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Variant of `reassign()` for the `TxItemStatus` flag.
   # make sure that the argument `item` is not some copy
   let rc = xp.byItemID.eq(item.itemID)
@@ -196,8 +196,7 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
       return true
 
 
-proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int)
-    {.gcsafe,raises: [Defect,KeyError].} =
+proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int) =
   ## Flush/delete at most `maxItems` oldest items from the waste basket and
   ## return the numbers of deleted and remaining items (a waste basket item
   ## is considered older if it was moved there earlier.)
@@ -213,7 +212,7 @@ proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int)
 
 
 proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Move argument `item` to rejects queue (aka waste basket.)
   if xp.deleteImpl(item):
     if xp.maxRejects <= xp.byRejects.len:
@@ -223,8 +222,7 @@ proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     return true
 
 proc reject*(xp: TxTabsRef; tx: var Transaction;
-             reason: TxInfo; status = txItemPending; info = "")
-    {.gcsafe,raises: [Defect,KeyError].} =
+             reason: TxInfo; status = txItemPending; info = "") =
   ## Similar to dispose but for a tx without the item wrapper, the function
   ## imports the tx into the waste basket (e.g. after it could not
   ## be inserted.)
@@ -233,8 +231,7 @@ proc reject*(xp: TxTabsRef; tx: var Transaction;
   let item = TxItemRef.new(tx, reason, status, info)
   xp.byRejects[item.itemID] = item
 
-proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo)
-    {.gcsafe,raises: [Defect,KeyError].} =
+proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo) =
   ## Variant of `reject()` with `item` rather than `tx` (assuming
   ## `item` is not in the database.)
   if xp.maxRejects <= xp.byRejects.len:
@@ -243,8 +240,7 @@ proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo)
   xp.byRejects[item.itemID] = item
 
 proc reject*(xp: TxTabsRef; tx: Transaction;
-             reason: TxInfo; status = txItemPending; info = "")
-    {.gcsafe,raises: [Defect,KeyError].} =
+             reason: TxInfo; status = txItemPending; info = "") =
   ## Variant of `reject()`
   var ty = tx
   xp.reject(ty, reason, status)
@@ -274,7 +270,7 @@ proc remote*(lc: TxTabsLocality): seq[EthAddress] =
 # ------------------------------------------------------------------------------
 
 proc `baseFee=`*(xp: TxTabsRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Setter, update may cause database re-org
   if xp.bySender.baseFee != val:
     xp.bySender.baseFee = val
@@ -300,16 +296,14 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool =
   ## paradigm for accessing a transaction container.
   xp.byItemID.hasKey(tx.itemID)
 
-proc nItems*(xp: TxTabsRef): TxTabsItemsCount
-    {.gcsafe,raises: [Defect,KeyError].} =
+proc nItems*(xp: TxTabsRef): TxTabsItemsCount =
   result.pending = xp.byStatus.eq(txItemPending).nItems
   result.staged = xp.byStatus.eq(txItemStaged).nItems
   result.packed = xp.byStatus.eq(txItemPacked).nItems
   result.total =  xp.byItemID.len
   result.disposed = xp.byRejects.len
 
-proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals
-    {.gcsafe,raises: [Defect,KeyError].} =
+proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals =
   result.pending = xp.byStatus.eq(txItemPending).gasLimits
   result.staged = xp.byStatus.eq(txItemStaged).gasLimits
   result.packed = xp.byStatus.eq(txItemPacked).gasLimits
@@ -357,7 +351,7 @@ proc flushLocals*(xp: TxTabsRef) =
 
 iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
                      fromRank = TxRank.low): (EthAddress,TxStatusNonceRef)
-        {.gcsafe,raises: [Defect,KeyError].} =
+        {.gcsafe,raises: [KeyError].} =
   ## Walk accounts with increasing ranks and return a nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
   if rcBucket.isOk:
@@ -379,7 +373,7 @@ iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
 
 iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
                      fromRank = TxRank.high): (EthAddress,TxStatusNonceRef)
-        {.gcsafe,raises: [Defect,KeyError].} =
+        {.gcsafe,raises: [KeyError].} =
   ## Walk accounts with decreasing ranks and return the nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
   if rcBucket.isOk:
@@ -400,7 +394,7 @@ iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
 
 iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
         (EthAddress,TxStatusNonceRef)
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   ## Loop over accounts from a particular bucket ordered by
   ## + local ranks, higest one first
   ## + remote ranks, higest one first
@@ -419,7 +413,7 @@ iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
 
 iterator incAccount*(xp: TxTabsRef;
                      fromRank = TxRank.low): (EthAddress,TxSenderNonceRef)
-        {.gcsafe,raises: [Defect,KeyError].} =
+        {.gcsafe,raises: [KeyError].} =
   ## Variant of `incAccount()` without bucket restriction.
   var rcRank = xp.byRank.ge(fromRank)
   while rcRank.isOk:
@@ -427,7 +421,7 @@ iterator incAccount*(xp: TxTabsRef;
 
     # Try all sender adresses found
     for account in addrList.keys:
-      yield (account, xp.bySender.eq(account).any.value.data)
+      yield (account, xp.bySender.eq(account).sub.value.data)
 
     # Get next ranked address list (top down index walk)
     rcRank = xp.byRank.gt(rank) # potenially modified database
@@ -435,7 +429,7 @@ iterator incAccount*(xp: TxTabsRef;
 
 iterator decAccount*(xp: TxTabsRef;
                      fromRank = TxRank.high): (EthAddress,TxSenderNonceRef)
-        {.gcsafe,raises: [Defect,KeyError].} =
+        {.gcsafe,raises: [KeyError].} =
   ## Variant of `decAccount()` without bucket restriction.
   var rcRank = xp.byRank.le(fromRank)
   while rcRank.isOk:
@@ -443,7 +437,7 @@ iterator decAccount*(xp: TxTabsRef;
 
     # Try all sender adresses found
     for account in addrList.keys:
-      yield (account, xp.bySender.eq(account).any.value.data)
+      yield (account, xp.bySender.eq(account).sub.value.data)
 
     # Get next ranked address list (top down index walk)
     rcRank = xp.byRank.lt(rank) # potenially modified database
@@ -453,8 +447,7 @@ iterator decAccount*(xp: TxTabsRef;
 # -----------------------------------------------------------------------------
 
 iterator incNonce*(nonceList: TxSenderNonceRef;
-                   nonceFrom = AccountNonce.low): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
+                   nonceFrom = AccountNonce.low): TxItemRef =
   ## Second stage iterator inside `incAccount()` or `decAccount()`. The
   ## items visited are always sorted by least-nonce first.
   var rc = nonceList.ge(nonceFrom)
@@ -502,7 +495,7 @@ iterator decNonce*(nonceList: TxStatusNonceRef;
 # ------------------------------------------------------------------------------
 
 proc verify*(xp: TxTabsRef): Result[void,TxInfo]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Verify descriptor and subsequent data structures.
   block:
     let rc = xp.bySender.verify

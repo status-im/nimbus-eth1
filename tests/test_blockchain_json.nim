@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,10 +9,10 @@
 # according to those terms.
 
 import
-  std/[json, os, tables, strutils, sets, options],
+  std/[json, os, tables, strutils, options],
   unittest2,
   eth/rlp, eth/trie/trie_defs,
-  stew/[endians2, byteutils],
+  stew/byteutils,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, vm_types, errors, constants],

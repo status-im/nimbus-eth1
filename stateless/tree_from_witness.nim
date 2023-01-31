@@ -1,6 +1,6 @@
 import
   typetraits,
-  faststreams/inputs, eth/[common, rlp], stint, stew/endians2,
+  faststreams/inputs, eth/[common, rlp], stint,
   eth/trie/[db, trie_defs],
   ./witness_types, stew/byteutils, ../nimbus/constants
 

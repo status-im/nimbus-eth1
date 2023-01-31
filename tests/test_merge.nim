@@ -8,11 +8,10 @@
 # those terms.
 
 import
-  std/[json, os, sets, strutils, typetraits],
+  std/[json, os, strutils, typetraits],
   unittest2,
   json_rpc/[rpcserver, rpcclient],
   web3/[engine_api_types],
-  eth/[p2p/private/p2p_types],
   ../nimbus/sync/protocol,
   ../nimbus/rpc,
   ../nimbus/common,

@@ -16,6 +16,8 @@ import
   httputils,
   websock/websock as ws
 
+{.push raises: [].}
+
 proc sameOrigin(a, b: Uri): bool =
   a.hostname == b.hostname and
     a.scheme == b.scheme and

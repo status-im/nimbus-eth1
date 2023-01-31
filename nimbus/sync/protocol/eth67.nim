@@ -30,6 +30,9 @@ export
 logScope:
   topics = "eth67"
 
+static:
+  const stopCompilerGossip {.used.} = Hash256().toHex
+
 const
   ethVersion* = 67
   prettyEthProtoName* = "[eth/" & $ethVersion & "]"

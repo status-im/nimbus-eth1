@@ -141,14 +141,14 @@ type
         desc: "ENR URI of the node to send a findContent message"
         name: "node" .}: Node
 
-proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
+proc parseCmdArg*(T: type enr.Record, p: string): T =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
-proc completeCmdArg*(T: type enr.Record, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: TaintedString): T =
+proc parseCmdArg*(T: type Node, p: string): T =
   var record: enr.Record
   if not fromURI(record, p):
     raise newException(ConfigurationError, "Invalid ENR")
@@ -162,26 +162,26 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T =
 
   n[]
 
-proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
+proc parseCmdArg*(T: type PrivateKey, p: string): T =
   try:
-    result = PrivateKey.fromHex(string(p)).tryGet()
+    result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
     raise newException(ConfigurationError, "Invalid private key")
 
-proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PortalProtocolId, p: TaintedString): T =
+proc parseCmdArg*(T: type PortalProtocolId, p: string): T =
   try:
-    result = byteutils.hexToByteArray(string(p), 2)
+    result = byteutils.hexToByteArray(p, 2)
   except ValueError:
     raise newException(ConfigurationError,
       "Invalid protocol id, not a valid hex value")
 
-proc completeCmdArg*(T: type PortalProtocolId, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type PortalProtocolId, val: string): seq[string] =
   return @[]
 
 proc discover(d: discv5_protocol.Protocol) {.async.} =

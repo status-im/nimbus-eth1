@@ -13,12 +13,16 @@
 
 import
   std/[sequtils, strformat, strutils],
-  eth/[common, p2p, trie/nibbles],
+  eth/[common, p2p, rlp, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
+  ../../nimbus/sync/types,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_envelope, hexary_nearby, hexary_paths]
+    hexary_desc, hexary_envelope,  hexary_error, hexary_nearby, hexary_paths,
+    hexary_range, snapdb_accounts, snapdb_desc],
+  ../replay/[pp, undump_accounts],
+  ./test_helpers
 
 const
   cmaNlSp0 = ",\n" & repeat(" ",12)
@@ -77,6 +81,125 @@ proc print_data(
     "\n    ", iv.maxPt.hexaryPath(rootKey,db).pp(dbg), "\n",
     "\n    pfxMax=", pfx.hexaryEnvelope.maxPt,
     "\n    ", pfx.hexaryEnvelope.maxPt.hexaryPath(rootKey,db).pp(dbg)
+
+
+proc printCompareRightLeafs(
+    rootKey: NodeKey;
+    baseTag: NodeTag;
+    accounts: seq[PackedAccount];
+    leafs: seq[RangeLeaf];
+    db: HexaryTreeDbRef|HexaryGetFn;        ## Database abstraction
+    dbg: HexaryTreeDbRef;                   ## Debugging env
+      ) =
+  let
+    noisy = not dbg.isNil
+  var
+    top = 0
+    nMax = min(accounts.len, leafs.len)
+    step = nMax div 2
+
+  while top < nMax:
+    while 1 < step and accounts[top+step].accKey != leafs[top+step].key:
+      #noisy.say "***", "i=", top+step, " fail"
+      step = max(1, step div 2)
+
+    if accounts[top+step].accKey == leafs[top+step].key:
+      top += step
+      step = max(1, step div 2)
+      noisy.say "***", "i=", top, " step=", step, " ok"
+      continue
+
+    let start = top
+    top = nMax
+    for i in start ..< top:
+      if accounts[i].accKey == leafs[i].key:
+        noisy.say "***", "i=", i, " skip, ok"
+        continue
+
+      # Diagnostics and return
+      check (i,accounts[i].accKey) == (i,leafs[i].key)
+
+      let
+        lfsKey = leafs[i].key
+        accKey = accounts[i].accKey
+        prdKey = if 0 < i: accounts[i-1].accKey else: baseTag.to(NodeKey)
+        nxtTag = if 0 < i: prdKey.to(NodeTag) + 1.u256 else: baseTag
+        nxtPath = nxtTag.hexaryPath(rootKey,db)
+        rightRc = nxtPath.hexaryNearbyRight(db)
+
+      if rightRc.isOk:
+        check lfsKey == rightRc.value.getPartialPath.convertTo(NodeKey)
+      else:
+        check rightRc.error == HexaryError(0) # force error printing
+
+      noisy.say "\n***", "i=", i, "/", accounts.len,
+        "\n",
+        "\n    prdKey=", prdKey,
+        "\n    ", prdKey.hexaryPath(rootKey,db).pp(dbg),
+        "\n",
+        "\n    nxtKey=", nxtTag,
+        "\n    ", nxtPath.pp(dbg),
+        "\n",
+        "\n    accKey=", accKey,
+        "\n    ", accKey.hexaryPath(rootKey,db).pp(dbg),
+        "\n",
+        "\n    lfsKey=", lfsKey,
+        "\n    ", lfsKey.hexaryPath(rootKey,db).pp(dbg),
+        "\n"
+      return
+
+
+proc printCompareLeftNearby(
+    rootKey: NodeKey;
+    leftKey: NodeKey;
+    rightKey: NodeKey;
+    db: HexaryTreeDbRef|HexaryGetFn;        ## Database abstraction
+    dbg: HexaryTreeDbRef;                   ## Debugging env
+      ) =
+  let
+    noisy = not dbg.isNil
+    rightPath = rightKey.hexaryPath(rootKey,db)
+    toLeftRc = rightPath.hexaryNearbyLeft(db)
+  var
+    toLeftKey: NodeKey
+
+  if toLeftRc.isErr:
+    check toLeftRc.error == HexaryError(0) # force error printing
+  else:
+    toLeftKey = toLeftRc.value.getPartialPath.convertTo(NodeKey)
+    if toLeftKey == leftKey:
+      return
+
+  noisy.say "\n***",
+    "    rightKey=", rightKey,
+    "\n    ", rightKey.hexaryPath(rootKey,db).pp(dbg),
+    "\n",
+    "\n    leftKey=", leftKey,
+    "\n    ", leftKey.hexaryPath(rootKey,db).pp(dbg),
+    "\n",
+    "\n    toLeftKey=", toLeftKey,
+    "\n    ", toLeftKey.hexaryPath(rootKey,db).pp(dbg),
+    "\n"
+
+
+proc verifyAccountListSizes() =
+  ## RLP does not allow static check ..
+  for n in [0, 1, 128, 129, 200]:
+    check n.rangeAccountSizeMax == Account(
+      storageRoot: Hash256(data: high(UInt256).toBytesBE),
+      codeHash:    Hash256(data: high(UInt256).toBytesBE),
+      nonce:       high(uint64),
+      balance:     high(UInt256)).repeat(n).encode.len
+
+# ------------------------------------------------------------------------------
+# Private functions, pretty printing
+# ------------------------------------------------------------------------------
+
+proc pp(a: NodeTag; collapse = true): string =
+  a.to(NodeKey).pp(collapse)
+
+proc pp(iv: NodeTagRange; collapse = false): string =
+  "(" & iv.minPt.pp(collapse) & "," & iv.maxPt.pp(collapse) & ")"
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -197,6 +320,78 @@ proc test_NodeRangeDecompose*(
         pfx, qfx, iv, firstTag, lastTag, rootKey, db, dbg)
 
       if true: quit()
+
+
+proc test_NodeRangeRightProofs*(
+    inLst: seq[UndumpAccounts];
+    db: HexaryTreeDbRef|HexaryGetFn;         ## Database abstraction
+    nSplit = 0;                              ## Also split intervals (unused)
+    dbg = HexaryTreeDbRef(nil);              ## Debugging env
+      ) =
+  ## Partition range and provide proofs suitable for `GetAccountRange` message
+  ## from `snap/1` protocol.
+  let
+    rootKey = inLst[0].root.to(NodeKey)
+    noisy = not dbg.isNil
+
+  # RLP does not allow static check
+  verifyAccountListSizes()
+
+  # Assuming the `inLst` entries have been stored in the DB already
+  for n,w in inLst:
+    let
+      iv = NodeTagRange.new(w.base, w.data.accounts[^1].accKey.to(NodeTag))
+      rc = iv.hexaryRangeLeafsProof(rootKey, db, high(int))
+    check rc.isOk
+    if rc.isErr:
+      return
+
+    let
+      leafs = rc.value.leafs
+      accounts = w.data.accounts
+    if leafs.len != accounts.len or accounts[^1].accKey != leafs[^1].key:
+      noisy.say "***", "n=", n, " something went wrong .."
+      check (n,leafs.len) == (n,accounts.len)
+      rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
+      return
+
+    # FIXME: verify that proof nodes are complete
+
+    check rc.value.proof.len <= w.data.proof.len
+    check leafs[^1].key.to(NodeTag) <= iv.maxPt
+    noisy.say "***", "n=", n,
+      " leafs=", leafs.len,
+      " proof=", rc.value.proof.len, "/", w.data.proof.len
+
+
+proc test_NodeRangeLeftBoundary*(
+    inLst: seq[UndumpAccounts];
+    db: HexaryTreeDbRef|HexaryGetFn;         ## Database abstraction
+    dbg = HexaryTreeDbRef(nil);              ## Debugging env
+      ) =
+  ## Verify left side boundary checks
+  let
+    rootKey = inLst[0].root.to(NodeKey)
+    noisy = not dbg.isNil
+
+  # Assuming the `inLst` entries have been stored in the DB already
+  for n,w in inLst:
+    let accounts = w.data.accounts
+    for i in 1 ..< accounts.len:
+      let
+        leftKey = accounts[i-1].accKey
+        rightKey = (accounts[i].accKey.to(NodeTag) - 1.u256).to(NodeKey)
+        toLeftRc = rightKey.hexaryPath(rootKey,db).hexaryNearbyLeft(db)
+      if toLeftRc.isErr:
+        check toLeftRc.error == HexaryError(0) # force error printing
+        return
+      let toLeftKey = toLeftRc.value.getPartialPath.convertTo(NodeKey)
+      if leftKey != toLeftKey:
+        let j = i-1
+        check (n, j, leftKey) == (n, j, toLeftKey)
+        rootKey.printCompareLeftNearby(leftKey, rightKey, db, dbg)
+        return
+    noisy.say "***", "n=", n, " accounts=", accounts.len
 
 # ------------------------------------------------------------------------------
 # End

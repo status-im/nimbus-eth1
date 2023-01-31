@@ -19,7 +19,7 @@ import
   ../../pow/header,
   eth/[eip1559]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxChainGasLimitsPc* = tuple

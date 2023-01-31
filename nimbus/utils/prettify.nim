@@ -14,6 +14,8 @@
 import
   std/[math, strutils]
 
+{.push raises: [].}
+
 proc toSI*(num: SomeUnsignedInt): string =
   ## Prints `num` argument value greater than 99 as rounded SI unit.
   const

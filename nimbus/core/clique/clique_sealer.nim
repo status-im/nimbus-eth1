@@ -22,7 +22,7 @@ import
   std/[sequtils, times],
   chronicles,
   chronos,
-  eth/[keys, rlp],
+  eth/keys,
   "../.."/[constants, utils/ec_recover],
   ../../common/common,
   ./clique_cfg,
@@ -42,15 +42,15 @@ logScope:
 # Private Helpers
 # ------------------------------------------------------------------------------
 
-proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool =
+proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool {.gcsafe, raises: [].} =
   s.ballot.isValidVote(a, authorize)
 
-proc isSigner*(s: Snapshot; address: EthAddress): bool =
+proc isSigner*(s: Snapshot; address: EthAddress): bool {.gcsafe, raises: [].} =
   ## See `clique_verify.isSigner()`
   s.ballot.isAuthSigner(address)
 
 # clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
-proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
+proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool {.gcsafe, raises: [].} =
   ## See `clique_verify.inTurn()`
   let ascSignersList = s.ballot.authSigners
   for offset in 0 ..< ascSignersList.len:
@@ -62,14 +62,14 @@ proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(681): func calcDifficulty(snap [..]
-proc calcDifficulty(s: Snapshot; signer: EthAddress): DifficultyInt =
+proc calcDifficulty(s: Snapshot; signer: EthAddress): DifficultyInt {.gcsafe, raises: [].} =
   if s.inTurn(s.blockNumber + 1, signer):
     DIFF_INTURN
   else:
     DIFF_NOTURN
 
 proc recentBlockNumber*(s: Snapshot;
-                        a: EthAddress): Result[BlockNumber,void] =
+                        a: EthAddress): Result[BlockNumber,void] {.gcsafe, raises: [].} =
   ## Return `BlockNumber` for `address` argument (if any)
   for (number,recent) in s.recents.pairs:
     if recent == a:
@@ -82,7 +82,7 @@ proc recentBlockNumber*(s: Snapshot;
 
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
 proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOkResult
-                    {.gcsafe, raises: [Defect, CatchableError].} =
+                    {.gcsafe, raises: [CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
   ## of a block header according to the rules of a particular engine.
   ##
@@ -134,20 +134,20 @@ proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOk
 
   ok()
 
-proc prepareForSeal*(c: Clique; prepHeader: BlockHeader; header: var BlockHeader) =
+proc prepareForSeal*(c: Clique; prepHeader: BlockHeader; header: var BlockHeader) {.gcsafe, raises: [].} =
   # TODO: use system.move?
   header.nonce = prepHeader.nonce
   header.extraData = prepHeader.extraData
   header.mixDigest = prepHeader.mixDigest
 
 # clique/clique.go(589): func (c *Clique) Authorize(signer [..]
-proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
+proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) {.gcsafe, raises: [].} =
   ## Injects private key into the consensus engine to mint new blocks with.
   c.signer = signer
   c.signFn = signFn
 
 # clique/clique.go(724): func CliqueRLP(header [..]
-proc cliqueRlp*(header: BlockHeader): seq[byte] =
+proc cliqueRlp*(header: BlockHeader): seq[byte] {.gcsafe, raises: [].} =
   ## Returns the rlp bytes which needs to be signed for the proof-of-authority
   ## sealing. The RLP to sign consists of the entire header apart from the 65
   ## byte signature contained at the end of the extra data.
@@ -159,7 +159,7 @@ proc cliqueRlp*(header: BlockHeader): seq[byte] =
   header.encodeSealHeader
 
 # clique/clique.go(688): func SealHash(header *types.Header) common.Hash {
-proc sealHash*(header: BlockHeader): Hash256 =
+proc sealHash*(header: BlockHeader): Hash256 {.gcsafe, raises: [].} =
   ## For the Consensus Engine, `sealHash()` returns the hash of a block prior
   ## to it being sealed.
   ##
@@ -170,7 +170,7 @@ proc sealHash*(header: BlockHeader): Hash256 =
 # clique/clique.go(599): func (c *Clique) Seal(chain [..]
 proc seal*(c: Clique; ethBlock: var EthBlock):
            Result[void,CliqueError] {.gcsafe,
-            raises: [Defect,CatchableError].} =
+            raises: [CatchableError].} =
   ## This implementation attempts to create a sealed block using the local
   ## signing credentials.
 
@@ -242,7 +242,7 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
 # clique/clique.go(673): func (c *Clique) CalcDifficulty(chain [..]
 proc calcDifficulty*(c: Clique;
                     parent: BlockHeader): Result[DifficultyInt,CliqueError]
-                      {.gcsafe, raises: [Defect,CatchableError].} =
+                      {.gcsafe, raises: [CatchableError].} =
   ## For the Consensus Engine, `calcDifficulty()` is the difficulty adjustment
   ## algorithm. It returns the difficulty that a new block should have.
   ##

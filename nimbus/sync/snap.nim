@@ -17,7 +17,7 @@ import
   ./snap/[worker, worker_desc],
   "."/[protocol, sync_desc, sync_sched]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-sync"

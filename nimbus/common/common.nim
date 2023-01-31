@@ -28,6 +28,8 @@ export
   genesis,
   utils
 
+{.push raises: [].}
+
 type
   SyncProgress = object
     start  : BlockNumber
@@ -83,7 +85,7 @@ type
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc hardForkTransition*(com: CommonRef, forkDeterminer: ForkDeterminationInfo) {.gcsafe.}
+proc hardForkTransition*(com: CommonRef, forkDeterminer: ForkDeterminationInfo) {.gcsafe, raises: [CatchableError].}
 
 func cliquePeriod*(com: CommonRef): int
 
@@ -93,6 +95,16 @@ func cliqueEpoch*(com: CommonRef): int
 # Private helper functions
 # ------------------------------------------------------------------------------
 
+template noExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" & info & ": name=" & $e.name & " msg=" & e.msg
+  #except Defect as e:
+  #  raise e
+  except Exception as e:
+    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+
 proc consensusTransition(com: CommonRef, fork: HardFork) =
   if fork >= MergeFork:
     com.consensusType = ConsensusType.POS
@@ -101,8 +113,7 @@ proc consensusTransition(com: CommonRef, fork: HardFork) =
     # this could happen during reorg
     com.consensusType = com.config.consensusType
 
-proc setForkId(com: CommonRef, blockZero: BlockHeader)
-  {. raises: [Defect,CatchableError].} =
+proc setForkId(com: CommonRef, blockZero: BlockHeader) =
   com.genesisHash = blockZero.blockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIds = calculateForkIds(com.config, genesisCRC)
@@ -119,7 +130,7 @@ proc init(com      : CommonRef,
           pruneTrie: bool,
           networkId: NetworkId,
           config   : ChainConfig,
-          genesis  : Genesis) =
+          genesis  : Genesis) {.gcsafe, raises: [CatchableError].} =
 
   config.daoCheck()
 
@@ -179,7 +190,8 @@ proc new*(_: type CommonRef,
           db: TrieDatabaseRef,
           pruneTrie: bool = true,
           networkId: NetworkId = MainNet,
-          params = networkParams(MainNet)): CommonRef =
+          params = networkParams(MainNet)): CommonRef
+            {.gcsafe, raises: [CatchableError].} =
 
   ## If genesis data is present, the forkIds will be initialized
   ## empty data base also initialized with genesis block
@@ -195,7 +207,8 @@ proc new*(_: type CommonRef,
           db: TrieDatabaseRef,
           config: ChainConfig,
           pruneTrie: bool = true,
-          networkId: NetworkId = MainNet): CommonRef =
+          networkId: NetworkId = MainNet): CommonRef
+            {.gcsafe, raises: [CatchableError].} =
 
   ## There is no genesis data present
   ## Mainly used for testing without genesis
@@ -264,7 +277,6 @@ proc hardForkTransition*(com: CommonRef,
 
 proc hardForkTransition*(com: CommonRef, header: BlockHeader)
                         {.gcsafe, raises: [Defect, CatchableError].} =
-
   com.hardForkTransition(header.parentHash, header.blockNumber, some(header.timestamp))
 
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
@@ -284,7 +296,7 @@ func forkGTE*(com: CommonRef, fork: HardFork): bool =
 
 # TODO: move this consensus code to where it belongs
 proc minerAddress*(com: CommonRef; header: BlockHeader): EthAddress
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   if com.consensusType != ConsensusType.POA:
     # POW and POS return header.coinbase
     return header.coinbase
@@ -306,7 +318,7 @@ func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
 proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool
-                      {.gcsafe, raises: [Defect,CatchableError].} =
+                      {.gcsafe, raises: [CatchableError].} =
   if com.config.terminalTotalDifficulty.isNone:
     return false
 
@@ -317,14 +329,14 @@ proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool
   ptd >= ttd and td >= ttd
 
 proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
-                {.gcsafe, raises: [Defect,CatchableError].} =
+                {.gcsafe, raises: [CatchableError].} =
   if com.isBlockAfterTtd(header):
     return ConsensusType.POS
 
   return com.config.consensusType
 
 proc initializeEmptyDb*(com: CommonRef)
-    {.raises: [Defect, CatchableError].} =
+    {.raises: [CatchableError].} =
   let trieDB = com.db.db
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     trace "Writing genesis to DB"
@@ -337,7 +349,8 @@ proc initializeEmptyDb*(com: CommonRef)
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader) =
   ## Used by RPC to update the beacon head for snap sync
   if not com.syncReqNewHead.isNil:
-    com.syncReqNewHead(header)
+    noExceptionOops("syncReqNewHead"):
+      com.syncReqNewHead(header)
 
 # ------------------------------------------------------------------------------
 # Getters

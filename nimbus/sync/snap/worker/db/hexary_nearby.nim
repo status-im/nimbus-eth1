@@ -16,13 +16,13 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 proc hexaryNearbyRight*(path: RPath; db: HexaryTreeDbRef;
-    ): Result[RPath,HexaryError] {.gcsafe, raises: [Defect,KeyError]}
+    ): Result[RPath,HexaryError] {.gcsafe, raises: [KeyError]}
 
 proc hexaryNearbyRight*(path: XPath; getFn: HexaryGetFn;
-    ): Result[XPath,HexaryError] {.gcsafe, raises: [Defect,RlpError]}
+    ): Result[XPath,HexaryError] {.gcsafe, raises: [RlpError]}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -31,7 +31,7 @@ proc hexaryNearbyRight*(path: XPath; getFn: HexaryGetFn;
 proc toBranchNode(
     rlp: Rlp
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   var rlp = rlp
   XNodeObj(kind: Branch, bLink: rlp.read(array[17,Blob]))
 
@@ -39,14 +39,14 @@ proc toLeafNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Leaf, lPfx: pSegm, lData: rlp.listElem(1).toBytes)
 
 proc toExtensionNode(
     rlp: Rlp;
     pSegm: NibblesSeq
       ): XNodeObj
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
 
 proc `<=`(a, b: NibblesSeq): bool =
@@ -87,11 +87,11 @@ template noRlpErrorOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc hexaryNearbyRightImpl(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    db: HexaryTreeDbRef|HexaryGetFn;  ## Database abstraction
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError,RlpError]} =
+      {.gcsafe, raises: [KeyError,RlpError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyRight(db)
@@ -107,11 +107,11 @@ proc hexaryNearbyRightImpl(
   err(NearbyLeafExpected)
 
 proc hexaryNearbyLeftImpl(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    db: HexaryTreeDbRef|HexaryGetFn;  ## Database abstraction
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError,RlpError]} =
+      {.gcsafe, raises: [KeyError,RlpError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyLeft(db)
@@ -136,7 +136,7 @@ proc completeLeast(
     db: HexaryTreeDbRef;
     pathLenMax = 64;
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Extend path using least nodes without recursion.
   var rPath = RPath(path: path.path)
 
@@ -184,7 +184,7 @@ proc completeLeast(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError].} =
+      {.gcsafe, raises: [RlpError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -243,7 +243,7 @@ proc completeMost(
     db: HexaryTreeDbRef;
     pathLenMax = 64;
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError].} =
+      {.gcsafe, raises: [KeyError].} =
   ## Extend path using max nodes without recursion.
   var rPath = RPath(path: path.path)
 
@@ -290,7 +290,7 @@ proc completeMost(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError].} =
+      {.gcsafe, raises: [RlpError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -347,8 +347,8 @@ proc completeMost(
 # ------------------------------------------------------------------------------
 
 proc hexaryNearbyRight*(
-    path: RPath;                   ## Partially expanded path
-    db: HexaryTreeDbRef;           ## Database
+    path: RPath;                   # Partially expanded path
+    db: HexaryTreeDbRef;           # Database
       ): Result[RPath,HexaryError]
       {.gcsafe, raises: [Defect,KeyError]} =
   ## Extends the maximally extended argument nodes `path` to the right (i.e.
@@ -366,53 +366,72 @@ proc hexaryNearbyRight*(
   if path.path[^1].node.kind == Leaf:
     return ok(path)
 
-  var rPath = path
+  var
+    rPath = path
+    start = true
   while 0 < rPath.path.len:
     let top = rPath.path[^1]
-    if top.node.kind != Branch or
-       top.nibble < 0 or
-       rPath.tail.len == 0:
-      return err(NearbyUnexpectedNode) # error
+    case top.node.kind:
+    of Leaf:
+      return err(NearbyUnexpectedNode)
+    of Branch:
+      if top.nibble < 0 or rPath.tail.len == 0:
+        return err(NearbyUnexpectedNode)
+    of Extension:
+      rPath.tail = top.node.ePfx & rPath.tail
+      rPath.path.setLen(rPath.path.len - 1)
+      continue
 
-    let topLink = top.node.bLink[top.nibble]
-    if topLink.isZero or not db.tab.hasKey(topLink):
-      return err(NearbyDanglingLink) # error
+    var
+      step = top
+    let
+      rPathLen = rPath.path.len # in case of backtracking
+      rPathTail = rPath.tail    # in case of backtracking
 
-    let nextNibble = rPath.tail[0].int8
-    if nextNibble < 15:
-      let
-        nextNode = db.tab[topLink]
-        rPathLen = rPath.path.len # in case of backtracking
-        rPathTail = rPath.tail
-      case nextNode.kind
-      of Leaf:
-        if rPath.tail <= nextNode.lPfx:
-          return rPath.completeLeast(topLink, db)
-      of Extension:
-        if rPath.tail <= nextNode.ePfx:
-          return rPath.completeLeast(topLink, db)
-      of Branch:
-        # Step down and complete with a branch link on the child node
-        rPath.path = rPath.path & RPathStep(
-          key:    topLink,
-          node:   nextNode,
-          nibble: nextNibble)
+    # Look ahead checking next node
+    if start:
+      let topLink = top.node.bLink[top.nibble]
+      if topLink.isZero or not db.tab.hasKey(topLink):
+        return err(NearbyDanglingLink) # error
 
-      # Find the next item to the right of the new top entry
-      let step = rPath.path[^1]
-      for inx in (step.nibble + 1) .. 15:
-        let link = step.node.bLink[inx]
-        if not link.isZero:
-          rPath.path[^1].nibble = inx.int8
-          return rPath.completeLeast(link, db)
+      let nextNibble = rPath.tail[0].int8
+      if start and nextNibble < 15:
+        let nextNode = db.tab[topLink]
+        case nextNode.kind
+        of Leaf:
+          if rPath.tail <= nextNode.lPfx:
+            return rPath.completeLeast(topLink, db)
+        of Extension:
+          if rPath.tail <= nextNode.ePfx:
+            return rPath.completeLeast(topLink, db)
+        of Branch:
+          # Step down and complete with a branch link on the child node
+          step = RPathStep(
+            key:    topLink,
+            node:   nextNode,
+            nibble: nextNibble)
+          rPath.path &= step
 
-      # Restore `rPath` and backtrack
-      rPath.path.setLen(rPathLen)
-      rPath.tail = rPathTail
+    # Find the next item to the right of the current top entry
+    for inx in (step.nibble + 1) .. 15:
+      let link = step.node.bLink[inx]
+      if not link.isZero:
+        rPath.path[^1].nibble = inx.int8
+        return rPath.completeLeast(link, db)
 
-    # Pop `Branch` node on top and append nibble to `tail`
-    rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
-    rPath.path.setLen(rPath.path.len - 1)
+    if start:
+      # Retry without look ahead
+      start = false
+
+      # Restore `rPath` (pop temporary extra step)
+      if rPathLen < rPath.path.len:
+        rPath.path.setLen(rPathLen)
+        rPath.tail = rPathTail
+    else:
+      # Pop current `Branch` node on top and append nibble to `tail`
+      rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
+      rPath.path.setLen(rPath.path.len - 1)
+    # End while
 
   # Pathological case: nfffff.. for n < f
   var step = path.path[0]
@@ -425,10 +444,9 @@ proc hexaryNearbyRight*(
 
   err(NearbyFailed) # error
 
-
 proc hexaryNearbyRight*(
-    path: XPath;                   ## Partially expanded path
-    getFn: HexaryGetFn;            ## Database abstraction
+    path: XPath;                   # Partially expanded path
+    getFn: HexaryGetFn;            # Database abstraction
       ): Result[XPath,HexaryError]
       {.gcsafe, raises: [Defect,RlpError]} =
   ## Variant of `hexaryNearbyRight()` for persistant database
@@ -439,52 +457,71 @@ proc hexaryNearbyRight*(
   if path.path[^1].node.kind == Leaf:
     return ok(path)
 
-  var xPath = path
+  var
+    xPath = path
+    start = true
   while 0 < xPath.path.len:
     let top = xPath.path[^1]
-    if top.node.kind != Branch or
-       top.nibble < 0 or
-       xPath.tail.len == 0:
-      return err(NearbyUnexpectedNode) # error
+    case top.node.kind:
+    of Leaf:
+      return err(NearbyUnexpectedNode)
+    of Branch:
+      if top.nibble < 0 or xPath.tail.len == 0:
+        return err(NearbyUnexpectedNode)
+    of Extension:
+      xPath.tail = top.node.ePfx & xPath.tail
+      xPath.path.setLen(xPath.path.len - 1)
+      continue
 
-    let topLink = top.node.bLink[top.nibble]
-    if topLink.len == 0 or topLink.getFn().len == 0:
-      return err(NearbyDanglingLink) # error
+    var
+      step = top
+    let
+      xPathLen = xPath.path.len # in case of backtracking
+      xPathTail = xPath.tail    # in case of backtracking
 
-    let nextNibble = xPath.tail[0].int8
-    if nextNibble < 15:
-      let
-        nextNodeRlp = rlpFromBytes topLink.getFn()
-        xPathLen = xPath.path.len # in case of backtracking
-        xPathTail = xPath.tail
-      case nextNodeRlp.listLen:
-      of 2:
-        if xPath.tail <= nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1]:
-          return xPath.completeLeast(topLink, getFn)
-      of 17:
-        # Step down and complete with a branch link on the child node
-        xPath.path = xPath.path & XPathStep(
-          key:    topLink,
-          node:   nextNodeRlp.toBranchNode,
-          nibble: nextNibble)
-      else:
-        return err(NearbyGarbledNode) # error
+    # Look ahead checking next node
+    if start:
+      let topLink = top.node.bLink[top.nibble]
+      if topLink.len == 0 or topLink.getFn().len == 0:
+        return err(NearbyDanglingLink) # error
 
-      # Find the next item to the right of the new top entry
-      let step = xPath.path[^1]
-      for inx in (step.nibble + 1) .. 15:
-        let link = step.node.bLink[inx]
-        if 0 < link.len:
-          xPath.path[^1].nibble = inx.int8
-          return xPath.completeLeast(link, getFn)
+      let nextNibble = xPath.tail[0].int8
+      if nextNibble < 15:
+        let nextNodeRlp = rlpFromBytes topLink.getFn()
+        case nextNodeRlp.listLen:
+        of 2:
+          if xPath.tail <= nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1]:
+            return xPath.completeLeast(topLink, getFn)
+        of 17:
+          # Step down and complete with a branch link on the child node
+          step = XPathStep(
+            key:    topLink,
+            node:   nextNodeRlp.toBranchNode,
+            nibble: nextNibble)
+          xPath.path &= step
+        else:
+          return err(NearbyGarbledNode) # error
 
-      # Restore `xPath` and backtrack
-      xPath.path.setLen(xPathLen)
-      xPath.tail = xPathTail
+    # Find the next item to the right of the current top entry
+    for inx in (step.nibble + 1) .. 15:
+      let link = step.node.bLink[inx]
+      if 0 < link.len:
+        xPath.path[^1].nibble = inx.int8
+        return xPath.completeLeast(link, getFn)
 
-    # Pop `Branch` node on top and append nibble to `tail`
-    xPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & xPath.tail
-    xPath.path.setLen(xPath.path.len - 1)
+    if start:
+      # Retry without look ahead
+      start = false
+
+      # Restore `xPath` (pop temporary extra step)
+      if xPathLen < xPath.path.len:
+        xPath.path.setLen(xPathLen)
+        xPath.tail = xPathTail
+    else:
+      # Pop current `Branch` node on top and append nibble to `tail`
+      xPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & xPath.tail
+      xPath.path.setLen(xPath.path.len - 1)
+    # End while
 
   # Pathological case: nfffff.. for n < f
   var step = path.path[0]
@@ -502,7 +539,7 @@ proc hexaryNearbyRightMissing*(
     path: RPath;
     db: HexaryTreeDbRef;
       ): bool
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Returns `true` if the maximally extended argument nodes `path` is the
   ## rightmost on the hexary trie database. It verifies that there is no more
   ## leaf entry to the right of the argument `path`.
@@ -537,10 +574,10 @@ proc hexaryNearbyRightMissing*(
 # ------------------------------------------------------------------------------
 
 proc hexaryNearbyLeft*(
-    path: RPath;                   ## Partially expanded path
-    db: HexaryTreeDbRef;           ## Database
+    path: RPath;                   # Partially expanded path
+    db: HexaryTreeDbRef;           # Database
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Similar to `hexaryNearbyRight()`.
   ##
   ## This code is intended to be used for verifying a right-bound proof to
@@ -552,53 +589,72 @@ proc hexaryNearbyLeft*(
   if path.path[^1].node.kind == Leaf:
     return ok(path)
 
-  var rPath = path
+  var
+    rPath = path
+    start = true
   while 0 < rPath.path.len:
     let top = rPath.path[^1]
-    if top.node.kind != Branch or
-       top.nibble < 0 or
-       rPath.tail.len == 0:
-      return err(NearbyUnexpectedNode) # error
+    case top.node.kind:
+    of Leaf:
+      return err(NearbyUnexpectedNode)
+    of Branch:
+      if top.nibble < 0 or rPath.tail.len == 0:
+        return err(NearbyUnexpectedNode)
+    of Extension:
+      rPath.tail = top.node.ePfx & rPath.tail
+      rPath.path.setLen(rPath.path.len - 1)
+      continue
 
-    let topLink = top.node.bLink[top.nibble]
-    if topLink.isZero or not db.tab.hasKey(topLink):
-      return err(NearbyDanglingLink) # error
+    var
+      step = top
+    let
+      rPathLen = rPath.path.len # in case of backtracking
+      rPathTail = rPath.tail    # in case of backtracking
 
-    let nextNibble = rPath.tail[0].int8
-    if 0 < nextNibble:
-      let
-        nextNode = db.tab[topLink]
-        rPathLen = rPath.path.len # in case of backtracking
-        rPathTail = rPath.tail
-      case nextNode.kind
-      of Leaf:
-        if nextNode.lPfx <= rPath.tail:
-          return rPath.completeMost(topLink, db)
-      of Extension:
-        if nextNode.ePfx <= rPath.tail:
-          return rPath.completeMost(topLink, db)
-      of Branch:
-        # Step down and complete with a branch link on the child node
-        rPath.path = rPath.path & RPathStep(
-          key:    topLink,
-          node:   nextNode,
-          nibble: nextNibble)
+    # Look ahead checking next node
+    if start:
+      let topLink = top.node.bLink[top.nibble]
+      if topLink.isZero or not db.tab.hasKey(topLink):
+        return err(NearbyDanglingLink) # error
 
-      # Find the next item to the right of the new top entry
-      let step = rPath.path[^1]
-      for inx in (step.nibble - 1).countDown(0):
-        let link = step.node.bLink[inx]
-        if not link.isZero:
-          rPath.path[^1].nibble = inx.int8
-          return rPath.completeMost(link, db)
+      let nextNibble = rPath.tail[0].int8
+      if 0 < nextNibble:
+        let nextNode = db.tab[topLink]
+        case nextNode.kind
+        of Leaf:
+          if nextNode.lPfx <= rPath.tail:
+            return rPath.completeMost(topLink, db)
+        of Extension:
+          if nextNode.ePfx <= rPath.tail:
+            return rPath.completeMost(topLink, db)
+        of Branch:
+          # Step down and complete with a branch link on the child node
+          step = RPathStep(
+            key:    topLink,
+            node:   nextNode,
+            nibble: nextNibble)
+          rPath.path &= step
 
-      # Restore `rPath` and backtrack
-      rPath.path.setLen(rPathLen)
-      rPath.tail = rPathTail
+    # Find the next item to the right of the new top entry
+    for inx in (step.nibble - 1).countDown(0):
+      let link = step.node.bLink[inx]
+      if not link.isZero:
+        rPath.path[^1].nibble = inx.int8
+        return rPath.completeMost(link, db)
 
-    # Pop `Branch` node on top and append nibble to `tail`
-    rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
-    rPath.path.setLen(rPath.path.len - 1)
+    if start:
+      # Retry without look ahead
+      start = false
+
+      # Restore `rPath` (pop temporary extra step)
+      if rPathLen < rPath.path.len:
+        rPath.path.setLen(rPathLen)
+        rPath.tail = rPathTail
+    else:
+      # Pop current `Branch` node on top and append nibble to `tail`
+      rPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & rPath.tail
+      rPath.path.setLen(rPath.path.len - 1)
+    # End while
 
   # Pathological case: n0000.. for 0 < n
   var step = path.path[0]
@@ -613,10 +669,10 @@ proc hexaryNearbyLeft*(
 
 
 proc hexaryNearbyLeft*(
-    path: XPath;                   ## Partially expanded path
-    getFn: HexaryGetFn;            ## Database abstraction
+    path: XPath;                   # Partially expanded path
+    getFn: HexaryGetFn;            # Database abstraction
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyLeft()` for persistant database
 
   # Some easy cases
@@ -625,52 +681,71 @@ proc hexaryNearbyLeft*(
   if path.path[^1].node.kind == Leaf:
     return ok(path)
 
-  var xPath = path
+  var
+    xPath = path
+    start = true
   while 0 < xPath.path.len:
     let top = xPath.path[^1]
-    if top.node.kind != Branch or
-       top.nibble < 0 or
-       xPath.tail.len == 0:
-      return err(NearbyUnexpectedNode) # error
+    case top.node.kind:
+    of Leaf:
+      return err(NearbyUnexpectedNode)
+    of Branch:
+      if top.nibble < 0 or xPath.tail.len == 0:
+        return err(NearbyUnexpectedNode)
+    of Extension:
+      xPath.tail = top.node.ePfx & xPath.tail
+      xPath.path.setLen(xPath.path.len - 1)
+      continue
 
-    let topLink = top.node.bLink[top.nibble]
-    if topLink.len == 0 or topLink.getFn().len == 0:
-      return err(NearbyDanglingLink) # error
+    var
+      step = top
+    let
+      xPathLen = xPath.path.len # in case of backtracking
+      xPathTail = xPath.tail    # in case of backtracking
 
-    let nextNibble = xPath.tail[0].int8
-    if 0 < nextNibble:
-      let
-        nextNodeRlp = rlpFromBytes topLink.getFn()
-        xPathLen = xPath.path.len # in case of backtracking
-        xPathTail = xPath.tail
-      case nextNodeRlp.listLen:
-      of 2:
-        if nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1] <= xPath.tail:
-          return xPath.completeMost(topLink, getFn)
-      of 17:
-        # Step down and complete with a branch link on the child node
-        xPath.path = xPath.path & XPathStep(
-          key:    topLink,
-          node:   nextNodeRlp.toBranchNode,
-          nibble: nextNibble)
-      else:
-        return err(NearbyGarbledNode) # error
+    # Look ahead checking next node
+    if start:
+      let topLink = top.node.bLink[top.nibble]
+      if topLink.len == 0 or topLink.getFn().len == 0:
+        return err(NearbyDanglingLink) # error
 
-      # Find the next item to the right of the new top entry
-      let step = xPath.path[^1]
-      for inx in (step.nibble - 1).countDown(0):
-        let link = step.node.bLink[inx]
-        if 0 < link.len:
-          xPath.path[^1].nibble = inx.int8
-          return xPath.completeMost(link, getFn)
+      let nextNibble = xPath.tail[0].int8
+      if 0 < nextNibble:
+        let nextNodeRlp = rlpFromBytes topLink.getFn()
+        case nextNodeRlp.listLen:
+        of 2:
+          if nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1] <= xPath.tail:
+            return xPath.completeMost(topLink, getFn)
+        of 17:
+          # Step down and complete with a branch link on the child node
+          step = XPathStep(
+            key:    topLink,
+            node:   nextNodeRlp.toBranchNode,
+            nibble: nextNibble)
+          xPath.path &= step
+        else:
+          return err(NearbyGarbledNode) # error
 
-      # Restore `xPath` and backtrack
-      xPath.path.setLen(xPathLen)
-      xPath.tail = xPathTail
+    # Find the next item to the right of the new top entry
+    for inx in (step.nibble - 1).countDown(0):
+      let link = step.node.bLink[inx]
+      if 0 < link.len:
+        xPath.path[^1].nibble = inx.int8
+        return xPath.completeMost(link, getFn)
 
-    # Pop `Branch` node on top and append nibble to `tail`
-    xPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & xPath.tail
-    xPath.path.setLen(xPath.path.len - 1)
+    if start:
+      # Retry without look ahead
+      start = false
+
+      # Restore `xPath` (pop temporary extra step)
+      if xPathLen < xPath.path.len:
+        xPath.path.setLen(xPathLen)
+        xPath.tail = xPathTail
+    else:
+      # Pop `Branch` node on top and append nibble to `tail`
+      xPath.tail = @[top.nibble.byte].initNibbleRange.slice(1) & xPath.tail
+      xPath.path.setLen(xPath.path.len - 1)
+    # End while
 
   # Pathological case: n00000.. for 0 < n
   var step = path.path[0]
@@ -688,43 +763,43 @@ proc hexaryNearbyLeft*(
 # ------------------------------------------------------------------------------
 
 proc hexaryNearbyRight*(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    db: HexaryTreeDbRef;              ## Database
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    db: HexaryTreeDbRef;              # Database
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryNearbyRight()` working with `NodeTag` arguments rather
   ## than `RPath()` ones.
   noRlpErrorOops("hexaryNearbyRight"):
     return baseTag.hexaryNearbyRightImpl(rootKey, db)
 
 proc hexaryNearbyRight*(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    getFn: HexaryGetFn;               ## Database abstraction
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    getFn: HexaryGetFn;               # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyRight()` for persistant database
   noKeyErrorOops("hexaryNearbyRight"):
     return baseTag.hexaryNearbyRightImpl(rootKey, getFn)
 
 
 proc hexaryNearbyLeft*(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    db: HexaryTreeDbRef;              ## Database
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    db: HexaryTreeDbRef;              # Database
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Similar to `hexaryNearbyRight()` for `NodeKey` arguments.
   noRlpErrorOops("hexaryNearbyLeft"):
     return baseTag.hexaryNearbyLeftImpl(rootKey, db)
 
 proc hexaryNearbyLeft*(
-    baseTag: NodeTag;                 ## Some node
-    rootKey: NodeKey;                 ## State root
-    getFn: HexaryGetFn;               ## Database abstraction
+    baseTag: NodeTag;                 # Some node
+    rootKey: NodeKey;                 # State root
+    getFn: HexaryGetFn;               # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [RlpError]} =
   ## Variant of `hexaryNearbyLeft()` for persistant database
   noKeyErrorOops("hexaryNearbyLeft"):
     return baseTag.hexaryNearbyLeftImpl(rootKey, getFn)

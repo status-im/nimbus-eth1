@@ -21,7 +21,7 @@ import
   ethash,
   stew/keyed_queue
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   PowDatasetItemRef* = ref object
@@ -102,7 +102,7 @@ proc new*(T: type PowDatasetRef; maxItems = nItemsMax): T =
 # ------------------------------------------------------------------------------
 
 proc get*(pd: var PowDataset; bn: BlockNumber): PowDatasetItemRef
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Return a cache derived from argument `blockNumber` ready to be used
   ## for the `hashimotoLight()` method.
   let
@@ -115,7 +115,7 @@ proc get*(pd: var PowDataset; bn: BlockNumber): PowDatasetItemRef
   let
     # note that `getDataSize()` and `getCacheSize()` depend on
     # `key * EPOCH_LENGTH` rather than the original block number.
-    top = key * EPOCH_LENGTH
+    # top = key * EPOCH_LENGTH -- notused
     cache = pd.cache.get(bn)
     pair = PowDatasetItemRef(
       size: cache.size,
@@ -124,18 +124,18 @@ proc get*(pd: var PowDataset; bn: BlockNumber): PowDatasetItemRef
   pd.dataset.lruAppend(key, pair, pd.datasetMax)
 
 proc get*(pdr: PowDatasetRef; bn: BlockNumber): PowDatasetItemRef
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Variant of `getCache()`
   pdr[].get(bn)
 
 
 proc hasItem*(pd: var PowDataset; bn: BlockNumber): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [].} =
   ##Returns true if there is a cache entry for argument `bn`.
   pd.dataset.hasKey(bn.toKey)
 
 proc hasItem*(pdr: PowDatasetRef; bn: BlockNumber): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Variant of `hasItem()`
   pdr[].hasItem(bn)
 

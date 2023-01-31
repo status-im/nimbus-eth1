@@ -50,7 +50,7 @@ import
   ../db/[hexary_desc, hexary_envelope, snapdb_storage_slots],
   "."/[find_missing_nodes, storage_queue_helper]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-heal"
@@ -82,7 +82,7 @@ proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
 proc healingCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): string =
+      ): string {.used.} =
   "{" &
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "runState=" & $buddy.ctrl.state & "," &
@@ -131,15 +131,16 @@ proc compileMissingNodesList(
   ## Find some missing glue nodes in storage slots database.
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.used.} = buddy.peer
     slots = kvp.data.slots
     rootKey = kvp.key.to(NodeKey)
     getFn = ctx.data.snapDb.getStorageSlotsFn(kvp.data.accKey)
 
   if not slots.processed.isFull:
     noExceptionOops("compileMissingNodesList"):
-      let (missing, nLevel, nVisited) = slots.findMissingNodes(
-        rootKey, getFn, healStorageSlotsInspectionPlanBLevel)
+      let (missing, nLevel {.used.}, nVisited {.used.}) =
+        slots.findMissingNodes(
+          rootKey, getFn, healStorageSlotsInspectionPlanBLevel)
 
       when extraTraceMessages:
         trace logTxt "missing nodes", peer,
@@ -159,8 +160,8 @@ proc getNodesFromNetwork(
   ##  Extract from `missing` the next batch of nodes that need
   ## to be merged it into the database
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
+    ctx {.used.} = buddy.ctx
+    peer {.used.} = buddy.peer
     accPath = kvp.data.accKey.to(Blob)
     storageRoot = kvp.key
     fetchNodes = missing[0 ..< fetchRequestTrieNodesMax]
@@ -282,8 +283,8 @@ proc healStorageSlots*(
       ) {.async.} =
   ## Fetching and merging missing slorage slots trie database nodes.
   let
-    ctx = buddy.ctx
-    peer = buddy.peer
+    ctx {.used.} = buddy.ctx
+    peer {.used.} = buddy.peer
 
   # Extract healing slot items from partial slots list
   var toBeHealed: seq[SnapSlotsQueuePair]

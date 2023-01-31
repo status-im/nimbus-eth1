@@ -1,12 +1,12 @@
 # Nimbus
-# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  asynctest, json, strformat, strutils, tables, os, typetraits,
+  asynctest, json, strutils, tables, os, typetraits,
   nimcrypto/[hash], nimcrypto/utils as ncrutils, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient],
   eth/[rlp, keys, p2p/private/p2p_types],

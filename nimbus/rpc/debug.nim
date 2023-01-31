@@ -13,6 +13,8 @@ import
   hexstrings, ../tracer, ../vm_types,
   ../common/common
 
+{.push raises: [].}
+
 type
   TraceOptions = object
     disableStorage: Option[bool]

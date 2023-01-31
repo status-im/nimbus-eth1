@@ -25,7 +25,7 @@ import
   eth/[common, keys],
   stew/[keyed_queue, sorted_set]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   TxAddStats* = tuple ##\
@@ -56,7 +56,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc getItemList(tab: var AccouuntNonceTab; key: EthAddress): var NonceList
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [KeyError].} =
   if not tab.hasKey(key):
     tab[key] = NonceList.init
   tab[key]
@@ -66,12 +66,12 @@ proc getItemList(tab: var AccouuntNonceTab; key: EthAddress): var NonceList
 # ------------------------------------------------------------------------------
 
 proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
 
   var current: TxItemRef
 
   block:
-    let rc = xp.txDB.bySender.eq(item.sender).any.eq(item.tx.nonce)
+    let rc = xp.txDB.bySender.eq(item.sender).sub.eq(item.tx.nonce)
     if rc.isErr:
       return err(txInfoErrUnspecified)
     current = rc.value.data
@@ -98,13 +98,13 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
 # ------------------------------------------------------------------------------
 
 proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
+    {.discardable,gcsafe,raises: [CatchableError].} =
   ## Add a transaction item. It is tested and stored in either of the `pending`
   ## or `staged` buckets, or disposed into the waste basket. The function
   ## returns `true` if the item was added to the `staged` bucket.
 
   var
-    stagedItemAdded = false
+    # stagedItemAdded = false -- notused
     vetted = txInfoOk
 
   # Leave this frame with `return`, or proceeed with error
@@ -160,7 +160,7 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(xp: TxPoolRef;
              txs: openArray[Transaction]; info = ""): TxAddStats
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
+    {.discardable,gcsafe,raises: [CatchableError].} =
   ## Add a list of transactions. The list is sorted after nonces and txs are
   ## tested and stored into either of the `pending` or `staged` buckets, or
   ## disposed o the waste basket. The function returns the tuple

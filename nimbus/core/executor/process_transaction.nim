@@ -21,7 +21,7 @@ import
   chronicles,
   stew/results
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -115,7 +115,7 @@ proc processTransaction*(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork): Result[GasInt,void]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Process the transaction, write the results to accounts db. The function
   ## returns the amount of gas burned if executed.
   safeExecutor("processTransaction"):
@@ -126,7 +126,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader): Result[GasInt,void]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `processTransaction()` with `*fork* derived
   ## from the `vmState` argument.
   ##

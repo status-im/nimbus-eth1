@@ -51,7 +51,7 @@ type
 
 proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
-    kind:            CallKind(msg.kind),
+    kind:            CallKind(msg.kind.ord),
     depth:           msg.depth,
     gas:             msg.gas,
     sender:          msg.sender.fromEvmc,

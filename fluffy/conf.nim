@@ -1,11 +1,11 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/os,
@@ -238,15 +238,15 @@ func parseCmdArg*(T: type TrustedDigest, input: string): T
 func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type enr.Record, p: TaintedString): T
+proc parseCmdArg*(T: type enr.Record, p: string): T
     {.raises: [Defect, ConfigurationError].} =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
-proc completeCmdArg*(T: type enr.Record, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: TaintedString): T
+proc parseCmdArg*(T: type Node, p: string): T
     {.raises: [Defect, ConfigurationError].} =
   var record: enr.Record
   if not fromURI(record, p):
@@ -261,20 +261,20 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T
 
   n[]
 
-proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T
+proc parseCmdArg*(T: type PrivateKey, p: string): T
     {.raises: [Defect, ConfigurationError].} =
   try:
-    result = PrivateKey.fromHex(string(p)).tryGet()
+    result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
     raise newException(ConfigurationError, "Invalid private key")
 
-proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
+proc parseCmdArg*(T: type ClientConfig, p: string): T
       {.raises: [Defect, ConfigurationError].} =
   let uri = parseUri(p)
   if (uri.scheme == "http" or uri.scheme == "https"):
@@ -286,5 +286,5 @@ proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
       ConfigurationError, "Proxy uri should have defined scheme (http/https/ws/wss)"
     )
 
-proc completeCmdArg*(T: type ClientConfig, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]

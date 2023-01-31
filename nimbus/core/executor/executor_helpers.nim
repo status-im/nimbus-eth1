@@ -25,7 +25,7 @@ type
   Bloom = common.BloomFilter
   LogsBloom = bloom.BloomFilter
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -58,8 +58,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt
-                    {.gcsafe, raises: [Defect,CatchableError].} =
+proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
 
   var rec: Receipt
   if vmState.com.forkGTE(Byzantium):

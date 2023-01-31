@@ -1,7 +1,7 @@
 import
   unittest2, os, json, strutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  stew/byteutils, faststreams/inputs,
+  stew/byteutils,
   ../tests/[test_helpers, test_config],
   ../nimbus/db/accounts_cache, ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness],

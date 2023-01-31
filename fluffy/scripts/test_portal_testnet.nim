@@ -23,9 +23,9 @@ import
   ../tests/test_history_util
 
 type
-  FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
+  FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [].}
 
-  CheckCallback[A] = proc (a: A): bool {.gcsafe, raises: [Defect].}
+  CheckCallback[A] = proc (a: A): bool {.gcsafe, raises: [].}
 
   PortalTestnetConf* = object
     nodeCount* {.

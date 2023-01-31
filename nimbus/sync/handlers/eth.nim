@@ -18,7 +18,7 @@ import
   ../protocol/trace_config, # gossip noise control
   ../../core/[chain, tx_pool, tx_pool/tx_item]
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   HashToTime = TableRef[Hash256, Time]
@@ -74,19 +74,17 @@ const
 # Private functions: helper functions
 # ------------------------------------------------------------------------------
 
-proc notEnabled(name: string) =
+proc notEnabled(name: string) {.used.} =
   debug "Wire handler method is disabled", meth = name
 
-proc notImplemented(name: string) =
+proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth = name
 
-proc inPool(ctx: EthWireRef, txHash: Hash256): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
   let res = ctx.txPool.getItem(txHash)
   res.isOk
 
-proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool =
   let res = ctx.txPool.getItem(txHash)
   if res.isErr: return false
   res.get().reject == txInfoOk
@@ -94,7 +92,7 @@ proc inPoolAndOk(ctx: EthWireRef, txHash: Hash256): bool
 proc successorHeader(db: ChainDBRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [Defect,RlpError].} =
+                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
   let offset = 1 + skip.toBlockNumber
   if h.blockNumber <= (not 0.toBlockNumber) - offset:
     result = db.getBlockHeader(h.blockNumber + offset, output)
@@ -102,7 +100,7 @@ proc successorHeader(db: ChainDBRef,
 proc ancestorHeader(db: ChainDBRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [Defect,RlpError].} =
+                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
   let offset = 1 + skip.toBlockNumber
   if h.blockNumber >= offset:
     result = db.getBlockHeader(h.blockNumber - offset, output)
@@ -110,7 +108,7 @@ proc ancestorHeader(db: ChainDBRef,
 proc blockHeader(db: ChainDBRef,
                  b: HashOrNum,
                  output: var BlockHeader): bool
-                 {.gcsafe, raises: [Defect,RlpError].} =
+                 {.gcsafe, raises: [RlpError].} =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:
@@ -120,8 +118,9 @@ proc blockHeader(db: ChainDBRef,
 # Private functions: peers related functions
 # ------------------------------------------------------------------------------
 
-proc hash(peer: Peer): hashes.Hash =
-  hash(peer.remote)
+when isMainModule:
+  proc hash(peer: Peer): hashes.Hash =
+    hash(peer.remote)
 
 proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
   # do not send back tx or txhash to thisPeer
@@ -129,7 +128,7 @@ proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
     if peer != thisPeer:
       result.add peer
 
-proc banExpiredReconnect(arg: pointer) {.gcsafe, raises: [Defect].} =
+proc banExpiredReconnect(arg: pointer) =
   # Reconnect to peer after ban period if pool is empty
   try:
 
@@ -382,7 +381,7 @@ proc txPoolEnabled*(ctx: EthWireRef; ena: bool) =
     ctx.enableTxPool = if ena: Enabled else: Suspended
 
 method getStatus*(ctx: EthWireRef): EthState
-    {.gcsafe, raises: [Defect,RlpError,EVMError].} =
+    {.gcsafe, raises: [RlpError,EVMError].} =
   let
     db = ctx.db
     com = ctx.chain.com
@@ -400,7 +399,7 @@ method getStatus*(ctx: EthWireRef): EthState
   )
 
 method getReceipts*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[seq[Receipt]]
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   let db = ctx.db
   var header: BlockHeader
   for blockHash in hashes:
@@ -410,8 +409,7 @@ method getReceipts*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[seq[Receip
       result.add @[]
       trace "handlers.getReceipts: blockHeader not found", blockHash
 
-method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transaction]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transaction] =
   let txPool = ctx.txPool
   for txHash in hashes:
     let res = txPool.getItem(txHash)
@@ -421,7 +419,7 @@ method getPooledTxs*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[Transacti
       trace "handlers.getPooledTxs: tx not found", txHash
 
 method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBody]
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   let db = ctx.db
   var body: BlockBody
   for blockHash in hashes:
@@ -432,7 +430,7 @@ method getBlockBodies*(ctx: EthWireRef, hashes: openArray[Hash256]): seq[BlockBo
       trace "handlers.getBlockBodies: blockBody not found", blockHash
 
 method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   let db = ctx.db
   var foundBlock: BlockHeader
   result = newSeqOfCap[BlockHeader](req.maxResults)
@@ -450,7 +448,7 @@ method getBlockHeaders*(ctx: EthWireRef, req: BlocksRequest): seq[BlockHeader]
       result.add foundBlock
 
 method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transaction])
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxs")
@@ -491,8 +489,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef, peer: Peer, txs: openArray[Transacti
 
   asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull..^1])
 
-method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256])
-    {.gcsafe, raises: [Defect,CatchableError].} =
+method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArray[Hash256]) =
   if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
       notEnabled("handleAnnouncedTxsHashes")
@@ -523,7 +520,7 @@ method handleAnnouncedTxsHashes*(ctx: EthWireRef, peer: Peer, txHashes: openArra
   asyncSpawn ctx.fetchTransactions(reqHashes, peer)
 
 method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
       peer, blockNumber=blk.header.blockNumber,
@@ -538,7 +535,7 @@ method handleNewBlock*(ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficul
     )
 
 method handleNewBlockHashes*(ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce])
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   if ctx.chain.com.forkGTE(MergeFork):
     debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
       peer, numHashes=hashes.len

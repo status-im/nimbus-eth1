@@ -19,7 +19,7 @@ import
 export
   hardforks
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   Genesis* = ref object
@@ -82,16 +82,16 @@ const
 # ------------------------------------------------------------------------------
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   let val = rlp.read(UInt256).toByteArrayBE()
   result[0 .. ^1] = val.toOpenArray(12, val.high)
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type GenesisAccount): GenesisAccount
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   GenesisAccount(balance: rlp.read(UInt256))
 
 func decodePrealloc*(data: seq[byte]): GenesisAlloc
-    {.gcsafe, raises: [Defect,RlpError].} =
+    {.gcsafe, raises: [RlpError].} =
   for tup in rlp.decode(data, seq[AddressBalance]):
     result[tup.address] = tup.account
 
@@ -104,7 +104,7 @@ proc fromHex(c: char): int =
   else: -1
 
 proc readValue(reader: var JsonReader, value: var UInt256)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Mixin for `Json.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
@@ -148,35 +148,35 @@ proc readValue(reader: var JsonReader, value: var UInt256)
   reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var ChainId)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = reader.readValue(int).ChainId
 
 proc readValue(reader: var JsonReader, value: var Hash256)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = Hash256.fromHex(reader.readValue(string))
 
 proc readValue(reader: var JsonReader, value: var BlockNonce)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = fromHex[uint64](reader.readValue(string)).toBlockNonce
 
 proc readValue(reader: var JsonReader, value: var EthTime)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = fromHex[int64](reader.readValue(string)).fromUnix
 
 proc readValue(reader: var JsonReader, value: var seq[byte])
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = hexToSeqByte(reader.readValue(string))
 
 proc readValue(reader: var JsonReader, value: var GasInt)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = fromHex[GasInt](reader.readValue(string))
 
 proc readValue(reader: var JsonReader, value: var EthAddress)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = parseAddress(reader.readValue(string))
 
 proc readValue(reader: var JsonReader, value: var AccountNonce)
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   value = fromHex[uint64](reader.readValue(string))
 
 template to(a: string, b: type EthAddress): EthAddress =
@@ -285,7 +285,7 @@ proc validateNetworkParams*(params: var NetworkParams): bool =
   validateChainConfig(params.config)
 
 proc loadNetworkParams*(fileName: string, params: var NetworkParams):
-    bool {.raises: [Defect,SerializationError].} =
+    bool =
   try:
     params = Json.loadFile(fileName, NetworkParams, allowUnknownFields = true)
   except IOError as e:
@@ -315,7 +315,7 @@ proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   validateNetworkParams(params)
 
 proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   try:
     ga = Json.decode(data, GenesisAlloc, allowUnknownFields = true)
   except JsonReaderError as e:
@@ -325,7 +325,7 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
   return true
 
 proc parseGenesis*(data: string): Genesis
-     {.gcsafe, raises: [Defect,CatchableError].} =
+     {.gcsafe, raises: [CatchableError].} =
   try:
     result = Json.decode(data, Genesis, allowUnknownFields = true)
   except JsonReaderError as e:
@@ -444,7 +444,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
     ChainConfig()
 
 proc genesisBlockForNetwork*(id: NetworkId): Genesis
-    {.gcsafe, raises: [Defect, ValueError, RlpError].} =
+    {.gcsafe, raises: [ValueError, RlpError].} =
   result = case id
   of MainNet:
     Genesis(
@@ -493,7 +493,7 @@ proc genesisBlockForNetwork*(id: NetworkId): Genesis
     Genesis()
 
 proc networkParams*(id: NetworkId): NetworkParams
-    {.gcsafe, raises: [Defect, ValueError, RlpError].} =
+    {.gcsafe, raises: [ValueError, RlpError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
 

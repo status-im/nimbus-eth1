@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[times, tables, typetraits],
+  std/[times, typetraits],
   pkg/[chronos,
     stew/results,
     chronicles,
@@ -22,7 +22,7 @@ import
     tx_pool,
     casper,
     validate],
-  "."/clique/[clique_defs,
+  "."/clique/[
     clique_desc,
     clique_cfg,
     clique_sealer],

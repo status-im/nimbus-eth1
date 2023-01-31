@@ -15,7 +15,7 @@ import
   ../../range_desc,
   ./hexary_error
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 type
   HexaryPpFn* = proc(key: RepairKey): string {.gcsafe.}
@@ -400,6 +400,24 @@ proc convertTo*(node: RNodeRef; T: type Blob): T =
     writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
     if not writer.appendOk(node.eLink):
       return # empty `Blob`
+  of Leaf:
+    writer.startList(2)
+    writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
+    writer.append(node.lData)
+
+  writer.finish()
+
+proc convertTo*(node: XNodeObj; T: type Blob): T =
+  ## Variant of above `convertTo()` for `XNodeObj` nodes.
+  var writer = initRlpWriter()
+
+  case node.kind:
+  of Branch:
+    writer.append(node.bLink)
+  of Extension:
+    writer.startList(2)
+    writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
+    writer.append(node.eLink)
   of Leaf:
     writer.startList(2)
     writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
