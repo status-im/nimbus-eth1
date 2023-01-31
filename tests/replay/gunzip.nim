@@ -52,12 +52,12 @@ proc explode(state: var GUnzip; data: openArray[char];
     outData = ""
     rc: ZError
 
-  state.mz.next_in  = cast[ptr cuchar](inBuf[0].addr)
+  state.mz.next_in  = cast[ptr uint8](inBuf[0].addr)
   state.mz.total_in = 0
   state.mz.avail_in = inBuf.len.cuint
 
   while not state.outDoneOK and 0 < state.mz.avail_in:
-    state.mz.next_out = cast[ptr cuchar](state.outBuf[0].addr)
+    state.mz.next_out = cast[ptr uint8](state.outBuf[0].addr)
     state.mz.avail_out = state.outBuf.len.cuint
     state.mz.total_out = 0
 

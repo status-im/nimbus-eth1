@@ -238,7 +238,9 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
+          # use CC to make sure Nim compiler and subsequent test
+          # using the same glibc version.
+          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
 
       - name: Run fluffy tests (Windows)
         if: runner.os == 'Windows'
@@ -253,6 +255,9 @@ jobs:
       - name: Run fluffy tests (Linux)
         if: runner.os == 'Linux'
         run: |
+          gcc --version
+          ./env.sh nim -v
+          ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy
