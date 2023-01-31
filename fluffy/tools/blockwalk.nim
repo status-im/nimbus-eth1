@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 # Testing tool to verify that a specific range of blocks can be fetched from
 # the Portal network.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/strutils,
@@ -39,8 +39,8 @@ type
       desc: "The block hash from where to start walking the blocks backwards"
       name: "block-hash" .}: Hash256
 
-proc parseCmdArg*(T: type Hash256, p: TaintedString): T
-    {.raises: [Defect, ConfigurationError].} =
+proc parseCmdArg*(T: type Hash256, p: string): T
+    {.raises: [ConfigurationError].} =
   var hash: Hash256
   try:
     hexToByteArray(p, hash.data)
@@ -49,7 +49,7 @@ proc parseCmdArg*(T: type Hash256, p: TaintedString): T
 
   return hash
 
-proc completeCmdArg*(T: type Hash256, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type Hash256, val: string): seq[string] =
   return @[]
 
 proc walkBlocks(client: RpcClient, startHash: Hash256) {.async.} =
@@ -102,7 +102,7 @@ proc run(config: BlockWalkConf) {.async.} =
 when isMainModule:
   {.pop.}
   let config = BlockWalkConf.load()
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 

@@ -1,5 +1,5 @@
 # Nimbus - Portal Network- Message types
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 ## Definitions and encoding of the messages of the Portal wire protocol:
 ## https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md#request---response-messages
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   stint, stew/[results, objects],
@@ -124,7 +124,7 @@ template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
 
 func fromSszBytes*(T: type UInt256, data: openArray[byte]):
-    T {.raises: [Defect, MalformedSszError].} =
+    T {.raises: [MalformedSszError].} =
   if data.len != sizeof(result):
     raiseIncorrectSize T
 

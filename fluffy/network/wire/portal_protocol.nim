@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 ## Implementation of the Portal wire protocol as specified at:
 ## https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[sequtils, sets, algorithm],

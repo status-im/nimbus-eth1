@@ -1,11 +1,11 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   chronicles,
@@ -366,7 +366,7 @@ proc createStoreHandler*(
   return (proc(
       contentKey: ByteList,
       contentId: ContentId,
-      content: seq[byte]) {.raises: [Defect], gcsafe.} =
+      content: seq[byte]) {.raises: [], gcsafe.} =
     # always re-check that the key is in the node range to make sure only
     # content in range is stored.
     # TODO: current silent assumption is that both ContentDB and PortalProtocol

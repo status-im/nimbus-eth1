@@ -1,11 +1,11 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/json,
@@ -37,25 +37,25 @@ proc parseWitness*(node: JsonNode): Result[seq[seq[byte]], string] =
     return err(error.msg)
 
 # bridge_waitNewCanonicalChain
-proc waitNewCanonicalChain*(bridgeClient: BridgeClient): Future[void] {.async, raises: [Defect, CatchableError].} = discard
+proc waitNewCanonicalChain*(bridgeClient: BridgeClient): Future[void] {.async.} = discard
 
 #bridge_getBlockChanges
-proc getBlockChanges*(bridgeClient: BridgeClient, blockHash: Hash256): Future[AccessList] {.async, raises: [Defect, CatchableError].} = discard
+proc getBlockChanges*(bridgeClient: BridgeClient, blockHash: Hash256): Future[AccessList] {.async.} = discard
 
 #bridge_getItemWitness
 proc getItemWitness*(bridgeClient: BridgeClient, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
-  Future[seq[seq[byte]]] {.async, raises: [Defect, CatchableError].} = discard
+  Future[seq[seq[byte]]] {.async.} = discard
 
 #bridge_getNextItem
 proc getNextItem*(bridgeClient: BridgeClient, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
-  Future[(EthAddress, StorageKey)] {.async, raises: [Defect, CatchableError].} = discard
+  Future[(EthAddress, StorageKey)] {.async.} = discard
 
 # bridge_getBlockWitness
 # Returns a list of all RLP-encoded merkle trie values (including contract bytecode) accessed during block execution
 proc getBlockWitness*(bridgeClient: BridgeClient, blockNumber: BlockNumber):
-  Future[Result[seq[seq[byte]], string]] {.async, raises: [Defect, CatchableError].} =
+  Future[Result[seq[seq[byte]], string]] {.async.} =
   let result = await bridgeClient.call("bridge_getBlockWitnessblockNumber", %[%blockNumber])
   return parseWitness(result)
 
-proc close*(bridgeClient: BridgeClient): Future[void] {.async, raises: [Defect, CatchableError].} =
+proc close*(bridgeClient: BridgeClient): Future[void] {.async.} =
   await bridgeClient.close()

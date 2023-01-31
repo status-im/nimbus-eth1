@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 # Tool to verify that certain Portal content is available on the network.
 # Currently only supports checking `EpochAccumulator`s of the history network.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   confutils, chronicles, chronicles/topics_registry, stew/byteutils,
@@ -84,7 +84,7 @@ proc run(config: ContentVerifierConf) {.async.} =
 when isMainModule:
   {.pop.}
   let config = ContentVerifierConf.load()
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 

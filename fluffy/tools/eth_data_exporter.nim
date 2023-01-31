@@ -34,7 +34,7 @@
 # e.g: `./build/bin/geth --ws --txlookuplimit=0`
 #
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[json, typetraits, strutils, strformat, os],
@@ -170,8 +170,8 @@ type
         desc: "Number of the last block header to be exported"
         name: "end-block" .}: uint64
 
-proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
-    {.raises: [Defect, ConfigurationError].} =
+proc parseCmdArg*(T: type StorageMode, p: string): T
+    {.raises: [ConfigurationError].} =
   if p == "db":
     return Db
   elif p == "json":
@@ -180,7 +180,7 @@ proc parseCmdArg*(T: type StorageMode, p: TaintedString): T
     let msg = "Provided mode: " & p & " is not a valid. Should be `json` or `db`"
     raise newException(ConfigurationError, msg)
 
-proc completeCmdArg*(T: type StorageMode, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type StorageMode, val: string): seq[string] =
   return @[]
 
 proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
@@ -322,7 +322,7 @@ proc exportBlocks(config: ExporterConf, client: RpcClient) =
 when isMainModule:
   {.pop.}
   let config = ExporterConf.load()
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 

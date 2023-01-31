@@ -1,11 +1,11 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[times, sequtils, typetraits],
@@ -36,13 +36,13 @@ import
 func toHash*(value: array[32, byte]): Hash256 =
   result.data = value
 
-func toHash*(value: EthHashStr): Hash256 {.raises: [Defect, ValueError].} =
+func toHash*(value: EthHashStr): Hash256 {.raises: [ValueError].} =
   hexToPaddedByteArray[32](value.string).toHash
 
 func init*(
     T: type TransactionObject,
     tx: Transaction, header: BlockHeader, txIndex: int):
-    T {.raises: [Defect, ValidationError].} =
+    T {.raises: [ValidationError].} =
   TransactionObject(
     blockHash: some(header.blockHash),
     blockNumber: some(encodeQuantity(header.blockNumber)),
@@ -66,7 +66,7 @@ func init*(
     T: type BlockObject,
     header: BlockHeader, body: BlockBody,
     fullTx = true, isUncle = false):
-    T {.raises: [Defect, ValidationError].} =
+    T {.raises: [ValidationError].} =
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
@@ -114,7 +114,7 @@ proc installEthApiHandlers*(
     # Currently only HistoryNetwork needed, later we might want a master object
     # holding all the networks.
     rpcServerWithProxy: var RpcProxy, historyNetwork: HistoryNetwork)
-    {.raises: [Defect, CatchableError].} =
+    {.raises: [CatchableError].} =
 
   # Supported API
   rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
