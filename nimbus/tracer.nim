@@ -5,7 +5,7 @@ import
   ./utils/utils,
   "."/[constants, vm_state, vm_types, transaction, core/executor],
   nimcrypto/utils as ncrutils,
-  chronicles, ./rpc/hexstrings, ./launcher,
+  ./rpc/hexstrings, ./launcher,
   stew/results
 
 when defined(geth):

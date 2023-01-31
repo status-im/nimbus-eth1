@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,6 @@ import
   stint,
   stew/byteutils,
   ../../nimbus/transaction,
-  ../../nimbus/common/evmforks,
   ../../nimbus/db/accounts_cache
 
 template fromJson(T: type EthAddress, n: JsonNode): EthAddress =

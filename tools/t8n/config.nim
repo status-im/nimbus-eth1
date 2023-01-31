@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -116,24 +116,24 @@ type
       defaultValue: 3
       name: "verbosity" }: int
 
-proc parseCmdArg(T: type Option[UInt256], p: TaintedString): T =
-  if p.string == "-1":
+proc parseCmdArg(T: type Option[UInt256], p: string): T =
+  if p == "-1":
     none(UInt256)
-  elif startsWith(p.string, "0x"):
-    some(parse(p.string, UInt256, 16))
+  elif startsWith(p, "0x"):
+    some(parse(p, UInt256, 16))
   else:
-    some(parse(p.string, UInt256, 10))
+    some(parse(p, UInt256, 10))
 
-proc completeCmdArg(T: type Option[UInt256], val: TaintedString): seq[string] =
+proc completeCmdArg(T: type Option[UInt256], val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type HexOrInt, p: TaintedString): T =
-  if startsWith(p.string, "0x"):
-    parseHexInt(p.string).T
+proc parseCmdArg(T: type HexOrInt, p: string): T =
+  if startsWith(p, "0x"):
+    parseHexInt(p).T
   else:
-    parseInt(p.string).T
+    parseInt(p).T
 
-proc completeCmdArg(T: type HexOrInt, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type HexOrInt, val: string): seq[string] =
   return @[]
 
 proc notCmd(x: string): bool =

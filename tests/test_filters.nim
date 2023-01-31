@@ -10,7 +10,7 @@
 import
   std/[options, strutils, typetraits],
   unittest2,
-  eth/[common/eth_types, rlp],
+  eth/[common/eth_types],
   nimcrypto/hash,
   stew/byteutils,
   ../nimbus/rpc/filters,

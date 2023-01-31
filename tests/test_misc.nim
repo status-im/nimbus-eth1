@@ -1,5 +1,4 @@
 import
-  std/[os],
   unittest2,
   eth/common/eth_types,
   ../nimbus/vm_internals,

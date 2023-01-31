@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[tables, json, sets],
+  std/[json, sets],
   chronos,
   json_rpc/rpcclient,
   "."/[stack, memory, code_stream],

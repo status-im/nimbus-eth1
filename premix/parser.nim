@@ -1,6 +1,6 @@
 import
   json, strutils, times, options, os,
-  eth/[rlp, common], httputils, nimcrypto/utils,
+  eth/common, httputils, nimcrypto/utils,
   stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover

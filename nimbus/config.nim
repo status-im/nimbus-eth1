@@ -502,25 +502,25 @@ type
         defaultValue: ""
         name: "blocks-file" }: InputFile
 
-proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
-  parseInt(p.string).T
+proc parseCmdArg(T: type NetworkId, p: string): T =
+  parseInt(p).T
 
-proc completeCmdArg(T: type NetworkId, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type UInt256, p: TaintedString): T =
-  parse(string p, T)
+proc parseCmdArg(T: type UInt256, p: string): T =
+  parse(p, T)
 
-proc completeCmdArg(T: type UInt256, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type UInt256, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type EthAddress, p: TaintedString): T =
+proc parseCmdArg(T: type EthAddress, p: string): T =
   try:
-    result = hexToByteArray(p.string, 20)
+    result = hexToByteArray(p, 20)
   except CatchableError:
     raise newException(ValueError, "failed to parse EthAddress")
 
-proc completeCmdArg(T: type EthAddress, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
 proc processList(v: string, o: var seq[string]) =
@@ -530,16 +530,16 @@ proc processList(v: string, o: var seq[string]) =
       if len(n) > 0:
         o.add(n)
 
-proc parseCmdArg(T: type NetworkParams, p: TaintedString): T =
+proc parseCmdArg(T: type NetworkParams, p: string): T =
   try:
-    if not loadNetworkParams(p.string, result):
+    if not loadNetworkParams(p, result):
       raise newException(ValueError, "failed to load customNetwork")
   except Exception: #  as exc: -- notused
     # on linux/mac, nim compiler refuse to compile
     # with unlisted exception error
     raise newException(ValueError, "failed to load customNetwork")
 
-proc completeCmdArg(T: type NetworkParams, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
 proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
