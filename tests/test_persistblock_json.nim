@@ -8,7 +8,7 @@
 import
   std/[json, os, tables, strutils],
   unittest2,
-  eth/rlp, stew/byteutils,
+  stew/byteutils,
   ./test_helpers,
   ../nimbus/core/chain,
   ../nimbus/common/common

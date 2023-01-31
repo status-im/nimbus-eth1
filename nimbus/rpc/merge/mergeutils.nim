@@ -1,10 +1,19 @@
+# Nimbus
+# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import
   std/[typetraits, times, strutils],
   nimcrypto/[hash, sha2],
   web3/engine_api_types,
   json_rpc/errors,
   eth/[trie, rlp, common, trie/db],
-  stew/[objects, results, byteutils],
+  stew/[results, byteutils],
   ../../constants,
   ./mergetypes
 

@@ -1,14 +1,11 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
 import
   std/strutils,
@@ -94,7 +91,7 @@ template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
 proc getPayloadByTag(
     proxy: VerifiedRpcProxy,
     quantityTag: string):
-    results.Opt[ExecutionData] {.raises: [ValueError, Defect].} =
+    results.Opt[ExecutionData] {.raises: [ValueError].} =
   checkPreconditions(proxy)
 
   let tagResult = parseQuantityTag(quantityTag)
@@ -113,7 +110,7 @@ proc getPayloadByTag(
 
 proc getPayloadByTagOrThrow(
     proxy: VerifiedRpcProxy,
-    quantityTag: string): ExecutionData {.raises: [ValueError, Defect].} =
+    quantityTag: string): ExecutionData {.raises: [ValueError].} =
 
   let tagResult = getPayloadByTag(proxy, quantityTag)
 

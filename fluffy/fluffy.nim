@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/os,
@@ -254,7 +254,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 when isMainModule:
   {.pop.}
   let config = PortalConf.load()
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   setLogLevel(config.logLevel)
 

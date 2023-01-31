@@ -1,11 +1,11 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   stew/results, chronos, chronicles,
@@ -111,9 +111,9 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 
 proc calcRootHash(items: Transactions | ReceiptsSSZ): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
-  for i, t in items:
+  for i, item in items:
     try:
-      tr.put(rlp.encode(i), t.asSeq())
+      tr.put(rlp.encode(i), item.asSeq())
     except RlpError as e:
       # TODO: Investigate this RlpError as it doesn't sound like this is
       # something that can actually occur.

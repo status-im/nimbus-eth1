@@ -162,7 +162,7 @@ proc witnessKeysMain*() =
       runTest(rand(1..30), testStatusIMPL, false, addInvalidKeys = true)
 
     test "multiple identical addresses rejected":
-      expect AssertionError:
+      expect AssertionDefect:
         runTest(rand(5..30), testStatusIMPL, true)
 
     test "case 1: all keys is a match":

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,7 @@
 ##
 
 import
+  std/options,
   ../../../constants,
   ../../computation,
   ../../stack,
@@ -22,11 +23,7 @@ import
   ../gas_meter,
   ../utils/utils_numeric,
   ./oph_defs,
-  chronicles,
-  eth/common,
-  options,
-  sets,
-  stint
+  eth/common
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

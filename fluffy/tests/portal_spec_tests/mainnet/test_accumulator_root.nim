@@ -7,7 +7,7 @@
 
 {.used.}
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   unittest2, stint, stew/byteutils,

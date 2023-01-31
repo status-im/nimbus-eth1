@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,7 @@
 
 # https://github.com/ethereum/portal-network-specs/blob/master/header-gossip-network.md
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/options,

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -35,12 +35,12 @@ proc runTest(n: JsonNode): bool =
 
   var
     exitCode = -1
-    line = newStringOfCap(120).TaintedString
+    line = newStringOfCap(120)
     res = ""
 
   while true:
     if outp.readLine(line):
-      res.add(line.string)
+      res.add(line)
       res.add("\n")
     else:
       exitCode = peekExitCode(p)

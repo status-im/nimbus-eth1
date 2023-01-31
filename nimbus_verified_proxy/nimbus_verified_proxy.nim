@@ -1,14 +1,11 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when (NimMajor, NimMinor) < (1, 4):
-  {.push raises: [Defect].}
-else:
-  {.push raises: [].}
+{.push raises: [].}
 
 import
   std/[os, strutils],
@@ -44,11 +41,11 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
 # TODO Find what can throw exception
-proc run() {.raises: [Exception, Defect].} =
+proc run() {.raises: [Exception].} =
   {.pop.}
   var config = makeBannerAndConfig(
     "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
-  {.push raises: [Defect].}
+  {.push raises: [].}
 
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()

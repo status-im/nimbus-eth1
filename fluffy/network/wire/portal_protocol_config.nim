@@ -1,3 +1,12 @@
+# Nimbus
+# Copyright (c) 2021-2023 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.push raises: [].}
+
 import
   std/strutils,
   confutils,
@@ -44,7 +53,7 @@ proc init*(
     radiusConfig: radiusConfig
   )
 
-proc parseCmdArg*(T: type RadiusConfig, p: TaintedString): T
+proc parseCmdArg*(T: type RadiusConfig, p: string): T
     {.raises: [Defect, ConfigurationError].} =
   if p.startsWith("dynamic") and len(p) == 7:
     RadiusConfig(kind: Dynamic)
@@ -79,5 +88,5 @@ proc parseCmdArg*(T: type RadiusConfig, p: TaintedString): T
 
     RadiusConfig(kind: Static, logRadius: parsed)
 
-proc completeCmdArg*(T: type RadiusConfig, val: TaintedString): seq[string] =
+proc completeCmdArg*(T: type RadiusConfig, val: string): seq[string] =
   return @[]

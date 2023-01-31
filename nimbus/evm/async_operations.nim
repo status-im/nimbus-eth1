@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -50,11 +50,11 @@ proc realLazyDataSource*(client: RpcClient): LazyDataSource =
       let blockId: BlockIdentifier = blockId(c.vmState.parent.blockNumber.truncate(uint64)) # ditto
       let res = await client.eth_getStorageAt(address, quantity, blockId)
       echo("Fetched slot " & $(slot) & ", result is " & $(res))
-      let v = res  # will res be the actual value, or do I need to convert or something?
-      
+      # let v = res  # will res be the actual value, or do I need to convert or something?
+
       # Before implementing this, see the note from Zahary here:
       # https://github.com/status-im/nimbus-eth1/pull/1260#discussion_r999669139
-      # 
+      #
       # c.vmState.mutateStateDB:
       #   db.setStorage(c.msg.contractAddress, slot, UInt256.fromBytesBE(v))
     )
@@ -75,7 +75,7 @@ proc fakeLazyDataSource*(fakePairs: seq[tuple[key, val: array[32, byte]]]): Lazy
       # statements from multiple Computations can run at the same
       # time and be interleaved.
       # echo("Attempting to fake-fetch slot " & $(slot))
-      # await sleepAsync(2.seconds)  
+      # await sleepAsync(2.seconds)
 
       let slotBytes = toBytesBE(slot)
       # The linear search is obviously slow, but doesn't matter

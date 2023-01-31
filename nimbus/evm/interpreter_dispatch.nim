@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,11 +15,11 @@ const
 
 import
   std/[macros, sets, strformat],
+  pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, utils/utils, db/accounts_cache],
   "."/[code_stream, computation],
   "."/[message, precompiles, state, types],
-  ./interpreter/[op_dispatcher, gas_costs],
-  pkg/[chronicles, chronos, eth/keys, stew/byteutils]
+  ./interpreter/[op_dispatcher, gas_costs]
 
 logScope:
   topics = "vm opcode"
