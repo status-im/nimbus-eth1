@@ -559,12 +559,8 @@ when isMainModule:
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
     import ./test_sync_snap/snap_storage_xx
-    let knownFailures = @[
-      ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),
-      ("storages4__26__33_dump#11", @[(1193, RightBoundaryProofFailed)]),
+    let knownFailures: KnownStorageFailure = @[
       ("storages5__34__41_dump#10", @[( 508, RootNodeMismatch)]),
-      ("storagesB__84__92_dump#6",  @[( 325, RightBoundaryProofFailed)]),
-      ("storagesD_102_109_dump#17", @[(1102, RightBoundaryProofFailed)]),
     ]
     noisy.showElapsed("storageRunner()"):
       for n,sam in snapStorageList:
@@ -572,14 +568,14 @@ when isMainModule:
 
   # This one uses readily available dumps
   when true: # and false:
-  #  false.inspectionRunner()
+    false.inspectionRunner()
     for n,sam in snapTestList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
     for n,sam in snapTestStorageList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
-  #    false.storagesRunner(persistent=true, sam)
+      false.storagesRunner(persistent=true, sam)
 
   # This one uses readily available dumps
   when true and false:
