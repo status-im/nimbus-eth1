@@ -58,7 +58,7 @@ proc test_storageSlotsImport*(
     inList: seq[UndumpStorages];
     dbBase: SnapDbRef;
     persistent: bool;
-    ignore: seq[(string,seq[(int,HexaryError)])];
+    ignore: KnownStorageFailure;
     idPfx: string;
       ) =
   ## Import and merge storages lists
@@ -80,7 +80,7 @@ proc test_storageSlotsTries*(
     inList: seq[UndumpStorages];
     dbBase: SnapDbRef;
     persistent: bool;
-    ignore: seq[(string,seq[(int,HexaryError)])];
+    ignore: KnownStorageFailure;
     idPfx: string;
       ) =
   ## Inspecting imported storages lists sub-tries

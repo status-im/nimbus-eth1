@@ -236,7 +236,7 @@ proc importAccounts*(
         return err(rc.error)
       accounts = rc.value
 
-    # Inspect trie for dangling nodes from prrof data (if any.)
+    # Inspect trie for dangling nodes from proof data (if any.)
     if 0 < data.proof.len:
       proofStats = ps.hexaDb.hexaryInspectTrie(ps.root)
 

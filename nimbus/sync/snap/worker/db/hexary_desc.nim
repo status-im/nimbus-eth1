@@ -163,6 +163,9 @@ static:
 var
   disablePrettyKeys* = false      ## Degugging, print raw keys if `true`
 
+proc isNodeKey*(a: RepairKey): bool {.gcsafe.}
+proc isZero*(a: RepairKey): bool {.gcsafe.}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -196,6 +199,12 @@ proc ppImpl(s: string; hex = false): string =
       "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
 
 proc ppImpl(key: RepairKey; db: HexaryTreeDbRef): string =
+  if key.isZero:
+    return "ø"
+  if not key.isNodekey:
+    var num: uint64
+    (addr num).copyMem(unsafeAddr key.ByteArray33[25], 8)
+    return "%" & $num
   try:
     if not disablePrettyKeys and not db.keyPp.isNil:
       return db.keyPp(key)
@@ -333,7 +342,11 @@ proc init*(key: var RepairKey; data: openArray[byte]): bool =
 
 proc newRepairKey*(db: HexaryTreeDbRef): RepairKey =
   db.repairKeyGen.inc
-  var src = db.repairKeyGen.toBytesBE
+  # Storing in proper endian handy for debugging (but not really important)
+  when cpuEndian == bigEndian:
+    var src = db.repairKeyGen.toBytesBE
+  else:
+    var src = db.repairKeyGen.toBytesLE
   (addr result.ByteArray33[25]).copyMem(addr src[0], 8)
   result.ByteArray33[0] = 1
 
@@ -355,8 +368,11 @@ proc to*(key: NodeKey; T: type NibblesSeq): T =
 proc to*(key: NodeKey; T: type RepairKey): T =
   (addr result.ByteArray33[1]).copyMem(unsafeAddr key.ByteArray32[0], 32)
 
-proc isZero*[T: NodeTag|NodeKey|RepairKey](a: T): bool =
-  a == T.default
+proc isZero*(a: RepairKey): bool =
+  a == typeof(a).default
+
+proc isZero*[T: NodeTag|NodeKey](a: T): bool =
+  a == typeof(a).default
 
 proc isNodeKey*(a: RepairKey): bool =
   a.ByteArray33[0] == 0

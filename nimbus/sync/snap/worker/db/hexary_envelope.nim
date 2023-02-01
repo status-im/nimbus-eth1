@@ -144,7 +144,7 @@ proc padPartialPath(pfx: NibblesSeq; dblNibble: byte): NodeKey =
       padded = padded & @[dblNibble].initNibbleRange.slice(1)
   else:
     let nope = seq[byte].default.initNibbleRange
-    padded = pfx.slice(0,63) & nope # nope forces re-alignment
+    padded = pfx.slice(0,64) & nope # nope forces re-alignment
 
   let bytes = padded.getBytes
   (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)

@@ -12,21 +12,34 @@
 ## Snap sync components tester and TDD environment
 
 import
-  std/[sequtils, strformat, strutils],
+  std/[sequtils, sets, strformat, strutils],
   eth/[common, p2p, rlp, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
   ../../nimbus/sync/types,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_envelope,  hexary_error, hexary_nearby, hexary_paths,
-    hexary_range, snapdb_accounts, snapdb_desc],
+    hexary_desc, hexary_envelope,  hexary_error, hexary_interpolate,
+    hexary_import, hexary_nearby, hexary_paths, hexary_range,
+    snapdb_accounts, snapdb_desc],
   ../replay/[pp, undump_accounts],
   ./test_helpers
 
 const
   cmaNlSp0 = ",\n" & repeat(" ",12)
   cmaNlSpc = ",\n" & repeat(" ",13)
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc ppNodeKeys(a: openArray[Blob], dbg = HexaryTreeDbRef(nil)): string =
+  result = "["
+  if dbg.isNil:
+    result &= a.mapIt(it.digestTo(NodeKey).pp(collapse=true)).join(",")
+  else:
+    result &= a.mapIt(it.digestTo(NodeKey).pp(dbg)).join(",")
+  result &= "]"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -132,18 +145,14 @@ proc printCompareRightLeafs(
       else:
         check rightRc.error == HexaryError(0) # force error printing
 
-      noisy.say "\n***", "i=", i, "/", accounts.len,
-        "\n",
-        "\n    prdKey=", prdKey,
+      if noisy: true.say "\n***", "i=", i, "/", accounts.len,
+        "\n\n    prdKey=", prdKey,
         "\n    ", prdKey.hexaryPath(rootKey,db).pp(dbg),
-        "\n",
-        "\n    nxtKey=", nxtTag,
+        "\n\n    nxtKey=", nxtTag,
         "\n    ", nxtPath.pp(dbg),
-        "\n",
-        "\n    accKey=", accKey,
+        "\n\n    accKey=", accKey,
         "\n    ", accKey.hexaryPath(rootKey,db).pp(dbg),
-        "\n",
-        "\n    lfsKey=", lfsKey,
+        "\n\n    lfsKey=", lfsKey,
         "\n    ", lfsKey.hexaryPath(rootKey,db).pp(dbg),
         "\n"
       return
@@ -170,14 +179,12 @@ proc printCompareLeftNearby(
     if toLeftKey == leftKey:
       return
 
-  noisy.say "\n***",
+  if noisy: true.say "\n***",
     "    rightKey=", rightKey,
     "\n    ", rightKey.hexaryPath(rootKey,db).pp(dbg),
-    "\n",
-    "\n    leftKey=", leftKey,
+    "\n\n    leftKey=", leftKey,
     "\n    ", leftKey.hexaryPath(rootKey,db).pp(dbg),
-    "\n",
-    "\n    toLeftKey=", toLeftKey,
+    "\n\n    toLeftKey=", toLeftKey,
     "\n    ", toLeftKey.hexaryPath(rootKey,db).pp(dbg),
     "\n"
 
@@ -190,6 +197,52 @@ proc verifyAccountListSizes() =
       codeHash:    Hash256(data: high(UInt256).toBytesBE),
       nonce:       high(uint64),
       balance:     high(UInt256)).repeat(n).encode.len
+
+
+proc verifyRangeProof(
+    rootKey: NodeKey;
+    leafs: seq[RangeLeaf];
+    proof: seq[Blob];
+    dbg = HexaryTreeDbRef(nil);
+     ): Result[void,HexaryError] =
+  ## Re-build temporary database and prove or disprove
+  let
+    dumpOk = dbg.isNil.not
+    noisy = dbg.isNil.not
+    xDb = HexaryTreeDbRef()
+  if not dbg.isNil:
+    xDb.keyPp = dbg.keyPp
+
+  # Import proof nodes
+  var unrefs, refs: HashSet[RepairKey] # values ignored
+  for rlpRec in proof:
+    let importError = xDb.hexaryImport(rlpRec, unrefs, refs).error
+    if importError != HexaryError(0):
+      check importError == HexaryError(0)
+      return err(importError)
+
+  # Build tree
+  var lItems = leafs.mapIt(RLeafSpecs(
+    pathTag: it.key.to(NodeTag),
+    payload: it.data))
+  let rc = xDb.hexaryInterpolate(rootKey, lItems)
+  if rc.isOk:
+    return ok()
+
+  if noisy:
+    true.say "\n***", "error=", rc.error,
+      #"\n",
+      #"\n    unrefs=[", unrefs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
+      #"\n    refs=[", refs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
+      "\n\n    proof=", proof.ppNodeKeys(dbg),
+      "\n\n    first=", leafs[0].key,
+      "\n    ", leafs[0].key.hexaryPath(rootKey,xDb).pp(dbg),
+      "\n\n    last=", leafs[^1].key,
+      "\n    ", leafs[^1].key.hexaryPath(rootKey,xDb).pp(dbg),
+      "\n\n    database dump",
+      "\n    ", xDb.dumpHexaDB(rootKey),
+      "\n"
+  rc
 
 # ------------------------------------------------------------------------------
 # Private functions, pretty printing
@@ -322,10 +375,9 @@ proc test_NodeRangeDecompose*(
       if true: quit()
 
 
-proc test_NodeRangeRightProofs*(
+proc test_NodeRangeProof*(
     inLst: seq[UndumpAccounts];
     db: HexaryTreeDbRef|HexaryGetFn;         ## Database abstraction
-    nSplit = 0;                              ## Also split intervals (unused)
     dbg = HexaryTreeDbRef(nil);              ## Debugging env
       ) =
   ## Partition range and provide proofs suitable for `GetAccountRange` message
@@ -333,6 +385,7 @@ proc test_NodeRangeRightProofs*(
   let
     rootKey = inLst[0].root.to(NodeKey)
     noisy = not dbg.isNil
+    maxLen = high(int)
 
   # RLP does not allow static check
   verifyAccountListSizes()
@@ -340,25 +393,44 @@ proc test_NodeRangeRightProofs*(
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
     let
-      iv = NodeTagRange.new(w.base, w.data.accounts[^1].accKey.to(NodeTag))
-      rc = iv.hexaryRangeLeafsProof(rootKey, db, high(int))
+      accounts = w.data.accounts[0 .. min(w.data.accounts.len,maxLen)-1]
+      iv = NodeTagRange.new(w.base, accounts[^1].accKey.to(NodeTag))
+      rc = iv.hexaryRangeLeafsProof(rootKey, db, accounts.len)
     check rc.isOk
     if rc.isErr:
       return
 
-    let
-      leafs = rc.value.leafs
-      accounts = w.data.accounts
+    let leafs = rc.value.leafs
     if leafs.len != accounts.len or accounts[^1].accKey != leafs[^1].key:
       noisy.say "***", "n=", n, " something went wrong .."
       check (n,leafs.len) == (n,accounts.len)
       rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
       return
 
-    # FIXME: verify that proof nodes are complete
+    # Import proof nodes and build trie
+    var rx = rootKey.verifyRangeProof(leafs, rc.value.proof)
+    if rx.isErr:
+      rx = rootKey.verifyRangeProof(leafs, rc.value.proof, dbg)
+      let
+        baseNbls =  iv.minPt.to(NodeKey).to(NibblesSeq)
+        lastNbls =  iv.maxPt.to(NodeKey).to(NibblesSeq)
+        nPfxNblsLen = baseNbls.sharedPrefixLen lastNbls
+        pfxNbls = baseNbls.slice(0, nPfxNblsLen)
+      noisy.say "***", "n=", n,
+        " leafs=", leafs.len,
+        " proof=", rc.value.proof.ppNodeKeys(dbg),
+        "\n\n   ",
+        " base=", iv.minPt,
+        "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(dbg),
+        "\n\n   ",
+        " pfx=", pfxNbls,
+        " nPfx=", nPfxNblsLen,
+        "\n    ", pfxNbls.hexaryPath(rootKey,db).pp(dbg),
+        "\n"
 
-    check rc.value.proof.len <= w.data.proof.len
-    check leafs[^1].key.to(NodeTag) <= iv.maxPt
+      check rx == typeof(rx).ok()
+      return
+
     noisy.say "***", "n=", n,
       " leafs=", leafs.len,
       " proof=", rc.value.proof.len, "/", w.data.proof.len

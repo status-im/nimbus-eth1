@@ -30,15 +30,14 @@ MUFFLE     := 2>/dev/null
 endif
 
 # Support for external NIM compiler unless X=0
-ifneq ($(if $X,$X,1),0)
-# works with external nim 1.5.1 (not the local 1.2.10 one)
+ifneq ($(if $X,$X,0),0)
 PATH       := $(SAVED_PATH):$(NIM_PATH):$(NIMBLE_DIR)/bin
 else
 PATH       := $(NIM_PATH):$(NIMBLE_DIR)/bin:$(SAVED_PATH)
 endif
 
 # Compat version is used with external NIM compiler
-NIM_COMPAT := --useVersion:1.2
+# NIM_COMPAT := --useVersion:1.2
 
 # Name of NIMDOC compiler, test for newer version on host OS
 NIM_CMD    := nim
@@ -71,7 +70,7 @@ help::
 	echo "Usage: $(MAKE) <target> [<option> ..]"
 	echo
 	echo "<option>: V=1          -- verbose mode"
-	echo "          X=0          -- preferring local nim compiler (this repo)"
+	echo "          X=1          -- preferring local nim compiler (this repo)"
 	echo "          NIMFLAGS=..  -- additional flags for nim-docs generator"
 	echo
 	echo "<target>: docs         -- build NIM docs"
@@ -116,12 +115,9 @@ docs/ex/%.png : %.png
 	@mkdir -p $(dir $@)
 	@set -x; cp "$<" "$@"
 
-docs/dochack.js docs/nimdoc.out.css:
-	cp docs.static/$(notdir $@) $@
-
 .PHONY: docs-index-helper
 .SILENT: docs-index-helper
-docs-index-helper: docs/dochack.js docs/nimdoc.out.css
+docs-index-helper:
 	nim=$(NIM_EXE); \
 	$$nim --version | sed q ; set -x ;\
 	$$nim --skipProjCfg buildIndex -o:docs/theindex.html \
@@ -211,9 +207,6 @@ clean-test-exe:
 
 .SILENT: clean-docs
 clean-docs:
-	for f in docs/dochack.js docs/nimdoc.out.css; do \
-	  [ ! -f "$$f" ] || (set -x; rm -f "$$f"); \
-	done
 	for f in $(foreach f,$(EXE_FILES),docs/$f) \
 	         $(foreach f,$(PNG_FILES),docs/ex/$f) \
 	         $(foreach f,$(MD_FILES),docs/ex/$f) \
@@ -223,10 +216,6 @@ clean-docs:
 	  [ ! -f "$$f.idx"  ] || (set -x; rm -f "$$f.idx"); \
 	  [ ! -f "$$f.png"  ] || (set -x; rm -f "$$f.png"); \
 	done
-	find docs -name 'nimdoc?out.css' -print 2>/dev/null | \
-	  while read f_css ; do \
-	    [ ! -f "$$f_css"  ] || (set -x; rm -f "$$f_css"); \
-	  done
 	for d in $(shell find docs -depth -type d -print $(MUFFLE)); do \
 	  (set -x; rmdir "$$d" $(MUFFLE)) || true; \
 	done
