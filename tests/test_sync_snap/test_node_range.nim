@@ -378,7 +378,6 @@ proc test_NodeRangeDecompose*(
 proc test_NodeRangeProof*(
     inLst: seq[UndumpAccounts];
     db: HexaryTreeDbRef|HexaryGetFn;         ## Database abstraction
-    nSplit = 0;                              ## Also split intervals (unused)
     dbg = HexaryTreeDbRef(nil);              ## Debugging env
       ) =
   ## Partition range and provide proofs suitable for `GetAccountRange` message
@@ -386,7 +385,7 @@ proc test_NodeRangeProof*(
   let
     rootKey = inLst[0].root.to(NodeKey)
     noisy = not dbg.isNil
-    maxLen = 5
+    maxLen = high(int)
 
   # RLP does not allow static check
   verifyAccountListSizes()

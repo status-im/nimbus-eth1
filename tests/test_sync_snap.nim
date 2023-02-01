@@ -213,11 +213,10 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       # true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
       test &"Retrieve accounts & proofs for previous account ranges":
-        let nPart = 3
         if db.persistent:
-          accLst.test_NodeRangeProof(getFn, nPart, dbg)
+          accLst.test_NodeRangeProof(getFn, dbg)
         else:
-          accLst.test_NodeRangeProof(hexaDB, nPart, dbg)
+          accLst.test_NodeRangeProof(hexaDB, dbg)
 
       test &"Verify left boundary checks":
         if db.persistent:
