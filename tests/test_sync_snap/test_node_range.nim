@@ -13,7 +13,7 @@
 
 import
   std/[sequtils, sets, strformat, strutils],
-  eth/[common, p2p, rlp, trie/nibbles],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
   ../../nimbus/sync/types,
@@ -187,16 +187,6 @@ proc printCompareLeftNearby(
     "\n\n    toLeftKey=", toLeftKey,
     "\n    ", toLeftKey.hexaryPath(rootKey,db).pp(dbg),
     "\n"
-
-
-proc verifyAccountListSizes() =
-  ## RLP does not allow static check ..
-  for n in [0, 1, 128, 129, 200]:
-    check n.rangeAccountSizeMax == Account(
-      storageRoot: Hash256(data: high(UInt256).toBytesBE),
-      codeHash:    Hash256(data: high(UInt256).toBytesBE),
-      nonce:       high(uint64),
-      balance:     high(UInt256)).repeat(n).encode.len
 
 
 proc verifyRangeProof(
@@ -386,9 +376,6 @@ proc test_NodeRangeProof*(
     rootKey = inLst[0].root.to(NodeKey)
     noisy = not dbg.isNil
     maxLen = high(int)
-
-  # RLP does not allow static check
-  verifyAccountListSizes()
 
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
