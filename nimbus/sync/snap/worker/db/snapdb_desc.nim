@@ -74,7 +74,7 @@ proc toKey(a: NodeKey; ps: SnapDbBaseRef): uint =
 #  a.to(NodeKey).toKey(ps)
 
 proc ppImpl(a: RepairKey; pv: SnapDbRef): string =
-  if a.isZero: "ø" else:"$" & $a.toKey(pv)
+  "$" & $a.toKey(pv)
 
 # ------------------------------------------------------------------------------
 # Debugging, pretty printing
@@ -297,23 +297,28 @@ proc verifyNoMoreRight*(
 # Debugging (and playing with the hexary database)
 # ------------------------------------------------------------------------------
 
-proc assignPrettyKeys*(ps: SnapDbBaseRef) =
+proc assignPrettyKeys*(xDb: HexaryTreeDbRef; root: NodeKey) =
   ## Prepare for pretty pringing/debugging. Run early enough this function
   ## sets the root key to `"$"`, for instance.
-  noPpError("validate(1)"):
-    # Make keys assigned in pretty order for printing
-    var keysList = toSeq(ps.hexaDb.tab.keys)
-    let rootKey = ps.root.to(RepairKey)
-    discard rootKey.toKey(ps)
-    if ps.hexaDb.tab.hasKey(rootKey):
-      keysList = @[rootKey] & keysList
-    for key in keysList:
-      let node = ps.hexaDb.tab[key]
-      discard key.toKey(ps)
-      case node.kind:
-      of Branch: (for w in node.bLink: discard w.toKey(ps))
-      of Extension: discard node.eLink.toKey(ps)
-      of Leaf: discard
+  if not xDb.keyPp.isNil:
+    noPpError("validate(1)"):
+      # Make keys assigned in pretty order for printing
+      let rootKey = root.to(RepairKey)
+      discard xDb.keyPp rootKey
+      var keysList = toSeq(xDb.tab.keys)
+      if xDb.tab.hasKey(rootKey):
+        keysList = @[rootKey] & keysList
+      for key in keysList:
+        let node = xDb.tab[key]
+        discard xDb.keyPp key
+        case node.kind:
+        of Branch: (for w in node.bLink: discard xDb.keyPp w)
+        of Extension: discard xDb.keyPp node.eLink
+        of Leaf: discard
+
+proc assignPrettyKeys*(ps: SnapDbBaseRef) =
+  ## Variant of `assignPrettyKeys()`
+  ps.hexaDb.assignPrettyKeys(ps.root)
 
 proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the

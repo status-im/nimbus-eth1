@@ -19,17 +19,23 @@ import
   ../../nimbus/sync/snap/worker/db/[hexary_desc, snapdb_accounts],
   ../replay/pp
 
+type
+  KnownStorageFailure* = seq[(string,seq[(int,HexaryError)])]
+    ## (<sample-name> & "#" <instance>, @[(<slot-id>, <error-symbol>)), ..])
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
+template isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
   if rc.isErr:
     check rc.error == NothingSerious # prints an error if different
+    false
   elif 0 < rc.value.innerGaps.len:
     check rc.value.innerGaps == seq[NodeSpecs].default
+    false
   else:
-    return true
+    true
 
 proc lastTwo*(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
