@@ -539,7 +539,7 @@ when isMainModule:
 
   # This one uses readily available dumps
   when true: # and false:
-    # false.inspectionRunner()
+    false.inspectionRunner()
     for n,sam in snapTestList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
