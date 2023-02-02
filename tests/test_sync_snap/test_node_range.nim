@@ -382,7 +382,7 @@ proc test_NodeRangeProof*(
     let
       accounts = w.data.accounts[0 .. min(w.data.accounts.len,maxLen)-1]
       iv = NodeTagRange.new(w.base, accounts[^1].accKey.to(NodeTag))
-      rc = iv.hexaryRangeLeafsProof(rootKey, db, accounts.len)
+      rc = db.hexaryRangeLeafsProof(rootKey, iv, accounts.len)
     check rc.isOk
     if rc.isErr:
       return
