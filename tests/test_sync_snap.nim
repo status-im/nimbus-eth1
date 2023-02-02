@@ -203,17 +203,20 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         getFn = desc.getAccountFn
         dbg = if noisy: hexaDb else: nil
 
-      desc.assignPrettyKeys() # debugging, make sure that state root ~ "$0"
-
       test &"Proofing {accLst.len} list items for state root ..{root.pp}":
         accLst.test_accountsImport(desc, db.persistent)
 
+      # debugging, make sure that state root ~ "$0"
+      desc.assignPrettyKeys()
+
+      # Beware: dumping a large database is not recommended
+      # true.say "***", "database dump\n    ", desc.dumpHexaDB()
+
       test &"Retrieve accounts & proofs for previous account ranges":
-        let nPart = 3
         if db.persistent:
-          accLst.test_NodeRangeRightProofs(getFn, nPart, dbg)
+          accLst.test_NodeRangeProof(getFn, dbg)
         else:
-          accLst.test_NodeRangeRightProofs(hexaDB, nPart, dbg)
+          accLst.test_NodeRangeProof(hexaDB, dbg)
 
       test &"Verify left boundary checks":
         if db.persistent:
@@ -235,8 +238,6 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
 
       test &"Revisiting {accKeys.len} stored items on ChainDBRef":
         accKeys.test_accountsRevisitStoredItems(desc, noisy)
-        # Beware: dumping a large database is not recommended
-        # true.say "***", "database dump\n    ", desc.dumpHexaDB()
 
       test &"Decompose path prefix envelopes on {info}":
         let hexaDb = desc.hexaDb
@@ -285,6 +286,7 @@ proc storagesRunner(
 
     test &"Inspecting {stoLst.len} imported storages lists sub-tries":
       stoLst.test_storageSlotsTries(xdb, db.persistent, knownFailures,idPfx)
+
 
 proc inspectionRunner(
     noisy = true;
@@ -547,24 +549,20 @@ when isMainModule:
   #
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true: # and false:
+  when true and false:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("accountsRunner()"):
       for n,sam in snapOtherList:
         false.accountsRunner(persistent=true, sam)
-    #noisy.showElapsed("inspectRunner()"):
-    #  for n,sam in snapOtherHealingList:
-    #    false.inspectionRunner(persistent=true, cascaded=false, sam)
+    noisy.showElapsed("inspectRunner()"):
+      for n,sam in snapOtherHealingList:
+        false.inspectionRunner(persistent=true, cascaded=false, sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
     import ./test_sync_snap/snap_storage_xx
-    let knownFailures = @[
-      ("storages3__18__25_dump#11", @[( 233, RightBoundaryProofFailed)]),
-      ("storages4__26__33_dump#11", @[(1193, RightBoundaryProofFailed)]),
+    let knownFailures: KnownStorageFailure = @[
       ("storages5__34__41_dump#10", @[( 508, RootNodeMismatch)]),
-      ("storagesB__84__92_dump#6",  @[( 325, RightBoundaryProofFailed)]),
-      ("storagesD_102_109_dump#17", @[(1102, RightBoundaryProofFailed)]),
     ]
     noisy.showElapsed("storageRunner()"):
       for n,sam in snapStorageList:
@@ -572,14 +570,14 @@ when isMainModule:
 
   # This one uses readily available dumps
   when true: # and false:
-  #  false.inspectionRunner()
+    false.inspectionRunner()
     for n,sam in snapTestList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
     for n,sam in snapTestStorageList:
       false.accountsRunner(persistent=false, sam)
       false.accountsRunner(persistent=true, sam)
-  #    false.storagesRunner(persistent=true, sam)
+      false.storagesRunner(persistent=true, sam)
 
   # This one uses readily available dumps
   when true and false:

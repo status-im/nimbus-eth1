@@ -25,6 +25,11 @@ type
 
   ContentType* = enum
     newBlockHeader = 0x00
+    # TODO: remove or fix this temporary 
+    # dummySelector per latest spec.
+    # This is temporary workaround
+    # to fool SSZ.isUnion    
+    dummySelector  = 0x01
 
   NewBlockHeaderKey* = object
     blockHash*: BlockHash
@@ -34,6 +39,8 @@ type
     case contentType*: ContentType
     of newBlockHeader:
       newBlockHeaderKey*: NewBlockHeaderKey
+    of dummySelector:
+      dummyField: uint64
 
 func encode*(contentKey: ContentKey): ByteList =
   ByteList.init(SSZ.encode(contentKey))

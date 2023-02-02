@@ -28,7 +28,7 @@ jobs:
   # separate job so it can run concurrently with other tests
   testutp:
     # whole test setup runs on ubuntu so we do not need multiple arch setup here
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     # TODO: for now only push event as this way it is easier to get branch name
     # to build container
     if: github.event_name == 'push'
@@ -108,7 +108,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-22.04
             shell: bash
           - target:
               os: macos
@@ -238,7 +238,9 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
+          # use CC to make sure Nim compiler and subsequent test
+          # using the same glibc version.
+          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
 
       - name: Run fluffy tests (Windows)
         if: runner.os == 'Windows'
@@ -253,6 +255,9 @@ jobs:
       - name: Run fluffy tests (Linux)
         if: runner.os == 'Linux'
         run: |
+          gcc --version
+          ./env.sh nim -v
+          ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy

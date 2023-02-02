@@ -34,13 +34,16 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-#proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =
-#  let y = if w.canLock: "lockOk" else: "noLock"
-#  "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
+when true:
+  import std/[sequtils, strutils]
 
-#proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
-#  let pfx = "\n" & " ".repeat(indent)
-#  w.mapIt(it.pp(db)).join(pfx)
+  proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =
+    let y = if w.canLock: "lockOk" else: "noLock"
+    "(" & $w.pos & "," & y & "," & w.step.pp(db) & ")"
+
+  proc pp(w: seq[RPathXStep]; db: HexaryTreeDbRef; indent = 4): string =
+    let pfx = "\n" & " ".repeat(indent)
+    w.mapIt(it.pp(db)).join(pfx)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -285,7 +288,8 @@ proc rTreeInterpolate(
 proc rTreeUpdateKeys(
     rPath: RPath;
     db: HexaryTreeDbRef;
-      ): Result[void,bool] =
+      ): Result[void,bool]
+      {.gcsafe, raises: [KeyError].} =
   ## The argument `rPath` is assumed to organise database nodes as
   ##
   ##    root -> ... -> () -> () -> ... -> () -> () ...
@@ -343,7 +347,9 @@ proc rTreeUpdateKeys(
         of Leaf:
           discard
         if key != thisKey:
-          return err(false) # no changes were made
+          if not db.tab.hasKey(key) or
+             db.tab[key].state notin {Mutable,TmpRoot}:
+            return err(false) # no changes were made
 
         # Ok, replace database records by stack entries
         var lockOk = true

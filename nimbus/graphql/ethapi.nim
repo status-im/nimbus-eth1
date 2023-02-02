@@ -70,6 +70,11 @@ type
     ethNode: EthereumNode
     txPool: TxPoolRef
 
+when (NimMajor, NimMinor, NimPatch) >= (1, 6, 0):
+  {.push hint[XCannotRaiseY]: off.}
+else:
+  {.push hint[XDeclaredButNotUsed]: off.}
+  
 proc toHash(n: Node): Hash256 =
   result.data = hexToByteArray[32](n.stringVal)
 
@@ -1333,3 +1338,5 @@ proc setupGraphqlHttpServer*(conf: NimbusConf,
     echo sres.error
     quit(QuitFailure)
   sres.get()
+
+{.pop.}

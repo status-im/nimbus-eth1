@@ -62,8 +62,13 @@ proc toPC*(
   let
     sign = if num < 0: "-" else: ""
     preTruncated = (num.abs * multiplier) + roundUp
+
   if int.high.float <= preTruncated:
     return "NaN"
+  # `intToStr` will do `abs` which throws overflow exception when value of low()
+  if preTruncated.int <= int.low():
+    return "NaN"
+
   result = sign & preTruncated.int.intToStr(minDigits) & "%"
   when 0 < digitsAfterDot:
     result.insert(".", result.len - minDigits)
