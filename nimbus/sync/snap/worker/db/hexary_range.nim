@@ -40,9 +40,9 @@ proc convertTo(key: RepairKey; T: type NodeKey): T =
 # ------------------------------------------------------------------------------
 
 template collectLeafs(
-    iv: NodeTagRange;                # Proofed range of leaf paths
-    rootKey: NodeKey|RepairKey;      # State root
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+    rootKey: NodeKey|RepairKey;      # State root
+    iv: NodeTagRange;                # Proofed range of leaf paths
     nLeafs: int;                     # Implies maximal data size
       ): auto =
   ## Collect trie database leafs prototype. This directive is provided as
@@ -90,12 +90,12 @@ template collectLeafs(
 
 
 template updateProof(
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+    rootKey: NodeKey|RepairKey;      # State root
     baseTag: NodeTag;                # Left boundary
     leafList: seq[RangeLeaf];        # Set of collected leafs
-    rootKey: NodeKey|RepairKey;      # State root
-    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): auto =
-  ## Update leafs list by adding proof nodes. This directive is provided as
+  ## Complement leafs list by adding proof nodes. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
   var proof = baseTag.hexaryPath(rootKey, db)
         .path
@@ -120,53 +120,53 @@ template updateProof(
 # ------------------------------------------------------------------------------
 
 proc hexaryRangeLeafsProof*(
-    iv: NodeTagRange;                # Proofed range of leaf paths
-    rootKey: NodeKey;                # State root
-    db: HexaryGetFn;                 # Database abstraction
-    nLeafs = high(int);              # Implies maximal data size
-      ): Result[RangeProof,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## ...
-  let rc = iv.collectLeafs(rootKey, db, nLeafs)
-  if rc.isErr:
-    err(rc.error)
-  else:
-    ok(iv.minPt.updateProof(rc.value, rootKey, db))
-
-proc hexaryRangeLeafsProof*(
-    baseTag: NodeTag;                # Left boundary
-    leafList: seq[RangeLeaf];        # Set of already collected leafs
-    rootKey: NodeKey;                # State root
-    db: HexaryGetFn;                 # Database abstraction
-      ): RangeProof
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## ...
-  baseTag.updateProof(leafList, rootKey, db)
-
-
-proc hexaryRangeLeafsProof*(
-    iv: NodeTagRange;                # Proofed range of leaf paths
-    rootKey: NodeKey;                # State root
     db: HexaryTreeDbRef;             # Database abstraction
+    rootKey: NodeKey;                # State root
+    iv: NodeTagRange;                # Proofed range of leaf paths
     nLeafs = high(int);              # Implies maximal data size
       ): Result[RangeProof,HexaryError]
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## ...
-  let rc = iv.collectLeafs(rootKey, db, nLeafs)
+  ## Collect trie database leafs prototype and add proof.
+  let rc = db.collectLeafs(rootKey, iv, nLeafs)
   if rc.isErr:
     err(rc.error)
   else:
-    ok(iv.minPt.updateProof(rc.value, rootKey, db))
+    ok(db.updateProof(rootKey, iv.minPt, rc.value))
 
 proc hexaryRangeLeafsProof*(
+    db: HexaryTreeDbRef;             # Database abstraction
+    rootKey: NodeKey;                # State root
     baseTag: NodeTag;                # Left boundary
     leafList: seq[RangeLeaf];        # Set of already collected leafs
-    rootKey: NodeKey;                # State root
-    db: HexaryTreeDbRef;             # Database abstraction
       ): RangeProof
       {.gcsafe, raises: [Defect,KeyError]} =
-  ## ...
-  baseTag.updateProof(leafList, rootKey, db)
+  ## Complement leafs list by adding proof nodes to the argument list
+  ## `leafList`.
+  db.updateProof(rootKey, baseTag, leafList)
+
+proc hexaryRangeLeafsProof*(
+    db: HexaryGetFn;                 # Database abstraction
+    rootKey: NodeKey;                # State root
+    iv: NodeTagRange;                # Proofed range of leaf paths
+    nLeafs = high(int);              # Implies maximal data size
+      ): Result[RangeProof,HexaryError]
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryRangeLeafsProof()` for persistent database.
+  let rc = db.collectLeafs(rootKey, iv, nLeafs)
+  if rc.isErr:
+    err(rc.error)
+  else:
+    ok(db.updateProof(rootKey, iv.minPt, rc.value))
+
+proc hexaryRangeLeafsProof*(
+    db: HexaryGetFn;                 # Database abstraction
+    rootKey: NodeKey;                # State root
+    baseTag: NodeTag;                # Left boundary
+    leafList: seq[RangeLeaf];        # Set of already collected leafs
+      ): RangeProof
+      {.gcsafe, raises: [Defect,RlpError]} =
+  ## Variant of `hexaryRangeLeafsProof()` for persistent database.
+  db.updateProof(rootKey, baseTag, leafList)
 
 # ------------------------------------------------------------------------------
 # End

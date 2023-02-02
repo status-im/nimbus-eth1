@@ -10,6 +10,52 @@
 # distributed except according to those terms.
 
 ## Snap sync components tester and TDD environment
+##
+## This module provides test bodies for storing chain chain data directly
+## rather than derive them by executing the EVM. Here, only accounts are
+## considered.
+##
+## The `snap/1` protocol allows to fetch data for a certain account range. The
+## following boundary conditions apply to the received data:
+##
+## * `State root`: All data are relaive to the same state root.
+##
+## * `Accounts`: There is an accounts interval sorted in strictly increasing
+##   order. The accounts are required consecutive, i.e. without holes in
+##   between although this cannot be verified immediately.
+##
+## * `Lower bound`: There is a start value which might be lower than the first
+##   account hash. There must be no other account between this start value and
+##   the first account (not verifyable yet.) For all practicat purposes, this
+##   value is mostly ignored but carried through.
+##
+## * `Proof`: There is a list of hexary nodes which allow to build a partial
+##   Patricia-Merkle trie starting at the state root with all the account
+##   leaves. There are enough nodes that show that there is no account before
+##   the least account (which is currently ignored.)
+##
+## There are test data samples on the sub-directory `test_sync_snap`. These
+## are complete replies for some (admittedly snap) test requests from a `kiln#`
+## session.
+##
+## There are three tests:
+##
+## 1. Run the `test_accountsImport()` function which is the all-in-one
+##    production function processoing the data described above. The test
+##    applies it sequentially to all argument data sets.
+##
+## 2. With `test_accountsMergeProofs()` individual items are tested which are
+##    hidden in test 1. while merging the sample data.
+##    * Load/accumulate `proofs` data from several samples
+##    * Load/accumulate accounts (needs some unique sorting)
+##    * Build/complete hexary trie for accounts
+##    * Save/bulk-store hexary trie on disk. If rocksdb is available, data
+##      are bulk stored via sst.
+##
+## 3. The function `test_accountsRevisitStoredItems()` traverses trie nodes
+##    stored earlier. The accounts from test 2 are re-visted using the account
+##    hash as access path.
+##
 
 import
   std/algorithm,

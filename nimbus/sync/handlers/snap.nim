@@ -26,6 +26,14 @@ type
     chain: ChainRef
     peerPool: PeerPool
 
+const
+  transportAccountSizeMax = 110
+    ## Account record with `high(UInt256)` hashes and balance, and maximal
+    ## nonce within RLP list
+
+  transportProofNodeSizeMax = 536
+    ## Branch node with all branches `high(UInt256)` within RLP list
+
 # ------------------------------------------------------------------------------
 # Private functions: helper functions
 # ------------------------------------------------------------------------------
@@ -72,6 +80,45 @@ proc init*(
 
   #ctx.setupPeerObserver()
   ctx
+
+# ------------------------------------------------------------------------------
+# Public functions: helpers
+# ------------------------------------------------------------------------------
+
+proc accountRangeSize*(n: int): int =
+  ## Max number of bytes needed to store `n` RLP encoded `Account()` type
+  ## entries. Note that this is an *approximate* upper bound.
+  ##
+  ## The maximum size of a single RLP encoded account item can be determined
+  ## by setting every field of `Account()` to `high()` or `0xff`.
+  ##
+  ## Note: Public function subject to unit tests
+  # Experimentally derived, see `test_calc` unit test module
+  if 595 < n:
+    4 + n * transportAccountSizeMax
+  elif 2 < n:
+    3 + n * transportAccountSizeMax
+  elif 0 < n:
+    2 + n * transportAccountSizeMax
+  else:
+    1
+
+proc proofNodesSize*(n: int): int =
+  ## Ditto for proof nodes
+  ##
+  ## Note: Public function subject to unit tests
+  # Experimentally derived, see `test_calc` unit test module
+  if 125 < n:
+    4 + n * transportProofNodeSizeMax
+  elif 0 < n:
+    3 + n * transportProofNodeSizeMax
+  else:
+    1
+
+proc accountRangeNumEntries*(size: int): int =
+  ## Number of entries with size guaranteed to not exceed the argument `size`.
+  if transportAccountSizeMax + 3 <= size:
+    result = (size - 3) div transportAccountSizeMax
 
 # ------------------------------------------------------------------------------
 # Public functions: snap wire protocol handlers

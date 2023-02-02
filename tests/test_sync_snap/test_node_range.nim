@@ -13,7 +13,7 @@
 
 import
   std/[sequtils, sets, strformat, strutils],
-  eth/[common, p2p, rlp, trie/nibbles],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
   ../../nimbus/sync/types,
@@ -187,16 +187,6 @@ proc printCompareLeftNearby(
     "\n\n    toLeftKey=", toLeftKey,
     "\n    ", toLeftKey.hexaryPath(rootKey,db).pp(dbg),
     "\n"
-
-
-proc verifyAccountListSizes() =
-  ## RLP does not allow static check ..
-  for n in [0, 1, 128, 129, 200]:
-    check n.rangeAccountSizeMax == Account(
-      storageRoot: Hash256(data: high(UInt256).toBytesBE),
-      codeHash:    Hash256(data: high(UInt256).toBytesBE),
-      nonce:       high(uint64),
-      balance:     high(UInt256)).repeat(n).encode.len
 
 
 proc verifyRangeProof(
@@ -387,53 +377,70 @@ proc test_NodeRangeProof*(
     noisy = not dbg.isNil
     maxLen = high(int)
 
-  # RLP does not allow static check
-  verifyAccountListSizes()
-
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
     let
-      accounts = w.data.accounts[0 .. min(w.data.accounts.len,maxLen)-1]
+      accounts = w.data.accounts[0 ..< min(w.data.accounts.len,maxLen)]
       iv = NodeTagRange.new(w.base, accounts[^1].accKey.to(NodeTag))
-      rc = iv.hexaryRangeLeafsProof(rootKey, db, accounts.len)
+      rc = db.hexaryRangeLeafsProof(rootKey, iv, accounts.len)
     check rc.isOk
     if rc.isErr:
       return
 
-    let leafs = rc.value.leafs
-    if leafs.len != accounts.len or accounts[^1].accKey != leafs[^1].key:
-      noisy.say "***", "n=", n, " something went wrong .."
-      check (n,leafs.len) == (n,accounts.len)
-      rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
-      return
+    # Run over sub-samples of the given account range
+    var subCount = 0
+    for cutOff in {0, 2, 5, 10, 16, 23, 77}:
 
-    # Import proof nodes and build trie
-    var rx = rootKey.verifyRangeProof(leafs, rc.value.proof)
-    if rx.isErr:
-      rx = rootKey.verifyRangeProof(leafs, rc.value.proof, dbg)
-      let
-        baseNbls =  iv.minPt.to(NodeKey).to(NibblesSeq)
-        lastNbls =  iv.maxPt.to(NodeKey).to(NibblesSeq)
-        nPfxNblsLen = baseNbls.sharedPrefixLen lastNbls
-        pfxNbls = baseNbls.slice(0, nPfxNblsLen)
-      noisy.say "***", "n=", n,
-        " leafs=", leafs.len,
-        " proof=", rc.value.proof.ppNodeKeys(dbg),
-        "\n\n   ",
-        " base=", iv.minPt,
-        "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(dbg),
-        "\n\n   ",
-        " pfx=", pfxNbls,
-        " nPfx=", nPfxNblsLen,
-        "\n    ", pfxNbls.hexaryPath(rootKey,db).pp(dbg),
-        "\n"
+      # Take sub-samples but not too small
+      if 0 < cutOff and rc.value.leafs.len < cutOff + 5:
+        break # rest cases ignored
+      subCount.inc
 
-      check rx == typeof(rx).ok()
-      return
+      let leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
+      var proof: seq[Blob]
+
+      # Calculate proof
+      if cutOff == 0:
+        if leafs.len != accounts.len or accounts[^1].accKey != leafs[^1].key:
+          noisy.say "***", "n=", n, " something went wrong .."
+          check (n,leafs.len) == (n,accounts.len)
+          rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
+          return
+        proof = rc.value.proof
+      else:
+        # Re-adjust proof
+        proof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs).proof
+
+      # Import proof nodes and build trie
+      block:
+        var rx = rootKey.verifyRangeProof(leafs, proof)
+        if rx.isErr:
+          rx = rootKey.verifyRangeProof(leafs, proof, dbg)
+          let
+            baseNbls =  iv.minPt.to(NodeKey).to(NibblesSeq)
+            lastNbls =  iv.maxPt.to(NodeKey).to(NibblesSeq)
+            nPfxNblsLen = baseNbls.sharedPrefixLen lastNbls
+            pfxNbls = baseNbls.slice(0, nPfxNblsLen)
+          noisy.say "***", "n=", n,
+            " cutOff=", cutOff,
+            " leafs=", leafs.len,
+            " proof=", proof.ppNodeKeys(dbg),
+            "\n\n   ",
+            " base=", iv.minPt,
+            "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(dbg),
+            "\n\n   ",
+            " pfx=", pfxNbls,
+            " nPfx=", nPfxNblsLen,
+            "\n    ", pfxNbls.hexaryPath(rootKey,db).pp(dbg),
+            "\n"
+
+          check rx == typeof(rx).ok()
+          return
 
     noisy.say "***", "n=", n,
-      " leafs=", leafs.len,
-      " proof=", rc.value.proof.len, "/", w.data.proof.len
+      " leafs=", rc.value.leafs.len,
+      " proof=", rc.value.proof.len, "/", w.data.proof.len,
+      " sub-samples=", subCount
 
 
 proc test_NodeRangeLeftBoundary*(
@@ -468,3 +475,6 @@ proc test_NodeRangeLeftBoundary*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+proc xxx(inLst: seq[UndumpAccounts]; db: HexaryGetFn; dbg: HexaryTreeDbRef) =
+  inLst.test_NodeRangeProof(db, dbg)

@@ -27,8 +27,8 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
-    test_accounts, test_helpers, test_node_range, test_inspect, test_pivot,
-    test_storage, test_db_timing, test_types]
+    test_accounts, test_calc, test_helpers, test_node_range, test_inspect,
+    test_pivot, test_storage, test_db_timing, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -174,9 +174,19 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
+proc miscRunner(noisy = true) =
+
+  suite "SyncSnap: Verify setup, constants, limits":
+
+    test "RLP accounts list sizes":
+      test_calcAccountsListSizes()
+
+    test "RLP proofs list sizes":
+      test_calcProofsListSizes()
+
+
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   let
-    peer = Peer.new
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
     tmpDir = getTmpDir()
@@ -490,6 +500,7 @@ proc dbTimingRunner(noisy = true;  persistent = true; cleanUp = true) =
 # ------------------------------------------------------------------------------
 
 proc syncSnapMain*(noisy = defined(debug)) =
+  noisy.miscRunner()
   noisy.accountsRunner(persistent=true)
   noisy.accountsRunner(persistent=false)
   noisy.importRunner() # small sample, just verify functionality
@@ -503,50 +514,8 @@ when isMainModule:
   #setTraceLevel()
   setErrorLevel()
 
-  # The `accountsRunner()` tests a snap sync functionality for storing chain
-  # chain data directly rather than derive them by executing the EVM. Here,
-  # only accounts are considered.
-  #
-  # The `snap/1` protocol allows to fetch data for a certain account range. The
-  # following boundary conditions apply to the received data:
-  #
-  # * `State root`: All data are relaive to the same state root.
-  #
-  # * `Accounts`: There is an accounts interval sorted in strictly increasing
-  #   order. The accounts are required consecutive, i.e. without holes in
-  #   between although this cannot be verified immediately.
-  #
-  # * `Lower bound`: There is a start value which might be lower than the first
-  #   account hash. There must be no other account between this start value and
-  #   the first account (not verifyable yet.) For all practicat purposes, this
-  #   value is mostly ignored but carried through.
-  #
-  # * `Proof`: There is a list of hexary nodes which allow to build a partial
-  #   Patricia-Merkle trie starting at the state root with all the account
-  #   leaves. There are enough nodes that show that there is no account before
-  #   the least account (which is currently ignored.)
-  #
-  # There are test data samples on the sub-directory `test_sync_snap`. These
-  # are complete replies for some (admittedly smapp) test requests from a `kiln`
-  # session.
-  #
-  # The `accountsRunner()` does three tests:
-  #
-  # 1. Run the `importAccounts()` function which is the all-in-one production
-  #    function processoing the data described above. The test applies it
-  #    sequentially to about 20 data sets.
-  #
-  # 2. Test individual functional items which are hidden in test 1. while
-  #    merging the sample data.
-  #    * Load/accumulate `proofs` data from several samples
-  #    * Load/accumulate accounts (needs some unique sorting)
-  #    * Build/complete hexary trie for accounts
-  #    * Save/bulk-store hexary trie on disk. If rocksdb is available, data
-  #      are bulk stored via sst.
-  #
-  # 3. Traverse trie nodes stored earlier. The accounts from test 2 are
-  #    re-visted using the account hash as access path.
-  #
+  # Test constant, calculations etc.
+  noisy.miscRunner()
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
