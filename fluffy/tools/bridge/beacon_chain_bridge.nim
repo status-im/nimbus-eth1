@@ -65,7 +65,7 @@
 import
   std/[os, strutils, options],
   web3/ethtypes,
-  chronicles, chronos,
+  chronicles, chronos, confutils,
   eth/[keys, rlp], eth/[trie, trie/db],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
   # for `BlockHeader`.
@@ -155,13 +155,7 @@ proc asPortalBlockData*(
 
   (hash, headerWithProof, body)
 
-# TODO Find what can throw exception
-proc run() {.raises: [Exception].} =
-  {.pop.}
-  var config = makeBannerAndConfig(
-    "Nimbus beacon chain bridge", BeaconBridgeConf)
-  {.push raises: [].}
-
+proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
@@ -388,4 +382,9 @@ proc run() {.raises: [Exception].} =
     poll()
 
 when isMainModule:
-  run()
+  {.pop.}
+  var config = makeBannerAndConfig(
+    "Nimbus beacon chain bridge", BeaconBridgeConf)
+  {.push raises: [].}
+
+  run(config)
