@@ -9,7 +9,7 @@
 
 import
   std/[os, strutils],
-  chronicles, chronicles/chronos_tools, chronos,
+  chronicles, chronicles/chronos_tools, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
   beacon_chain/eth1/eth1_monitor,
@@ -40,13 +40,7 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
 
-# TODO Find what can throw exception
-proc run() {.raises: [Exception].} =
-  {.pop.}
-  var config = makeBannerAndConfig(
-    "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
-  {.push raises: [].}
-
+proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
 
@@ -246,4 +240,9 @@ proc run() {.raises: [Exception].} =
     poll()
 
 when isMainModule:
-  run()
+  {.pop.}
+  var config = makeBannerAndConfig(
+    "Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
+  {.push raises: [].}
+
+  run(config)
