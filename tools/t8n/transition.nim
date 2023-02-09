@@ -20,7 +20,8 @@ import
   ../../nimbus/utils/utils,
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/core/dao,
-  ../../nimbus/core/executor/[process_transaction, executor_helpers]
+  ../../nimbus/core/executor/[process_transaction, executor_helpers],
+  ../../nimbus/core/eip4844
 
 import stew/byteutils
 const
@@ -203,6 +204,7 @@ proc exec(ctx: var TransContext,
   vmState.receipts = newSeqOfCap[Receipt](txList.len)
   vmState.cumulativeGasUsed = 0
 
+  var dataGasUsed = 0'u64
   for txIndex, txRes in txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -239,6 +241,7 @@ proc exec(ctx: var TransContext,
       rec, tx, sender, txIndex, gasUsed
     )
     includedTx.add tx
+    dataGasUsed += tx.getTotalDataGas
 
   # Add mining reward? (-1 means rewards are disabled)
   if stateReward.isSome and stateReward.get >= 0:
@@ -285,6 +288,10 @@ proc exec(ctx: var TransContext,
     currentBaseFee: ctx.env.currentBaseFee,
     withdrawalsRoot: header.withdrawalsRoot
   )
+
+  if fork >= FkCancun:
+    result.result.dataGasUsed = some dataGasUsed
+    result.result.excessDataGas = some calcExcessDataGas(vmState.parent)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -403,7 +410,9 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       timestamp: ctx.env.parentTimestamp,
       difficulty: ctx.env.parentDifficulty.get(0.u256),
       ommersHash: uncleHash,
-      blockNumber: ctx.env.currentNumber - 1.toBlockNumber
+      blockNumber: ctx.env.currentNumber - 1.toBlockNumber,
+      dataGasUsed: ctx.env.parentDataGasUsed,
+      excessDataGas: ctx.env.parentExcessDataGas
     )
 
     # Sanity check, to not `panic` in state_transition
@@ -418,6 +427,17 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
       raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
+
+    if com.isCancunOrLater(ctx.env.currentTimestamp):
+      if ctx.env.parentDataGasUsed.isNone:
+        raise newError(ErrorConfig, "Cancun config but missing 'parentDataGasUsed' env section")
+
+      if ctx.env.parentExcessDataGas.isNone:
+        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessDataGas' env section")
+
+      let res = loadKzgTrustedSetup()
+      if res.isErr:
+        raise newError(ErrorConfig, res.error)
 
     if com.forkGTE(MergeFork):
       if ctx.env.currentRandom.isNone:
