@@ -13,6 +13,7 @@ import
   chronicles,
   eth/[common, p2p, trie/db, trie/nibbles],
   ../../../../db/[select_backend, storage_types],
+  ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
        hexary_paths, rocky_bulk_load]
@@ -211,7 +212,7 @@ proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
 proc mergeProofs*(
     ps: SnapDbBaseRef;        ## Session database
     peer: Peer;               ## For log messages
-    proof: seq[Blob];         ## Node records
+    proof: seq[SnapProof];    ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
       ): Result[void,HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
@@ -225,7 +226,7 @@ proc mergeProofs*(
     refs = @[ps.root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
-    let report = db.hexaryImport(rlpRec, nodes, refs)
+    let report = db.hexaryImport(rlpRec.data, nodes, refs)
     if report.error != NothingSerious:
       let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error

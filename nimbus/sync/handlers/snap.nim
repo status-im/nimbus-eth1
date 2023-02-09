@@ -31,7 +31,7 @@ const
     ## Account record with `high(UInt256)` hashes and balance, and maximal
     ## nonce within RLP list
 
-  transportProofNodeSizeMax = 536
+  transportProofNodeSizeMax = 532
     ## Branch node with all branches `high(UInt256)` within RLP list
 
 # ------------------------------------------------------------------------------
@@ -40,6 +40,37 @@ const
 
 proc notImplemented(name: string) =
   debug "snapWire: hHandler method not implemented", meth=name
+
+proc rlpSize(blobLen: int): int =
+  ## Returns the size of RLP encoded <blob> of argument length `blobLen`.
+
+  if blobLen < 56:
+      return blobLen + 1
+  if blobLen < (1 shl (8 * 1)):
+    return blobLen + 2
+  if blobLen < (1 shl (8 * 2)):
+    return blobLen + 3
+  if blobLen < (1 shl (8 * 3)):
+    return blobLen + 4
+
+  when sizeof(int) < 8:
+    if blobLen < (1 shl (8 * 4)):
+      return blobLen + 5
+    if blobLen < (1 shl (8 * 5)):
+      return blobLen + 6
+    if blobLen < (1 shl (8 * 6)):
+      return blobLen + 7
+    if blobLen < (1 shl (8 * 7)):
+      return blobLen + 8
+
+  if blobLen < high(int) - (1 + sizeof(int)):
+    blobLen + 1 + sizeof(int)
+  else:
+    high(int)
+
+proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
+  ## RLP mixin, encoding
+  writer.snapAppend node
 
 # ------------------------------------------------------------------------------
 # Private functions: peer observer
@@ -93,32 +124,24 @@ proc accountRangeSize*(n: int): int =
   ## by setting every field of `Account()` to `high()` or `0xff`.
   ##
   ## Note: Public function subject to unit tests
-  # Experimentally derived, see `test_calc` unit test module
-  if 595 < n:
-    4 + n * transportAccountSizeMax
-  elif 2 < n:
-    3 + n * transportAccountSizeMax
-  elif 0 < n:
-    2 + n * transportAccountSizeMax
+  const nMax = high(int) div transportAccountSizeMax
+  if n <= nMax:
+    rlpSize(n * transportAccountSizeMax)
   else:
-    1
+    high(int)
 
 proc proofNodesSize*(n: int): int =
   ## Ditto for proof nodes
   ##
-  ## Note: Public function subject to unit tests
-  # Experimentally derived, see `test_calc` unit test module
-  if 125 < n:
-    4 + n * transportProofNodeSizeMax
-  elif 0 < n:
-    3 + n * transportProofNodeSizeMax
+  ## Note: This is a public function subject to unit tests
+  const nMax = high(int) div transportProofNodeSizeMax
+  if n <= nMax:
+    rlpSize(n * transportProofNodeSizeMax)
   else:
-    1
+    high(int)
 
-proc accountRangeNumEntries*(size: int): int =
-  ## Number of entries with size guaranteed to not exceed the argument `size`.
-  if transportAccountSizeMax + 3 <= size:
-    result = (size - 3) div transportAccountSizeMax
+proc proofEncode*(proof: seq[SnapProof]): Blob =
+  rlp.encode proof
 
 # ------------------------------------------------------------------------------
 # Public functions: snap wire protocol handlers
@@ -130,7 +153,7 @@ method getAccountRange*(
     origin: Hash256;
     limit: Hash256;
     replySizeMax: uint64;
-      ): (seq[SnapAccount], SnapAccountProof)
+      ): (seq[SnapAccount], seq[SnapProof])
       {.gcsafe.} =
   notImplemented("getAccountRange")
 
@@ -141,7 +164,7 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], SnapStorageProof)
+      ): (seq[seq[SnapStorage]], seq[SnapProof])
       {.gcsafe.} =
   notImplemented("getStorageRanges")
 

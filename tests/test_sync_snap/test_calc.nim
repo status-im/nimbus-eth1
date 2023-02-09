@@ -14,8 +14,10 @@
 import
   std/sequtils,
   eth/common,
+  eth/rlp,
   unittest2,
   ../../nimbus/sync/handlers/snap,
+  ../../nimbus/sync/protocol,
   ../../nimbus/sync/snap/[range_desc, worker/db/hexary_desc],
   ./test_helpers
 
@@ -37,9 +39,6 @@ proc test_calcAccountsListSizes*() =
   for n in tryLst:
     #echo ">>> ", n, " ", sample.repeat(n).encode.len
     check n.accountRangeSize == sample.repeat(n).encode.len
-  block:
-    let n = tryLst[^1]
-    check 4 + n * sample.encode.len == sample.repeat(n).encode.len
 
 
 proc  test_calcProofsListSizes*() =
@@ -49,16 +48,13 @@ proc  test_calcProofsListSizes*() =
     var xNode = XNodeObj(kind: Branch)
     for n in 0 .. 15:
       xNode.bLink[n] = high(NodeTag).to(Blob)
-    xNode
+    SnapProof(data: xNode.convertTo(Blob))
 
   let tryLst = [0, 1, 2, 126, 127]
 
   for n in tryLst:
-    #echo ">>> ", n, " ", sample.repeat(n).encode.len
-    check n.proofNodesSize == sample.repeat(n).encode.len
-  block:
-    let n = tryLst[^1]
-    check 4 + n * sample.encode.len == sample.repeat(n).encode.len
+    #echo ">>> ", n, " ", sample.repeat(n).proofEncode.rlpFromBytes.inspect
+    check n.proofNodesSize == sample.repeat(n).proofEncode.len
 
 # ------------------------------------------------------------------------------
 # End

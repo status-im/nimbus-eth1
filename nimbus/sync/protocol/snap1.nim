@@ -138,7 +138,6 @@ import
   chronicles,
   chronos,
   eth/[common, p2p, p2p/private/p2p_types],
-  nimcrypto/hash,
   ./snap/snap_types,
   ../../constants
 
@@ -167,69 +166,22 @@ const
   trSnapSendReplying* =
     ">> " & prettySnapProtoName & " Replying "
 
-# The `snap` protocol represents `Account` differently from the regular RLP
-# serialisation used in `eth` protocol as well as the canonical Merkle hash
-# over all accounts.  In `snap`, empty storage hash and empty code hash are
-# each represented by an RLP zero-length string instead of the full hash.  This
-# avoids transmitting these hashes in about 90% of accounts.  We need to
-# recognise or set these hashes in `Account` when serialising RLP for `snap`.
-
-proc snapRead*(rlp: var Rlp; T: type Account; strict: static[bool] = false): T
-    {.gcsafe, raises: [RlpError]} =
-  ## RLP decoding for `Account`. The `snap` RLP representation of the account
-  ## differs from standard `Account` RLP. Empty storage hash and empty code
-  ## hash are each represented by an RLP zero-length string instead of the
-  ## full hash.
-  ##
-  ## Normally, this read function will silently handle standard encodinig and
-  ## `snap` enciding. Setting the argument strict as `false` the function will
-  ## throw an exception if `snap` encoding is violated.
-  rlp.tryEnterList()
-  result.nonce = rlp.read(typeof(result.nonce))
-  result.balance = rlp.read(typeof(result.balance))
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.storageRoot = rlp.read(typeof(result.storageRoot))
-    when strict:
-      if result.storageRoot == EMPTY_ROOT_HASH:
-        raise newException(RlpTypeMismatch,
-          "EMPTY_ROOT_HASH not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.storageRoot = EMPTY_ROOT_HASH
-  if rlp.blobLen != 0 or not rlp.isBlob:
-    result.codeHash = rlp.read(typeof(result.codeHash))
-    when strict:
-      if result.codeHash == EMPTY_SHA3:
-        raise newException(RlpTypeMismatch,
-          "EMPTY_SHA3 not encoded as empty string in Snap protocol")
-  else:
-    rlp.skipElem()
-    result.codeHash = EMPTY_SHA3
-
-proc snapAppend*(writer: var RlpWriter; account: Account) =
-  ## RLP encoding for `Account`. The snap RLP representation of the account
-  ## differs from standard `Account` RLP. Empty storage hash and empty code
-  ## hash are each represented by an RLP zero-length string instead of the
-  ## full hash.
-  writer.startList(4)
-  writer.append(account.nonce)
-  writer.append(account.balance)
-  if account.storageRoot == EMPTY_ROOT_HASH:
-    writer.append("")
-  else:
-    writer.append(account.storageRoot)
-  if account.codeHash == EMPTY_SHA3:
-    writer.append("")
-  else:
-    writer.append(account.codeHash)
 
 proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
-  ## RLP Mixin: decoding for `SnapAccount`.
-  result = rlp.snapRead(T)
+  ## RLP mixin, decoding
+  rlp.snapRead T
 
-proc append(rlpWriter: var RlpWriter, t: SnapAccount, account: Account) =
-  ##  RLP Mixin: encoding for `SnapAccount`.
-  rlpWriter.snapAppend(account)
+proc read(rlp: var Rlp; t: var SnapProof; T: type Blob): T =
+  ## RLP mixin, decoding
+  rlp.snapRead T
+
+proc append(writer: var RlpWriter, t: SnapAccount, account: Account) =
+  ## RLP mixin, encoding
+  writer.snapAppend account
+
+proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
+  ## RLP mixin, encoding
+  writer.snapAppend node
 
 
 p2pProtocol snap1(version = snapVersion,
@@ -271,8 +223,8 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x01: AccountRange.
     proc accountRange(
         peer: Peer;
-        accounts: seq[SnapAccount];
-        proof: SnapAccountProof)
+        accounts: openArray[SnapAccount];
+        proof: openArray[SnapProof])
 
 
   requestResponse:
@@ -312,7 +264,7 @@ p2pProtocol snap1(version = snapVersion,
     proc storageRanges(
         peer: Peer;
         slotLists: openArray[seq[SnapStorage]];
-        proof: SnapStorageProof)
+        proof: openArray[SnapProof])
 
 
   requestResponse:

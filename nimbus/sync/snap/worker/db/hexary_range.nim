@@ -13,6 +13,7 @@ import
   chronicles,
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
+  ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
 
@@ -25,7 +26,7 @@ type
 
   RangeProof* = object
     leafs*: seq[RangeLeaf]
-    proof*: seq[Blob]
+    proof*: seq[SnapProof]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -113,7 +114,7 @@ template updateProof(
 
   RangeProof(
     leafs: leafList,
-    proof: proof.toSeq)
+    proof: proof.toSeq.mapIt(SnapProof(data: it)))
 
 # ------------------------------------------------------------------------------
 # Public functions

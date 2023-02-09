@@ -113,7 +113,7 @@ proc importStorageSlots(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     base: NodeTag;             ## before or at first account entry in `data`
     data: AccountSlots;        ## Account storage descriptor
-    proof: SnapStorageProof;   ## Storage slots proof data
+    proof: seq[SnapProof];    ## Storage slots proof data
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
