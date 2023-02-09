@@ -209,11 +209,11 @@ macro fillToBlockNumberArray(conf, arr: typed): untyped =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toForkToBlockNumber*(conf: ChainConfig): ForkToBlockNumber =
+proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   fillToBlockNumberArray(conf, result)
   result[Frontier] = some(0.toBlockNumber)
 
-proc toHardFork*(forkToBlock: ForkToBlockNumber, number: BlockNumber): HardFork =
+proc toHardFork*(forkToBlock: ForkTransitionTable, number: BlockNumber): HardFork =
   for fork in countdown(HardFork.high, HardFork.low):
     let forkBlock = forkToBlock[fork]
     if forkBlock.isSome and number >= forkBlock.get:

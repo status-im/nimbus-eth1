@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/options,
+  std/[options, times],
   eth/common,
   json_serialization,
   ../utils/utils,
@@ -82,10 +82,29 @@ type
     consensusType*
       {.dontSerialize.} : ConsensusType
 
-  ForkToBlockNumber* = array[HardFork, Option[BlockNumber]]
+  ForkTransitionTable* = array[HardFork, Option[BlockNumber]]
   ForkOptional* = object
     name*: string
     number*: Option[BlockNumber]
+
+  ForkDeterminationInfo* = BlockNumber
+
+
+proc blockNumberToForkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
+  n
+
+proc forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
+  n
+
+proc forkDeterminationInfoForHeader*(header: BlockHeader): ForkDeterminationInfo =
+  forkDeterminationInfo(header.blockNumber, header.timestamp)
+
+proc adjustForNextBlock*(n: BlockNumber): BlockNumber =
+  n + 1
+
+proc adjustForNextBlock*(t: EthTime): EthTime =
+  fromUnix(t.toUnix + 12)
+
 
 const
   # this table is used for generate
@@ -286,7 +305,7 @@ func mergeMaybe(data, number, td: UInt256): bool
   # data is a TTD
   td >= data
 
-proc blockToForks*(conf: ChainConfig, map: ForkToBlockNumber): BlockToForks =
+proc blockToForks*(conf: ChainConfig, map: ForkTransitionTable): BlockToForks =
   # between Frontier and latest HardFork
   # can be a match or not
   for fork, number in map:

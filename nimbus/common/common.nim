@@ -55,7 +55,7 @@ type
 
     # map block number and ttd to
     # HardFork
-    forkToBlock: ForkToBlockNumber
+    forkToBlock: ForkTransitionTable
     blockToFork: BlockToForks
 
     # Eth wire protocol need this
@@ -139,7 +139,7 @@ proc init(com      : CommonRef,
   com.db          = ChainDBRef.new(db)
   com.pruneTrie   = pruneTrie
   com.config      = config
-  com.forkToBlock = config.toForkToBlockNumber()
+  com.forkToBlock = config.toForkTransitionTable()
   com.blockToFork = config.blockToForks(com.forkToBlock)
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
@@ -304,6 +304,18 @@ proc hardForkTransition*(com: CommonRef, header: BlockHeader)
                         {.gcsafe, raises: [CatchableError].} =
 
   com.hardForkTransition(header.parentHash, header.blockNumber)
+
+proc hardForkTransition*(com: CommonRef,
+                         parentHash: Hash256,
+                         number: BlockNumber,
+                         time: Option[EthTime]) {.gcsafe, raises: [CatchableError].} =
+  com.hardForkTransition(parentHash, number)
+
+proc hardForkTransition*(com: CommonRef,
+                         number: BlockNumber,
+                         td: Option[DifficultyInt],
+                         time: Option[EthTime]) {.gcsafe, raises: [CatchableError].} =
+  com.hardForkTransition(number, td)
 
 func toEVMFork*(com: CommonRef, number: BlockNumber): EVMFork =
   ## similar to toFork, but produce EVMFork

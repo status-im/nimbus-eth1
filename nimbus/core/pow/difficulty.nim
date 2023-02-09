@@ -172,7 +172,7 @@ template calcDifficultyGrayGlacier*(timeStamp: EthTime, parent: BlockHeader): Di
   makeDifficultyCalculator(11_400_000, timeStamp, parent)
 
 func calcDifficulty*(com: CommonRef, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-  let next = com.toHardFork(parent.blockNumber + bigOne)
+  let next = com.toHardFork(parent.forkDeterminationInfoForHeader.adjustForNextBlock)
   if next >= GrayGlacier:
     result = calcDifficultyGrayGlacier(timeStamp, parent)
   elif next >= ArrowGlacier:

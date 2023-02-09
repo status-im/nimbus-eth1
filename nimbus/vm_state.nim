@@ -24,6 +24,7 @@ export
   vms.enableTracing,
   vms.tracingEnabled,
   vms.baseFee,
+  vms.forkDeterminationInfoForVMState,
   vms.generateWitness,
   vms.`generateWitness=`,
   vms.getAncestorHash,

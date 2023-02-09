@@ -200,7 +200,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
   let
     com     = CommonRef.new(newMemoryDB(), ctx.chainConfig, pruneTrie = false)
     parent  = BlockHeader(stateRoot: emptyRlpHash)
-    fork    = com.toEVMFork(ctx.header.blockNumber)
+    fork    = com.toEVMFork(ctx.header.forkDeterminationInfoForHeader)
 
   let vmState = TestVMState()
   vmState.init(

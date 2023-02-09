@@ -96,7 +96,7 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCa
     gasLimit:   0.GasInt,          ## ???
     fee:        UInt256.none())    ## ???
   let vmState = BaseVMState.new(topHeader, com)
-  let fork    = com.toEVMFork(header.blockNumber)
+  let fork    = com.toEVMFork(vmState.forkDeterminationInfoForVMState)
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = toCallParams(vmState, cd, gasCap, header.fee)
 

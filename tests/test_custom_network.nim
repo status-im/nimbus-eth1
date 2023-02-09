@@ -237,7 +237,7 @@ proc genesisLoadRunner(noisy = true;
         params = params)
 
       check mcom.ttd.get == sSpcs.termTotalDff
-      check mcom.toHardFork(sSpcs.mergeFork.toBlockNumber) == MergeFork
+      check mcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
 
     test &"Construct persistent ChainDBRef on {tmpDir}, {persistPruneInfo}":
       if disablePersistentDB:
@@ -257,7 +257,7 @@ proc genesisLoadRunner(noisy = true;
           params = params)
 
         check dcom.ttd.get == sSpcs.termTotalDff
-        check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber) == MergeFork
+        check dcom.toHardFork(sSpcs.mergeFork.toBlockNumber.blockNumberToForkDeterminationInfo) == MergeFork
 
     test "Initialise in-memory Genesis":
       mcom.initializeEmptyDb
