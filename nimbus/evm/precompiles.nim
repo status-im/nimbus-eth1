@@ -16,8 +16,9 @@ import
   ../errors, eth/[common, keys], chronicles,
   nimcrypto/[ripemd, sha2, utils], bncurve/[fields, groups],
   ../common/evmforks,
-  ../eip4844/eip4844,
+  ../core/eip4844,
   ./modexp
+
 
 type
   PrecompileAddresses* = enum

@@ -128,6 +128,23 @@ proc validateTxEip2930(tx: Transaction) =
   if not isValid:
     raise newException(ValidationError, "Invalid transaction")
 
+proc validateTxEip4844(tx: Transaction) =
+  validateTxEip2930(tx)
+
+  var isValid = tx.payload.len <= MAX_CALLDATA_SIZE
+  isValid = isValid and tx.accessList.len <= MAX_ACCESS_LIST_SIZE
+
+  for acl in tx.accessList:
+    isValid = isValid and
+      (acl.storageKeys.len <= MAX_ACCESS_LIST_STORAGE_KEYS)
+
+  isValid = isValid and
+    tx.versionedHashes.len <= MAX_VERSIONED_HASHES_LIST_SIZE
+
+  for bv in tx.versionedHashes:
+    isValid = isValid and
+      bv.data[0] == BLOB_COMMITMENT_VERSION_KZG
+
 proc validate*(tx: Transaction, fork: EVMFork) =
   # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
@@ -144,6 +161,8 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   case tx.txType
   of TxLegacy:
     validateTxLegacy(tx, fork)
+  of TxEip4844:
+    validateTxEip4844(tx)
   else:
     validateTxEip2930(tx)
 
