@@ -22,6 +22,8 @@ import
 export
   common
 
+{.push raises: [].}
+
 logScope:
   topics = "vm computation"
 
@@ -113,7 +115,8 @@ template getGasPrice*(c: Computation): GasInt =
   else:
     c.vmState.txGasPrice
 
-proc getBlockHash*(c: Computation, number: UInt256): Hash256 =
+proc getBlockHash*(c: Computation, number: UInt256): Hash256
+    {.gcsafe, raises: [CatchableError].} =
   when evmc_enabled:
     let
       blockNumber = c.host.getTxContext().block_number.u256
@@ -243,17 +246,18 @@ proc snapshot*(c: Computation) =
 proc commit*(c: Computation) =
   c.vmState.stateDB.commit(c.savePoint)
 
-proc dispose*(c: Computation) {.inline.} =
+proc dispose*(c: Computation) =
   c.vmState.stateDB.safeDispose(c.savePoint)
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
   c.vmState.stateDB.rollback(c.savePoint)
 
-proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
+proc setError*(c: Computation, msg: string, burnsGas = false) =
   c.error = Error(info: msg, burnsGas: burnsGas)
 
-proc writeContract*(c: Computation) =
+proc writeContract*(c: Computation)
+    {.gcsafe, raises: [CatchableError].} =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
@@ -351,7 +355,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   # Register the account to be deleted
   c.selfDestructs.incl(c.msg.contractAddress)
 
-proc addLogEntry*(c: Computation, log: Log) {.inline.} =
+proc addLogEntry*(c: Computation, log: Log) =
   c.logEntries.add(log)
 
 proc getGasRefund*(c: Computation): GasInt =
@@ -362,19 +366,22 @@ proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   c.gasMeter.refundGas(cost * c.selfDestructs.len)
 
-proc tracingEnabled*(c: Computation): bool {.inline.} =
+proc tracingEnabled*(c: Computation): bool =
   TracerFlags.EnableTracing in c.vmState.tracer.flags
 
-proc traceOpCodeStarted*(c: Computation, op: Op): int {.inline.} =
+proc traceOpCodeStarted*(c: Computation, op: Op): int
+    {.gcsafe, raises: [CatchableError].} =
   c.vmState.tracer.traceOpCodeStarted(c, op)
 
-proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int) {.inline.} =
+proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int)
+    {.gcsafe, raises: [CatchableError].} =
   c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
 
-proc traceError*(c: Computation) {.inline.} =
+proc traceError*(c: Computation)
+    {.gcsafe, raises: [CatchableError].} =
   c.vmState.tracer.traceError(c)
 
-proc prepareTracer*(c: Computation) {.inline.} =
+proc prepareTracer*(c: Computation) =
   c.vmState.tracer.prepare(c.msg.depth)
 
 # ------------------------------------------------------------------------------

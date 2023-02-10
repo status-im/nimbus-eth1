@@ -22,6 +22,8 @@ import
   macros,
   stint
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 when defined(evmc_enabled):
   import ../../evmc_api, ../../evmc_helpers, evmc/evmc
 else:

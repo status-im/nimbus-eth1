@@ -22,6 +22,8 @@ import
   ./state,
   ./types
 
+{.push raises: [].}
+
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(EVMFork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
@@ -56,7 +58,8 @@ proc postExecComputation(c: Computation) =
 
   c.vmState.status = c.isSuccess
 
-proc execComputation*(c: Computation) =
+proc execComputation*(c: Computation)
+    {.gcsafe, raises: [CatchableError].} =
   c.preExecComputation()
   c.execCallOrCreate()
   c.postExecComputation()
