@@ -6,6 +6,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   macros, strformat, strutils, stint, chronicles,
   stew/byteutils, stew/ranges/ptr_arith,
@@ -42,7 +44,8 @@ proc depthPrefix(host: TransactionHost): string =
     let num = '(' & $depth & ')'
     return num & spaces(42 - num.len)
 
-proc showEvmcMessage(msg: EvmcMessage): string =
+proc showEvmcMessage(msg: EvmcMessage): string
+    {.gcsafe, raises: [ValueError].} =
   let kindStr =
     if msg.flags == {}: $msg.kind
     elif msg.flags == {EVMC_STATIC} and msg.kind == EVMC_CALL: "CALL_STATIC"
@@ -64,7 +67,8 @@ proc showEvmcMessage(msg: EvmcMessage): string =
   if msg.kind == EVMC_CREATE2:
     result.add &" create2_salt={$msg.create2_salt.fromEvmc}"
 
-proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string =
+proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string
+    {.gcsafe, raises: [ValueError].} =
   if res.status_code != EVMC_SUCCESS and res.status_code != EVMC_REVERT and
      res.gas_left == 0 and res.output_size == 0:
     return &"status={$res.status_code}"
@@ -82,7 +86,8 @@ proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string =
   if withCreateAddress:
     result.add &" create_address={$res.create_address.fromEvmc}"
 
-proc showEvmcTxContext(txc: EvmcTxContext): string =
+proc showEvmcTxContext(txc: EvmcTxContext): string
+    {.gcsafe, raises: [ValueError].} =
   return &"tx_gas_price={$txc.tx_gas_price.fromEvmc}" &
     &" tx_origin={$txc.tx_origin.fromEvmc}" &
     &" block_coinbase={$txc.block_coinbase.fromEvmc}" &

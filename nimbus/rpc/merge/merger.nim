@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
   eth/[rlp, trie/db],
@@ -34,7 +36,7 @@ proc readStatus(db: TrieDatabaseRef): TransitionStatus =
   if bytes.len > 0:
     try:
       result = rlp.decode(bytes, typeof result)
-    except:
+    except CatchableError:
       error "Failed to decode POS transition status"
 
 proc new*(_: type MergerRef, db: TrieDatabaseRef): MergerRef =

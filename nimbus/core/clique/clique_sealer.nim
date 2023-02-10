@@ -18,6 +18,8 @@
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ##
 
+{.push raises: [Defect].}
+
 import
   std/[sequtils, times],
   chronicles,
@@ -32,8 +34,6 @@ import
   ./clique_snapshot,
   ./clique_verify,
   ./snapshot/[ballot, snapshot_desc]
-
-{.push raises: [Defect].}
 
 logScope:
   topics = "clique PoA Mining"
@@ -232,7 +232,7 @@ proc seal*(c: Clique; ethBlock: var EthBlock):
     if EXTRA_SEAL < extraLen:
       header.extraData.setLen(extraLen - EXTRA_SEAL)
     header.extraData.add signature.value
-  except Exception as exc:
+  except CatchableError as exc:
     return err((errCliqueSealSigFn,
       "Error when signing block header: " & exc.msg))
 

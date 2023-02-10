@@ -18,6 +18,8 @@
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ##
 
+{.push raises: [].}
+
 import
   std/tables,
   ./clique_cfg,
@@ -34,7 +36,8 @@ type
   CliqueSignerFn* =    ## Hashes and signs the data to be signed by
                        ## a backing account
     proc(signer: EthAddress;
-         message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.}
+         message: openArray[byte]): Result[RawSignature, cstring]
+           {.gcsafe, raises: [CatchableError].}
 
   Proposals = Table[EthAddress,bool]
 
@@ -87,8 +90,6 @@ type
       ## Leving the flag `false`, the assumption is that all the checkponts
       ## before have been vetted already regardless of the current branch. So
       ## the nearest `epoch` header is used.
-
-{.push raises: [].}
 
 logScope:
   topics = "clique PoA constructor"

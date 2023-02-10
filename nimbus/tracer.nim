@@ -84,7 +84,7 @@ const
 proc traceTransaction*(com: CommonRef, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = com.db.getParentHeader(header)
+    # parent = com.db.getParentHeader(header) -- notused
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
     memoryDB = newMemoryDB()
@@ -213,7 +213,7 @@ proc dumpBlockState*(com: CommonRef, header: BlockHeader, body: BlockBody, dumpS
 
 proc traceBlock*(com: CommonRef, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = com.db.getParentHeader(header)
+    # parent = com.db.getParentHeader(header) -- notused
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(com.db.db, memoryDB)
     captureTrieDB = trieDB captureDB

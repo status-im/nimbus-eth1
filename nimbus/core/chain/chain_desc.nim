@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   ../../common/common,
   ../../utils/utils,
@@ -35,8 +37,6 @@ type
     verifyFrom: BlockNumber ##\
       ## First block to when `extraValidation` will be applied (only
       ## effective if `extraValidation` is true.)
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private constructor helper

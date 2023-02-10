@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[options],
   chronicles,
@@ -28,15 +30,13 @@ export
   genesis,
   utils
 
-{.push raises: [].}
-
 type
   SyncProgress = object
     start  : BlockNumber
     current: BlockNumber
     highest: BlockNumber
 
-  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe.}
+  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
     ## Update head for syncing
 
   CommonRef* = ref object
@@ -96,16 +96,6 @@ func cliqueEpoch*(com: CommonRef): int
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
-
-template noExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raiseAssert "Inconveivable (" & info & ": name=" & $e.name & " msg=" & e.msg
-  #except Defect as e:
-  #  raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
 
 proc consensusTransition(com: CommonRef, fork: HardFork) =
   if fork >= MergeFork:
@@ -365,7 +355,7 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
   return com.config.consensusType
 
 proc initializeEmptyDb*(com: CommonRef)
-    {.raises: [CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   let trieDB = com.db.db
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     trace "Writing genesis to DB"
@@ -375,11 +365,11 @@ proc initializeEmptyDb*(com: CommonRef)
       com.consensusType == ConsensusType.POS)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
-proc syncReqNewHead*(com: CommonRef; header: BlockHeader) =
+proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
+    {.gcsafe, raises: [CatchableError].} =
   ## Used by RPC to update the beacon head for snap sync
   if not com.syncReqNewHead.isNil:
-    noExceptionOops("syncReqNewHead"):
-      com.syncReqNewHead(header)
+    com.syncReqNewHead(header)
 
 # ------------------------------------------------------------------------------
 # Getters

@@ -12,6 +12,8 @@
 ## ====================================
 ##
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 import
   ../../../constants,
   ../../../errors,
@@ -29,8 +31,6 @@ import
   eth/common,
   eth/common/eth_types,
   stint
-
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
 when not defined(evmc_enabled):
   import
@@ -251,7 +251,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind        : evmcCall.evmc_call_kind,
+        kind        : evmcCall.ord.evmc_call_kind,
         depth       : (k.cpt.msg.depth + 1).int32,
         gas         : childGasLimit,
         sender      : p.sender,
@@ -335,7 +335,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind        : evmcCallCode.evmc_call_kind,
+        kind        : evmcCallCode.ord.evmc_call_kind,
         depth       : (k.cpt.msg.depth + 1).int32,
         gas         : childGasLimit,
         sender      : p.sender,
@@ -408,7 +408,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind        : evmcDelegateCall.evmc_call_kind,
+        kind        : evmcDelegateCall.ord.evmc_call_kind,
         depth       : (k.cpt.msg.depth + 1).int32,
         gas         : childGasLimit,
         sender      : p.sender,
@@ -486,7 +486,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind        : evmcCall.evmc_call_kind,
+        kind        : evmcCall.ord.evmc_call_kind,
         depth       : (k.cpt.msg.depth + 1).int32,
         gas         : childGasLimit,
         sender      : p.sender,

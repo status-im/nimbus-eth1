@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   ../../vm_state,
   ../../vm_types,
@@ -16,7 +18,6 @@ import
   ../executor,
   ../validate,
   ./chain_desc,
-  ./chain_helpers,
   chronicles,
   stint
 
@@ -33,8 +34,6 @@ type
 
   PersistBlockFlags = set[PersistBlockFlag]
 
-{.push raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
@@ -43,7 +42,7 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
                        bodies: openArray[BlockBody],
                        flags: PersistBlockFlags = {}): ValidationResult
                           # wildcard exception, wrapped below in public section
-                          {.inline, raises: [Exception].} =
+                          {.inline, raises: [CatchableError].} =
 
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
@@ -139,11 +138,10 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
                                 body: BlockBody): ValidationResult
                                 {.gcsafe, raises: [CatchableError].} =
-
-  safeP2PChain("persistBlocks"):
-    result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveReceipts})
-    if result == ValidationResult.OK:
-      c.db.persistHeaderToDbWithoutSetHead(header)
+  result = c.persistBlocksImpl(
+    [header], [body], {NoPersistHeader, NoSaveReceipts})
+  if result == ValidationResult.OK:
+    c.db.persistHeaderToDbWithoutSetHead(header)
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
                                 {.gcsafe, raises: [CatchableError].} =
@@ -158,10 +156,9 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
       hash = header.blockHash
     return ValidationResult.Error
 
-  safeP2PChain("persistBlocks"):
-    result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
-    if result == ValidationResult.OK:
-      discard c.db.setHead(header.blockHash)
+  result = c.persistBlocksImpl([header], [body], {NoPersistHeader, NoSaveTxs})
+  if result == ValidationResult.OK:
+    discard c.db.setHead(header.blockHash)
 
 proc setCanonical*(c: ChainRef, blockHash: Hash256): ValidationResult
                                 {.gcsafe, raises: [CatchableError].} =
@@ -185,8 +182,7 @@ proc persistBlocks*(c: ChainRef; headers: openArray[BlockHeader];
     debug "Nothing to do"
     return ValidationResult.OK
 
-  safeP2PChain("persistBlocks"):
-    result = c.persistBlocksImpl(headers,bodies)
+  c.persistBlocksImpl(headers,bodies)
 
 # ------------------------------------------------------------------------------
 # End
