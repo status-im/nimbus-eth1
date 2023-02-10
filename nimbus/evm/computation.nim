@@ -332,7 +332,8 @@ proc merge*(c, child: Computation) =
   c.selfDestructs.incl child.selfDestructs
   c.touchedAccounts.incl child.touchedAccounts
 
-proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
+proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
+    {.gcsafe, raises: [CatchableError].} =
   c.vmState.mutateStateDB:
     let
       localBalance = c.getBalance(c.msg.contractAddress)
