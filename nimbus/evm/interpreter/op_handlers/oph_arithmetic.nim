@@ -229,12 +229,12 @@ const
 
   byteOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x20, Retrieve single byte from word.
-    let (position, value) = k.cpt.stack.popInt(2)
-    let pos = position.truncate(int)
+    let (position, value) = k.cpt.stack.popInt(2)    
     k.cpt.stack.push:
-      if pos >= 32 or pos < 0:
+      if position >= 32.u256:
         zero(UInt256)
       else:
+        let pos = position.truncate(int)
         when system.cpuEndian == bigEndian:
           cast[array[32, byte]](value)[pos].u256
         else:
