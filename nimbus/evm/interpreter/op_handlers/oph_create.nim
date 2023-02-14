@@ -12,6 +12,8 @@
 ## ======================================
 ##
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 import
   ../../../constants,
   ../../../errors,
@@ -32,8 +34,6 @@ import
   eth/common/eth_types,
   stint,
   strformat
-
-{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
 when not defined(evmc_enabled):
   import
@@ -137,7 +137,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind: evmcCreate.evmc_call_kind,
+        kind: evmcCreate.ord.evmc_call_kind,
         depth: (k.cpt.msg.depth + 1).int32,
         gas: createMsgGas,
         sender: k.cpt.msg.contractAddress,
@@ -217,7 +217,7 @@ const
         msg = new(nimbus_message)
         c   = k.cpt
       msg[] = nimbus_message(
-        kind: evmcCreate2.evmc_call_kind,
+        kind: evmcCreate2.ord.evmc_call_kind,
         depth: (k.cpt.msg.depth + 1).int32,
         gas: createMsgGas,
         sender: k.cpt.msg.contractAddress,

@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[tables, strutils, options, times, macros],
   eth/[common, rlp, p2p], stint, stew/[byteutils],
@@ -18,8 +20,6 @@ import
 
 export
   hardforks
-
-{.push raises: [].}
 
 type
   Genesis* = ref object
@@ -114,7 +114,7 @@ proc readValue(reader: var JsonReader, value: var UInt256)
       reader.lexer.customIntValueIt:
         accu = accu * 10 + it.u256
       ok = reader.lexer.lazyTok == tkExInt # non-negative wanted
-    except:
+    except CatchableError:
       ok = false
   elif reader.lexer.lazyTok == tkQuoted:
     try:
@@ -138,7 +138,7 @@ proc readValue(reader: var JsonReader, value: var UInt256)
             accu = accu * 10 + num.u256
           else:
             accu = accu * 16 + num.u256
-    except:
+    except CatchableError:
       reader.raiseUnexpectedValue("numeric string parse error")
   else:
     reader.raiseUnexpectedValue("expect int or hex/int string")
@@ -278,7 +278,7 @@ proc loadNetworkParams*(fileName: string, params: var NetworkParams):
   except JsonReaderError as e:
     error "Invalid network params file format", fileName, msg=e.formatMsg("")
     return false
-  except Exception as e:
+  except CatchableError as e:
     error "Error loading network params file",
       fileName, exception = e.name, msg = e.msg
     return false
@@ -291,7 +291,7 @@ proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   except JsonReaderError as e:
     error "Invalid network params format", msg=e.formatMsg("")
     return false
-  except:
+  except CatchableError:
     var msg = getCurrentExceptionMsg()
     error "Error decoding network params", msg
     return false

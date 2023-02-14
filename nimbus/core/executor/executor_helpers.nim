@@ -8,8 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[strformat],
   ../../common/common,
   ../../db/accounts_cache,
   ../../vm_state,
@@ -25,8 +26,6 @@ type
   Bloom = common.BloomFilter
   LogsBloom = bloom.BloomFilter
 
-{.push raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -40,17 +39,6 @@ func logsBloom(logs: openArray[Log]): LogsBloom =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-template safeExecutor*(info: string; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raise (ref CatchableError)(msg: e.msg)
-  except Defect as e:
-    raise (ref Defect)(msg: e.msg)
-  except:
-    let e = getCurrentException()
-    raise newException(ExecutorError, info & "(): " & $e.name & " -- " & e.msg)
 
 func createBloom*(receipts: openArray[Receipt]): Bloom =
   var bloom: LogsBloom

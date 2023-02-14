@@ -12,6 +12,8 @@
 #   nimbus-eth2/beacon_chain/spec/engine_authentication.nim
 #   go-ethereum/node/jwt_handler.go
 
+{.push raises: [].}
+
 import
   std/[base64, json, options, os, strutils, times],
   bearssl/rand,
@@ -24,8 +26,6 @@ import
   nimcrypto/[hmac, utils],
   stew/[byteutils, objects, results],
   ../config
-
-{.push raises: [].}
 
 logScope:
   topics = "Jwt/HS256 auth"
@@ -51,7 +51,7 @@ type
     ## Random generator function producing a shared key. Typically, this\
     ## will be a wrapper around a random generator type, such as\
     ## `HmacDrbgContext`.
-    proc(): JwtSharedKey {.gcsafe.}
+    proc(): JwtSharedKey {.gcsafe, raises: [CatchableError].}
 
   JwtExcept* = object of CatchableError
     ## Catch and relay exception error
@@ -82,12 +82,6 @@ type
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-template safeExecutor(info: string; code: untyped) =
-  try:
-    code
-  except Exception as e:
-    raise newException(JwtExcept, info & "(): " & $e.name & " -- " & e.msg)
 
 proc base64urlEncode(x: auto): string =
   # The only strings this gets are internally generated, and don't have
@@ -132,12 +126,16 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
     error = jwtIatPayloadInvJson
     let jwtPayload = jsonPayload.parseJson.to(JwtIatPayload)
     time = jwtPayload.iat.int64
-  except:
+  except CatchableError as e:
     debug "JWT token decoding error",
       protectedHeader = p[0],
       payload = p[1],
+      msg = e.msg,
       error
     return err(error)
+  except Exception as e:
+    {.warning: "Kludge(BareExcept): `parseJson()` in vendor package needs to be updated".}
+    raiseAssert "Ooops verifyTokenHS256(): name=" & $e.name & " msg=" & e.msg
 
   # github.com/ethereum/
   #  /execution-apis/blob/v1.0.0-alpha.8/src/engine/authentication.md#jwt-claims
@@ -194,8 +192,11 @@ proc jwtGenSecret*(rng: ref rand.HmacDrbgContext): JwtGenSecret =
     rng[].generate(data)
     data.JwtSharedKey
 
-proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
-                    Result[JwtSharedKey, JwtError] =
+proc jwtSharedSecret*(
+    rndSecret: JwtGenSecret;
+    config: NimbusConf;
+      ): Result[JwtSharedKey, JwtError]
+      {.gcsafe, raises: [CatchableError].}=
   ## Return a key for jwt authentication preferable from the argument file
   ## `config.jwtSecret` (which contains at least 32 bytes hex encoded random
   ## data.) Otherwise it creates a key and stores it in the `config.dataDir`.
@@ -254,10 +255,9 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
 
 proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
                     Result[JwtSharedKey, JwtError]
-    {.gcsafe, raises: [JwtExcept].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
-  safeExecutor("jwtSharedSecret"):
-    result = rng.jwtGenSecret.jwtSharedSecret(config)
+  rng.jwtGenSecret.jwtSharedSecret(config)
 
 proc httpJwtAuth*(key: JwtSharedKey): HttpAuthHook =
   proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async.} =

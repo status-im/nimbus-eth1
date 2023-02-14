@@ -6,23 +6,24 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-#{.push raises: [Defect].}
+{.push raises: [].}
 
 import
-  sets, stint, chronicles, stew/ranges/ptr_arith,
   eth/common/eth_types,
+  stew/ranges/ptr_arith,
+  stint,
   ".."/[vm_types, vm_computation],
   ../utils/utils,
-  ./host_types, ./host_trace
+  "."/[host_types, host_trace]
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
   dealloc(res.output_data)
 
 proc beforeExecCreateEvmcNested(host: TransactionHost,
-                                m: EvmcMessage): Computation {.inline.} =
+                                m: EvmcMessage): Computation =
   # TODO: use evmc_message to avoid copy
   let childMsg = Message(
-    kind: CallKind(m.kind),
+    kind: CallKind(m.kind.ord),
     depth: m.depth,
     gas: m.gas,
     sender: m.sender.fromEvmc,
@@ -53,7 +54,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
 proc beforeExecCallEvmcNested(host: TransactionHost,
                               m: EvmcMessage): Computation {.inline.} =
   let childMsg = Message(
-    kind: CallKind(m.kind),
+    kind: CallKind(m.kind.ord),
     depth: m.depth,
     gas: m.gas,
     sender: m.sender.fromEvmc,
@@ -111,7 +112,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
 proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline.} =
+    {.noinline, gcsafe, raises: [ValueError].} =
   # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
   # and `show` in `host_services`, but `call` needs to minimise C stack used
   # by nested EVM calls.  Just `flip256` in glue's `call` adds a lot of
@@ -135,7 +136,7 @@ proc afterExecEvmcNested(host: TransactionHost, child: Computation,
                          kind: EvmcCallKind): EvmcResult
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline.} =
+    {.noinline, gcsafe, raises: [ValueError].} =
   host.computation = host.saveComputation[^1]
   host.saveComputation[^1] = nil
   host.saveComputation.setLen(host.saveComputation.len - 1)

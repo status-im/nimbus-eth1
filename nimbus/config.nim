@@ -6,6 +6,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[
     options,
@@ -502,19 +504,22 @@ type
         defaultValue: ""
         name: "blocks-file" }: InputFile
 
-proc parseCmdArg(T: type NetworkId, p: string): T =
+proc parseCmdArg(T: type NetworkId, p: string): T
+    {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
 
 proc completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type UInt256, p: string): T =
+proc parseCmdArg(T: type UInt256, p: string): T
+    {.gcsafe, raises: [ValueError].} =
   parse(p, T)
 
 proc completeCmdArg(T: type UInt256, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type EthAddress, p: string): T =
+proc parseCmdArg(T: type EthAddress, p: string): T
+    {.gcsafe, raises: [ValueError].}=
   try:
     result = hexToByteArray(p, 20)
   except CatchableError:
@@ -523,38 +528,41 @@ proc parseCmdArg(T: type EthAddress, p: string): T =
 proc completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
-proc processList(v: string, o: var seq[string]) =
+proc processList(v: string, o: var seq[string])
+    =
   ## Process comma-separated list of strings.
   if len(v) > 0:
     for n in v.split({' ', ','}):
       if len(n) > 0:
         o.add(n)
 
-proc parseCmdArg(T: type NetworkParams, p: string): T =
+proc parseCmdArg(T: type NetworkParams, p: string): T
+    {.gcsafe, raises: [ValueError].} =
   try:
     if not loadNetworkParams(p, result):
       raise newException(ValueError, "failed to load customNetwork")
-  except Exception: #  as exc: -- notused
-    # on linux/mac, nim compiler refuse to compile
-    # with unlisted exception error
+  except CatchableError:
     raise newException(ValueError, "failed to load customNetwork")
 
 proc completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
-proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
+proc setBootnodes(output: var seq[ENode], nodeUris: openArray[string])
+    {.gcsafe, raises: [CatchableError].} =
   output = newSeqOfCap[ENode](nodeUris.len)
   for item in nodeUris:
     output.add(ENode.fromString(item).tryGet())
 
-iterator repeatingList(listOfList: openArray[string]): string =
+iterator repeatingList(listOfList: openArray[string]): string
+    =
   for strList in listOfList:
     var list = newSeq[string]()
     processList(strList, list)
     for item in list:
       yield item
 
-proc append(output: var seq[ENode], nodeUris: openArray[string]) =
+proc append(output: var seq[ENode], nodeUris: openArray[string])
+    =
   for item in repeatingList(nodeUris):
     let res = ENode.fromString(item)
     if res.isErr:
@@ -562,7 +570,8 @@ proc append(output: var seq[ENode], nodeUris: openArray[string]) =
       continue
     output.add res.get()
 
-iterator strippedLines(filename: string): (int, string) =
+iterator strippedLines(filename: string): (int, string)
+    {.gcsafe, raises: [IOError].} =
   var i = 0
   for line in lines(filename):
     let stripped = strip(line)
@@ -573,7 +582,8 @@ iterator strippedLines(filename: string): (int, string) =
       yield (i, stripped)
       inc i
 
-proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string) =
+proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string)
+    =
   if fileName.len == 0:
     return
 
@@ -656,7 +666,8 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
 
-proc getBootNodes*(conf: NimbusConf): seq[ENode] =
+proc getBootNodes*(conf: NimbusConf): seq[ENode]
+    {.gcsafe, raises: [CatchableError].} =
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
     case conf.networkId
@@ -693,14 +704,28 @@ proc getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):
     result.add parseUri(item)
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
-  {.push warning[ProveInit]: off.}
-  result = NimbusConf.load(
-    cmdLine,
-    version = NimbusBuild,
-    copyrightBanner = NimbusHeader
-  )
-  {.pop.}
+# KLUDGE: The `load()` template does currently not work within any exception
+#         annotated environment.
+{.pop.}
+
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
+    {.raises: [CatchableError].} =
+  ## Note: this function is not gc-safe
+
+  # The try/catch clause can go away when `load()` is clean
+  try:
+    {.push warning[ProveInit]: off.}
+    result = NimbusConf.load(
+      cmdLine,
+      version = NimbusBuild,
+      copyrightBanner = NimbusHeader
+    )
+    {.pop.}
+  except CatchableError as e:
+    raise e
+  except Exception as e:
+   {.warning: "Kludge(BareExcept): `load()` template in vendor package needs to be updated"}
+   raiseAssert "Ooops makeConfig(): name=" & $e.name & " msg=" & e.msg
 
   var networkId = result.getNetworkId()
 

@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sets],
   ../../common/common,
@@ -17,11 +19,8 @@ import
   ../../vm_state,
   ../../vm_types,
   ../validate,
-  ./executor_helpers,
   chronicles,
   stew/results
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -41,7 +40,7 @@ proc processTransactionImpl(
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork): Result[GasInt,void]
     # wildcard exception, wrapped below
-    {.gcsafe, raises: [Exception].} =
+    {.gcsafe, raises: [CatchableError].} =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -118,8 +117,7 @@ proc processTransaction*(
     {.gcsafe, raises: [CatchableError].} =
   ## Process the transaction, write the results to accounts db. The function
   ## returns the amount of gas burned if executed.
-  safeExecutor("processTransaction"):
-    result = vmState.processTransactionImpl(tx, sender, header, fork)
+  vmState.processTransactionImpl(tx, sender, header, fork)
 
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction

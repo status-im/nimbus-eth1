@@ -18,6 +18,9 @@ import
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[snapdb_desc, snapdb_pivot]
 
+when defined(windows):
+  import std/os
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -42,6 +45,9 @@ proc test_pivotStoreRead*(
         nSlotLists:   n.uint64,
         processed:    processed,
         slotAccounts: slotAccounts)).isOk
+    when defined(windows):
+      # There might be a race condition on Windows (seen on qemu/win7)
+      sleep(50)
     # verify latest state root
     block:
       let rc = dbBase.recoverPivot()
@@ -71,6 +77,9 @@ proc test_pivotStoreRead*(
         nSlotLists:   0,
         processed:    @[],
         slotAccounts: @[])).isOk
+    when defined(windows):
+      # There might be a race condition on Windows (seen on qemu/win7)
+      sleep(50)
     block:
       let rc = dbBase.recoverPivot(w)
       check rc.isOk

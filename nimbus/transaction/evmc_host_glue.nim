@@ -6,7 +6,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-#{.push raises: [Defect].}
+{.push raises: [].}
 
 when not declaredInScope(included_from_host_services):
   {.error: "Do not import this file directly, import host_services instead".}
@@ -20,11 +20,13 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
   toHost(p).accountExists(address.fromEvmc)
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
-                key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
+                key: var evmc_bytes32): evmc_bytes32
+    {.cdecl, raises: [RlpError].} =
   toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
-                key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
+                key, value: var evmc_bytes32): evmc_storage_status
+    {.cdecl, raises: [RlpError].} =
   toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,
@@ -47,7 +49,8 @@ proc selfDestruct(p: evmc_host_context, address,
                   beneficiary: var evmc_address) {.cdecl.} =
   toHost(p).selfDestruct(address.fromEvmc, beneficiary.fromEvmc)
 
-proc call(p: evmc_host_context, msg: var evmc_message): evmc_result {.cdecl.} =
+proc call(p: evmc_host_context, msg: var evmc_message): evmc_result
+    {.cdecl, raises: [CatchableError].} =
   # This would contain `flip256`, but `call` is special.  The C stack usage
   # must be kept small for deeply nested EVM calls.  To ensure small stack,
   # `flip256` must be handled at `host_call_nested`, not here.
@@ -58,7 +61,8 @@ proc getTxContext(p: evmc_host_context): evmc_tx_context {.cdecl.} =
   # `getTxContext`, it's better to do `flip256` when filling the cache.
   toHost(p).getTxContext()
 
-proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32 {.cdecl.} =
+proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32
+    {.cdecl, raises: [CatchableError].} =
   # TODO: `HostBlockNumber` is 256-bit unsigned.  It should be changed to match
   # EVMC which is more sensible.
   toHost(p).getBlockHash(number.uint64.u256).toEvmc
@@ -94,7 +98,8 @@ let hostInterface = evmc_host_interface(
   access_storage: accessStorage,
 )
 
-proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
+proc evmcExecComputation*(host: TransactionHost): EvmcResult
+    {.raises: [CatchableError].} =
   host.showCallEntry(host.msg)
 
   let vm = evmcLoadVMCached()
@@ -125,10 +130,16 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
   # TODO: But wait: Why does the Nim EVMC test program compile fine without
   # any `gcsafe`, even with `--threads:on`?
   {.gcsafe.}:
-    result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
-                        evmc_revision(host.vmState.fork), host.msg,
-                        if host.code.len > 0: host.code[0].unsafeAddr else: nil,
-                        host.code.len.csize_t)
+    try:
+      result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
+                          evmc_revision(host.vmState.fork.ord), host.msg,
+                          if host.code.len > 0: host.code[0].unsafeAddr
+                          else: nil,
+                          host.code.len.csize_t)
+    except Exception as e:
+      {.warning: "Kludge(BareExcept): `evmc_execute_fn` in vendor package needs to be updated".}
+      raiseAssert "Ooops evmcExecComputation(): name=" &
+        $e.name & " msg=" & e.msg
 
   host.showCallReturn(result)
 
