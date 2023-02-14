@@ -12,7 +12,6 @@
 
 import
   chronicles,
-  chronos,
   eth/p2p,
   ../snap/worker/db/hexary_range,
   ../protocol,
@@ -28,11 +27,7 @@ type
     peerPool: PeerPool
 
 const
-  transportAccountSizeMax = 110
-    ## Account record with `high(UInt256)` hashes and balance, and maximal
-    ## nonce within RLP list
-
-  transportProofNodeSizeMax = 532
+  proofNodeSizeMax = 532
     ## Branch node with all branches `high(UInt256)` within RLP list
 
 # ------------------------------------------------------------------------------
@@ -90,27 +85,13 @@ proc init*(
 # Public functions: helpers
 # ------------------------------------------------------------------------------
 
-proc accountRangeSize*(n: int): int =
-  ## Max number of bytes needed to store `n` RLP encoded `Account()` type
-  ## entries. Note that this is an *approximate* upper bound.
-  ##
-  ## The maximum size of a single RLP encoded account item can be determined
-  ## by setting every field of `Account()` to `high()` or `0xff`.
-  ##
-  ## Note: Public function subject to unit tests
-  const nMax = high(int) div transportAccountSizeMax
-  if n <= nMax:
-    hexaryRangeRlpSize(n * transportAccountSizeMax)
-  else:
-    high(int)
-
 proc proofNodesSizeMax*(n: int): int =
-  ## Ditto for proof nodes
-  ##
-  ## Note: This is a public function subject to unit tests
-  const nMax = high(int) div transportProofNodeSizeMax
+  ## Max number of bytes needed to store a list of `n` RLP encoded hexary
+  ## nodes which is a `Branch` node where every link reference is set to
+  ## `high(UInt256)`.
+  const nMax = high(int) div proofNodeSizeMax
   if n <= nMax:
-    hexaryRangeRlpSize(n * transportProofNodeSizeMax)
+    hexaryRangeRlpSize(n * proofNodeSizeMax)
   else:
     high(int)
 

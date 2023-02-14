@@ -396,8 +396,11 @@ proc test_NodeRangeProof*(
         break # remaining cases ignored
       subCount.inc
 
-      let leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
-      var proof: seq[SnapProof]
+      let
+        leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
+        leafsRlpLen = leafs.encode.len
+      var
+        proof: seq[SnapProof]
 
       # Calculate proof
       if cutOff == 0:
@@ -407,16 +410,21 @@ proc test_NodeRangeProof*(
           rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
           return
         proof = rc.value.proof
+
+        # Some sizes to verify (full data list)
+        check rc.value.proofSize == proof.encode.len
+        check rc.value.leafsSize == leafsRlpLen
       else:
         # Make sure that the size calculation deliver the expected number
         # of entries.
-        let
-          nSizeLimit = 1 + leafs.encode.len
-          rx = db.hexaryRangeLeafsProof(rootKey, iv, nSizeLimit)
+        let rx = db.hexaryRangeLeafsProof(rootKey, iv, leafsRlpLen + 1)
         check rx.isOk
         if rx.isErr:
           return
         check rx.value.leafs.len == leafs.len
+
+        # Some size to verify (truncated data list)
+        check rx.value.proofSize == rx.value.proof.encode.len
 
         # Re-adjust proof
         proof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs).proof
