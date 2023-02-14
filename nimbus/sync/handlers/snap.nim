@@ -14,6 +14,7 @@ import
   chronicles,
   chronos,
   eth/p2p,
+  ../snap/worker/db/hexary_range,
   ../protocol,
   ../protocol/snap/snap_types,
   ../../core/chain
@@ -40,33 +41,6 @@ const
 
 proc notImplemented(name: string) =
   debug "snapWire: hHandler method not implemented", meth=name
-
-proc rlpSize(blobLen: int): int =
-  ## Returns the size of RLP encoded <blob> of argument length `blobLen`.
-
-  if blobLen < 56:
-      return blobLen + 1
-  if blobLen < (1 shl (8 * 1)):
-    return blobLen + 2
-  if blobLen < (1 shl (8 * 2)):
-    return blobLen + 3
-  if blobLen < (1 shl (8 * 3)):
-    return blobLen + 4
-
-  when sizeof(int) < 8:
-    if blobLen < (1 shl (8 * 4)):
-      return blobLen + 5
-    if blobLen < (1 shl (8 * 5)):
-      return blobLen + 6
-    if blobLen < (1 shl (8 * 6)):
-      return blobLen + 7
-    if blobLen < (1 shl (8 * 7)):
-      return blobLen + 8
-
-  if blobLen < high(int) - (1 + sizeof(int)):
-    blobLen + 1 + sizeof(int)
-  else:
-    high(int)
 
 proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
   ## RLP mixin, encoding
@@ -126,17 +100,17 @@ proc accountRangeSize*(n: int): int =
   ## Note: Public function subject to unit tests
   const nMax = high(int) div transportAccountSizeMax
   if n <= nMax:
-    rlpSize(n * transportAccountSizeMax)
+    hexaryRangeRlpSize(n * transportAccountSizeMax)
   else:
     high(int)
 
-proc proofNodesSize*(n: int): int =
+proc proofNodesSizeMax*(n: int): int =
   ## Ditto for proof nodes
   ##
   ## Note: This is a public function subject to unit tests
   const nMax = high(int) div transportProofNodeSizeMax
   if n <= nMax:
-    rlpSize(n * transportProofNodeSizeMax)
+    hexaryRangeRlpSize(n * transportProofNodeSizeMax)
   else:
     high(int)
 

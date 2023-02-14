@@ -14,7 +14,6 @@ import
   nimcrypto/utils,
   stew/byteutils,
   ../../nimbus/sync/[protocol, snap/range_desc],
-  ../../nimbus/sync/protocol,
   ./gunzip
 
 type

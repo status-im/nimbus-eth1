@@ -375,14 +375,14 @@ proc test_NodeRangeProof*(
   let
     rootKey = inLst[0].root.to(NodeKey)
     noisy = not dbg.isNil
-    maxLen = high(int)
+    maxLen = high(int) # set it lower for debugging (eg. 5 for a small smaple)
 
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
     let
       accounts = w.data.accounts[0 ..< min(w.data.accounts.len,maxLen)]
       iv = NodeTagRange.new(w.base, accounts[^1].accKey.to(NodeTag))
-      rc = db.hexaryRangeLeafsProof(rootKey, iv, accounts.len)
+      rc = db.hexaryRangeLeafsProof(rootKey, iv)
     check rc.isOk
     if rc.isErr:
       return
@@ -393,7 +393,7 @@ proc test_NodeRangeProof*(
 
       # Take sub-samples but not too small
       if 0 < cutOff and rc.value.leafs.len < cutOff + 5:
-        break # rest cases ignored
+        break # remaining cases ignored
       subCount.inc
 
       let leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
@@ -408,6 +408,16 @@ proc test_NodeRangeProof*(
           return
         proof = rc.value.proof
       else:
+        # Make sure that the size calculation deliver the expected number
+        # of entries.
+        let
+          nSizeLimit = 1 + leafs.encode.len
+          rx = db.hexaryRangeLeafsProof(rootKey, iv, nSizeLimit)
+        check rx.isOk
+        if rx.isErr:
+          return
+        check rx.value.leafs.len == leafs.len
+
         # Re-adjust proof
         proof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs).proof
 
