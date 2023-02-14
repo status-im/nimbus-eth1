@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, sequtils, strutils, hashes],
   eth/common,
@@ -16,8 +18,6 @@ import
   ../../constants,
   ../protocol,
   ../types
-
-{.push raises: [].}
 
 type
   ByteArray32* = array[32,byte]

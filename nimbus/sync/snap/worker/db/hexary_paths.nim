@@ -10,14 +10,14 @@
 
 ## Find node paths in hexary tries.
 
+{.push raises: [].}
+
 import
   std/[sequtils, sets, tables],
   eth/[common, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../range_desc,
   ./hexary_desc
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -132,7 +132,7 @@ proc pathExtend(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Ditto for `XPath` rather than `RPath`
   result = path
   var key = key
@@ -193,7 +193,7 @@ proc pathLeast(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## For the partial path given, extend by branch nodes with least node
   ## indices.
   result = path
@@ -283,7 +283,7 @@ proc pathMost(
     key: Blob;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## For the partial path given, extend by branch nodes with greatest node
   ## indices.
   result = path
@@ -457,7 +457,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Variant of `hexaryPath` for a  hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPath(rootKey, db)
 
@@ -467,7 +467,7 @@ proc hexaryPath*(
     rootKey: NodeKey;               # State root
     getFn: HexaryGetFn;             # Database abstraction
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Compute the longest possible path on an arbitrary hexary trie.
   XPath(tail: partialPath).pathExtend(rootKey.to(Blob), getFn)
 
@@ -476,7 +476,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a node key..
   nodeKey.to(NibblesSeq).hexaryPath(rootKey, getFn)
 
@@ -485,7 +485,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a node tag..
   nodeTag.to(NodeKey).hexaryPath(rootKey, getFn)
 
@@ -494,7 +494,7 @@ proc hexaryPath*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPath(rootKey, getFn)
 
@@ -543,7 +543,7 @@ proc hexaryPathNodeKey*(
     getFn: HexaryGetFn;            # Database abstraction
     missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database.
   let steps = partialPath.hexaryPath(rootKey, getFn)
   if 0 < steps.path.len and steps.tail.len == 0:
@@ -564,11 +564,10 @@ proc hexaryPathNodeKey*(
     getFn: HexaryGetFn;            # Database abstraction
     missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [RlpError]} =
+     {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPathNodeKey()` for persistent database and
   ## hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, getFn, missingOk)
-
 
 proc hexaryPathNodeKeys*(
     partialPaths: seq[Blob];       # Partial paths segments
@@ -576,7 +575,7 @@ proc hexaryPathNodeKeys*(
     db: HexaryTreeDbRef;           # Database
     missingOk = false;             # Also return key for missing node
       ): HashSet[NodeKey]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Convert a list of path segments to a set of node keys
   partialPaths.toSeq
     .mapIt(it.hexaryPathNodeKey(rootKey, db, missingOk))
@@ -593,7 +592,7 @@ proc next*(
     getFn: HexaryGetFn;
     minDepth = 64;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Advance the argument `path` to the next leaf node (if any.). The
   ## `minDepth` argument requires the result of `next()` to satisfy
   ## `minDepth <= next().getNibbles.len`.
@@ -624,7 +623,7 @@ proc prev*(
     getFn: HexaryGetFn;
     minDepth = 64;
       ): XPath
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Advance the argument `path` to the previous leaf node (if any.) The
   ## `minDepth` argument requires the result of `next()` to satisfy
   ## `minDepth <= next().getNibbles.len`.

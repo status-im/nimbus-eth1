@@ -118,9 +118,8 @@ proc blockHeader(db: ChainDBRef,
 # Private functions: peers related functions
 # ------------------------------------------------------------------------------
 
-when isMainModule:
-  proc hash(peer: Peer): hashes.Hash =
-    hash(peer.remote)
+proc hash(peer: Peer): hashes.Hash {.used.} =
+  hash(peer.remote)
 
 proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
   # do not send back tx or txhash to thisPeer

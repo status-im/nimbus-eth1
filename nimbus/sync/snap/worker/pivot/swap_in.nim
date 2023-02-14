@@ -99,6 +99,8 @@ proc existsInTrie(
       return rc.value == node.nodeKey
   except RlpError:
     error = RlpEncoding
+  except CatchableError:
+    error = ExceptionError
 
   when extraTraceMessages:
     if error != NothingSerious:
@@ -107,23 +109,12 @@ proc existsInTrie(
   false
 
 
-template noKeyErrorOrExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
-
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" &
+      info & "): name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -138,13 +129,14 @@ proc uncoveredEnvelopes(
   ## express this complement as a list of envelopes of sub-tries.
   ##
   var decomposed = "n/a"
-  let rc = processed.hexaryEnvelopeDecompose(rootKey, getFn)
-  if rc.isOk:
-    # Return allocated nodes only
-    result = rc.value.filterIt(0 < it.nodeKey.ByteArray32.getFn().len)
+  noExceptionOops("swapIn"):
+    let rc = processed.hexaryEnvelopeDecompose(rootKey, getFn)
+    if rc.isOk:
+      # Return allocated nodes only
+      result = rc.value.filterIt(0 < it.nodeKey.ByteArray32.getFn().len)
 
-    when extraTraceMessages:
-      decomposed = rc.value.toPC
+      when extraTraceMessages:
+        decomposed = rc.value.toPC
 
   when extraTraceMessages:
     trace logTxt "unprocessed envelopes", processed,
@@ -216,36 +208,37 @@ proc swapIn(
   for n in 0 ..< swappedIn.len:
     swappedIn[n] = NodeTagRangeSet.init()
 
-  # Swap in node ranges from other pivots
-  while lapCount < loopMax:
-    var merged = 0.u256                        # Loop control
+  noExceptionOops("swapIn"):
+    # Swap in node ranges from other pivots
+    while lapCount < loopMax:
+      var merged = 0.u256                      # Loop control
 
-    let checkNodes = processed.uncoveredEnvelopes(rootKey, getFn)
-    for node in checkNodes:
+      let checkNodes = processed.uncoveredEnvelopes(rootKey, getFn)
+      for node in checkNodes:
 
-      # Process table of sets from other pivots with ranges intersecting
-      # with the `node` envelope.
-      for n,rngSet in node.otherProcessedRanges(otherPivots, rootKey, getFn):
+        # Process table of sets from other pivots with ranges intersecting
+        # with the `node` envelope.
+        for n,rngSet in node.otherProcessedRanges(otherPivots, rootKey, getFn):
 
-        # Merge `rngSet` into `swappedIn[n]` and `pivot.processed`,
-        # and remove `rngSet` from ` pivot.unprocessed`
-        for iv in rngSet.increasing:
-          discard swappedIn[n].merge iv        # Imported range / other pivot
-          merged += processed.merge iv         # Import range as processed
-          unprocessed.reduce iv                # No need to re-fetch
+          # Merge `rngSet` into `swappedIn[n]` and `pivot.processed`,
+          # and remove `rngSet` from ` pivot.unprocessed`
+          for iv in rngSet.increasing:
+            discard swappedIn[n].merge iv      # Imported range / other pivot
+            merged += processed.merge iv       # Import range as processed
+            unprocessed.reduce iv              # No need to re-fetch
 
-    if merged == 0:                            # Loop control
-      break
+      if merged == 0:                          # Loop control
+        break
 
-    lapCount.inc
-    allMerged += merged                        # Statistics, logging
+      lapCount.inc
+      allMerged += merged                      # Statistics, logging
 
-    when extraTraceMessages:
-      trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
-        merged=((merged.to(float) / (2.0^256)).toPC(3)),
-        allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
+      when extraTraceMessages:
+        trace logTxt "inherited ranges", lapCount, nCheckNodes=checkNodes.len,
+          merged=((merged.to(float) / (2.0^256)).toPC(3)),
+          allMerged=((allMerged.to(float) / (2.0^256)).toPC(3))
 
-    # End while()
+      # End while()
 
   (swappedIn,lapCount)
 
@@ -290,7 +283,7 @@ proc swapInAccounts*(
    nSlotAccounts = 0                             # Logging & debugging
    swappedIn: seq[NodeTagRangeSet]
 
-  noKeyErrorOrExceptionOops("swapInAccounts"):
+  noExceptionOops("swapInAccounts"):
     (swappedIn, nLaps) = swapIn(
       fa.processed, fa.unprocessed, others, rootKey, getFn, loopMax)
 

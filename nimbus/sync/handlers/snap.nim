@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
   chronos,
@@ -15,8 +17,6 @@ import
   ../protocol,
   ../protocol/snap/snap_types,
   ../../core/chain
-
-{.push raises: [].}
 
 logScope:
   topics = "wire-protocol"

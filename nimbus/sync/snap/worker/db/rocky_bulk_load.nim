@@ -159,7 +159,7 @@ proc add*(
 proc finish*(
     rbl: RockyBulkLoadRef
       ): Result[int64,void]
-      {.gcsafe, raises: [OSError].} =
+      {.gcsafe, raises: [OSError, IOError].} =
   ## Commit collected and cached data to the database. This function implies
   ## `destroy()` if successful. Otherwise `destroy()` must be called
   ## explicitely, e.g. after error analysis.
@@ -177,14 +177,12 @@ proc finish*(
         addr csError)
 
       if csError.isNil:
-        var size: int64
-        try:
-          var f: File
-          if f.open(rbl.filePath):
-            size = f.getFileSize
-            f.close
-        except:
-          discard
+        var
+          size: int64
+          f: File
+        if f.open(rbl.filePath):
+          size = f.getFileSize
+          f.close
         rbl.destroy()
         return ok(size)
 

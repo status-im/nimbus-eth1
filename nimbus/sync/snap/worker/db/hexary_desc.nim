@@ -18,8 +18,9 @@ import
 {.push raises: [].}
 
 type
-  HexaryPpFn* = proc(key: RepairKey): string {.gcsafe.}
-    ## For testing/debugging: key pretty printer function
+  HexaryPpFn* =
+    proc(key: RepairKey): string {.gcsafe, raises: [CatchableError].}
+      ## For testing/debugging: key pretty printer function
 
   ByteArray33* = array[33,byte]
     ## Used for 31 byte database keys, i.e. <marker> + <32-byte-key>
@@ -140,10 +141,11 @@ type
     repairKeyGen*: uint64           ## Unique tmp key generator
     keyPp*: HexaryPpFn              ## For debugging, might go away
 
-  HexaryGetFn* = proc(key: openArray[byte]): Blob {.gcsafe.}
-    ## Persistent database `get()` function. For read-only cases, this function
-    ## can be seen as the persistent alternative to ``tab[]` on a
-    ## `HexaryTreeDbRef` descriptor.
+  HexaryGetFn* = proc(key: openArray[byte]): Blob
+    {.gcsafe, raises: [CatchableError].}
+      ## Persistent database `get()` function. For read-only cases, this
+      ## function can be seen as the persistent alternative to ``tab[]` on
+      ## a `HexaryTreeDbRef` descriptor.
 
   HexaryNodeReport* = object
     ## Return code for single node operations
@@ -208,7 +210,7 @@ proc ppImpl(key: RepairKey; db: HexaryTreeDbRef): string =
   try:
     if not disablePrettyKeys and not db.keyPp.isNil:
       return db.keyPp(key)
-  except:
+  except CatchableError:
     discard
   key.ByteArray33.toSeq.mapIt(it.toHex(2)).join.toLowerAscii
 
@@ -276,17 +278,16 @@ proc ppImpl(db: HexaryTreeDbRef; root: NodeKey): seq[string] =
       result = result or (1u64 shl 63)
   proc cmpIt(x, y: (uint64,string)): int =
     cmp(x[0],y[0])
-  try:
-    var accu: seq[(uint64,string)]
-    if root.ByteArray32 != ByteArray32.default:
-      accu.add @[(0u64, "($0" & "," & root.ppImpl(db) & ")")]
-    for key,node in db.tab.pairs:
-      accu.add (
-        key.ppImpl(db).tokey,
-        "(" & key.ppImpl(db) & "," & node.ppImpl(db) & ")")
-    result = accu.sorted(cmpIt).mapIt(it[1])
-  except Exception as e:
-    result &= " ! Ooops ppImpl(): name=" & $e.name & " msg=" & e.msg
+
+  var accu: seq[(uint64,string)]
+  if root.ByteArray32 != ByteArray32.default:
+    accu.add @[(0u64, "($0" & "," & root.ppImpl(db) & ")")]
+  for key,node in db.tab.pairs:
+    accu.add (
+      key.ppImpl(db).tokey,
+      "(" & key.ppImpl(db) & "," & node.ppImpl(db) & ")")
+
+  accu.sorted(cmpIt).mapIt(it[1])
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

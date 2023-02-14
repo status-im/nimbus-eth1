@@ -101,10 +101,9 @@ template discardRlpError(info: static[string]; code: untyped) =
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" &
+      info & "): name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions

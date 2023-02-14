@@ -135,16 +135,16 @@ proc processStaged(buddy: FullBuddyRef): bool =
   except CatchableError as e:
     error "Storing persistent blocks failed", peer, range=($wi.blocks),
       error = $e.name, msg = e.msg
-  except Defect as e:
-    # Pass through
-    raise e
-  except Exception as e:
-    # Notorious case where the `Chain` reference applied to
-    # `persistBlocks()` has the compiler traced a possible `Exception`
-    # (i.e. `ctx.chain` could be uninitialised.)
-    error "Exception while storing persistent blocks", peer,
-      range=($wi.blocks), error=($e.name), msg=e.msg
-    raise (ref Defect)(msg: $e.name & ": " & e.msg)
+  #except Defect as e:
+  #  # Pass through
+  #  raise e
+  #except Exception as e:
+  #  # Notorious case where the `Chain` reference applied to
+  #  # `persistBlocks()` has the compiler traced a possible `Exception`
+  #  # (i.e. `ctx.chain` could be uninitialised.)
+  #  error "Exception while storing persistent blocks", peer,
+  #    range=($wi.blocks), error=($e.name), msg=e.msg
+  #  raise (ref Defect)(msg: $e.name & ": " & e.msg)
 
   # Something went wrong. Recycle work item (needs to be re-fetched, anyway)
   let

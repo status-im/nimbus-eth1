@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[algorithm, sequtils, tables],
   chronicles,
@@ -17,8 +19,6 @@ import
   "."/[hexary_desc, hexary_error, hexary_envelope, hexary_import,
        hexary_interpolate, hexary_inspect, hexary_paths, snapdb_desc,
        snapdb_persistent]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -33,6 +33,8 @@ type
 
 const
   extraTraceMessages = false or true
+
+proc getAccountFn*(ps: SnapDbAccountsRef): HexaryGetFn
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -50,17 +52,15 @@ template noKeyError(info: static[string]; code: untyped) =
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
 
-template noRlpExceptionOops(info: static[string]; code: untyped) =
+template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
+  except KeyError as e:
+    raiseAssert "Not possible -- " & info & ": " & e.msg
   except RlpError:
     return err(RlpEncoding)
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    return err(AccountNotFound)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -70,7 +70,7 @@ proc persistentAccounts(
     db: HexaryTreeDbRef;      ## Current table
     ps: SnapDbAccountsRef;    ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentAccountsPut(ps.kvDb)
@@ -300,7 +300,7 @@ proc importAccounts*(
   except OSError as e:
     error "Import Accounts exception", peer=ps.peer, name=($e.name), msg=e.msg
     return err(OSErrorException)
-  except Exception as e:
+  except CatchableError as e:
     raiseAssert "Not possible @ importAccounts(" & $e.name & "):" & e.msg
 
   #when extraTraceMessages:
@@ -330,7 +330,8 @@ proc importRawAccountsNodes*(
     nodes: openArray[NodeSpecs]; ## List of `(key,data)` records
     reportNodes = {Leaf};        ## Additional node types to report
     persistent = false;          ## store data on disk
-      ): seq[HexaryNodeReport] =
+      ): seq[HexaryNodeReport]
+      {.gcsafe, raises: [IOError].} =
   ## Store data nodes given as argument `nodes` on the persistent database.
   ##
   ## If there were an error when processing a particular argument `notes` item,
@@ -396,7 +397,8 @@ proc importRawAccountsNodes*(
     peer: Peer,                   ## For log messages, only
     nodes: openArray[NodeSpecs];  ## List of `(key,data)` records
     reportNodes = {Leaf};         ## Additional node types to report
-      ): seq[HexaryNodeReport] =
+      ): seq[HexaryNodeReport]
+      {.gcsafe, raises: [IOError].} =
   ## Variant of `importRawNodes()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, Hash256(), peer).importRawAccountsNodes(
@@ -409,7 +411,7 @@ proc getAccountsNodeKey*(
       ): Result[NodeKey,HexaryError] =
   ## For a partial node path argument `path`, return the raw node key.
   var rc: Result[NodeKey,void]
-  noRlpExceptionOops("getAccountsNodeKey()"):
+  noExceptionOops("getAccountsNodeKey()"):
     if persistent:
       rc = path.hexaryPathNodeKey(ps.root, ps.getAccountFn)
     else:
@@ -438,7 +440,7 @@ proc getAccountsData*(
   ## Caveat: There is no unit test yet for the non-persistent version
   var acc: Account
 
-  noRlpExceptionOops("getAccountData()"):
+  noExceptionOops("getAccountData()"):
     var leaf: Blob
     if persistent:
       leaf = path.hexaryPath(ps.root, ps.getAccountFn).leafData
@@ -499,7 +501,7 @@ proc nextAccountsChainDbKey*(
       ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `ChainDBRef`, the one next to the
   ## argument account key.
-  noRlpExceptionOops("getChainDbAccount()"):
+  noExceptionOops("getChainDbAccount()"):
     let path = accKey
                .hexaryPath(ps.root, ps.getAccountFn)
                .next(ps.getAccountFn)
@@ -515,7 +517,7 @@ proc prevAccountsChainDbKey*(
       ): Result[NodeKey,HexaryError] =
   ## Fetch the account path on the `ChainDBRef`, the one before to the
   ## argument account.
-  noRlpExceptionOops("getChainDbAccount()"):
+  noExceptionOops("getChainDbAccount()"):
     let path = accKey
                .hexaryPath(ps.root, ps.getAccountFn)
                .prev(ps.getAccountFn)

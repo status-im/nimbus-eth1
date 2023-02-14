@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   eth/[common, p2p],
   chronicles,
@@ -16,8 +18,6 @@ import
   ../core/chain,
   ./snap/[worker, worker_desc],
   "."/[protocol, sync_desc, sync_sched]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-sync"

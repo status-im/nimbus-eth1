@@ -480,19 +480,8 @@ proc persistWorkItem(ctx: LegacySyncRef, wi: var WantedBlocks): ValidationResult
   try:
     result = ctx.chain.persistBlocks(wi.headers, wi.bodies)
   except CatchableError as e:
-    error "storing persistent blocks failed",
-      error = $e.name, msg = e.msg
+    error "storing persistent blocks failed", error = $e.name, msg = e.msg
     result = ValidationResult.Error
-  except Defect as e:
-    # Pass through
-    raise e
-  except Exception as e:
-    # Notorious case where the `Chain` reference applied to `persistBlocks()`
-    # has the compiler traced a possible `Exception` (i.e. `ctx.chain` could
-    # be uninitialised.)
-    error "exception while storing persistent blocks",
-      error = $e.name, msg = e.msg
-    raise (ref Defect)(msg: $e.name & ": " & e.msg)
   case result
   of ValidationResult.OK:
     ctx.finalizedBlock = wi.endIndex
