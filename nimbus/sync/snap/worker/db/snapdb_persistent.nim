@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[algorithm, tables],
   chronicles,
@@ -16,17 +18,18 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
-{.push raises: [].}
-
 logScope:
   topics = "snap-db"
 
 type
-  AccountsGetFn* = proc(key: openArray[byte]): Blob {.gcsafe, raises:[Defect].}
-    ## The `get()` function for the accounts trie
+  AccountsGetFn* = proc(key: openArray[byte]): Blob
+    {.gcsafe, raises:[].}
+      ## The `get()` function for the accounts trie
 
-  StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob {.gcsafe, raises: [Defect].}
-    ## The `get()` function for the storage trie depends on the current account
+  StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob
+    {.gcsafe, raises: [].}
+      ## The `get()` function for the storage trie depends on the current
+      ## account
 
   StateRootRegistry* = object
     ## State root record. A table of these kind of records is organised as
@@ -180,7 +183,7 @@ proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:
     return err(NoRocksDbBackend)
@@ -229,7 +232,7 @@ proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
     rocky: RocksStoreRef
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## SST based bulk load on `rocksdb`.
   if rocky.isNil:
     return err(NoRocksDbBackend)

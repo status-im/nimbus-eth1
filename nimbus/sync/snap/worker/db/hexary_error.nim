@@ -19,6 +19,7 @@ type
     LowerBoundProofError
     NodeNotFound
     RlpEncoding
+    SlotsNotFound
     SlotsNotSrictlyIncreasing
     TrieLoopAlert
     TrieIsEmpty
@@ -69,6 +70,8 @@ type
     NoRocksDbBackend
     UnresolvedRepairNode
     OSErrorException
+    IOErrorException
+    ExceptionError
     StateRootNotFound
 
 # End

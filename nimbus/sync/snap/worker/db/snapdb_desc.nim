@@ -52,9 +52,7 @@ template noPpError(info: static[string]; code: untyped) =
     raiseAssert "Inconveivable (" & info & "): " & e.msg
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
+  except CatchableError as e:
     raiseAssert "Ooops (" & info & ") " & $e.name & ": " & e.msg
 
 proc toKey(a: RepairKey; pv: SnapDbRef): uint =
@@ -255,7 +253,7 @@ proc verifyLowerBound*(
     base: NodeTag;            ## Before or at first account entry in `data`
     first: NodeTag;           ## First account key
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [KeyError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
   var error: HexaryError
@@ -279,7 +277,7 @@ proc verifyNoMoreRight*(
     peer: Peer;               ## For log messages
     base: NodeTag;            ## Before or at first account entry in `data`
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [KeyError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.
   let

@@ -69,10 +69,9 @@ import
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" &
+      info & "): name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -125,7 +124,7 @@ proc findMissingNodes*(
           stopAtLevel = planBLevelMax,
           maxDangling = fetchRequestTrieNodesMax)
       result = (stats.dangling, stats.level, stats.count)
-    except:
+    except CatchableError:
       discard
 
 # ------------------------------------------------------------------------------

@@ -37,6 +37,9 @@
 ## must be solved by fetching and storing more storage slots and running this
 ## healing algorithm again.
 ##
+
+# ###### --- CHECK DEADLOCK ---- ####
+
 import
   std/[math, sequtils, tables],
   chronicles,
@@ -105,19 +108,12 @@ proc healingCtx(
 # Private helpers
 # ------------------------------------------------------------------------------
 
-#template discardRlpError(info: static[string]; code: untyped) =
-#  try:
-#    code
-#  except RlpError as e:
-#    discard
-
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    raiseAssert "Inconveivable (" &
+      info & "): name=" & $e.name & " msg=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -205,7 +201,7 @@ proc slotKey(node: NodeSpecs): (bool,NodeKey) =
       nibbles = prefix & segment
     if nibbles.len == 64:
       return (true, nibbles.getBytes.convertTo(NodeKey))
-  except:
+  except CatchableError:
     discard
 
 # ------------------------------------------------------------------------------
