@@ -31,6 +31,8 @@ import
   stint,
   strformat
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 # ------------------------------------------------------------------------------
 # Private, names & settings
 # ------------------------------------------------------------------------------

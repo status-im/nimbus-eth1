@@ -21,6 +21,8 @@ import
   "."/[message, precompiles, state, types],
   ./interpreter/[op_dispatcher, gas_costs]
 
+{.push raises: [].}
+
 logScope:
   topics = "vm opcode"
 
@@ -34,7 +36,8 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool) {.gcsafe.} =
+proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
+    {.gcsafe, raises: [CatchableError].} =
   ## Op code execution handler main loop.
   var desc: Vm2Ctx
   desc.cpt = c
@@ -127,7 +130,8 @@ proc afterExecCall(c: Computation) =
     c.rollback()
 
 
-proc beforeExecCreate(c: Computation): bool =
+proc beforeExecCreate(c: Computation): bool
+    {.gcsafe, raises: [ValueError].} =
   c.vmState.mutateStateDB:
     let nonce = db.getNonce(c.msg.sender)
     if nonce+1 < nonce:
@@ -159,7 +163,8 @@ proc beforeExecCreate(c: Computation): bool =
 
   return false
 
-proc afterExecCreate(c: Computation) =
+proc afterExecCreate(c: Computation)
+    {.gcsafe, raises: [CatchableError].} =
   if c.isSuccess:
     # This can change `c.isSuccess`.
     c.writeContract()
@@ -175,14 +180,16 @@ proc afterExecCreate(c: Computation) =
     c.rollback()
 
 
-proc beforeExec(c: Computation): bool =
+proc beforeExec(c: Computation): bool
+    {.gcsafe, raises: [ValueError].} =
   if not c.msg.isCreate:
     c.beforeExecCall()
     false
   else:
     c.beforeExecCreate()
 
-proc afterExec(c: Computation) =
+proc afterExec(c: Computation)
+    {.gcsafe, raises: [CatchableError].} =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
@@ -192,7 +199,8 @@ proc afterExec(c: Computation) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
+proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
+    {.gcsafe, raises: [CatchableError].} =
   let fork = c.fork
 
   block:
@@ -204,8 +212,10 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
         (c.continuation)()
       c.selectVM(fork, shouldPrepareTracer)
     except CatchableError as e:
-      c.setError(
-        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
+      let
+        msg = e.msg
+        depth = $c.msg.depth
+      c.setError("Opcode Dispatch Error msg=" & msg & ", depth=" & depth, true)
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
@@ -213,7 +223,8 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
-  proc execCallOrCreate*(c: Computation) =
+  proc execCallOrCreate*(c: Computation)
+      {.gcsafe, raises: [CatchableError].} =
     defer: c.dispose()
     if c.beforeExec():
       return
@@ -236,7 +247,8 @@ when vm_use_recursion:
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation) =
+  proc execCallOrCreate*(cParam: Computation)
+      {.gcsafe, raises: [CatchableError].} =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:

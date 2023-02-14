@@ -25,6 +25,8 @@ import
   ./oph_defs,
   eth/common
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
