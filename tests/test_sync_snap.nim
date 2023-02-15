@@ -178,7 +178,7 @@ proc testDbs(
     else:
       result.dbDir = workDir / "tmp"
   if result.persistent:
-    result.dbDir.flushDbDir
+    workDir.flushDbDir(subDir)
     for n in 0 ..< min(result.cdb.len, instances):
       result.cdb[n] = (result.dbDir / $n).newChainDB
 
@@ -510,7 +510,7 @@ when isMainModule:
   #setTraceLevel()
   setErrorLevel()
 
-  # Test constant, calculations etc.
+  # Test constants, calculations etc.
   when true: # and false:
     noisy.miscRunner()
 
@@ -546,7 +546,8 @@ when isMainModule:
       false.storagesRunner(persistent=true, sam)
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
-  # dumps `bulkTest1`, `bulkTest2`, .. from the `nimbus-eth1-blobs` package
+  # dumps `bulkTest1`, `bulkTest2`, .. from the `nimbus-eth1-blobs` package.
+  # For specs see `tests/test_sync_snap/bulk_test_xx.nim`.
   when true and false:
     # ---- database storage timings -------
 
