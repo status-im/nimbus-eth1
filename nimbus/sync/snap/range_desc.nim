@@ -57,7 +57,7 @@ type
     ## used for storing in the database. So the `PackedAccount` is `BaseDB`
     ## trie compatible.
     accounts*: seq[PackedAccount]  ## List of re-packed accounts data
-    proof*: SnapAccountProof       ## Boundary proofs
+    proof*: seq[SnapProof]         ## Boundary proofs
 
   PackedAccount* = object
     ## In fact, the `snap/1` driver returns the `Account` structure which is
@@ -75,7 +75,7 @@ type
     ## List of storage descriptors, the last `AccountSlots` storage data might
     ## be incomplete and the `proof` is needed for proving validity.
     storages*: seq[AccountSlots]    ## List of accounts and storage data
-    proof*: SnapStorageProof        ## Boundary proofs for last entry
+    proof*: seq[SnapProof]          ## Boundary proofs for last entry
     base*: NodeTag                  ## Lower limit for last entry w/proof
 
   AccountSlots* = object

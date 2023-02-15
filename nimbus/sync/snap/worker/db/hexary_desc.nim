@@ -179,6 +179,52 @@ proc initImpl(key: var RepairKey; data: openArray[byte]): bool =
     trg.copyMem(unsafeAddr data[0], data.len)
     return true
 
+
+proc append(writer: var RlpWriter, node: RNodeRef) =
+  ## Mixin for RLP writer
+  proc appendOk(writer: var RlpWriter; key: RepairKey): bool =
+    if key.isZero:
+      writer.append(EmptyNodeBlob)
+    elif key.isNodeKey:
+      var hash: Hash256
+      (addr hash.data[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
+      writer.append(hash)
+    else:
+      return false
+    true
+
+  case node.kind:
+  of Branch:
+    writer.startList(17)
+    for n in 0 ..< 16:
+      if not writer.appendOk(node.bLink[n]):
+        return # empty `Blob`
+    writer.append(node.bData)
+  of Extension:
+    writer.startList(2)
+    writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
+    if not writer.appendOk(node.eLink):
+      return # empty `Blob`
+  of Leaf:
+    writer.startList(2)
+    writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
+    writer.append(node.lData)
+
+
+proc append(writer: var RlpWriter, node: XNodeObj) =
+  ## Mixin for RLP writer
+  case node.kind:
+  of Branch:
+    writer.append(node.bLink)
+  of Extension:
+    writer.startList(2)
+    writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
+    writer.append(node.eLink)
+  of Leaf:
+    writer.startList(2)
+    writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
+    writer.append(node.lData)
+
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
@@ -393,54 +439,21 @@ proc convertTo*(data: Blob; T: type RepairKey): T =
 proc convertTo*(node: RNodeRef; T: type Blob): T =
   ## Write the node as an RLP-encoded blob
   var writer = initRlpWriter()
-
-  proc appendOk(writer: var RlpWriter; key: RepairKey): bool =
-    if key.isZero:
-      writer.append(EmptyNodeBlob)
-    elif key.isNodeKey:
-      var hash: Hash256
-      (addr hash.data[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
-      writer.append(hash)
-    else:
-      return false
-    true
-
-  case node.kind:
-  of Branch:
-    writer.startList(17)
-    for n in 0 ..< 16:
-      if not writer.appendOk(node.bLink[n]):
-        return # empty `Blob`
-    writer.append(node.bData)
-  of Extension:
-    writer.startList(2)
-    writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
-    if not writer.appendOk(node.eLink):
-      return # empty `Blob`
-  of Leaf:
-    writer.startList(2)
-    writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
-    writer.append(node.lData)
-
+  writer.append node
   writer.finish()
 
 proc convertTo*(node: XNodeObj; T: type Blob): T =
-  ## Variant of above `convertTo()` for `XNodeObj` nodes.
+  ## Variant of `convertTo()` for `XNodeObj` nodes.
   var writer = initRlpWriter()
-
-  case node.kind:
-  of Branch:
-    writer.append(node.bLink)
-  of Extension:
-    writer.startList(2)
-    writer.append(node.ePfx.hexPrefixEncode(isleaf = false))
-    writer.append(node.eLink)
-  of Leaf:
-    writer.startList(2)
-    writer.append(node.lPfx.hexPrefixEncode(isleaf = true))
-    writer.append(node.lData)
-
+  writer.append node
   writer.finish()
+
+proc convertTo*(nodeList: openArray[XNodeObj]; T: type Blob): T =
+  ## Variant of `convertTo()` for a list of `XNodeObj` nodes.
+  var writer = initRlpList(nodeList.len)
+  for w in nodeList:
+    writer.append w
+  writer.finish
 
 # ------------------------------------------------------------------------------
 # End

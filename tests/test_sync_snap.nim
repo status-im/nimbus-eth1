@@ -511,7 +511,8 @@ when isMainModule:
   setErrorLevel()
 
   # Test constant, calculations etc.
-  noisy.miscRunner()
+  when true: # and false:
+    noisy.miscRunner()
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -544,16 +545,18 @@ when isMainModule:
       false.accountsRunner(persistent=true, sam)
       false.storagesRunner(persistent=true, sam)
 
-  # This one uses readily available dumps
+  # This one uses the readily available dump: `bulkTest0` and some huge replay
+  # dumps `bulkTest1`, `bulkTest2`, .. from the `nimbus-eth1-blobs` package
   when true and false:
     # ---- database storage timings -------
 
-    noisy.showElapsed("importRunner()"):
-      noisy.importRunner(capture = bulkTest0)
+    for test in @[bulkTest0] & @[bulkTest1, bulkTest2, bulkTest3]:
+      noisy.showElapsed("importRunner()"):
+        noisy.importRunner(capture = test)
 
-    noisy.showElapsed("dbTimingRunner()"):
-      true.dbTimingRunner(cleanUp = false)
-      true.dbTimingRunner()
+      noisy.showElapsed("dbTimingRunner()"):
+        true.dbTimingRunner(cleanUp = false)
+        true.dbTimingRunner()
 
 # ------------------------------------------------------------------------------
 # End

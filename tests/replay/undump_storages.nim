@@ -13,8 +13,7 @@ import
   eth/common,
   nimcrypto/utils,
   stew/byteutils,
-  ../../nimbus/sync/snap/range_desc,
-  ../../nimbus/sync/protocol,
+  ../../nimbus/sync/[protocol, snap/range_desc],
   ./gunzip
 
 type
@@ -68,6 +67,9 @@ proc dumpStorages*(
   ## Dump account and storage data in parseable Ascii text
   proc ppStr(blob: Blob): string =
     blob.mapIt(it.toHex(2)).join.toLowerAscii
+
+  proc ppStr(proof: SnapProof): string =
+    proof.data.ppStr
 
   proc ppStr(hash: Hash256): string =
     hash.data.mapIt(it.toHex(2)).join.toLowerAscii
@@ -207,7 +209,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
 
     of UndumpProofs:
       if flds.len == 1:
-        data.data.proof.add flds[0].toByteSeq
+        data.data.proof.add SnapProof(data: flds[0].toByteSeq)
         nProofs.dec
         if nProofs <= 0:
           state = UndumpCommit

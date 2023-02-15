@@ -16,7 +16,7 @@ import
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
-  ../../nimbus/sync/types,
+  ../../nimbus/sync/[protocol, types],
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_envelope,  hexary_error, hexary_interpolate,
@@ -192,7 +192,7 @@ proc printCompareLeftNearby(
 proc verifyRangeProof(
     rootKey: NodeKey;
     leafs: seq[RangeLeaf];
-    proof: seq[Blob];
+    proof: seq[SnapProof];
     dbg = HexaryTreeDbRef(nil);
      ): Result[void,HexaryError] =
   ## Re-build temporary database and prove or disprove
@@ -206,7 +206,7 @@ proc verifyRangeProof(
   # Import proof nodes
   var unrefs, refs: HashSet[RepairKey] # values ignored
   for rlpRec in proof:
-    let importError = xDb.hexaryImport(rlpRec, unrefs, refs).error
+    let importError = xDb.hexaryImport(rlpRec.data, unrefs, refs).error
     if importError != HexaryError(0):
       check importError == HexaryError(0)
       return err(importError)
@@ -224,7 +224,7 @@ proc verifyRangeProof(
       #"\n",
       #"\n    unrefs=[", unrefs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
       #"\n    refs=[", refs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
-      "\n\n    proof=", proof.ppNodeKeys(dbg),
+      "\n\n    proof=", proof.mapIt(it.data).ppNodeKeys(dbg),
       "\n\n    first=", leafs[0].key,
       "\n    ", leafs[0].key.hexaryPath(rootKey,xDb).pp(dbg),
       "\n\n    last=", leafs[^1].key,
@@ -375,14 +375,14 @@ proc test_NodeRangeProof*(
   let
     rootKey = inLst[0].root.to(NodeKey)
     noisy = not dbg.isNil
-    maxLen = high(int)
+    maxLen = high(int) # set it lower for debugging (eg. 5 for a small smaple)
 
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
     let
       accounts = w.data.accounts[0 ..< min(w.data.accounts.len,maxLen)]
       iv = NodeTagRange.new(w.base, accounts[^1].accKey.to(NodeTag))
-      rc = db.hexaryRangeLeafsProof(rootKey, iv, accounts.len)
+      rc = db.hexaryRangeLeafsProof(rootKey, iv)
     check rc.isOk
     if rc.isErr:
       return
@@ -393,11 +393,14 @@ proc test_NodeRangeProof*(
 
       # Take sub-samples but not too small
       if 0 < cutOff and rc.value.leafs.len < cutOff + 5:
-        break # rest cases ignored
+        break # remaining cases ignored
       subCount.inc
 
-      let leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
-      var proof: seq[Blob]
+      let
+        leafs = rc.value.leafs[0 ..< rc.value.leafs.len - cutOff]
+        leafsRlpLen = leafs.encode.len
+      var
+        proof: seq[SnapProof]
 
       # Calculate proof
       if cutOff == 0:
@@ -407,7 +410,22 @@ proc test_NodeRangeProof*(
           rootKey.printCompareRightLeafs(w.base, accounts, leafs, db, dbg)
           return
         proof = rc.value.proof
+
+        # Some sizes to verify (full data list)
+        check rc.value.proofSize == proof.encode.len
+        check rc.value.leafsSize == leafsRlpLen
       else:
+        # Make sure that the size calculation deliver the expected number
+        # of entries.
+        let rx = db.hexaryRangeLeafsProof(rootKey, iv, leafsRlpLen + 1)
+        check rx.isOk
+        if rx.isErr:
+          return
+        check rx.value.leafs.len == leafs.len
+
+        # Some size to verify (truncated data list)
+        check rx.value.proofSize == rx.value.proof.encode.len
+
         # Re-adjust proof
         proof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs).proof
 
@@ -424,7 +442,7 @@ proc test_NodeRangeProof*(
           noisy.say "***", "n=", n,
             " cutOff=", cutOff,
             " leafs=", leafs.len,
-            " proof=", proof.ppNodeKeys(dbg),
+            " proof=", proof.mapIt(it.data).ppNodeKeys(dbg),
             "\n\n   ",
             " base=", iv.minPt,
             "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(dbg),
@@ -475,6 +493,3 @@ proc test_NodeRangeLeftBoundary*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
-proc xxx(inLst: seq[UndumpAccounts]; db: HexaryGetFn; dbg: HexaryTreeDbRef) =
-  inLst.test_NodeRangeProof(db, dbg)
