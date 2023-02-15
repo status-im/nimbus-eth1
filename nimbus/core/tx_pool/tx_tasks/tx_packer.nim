@@ -12,6 +12,8 @@
 ## =============================================================
 ##
 
+{.push raises: [].}
+
 import
   std/[sets, tables],
   ../../../db/accounts_cache,
@@ -31,8 +33,6 @@ import
   chronicles,
   eth/[keys, rlp, trie, trie/db],
   stew/[sorted_set]
-
-{.push raises: [].}
 
 type
   TxPackerError* = object of CatchableError
@@ -87,9 +87,9 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt, fork)
 
-  safeExecutor "tx_packer.runTx":
-    # Execute transaction, may return a wildcard `Exception`
-    result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
+  #safeExecutor "tx_packer.runTx":
+  #  # Execute transaction, may return a wildcard `Exception`
+  result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
 
   pst.cleanState = false
   doAssert 0 <= result

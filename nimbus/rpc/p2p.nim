@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[times, tables, typetraits],
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
@@ -21,8 +23,6 @@ import
   ../common/[common, context],
   ../utils/utils,
   ./filters
-
-{.push raises: [].}
 
 #[
   Note:
@@ -327,7 +327,7 @@ proc setupEthRpc*(
     try:
       let header = chainDB.headerFromTag(quantityTag)
       result = some(populateBlockObject(header, chainDB, fullTransactions))
-    except:
+    except CatchableError:
       result = none(BlockObject)
 
   server.rpc("eth_getTransactionByHash") do(data: EthHashStr) -> Option[TransactionObject]:

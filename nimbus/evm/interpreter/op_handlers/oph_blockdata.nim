@@ -19,6 +19,8 @@ import
   ../op_codes,
   ./oph_defs
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 when not defined(evmc_enabled):
   import ../../state
 

@@ -8,28 +8,16 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[json, macros, options, sets, strformat, tables],
+  std/[json, options, sets, strformat, tables],
   eth/[keys],
   ../../stateless/[witness_from_tree, witness_types],
   ../db/accounts_cache,
   ../common/[common, evmforks],
-  ../errors,
   ./transaction_tracer,
   ./types
-
-{.push raises: [].}
-
-template safeExecutor(info: string; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raise (ref CatchableError)(msg: e.msg)
-  except Defect as e:
-    raise (ref Defect)(msg: e.msg)
-  except:
-    let e = getCurrentException()
-    raise newException(VmStateError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc init(
       self:        BaseVMState;
@@ -390,8 +378,7 @@ proc buildWitness*(vmState: BaseVMState): seq[byte]
 
   # build witness from tree
   var wb = initWitnessBuilder(vmState.com.db.db, rootHash, flags)
-  safeExecutor("buildWitness"):
-    result = wb.buildWitness(mkeys)
+  wb.buildWitness(mkeys)
 
 func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
   # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;

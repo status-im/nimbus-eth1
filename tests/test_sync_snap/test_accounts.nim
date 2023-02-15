@@ -62,6 +62,7 @@ import
   eth/[common, p2p],
   unittest2,
   ../../nimbus/db/select_backend,
+  ../../nimbus/sync/protocol,
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[snapdb_accounts, snapdb_desc],
   ../replay/[pp, undump_accounts],
@@ -71,7 +72,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc flatten(list: openArray[seq[Blob]]): seq[Blob] =
+proc flatten(list: openArray[seq[SnapProof]]): seq[SnapProof] =
   for w in list:
     result.add w
 

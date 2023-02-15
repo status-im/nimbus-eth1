@@ -34,7 +34,7 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-when true:
+when false:
   import std/[sequtils, strutils]
 
   proc pp(w: RPathXStep; db: HexaryTreeDbRef): string =

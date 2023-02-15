@@ -12,6 +12,8 @@
 ## ============================================
 ##
 
+{.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
+
 import
   ../../../errors,
   ../../types,
@@ -23,7 +25,7 @@ import
   stint
 
 when defined(evmc_enabled):
-  import ../../evmc_api, ../../evmc_helpers, evmc/evmc
+  import ../../evmc_api, evmc/evmc
 else:
   import
     ../../state,

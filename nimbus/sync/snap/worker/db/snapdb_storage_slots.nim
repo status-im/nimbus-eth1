@@ -42,34 +42,13 @@ proc to(h: Hash256; T: type NodeKey): T =
 #proc convertTo(data: openArray[byte]; T: type Hash256): T =
 #  discard result.data.NodeKey.init(data) # size error => zero
 
-
-#template noKeyError(info: static[string]; code: untyped) =
-#  try:
-#    code
-#  except KeyError as e:
-#    raiseAssert "Not possible (" & info & "): " & e.msg
-
-template noRlpExceptionOops(info: static[string]; code: untyped) =
+template noExceptionOops(info: static[string]; code: untyped) =
   try:
     code
   except RlpError:
     return err(RlpEncoding)
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
-    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
-
-#template noGenericExOrKeyError(info: static[string]; code: untyped) =
-#  try:
-#    code
-#  except KeyError as e:
-#    raiseAssert "Not possible (" & info & "): " & e.msg
-#  except Defect as e:
-#    raise e
-#  except Exception as e:
-#    raiseAssert "Ooops " & info & ": name=" & $e.name & " msg=" & e.msg
+  except CatchableError as e:
+    return err(SlotsNotFound)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -79,7 +58,7 @@ proc persistentStorageSlots(
     db: HexaryTreeDbRef;       ## Current table
     ps: SnapDbStorageSlotsRef; ## For persistent database
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [OSError,KeyError].} =
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
   ## Store accounts trie table on databse
   if ps.rockDb.isNil:
     let rc = db.persistentStorageSlotsPut(ps.kvDb)
@@ -134,7 +113,7 @@ proc importStorageSlots(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     base: NodeTag;             ## before or at first account entry in `data`
     data: AccountSlots;        ## Account storage descriptor
-    proof: SnapStorageProof;   ## Storage slots proof data
+    proof: seq[SnapProof];    ## Storage slots proof data
     noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
@@ -322,6 +301,10 @@ proc importStorageSlots*(
       result.add HexaryNodeReport(slot: itemInx, error: OSErrorException)
       error "Import storage slots exception", peer, itemInx, nItems,
         name=($e.name), msg=e.msg, nErrors=result.len
+    except IOError as e:
+      result.add HexaryNodeReport(slot: itemInx, error: IOErrorException)
+      error "Import storage slots exception", peer, itemInx, nItems,
+        name=($e.name), msg=e.msg, nErrors=result.len
 
   #when extraTraceMessages:
   #  if result.len == 0:
@@ -401,6 +384,11 @@ proc importRawStorageSlotsNodes*(
     nErrors.inc
     error "Import storage slots nodes exception", peer, slot, nItems,
       name=($e.name), msg=e.msg, nErrors
+  except IOError as e:
+    result.add HexaryNodeReport(slot: slot, error: IOErrorException)
+    nErrors.inc
+    error "Import storage slots nodes exception", peer, slot, nItems,
+      name=($e.name), msg=e.msg, nErrors
 
   when extraTraceMessages:
     if nErrors == 0:
@@ -445,7 +433,7 @@ proc inspectStorageSlotsTrie*(
   ##
   let peer {.used.} = ps.peer
   var stats: TrieNodeStat
-  noRlpExceptionOops("inspectStorageSlotsTrie()"):
+  noExceptionOops("inspectStorageSlotsTrie()"):
     if persistent:
       stats = ps.getStorageSlotsFn.hexaryInspectTrie(
         ps.root, pathList, resumeCtx, suspendAfter=suspendAfter)
@@ -498,7 +486,7 @@ proc getStorageSlotsData*(
   let peer {.used.} = ps.peer
   var acc: Account
 
-  noRlpExceptionOops("getStorageSlotsData()"):
+  noExceptionOops("getStorageSlotsData()"):
     var leaf: Blob
     if persistent:
       leaf = path.hexaryPath(ps.root, ps.getStorageSlotsFn).leafData
@@ -506,7 +494,7 @@ proc getStorageSlotsData*(
       leaf = path.hexaryPath(ps.root, ps.hexaDb).leafData
 
     if leaf.len == 0:
-      return err(AccountNotFound)
+      return err(SlotsNotFound)
     acc = rlp.decode(leaf,Account)
 
   return ok(acc)

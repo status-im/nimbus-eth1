@@ -11,8 +11,9 @@
 import
   std/[sequtils, sets, tables],
   chronicles,
-  eth/[common, p2p, rlp, trie/nibbles],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
+  ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
 
@@ -25,7 +26,12 @@ type
 
   RangeProof* = object
     leafs*: seq[RangeLeaf]
-    proof*: seq[Blob]
+    leafsSize*: int
+    proof*: seq[SnapProof]
+    proofSize*: int
+
+proc hexaryRangeRlpLeafListSize*(blobLen: int; lstLen = 0): (int,int) {.gcsafe.}
+proc hexaryRangeRlpSize*(blobLen: int): int {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -35,6 +41,15 @@ proc convertTo(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use (if at all, unless debugging)
   (addr result.ByteArray32[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
 
+proc rlpPairSize(aLen: int; bRlpLen: int): int =
+  ## Size caclualation for an RLP encoded pair `[<a>,<rb>]` for blobs `a` and
+  ## rlp encoded `rb` argument length `aLen` and `bRlpLen`.
+  let aRlpLen = hexaryRangeRlpSize(aLen)
+  if bRlpLen < high(int) - aRlpLen:
+    hexaryRangeRlpSize(aRlpLen + bRlpLen)
+  else:
+    high(int)
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -43,7 +58,8 @@ template collectLeafs(
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
     rootKey: NodeKey|RepairKey;      # State root
     iv: NodeTagRange;                # Proofed range of leaf paths
-    nLeafs: int;                     # Implies maximal data size
+    nSizeLimit: int;                 # List of RLP encoded data must be smaller
+    nSizeUsed: var int;              # Updated size counter for the raw list
       ): auto =
   ## Collect trie database leafs prototype. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
@@ -51,12 +67,12 @@ template collectLeafs(
 
   block body:
     var
-      nodeTag = iv.minPt
+      nodeTag = minPt(iv)
       prevTag: NodeTag
       rls: seq[RangeLeaf]
 
-    # Fill at most `nLeafs` leaf nodes from interval range
-    while rls.len < nLeafs and nodeTag <= iv.maxPt:
+    # Fill leaf nodes from interval range unless size reached
+    while nodeTag <= maxPt(iv):
       # The following logic might be sub-optimal. A strict version of the
       # `next()` function that stops with an error at dangling links could
       # be faster if the leaf nodes are not too far apart on the hexary trie.
@@ -76,6 +92,13 @@ template collectLeafs(
         rc = typeof(rc).err(FailedNextNode)
         break body # stop here
 
+      let (pairLen,listLen) =
+        hexaryRangeRlpLeafListSize(xPath.leafData.len, nSizeUsed)
+      if listLen < nSizeLimit:
+        nSizeUsed += pairLen
+      else:
+        break
+
       rls.add RangeLeaf(
         key:  rightKey,
         data: xPath.leafData)
@@ -94,6 +117,7 @@ template updateProof(
     rootKey: NodeKey|RepairKey;      # State root
     baseTag: NodeTag;                # Left boundary
     leafList: seq[RangeLeaf];        # Set of collected leafs
+    nSizeUsed: int;                  # To be stored into the result
       ): auto =
   ## Complement leafs list by adding proof nodes. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
@@ -106,67 +130,98 @@ template updateProof(
   if 0 < leafList.len:
     proof.incl leafList[^1].key.to(NodeTag).hexaryPath(rootKey, db)
         .path
-         .mapIt(it.node)
+        .mapIt(it.node)
         .filterIt(it.kind != Leaf)
         .mapIt(it.convertTo(Blob))
         .toHashSet
 
-  RangeProof(
+  var rp = RangeProof(
     leafs: leafList,
-    proof: proof.toSeq)
+    proof: proof.toSeq.mapIt(SnapProof(data: it)))
+
+  if 0 < nSizeUsed:
+    rp.leafsSize = hexaryRangeRlpSize nSizeUsed
+  if 0 < rp.proof.len:
+    rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.data.len, 0)
+
+  rp
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc hexaryRangeLeafsProof*(
-    db: HexaryTreeDbRef;             # Database abstraction
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
     rootKey: NodeKey;                # State root
     iv: NodeTagRange;                # Proofed range of leaf paths
-    nLeafs = high(int);              # Implies maximal data size
+    nSizeLimit = high(int);          # List of RLP encoded data must be smaller
       ): Result[RangeProof,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Collect trie database leafs prototype and add proof.
-  let rc = db.collectLeafs(rootKey, iv, nLeafs)
+  var accSize = 0
+  let rc = db.collectLeafs(rootKey, iv, nSizeLimit, accSize)
   if rc.isErr:
     err(rc.error)
   else:
-    ok(db.updateProof(rootKey, iv.minPt, rc.value))
+    ok(db.updateProof(rootKey, iv.minPt, rc.value, accSize))
 
 proc hexaryRangeLeafsProof*(
-    db: HexaryTreeDbRef;             # Database abstraction
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
     rootKey: NodeKey;                # State root
     baseTag: NodeTag;                # Left boundary
     leafList: seq[RangeLeaf];        # Set of already collected leafs
       ): RangeProof
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Complement leafs list by adding proof nodes to the argument list
   ## `leafList`.
-  db.updateProof(rootKey, baseTag, leafList)
+  db.updateProof(rootKey, baseTag, leafList, 0)
 
-proc hexaryRangeLeafsProof*(
-    db: HexaryGetFn;                 # Database abstraction
-    rootKey: NodeKey;                # State root
-    iv: NodeTagRange;                # Proofed range of leaf paths
-    nLeafs = high(int);              # Implies maximal data size
-      ): Result[RangeProof,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Variant of `hexaryRangeLeafsProof()` for persistent database.
-  let rc = db.collectLeafs(rootKey, iv, nLeafs)
-  if rc.isErr:
-    err(rc.error)
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+proc hexaryRangeRlpSize*(blobLen: int): int =
+  ## Returns the size of RLP encoded <blob> of argument length `blobLen`.
+  if blobLen < 56:
+      return blobLen + 1
+  if blobLen < (1 shl (8 * 1)):
+    return blobLen + 2
+  if blobLen < (1 shl (8 * 2)):
+    return blobLen + 3
+  if blobLen < (1 shl (8 * 3)):
+    return blobLen + 4
+
+  when sizeof(int) < 8:
+    if blobLen < (1 shl (8 * 4)):
+      return blobLen + 5
+    if blobLen < (1 shl (8 * 5)):
+      return blobLen + 6
+    if blobLen < (1 shl (8 * 6)):
+      return blobLen + 7
+    if blobLen < (1 shl (8 * 7)):
+      return blobLen + 8
+
+  if blobLen < high(int) - (1 + sizeof(int)):
+    blobLen + 1 + sizeof(int)
   else:
-    ok(db.updateProof(rootKey, iv.minPt, rc.value))
+    high(int)
 
-proc hexaryRangeLeafsProof*(
-    db: HexaryGetFn;                 # Database abstraction
-    rootKey: NodeKey;                # State root
-    baseTag: NodeTag;                # Left boundary
-    leafList: seq[RangeLeaf];        # Set of already collected leafs
-      ): RangeProof
-      {.gcsafe, raises: [Defect,RlpError]} =
-  ## Variant of `hexaryRangeLeafsProof()` for persistent database.
-  db.updateProof(rootKey, baseTag, leafList)
+proc hexaryRangeRlpLeafListSize*(blobLen: int; lstLen = 0): (int,int) =
+  ## Size caclualation for an RLP encoded list `[[<key>,<blob>],a,b,..]`
+  ## where a,b,.. are from a sequence of the same format `[<keyA>,<blobA>]`,
+  ## `[<keyB>,<blobB>]`,... The size of blob is the argument size `blobLen`,
+  ## and the toral size of the sequence is `listLen`.
+  ##
+  ## The fuction returns `(x,y)`, the size `x` of the RLP encoded pair
+  ## `[<key>,<blob>]` and the total size `y` of the complete RLP encoded list
+  ## `[[<key>,<blob>],a,b,..]`.
+  let pairLen = blobLen.rlpPairSize(33)
+  if lstLen == 0:
+    (pairLen, hexaryRangeRlpSize(pairLen))
+  elif lstLen < high(int) - lstLen:
+    (pairLen, hexaryRangeRlpSize(pairLen + lstLen))
+  else:
+    (pairLen, high(int))
 
 # ------------------------------------------------------------------------------
 # End

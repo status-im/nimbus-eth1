@@ -30,7 +30,7 @@ type
   #
   # SnapStorageRanges* = object
   #  slotLists*: seq[seq[SnapStorage]]
-  #  proof*: SnapStorageProof
+  #  proof*: seq[SnapProof]
 
   GetStorageRanges* = object
     leftOver*: seq[AccountSlotsHeader]

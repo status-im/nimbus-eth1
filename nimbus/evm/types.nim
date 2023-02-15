@@ -17,6 +17,8 @@ import
   ../db/accounts_cache,
   ../common/[common, evmforks]
 
+{.push raises: [].}
+
 when defined(evmc_enabled):
   import
     ./evmc_api
@@ -99,7 +101,7 @@ type
     else:
       parent*, child*:      Computation
     pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe.}
+    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
 
   Error* = ref object
     info*:                  string
@@ -132,7 +134,9 @@ type
     flags*:            MsgFlags
 
   LazyDataSource* = ref object of RootObj
-    ifNecessaryGetStorage*: proc(c: Computation, slot: UInt256): Future[void] {.gcsafe.}
+    ifNecessaryGetStorage*:
+      proc(c: Computation, slot: UInt256): Future[void]
+        {.gcsafe, raises: [CatchableError].}
 
   AsyncOperationFactory* = ref object of RootObj
     lazyDataSource*: LazyDataSource

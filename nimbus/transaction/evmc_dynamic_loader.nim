@@ -6,7 +6,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-#{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[dynlib, strformat, strutils, os],
@@ -83,13 +83,21 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
 
   return (cast[evmc_create_vm_name_fn](sym), path)
 
-proc evmcLoadVMShowDetail(): ptr evmc_vm =
+proc evmcLoadVMShowDetail(): ptr evmc_vm {.raises: [CatchableError].} =
   let (vmCreate, vmDescription) = evmcLoadVMGetCreateFn()
   if vmCreate.isNil:
     return nil
 
-  {.gcsafe.}:
-    let vm: ptr evmc_vm = vmCreate()
+  var vm: ptr evmc_vm
+  try:
+    {.gcsafe.}:
+      vm = vmCreate()
+  except CatchableError as e:
+    raise e
+  except Exception as e:
+    {.warning: "Kludge(BareExcept): `evmc_create_nimbus_evm()` in vendor package needs to be double checked and updated".}
+    raiseAssert "Ooops evmcLoadVMShowDetail(): name=" &
+      $e.name & " msg=" & e.msg
 
   if vm.isNil:
     warn "The loaded EVM did not create a VM when requested",
@@ -108,7 +116,7 @@ proc evmcLoadVMShowDetail(): ptr evmc_vm =
   info "Using EVM", name=name, version=version, `from`=vmDescription
   return vm
 
-proc evmcLoadVMCached*(): ptr evmc_vm =
+proc evmcLoadVMCached*(): ptr evmc_vm {.raises: [CatchableError].} =
   # TODO: Make this open the VM library once per process.  Currently it does
   # so once per thread, but at least this is thread-safe.
   var vm {.threadvar.}: ptr evmc_vm

@@ -6,6 +6,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, times],
   chronicles,
@@ -30,7 +32,8 @@ type
 
 proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
                   globalGasCap: GasInt, baseFee: Option[UInt256],
-                  forkOverride = none(EVMFork)): CallParams =
+                  forkOverride = none(EVMFork)): CallParams
+    {.gcsafe, raises: [ValueError].} =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if cd.gasPrice.isSome and (cd.maxFee.isSome or cd.maxPriorityFee.isSome):
@@ -73,7 +76,8 @@ proc toCallParams(vmState: BaseVMState, cd: RpcCallData,
     accessList:   cd.accessList
   )
 
-proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallResult =
+proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallResult
+    {.gcsafe, raises: [CatchableError].} =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
@@ -88,7 +92,8 @@ proc rpcCallEvm*(call: RpcCallData, header: BlockHeader, com: CommonRef): CallRe
 
   runComputation(params)
 
-proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCap: GasInt): GasInt =
+proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCap: GasInt): GasInt
+    {.gcsafe, raises: [CatchableError].} =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = BlockHeader(
     parentHash: header.blockHash,
@@ -150,7 +155,8 @@ proc rpcEstimateGas*(cd: RpcCallData, header: BlockHeader, com: CommonRef, gasCa
   let intrinsicGas = intrinsicGas(params, fork)
 
   # Create a helper to check if a gas allowance results in an executable transaction
-  proc executable(gasLimit: GasInt): bool =
+  proc executable(gasLimit: GasInt): bool
+      {.gcsafe, raises: [CatchableError].} =
     if intrinsicGas > gasLimit:
       # Special case, raise gas limit
       return true
@@ -213,11 +219,13 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
   if tx.txType > TxLegacy:
     shallowCopy(result.accessList, tx.accessList)
 
-proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt =
+proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): GasInt
+    {.gcsafe, raises: [CatchableError].} =
   let call = callParamsForTx(tx, sender, vmState, fork)
   return runComputation(call).gasUsed
 
-proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallResult =
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallResult
+    {.gcsafe, raises: [CatchableError].} =
   let call = callParamsForTest(tx, sender, vmState, fork)
   runComputation(call)
 

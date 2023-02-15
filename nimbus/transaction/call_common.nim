@@ -6,6 +6,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
   chronos,
@@ -186,8 +188,8 @@ proc setupHost(call: CallParams): TransactionHost =
   return host
 
 when defined(evmc_enabled):
-  import ./host_services
-  proc doExecEvmc(host: TransactionHost, call: CallParams) =
+  proc doExecEvmc(host: TransactionHost, call: CallParams)
+      {.gcsafe, raises: [CatchableError].} =
     var callResult = evmcExecComputation(host)
     let c = host.computation
 
@@ -205,7 +207,12 @@ when defined(evmc_enabled):
                                      callResult.output_size.int))
     if not callResult.release.isNil:
       {.gcsafe.}:
-        callResult.release(callResult)
+        try:
+          callResult.release(callResult)
+        except Exception as e:
+          {.warning: "Kludge(BareExcept): `evmc_release_fn` in vendor package needs to be updated"}
+          raiseAssert "Ooops evmcExecComputation(): name=" &
+            $e.name & " msg=" & e.msg
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
@@ -261,7 +268,8 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   result.stack = c.stack
   result.memory = c.memory
 
-proc runComputation*(call: CallParams): CallResult =
+proc runComputation*(call: CallParams): CallResult
+    {.gcsafe, raises: [CatchableError].} =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 

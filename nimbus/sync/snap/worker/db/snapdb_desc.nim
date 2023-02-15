@@ -13,6 +13,7 @@ import
   chronicles,
   eth/[common, p2p, trie/db, trie/nibbles],
   ../../../../db/[select_backend, storage_types],
+  ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
        hexary_paths, rocky_bulk_load]
@@ -52,9 +53,7 @@ template noPpError(info: static[string]; code: untyped) =
     raiseAssert "Inconveivable (" & info & "): " & e.msg
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
-  except Defect as e:
-    raise e
-  except Exception as e:
+  except CatchableError as e:
     raiseAssert "Ooops (" & info & ") " & $e.name & ": " & e.msg
 
 proc toKey(a: RepairKey; pv: SnapDbRef): uint =
@@ -213,7 +212,7 @@ proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
 proc mergeProofs*(
     ps: SnapDbBaseRef;        ## Session database
     peer: Peer;               ## For log messages
-    proof: seq[Blob];         ## Node records
+    proof: seq[SnapProof];    ## Node records
     freeStandingOk = false;   ## Remove freestanding nodes
       ): Result[void,HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
@@ -227,7 +226,7 @@ proc mergeProofs*(
     refs = @[ps.root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
-    let report = db.hexaryImport(rlpRec, nodes, refs)
+    let report = db.hexaryImport(rlpRec.data, nodes, refs)
     if report.error != NothingSerious:
       let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error
@@ -255,7 +254,7 @@ proc verifyLowerBound*(
     base: NodeTag;            ## Before or at first account entry in `data`
     first: NodeTag;           ## First account key
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [KeyError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
   var error: HexaryError
@@ -279,7 +278,7 @@ proc verifyNoMoreRight*(
     peer: Peer;               ## For log messages
     base: NodeTag;            ## Before or at first account entry in `data`
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [KeyError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.
   let

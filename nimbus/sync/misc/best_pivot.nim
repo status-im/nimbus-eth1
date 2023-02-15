@@ -172,7 +172,7 @@ proc getBestHeader(
 
 proc agreesOnChain(
     bp: BestPivotWorkerRef;
-    other: Peer
+    other: Peer;
       ): Future[Result[void,bool]]
       {.async.} =
   ## Returns `true` if one of the peers `bp.peer` or `other` acknowledges

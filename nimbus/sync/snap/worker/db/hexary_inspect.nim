@@ -99,7 +99,7 @@ proc processLink(
     inspect: var seq[(NodeKey,NibblesSeq)];
     trail: NibblesSeq;
     child: Rlp;
-      ) {.gcsafe, raises: [RlpError]} =
+      ) {.gcsafe, raises: [CatchableError]} =
   ## Ditto
   if not child.isEmpty:
     let childBlob = child.toBytes
@@ -267,7 +267,7 @@ proc hexaryInspectTrie*(
     stopAtLevel = 64u8;                  # Width-first depth level
     maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryInspectTrie()` for persistent database.
   when extraTraceMessages:
     let nPaths = paths.len

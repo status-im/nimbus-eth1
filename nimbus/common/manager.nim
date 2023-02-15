@@ -7,14 +7,14 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[os, json, tables, strutils],
   stew/[byteutils, results],
   eth/[keyfile, common, keys]
 
 from nimcrypto/utils import burnMem
-
-{.push raises: [].}
 
 type
   NimbusAccount* = object
@@ -44,8 +44,14 @@ proc loadKeystores*(am: var AccountsManager, path: string): Result[void, string]
       return err("keystore: json parsing error " & filename)
     except ValueError:
       return err("keystore: data parsing error")
-    except Exception: # json raises Exception
-      return err("keystore: " & getCurrentExceptionMsg())
+    except IOError:
+      return err("keystore: data read error")
+    except CatchableError as e: # json raises Exception
+      return err("keystore: " & e.msg)
+    except Exception as e:
+      {.warning: "Kludge(BareExcept): `parseFile()` in json vendor package needs to be updated".}
+      raiseAssert "Ooops loadKeystores(): name=" & $e.name & " msg=" & e.msg
+
 
   ok()
 

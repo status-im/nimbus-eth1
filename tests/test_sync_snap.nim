@@ -51,6 +51,8 @@ type
     ## Provide enough spare empty databases
     persistent: bool
     dbDir: string
+    baseDir: string # for cleanup
+    subDir: string  # for cleanup
     cdb: array[nTestDbInstances,ChainDb]
 
 when defined(linux):
@@ -149,12 +151,28 @@ proc flushDbDir(s: string; subDir = "") =
         break dontClearUnlessEmpty
       try: baseDir.removeDir except: discard
 
-proc testDbs(workDir = ""; subDir = ""; instances = nTestDbInstances): TestDbs =
-  if disablePersistentDB or workDir == "":
+
+proc flushDbs(db: TestDbs) =
+  if db.persistent:
+    for n in 0 ..< nTestDbInstances:
+      if db.cdb[n].rocksStoreRef.isNil:
+        break
+      db.cdb[n].rocksStoreRef.store.db.rocksdb_close
+    db.baseDir.flushDbDir(db.subDir)
+
+proc testDbs(
+    workDir: string;
+    subDir: string;
+    instances: int;
+    persistent: bool;
+      ): TestDbs =
+  if disablePersistentDB or workDir == "" or not persistent:
     result.persistent = false
     result.dbDir = "*notused*"
   else:
     result.persistent = true
+    result.baseDir = workDir
+    result.subDir = subDir
     if subDir != "":
       result.dbDir = workDir / "tmp" / subDir
     else:
@@ -190,18 +208,13 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
     tmpDir = getTmpDir()
-    db = if persistent: tmpDir.testDbs(sample.name, instances=2) else: testDbs()
-    dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
-    info = if db.persistent: &"persistent db on \"{dbDir}\""
+    db = tmpDir.testDbs(sample.name & "-accounts", instances=3, persistent)
+    info = if db.persistent: &"persistent db on \"{db.baseDir}\""
            else: "in-memory db"
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
 
   defer:
-    if db.persistent:
-      if not db.cdb[0].rocksStoreRef.isNil:
-        db.cdb[0].rocksStoreRef.store.db.rocksdb_close
-        db.cdb[1].rocksStoreRef.store.db.rocksdb_close
-      tmpDir.flushDbDir(sample.name)
+    db.flushDbs
 
   suite &"SyncSnap: {fileInfo} accounts and proofs for {info}":
 
@@ -239,9 +252,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       var accKeys: seq[NodeKey]
 
       # New common descriptor for this sub-group of tests
-      let
-        cdb = db.cdb[1]
-        desc = cdb.snapDbAccountsRef(root, db.persistent)
+      let desc = db.cdb[1].snapDbAccountsRef(root, db.persistent)
 
       test &"Merging {accLst.len} accounts/proofs lists into single list":
         accLst.test_accountsMergeProofs(desc, accKeys) # set up `accKeys`
@@ -256,10 +267,12 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         else:
           accKeys.test_NodeRangeDecompose(root, hexaDb, hexaDb)
 
+      # This one works with a new clean database in order to avoid some
+      # problems on observed qemu/Win7.
       test &"Storing/retrieving {accKeys.len} stored items " &
           "on persistent pivot/checkpoint registry":
         if db.persistent:
-          accKeys.test_pivotStoreRead(cdb)
+          accKeys.test_pivotStoreRead(db.cdb[2])
         else:
           skip()
 
@@ -273,17 +286,12 @@ proc storagesRunner(
     accLst = sample.to(seq[UndumpAccounts])
     stoLst = sample.to(seq[UndumpStorages])
     tmpDir = getTmpDir()
-    db = if persistent: tmpDir.testDbs(sample.name, instances=1) else: testDbs()
-    dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
-    info = if db.persistent: &"persistent db on \"{dbDir}\""
-           else: "in-memory db"
+    db = tmpDir.testDbs(sample.name & "-storages", instances=1, persistent)
+    info = if db.persistent: &"persistent db" else: "in-memory db"
     idPfx = sample.file.splitPath.tail.replace(".txt.gz","")
 
   defer:
-    if db.persistent:
-      if not db.cdb[0].rocksStoreRef.isNil:
-        db.cdb[0].rocksStoreRef.store.db.rocksdb_close
-      tmpDir.flushDbDir(sample.name)
+    db.flushDbs
 
   suite &"SyncSnap: {idPfx} accounts storage for {info}":
     let xdb = db.cdb[0].snapDbRef(db.persistent)
@@ -306,19 +314,13 @@ proc inspectionRunner(
   let
     inspectList = sample.mapIt(it.to(seq[UndumpAccounts]))
     tmpDir = getTmpDir()
-    db = if persistent: tmpDir.testDbs(sample[0].name) else: testDbs()
-    dbDir = db.dbDir.split($DirSep).lastTwo.join($DirSep)
-    info = if db.persistent: &"persistent db on \"{dbDir}\""
-           else: "in-memory db"
+    db = tmpDir.testDbs(
+      sample[0].name & "-inspection", instances=nTestDbInstances, persistent)
+    info = if db.persistent: &"persistent db" else: "in-memory db"
     fileInfo = "[" & sample[0].file.splitPath.tail.replace(".txt.gz","") & "..]"
 
   defer:
-    if db.persistent:
-      for n in 0 ..< nTestDbInstances:
-        if db.cdb[n].rocksStoreRef.isNil:
-          break
-        db.cdb[n].rocksStoreRef.store.db.rocksdb_close
-      tmpDir.flushDbDir(sample[0].name)
+    db.flushDbs
 
   suite &"SyncSnap: inspect {fileInfo} lists for {info} for healing":
     var
@@ -375,14 +377,13 @@ proc importRunner(noisy = true;  persistent = true; capture = bChainCapture) =
     fileInfo = capture.file.splitFile.name.split(".")[0]
     filePath = capture.file.findFilePath(baseDir,repoDir).value
     tmpDir = getTmpDir()
-    db = if persistent: tmpDir.testDbs(capture.name) else: testDbs()
+    db = tmpDir.testDbs(capture.name & "-import", instances=1, persistent)
     numBlocks = capture.numBlocks
     numBlocksInfo = if numBlocks == high(int): "" else: $numBlocks & " "
     loadNoise = noisy
 
   defer:
-    if db.persistent:
-      tmpDir.flushDbDir(capture.name)
+    db.flushDbs
 
   suite &"SyncSnap: using {fileInfo} capture for testing db timings":
     var ddb: CommonRef         # perstent DB on disk
@@ -414,19 +415,14 @@ proc dbTimingRunner(noisy = true;  persistent = true; cleanUp = true) =
   # Allows to repeat storing on existing data
   if not xDbs.cdb[0].isNil:
     emptyDb = "pre-loaded"
-  elif persistent:
-    xTmpDir = getTmpDir()
-    xDbs = xTmpDir.testDbs("store-runner")
   else:
-    xDbs = testDbs()
+    xTmpDir = getTmpDir()
+    xDbs = xTmpDir.testDbs(
+      "timing-runner", instances=nTestDbInstances, persistent)
 
   defer:
-    if xDbs.persistent and cleanUp:
-      for n in 0 ..< nTestDbInstances:
-        if xDbs.cdb[n].rocksStoreRef.isNil:
-          break
-        xDbs.cdb[n].rocksStoreRef.store.db.rocksdb_close
-      xTmpDir.flushDbDir("store-runner")
+    if cleanUp:
+      xDbs.flushDbs
       xDbs.reset
 
   suite &"SyncSnap: storage tests on {emptyDb} databases":
@@ -515,7 +511,8 @@ when isMainModule:
   setErrorLevel()
 
   # Test constant, calculations etc.
-  noisy.miscRunner()
+  when true: # and false:
+    noisy.miscRunner()
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
@@ -548,16 +545,18 @@ when isMainModule:
       false.accountsRunner(persistent=true, sam)
       false.storagesRunner(persistent=true, sam)
 
-  # This one uses readily available dumps
+  # This one uses the readily available dump: `bulkTest0` and some huge replay
+  # dumps `bulkTest1`, `bulkTest2`, .. from the `nimbus-eth1-blobs` package
   when true and false:
     # ---- database storage timings -------
 
-    noisy.showElapsed("importRunner()"):
-      noisy.importRunner(capture = bulkTest0)
+    for test in @[bulkTest0] & @[bulkTest1, bulkTest2, bulkTest3]:
+      noisy.showElapsed("importRunner()"):
+        noisy.importRunner(capture = test)
 
-    noisy.showElapsed("dbTimingRunner()"):
-      true.dbTimingRunner(cleanUp = false)
-      true.dbTimingRunner()
+      noisy.showElapsed("dbTimingRunner()"):
+        true.dbTimingRunner(cleanUp = false)
+        true.dbTimingRunner()
 
 # ------------------------------------------------------------------------------
 # End

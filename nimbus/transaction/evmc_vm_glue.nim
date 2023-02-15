@@ -6,7 +6,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-#{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   ./host_types, evmc/evmc, stew/ranges/ptr_arith,
@@ -18,7 +18,8 @@ proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
 proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
                  hostContext: evmc_host_context, rev: evmc_revision,
                  msg: var evmc_message, code: ptr byte,
-                 code_size: csize_t): evmc_result {.cdecl.} =
+                 code_size: csize_t): evmc_result
+    {.cdecl, raises: [CatchableError].} =
   # TODO: Obviously we are cheating here at the moment, knowing the caller type.
   # TODO: This lets the host read extra results needed for tests, but it
   # means the Nimbus EVM cannot be used by a non-Nimbus host, yet.
@@ -37,10 +38,7 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  try:
-    execComputation(c)
-  except Exception as e:
-    c.setError("Caught error " & e.repr, true);
+  execComputation(c)
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte

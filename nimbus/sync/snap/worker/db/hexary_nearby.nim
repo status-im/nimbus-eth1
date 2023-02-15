@@ -8,6 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
 
 import
   std/tables,
@@ -16,13 +17,11 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
 
-{.push raises: [].}
-
 proc hexaryNearbyRight*(path: RPath; db: HexaryTreeDbRef;
     ): Result[RPath,HexaryError] {.gcsafe, raises: [KeyError]}
 
 proc hexaryNearbyRight*(path: XPath; getFn: HexaryGetFn;
-    ): Result[XPath,HexaryError] {.gcsafe, raises: [RlpError]}
+    ): Result[XPath,HexaryError] {.gcsafe, raises: [CatchableError]}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -91,7 +90,7 @@ proc hexaryNearbyRightImpl(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [KeyError,RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyRight(db)
@@ -111,7 +110,7 @@ proc hexaryNearbyLeftImpl(
     rootKey: NodeKey;                 # State root
     db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [KeyError,RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Wrapper
   let path = block:
     let rc = baseTag.hexaryPath(rootKey, db).hexaryNearbyLeft(db)
@@ -184,7 +183,7 @@ proc completeLeast(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -290,7 +289,7 @@ proc completeMost(
     getFn: HexaryGetFn;
     pathLenMax = 64;
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [RlpError].} =
+      {.gcsafe, raises: [CatchableError].} =
   ## Variant of `completeLeast()` for persistent database
   var xPath = XPath(path: path.path)
 
@@ -350,7 +349,7 @@ proc hexaryNearbyRight*(
     path: RPath;                   # Partially expanded path
     db: HexaryTreeDbRef;           # Database
       ): Result[RPath,HexaryError]
-      {.gcsafe, raises: [Defect,KeyError]} =
+      {.gcsafe, raises: [KeyError]} =
   ## Extends the maximally extended argument nodes `path` to the right (i.e.
   ## with non-decreasing path value). This is similar to the
   ## `hexary_path.next()` function, only that this algorithm does not
@@ -448,7 +447,7 @@ proc hexaryNearbyRight*(
     path: XPath;                   # Partially expanded path
     getFn: HexaryGetFn;            # Database abstraction
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [Defect,RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryNearbyRight()` for persistant database
 
   # Some easy cases
@@ -672,7 +671,7 @@ proc hexaryNearbyLeft*(
     path: XPath;                   # Partially expanded path
     getFn: HexaryGetFn;            # Database abstraction
       ): Result[XPath,HexaryError]
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryNearbyLeft()` for persistant database
 
   # Some easy cases
@@ -765,44 +764,24 @@ proc hexaryNearbyLeft*(
 proc hexaryNearbyRight*(
     baseTag: NodeTag;                 # Some node
     rootKey: NodeKey;                 # State root
-    db: HexaryTreeDbRef;              # Database
+    db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryNearbyRight()` working with `NodeTag` arguments rather
-  ## than `RPath()` ones.
+  ## than `RPath` or `XPath` ones.
   noRlpErrorOops("hexaryNearbyRight"):
     return baseTag.hexaryNearbyRightImpl(rootKey, db)
 
-proc hexaryNearbyRight*(
-    baseTag: NodeTag;                 # Some node
-    rootKey: NodeKey;                 # State root
-    getFn: HexaryGetFn;               # Database abstraction
-      ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [RlpError]} =
-  ## Variant of `hexaryNearbyRight()` for persistant database
-  noKeyErrorOops("hexaryNearbyRight"):
-    return baseTag.hexaryNearbyRightImpl(rootKey, getFn)
-
 
 proc hexaryNearbyLeft*(
     baseTag: NodeTag;                 # Some node
     rootKey: NodeKey;                 # State root
-    db: HexaryTreeDbRef;              # Database
+    db: HexaryTreeDbRef|HexaryGetFn;  # Database abstraction
       ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Similar to `hexaryNearbyRight()` for `NodeKey` arguments.
   noRlpErrorOops("hexaryNearbyLeft"):
     return baseTag.hexaryNearbyLeftImpl(rootKey, db)
-
-proc hexaryNearbyLeft*(
-    baseTag: NodeTag;                 # Some node
-    rootKey: NodeKey;                 # State root
-    getFn: HexaryGetFn;               # Database abstraction
-      ): Result[NodeTag,HexaryError]
-      {.gcsafe, raises: [RlpError]} =
-  ## Variant of `hexaryNearbyLeft()` for persistant database
-  noKeyErrorOops("hexaryNearbyLeft"):
-    return baseTag.hexaryNearbyLeftImpl(rootKey, getFn)
 
 # ------------------------------------------------------------------------------
 # End

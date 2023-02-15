@@ -104,11 +104,14 @@ type
     of GckFixed:
       cost*: GasInt
     of GckDynamic:
-      d_handler*: proc(value: UInt256): GasInt {.nimcall, gcsafe.}
+      d_handler*: proc(value: UInt256): GasInt
+                    {.nimcall, gcsafe, raises: [CatchableError].}
     of GckMemExpansion:
-      m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}
+      m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
+                    {.nimcall, gcsafe, raises: [CatchableError].}
     of GckComplex:
-      c_handler*: proc(value: UInt256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
+      c_handler*: proc(value: UInt256, gasParams: GasParams): GasResult
+                    {.nimcall, gcsafe, raises: [CatchableError].}
       # We use gasCost/gasRefund for:
       #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
@@ -531,13 +534,16 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
       GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
-    func dynamic(handler: proc(value: UInt256): GasInt {.nimcall, gcsafe.}): GasCost =
-      GasCost(kind: GckDynamic, d_handler: handler)
+    func dynamic(handler: proc(value: UInt256): GasInt
+                  {.nimcall, gcsafe, raises: [CatchableError].}): GasCost =
+        GasCost(kind: GckDynamic, d_handler: handler)
 
-    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}): GasCost =
+    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
+                  {.nimcall, gcsafe, raises: [CatchableError].}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func complex(handler: proc(value: UInt256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
+    func complex(handler: proc(value: UInt256, gasParams: GasParams): GasResult
+                  {.nimcall, gcsafe, raises: [CatchableError].}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value
