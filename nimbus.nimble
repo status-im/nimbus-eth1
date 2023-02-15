@@ -55,7 +55,7 @@ proc test(path: string, name: string, params = "", lang = "c") =
     # Also, the command passed to NimScript `exec` on Windows is not a shell script.
     # Instead, we can set stack size at link time.
     const (buildOption, runPrefix) =
-      (" -d:windowsNoSetStack --passL:-Wl,--stack," & $(stackLimitKiB * (1024+16+8+0)), "")
+      (" -d:windowsNoSetStack --passL:-Wl,--stack," & $(stackLimitKiB * (1024+16+8+1)), "")
 
   buildBinary name, (path & "/"), params & buildOption
   exec runPrefix & "build/" & name
