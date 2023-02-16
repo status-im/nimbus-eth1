@@ -9,104 +9,112 @@
 # according to those terms.
 
 import
+  std/times,
   ../../nimbus/common/common,
   ./types
 
 export
   types
 
+const
+  BlockNumberZero: BlockNumber = 0.toBlockNumber
+  BlockNumberFive: BlockNumber = 5.toBlockNumber
+  TimeZero: EthTime = fromUnix(0)
+
+proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber], t: Option[EthTime], ttd: Option[DifficultyInt]): ForkTransitionTable =
+  
+  proc blockNumberToUse(f: HardFork): Option[BlockNumber] =
+    if f < transitionFork:
+      some(BlockNumberZero)
+    elif f == transitionFork:
+      b
+    else:
+      none(BlockNumber)
+  
+  proc timeToUse(f: HardFork): Option[EthTime] =
+    if f < transitionFork:
+      some(TimeZero)
+    elif f == transitionFork:
+      t
+    else:
+      none(EthTime)
+  
+  for f in low(HardFork) .. lastPurelyBlockNumberBasedFork:
+    result.blockNumberThresholds[f] = blockNumberToUse(f)
+
+  result.mergeForkTransitionThreshold.blockNumber = blockNumberToUse(HardFork.MergeFork)
+  result.mergeForkTransitionThreshold.ttd = ttd
+  
+  for f in firstTimeBasedFork .. high(HardFork):
+    result.timeThresholds[f] = timeToUse(f)
+
+proc assignNumber(c: ChainConfig, transitionFork: HardFork, n: BlockNumber) =
+  let table = createForkTransitionTable(transitionFork, some(n), none(EthTime), none(DifficultyInt))
+  c.populateFromForkTransitionTable(table)
+
+proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
+  let table = createForkTransitionTable(transitionFork, none(BlockNumber), some(t), none(DifficultyInt))
+  c.populateFromForkTransitionTable(table)
+
 func getChainConfig*(network: string, c: ChainConfig) =
-  const
-    Zero = 0.toBlockNumber
-    Five = 5.toBlockNumber
-
-  proc assignNumber(c: ChainConfig,
-                    fork: HardFork, n: BlockNumber) =
-    var number: array[HardFork, Option[BlockNumber]]
-    var z = low(HardFork)
-    while z < fork:
-      number[z] = some(Zero)
-      z = z.succ
-    number[fork] = some(n)
-    z = high(HardFork)
-    while z > fork:
-      number[z] = none(BlockNumber)
-      z = z.pred
-
-    c.homesteadBlock      = number[HardFork.Homestead]
-    c.daoForkBlock        = number[HardFork.DAOFork]
-    c.eip150Block         = number[HardFork.Tangerine]
-    c.eip155Block         = number[HardFork.Spurious]
-    c.eip158Block         = number[HardFork.Spurious]
-    c.byzantiumBlock      = number[HardFork.Byzantium]
-    c.constantinopleBlock = number[HardFork.Constantinople]
-    c.petersburgBlock     = number[HardFork.Petersburg]
-    c.istanbulBlock       = number[HardFork.Istanbul]
-    c.muirGlacierBlock    = number[HardFork.MuirGlacier]
-    c.berlinBlock         = number[HardFork.Berlin]
-    c.londonBlock         = number[HardFork.London]
-    c.arrowGlacierBlock   = number[HardFork.ArrowGlacier]
-    c.grayGlacierBlock    = number[HardFork.GrayGlacier]
-    c.mergeForkBlock      = number[HardFork.MergeFork]
-    c.shanghaiBlock       = number[HardFork.Shanghai]
-    c.cancunBlock         = number[HardFork.Cancun]
-
   c.daoForkSupport = false
   c.chainId = 1.ChainId
   c.terminalTotalDifficulty = none(UInt256)
 
   case network
   of $TestFork.Frontier:
-    c.assignNumber(HardFork.Frontier, Zero)
+    c.assignNumber(HardFork.Frontier, BlockNumberZero)
   of $TestFork.Homestead:
-    c.assignNumber(HardFork.Homestead, Zero)
+    c.assignNumber(HardFork.Homestead, BlockNumberZero)
   of $TestFork.EIP150:
-    c.assignNumber(HardFork.Tangerine, Zero)
+    c.assignNumber(HardFork.Tangerine, BlockNumberZero)
   of $TestFork.EIP158:
-    c.assignNumber(HardFork.Spurious, Zero)
+    c.assignNumber(HardFork.Spurious, BlockNumberZero)
   of $TestFork.Byzantium:
-    c.assignNumber(HardFork.Byzantium, Zero)
+    c.assignNumber(HardFork.Byzantium, BlockNumberZero)
   of $TestFork.Constantinople:
-    c.assignNumber(HardFork.Constantinople, Zero)
+    c.assignNumber(HardFork.Constantinople, BlockNumberZero)
   of $TestFork.ConstantinopleFix:
-    c.assignNumber(HardFork.Petersburg, Zero)
+    c.assignNumber(HardFork.Petersburg, BlockNumberZero)
   of $TestFork.Istanbul:
-    c.assignNumber(HardFork.Istanbul, Zero)
+    c.assignNumber(HardFork.Istanbul, BlockNumberZero)
   of $TestFork.FrontierToHomesteadAt5:
-    c.assignNumber(HardFork.Homestead, Five)
+    c.assignNumber(HardFork.Homestead, BlockNumberFive)
   of $TestFork.HomesteadToEIP150At5:
-    c.assignNumber(HardFork.Tangerine, Five)
+    c.assignNumber(HardFork.Tangerine, BlockNumberFive)
   of $TestFork.HomesteadToDaoAt5:
-    c.assignNumber(HardFork.DAOFork, Five)
+    c.assignNumber(HardFork.DAOFork, BlockNumberFive)
     c.daoForkSupport = true
   of $TestFork.EIP158ToByzantiumAt5:
-    c.assignNumber(HardFork.Byzantium, Five)
+    c.assignNumber(HardFork.Byzantium, BlockNumberFive)
   of $TestFork.ByzantiumToConstantinopleAt5:
-    c.assignNumber(HardFork.Constantinople, Five)
+    c.assignNumber(HardFork.Constantinople, BlockNumberFive)
   of $TestFork.ByzantiumToConstantinopleFixAt5:
-    c.assignNumber(HardFork.Petersburg, Five)
-    c.constantinopleBlock = some(Five)
+    c.assignNumber(HardFork.Petersburg, BlockNumberFive)
+    c.constantinopleBlock = some(BlockNumberFive)
   of $TestFork.ConstantinopleFixToIstanbulAt5:
-    c.assignNumber(HardFork.Istanbul, Five)
+    c.assignNumber(HardFork.Istanbul, BlockNumberFive)
   of $TestFork.Berlin:
-    c.assignNumber(HardFork.Berlin, Zero)
+    c.assignNumber(HardFork.Berlin, BlockNumberZero)
   of $TestFork.BerlinToLondonAt5:
-    c.assignNumber(HardFork.London, Five)
+    c.assignNumber(HardFork.London, BlockNumberFive)
   of $TestFork.London:
-    c.assignNumber(HardFork.London, Zero)
+    c.assignNumber(HardFork.London, BlockNumberZero)
   of $TestFork.ArrowGlacier:
-    c.assignNumber(HardFork.ArrowGlacier, Zero)
+    c.assignNumber(HardFork.ArrowGlacier, BlockNumberZero)
   of $TestFork.GrayGlacier:
-    c.assignNumber(HardFork.GrayGlacier, Zero)
+    c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
   of $TestFork.Merge:
-    c.assignNumber(HardFork.MergeFork, Zero)
+    c.assignNumber(HardFork.MergeFork, BlockNumberZero)
   of $TestFork.ArrowGlacierToMergeAtDiffC0000:
-    c.assignNumber(HardFork.GrayGlacier, Zero)
+    c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
     c.terminalTotalDifficulty = some(0xC0000.u256)
   of $TestFork.Shanghai:
-    c.assignNumber(HardFork.Shanghai, Zero)
+    c.assignTime(HardFork.Shanghai, TimeZero)
+  of $TestFork.MergeToShanghaiAtTime15k:
+    c.assignTime(HardFork.Shanghai, fromUnix(15000))
   of $TestFork.Cancun:
-    c.assignNumber(HardFork.Cancun, Zero)
+    c.assignTime(HardFork.Cancun, TimeZero)
   else:
     raise newException(ValueError, "unsupported network " & network)
 

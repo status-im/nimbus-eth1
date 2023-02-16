@@ -12,7 +12,7 @@ import
   stew/results, chronos, chronicles,
   eth/common/eth_types, eth/rlp,
   ../network/wire/portal_protocol,
-  ../network/history/[history_content, accumulator],
+  ../network/history/[history_content, history_network, accumulator],
   "."/[history_data_json_store, history_data_ssz_e2s]
 
 export results

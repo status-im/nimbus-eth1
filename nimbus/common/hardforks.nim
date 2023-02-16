@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/options,
+  std/[options, times],
   eth/common,
   json_serialization,
   ../utils/utils,
@@ -49,10 +49,103 @@ type
     Shanghai
     Cancun
 
+const lastPurelyBlockNumberBasedFork* = GrayGlacier
+# MergeFork is special because of TTD.
+const firstTimeBasedFork* = Shanghai
+
+
+type
   CliqueOptions* = object
     epoch* : Option[int]
     period*: Option[int]
 
+  MergeForkTransitionThreshold* = object
+    blockNumber*: Option[BlockNumber]
+    ttd*: Option[DifficultyInt]
+
+  ForkTransitionTable* = object
+    blockNumberThresholds*: array[Frontier..GrayGlacier, Option[BlockNumber]]
+    mergeForkTransitionThreshold*: MergeForkTransitionThreshold
+    timeThresholds*: array[Shanghai..Cancun, Option[EthTime]]
+
+  # Starting with Shanghai, forking is based on timestamp
+  # rather than block number.
+  #
+  # I'm not sure what to call this type, but we used to pass
+  # just the block number into various places that need to
+  # determine which fork we're on, and now we need to pass
+  # around both block number and also time. And the config
+  # info for each individual fork will be either a block
+  # number or a time.
+  #
+  # Note that time and TD are optional. TD being optional
+  # is because it's perfectly fine, if mergeForkBlock is
+  # set, to not bother with TTD anymore. But I'm not sure
+  # it makes sense to allow time to be optional. See the
+  # comment below on blockNumberToForkDeterminationInfo.
+  ForkDeterminationInfo* = object
+    blockNumber*: BlockNumber
+    time*: Option[EthTime]
+    td*: Option[DifficultyInt]
+
+func blockNumberToForkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
+  # FIXME: All callers of this function are suspect; I'm guess we should
+  # always be using both block number and time. But we have a few places,
+  # like various tests, where we only have block number and the tests are
+  # meant for pre-Merge forks, so maybe those are okay.
+  ForkDeterminationInfo(blockNumber: n, time: none[EthTime](), td: none[DifficultyInt]())
+
+func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
+  ForkDeterminationInfo(blockNumber: n, time: some(t), td: none[DifficultyInt]())
+
+# FIXME: Is this called anywhere?
+func forkDeterminationInfoIncludingTd*(n: BlockNumber, t: EthTime, td: DifficultyInt): ForkDeterminationInfo =
+  ForkDeterminationInfo(blockNumber: n, time: some(t), td: some(td))
+
+proc adjustForNextBlock*(n: BlockNumber): BlockNumber =
+  n + 1
+
+func adjustForNextBlock*(t: EthTime): EthTime =
+  # FIXME-Adam: what's the right thing to do here?
+  # How do we calculate "the timestamp for the block
+  # after this one"?
+  #
+  # If this makes no sense, what should the callers
+  # do instead?
+  fromUnix(t.toUnix + 12)
+
+func adjustForNextBlock*(f: ForkDeterminationInfo): ForkDeterminationInfo =
+  ForkDeterminationInfo(
+    blockNumber: adjustForNextBlock(f.blockNumber),
+    time: f.time.map(adjustForNextBlock),
+    td: f.td
+  )
+
+# This function is awkward because there are various different ways now of
+# doing a hard-fork transition (block number, ttd, time, block number *or*
+# time). We used to have a simple array called forkToBlock that mapped each
+# HardFork to a BlockNumber; now we have this ForkTransitionTable, which
+# contains a couple of arrays and also special cases for MergeBlock and
+# Shanghai.
+func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo, fork: HardFork): bool =
+  if fork <= lastPurelyBlockNumberBasedFork:
+    map.blockNumberThresholds[fork].isSome and forkDeterminer.blockNumber >= map.blockNumberThresholds[fork].get
+  elif fork == MergeFork:
+    # MergeFork is a special case that can use either block number or ttd;
+    # block number takes precedence.
+    let t = map.mergeForkTransitionThreshold
+    if t.blockNumber.isSome:
+      forkDeterminer.blockNumber >= t.blockNumber.get
+    elif t.ttd.isSome and forkDeterminer.td.isSome:
+      forkDeterminer.td.get >= t.ttd.get
+    else:
+      false
+  elif fork <= HardFork.high:
+    map.timeThresholds[fork].isSome and forkDeterminer.time.isSome and forkDeterminer.time.get >= map.timeThresholds[fork].get
+  else:
+    raise newException(Defect, "Why is this hard fork not in one of the above categories?")
+
+type
   # if you add more fork block
   # please update forkBlockField constant too
   ChainConfig* = ref object
@@ -74,18 +167,24 @@ type
     arrowGlacierBlock*  : Option[BlockNumber]
     grayGlacierBlock*   : Option[BlockNumber]
     mergeForkBlock*     : Option[BlockNumber]
-    shanghaiBlock*      : Option[BlockNumber]
-    cancunBlock*        : Option[BlockNumber]
+    shanghaiTime*       : Option[EthTime]
+    cancunTime*         : Option[EthTime]
 
     clique*             : CliqueOptions
     terminalTotalDifficulty*: Option[UInt256]
     consensusType*
       {.dontSerialize.} : ConsensusType
 
-  ForkToBlockNumber* = array[HardFork, Option[BlockNumber]]
-  ForkOptional* = object
+  # These are used for checking that the values of the fields
+  # are in a valid order.
+  BlockNumberBasedForkOptional* = object
     name*: string
     number*: Option[BlockNumber]
+  TimeBasedForkOptional* = object
+    name*: string
+    time*: Option[EthTime]
+
+
 
 const
   # this table is used for generate
@@ -107,31 +206,61 @@ const
     "arrowGlacierBlock",
     "grayGlacierBlock",
     "mergeForkBlock",
-    "shanghaiBlock",
-    "cancunBlock",
   ]
 
-  # this table is used to generate
-  # code to build fork to block number
-  # array
-  forkBlockNumber* = [
-    Homestead: "homesteadBlock",
-    DAOFork: "daoForkBlock",
-    Tangerine: "eip150Block",
-    Spurious: "eip158Block",
-    Byzantium: "byzantiumBlock",
-    Constantinople: "constantinopleBlock",
-    Petersburg: "petersburgBlock",
-    Istanbul: "istanbulBlock",
-    MuirGlacier: "muirGlacierBlock",
-    Berlin: "berlinBlock",
-    London: "londonBlock",
-    ArrowGlacier: "arrowGlacierBlock",
-    GrayGlacier: "grayGlacierBlock",
-    MergeFork: "mergeForkBlock",
-    Shanghai: "shanghaiBlock",
-    Cancun: "cancunBlock",
+  forkTimeField* = [
+    "shanghaiTime",
+    "cancunTime",
   ]
+
+
+func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
+  MergeForkTransitionThreshold(blockNumber: conf.mergeForkBlock, ttd: conf.terminalTotalDifficulty)
+
+proc toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
+  # We used to auto-generate this code from a list of
+  # field names, but it doesn't seem worthwhile anymore
+  # (now that there's irregularity due to block-based vs
+  # timestamp-based forking).
+  result.blockNumberThresholds[Frontier      ] = some(0.toBlockNumber)
+  result.blockNumberThresholds[Homestead     ] = conf.homesteadBlock
+  result.blockNumberThresholds[DAOFork       ] = conf.daoForkBlock
+  result.blockNumberThresholds[Tangerine     ] = conf.eip150Block
+  result.blockNumberThresholds[Spurious      ] = conf.eip158Block
+  result.blockNumberThresholds[Byzantium     ] = conf.byzantiumBlock
+  result.blockNumberThresholds[Constantinople] = conf.constantinopleBlock
+  result.blockNumberThresholds[Petersburg    ] = conf.petersburgBlock
+  result.blockNumberThresholds[Istanbul      ] = conf.istanbulBlock
+  result.blockNumberThresholds[MuirGlacier   ] = conf.muirGlacierBlock
+  result.blockNumberThresholds[Berlin        ] = conf.berlinBlock
+  result.blockNumberThresholds[London        ] = conf.londonBlock
+  result.blockNumberThresholds[ArrowGlacier  ] = conf.arrowGlacierBlock
+  result.blockNumberThresholds[GrayGlacier   ] = conf.grayGlacierBlock
+  result.mergeForkTransitionThreshold          = conf.mergeForkTransitionThreshold
+  result.timeThresholds[Shanghai] = conf.shanghaiTime
+  result.timeThresholds[Cancun] = conf.cancunTime
+
+proc populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
+  conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
+  conf.daoForkBlock        = t.blockNumberThresholds[HardFork.DAOFork]
+  conf.eip150Block         = t.blockNumberThresholds[HardFork.Tangerine]
+  conf.eip155Block         = t.blockNumberThresholds[HardFork.Spurious]
+  conf.eip158Block         = t.blockNumberThresholds[HardFork.Spurious]
+  conf.byzantiumBlock      = t.blockNumberThresholds[HardFork.Byzantium]
+  conf.constantinopleBlock = t.blockNumberThresholds[HardFork.Constantinople]
+  conf.petersburgBlock     = t.blockNumberThresholds[HardFork.Petersburg]
+  conf.istanbulBlock       = t.blockNumberThresholds[HardFork.Istanbul]
+  conf.muirGlacierBlock    = t.blockNumberThresholds[HardFork.MuirGlacier]
+  conf.berlinBlock         = t.blockNumberThresholds[HardFork.Berlin]
+  conf.londonBlock         = t.blockNumberThresholds[HardFork.London]
+  conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
+  conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
+
+  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.blockNumber
+  conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
+  
+  conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
+  conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM/EVMC Fork
@@ -201,8 +330,15 @@ func toNextFork(n: Option[BlockNumber]): uint64 =
   else:
     0'u64
 
-func getNextFork(c: ChainConfig, fork: HardFork): uint64 =
-  let next: array[HardFork, uint64] = [
+# EIP-6122: ForkID now works with timestamps too.
+func toNextFork(t: Option[EthTime]): uint64 =
+  if t.isSome:
+    t.get.toUnix.uint64
+  else:
+    0'u64
+
+func arrayMappingHardForkToNextFork(c: ChainConfig): array[HardFork, uint64] =
+  return [
     0'u64,
     toNextFork(c.homesteadBlock),
     toNextFork(c.daoForkBlock),
@@ -218,10 +354,11 @@ func getNextFork(c: ChainConfig, fork: HardFork): uint64 =
     toNextFork(c.arrowGlacierBlock),
     toNextFork(c.grayGlacierBlock),
     toNextFork(c.mergeForkBlock),
-    toNextFork(c.shanghaiBlock),
-    toNextFork(c.cancunBlock),
+    toNextFork(c.shanghaiTime),
+    toNextFork(c.cancunTime),
   ]
 
+func getNextFork(next: array[HardFork, uint64], fork: HardFork): uint64 =
   if fork == high(HardFork):
     result = 0
     return
@@ -232,9 +369,9 @@ func getNextFork(c: ChainConfig, fork: HardFork): uint64 =
       result = next[x]
       break
 
-func calculateForkId(c: ChainConfig, fork: HardFork,
+func calculateForkId(next: array[HardFork, uint64], fork: HardFork,
                      prevCRC: uint32, prevFork: uint64): ForkID =
-  result.nextFork = c.getNextFork(fork)
+  result.nextFork = getNextFork(next, fork)
 
   if result.nextFork != prevFork:
     result.crc = crc32(prevCRC, toBytesBE(prevFork))
@@ -243,69 +380,15 @@ func calculateForkId(c: ChainConfig, fork: HardFork,
 
 func calculateForkIds*(c: ChainConfig,
                       genesisCRC: uint32): array[HardFork, ForkID] =
+  let next = arrayMappingHardForkToNextFork(c)
+
   var prevCRC = genesisCRC
-  var prevFork = c.getNextFork(Frontier)
+  var prevFork = getNextFork(next, Frontier)
 
   for fork in HardFork:
-    result[fork] = calculateForkId(c, fork, prevCRC, prevFork)
+    result[fork] = calculateForkId(next, fork, prevCRC, prevFork)
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
-
-# ------------------------------------------------------------------------------
-# BlockNumber + TD comparator
-# ------------------------------------------------------------------------------
-
-type
-  BlockToForkFunc* = proc(data, number, td: UInt256): bool
-    {.gcsafe, noSideEffect, nimcall, raises: [Defect, CatchableError].}
-
-  BlockToFork* = object
-    # `data` can be blockNumber or TTD
-    data*  : UInt256
-    toFork*: BlockToForkFunc
-
-  BlockToForks* = array[HardFork, BlockToFork]
-
-func forkTrue(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [].} =
-  # frontier always return true
-  true
-
-func forkFalse(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [].} =
-  # forkBlock.isNone always return false
-  false
-
-func forkMaybe(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [].} =
-  # data is a blockNumber
-  number >= data
-
-func mergeMaybe(data, number, td: UInt256): bool
-  {.gcsafe, nimcall, raises: [].} =
-  # data is a TTD
-  td >= data
-
-proc blockToForks*(conf: ChainConfig, map: ForkToBlockNumber): BlockToForks =
-  # between Frontier and latest HardFork
-  # can be a match or not
-  for fork, number in map:
-    if number.isSome:
-      result[fork].data = number.get()
-      result[fork].toFork = forkMaybe
-    else:
-      result[fork].toFork = forkFalse
-
-  # Frontier always return true
-  result[Frontier].toFork = forkTrue
-
-  # special case for MergeFork
-  # if MergeForkBlock.isSome, it takes precedence over TTD
-  # if MergeForkBlock.isNone, compare TD with TTD
-  if map[MergeFork].isNone and
-     conf.terminalTotalDifficulty.isSome:
-    result[MergeFork].data = conf.terminalTotalDifficulty.get()
-    result[MergeFork].toFork = mergeMaybe
 
 # ------------------------------------------------------------------------------
 # End

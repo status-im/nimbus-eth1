@@ -187,73 +187,89 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-macro fillTmpArray(conf, tmp: typed): untyped =
+macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
   for i, x in forkBlockField:
     let fieldIdent = newIdentNode(x)
     result.add quote do:
-      `tmp`[`i`] = ForkOptional(
+      `tmp`[`i`] = BlockNumberBasedForkOptional(
         number  : `conf`.`fieldIdent`,
         name    : `x`)
 
-macro fillToBlockNumberArray(conf, arr: typed): untyped =
+macro fillArrayOfTimeBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
-  for fork, forkField in forkBlockNumber:
-    let
-      fieldIdent = newIdentNode(forkField)
-      forkIdent  = newIdentNode($HardFork(fork.ord))
+  for i, x in forkTimeField:
+    let fieldIdent = newIdentNode(x)
     result.add quote do:
-      `arr`[`forkIdent`] = `conf`.`fieldIdent`
+      `tmp`[`i`] = TimeBasedForkOptional(
+        time    : `conf`.`fieldIdent`,
+        name    : `x`)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toForkToBlockNumber*(conf: ChainConfig): ForkToBlockNumber =
-  fillToBlockNumberArray(conf, result)
-  result[Frontier] = some(0.toBlockNumber)
-
-proc toHardFork*(forkToBlock: ForkToBlockNumber, number: BlockNumber): HardFork =
+proc toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo): HardFork =
   for fork in countdown(HardFork.high, HardFork.low):
-    let forkBlock = forkToBlock[fork]
-    if forkBlock.isSome and number >= forkBlock.get:
+    if isGTETransitionThreshold(map, forkDeterminer, fork):
       return fork
 
   # should always have a match
   doAssert(false, "unreachable code")
 
+func forkDeterminationInfoForHeader*(header: BlockHeader): ForkDeterminationInfo =
+  # FIXME-Adam-mightAlsoNeedTTD?
+  forkDeterminationInfo(header.blockNumber, header.timestamp)
+
 proc validateChainConfig*(conf: ChainConfig): bool =
   result = true
 
-  var tmp: array[forkBlockField.len, ForkOptional]
-  fillTmpArray(conf, tmp)
+  # FIXME: factor this to remove the duplication between the
+  # block-based ones and the time-based ones.
 
-  var lastFork = tmp[0]
-  for i in 1..<tmp.len:
-    let cur = tmp[i]
+  var blockNumberBasedForkOptionals: array[forkBlockField.len, BlockNumberBasedForkOptional]
+  fillArrayOfBlockNumberBasedForkOptionals(conf, blockNumberBasedForkOptionals)
 
-    # Next one must be higher number
-    #if lastFork.number.isNone and cur.number.isSome:
-    #  error "Unsupported fork ordering",
-    #    lastFork=lastFork.name,
-    #    lastNumber=lastFork.number,
-    #    curFork=cur.name,
-    #    curNumber=cur.number
-    #  return false
+  var timeBasedForkOptionals: array[forkTimeField.len, TimeBasedForkOptional]
+  fillArrayOfTimeBasedForkOptionals(conf, timeBasedForkOptionals)
 
-    if lastFork.number.isSome and cur.number.isSome:
-      if lastFork.number.get > cur.number.get:
+  var lastBlockNumberBasedFork = blockNumberBasedForkOptionals[0]
+  for i in 1..<blockNumberBasedForkOptionals.len:
+    let cur = blockNumberBasedForkOptionals[i]
+
+    if lastBlockNumberBasedFork.number.isSome and cur.number.isSome:
+      if lastBlockNumberBasedFork.number.get > cur.number.get:
         error "Unsupported fork ordering",
-          lastFork=lastFork.name,
-          lastNumber=lastFork.number,
+          lastFork=lastBlockNumberBasedFork.name,
+          lastNumber=lastBlockNumberBasedFork.number,
           curFork=cur.name,
           curNumber=cur.number
         return false
 
     # If it was optional and not set, then ignore it
     if cur.number.isSome:
-      lastFork = cur
+      lastBlockNumberBasedFork = cur
 
+  # TODO: check to make sure the timestamps are all past the
+  # block numbers?
+
+  var lastTimeBasedFork = timeBasedForkOptionals[0]
+  for i in 1..<timeBasedForkOptionals.len:
+    let cur = timeBasedForkOptionals[i]
+
+    if lastTimeBasedFork.time.isSome and cur.time.isSome:
+      if lastTimeBasedFork.time.get > cur.time.get:
+        error "Unsupported fork ordering",
+          lastFork=lastTimeBasedFork.name,
+          lastTime=lastTimeBasedFork.time,
+          curFork=cur.name,
+          curTime=cur.time
+        return false
+
+    # If it was optional and not set, then ignore it
+    if cur.time.isSome:
+      lastTimeBasedFork = cur
+  
   if conf.clique.period.isSome or
      conf.clique.epoch.isSome:
     conf.consensusType = ConsensusType.POA

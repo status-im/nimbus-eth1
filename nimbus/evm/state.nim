@@ -379,3 +379,9 @@ proc buildWitness*(vmState: BaseVMState): seq[byte]
   # build witness from tree
   var wb = initWitnessBuilder(vmState.com.db.db, rootHash, flags)
   wb.buildWitness(mkeys)
+
+func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
+  # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;
+  # should timestamp be adding 12 or something?
+  # Also, can I get the TD? Do I need to?
+  forkDeterminationInfo(vmState.blockNumber, vmState.timestamp)

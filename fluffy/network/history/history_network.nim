@@ -21,6 +21,29 @@ logScope:
 
 export accumulator
 
+# This looks like it makes no sense, because it makes no sense. It's a
+# workaround for what seems to be a compiler bug; see here:
+#
+# https://github.com/status-im/nimbus-eth1/pull/1465
+#
+# Without this, the call `error` on a `Result` might give a compiler error for
+# the `Result[BlockHeader, string]` or `Result[seq[BlockHeader], string]` types.
+# The error is due to the `$` for `BlockHeader causing side effects, which
+# appears to be due to the timestamp field, which is of `times.Time` type. Its
+# `$` from the times module has side effects (Yes, silly times). In (my) theory
+# this `$` should not leak here, but it seems to do. To workaround this we
+# introduce this additional `$` call, which appears to work.
+#
+# Note that this also fixes the same error in another module, even when not
+# specifically exporting (no asterisk) the call.
+#
+# If you think this is unnecessary, feel free to try deleting it; if all the
+# tests still pass after deleting it, feel free to leave it out. In the
+# meantime, please just ignore it and go on with your life.
+#
+proc `$`(x: BlockHeader): string =
+  $x
+
 const
   historyProtocolId* = [byte 0x50, 0x0B]
 

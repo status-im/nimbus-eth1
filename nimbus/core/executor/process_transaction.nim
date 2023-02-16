@@ -127,7 +127,7 @@ proc processTransaction*(
     {.gcsafe, raises: [CatchableError].} =
   ## Variant of `processTransaction()` with `*fork* derived
   ## from the `vmState` argument.
-  let fork = vmState.com.toEVMFork(header.blockNumber)
+  let fork = vmState.com.toEVMFork(header.forkDeterminationInfoForHeader)
   vmState.processTransaction(tx, sender, header, fork)
 
 # ------------------------------------------------------------------------------
