@@ -33,8 +33,13 @@ export accumulator
 # deleting it, feel free to leave it out. In the
 # meantime, please just ignore it and go on with
 # your life.
+# proc `$`*(x: BlockHeader): string =
+#   $x
+
+# Wait, why does the previous one work locally but
+# not in CI? --Adam
 proc `$`*(x: BlockHeader): string =
-  $x
+  "BlockHeader(see history_network.nim)"
 
 
 const
