@@ -101,7 +101,7 @@ proc newPrivateKey(ap: TesterPool): PrivateKey =
   for n in 0 ..< data.len:
     data[n] = ap.rand
   # verify generated key, see keys.random(PrivateKey) from eth/keys.nim
-  var dataPtr0 = cast[ptr cuchar](unsafeAddr data[0])
+  var dataPtr0 = cast[ptr byte](unsafeAddr data[0])
   doAssert secp256k1_ec_seckey_verify(
     secp256k1_context_no_precomp, dataPtr0) == 1
   # Convert to PrivateKey
