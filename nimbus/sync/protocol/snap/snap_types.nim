@@ -11,7 +11,6 @@
 import
   chronicles,
   eth/common,
-  stew/endians2,
   ../../../constants
 
 {.push raises: [].}
@@ -149,7 +148,7 @@ method getAccountRange*(
     limit: Hash256;
     replySizeMax: uint64;
       ): (seq[SnapAccount], seq[SnapProof])
-      {.base.} =
+      {.base, raises: [CatchableError].} =
   notImplemented("getAccountRange")
 
 method getStorageRanges*(

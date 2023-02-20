@@ -50,6 +50,21 @@ proc rlpPairSize(aLen: int; bRlpLen: int): int =
   else:
     high(int)
 
+proc nonLeafPathNodes(
+    baseTag: NodeTag;                # Left boundary
+    rootKey: NodeKey|RepairKey;      # State root
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): HashSet[Blob]
+      {.gcsafe, raises: [CatchableError]} =
+  ## Helper for `updateProof()`
+  baseTag
+    .hexaryPath(rootKey, db)
+    .path
+    .mapIt(it.node)
+    .filterIt(it.kind != Leaf)
+    .mapIt(it.convertTo(Blob))
+    .toHashSet
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -83,7 +98,7 @@ template collectLeafs(
             rc = typeof(rc).err(rx.error)
             break body
           rx.value
-        rightKey = xPath.getPartialPath.convertTo(NodeKey)
+        rightKey = getPartialPath(xPath).convertTo(NodeKey)
         rightTag = rightKey.to(NodeTag)
 
       # Prevents from semi-endless looping
@@ -121,23 +136,13 @@ template updateProof(
       ): auto =
   ## Complement leafs list by adding proof nodes. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var proof = baseTag.hexaryPath(rootKey, db)
-        .path
-        .mapIt(it.node)
-        .filterIt(it.kind != Leaf)
-        .mapIt(it.convertTo(Blob))
-        .toHashSet
+  var proof = nonLeafPathNodes(baseTag, rootKey, db)
   if 0 < leafList.len:
-    proof.incl leafList[^1].key.to(NodeTag).hexaryPath(rootKey, db)
-        .path
-        .mapIt(it.node)
-        .filterIt(it.kind != Leaf)
-        .mapIt(it.convertTo(Blob))
-        .toHashSet
+    proof.incl nonLeafPathNodes(leafList[^1].key.to(NodeTag), rootKey, db)
 
   var rp = RangeProof(
     leafs: leafList,
-    proof: proof.toSeq.mapIt(SnapProof(data: it)))
+    proof: mapIt(toSeq(proof), SnapProof(data: it)))
 
   if 0 < nSizeUsed:
     rp.leafsSize = hexaryRangeRlpSize nSizeUsed
@@ -179,6 +184,16 @@ proc hexaryRangeLeafsProof*(
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
+
+proc to*(
+    rl: RangeLeaf;
+    T: type SnapAccount;
+      ): T
+      {.gcsafe, raises: [RlpError]} =
+  ## Convert the generic `RangeLeaf` argument to payload type.
+  T(accHash: rl.key.to(Hash256),
+    accBody: rl.data.decode(Account))
+
 
 proc hexaryRangeRlpSize*(blobLen: int): int =
   ## Returns the size of RLP encoded <blob> of argument length `blobLen`.
