@@ -135,16 +135,6 @@ proc processStaged(buddy: FullBuddyRef): bool =
   except CatchableError as e:
     error "Storing persistent blocks failed", peer, range=($wi.blocks),
       error = $e.name, msg = e.msg
-  #except Defect as e:
-  #  # Pass through
-  #  raise e
-  #except Exception as e:
-  #  # Notorious case where the `Chain` reference applied to
-  #  # `persistBlocks()` has the compiler traced a possible `Exception`
-  #  # (i.e. `ctx.chain` could be uninitialised.)
-  #  error "Exception while storing persistent blocks", peer,
-  #    range=($wi.blocks), error=($e.name), msg=e.msg
-  #  raise (ref Defect)(msg: $e.name & ": " & e.msg)
 
   # Something went wrong. Recycle work item (needs to be re-fetched, anyway)
   let
@@ -186,15 +176,15 @@ proc processStaged(buddy: FullBuddyRef): bool =
 proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.data.pivot = BestPivotCtxRef.init(ctx.data.rng)
-  if tickerOK:
-    ctx.data.ticker = TickerRef.init(ctx.tickerUpdater)
-  else:
-    debug "Ticker is disabled"
   let rc = ctx.topUsedNumber(backBlocks = 0)
   if rc.isErr:
     ctx.data.bCtx = BlockQueueCtxRef.init()
     return false
   ctx.data.bCtx = BlockQueueCtxRef.init(rc.value + 1)
+  if tickerOK:
+    ctx.data.ticker = TickerRef.init(ctx.tickerUpdater)
+  else:
+    debug "Ticker is disabled"
   true
 
 proc release*(ctx: FullCtxRef) =
