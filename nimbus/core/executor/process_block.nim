@@ -66,6 +66,15 @@ proc procBlkPreamble(vmState: BaseVMState;
           return false
         vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
 
+  if header.withdrawalsRoot.isSome:
+    if body.withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
+      debug "Mismatched withdrawalsRoot",
+        blockNumber = header.blockNumber
+      return false
+
+    for withdrawal in body.withdrawals.get:
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.u256)
+
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",
       gasUsed = header.gasUsed,
