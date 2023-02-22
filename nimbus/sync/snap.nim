@@ -119,9 +119,9 @@ proc init*(
   new result
   result.initSync(ethNode, chain, maxPeers, enableTicker)
   result.ctx.chain = chain # explicitely override
-  result.ctx.data.rng = rng
-  result.ctx.data.dbBackend = dbBackend
-  result.ctx.data.noRecovery = noRecovery
+  result.ctx.pool.rng = rng
+  result.ctx.pool.dbBackend = dbBackend
+  result.ctx.pool.noRecovery = noRecovery
   # Required to have been initialised via `addEthHandlerCapability()`
   doAssert not result.ctx.ethWireCtx.isNil
 

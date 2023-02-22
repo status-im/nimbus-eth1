@@ -215,7 +215,7 @@ proc storageQueueFetchFull*(
   noExceptionOops("getNextSlotItemsFull"):
     for kvp in env.fetchStorageFull.nextPairs:
       let
-        getFn = ctx.data.snapDb.getStorageSlotsFn kvp.data.accKey
+        getFn = ctx.pool.snapDb.getStorageSlotsFn kvp.data.accKey
         rootKey = kvp.key.to(NodeKey)
         accItem = AccountSlotsHeader(
           accKey:      kvp.data.accKey,

@@ -48,7 +48,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
-  let recov = ctx.data.recovery
+  let recov = ctx.pool.recovery
   if recov.isNil:
     return false
 
@@ -57,7 +57,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
       "#" & $recov.state.header.blockNumber & "(" & $recov.level & ")"
     topLevel = recov.level == 0
     env = block:
-      let rc = ctx.data.pivotTable.eq recov.state.header.stateRoot
+      let rc = ctx.pool.pivotTable.eq recov.state.header.stateRoot
       if rc.isErr:
         error "Recovery pivot context gone", checkpoint, topLevel
         return false
@@ -79,19 +79,19 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     #when extraTraceMessages:
     #  trace "Recovery done", checkpoint, topLevel
     return false
-  let rc = ctx.data.snapDb.recoverPivot(recov.state.predecessor)
+  let rc = ctx.pool.snapDb.recoverPivot(recov.state.predecessor)
   if rc.isErr:
     when extraTraceMessages:
       trace "Recovery stopped at pivot stale checkpoint", checkpoint, topLevel
     return false
 
   # Set up next level pivot checkpoint
-  ctx.data.recovery = SnapRecoveryRef(
+  ctx.pool.recovery = SnapRecoveryRef(
     state: rc.value,
     level: recov.level + 1)
 
   # Push onto pivot table and continue recovery (i.e. do not stop it yet)
-  ctx.data.pivotTable.reverseUpdate(ctx.data.recovery.state.header, ctx)
+  ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
 
   return true # continue recovery
 
@@ -101,38 +101,38 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
 
 proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.data.coveredAccounts = NodeTagRangeSet.init()
+  ctx.pool.coveredAccounts = NodeTagRangeSet.init()
   noExceptionOops("worker.setup()"):
     ctx.ethWireCtx.txPoolEnabled false
     ctx.chain.com.syncReqNewHead = ctx.pivotUpdateBeaconHeaderCB
-  ctx.data.snapDb =
-    if ctx.data.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
-    else: SnapDbRef.init(ctx.data.dbBackend)
+  ctx.pool.snapDb =
+    if ctx.pool.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
+    else: SnapDbRef.init(ctx.pool.dbBackend)
   if tickerOK:
-    ctx.data.ticker = TickerRef.init(ctx.data.pivotTable.tickerStats(ctx))
+    ctx.pool.ticker = TickerRef.init(ctx.pool.pivotTable.tickerStats(ctx))
   else:
     trace "Ticker is disabled"
 
   # Check for recovery mode
-  if not ctx.data.noRecovery:
-    let rc = ctx.data.snapDb.recoverPivot()
+  if not ctx.pool.noRecovery:
+    let rc = ctx.pool.snapDb.recoverPivot()
     if rc.isOk:
-      ctx.data.recovery = SnapRecoveryRef(state: rc.value)
+      ctx.pool.recovery = SnapRecoveryRef(state: rc.value)
       ctx.daemon = true
 
       # Set up early initial pivot
-      ctx.data.pivotTable.reverseUpdate(ctx.data.recovery.state.header, ctx)
+      ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
       trace "Recovery started",
-        checkpoint=("#" & $ctx.data.pivotTable.topNumber() & "(0)")
-      if not ctx.data.ticker.isNil:
-        ctx.data.ticker.startRecovery()
+        checkpoint=("#" & $ctx.pool.pivotTable.topNumber() & "(0)")
+      if not ctx.pool.ticker.isNil:
+        ctx.pool.ticker.startRecovery()
   true
 
 proc release*(ctx: SnapCtxRef) =
   ## Global clean up
-  if not ctx.data.ticker.isNil:
-    ctx.data.ticker.stop()
-    ctx.data.ticker = nil
+  if not ctx.pool.ticker.isNil:
+    ctx.pool.ticker.stop()
+    ctx.pool.ticker = nil
   noExceptionOops("worker.release()"):
     ctx.ethWireCtx.txPoolEnabled true
   ctx.chain.com.syncReqNewHead = nil
@@ -145,16 +145,16 @@ proc start*(buddy: SnapBuddyRef): bool =
   if peer.supports(protocol.snap) and
      peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    buddy.data.errors = ComErrorStatsRef()
-    if not ctx.data.ticker.isNil:
-      ctx.data.ticker.startBuddy()
+    buddy.only.errors = ComErrorStatsRef()
+    if not ctx.pool.ticker.isNil:
+      ctx.pool.ticker.startBuddy()
     return true
 
 proc stop*(buddy: SnapBuddyRef) =
   ## Clean up this peer
   let ctx = buddy.ctx
-  if not ctx.data.ticker.isNil:
-    ctx.data.ticker.stopBuddy()
+  if not ctx.pool.ticker.isNil:
+    ctx.pool.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -163,15 +163,15 @@ proc stop*(buddy: SnapBuddyRef) =
 proc runDaemon*(ctx: SnapCtxRef) {.async.} =
   ## Enabled while `ctx.daemon` is `true`
   ##
-  if not ctx.data.recovery.isNil:
+  if not ctx.pool.recovery.isNil:
     if not await ctx.recoveryStepContinue():
       # Done, stop recovery
-      ctx.data.recovery = nil
+      ctx.pool.recovery = nil
       ctx.daemon = false
 
       # Update logging
-      if not ctx.data.ticker.isNil:
-        ctx.data.ticker.stopRecovery()
+      if not ctx.pool.ticker.isNil:
+        ctx.pool.ticker.stopRecovery()
 
 
 proc runSingle*(buddy: SnapBuddyRef) {.async.} =
@@ -191,12 +191,12 @@ proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
   result = true
 
   # Clean up empty pivot slots (never the top one)
-  var rc = ctx.data.pivotTable.beforeLast
+  var rc = ctx.pool.pivotTable.beforeLast
   while rc.isOK:
     let (key, env) = (rc.value.key, rc.value.data)
     if env.fetchAccounts.processed.isEmpty:
-      ctx.data.pivotTable.del key
-    rc = ctx.data.pivotTable.prev(key)
+      ctx.pool.pivotTable.del key
+    rc = ctx.pool.pivotTable.prev(key)
 
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
@@ -211,13 +211,13 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # Set up current state root environment for accounts snapshot
   let
     env = block:
-      let rc = ctx.data.pivotTable.lastValue
+      let rc = ctx.pool.pivotTable.lastValue
       if rc.isErr:
         return # nothing to do
       rc.value
     pivot = "#" & $env.stateHeader.blockNumber # for logging
 
-  buddy.data.pivotEnv = env
+  buddy.only.pivotEnv = env
 
   # Full sync processsing based on current snapshot
   # -----------------------------------------------
@@ -231,7 +231,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   # If this is a new pivot, the previous one can be cleaned up. There is no
   # point in keeping some older space consuming state data any longer.
-  ctx.data.pivotTable.beforeTopMostlyClean()
+  ctx.pool.pivotTable.beforeTopMostlyClean()
 
   when extraTraceMessages:
     block:

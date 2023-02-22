@@ -259,9 +259,9 @@ proc swapInAccounts*(
   let
     pivot {.used.} = "#" & $env.stateHeader.blockNumber # Logging & debugging
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
-    getFn = ctx.data.snapDb.getAccountFn
+    getFn = ctx.pool.snapDb.getAccountFn
 
-    others = toSeq(ctx.data.pivotTable.nextPairs)
+    others = toSeq(ctx.pool.pivotTable.nextPairs)
 
                 # Swap in from mothballed pivots different from the current one
                 .filterIt(it.data.archived and it.key.to(NodeKey) != rootKey)

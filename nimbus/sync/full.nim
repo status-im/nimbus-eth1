@@ -113,7 +113,7 @@ proc init*(
     enableTicker = false): T =
   new result
   result.initSync(ethNode, chain, maxPeers, enableTicker)
-  result.ctx.data.rng = rng
+  result.ctx.pool.rng = rng
 
 proc start*(ctx: FullSyncRef) =
   doAssert ctx.startSync()
