@@ -112,7 +112,11 @@ USE_MIRACL := 0
 ENABLE_EVMC := 0
 
 # "-d:release" cannot be added to config.nims
+
 NIM_PARAMS += -d:release
+ifeq ($(BOEHM_GC),1)
+NIM_PARAMS += --mm:boehm
+endif
 
 T8N_PARAMS := -d:chronicles_default_output_device=stderr
 

@@ -220,6 +220,11 @@ engine is compiled. The variables are listed with decreasing priority (in
 case of doubt, the lower prioritised variable is ignored when the higher on is
 available.)
 
+ * BOEHM_GC=1<br>
+   Change garbage collector to `boehm`. This might help debugging in certain
+   cases when the `gc` is involved in a memory corruption or corruption
+   camouflage.
+
  * ENABLE_CHUNKED_RLPX=0<br>
    Disable legacy chunked RLPx messages which are enabled by default for
    synchronising against `Nethermind` nodes

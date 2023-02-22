@@ -22,6 +22,8 @@ const
       rc &= ", legacy-eth/66"
     when defined(chunked_rlpx_enabled):
       rc &= ", chunked-rlpx"
+    when defined(boehmgc):
+      rc &= ", boehm/gc"
     rc &= " enabled"
     rc
 
