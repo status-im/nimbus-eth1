@@ -130,7 +130,7 @@ proc compileMissingNodesList(
     peer {.used.} = buddy.peer
     slots = kvp.data.slots
     rootKey = kvp.key.to(NodeKey)
-    getFn = ctx.data.snapDb.getStorageSlotsFn(kvp.data.accKey)
+    getFn = ctx.pool.snapDb.getStorageSlotsFn(kvp.data.accKey)
 
   if not slots.processed.isFull:
     noExceptionOops("compileMissingNodesList"):
@@ -177,7 +177,7 @@ proc getNodesFromNetwork(
     rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
   if rc.isOk:
     # Reset error counts for detecting repeated timeouts, network errors, etc.
-    buddy.data.errors.resetComError()
+    buddy.only.errors.resetComError()
 
     return rc.value.nodes.mapIt(NodeSpecs(
       partialPath: it.partialPath,
@@ -185,7 +185,7 @@ proc getNodesFromNetwork(
       data:        it.data))
 
   let error = rc.error
-  if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
+  if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
     when extraTraceMessages:
       trace logTxt "fetch nodes error => stop", peer,
          ctx=buddy.healingCtx(kvp,env), error
@@ -217,7 +217,7 @@ proc storageSlotsHealing(
   ## `false` if there are nodes left to be completed.
   let
     ctx = buddy.ctx
-    db = ctx.data.snapDb
+    db = ctx.pool.snapDb
     peer = buddy.peer
     missing = buddy.compileMissingNodesList(kvp, env)
 

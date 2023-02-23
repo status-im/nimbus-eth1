@@ -124,20 +124,20 @@ proc storeStoragesSingleBatch(
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
       let error = rc.error
-      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
+      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
         trace logTxt "fetch error => stop", peer, ctx=buddy.fetchCtx(env),
           nReq=req.len, error
       return false # all of `req` failed
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
-  buddy.data.errors.resetComError()
+  buddy.only.errors.resetComError()
 
   var gotSlotLists = stoRange.data.storages.len
   if 0 < gotSlotLists:
 
     # Verify/process storages data and save it to disk
-    let report = ctx.data.snapDb.importStorageSlots(
+    let report = ctx.pool.snapDb.importStorageSlots(
       peer, stoRange.data, noBaseBoundCheck = true)
 
     if 0 < report.len:

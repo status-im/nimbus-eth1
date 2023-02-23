@@ -86,7 +86,7 @@ proc healingCtx(
     "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & $env.fetchAccounts.processed & "/" &
-                  $ctx.data.coveredAccounts ) & "}"
+                  $ctx.pool.coveredAccounts ) & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -118,7 +118,7 @@ proc compileMissingNodesList(
     ctx = buddy.ctx
     peer {.used.} = buddy.peer
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
-    getFn = ctx.data.snapDb.getAccountFn
+    getFn = ctx.pool.snapDb.getAccountFn
     fa {.used.} = env.fetchAccounts
 
   # Import from earlier run
@@ -171,7 +171,7 @@ proc fetchMissingNodes(
   let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
   if rc.isOk:
     # Reset error counts for detecting repeated timeouts, network errors, etc.
-    buddy.data.errors.resetComError()
+    buddy.only.errors.resetComError()
 
     # Forget about unfetched missing nodes, will be picked up later
     return rc.value.nodes.mapIt(NodeSpecs(
@@ -182,7 +182,7 @@ proc fetchMissingNodes(
   # Process error ...
   let
     error = rc.error
-    ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors)
+    ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
   when extraTraceMessages:
     if ok:
       trace logTxt "fetch nodes error => stop", peer,
@@ -241,7 +241,7 @@ proc registerAccountLeaf(
   if 0 < env.fetchAccounts.processed.merge(pt,pt) :
     env.nAccounts.inc
     env.fetchAccounts.unprocessed.reduce(pt,pt)
-    discard buddy.ctx.data.coveredAccounts.merge(pt,pt)
+    discard buddy.ctx.pool.coveredAccounts.merge(pt,pt)
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:
@@ -260,7 +260,7 @@ proc accountsHealingImpl(
   ## number of nodes fetched from the network, and -1 upon error.
   let
     ctx = buddy.ctx
-    db = ctx.data.snapDb
+    db = ctx.pool.snapDb
     peer = buddy.peer
 
   # Import from earlier runs (if any)

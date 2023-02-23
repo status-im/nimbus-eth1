@@ -113,7 +113,7 @@ proc accountsRangefetchImpl(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    db = ctx.data.snapDb
+    db = ctx.pool.snapDb
     fa = env.fetchAccounts
     stateRoot = env.stateHeader.stateRoot
 
@@ -134,7 +134,7 @@ proc accountsRangefetchImpl(
     if rc.isErr:
       fa.unprocessed.merge iv # fail => interval back to pool
       let error = rc.error
-      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.data.errors):
+      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
         when extraTraceMessages:
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
             reqLen=iv.len, error
@@ -142,7 +142,7 @@ proc accountsRangefetchImpl(
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
-  buddy.data.errors.resetComError()
+  buddy.only.errors.resetComError()
 
   let
     gotAccounts = dd.data.accounts.len # comprises `gotStorage`
@@ -188,7 +188,7 @@ proc accountsRangefetchImpl(
     fa.unprocessed.reduce w
     # Register consumed intervals on the accumulators over all state roots.
     discard fa.processed.merge w
-    discard ctx.data.coveredAccounts.merge w
+    discard ctx.pool.coveredAccounts.merge w
     ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
 
   # Register accounts with storage slots on the storage TODO list.

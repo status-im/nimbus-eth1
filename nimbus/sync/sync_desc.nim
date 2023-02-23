@@ -42,7 +42,7 @@ type
     ctx*: CtxRef[S]         ## Shared data descriptor back reference
     peer*: Peer             ## Reference to eth p2pProtocol entry
     ctrl*: BuddyCtrlRef     ## Control and state settings
-    data*: W                ## Worker peer specific data
+    only*: W                ## Worker peer specific data
 
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
@@ -51,7 +51,7 @@ type
     chain*: ChainRef        ## Block chain database (no need for `Peer`)
     poolMode*: bool         ## Activate `runPool()` workers if set `true`
     daemon*: bool           ## Enable global background job
-    data*: S                ## Shared context for all worker peers
+    pool*: S                ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------
 # Public functions
