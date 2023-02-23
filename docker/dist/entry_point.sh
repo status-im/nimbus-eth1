@@ -85,6 +85,8 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
 
   build_rocksdb TARGET_OS=MINGW CXX="${CXX}"
 
+  make -j$(nproc) update
+
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
@@ -131,6 +133,8 @@ elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
 
   build_rocksdb TARGET_ARCHITECTURE=arm CXX="${CXX}"
 
+  make -j$(nproc) update
+
   env CFLAGS="" make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
@@ -149,6 +153,8 @@ elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
   ${CXX} --version
 
   build_rocksdb TARGET_ARCHITECTURE=arm64 CXX="${CXX}"
+
+  make -j$(nproc) update
 
   make \
     -j$(nproc) \
@@ -176,6 +182,8 @@ elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
   ${CXX} --version
 
   build_rocksdb TARGET_OS=Darwin CXX="${CXX}" AR="${AR}"
+
+  make -j$(nproc) update
 
   make \
     -j$(nproc) \
@@ -217,6 +225,8 @@ elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
 
   build_rocksdb TARGET_OS=Darwin TARGET_ARCHITECTURE=arm64 CXX="${CXX}" AR="${AR}"
 
+  make -j$(nproc) update
+
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
@@ -248,6 +258,8 @@ else
   g++ --version
 
   build_rocksdb
+
+  make -j$(nproc) update
 
   make \
     -j$(nproc) \
