@@ -14,17 +14,13 @@ import
   std/[os, net],
   chronicles,
   chronos,
-  eth/keys,
+  eth/[keys, p2p/bootnodes],
   eth/p2p as eth_p2p,
-  json_rpc/rpcserver,
-  metrics,
-  metrics/[chronos_httpserver],
   stew/shims/net as stewNet,
-  "."/[config, constants, common],
+  "."/[constants, common],
   ./db/select_backend,
   ./core/[chain, tx_pool],
-  ./rpc/merge/merger,
-  ./sync/[legacy, full, protocol, snap, handlers, peers]
+  ./sync/[legacy, full, protocol, snap, handlers]
 
 type
   NimbusState = enum
@@ -38,16 +34,23 @@ type
     txPool: TxPoolRef
     networkLoop: Future[void]
     dbBackend: ChainDB
-    peerManager: PeerManagerRef
     legaSyncRef: LegacySyncRef
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
-    merger: MergerRef
+
+  NimbusSyncMode = enum
+    SyncModeDefault
+    SyncModeFull
+    SyncModeSnap
+    SyncModeSnapCtx
 
 const
-  MAX_PEERS = 25
+  CONFIG_MAX_PEERS = 25
+  CONFIG_AGENT_STRING = "Wen dowego afoot tomann abode stomen forest cooryin"
+  CONFIG_LOG_LEVEL = LogLevel.INFO
+  CONFIG_SYNC_MODE = SyncModeFull
 let
-  DATA_DIR = getHomeDir() / ".cache" / "nimbus"
+  CONFIG_DATA_DIR = getHomeDir() / ".cache" / "nimbus"
 
 proc basicServices(nimbus: NimbusNode,
                    com: CommonRef) =
@@ -59,15 +62,9 @@ proc basicServices(nimbus: NimbusNode,
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   nimbus.chainRef = newChain(com)
 
-  # this is temporary workaround to track POS transition
-  # until we have proper chain config and hard fork module
-  # see issue #640
-  nimbus.merger = MergerRef.new(com.db)
-
-proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              protocols: set[ProtocolFlag]) =
+proc setupP2P(nimbus: NimbusNode) =
   ## Creating P2P Server
-  let kpres = nimbus.ctx.getNetKeys("random", DATA_DIR)
+  let kpres = nimbus.ctx.getNetKeys("random", CONFIG_DATA_DIR)
   if kpres.isErr:
     fatal "Get network keys error", msg = kpres.error
     quit(QuitFailure)
@@ -79,13 +76,15 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     udpPort: Port(30303)
   )
 
-  let bootstrapNodes = conf.getBootNodes()
+  var bootstrapNodes: seq[ENode]
+  for item in MainnetBootnodes:
+    bootstrapNodes.add ENode.fromString(item).tryGet()
 
   nimbus.ethNode = newEthereumNode(
-    keypair, address, conf.networkId, conf.agentString,
-    addAllCapabilities = false, minPeers = MAX_PEERS,
+    keypair, address, MainNet, CONFIG_AGENT_STRING,
+    addAllCapabilities = false, minPeers = CONFIG_MAX_PEERS,
     bootstrapNodes = bootstrapNodes,
-    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
+    bindUdpPort = Port(30303), bindTcpPort = Port(30303),
     bindIp =  ValidIpAddress.init("0.0.0.0"),
     rng = nimbus.ctx.rng)
 
@@ -99,84 +98,59 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
-    let tickerOK = true
-    # Minimal capability needed for sync only
-    if ProtocolFlag.Eth notin protocols:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef)
-    let syncMode = SyncMode.Full
-    case syncMode:
-    of SyncMode.Full:
+    case CONFIG_SYNC_MODE:
+    of SyncModeFull:
       nimbus.fullSyncRef = FullSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, MAX_PEERS,
-        tickerOK)
-    of SyncMode.Snap, SyncMode.SnapCtx:
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, CONFIG_MAX_PEERS,
+        true)
+    of SyncModeSnap, SyncModeSnapCtx:
       # Minimal capability needed for sync only
-      if ProtocolFlag.Snap notin protocols:
+      block:
         nimbus.ethNode.addSnapHandlerCapability(
           nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, MAX_PEERS,
-        nimbus.dbBackend, tickerOK, noRecovery = false)
-    of SyncMode.Default:
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, CONFIG_MAX_PEERS,
+        nimbus.dbBackend, true, noRecovery = false)
+    of SyncModeDefault:
       nimbus.legaSyncRef = LegacySyncRef.new(
         nimbus.ethNode, nimbus.chainRef)
 
-  # Connect directly to the static nodes
-  let staticPeers = conf.getStaticPeers()
-  if staticPeers.len > 0:
-    nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool,
-      conf.reconnectInterval,
-      conf.reconnectMaxRetry,
-      staticPeers
-    )
-    nimbus.peerManager.start()
-
   # Start Eth node
   block:
-    var waitForPeers = true
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = false,
       waitForPeers = true)
 
-proc start(nimbus: NimbusNode, conf: NimbusConf) =
+proc start(nimbus: NimbusNode) =
   ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
+  setLogLevel(CONFIG_LOG_LEVEL)
 
-  createDir(DATA_DIR)
-  nimbus.dbBackend = newChainDB(DATA_DIR)
+  createDir(CONFIG_DATA_DIR)
+  nimbus.dbBackend = newChainDB(CONFIG_DATA_DIR)
   let trieDB = trieDB nimbus.dbBackend
   let com = CommonRef.new(trieDB,
-    true, # conf.pruneMode == PruneMode.Full,
-    conf.networkId,
-    conf.networkParams
+    true,
+    MainNet,
+    MainNet.networkParams
     )
 
   com.initializeEmptyDb()
-  let protocols = conf.getProtocolFlags()
 
   block:
     basicServices(nimbus, com)
-    setupP2P(nimbus, conf, protocols)
+    setupP2P(nimbus)
 
     block:
-      let syncMode = SyncMode.Full
-      case syncMode:
-      of SyncMode.Default:
+      case CONFIG_SYNC_MODE:
+      of SyncModeDefault:
         nimbus.legaSyncRef.start
         nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
           legacy.newBlockHandler,
           legacy.newBlockHashesHandler,
           cast[pointer](nimbus.legaSyncRef))
-      of SyncMode.Full:
+      of SyncModeFull:
         nimbus.fullSyncRef.start
-      of SyncMode.Snap, SyncMode.SnapCtx:
+      of SyncModeSnap, SyncModeSnapCtx:
         nimbus.snapSyncRef.start
 
     if nimbus.state == Starting:
@@ -187,14 +161,12 @@ proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
   trace "Graceful shutdown"
   block:
     await nimbus.networkLoop.cancelAndWait()
-  if nimbus.peerManager.isNil.not:
-    await nimbus.peerManager.stop()
   if nimbus.snapSyncRef.isNil.not:
     nimbus.snapSyncRef.stop()
   if nimbus.fullSyncRef.isNil.not:
     nimbus.fullSyncRef.stop()
 
-proc process*(nimbus: NimbusNode, conf: NimbusConf) =
+proc process*(nimbus: NimbusNode) =
   # Main event loop
   while nimbus.state == Running:
     try:
@@ -221,8 +193,6 @@ when isMainModule:
   ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)
 
-  ## Processing command line arguments
-  let conf = makeConfig()
-
-  nimbus.start(conf)
-  nimbus.process(conf)
+  echo "*** gabbleblotchit: Ignoring command line arguments"
+  nimbus.start()
+  nimbus.process()
