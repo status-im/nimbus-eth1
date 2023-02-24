@@ -15,8 +15,13 @@ RELEASE_FLAGS = -d:release
 DEBUG_FLAGS = --debugger:native --debuginfo:on
 DEBUG_FLAGS += --opt:none -d:useGcAssert -d:memProfiler
 
-BOEHM_FLAGS = $(DEBUG_FLAGS) --mm:boehm
+BOEHM_FLAGS = $(DEBUG_FLAGS) --mm:boehm -d:boehm_enabled
 NOBOEHM_FLAGS = $(DEBUG_FLAGS)
+
+OTHER_FLAGS =
+ifeq ($(SWAP_SYNC_REFS),1)
+OTHER_FLAGS += -d:swap_sync_refs
+endif
 
 # ----------------
 .PHONY: default help
@@ -27,33 +32,34 @@ default: help
 .SILENT: help
 help::
 	echo
-	echo "Usage: $(MAKE) -f $(MAKEFILE) <target>"
+	echo "Usage: $(MAKE) -f $(MAKEFILE) <target> <option>"
 	echo
-	echo "<target>: help     -- this help page"
+	echo "<target>: help             -- this help page"
 	echo
-	echo "          release  -- build release version"
-	echo "          boehm    -- build test version with safe gc"
-	echo "          noboehm  -- build test version with unsafe default gc"
-	echo "          run      -- run previously built version"
+	echo "          release          -- build release version"
+	echo "          boehm            -- build test version with safe gc"
+	echo "          noboehm          -- build test version with unsafe default gc"
+	echo "          run              -- run previously built version"
 	echo
-	echo "          brun     -- same as double targets boehm and run"
-	echo "          nobrun   -- same as double targets noboehm and run"
+	echo "          brun             -- same as double targets boehm and run"
+	echo "          nobrun           -- same as double targets noboehm and run"
 	echo
+	echo "<option>: SWAP_SYNC_REFS=1 -- swap descriptors in NimbusNode object"
 
 # ----------------
 .PHONY: release boehm brun noboehm nobrun run
 
 release:
 	@echo "*** Compiling without debugging support"
-	./env.sh nim c $(BUILD_ARGS)
+	./env.sh nim c $(OTHER_FLAGS) $(BUILD_ARGS)
 
 boehm brun::
 	@echo "*** Compiling for safe boehm gc"
-	./env.sh nim c $(BOEHM_FLAGS) $(BUILD_ARGS)
+	./env.sh nim c $(OTHER_FLAGS) $(BOEHM_FLAGS) $(BUILD_ARGS)
 
 noboehm nobrun::
 	@echo "*** Compiling for probably crashing gc"
-	./env.sh nim c $(NOBOEHM_FLAGS) $(BUILD_ARGS)
+	./env.sh nim c $(OTHER_FLAGS) $(NOBOEHM_FLAGS) $(BUILD_ARGS)
 
 brun nobrun run::
 	@test -x ./build/$(TARGET) || {\

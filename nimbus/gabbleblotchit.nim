@@ -10,6 +10,9 @@
 import
   ../nimbus/vm_compile_info
 
+when defined(swap_sync_refs):
+  {.warning: "Swapped positions of snapSyncRef and fullSyncRef".}
+
 import
   std/[os, net],
   chronicles,
@@ -17,10 +20,10 @@ import
   eth/[keys, p2p/bootnodes],
   eth/p2p as eth_p2p,
   stew/shims/net as stewNet,
-  "."/[constants, common],
+  ./common,
   ./db/select_backend,
-  ./core/[chain, tx_pool],
-  ./sync/[legacy, full, protocol, snap, handlers]
+  ./core/chain,
+  ./sync/[full, protocol, snap]
 
 type
   NimbusState = enum
@@ -31,34 +34,23 @@ type
     state: NimbusState
     ctx: EthContext
     chainRef: ChainRef
-    txPool: TxPoolRef
-    networkLoop: Future[void]
     dbBackend: ChainDB
-    legaSyncRef: LegacySyncRef
-    snapSyncRef: SnapSyncRef
-    fullSyncRef: FullSyncRef
-
-  NimbusSyncMode = enum
-    SyncModeDefault
-    SyncModeFull
-    SyncModeSnap
-    SyncModeSnapCtx
+    when defined(swap_sync_refs):
+      fullSyncRef: FullSyncRef
+      snapSyncRef: SnapSyncRef
+    else:
+      snapSyncRef: SnapSyncRef # << reverse these two and the systems ..
+      fullSyncRef: FullSyncRef # << .. survives without crashing
 
 const
   CONFIG_MAX_PEERS = 25
   CONFIG_AGENT_STRING = "Wen dowego afoot tomann abode stomen forest cooryin"
   CONFIG_LOG_LEVEL = LogLevel.INFO
-  CONFIG_SYNC_MODE = SyncModeFull
 let
   CONFIG_DATA_DIR = getHomeDir() / ".cache" / "nimbus"
 
 proc basicServices(nimbus: NimbusNode,
                    com: CommonRef) =
-  # app wide TxPool singleton
-  # TODO: disable some of txPool internal mechanism if
-  # the engineSigner is zero.
-  nimbus.txPool = TxPoolRef.new(com, ZERO_ADDRESS)
-
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   nimbus.chainRef = newChain(com)
 
@@ -88,38 +80,12 @@ proc setupP2P(nimbus: NimbusNode) =
     bindIp =  ValidIpAddress.init("0.0.0.0"),
     rng = nimbus.ctx.rng)
 
-  # Add protocol capabilities based on protocol flags
-  block:
-    block:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef,
-        nimbus.txPool)
-
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
-    case CONFIG_SYNC_MODE:
-    of SyncModeFull:
+    block:
       nimbus.fullSyncRef = FullSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, CONFIG_MAX_PEERS,
         true)
-    of SyncModeSnap, SyncModeSnapCtx:
-      # Minimal capability needed for sync only
-      block:
-        nimbus.ethNode.addSnapHandlerCapability(
-          nimbus.ethNode.peerPool)
-      nimbus.snapSyncRef = SnapSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, CONFIG_MAX_PEERS,
-        nimbus.dbBackend, true, noRecovery = false)
-    of SyncModeDefault:
-      nimbus.legaSyncRef = LegacySyncRef.new(
-        nimbus.ethNode, nimbus.chainRef)
-
-  # Start Eth node
-  block:
-    nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
-      enableDiscovery = false,
-      waitForPeers = true)
 
 proc start(nimbus: NimbusNode) =
   ## logging
@@ -141,17 +107,8 @@ proc start(nimbus: NimbusNode) =
     setupP2P(nimbus)
 
     block:
-      case CONFIG_SYNC_MODE:
-      of SyncModeDefault:
-        nimbus.legaSyncRef.start
-        nimbus.ethNode.setEthHandlerNewBlocksAndHashes(
-          legacy.newBlockHandler,
-          legacy.newBlockHashesHandler,
-          cast[pointer](nimbus.legaSyncRef))
-      of SyncModeFull:
+      block:
         nimbus.fullSyncRef.start
-      of SyncModeSnap, SyncModeSnapCtx:
-        nimbus.snapSyncRef.start
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C
@@ -159,10 +116,6 @@ proc start(nimbus: NimbusNode) =
 
 proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
   trace "Graceful shutdown"
-  block:
-    await nimbus.networkLoop.cancelAndWait()
-  if nimbus.snapSyncRef.isNil.not:
-    nimbus.snapSyncRef.stop()
   if nimbus.fullSyncRef.isNil.not:
     nimbus.fullSyncRef.stop()
 
@@ -193,6 +146,19 @@ when isMainModule:
   ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)
 
+  # Print some information about the test
   echo "*** gabbleblotchit: Ignoring command line arguments"
+  var info = ""
+  when defined(useGcAssert):
+    when defined(boehm_enabled):
+      info = "Boehm gc debugging"
+    else:
+      info = "Gc debugging"
+  else:
+    info = "Release mode"
+  when defined(swap_sync_refs):
+    info &= ", swapped sync descriptors"
+  echo "*** gabbleblotchit: ", info
+
   nimbus.start()
   nimbus.process()
