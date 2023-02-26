@@ -1,31 +1,27 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, typetraits],
   testutils/unittests, chronos,
-  eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types_rlp,
-  eth/rlp,
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
-  ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/wire/portal_protocol,
   ../../network/beacon_light_client/[light_client_network, light_client_content],
-  ../../../nimbus/constants,
   "."/[light_client_test_data, light_client_test_helpers]
 
-procSuite "Light client Content Network":
+procSuite "Beacon Light Client Content Network":
   let rng = newRng()
 
   asyncTest "Get bootstrap by trusted block hash":
     let
       lcNode1 = newLCNode(rng, 20302)
       lcNode2 = newLCNode(rng, 20303)
-      forks = getTestForkDigests()
+      forkDigests = testForkDigests
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -35,10 +31,12 @@ procSuite "Light client Content Network":
       (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
     let
-      bootstrap = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
-      bootstrappHeaderHash = hash_tree_root(bootstrap.header)
+      altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
+      bootstrap = ForkedLightClientBootstrap(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+      bootstrapHeaderHash = hash_tree_root(altairData.header)
       bootstrapKey = LightClientBootstrapKey(
-        blockHash: bootstrappHeaderHash
+        blockHash: bootstrapHeaderHash
       )
       bootstrapContentKey = ContentKey(
         contentType: lightClientBootstrap,
@@ -51,17 +49,17 @@ procSuite "Light client Content Network":
     lcNode2.portalProtocol().storeContent(
       bootstrapContentKeyEncoded,
       bootstrapContentId,
-      encodeBootstrapForked(forks.altair, bootstrap)
+      encodeForkedLightClientObject(bootstrap, forkDigests.altair)
     )
 
     let bootstrapFromNetworkResult =
       await lcNode1.lightClientNetwork.getLightClientBootstrap(
-        bootstrappHeaderHash
+        bootstrapHeaderHash
       )
 
     check:
       bootstrapFromNetworkResult.isOk()
-      bootstrapFromNetworkResult.get() == bootstrap
+      bootstrapFromNetworkResult.get().altairData == bootstrap.altairData
 
     await lcNode1.stop()
     await lcNode2.stop()
@@ -70,7 +68,7 @@ procSuite "Light client Content Network":
     let
       lcNode1 = newLCNode(rng, 20302)
       lcNode2 = newLCNode(rng, 20303)
-      forks = getTestForkDigests()
+      forkDigests = testForkDigests
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -80,19 +78,29 @@ procSuite "Light client Content Network":
       (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
     let
-      finalityUpdate = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
-      finalHeaderSlot = finalityUpdate.finalized_header.slot
-      finaloptimisticHeaderSlot = finalityUpdate.attested_header.slot
-      optimisticUpdate = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
-      optimisticHeaderSlot = optimisticUpdate.attested_header.slot
+      finalityUpdateData = SSZ.decode(
+        lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      finalityUpdate = ForkedLightClientFinalityUpdate(
+        kind: LightClientDataFork.Altair, altairData: finalityUpdateData)
+      finalizedHeaderSlot = finalityUpdateData.finalized_header.beacon.slot
+      finalizedOptimisticHeaderSlot =
+        finalityUpdateData.attested_header.beacon.slot
+
+      optimisticUpdateData = SSZ.decode(
+        lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+      optimisticUpdate = ForkedLightClientOptimisticUpdate(
+        kind: LightClientDataFork.Altair, altairData: optimisticUpdateData)
+      optimisticHeaderSlot = optimisticUpdateData.attested_header.beacon.slot
 
       finalityUpdateKey = finalityUpdateContentKey(
-        distinctBase(finalHeaderSlot),
-        distinctBase(finaloptimisticHeaderSlot)
+        distinctBase(finalizedHeaderSlot),
+        distinctBase(finalizedOptimisticHeaderSlot)
       )
       finalityKeyEnc = encode(finalityUpdateKey)
-      finalityUdpateId = toContentId(finalityKeyEnc)
-      optimistUpdateKey = optimisticUpdateContentKey(distinctBase(optimisticHeaderSlot))
+      finalityUpdateId = toContentId(finalityKeyEnc)
+
+      optimistUpdateKey = optimisticUpdateContentKey(
+        distinctBase(optimisticHeaderSlot))
       optimisticKeyEnc = encode(optimistUpdateKey)
       optimisticUpdateId = toContentId(optimisticKeyEnc)
 
@@ -101,30 +109,32 @@ procSuite "Light client Content Network":
     # the contentId coresponding to latest update content key
     lcNode2.portalProtocol().storeContent(
       finalityKeyEnc,
-      finalityUdpateId,
-      encodeFinalityUpdateForked(forks.altair, finalityUpdate)
+      finalityUpdateId,
+      encodeForkedLightClientObject(finalityUpdate, forkDigests.altair)
     )
 
     lcNode2.portalProtocol().storeContent(
       optimisticKeyEnc,
       optimisticUpdateId,
-      encodeOptimisticUpdateForked(forks.altair, optimisticUpdate)
+      encodeForkedLightClientObject(optimisticUpdate, forkDigests.altair)
     )
 
     let
-      finalityResult = await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
-        distinctBase(finalHeaderSlot) - 1,
-        distinctBase(finaloptimisticHeaderSlot) - 1
-      )
-      optimisticResult = await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
-        distinctBase(optimisticHeaderSlot) - 1
-      )
+      finalityResult =
+        await lcNode1.lightClientNetwork.getLightClientFinalityUpdate(
+          distinctBase(finalizedHeaderSlot) - 1,
+          distinctBase(finalizedOptimisticHeaderSlot) - 1
+        )
+      optimisticResult =
+        await lcNode1.lightClientNetwork.getLightClientOptimisticUpdate(
+          distinctBase(optimisticHeaderSlot) - 1
+        )
 
     check:
       finalityResult.isOk()
       optimisticResult.isOk()
-      finalityResult.get() == finalityUpdate
-      optimisticResult.get() == optimisticUpdate
+      finalityResult.get().altairData == finalityUpdate.altairData
+      optimisticResult.get().altairData == optimisticUpdate.altairData
 
     await lcNode1.stop()
     await lcNode2.stop()
@@ -133,7 +143,7 @@ procSuite "Light client Content Network":
     let
       lcNode1 = newLCNode(rng, 20302)
       lcNode2 = newLCNode(rng, 20303)
-      forks = getTestForkDigests()
+      forkDigests = testForkDigests
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -143,11 +153,16 @@ procSuite "Light client Content Network":
       (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
     let
-      update1 = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
-      update2 = SSZ.decode(lightClientUpdateBytes1, altair.LightClientUpdate)
+      altairData1 = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      altairData2 = SSZ.decode(lightClientUpdateBytes1, altair.LightClientUpdate)
+      update1 = ForkedLightClientUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData1)
+      update2 = ForkedLightClientUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData2)
       updates = @[update1, update2]
-      content = encodeLightClientUpdatesForked(forks.altair, updates)
-      startPeriod = update1.attested_header.slot.sync_committee_period
+      content = encodeLightClientUpdatesForked(forkDigests.altair, updates)
+      startPeriod =
+        altairData1.attested_header.beacon.slot.sync_committee_period
       contentKey = ContentKey(
         contentType: lightClientUpdate,
         lightClientUpdateKey: LightClientUpdateKey(
@@ -176,7 +191,8 @@ procSuite "Light client Content Network":
     let updatesFromPeer = updatesResult.get()
 
     check:
-      updatesFromPeer == updates
+      updatesFromPeer.asSeq()[0].altairData == updates[0].altairData
+      updatesFromPeer.asSeq()[1].altairData == updates[1].altairData
 
     await lcNode1.stop()
     await lcNode2.stop()

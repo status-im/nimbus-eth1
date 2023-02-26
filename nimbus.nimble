@@ -84,7 +84,7 @@ task fluffy_test, "Run fluffy tests":
   # Running tests with a low `mergeBlockNumber` to make the tests faster.
   # Using the real mainnet merge block number is not realistic for these tests.
   test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false -d:mergeBlockNumber:38130"
-  # test "fluffy/tests/beacon_light_client_tests", "all_beacon_light_client_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
+  test "fluffy/tests/beacon_light_client_tests", "all_beacon_light_client_tests", "-d:chronicles_log_level=ERROR -d:chronosStrictException -d:nimbus_db_backend=sqlite -d:PREFER_BLST_SHA256=false"
 
 task fluffy_tools, "Build fluffy tools":
   buildBinary "beacon_chain_bridge", "fluffy/tools/bridge/", "-d:chronicles_log_level=TRACE -d:chronosStrictException -d:PREFER_BLST_SHA256=false -d:libp2p_pki_schemes=secp256k1"

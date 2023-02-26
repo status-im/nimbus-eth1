@@ -1,5 +1,5 @@
-# beacon hain light client
-# Copyright (c) 2022 Status Research & Development GmbH
+# Nimbus - Portal Network
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,31 +21,39 @@ logScope: topics = "lightcl"
 
 type
   LightClientHeaderCallback* =
-    proc(lightClient: LightClient, header: BeaconBlockHeader) {.
-      gcsafe, raises: [Defect].}
+    proc(lightClient: LightClient, header: ForkedLightClientHeader) {.
+      gcsafe, raises: [].}
 
   LightClient* = ref object
     network: LightClientNetwork
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
     getBeaconTime: GetBeaconTimeFn
-    store: ref Option[LightClientStore]
+    store: ref ForkedLightClientStore
     processor: ref LightClientProcessor
     manager: LightClientManager
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
     trustedBlockRoot*: Option[Eth2Digest]
 
-func finalizedHeader*(lightClient: LightClient): Opt[BeaconBlockHeader] =
-  if lightClient.store[].isSome:
-    ok lightClient.store[].get.finalized_header
-  else:
-    err()
+func finalizedHeader*(
+    lightClient: LightClient): ForkedLightClientHeader =
+  withForkyStore(lightClient.store[]):
+    when lcDataFork > LightClientDataFork.None:
+      var header = ForkedLightClientHeader(kind: lcDataFork)
+      header.forky(lcDataFork) = forkyStore.finalized_header
+      header
+    else:
+      default(ForkedLightClientHeader)
 
-func optimisticHeader*(lightClient: LightClient): Opt[BeaconBlockHeader] =
-  if lightClient.store[].isSome:
-    ok lightClient.store[].get.optimistic_header
-  else:
-    err()
+func optimisticHeader*(
+    lightClient: LightClient): ForkedLightClientHeader =
+  withForkyStore(lightClient.store[]):
+    when lcDataFork > LightClientDataFork.None:
+      var header = ForkedLightClientHeader(kind: lcDataFork)
+      header.forky(lcDataFork) = forkyStore.optimistic_header
+      header
+    else:
+      default(ForkedLightClientHeader)
 
 proc new*(
     T: type LightClient,
@@ -63,7 +71,7 @@ proc new*(
     cfg: cfg,
     forkDigests: forkDigests,
     getBeaconTime: getBeaconTime,
-    store: (ref Option[LightClientStore])())
+    store: (ref ForkedLightClientStore)())
 
   func getTrustedBlockRoot(): Option[Eth2Digest] =
     lightClient.trustedBlockRoot
@@ -74,12 +82,12 @@ proc new*(
   proc onFinalizedHeader() =
     if lightClient.onFinalizedHeader != nil:
       lightClient.onFinalizedHeader(
-        lightClient, lightClient.finalizedHeader.get)
+        lightClient, lightClient.finalizedHeader)
 
   proc onOptimisticHeader() =
     if lightClient.onOptimisticHeader != nil:
       lightClient.onOptimisticHeader(
-        lightClient, lightClient.optimisticHeader.get)
+        lightClient, lightClient.optimisticHeader)
 
   lightClient.processor = LightClientProcessor.new(
     dumpEnabled, dumpDirInvalid, dumpDirIncoming,
@@ -87,47 +95,50 @@ proc new*(
     lightClient.store, getBeaconTime, getTrustedBlockRoot,
     onStoreInitialized, onFinalizedHeader, onOptimisticHeader)
 
-  proc lightClientVerifier(obj: SomeLightClientObject):
+  proc lightClientVerifier(obj: SomeForkedLightClientObject):
       Future[Result[void, VerifierError]] =
     let resfut = newFuture[Result[void, VerifierError]]("lightClientVerifier")
     lightClient.processor[].addObject(MsgSource.gossip, obj, resfut)
     resfut
 
-  proc bootstrapVerifier(obj: altair.LightClientBootstrap): auto =
+  proc bootstrapVerifier(obj: ForkedLightClientBootstrap): auto =
     lightClientVerifier(obj)
-  proc updateVerifier(obj: altair.LightClientUpdate): auto =
+  proc updateVerifier(obj: ForkedLightClientUpdate): auto =
     lightClientVerifier(obj)
-  proc finalityVerifier(obj: altair.LightClientFinalityUpdate): auto =
+  proc finalityVerifier(obj: ForkedLightClientFinalityUpdate): auto =
     lightClientVerifier(obj)
-  proc optimisticVerifier(obj: altair.LightClientOptimisticUpdate): auto =
+  proc optimisticVerifier(obj: ForkedLightClientOptimisticUpdate): auto =
     lightClientVerifier(obj)
 
   func isLightClientStoreInitialized(): bool =
-    lightClient.store[].isSome
+    lightClient.store[].kind > LightClientDataFork.None
 
   func isNextSyncCommitteeKnown(): bool =
-    if lightClient.store[].isSome:
-      lightClient.store[].get.is_next_sync_committee_known
-    else:
-      false
+    withForkyStore(lightClient.store[]):
+      when lcDataFork > LightClientDataFork.None:
+        forkyStore.is_next_sync_committee_known
+      else:
+        false
 
   func getFinalizedSlot(): Slot =
-    if lightClient.store[].isSome:
-      lightClient.store[].get.finalized_header.slot
-    else:
-      GENESIS_SLOT
+    withForkyStore(lightClient.store[]):
+      when lcDataFork > LightClientDataFork.None:
+        forkyStore.finalized_header.beacon.slot
+      else:
+        GENESIS_SLOT
 
-  func getOptimistiSlot(): Slot =
-    if lightClient.store[].isSome:
-      lightClient.store[].get.optimistic_header.slot
-    else:
-      GENESIS_SLOT
+  func getOptimisticSlot(): Slot =
+    withForkyStore(lightClient.store[]):
+      when lcDataFork > LightClientDataFork.None:
+        forkyStore.optimistic_header.beacon.slot
+      else:
+        GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
     lightClient.network, rng, getTrustedBlockRoot,
     bootstrapVerifier, updateVerifier, finalityVerifier, optimisticVerifier,
     isLightClientStoreInitialized, isNextSyncCommitteeKnown,
-    getFinalizedSlot, getOptimistiSlot, getBeaconTime)
+    getFinalizedSlot, getOptimisticSlot, getBeaconTime)
 
   lightClient
 
@@ -153,7 +164,7 @@ proc start*(lightClient: LightClient) =
 
 proc resetToFinalizedHeader*(
     lightClient: LightClient,
-    header: BeaconBlockHeader,
-    current_sync_committee: SyncCommittee) =
+    header: ForkedLightClientHeader,
+    current_sync_committee: altair.SyncCommittee) =
   lightClient.processor[].resetToFinalizedHeader(header, current_sync_committee)
 

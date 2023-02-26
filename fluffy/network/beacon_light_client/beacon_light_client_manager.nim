@@ -11,7 +11,8 @@ import
   std/typetraits,
   chronos, chronicles, stew/[base10, results],
   eth/p2p/discoveryv5/random2,
-  beacon_chain/spec/datatypes/altair,
+  beacon_chain/spec/datatypes/[phase0, altair, bellatrix, capella, deneb],
+  beacon_chain/spec/[forks_light_client, digest],
   beacon_chain/beacon_clock,
   "."/[light_client_network, light_client_content]
 
@@ -23,39 +24,38 @@ logScope:
 type
   Nothing = object
   SlotInfo = object
-    finalSlot: Slot
+    finalizedSlot: Slot
     optimisticSlot: Slot
 
   NetRes*[T] = Result[T, void]
   Endpoint[K, V] =
     (K, V) # https://github.com/nim-lang/Nim/issues/19531
   Bootstrap =
-    Endpoint[Eth2Digest, altair.LightClientBootstrap]
+    Endpoint[Eth2Digest, ForkedLightClientBootstrap]
   UpdatesByRange =
-    Endpoint[Slice[SyncCommitteePeriod], altair.LightClientUpdate]
+    Endpoint[Slice[SyncCommitteePeriod], ForkedLightClientUpdate]
   FinalityUpdate =
-    Endpoint[SlotInfo, altair.LightClientFinalityUpdate]
+    Endpoint[SlotInfo, ForkedLightClientFinalityUpdate]
   OptimisticUpdate =
-    Endpoint[Slot, altair.LightClientOptimisticUpdate]
+    Endpoint[Slot, ForkedLightClientOptimisticUpdate]
 
   ValueVerifier[V] =
-    proc(v: V): Future[Result[void, VerifierError]] {.gcsafe, raises: [Defect].}
+    proc(v: V): Future[Result[void, VerifierError]] {.gcsafe, raises: [].}
   BootstrapVerifier* =
-    ValueVerifier[altair.LightClientBootstrap]
+    ValueVerifier[ForkedLightClientBootstrap]
   UpdateVerifier* =
-    ValueVerifier[altair.LightClientUpdate]
+    ValueVerifier[ForkedLightClientUpdate]
   FinalityUpdateVerifier* =
-    ValueVerifier[altair.LightClientFinalityUpdate]
+    ValueVerifier[ForkedLightClientFinalityUpdate]
   OptimisticUpdateVerifier* =
-    ValueVerifier[altair.LightClientOptimisticUpdate]
+    ValueVerifier[ForkedLightClientOptimisticUpdate]
 
   GetTrustedBlockRootCallback* =
-    proc(): Option[Eth2Digest] {.gcsafe, raises: [Defect].}
+    proc(): Option[Eth2Digest] {.gcsafe, raises: [].}
   GetBoolCallback* =
-    proc(): bool {.gcsafe, raises: [Defect].}
-
+    proc(): bool {.gcsafe, raises: [].}
   GetSlotCallback* =
-    proc(): Slot {.gcsafe, raises: [Defect].}
+    proc(): Slot {.gcsafe, raises: [].}
 
   LightClientManager* = object
     network: LightClientNetwork
@@ -103,6 +103,12 @@ func init*(
     getBeaconTime: getBeaconTime
   )
 
+proc getFinalizedPeriod(self: LightClientManager): SyncCommitteePeriod =
+  self.getFinalizedSlot().sync_committee_period
+
+proc getOptimisticPeriod(self: LightClientManager): SyncCommitteePeriod =
+  self.getOptimisticSlot().sync_committee_period
+
 proc isGossipSupported*(
     self: LightClientManager,
     period: SyncCommitteePeriod
@@ -112,7 +118,7 @@ proc isGossipSupported*(
     return false
 
   let
-    finalizedPeriod = self.getFinalizedSlot().sync_committee_period
+    finalizedPeriod = self.getFinalizedPeriod()
     isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown()
   if isNextSyncCommitteeKnown:
     period <= finalizedPeriod + 1
@@ -124,11 +130,11 @@ proc doRequest(
     e: typedesc[Bootstrap],
     n: LightClientNetwork,
     blockRoot: Eth2Digest
-): Future[NetRes[altair.LightClientBootstrap]] =
+): Future[NetRes[ForkedLightClientBootstrap]] =
   n.getLightClientBootstrap(blockRoot)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
-type LightClientUpdatesByRangeResponse = NetRes[seq[altair.LightClientUpdate]]
+type LightClientUpdatesByRangeResponse = NetRes[ForkedLightClientUpdateList]
 proc doRequest(
     e: typedesc[UpdatesByRange],
     n: LightClientNetwork,
@@ -136,7 +142,6 @@ proc doRequest(
 ): Future[LightClientUpdatesByRangeResponse] =
   let
     startPeriod = periods.a
-    lastPeriod = periods.b
     reqCount = min(periods.len, MAX_REQUEST_LIGHT_CLIENT_UPDATES).uint64
   n.getLightClientUpdatesByRange(
     distinctBase(startPeriod),
@@ -148,9 +153,9 @@ proc doRequest(
     e: typedesc[FinalityUpdate],
     n: LightClientNetwork,
     slotInfo: SlotInfo
-): Future[NetRes[altair.LightClientFinalityUpdate]] =
+): Future[NetRes[ForkedLightClientFinalityUpdate]] =
   n.getLightClientFinalityUpdate(
-    distinctBase(slotInfo.finalSlot),
+    distinctBase(slotInfo.finalizedSlot),
     distinctBase(slotInfo.optimisticSlot)
   )
 
@@ -159,27 +164,27 @@ proc doRequest(
     e: typedesc[OptimisticUpdate],
     n: LightClientNetwork,
     optimisticSlot: Slot
-): Future[NetRes[altair.LightClientOptimisticUpdate]] =
+): Future[NetRes[ForkedLightClientOptimisticUpdate]] =
   n.getLightClientOptimisticUpdate(distinctBase(optimisticSlot))
 
 template valueVerifier[E](
     self: LightClientManager,
     e: typedesc[E]
 ): ValueVerifier[E.V] =
-  when E.V is altair.LightClientBootstrap:
+  when E.V is ForkedLightClientBootstrap:
     self.bootstrapVerifier
-  elif E.V is altair.LightClientUpdate:
+  elif E.V is ForkedLightClientUpdate:
     self.updateVerifier
-  elif E.V is altair.LightClientFinalityUpdate:
+  elif E.V is ForkedLightClientFinalityUpdate:
     self.finalityUpdateVerifier
-  elif E.V is altair.LightClientOptimisticUpdate:
+  elif E.V is ForkedLightClientOptimisticUpdate:
     self.optimisticUpdateVerifier
   else: static: doAssert false
 
 iterator values(v: auto): auto =
   ## Local helper for `workerTask` to share the same implementation for both
   ## scalar and aggregate values, by treating scalars as 1-length aggregates.
-  when v is seq:
+  when v is List:
     for i in v:
       yield i
   else:
@@ -199,7 +204,7 @@ proc workerTask[E](
       else:
         await E.doRequest(self.network, key)
     if value.isOk:
-      for val in value.get.values:
+      for val in value.get().values:
         let res = await self.valueVerifier(E)(val)
         if res.isErr:
           case res.error
@@ -208,15 +213,26 @@ proc workerTask[E](
             return didProgress
           of VerifierError.Duplicate:
             # Ignore, a concurrent request may have already fulfilled this
-            when E.V is altair.LightClientBootstrap:
+            when E.V is ForkedLightClientBootstrap:
               didProgress = true
             else:
               discard
           of VerifierError.UnviableFork:
-            notice "Received value from an unviable fork", value = val.shortLog
+            withForkyObject(val):
+              when lcDataFork > LightClientDataFork.None:
+                notice "Received value from an unviable fork",
+                  value = forkyObject, endpoint = E.name
+              else:
+                notice "Received value from an unviable fork",
+                  endpoint = E.name
             return didProgress
           of VerifierError.Invalid:
-            warn "Received invalid value", value = val.shortLog
+            withForkyObject(val):
+              when lcDataFork > LightClientDataFork.None:
+                warn "Received invalid value", value = forkyObject.shortLog,
+                  endpoint = E.name
+              else:
+                warn "Received invalid value", endpoint = E.name
             return didProgress
         else:
           didProgress = true
@@ -236,7 +252,7 @@ proc query[E](
     key: E.K
 ): Future[bool] =
   # TODO Consider making few requests concurrently
-  return self.workertask(e, key)
+  return self.workerTask(e, key)
 
 template query(
     self: LightClientManager,
@@ -305,9 +321,9 @@ proc loop(self: LightClientManager) {.async.} =
     # Fetch updates
     var allowWaitNextPeriod = false
     let
-      finalSlot = self.getFinalizedSlot()
+      finalizedSlot = self.getFinalizedSlot()
       optimisticSlot = self.getOptimisticSlot()
-      finalized = finalSlot.sync_committee_period
+      finalized = finalizedSlot.sync_committee_period
       optimistic = optimisticSlot.sync_committee_period
       current = wallTime.slotOrZero().sync_committee_period
       isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown()
@@ -322,7 +338,7 @@ proc loop(self: LightClientManager) {.async.} =
           await self.query(UpdatesByRange, finalized + 1 ..< current)
         elif finalized != optimistic:
           await self.query(FinalityUpdate, SlotInfo(
-            finalSlot: finalSlot,
+            finalizedSlot: finalizedSlot,
             optimisticSlot: optimisticSlot
           ))
         else:
