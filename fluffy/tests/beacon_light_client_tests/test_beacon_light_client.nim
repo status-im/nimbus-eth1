@@ -8,28 +8,25 @@
 {.push raises: [].}
 
 import
-  std/options,
   testutils/unittests, chronos,
-  eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types_rlp,
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/spec/helpers,
   beacon_chain/beacon_clock,
   beacon_chain/conf,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/beacon_light_client/[
-    light_client_content,
-    beacon_light_client
-  ],
+  ../../network/beacon_light_client/[light_client_content, beacon_light_client],
   "."/[light_client_test_data, light_client_test_helpers]
 
-procSuite "Portal Light client":
+procSuite "Portal Beacon Light Client":
   let rng = newRng()
 
-  proc headerCallback(q: AsyncQueue[BeaconBlockHeader]): LightClientHeaderCallback =
+  proc headerCallback(
+      q: AsyncQueue[ForkedLightClientHeader]): LightClientHeaderCallback =
     return (
-      proc (lightClient: LightClient, finalizedHeader: BeaconBlockHeader) {.gcsafe, raises: [].} =
+      proc (lightClient: LightClient, finalizedHeader: ForkedLightClientHeader)
+        {.gcsafe, raises: [].} =
         try:
           q.putNoWait(finalizedHeader)
         except AsyncQueueFullError as exc:
@@ -44,8 +41,8 @@ procSuite "Portal Light client":
 
   asyncTest "Start and retrieve bootstrap":
     let
-      finalHeaders = newAsyncQueue[BeaconBlockHeader]()
-      optimisticHeaders = newAsyncQueue[BeaconBlockHeader]()
+      finalizedHeaders = newAsyncQueue[ForkedLightClientHeader]()
+      optimisticHeaders = newAsyncQueue[ForkedLightClientHeader]()
       # Test data is retrieved from mainnet
       metadata = loadMainnetData()
       genesisState =
@@ -68,8 +65,10 @@ procSuite "Portal Light client":
 
       lcNode1 = newLCNode(rng, 20302, forkDigests[])
       lcNode2 = newLCNode(rng, 20303, forkDigests[])
-      bootstrap = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
-      bootstrapHeaderHash = hash_tree_root(bootstrap.header)
+      altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
+      bootstrap = ForkedLightClientBootstrap(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+      bootstrapHeaderHash = hash_tree_root(altairData.header)
 
     check:
       lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
@@ -93,7 +92,7 @@ procSuite "Portal Light client":
     lcNode2.portalProtocol().storeContent(
       bootstrapContentKeyEncoded,
       bootstrapContentId,
-      encodeBootstrapForked(forkDigests.altair, bootstrap)
+      encodeForkedLightClientObject(bootstrap, forkDigests.altair)
     )
 
     let lc = LightClient.new(
@@ -106,21 +105,22 @@ procSuite "Portal Light client":
       LightClientFinalizationMode.Optimistic
     )
 
-    lc.onFinalizedHeader = headerCallback(finalHeaders)
+    lc.onFinalizedHeader = headerCallback(finalizedHeaders)
     lc.onOptimisticHeader = headerCallback(optimisticHeaders)
     lc.trustedBlockRoot = some bootstrapHeaderHash
 
-    # After start light client will try to retrieve bootstrap for given
-    # trustedBlockRoot
+    # When running start the beacon light client will first try to retrieve the
+    # bootstrap for given trustedBlockRoot
     lc.start()
 
-    # wait till light client retrieves bootstrap. Upon receving bootstrap
-    # both callbacks should be called onFinalizedHeader and onOptimisticHeader
+    # Wait untill the beacon light client retrieves the bootstrap. Upon receving
+    # the bootstrap both onFinalizedHeader and onOptimisticHeader callbacks
+    # will be called.
     let
-      receivedFinalHeader = await finalHeaders.get()
+      receivedFinalHeader = await finalizedHeaders.get()
       receivedOptimisticHeader = await optimisticHeaders.get()
 
     check:
-      hash_tree_root(receivedFinalHeader) == bootstrapHeaderHash
-      hash_tree_root(receivedOptimisticHeader) == bootstrapHeaderHash
+      hash_tree_root(receivedFinalHeader.altairData) == bootstrapHeaderHash
+      hash_tree_root(receivedOptimisticHeader.altairData) == bootstrapHeaderHash
 

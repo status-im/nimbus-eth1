@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,80 +9,100 @@
 
 import
   unittest2,
-  stint,
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/beacon_light_client/light_client_content,
-  ./light_client_test_data
+  "."/[light_client_test_data, light_client_test_helpers]
 
-suite "Test light client contentEncodings":
-  var forks: ForkDigests
-  forks.phase0 = ForkDigest([0'u8, 0, 0, 1])
-  forks.altair = ForkDigest([0'u8, 0, 0, 2])
-  forks.bellatrix = ForkDigest([0'u8, 0, 0, 3])
-  forks.capella = ForkDigest([0'u8, 0, 0, 4])
-  forks.eip4844 = ForkDigest([0'u8, 0, 0, 5])
+suite "Beacon Light Client Content Encodings":
+  let forkDigests = testForkDigests
 
-  test "Light client bootstrap correct":
+  test "LightClientBootstrap":
     let
-      bootstrap = SSZ.decode(bootStrapBytes, altair.LightClientBootstrap)
-      encodedForked = encodeForked(altair.LightClientBootstrap, forks.altair, bootstrap)
-      decodedResult = decodeBootstrapForked(forks, encodedForked)
+      altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
+      bootstrap = ForkedLightClientBootstrap(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+
+      encoded = encodeForkedLightClientObject(bootstrap, forkDigests.altair)
+      decoded = decodeLightClientBootstrapForked(forkDigests, encoded)
 
     check:
-      decodedResult.isOk()
-      decodedResult.get() == bootstrap
+      decoded.isOk()
+      decoded.get().kind == LightClientDataFork.Altair
+      decoded.get().altairData == altairData
 
-  test "Light client update correct":
+  test "LightClientUpdate":
     let
-      update = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
-      encodedForked = encodeForked(altair.LightClientUpdate, forks.altair, update)
-      decodedResult = decodeLightClientUpdateForked(forks, encodedForked)
+      altairData = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      update = ForkedLightClientUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+
+      encoded = encodeForkedLightClientObject(update, forkDigests.altair)
+      decoded = decodeLightClientUpdateForked(forkDigests, encoded)
 
     check:
-      decodedResult.isOk()
-      decodedResult.get() == update
+      decoded.isOk()
+      decoded.get().kind == LightClientDataFork.Altair
+      decoded.get().altairData == altairData
 
-  test "Light client update list correct":
+  test "LightClientUpdateList":
     let
-      update = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      altairData = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
+      update = ForkedLightClientUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData)
       updateList = @[update, update]
-      encodedForked = encodeLightClientUpdatesForked(forks.altair, updateList)
-      decodedForked = decodeLightClientUpdatesForked(forks, encodedForked)
+
+      encoded = encodeLightClientUpdatesForked(forkDigests.altair, updateList)
+      decoded = decodeLightClientUpdatesByRange(forkDigests, encoded)
 
     check:
-      decodedForked.isOk()
-      decodedForked.get() == updateList
+      decoded.isOk()
+      decoded.get().asSeq()[0].altairData == updateList[0].altairData
+      decoded.get().asSeq()[1].altairData == updateList[1].altairData
 
-  test "Light client finality update correct":
+  test "LightClientFinalityUpdate":
     let
-      update = SSZ.decode(lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
-      encodedForked = encodeForked(altair.LightClientFinalityUpdate, forks.altair, update)
-      decodedResult = decodeLightClientFinalityUpdateForked(forks, encodedForked)
+      altairData = SSZ.decode(
+        lightClientFinalityUpdateBytes, altair.LightClientFinalityUpdate)
+      update = ForkedLightClientFinalityUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+
+      encoded = encodeForkedLightClientObject(update, forkDigests.altair)
+      decoded = decodeLightClientFinalityUpdateForked(forkDigests, encoded)
 
     check:
-      decodedResult.isOk()
-      decodedResult.get() == update
+      decoded.isOk()
+      decoded.get().kind == LightClientDataFork.Altair
+      decoded.get().altairData == altairData
 
-  test "Light client optimistic update correct":
+  test "LightClientOptimisticUpdate":
     let
-      update = SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
-      encodedForked = encodeForked(altair.LightClientOptimisticUpdate, forks.altair, update)
-      decodedResult = decodeLightClientOptimisticUpdateForked(forks, encodedForked)
+      altairData = SSZ.decode(
+        lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)
+      update = ForkedLightClientOptimisticUpdate(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+
+      encoded = encodeForkedLightClientObject(update, forkDigests.altair)
+      decoded = decodeLightClientOptimisticUpdateForked(forkDigests, encoded)
 
     check:
-      decodedResult.isOk()
-      decodedResult.get() == update
+      decoded.isOk()
+      decoded.get().kind == LightClientDataFork.Altair
+      decoded.get().altairData == altairData
 
-  test "Light client bootstrap failures":
+  test "Invalid LightClientBootstrap":
     let
-      bootstrap = SSZ.decode(bootStrapBytes, altair.LightClientBootstrap)
-      encodedTooEarlyFork = encodeBootstrapForked(forks.phase0, bootstrap)
-      encodedUnknownFork = encodeBootstrapForked(
-        ForkDigest([0'u8, 0, 0, 6]), bootstrap
-      )
+      altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
+      # TODO: This doesn't make much sense with current API
+      bootstrap = ForkedLightClientBootstrap(
+        kind: LightClientDataFork.Altair, altairData: altairData)
+
+      encodedTooEarlyFork = encodeForkedLightClientObject(
+        bootstrap, forkDigests.phase0)
+      encodedUnknownFork = encodeForkedLightClientObject(
+        bootstrap, ForkDigest([0'u8, 0, 0, 6]))
 
     check:
-      decodeBootstrapForked(forks, @[]).isErr()
-      decodeBootstrapForked(forks, encodedTooEarlyFork).isErr()
-      decodeBootstrapForked(forks, encodedUnknownFork).isErr()
+      decodeLightClientBootstrapForked(forkDigests, @[]).isErr()
+      decodeLightClientBootstrapForked(forkDigests, encodedTooEarlyFork).isErr()
+      decodeLightClientBootstrapForked(forkDigests, encodedUnknownFork).isErr()

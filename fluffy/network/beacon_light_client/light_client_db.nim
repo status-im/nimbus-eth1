@@ -89,8 +89,8 @@ proc new*(
 # TODO Add checks that uint64 can be safely casted to int64
 proc getLightClientUpdates(
     db: LightClientDb, start: uint64, to: uint64
-): LightClientUpdateList =
-  var updates: LightClientUpdateList
+): ForkedLightClientUpdateBytesList =
+  var updates: ForkedLightClientUpdateBytesList
   var update: seq[byte]
   for res in db.lcuStore.getBulkStmt.exec((start.int64, to.int64), update):
     res.expect("SQL query OK")
@@ -168,7 +168,7 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
   return (proc(
       contentKey: ByteList,
       contentId: ContentId,
-      content: seq[byte]) {.raises: [Defect], gcsafe.} =
+      content: seq[byte]) {.raises: [], gcsafe.} =
     let contentKeyResult = decode(contentKey)
       # TODO: as this should not fail, maybe it is better to raiseAssert ?
     if contentKeyResult.isNone():
@@ -182,7 +182,7 @@ proc createStoreHandler*(db: LightClientDb): DbStoreHandler =
       # - that updates start from startPeriod of content key
       var period = ck.lightClientUpdateKey.startPeriod
 
-      let updatesResult = decodeLightClientUpdatesForkedAsList(content)
+      let updatesResult = decodeSsz(content, ForkedLightClientUpdateBytesList)
 
       if updatesResult.isErr:
         return
