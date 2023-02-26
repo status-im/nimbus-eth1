@@ -211,7 +211,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         wallSlot = getBeaconTime().slotOrZero
 
       withBlck(signedBlock):
-        when stateFork >= BeaconStateFork.Bellatrix:
+        when stateFork >= ConsensusFork.Bellatrix:
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
 
@@ -325,7 +325,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
 
       targetGossipState = getTargetGossipState(
         slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.EIP4844_FORK_EPOCH, isBehind)
+        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, isBehind)
 
     template currentGossipState(): auto = blocksGossipState
     if currentGossipState == targetGossipState:
