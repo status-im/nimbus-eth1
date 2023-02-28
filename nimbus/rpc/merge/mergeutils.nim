@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[typetraits, times, strutils],
+  std/[typetraits, times, strutils, sequtils],
   nimcrypto/[hash, sha2],
   web3/engine_api_types,
   json_rpc/errors,
@@ -17,7 +17,7 @@ import
   ../../constants,
   ./mergetypes
 
-proc computePayloadId*(headBlockHash: Hash256, params: PayloadAttributesV1): PayloadID =
+proc computePayloadId*(headBlockHash: Hash256, params: PayloadAttributesV1 | PayloadAttributesV2): PayloadID =
   var dest: Hash256
   var ctx: sha256
   ctx.init()
@@ -25,9 +25,21 @@ proc computePayloadId*(headBlockHash: Hash256, params: PayloadAttributesV1): Pay
   ctx.update(toBytesBE distinctBase params.timestamp)
   ctx.update(distinctBase params.prevRandao)
   ctx.update(distinctBase params.suggestedFeeRecipient)
+  # FIXME-Adam: Do we need to include the withdrawals in this calculation?
+  # https://github.com/ethereum/go-ethereum/pull/25838#discussion_r1024340383
+  # "The execution api specs define that this ID can be completely random. It
+  # used to be derived from payload attributes in the past, but maybe it's
+  # time to use a randomized ID to not break it with any changes to the
+  # attributes?"
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
+
+proc append*(w: var RlpWriter, q: Quantity) =
+  w.append(uint64(q))
+
+proc append*(w: var RlpWriter, a: Address) =
+  w.append(distinctBase(a))
 
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
@@ -41,33 +53,69 @@ proc calcRootHashRlp*(items: openArray[seq[byte]]): Hash256 =
     tr.put(rlp.encode(i), t)
   return tr.rootHash()
 
-proc toBlockHeader*(payload: ExecutionPayloadV1): EthBlockHeader =
+proc calcWithdrawalsRoot(withdrawals: seq[WithdrawalV1]): Hash256 =
+  calcRootHashRlp(withdrawals.map(writer.encode))
+
+func maybeWithdrawals*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): Option[seq[WithdrawalV1]] =
+  when payload is ExecutionPayloadV1:
+    none[seq[WithdrawalV1]]()
+  else:
+    some(payload.withdrawals)
+
+proc toBlockHeader*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): EthBlockHeader =
   let transactions = seq[seq[byte]](payload.transactions)
   let txRoot = calcRootHashRlp(transactions)
-
+  
   EthBlockHeader(
-    parentHash    : payload.parentHash.asEthHash,
-    ommersHash    : EMPTY_UNCLE_HASH,
-    coinbase      : EthAddress payload.feeRecipient,
-    stateRoot     : payload.stateRoot.asEthHash,
-    txRoot        : txRoot,
-    receiptRoot   : payload.receiptsRoot.asEthHash,
-    bloom         : distinctBase(payload.logsBloom),
-    difficulty    : default(DifficultyInt),
-    blockNumber   : payload.blockNumber.distinctBase.u256,
-    gasLimit      : payload.gasLimit.unsafeQuantityToInt64,
-    gasUsed       : payload.gasUsed.unsafeQuantityToInt64,
-    timestamp     : fromUnix payload.timestamp.unsafeQuantityToInt64,
-    extraData     : bytes payload.extraData,
-    mixDigest     : payload.prevRandao.asEthHash, # EIP-4399 redefine `mixDigest` -> `prevRandao`
-    nonce         : default(BlockNonce),
-    fee           : some payload.baseFeePerGas
+    parentHash     : payload.parentHash.asEthHash,
+    ommersHash     : EMPTY_UNCLE_HASH,
+    coinbase       : EthAddress payload.feeRecipient,
+    stateRoot      : payload.stateRoot.asEthHash,
+    txRoot         : txRoot,
+    receiptRoot    : payload.receiptsRoot.asEthHash,
+    bloom          : distinctBase(payload.logsBloom),
+    difficulty     : default(DifficultyInt),
+    blockNumber    : payload.blockNumber.distinctBase.u256,
+    gasLimit       : payload.gasLimit.unsafeQuantityToInt64,
+    gasUsed        : payload.gasUsed.unsafeQuantityToInt64,
+    timestamp      : fromUnix payload.timestamp.unsafeQuantityToInt64,
+    extraData      : bytes payload.extraData,
+    mixDigest      : payload.prevRandao.asEthHash, # EIP-4399 redefine `mixDigest` -> `prevRandao`
+    nonce          : default(BlockNonce),
+    fee            : some payload.baseFeePerGas,
+    withdrawalsRoot: payload.maybeWithdrawals.map(calcWithdrawalsRoot) # EIP-4895
   )
 
-proc toBlockBody*(payload: ExecutionPayloadV1): BlockBody =
+proc toWithdrawal*(w: WithdrawalV1): Withdrawal =
+  Withdrawal(
+    index: uint64(w.index),
+    validatorIndex: uint64(w.validatorIndex),
+    address: distinctBase(w.address),
+    amount: uint64(w.amount) # AARDVARK: is this wei or gwei or what?
+  )
+
+proc toWithdrawalV1*(w: Withdrawal): WithdrawalV1 =
+  WithdrawalV1(
+    index: Quantity(w.index),
+    validatorIndex: Quantity(w.validatorIndex),
+    address: Address(w.address),
+    amount: Quantity(w.amount) # AARDVARK: is this wei or gwei or what?
+  )
+
+proc toTypedTransaction*(tx: Transaction): TypedTransaction =
+  TypedTransaction(rlp.encode(tx))
+
+proc toBlockBody*(payload: ExecutionPayloadV1 | ExecutionPayloadV2): BlockBody =
   result.transactions.setLen(payload.transactions.len)
   for i, tx in payload.transactions:
     result.transactions[i] = rlp.decode(distinctBase tx, Transaction)
+  when payload is ExecutionPayloadV2:
+    let ws = payload.maybeWithdrawals
+    result.withdrawals =
+      if ws.isSome:
+        some(ws.get.map(toWithdrawal))
+      else:
+        none[seq[Withdrawal]]()
 
 proc `$`*(x: BlockHash): string =
   toHex(x)
@@ -79,7 +127,10 @@ proc validateBlockHash*(header: EthBlockHeader, gotHash: Hash256): Result[void, 
   let wantHash = header.blockHash
   if wantHash != gotHash:
     let status = PayloadStatusV1(
-      status: PayloadExecutionStatus.invalid_block_hash,
+      # This used to say invalid_block_hash, but see here:
+      # https://github.com/ethereum/execution-apis/blob/main/src/engine/shanghai.md#engine_newpayloadv2
+      # "INVALID_BLOCK_HASH status value is supplanted by INVALID."
+      status: PayloadExecutionStatus.invalid,
       validationError: some("blockhash mismatch, want $1, got $2" % [$wantHash, $gotHash])
     )
     return err(status)

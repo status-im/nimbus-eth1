@@ -8,11 +8,12 @@
 # those terms.
 
 import
-  std/[typetraits, times, strutils],
+  std/[typetraits, times, strutils, sequtils, sets],
   stew/[results, byteutils],
   json_rpc/rpcserver,
   web3/[conversions, engine_api_types],
   eth/rlp,
+  eth/common/eth_types_rlp,
   ../common/common,
   ".."/core/chain/[chain_desc, persist_blocks],
   ../constants,
@@ -25,6 +26,26 @@ import
   chronicles
 
 {.push raises: [].}
+
+
+func toPayloadAttributesV1OrPayloadAttributesV2*(a: PayloadAttributesV1OrV2): Result[PayloadAttributesV1, PayloadAttributesV2] =
+  if a.withdrawals.isNone:
+    ok(
+      PayloadAttributesV1(
+        timestamp: a.timestamp,
+        prevRandao: a.prevRandao,
+        suggestedFeeRecipient: a.suggestedFeeRecipient
+      )
+    )
+  else:
+    err(
+      PayloadAttributesV2(
+        timestamp: a.timestamp,
+        prevRandao: a.prevRandao,
+        suggestedFeeRecipient: a.suggestedFeeRecipient,
+        withdrawals: a.withdrawals.get
+      )
+    )
 
 proc latestValidHash(db: ChainDBRef, parent: EthBlockHeader, ttd: DifficultyInt): Hash256
     {.gcsafe, raises: [RlpError].} =
@@ -45,6 +66,20 @@ proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedRespon
   let blockHash = latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
   invalidFCU(blockHash)
 
+proc txPriorityFee(ttx: TypedTransaction): UInt256 =
+  try:
+    let tx = rlp.decode(distinctBase(ttx), Transaction)
+    return u256(tx.gasPrice * tx.maxPriorityFee)
+  except RlpError:
+    doAssert(false, "found TypedTransaction that RLP failed to decode")
+
+# AARDVARK: make sure I have the right units (wei/gwei)
+proc sumOfBlockPriorityFees(payload: ExecutionPayloadV1OrV2): UInt256 =
+  payload.transactions.foldl(a + txPriorityFee(b), UInt256.zero)
+
+template unsafeQuantityToInt64(q: Quantity): int64 =
+  int64 q
+
 # I created these handle_whatever procs to eliminate duplicated code
 # between the V1 and V2 RPC endpoint implementations. (I believe
 # they're meant to be implementable in that way. e.g. The V2 specs
@@ -52,9 +87,16 @@ proc invalidFCU(com: CommonRef, header: EthBlockHeader): ForkchoiceUpdatedRespon
 # null.) --Adam
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
-proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1): PayloadStatusV1 {.raises: [CatchableError].} =
+proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1 | ExecutionPayloadV2): PayloadStatusV1 {.raises: [CatchableError].} =
   trace "Engine API request received",
-    meth = "newPayloadV1", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
+    meth = "newPayload", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
+
+  if com.isShanghaiOrLater(fromUnix(payload.timestamp.unsafeQuantityToInt64)):
+    when not(payload is ExecutionPayloadV2):
+      raise invalidParams("if timestamp is Shanghai or later, payload must be ExecutionPayloadV2")
+  else:
+    when not(payload is ExecutionPayloadV1):
+      raise invalidParams("if timestamp is earlier than Shanghai, payload must be ExecutionPayloadV1")
   
   var header = toBlockHeader(payload)
   let blockHash = payload.blockHash.asEthHash
@@ -142,14 +184,20 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
   return validStatus(blockHash)
     
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_getpayloadv1
-proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): ExecutionPayloadV1 {.raises: [CatchableError].} =
+proc handle_getPayload(api: EngineApiRef, payloadId: PayloadID): GetPayloadV2Response {.raises: [CatchableError].} =
   trace "Engine API request received",
     meth = "GetPayload", id = payloadId.toHex
 
-  var payload: ExecutionPayloadV1
+  var payload: ExecutionPayloadV1OrV2
   if not api.get(payloadId, payload):
     raise unknownPayload("Unknown payload")
-  return payload
+
+  let blockValue = Quantity(sumOfBlockPriorityFees(payload).truncate(uint64))
+  
+  return GetPayloadV2Response(
+    executionPayload: payload,
+    blockValue: blockValue
+  )
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_exchangetransitionconfigurationv1
 proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com: CommonRef, conf: TransitionConfigurationV1): TransitionConfigurationV1 {.raises: [CatchableError].} =
@@ -200,7 +248,7 @@ proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com
 
   return TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)
 
-# ForkchoiceUpdatedV1 has several responsibilities:
+# ForkchoiceUpdated has several responsibilities:
 # If the method is called with an empty head block:
 #     we return success, which can be used to check if the catalyst mode is enabled
 # If the total difficulty was not reached:
@@ -210,8 +258,17 @@ proc handle_exchangeTransitionConfiguration(sealingEngine: SealingEngineRef, com
 # We try to set our blockchain to the headBlock
 # If there are payloadAttributes:
 #     we try to assemble a block with the payloadAttributes and return its payloadID
-# https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_forkchoiceupdatedv1
-proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, api: EngineApiRef, update: ForkchoiceStateV1, payloadAttributes: Option[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.raises: [CatchableError].} =
+# https://github.com/ethereum/execution-apis/blob/main/src/engine/shanghai.md#engine_forkchoiceupdatedv2
+proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, api: EngineApiRef, update: ForkchoiceStateV1, payloadAttributes: Option[PayloadAttributesV1] | Option[PayloadAttributesV2]): ForkchoiceUpdatedResponse {.raises: [CatchableError].} =
+
+  if payloadAttributes.isSome:
+    if com.isShanghaiOrLater(fromUnix(payloadAttributes.get.timestamp.unsafeQuantityToInt64)):
+      when not(payloadAttributes is Option[PayloadAttributesV2]):
+        raise invalidParams("if timestamp is Shanghai or later, payloadAttributes must be PayloadAttributesV2")
+    else:
+      when not(payloadAttributes is Option[PayloadAttributesV1]):
+        raise invalidParams("if timestamp is earlier than Shanghai, payloadAttributes must be PayloadAttributesV1")
+
   let
     chain = sealingEngine.chain
     db = chain.db
@@ -342,12 +399,13 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, a
   # might replace it arbitrarilly many times in between.
   if payloadAttributes.isSome:
     let payloadAttrs = payloadAttributes.get()
-    var payload: ExecutionPayloadV1
-    let res = sealingEngine.generateExecutionPayload(payloadAttrs, payload)
+    let res = sealingEngine.generateExecutionPayload(payloadAttrs)
 
     if res.isErr:
       error "Failed to create sealing payload", err = res.error
       raise invalidAttr(res.error)
+    
+    let payload = res.get
 
     let id = computePayloadId(blockHash, payloadAttrs)
     api.put(id, payload)
@@ -361,6 +419,41 @@ proc handle_forkchoiceUpdated(sealingEngine: SealingEngineRef, com: CommonRef, a
 
   return validFCU(none(PayloadID), blockHash)
 
+func toHash(value: array[32, byte]): Hash256 =
+  result.data = value
+
+proc handle_getPayloadBodiesByHash(sealingEngine: SealingEngineRef, hashes: seq[BlockHash]): seq[Option[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+  let db = sealingEngine.chain.db
+  var body: BlockBody
+  for h in hashes:
+    if db.getBlockBody(toHash(distinctBase(h)), body):
+      var typedTransactions: seq[TypedTransaction]
+      for tx in body.transactions:
+        typedTransactions.add(tx.toTypedTransaction)
+      var withdrawals: seq[WithdrawalV1]
+      for w in body.withdrawals.get:
+        withdrawals.add(w.toWithdrawalV1)
+      result.add(
+        some(ExecutionPayloadBodyV1(
+          transactions: typedTransactions,
+          withdrawals: withdrawals
+        ))
+      )
+    else:
+      result.add(none[ExecutionPayloadBodyV1]())
+
+const supportedMethods: HashSet[string] =
+  toHashSet([
+    "engine_newPayloadV1",
+    "engine_newPayloadV2",
+    "engine_getPayloadV1",
+    "engine_getPayloadV2",
+    "engine_exchangeTransitionConfigurationV1",
+    "engine_forkchoiceUpdatedV1",
+    "engine_forkchoiceUpdatedV2",
+    "engine_getPayloadBodiesByHashV1"
+  ])
+
 # I'm trying to keep the handlers below very thin, and move the
 # bodies up to the various procs above. Once we have multiple
 # versions, they'll need to be able to share code.
@@ -373,11 +466,25 @@ proc setupEngineApi*(
     api = EngineApiRef.new(merger)
     com = sealingEngine.chain.com
 
+  server.rpc("engine_exchangeCapabilities") do(methods: seq[string]) -> seq[string]:
+    return methods.filterIt(supportedMethods.contains(it))
+
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
     return handle_newPayload(sealingEngine, api, com, payload)
+  
+  server.rpc("engine_newPayloadV2") do(payload: ExecutionPayloadV1OrV2) -> PayloadStatusV1:
+    let p = payload.toExecutionPayloadV1OrExecutionPayloadV2
+    if p.isOk:
+      return handle_newPayload(sealingEngine, api, com, p.get)
+    else:
+      return handle_newPayload(sealingEngine, api, com, p.error)
 
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
+    let r = handle_getPayload(api, payloadId)
+    return r.executionPayload.toExecutionPayloadV1
+
+  server.rpc("engine_getPayloadV2") do(payloadId: PayloadID) -> GetPayloadV2Response:
     return handle_getPayload(api, payloadId)
 
   server.rpc("engine_exchangeTransitionConfigurationV1") do(conf: TransitionConfigurationV1) -> TransitionConfigurationV1:
@@ -387,3 +494,20 @@ proc setupEngineApi*(
       update: ForkchoiceStateV1,
       payloadAttributes: Option[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
     return handle_forkchoiceUpdated(sealingEngine, com, api, update, payloadAttributes)
+
+  server.rpc("engine_forkchoiceUpdatedV2") do(
+      update: ForkchoiceStateV1,
+      payloadAttributes: Option[PayloadAttributesV1OrV2]) -> ForkchoiceUpdatedResponse:
+    if payloadAttributes.isNone:
+      return handle_forkchoiceUpdated(sealingEngine, com, api, update, none[PayloadAttributesV2]())
+    else:
+      let a = payloadAttributes.get.toPayloadAttributesV1OrPayloadAttributesV2
+      if a.isOk:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(a.get))
+      else:
+        return handle_forkchoiceUpdated(sealingEngine, com, api, update, some(a.error))
+
+  server.rpc("engine_getPayloadBodiesByHashV1") do(
+      hashes: seq[BlockHash]) -> seq[Option[ExecutionPayloadBodyV1]]:
+    return handle_getPayloadBodiesByHash(sealingEngine, hashes)
+

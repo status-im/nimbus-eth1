@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[options],
+  std/[options, times],
   chronicles,
   eth/trie/trie_defs,
   ./chain_config,
@@ -317,6 +317,9 @@ proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool
     ptd = com.db.getScore(header.parentHash)
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
+
+func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
 
 proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
                 {.gcsafe, raises: [CatchableError].} =
