@@ -12,10 +12,12 @@ import
   nimcrypto/[hash, sha2],
   web3/engine_api_types,
   json_rpc/errors,
-  eth/[trie, rlp, common, trie/db],
+  eth/[trie, rlp, common, common/eth_types, trie/db],
   stew/[results, byteutils],
   ../../constants,
   ./mergetypes
+
+type Hash256 = eth_types.Hash256
 
 proc computePayloadId*(headBlockHash: Hash256, params: PayloadAttributesV1 | PayloadAttributesV2): PayloadID =
   var dest: Hash256

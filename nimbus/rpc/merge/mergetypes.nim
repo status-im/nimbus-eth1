@@ -18,6 +18,7 @@ export merger, eth_types
 
 type
   EthBlockHeader* = eth_types.BlockHeader
+  Hash256 = eth_types.Hash256
 
 const
   # maxTrackedPayloads is the maximum number of prepared payloads the execution

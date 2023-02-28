@@ -13,6 +13,7 @@ import
   json_rpc/rpcserver,
   web3/[conversions, engine_api_types],
   eth/rlp,
+  eth/common/eth_types,
   eth/common/eth_types_rlp,
   ../common/common,
   ".."/core/chain/[chain_desc, persist_blocks],
@@ -26,6 +27,8 @@ import
   chronicles
 
 {.push raises: [].}
+
+type Hash256 = eth_types.Hash256
 
 
 func toPayloadAttributesV1OrPayloadAttributesV2*(a: PayloadAttributesV1OrV2): Result[PayloadAttributesV1, PayloadAttributesV2] =

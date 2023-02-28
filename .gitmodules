@@ -102,7 +102,7 @@
 	path = vendor/nim-web3
 	url = https://github.com/status-im/nim-web3.git
   ignore = dirty
-  branch = master
+  branch = V1OrV2
 [submodule "vendor/nim-snappy"]
   path = vendor/nim-snappy
   url = https://github.com/status-im/nim-snappy.git
