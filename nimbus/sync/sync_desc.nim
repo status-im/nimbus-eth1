@@ -14,6 +14,7 @@
 ## Public descriptors
 
 import
+  #std/options,
   eth/[common, p2p],
   ../core/chain,
   ../db/db_chain,
@@ -51,6 +52,7 @@ type
     chain*: ChainRef            ## Block chain database (no need for `Peer`)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
+    exCtrlFile*: Option[string] ## Extra instructions file (if any)
     pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

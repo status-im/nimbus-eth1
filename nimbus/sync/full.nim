@@ -111,10 +111,13 @@ proc init*(
     chain: ChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
-    enableTicker = false): T =
+    enableTicker = false;
+    exCtrlFile = none(string);
+      ): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker, exCtrlFile)
   result.ctx.pool.rng = rng
+
 
 proc start*(ctx: FullSyncRef) =
   doAssert ctx.startSync()
