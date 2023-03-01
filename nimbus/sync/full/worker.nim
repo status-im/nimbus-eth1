@@ -16,7 +16,7 @@ import
   chronos,
   eth/[common, p2p],
   ".."/[protocol, sync_desc],
-  ../misc/[best_pivot, block_queue],
+  ../misc/[best_pivot, block_queue, sync_ctrl],
   "."/[ticker, worker_desc]
 
 logScope:
@@ -72,11 +72,15 @@ proc tickerUpdater(ctx: FullCtxRef): TickerStatsUpdater =
     var stats: BlockQueueStats
     ctx.pool.bCtx.blockQueueStats(stats)
 
+    let suspended =
+      0 < ctx.pool.suspendAt and ctx.pool.suspendAt < stats.topAccepted
+
     TickerStats(
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
+      suspended:       suspended,
       reOrg:           stats.reOrg)
 
 
@@ -157,6 +161,10 @@ proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
     ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
   else:
     debug "Ticker is disabled"
+
+  if ctx.exCtrlFile.isSome:
+    warn "Full sync accepts suspension request block number",
+      syncCtrlFile=ctx.exCtrlFile.get
   true
 
 proc release*(ctx: FullCtxRef) =
@@ -376,15 +384,26 @@ proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ## `true` which is typically done after finishing `runSingle()`. This
   ## instance can be simultaneously active for all peer workers.
   ##
-  # Fetch work item
   let
-    ctx {.used.} = buddy.ctx
+    ctx = buddy.ctx
     bq = buddy.only.bQueue
-    rc = await bq.blockQueueWorker()
+
+  if ctx.exCtrlFile.isSome:
+    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile
+    if rc.isOk:
+      ctx.pool.suspendAt = rc.value
+    if 0 < ctx.pool.suspendAt:
+      if ctx.pool.suspendAt < buddy.only.bQueue.topAccepted:
+        # Sleep for a while, then leave
+        await sleepAsync(10.seconds)
+        return
+
+  # Fetch work item
+  let rc = await bq.blockQueueWorker()
   if rc.isErr:
     if rc.error == StagedQueueOverflow:
       # Mind the gap: Turn on pool mode if there are too may staged items.
-      buddy.ctx.poolMode = true
+      ctx.poolMode = true
     else:
       return
 

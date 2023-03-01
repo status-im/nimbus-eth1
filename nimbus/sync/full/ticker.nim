@@ -27,6 +27,7 @@ type
     nextUnprocessed*: Option[BlockNumber]
     nextStaged*: Option[BlockNumber]
     nStagedQueue*: int
+    suspended*: bool
     reOrg*: bool
 
   TickerStatsUpdater* =
@@ -75,8 +76,12 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
       tick = t.tick.toSI
       mem = getTotalMem().uint.toSI
 
-    info "Sync statistics", tick, buddies,
-      persistent, unprocessed, staged, queued, reOrg, mem
+    if data.suspended:
+     info "Sync statistics (suspended)", tick, buddies,
+       persistent, unprocessed, staged, queued, reOrg, mem
+    else:
+     info "Sync statistics", tick, buddies,
+       persistent, unprocessed, staged, queued, reOrg, mem
 
   t.tick.inc
   t.setLogTicker(Moment.fromNow(tickerLogInterval))

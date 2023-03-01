@@ -37,6 +37,7 @@ type
     pivotState*: PivotState         ## For initial pivot control
     pivotStamp*: Moment             ## `PivotState` driven timing control
     bCtx*: BlockQueueCtxRef         ## Global block queue descriptor
+    suspendAt*: BlockNumber         ## Suspend if persistent head is larger
     ticker*: TickerRef              ## Logger ticker
 
   FullBuddyRef* = BuddyRef[CtxData,BuddyData]
