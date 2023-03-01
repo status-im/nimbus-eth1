@@ -30,7 +30,7 @@ type
     reOrg*: bool
 
   TickerStatsUpdater* =
-    proc: TickerStats {.gcsafe, raises: [Defect].}
+    proc: TickerStats {.gcsafe, raises: [].}
 
   TickerRef* = ref object
     nBuddies:  int

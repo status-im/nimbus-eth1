@@ -8,14 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   eth/[common, p2p],
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],
-  "."/[full/worker, sync_desc, sync_sched, protocol]
-
-{.push raises: [].}
+  ./full/[worker, worker_desc],
+  "."/[sync_desc, sync_sched, protocol]
 
 logScope:
   topics = "full-sync"

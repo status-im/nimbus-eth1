@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises:[].}
+
 import
   std/[options],
   chronicles,
@@ -15,40 +17,10 @@ import
   eth/[common, p2p],
   ".."/[protocol, sync_desc],
   ../misc/[best_pivot, block_queue],
-  ./ticker
-
-{.push raises:[].}
+  "."/[ticker, worker_desc]
 
 logScope:
   topics = "full-buddy"
-
-type
-  PivotState = enum
-    PivotStateInitial,              ## Initial state
-    FirstPivotSeen,                 ## Starting, first pivot seen
-    FirstPivotAccepted,             ## Accepted, waiting for second
-    FirstPivotUseRegardless         ## Force pivot if available
-    PivotRunMode                    ## SNAFU after some magic
-
-  BuddyData* = object
-    ## Local descriptor data extension
-    pivot: BestPivotWorkerRef       ## Local pivot worker descriptor
-    bQueue: BlockQueueWorkerRef     ## Block queue worker
-
-  CtxData* = object
-    ## Globally shared data extension
-    rng*: ref HmacDrbgContext       ## Random generator, pre-initialised
-    pivot: BestPivotCtxRef          ## Global pivot descriptor
-    pivotState: PivotState          ## For initial pivot control
-    pivotStamp: Moment              ## `PivotState` driven timing control
-    bCtx: BlockQueueCtxRef          ## Global block queue descriptor
-    ticker: TickerRef               ## Logger ticker
-
-  FullBuddyRef* = BuddyRef[CtxData,BuddyData]
-    ## Extended worker peer descriptor
-
-  FullCtxRef* = CtxRef[CtxData]
-    ## Extended global descriptor
 
 const
   extraTraceMessages = false # or true

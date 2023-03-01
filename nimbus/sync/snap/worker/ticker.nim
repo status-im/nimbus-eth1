@@ -41,7 +41,7 @@ type
     nQueues*: int
 
   TickerStatsUpdater* =
-    proc: SnapTickerStats {.gcsafe, raises: [Defect].}
+    proc: SnapTickerStats {.gcsafe, raises: [].}
 
   TickerRef* = ref object
     ## Account fetching state that is shared among all peers.

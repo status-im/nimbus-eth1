@@ -8,12 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
   eth/common,
   ../../../constants
 
-{.push raises: [].}
+logScope:
+  topics = "snap-wire"
 
 type
   SnapAccount* = object

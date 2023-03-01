@@ -34,24 +34,24 @@ type
 
   BuddyCtrlRef* = ref object
     ## Control and state settings
-    runState: BuddyRunState ## Access with getters
-    multiOk*: bool          ## Triggers `runSingle()` mode unless `true`
+    runState: BuddyRunState     ## Access with getters
+    multiOk*: bool              ## Triggers `runSingle()` mode unless `true`
 
   BuddyRef*[S,W] = ref object
     ## Worker peer state descriptor.
-    ctx*: CtxRef[S]         ## Shared data descriptor back reference
-    peer*: Peer             ## Reference to eth p2pProtocol entry
-    ctrl*: BuddyCtrlRef     ## Control and state settings
-    only*: W                ## Worker peer specific data
+    ctx*: CtxRef[S]             ## Shared data descriptor back reference
+    peer*: Peer                 ## Reference to eth p2pProtocol entry
+    ctrl*: BuddyCtrlRef         ## Control and state settings
+    only*: W                    ## Worker peer specific data
 
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
-    buddiesMax*: int        ## Max number of buddies
-    ethWireCtx*: EthWireRef ## Eth protocol wire context (if available)
-    chain*: ChainRef        ## Block chain database (no need for `Peer`)
-    poolMode*: bool         ## Activate `runPool()` workers if set `true`
-    daemon*: bool           ## Enable global background job
-    pool*: S                ## Shared context for all worker peers
+    buddiesMax*: int            ## Max number of buddies
+    ethWireCtx*: EthWireRef     ## Eth protocol wire context (if available)
+    chain*: ChainRef            ## Block chain database (no need for `Peer`)
+    poolMode*: bool             ## Activate `runPool()` workers if set `true`
+    daemon*: bool               ## Enable global background job
+    pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------
 # Public functions
