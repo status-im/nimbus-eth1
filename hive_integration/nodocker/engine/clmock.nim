@@ -4,11 +4,12 @@ import
   nimcrypto/sysrand,
   stew/byteutils,
   eth/common, chronos,
-  web3/engine_api_types,
   json_rpc/rpcclient,
   ../../../nimbus/rpc/merge/mergeutils,
   ../../../nimbus/[constants],
   ./engine_client
+
+import web3/engine_api_types except Hash256  # conflict with the one from eth/common
 
 # Consensus Layer Client Mock used to sync the Execution Clients once the TTD has been reached
 type
