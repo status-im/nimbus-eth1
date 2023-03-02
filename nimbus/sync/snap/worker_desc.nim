@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/hashes,
   eth/[common, p2p],
@@ -18,8 +20,6 @@ import
   ./worker/db/[snapdb_desc, snapdb_pivot],
   ./worker/ticker,
   ./range_desc
-
-{.push raises: [].}
 
 type
   SnapAccountsList* = SortedSet[NodeTag,Hash256]
@@ -83,12 +83,12 @@ type
     state*: SnapDbPivotRegistry        ## Saved recovery context state
     level*: int                        ## top level is zero
 
-  BuddyData* = object
+  SnapBuddyData* = object
     ## Per-worker local descriptor data extension
     errors*: ComErrorStatsRef          ## For error handling
     pivotEnv*: SnapPivotRef            ## Environment containing state root
 
-  CtxData* = object
+  SnapCtxData* = object
     ## Globally shared data extension
     rng*: ref HmacDrbgContext          ## Random generator
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
@@ -105,10 +105,10 @@ type
     # Info
     ticker*: TickerRef                 ## Ticker, logger
 
-  SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
+  SnapBuddyRef* = BuddyRef[SnapCtxData,SnapBuddyData]
     ## Extended worker peer descriptor
 
-  SnapCtxRef* = CtxRef[CtxData]
+  SnapCtxRef* = CtxRef[SnapCtxData]
     ## Extended global descriptor
 
 # ------------------------------------------------------------------------------

@@ -23,7 +23,7 @@ logScope:
   topics = "snap-sync"
 
 type
-  SnapSyncRef* = RunnerSyncRef[CtxData,BuddyData]
+  SnapSyncRef* = RunnerSyncRef[SnapCtxData,SnapBuddyData]
 
 const
   extraTraceMessages = false # or true
