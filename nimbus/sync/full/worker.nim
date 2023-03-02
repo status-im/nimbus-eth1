@@ -158,7 +158,12 @@ proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
     return false
   ctx.pool.bCtx = BlockQueueCtxRef.init(rc.value + 1)
   if tickerOK:
-    ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
+    # ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
+    let fn = ctx.tickerUpdater
+    discard fn()
+    ctx.pool.ticker = TickerRef.init(fn)
+    debug "Running blind ticker"
+    ctx.pool.ticker.startBuddy
   else:
     debug "Ticker is disabled"
 

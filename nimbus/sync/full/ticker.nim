@@ -43,7 +43,7 @@ type
 
 const
   tickerStartDelay = 100.milliseconds
-  tickerLogInterval = 1.seconds
+  tickerLogInterval = 100.milliseconds # 1.seconds
   tickerLogSuppressMax = 100
 
 # ------------------------------------------------------------------------------
@@ -59,7 +59,9 @@ proc pp(n: Option[BlockNumber]): string =
 proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
+  GC_fullCollect()
   let data = t.statsCb()
+  GC_fullCollect()
 
   if data != t.lastStats or
      t.lastTick + tickerLogSuppressMax < t.tick:
@@ -84,7 +86,9 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
        persistent, unprocessed, staged, queued, reOrg, mem
 
   t.tick.inc
+  GC_fullCollect()
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
+  GC_fullCollect()
 
 
 proc setLogTicker(t: TickerRef; at: Moment) =
