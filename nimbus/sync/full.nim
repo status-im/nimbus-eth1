@@ -8,14 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   eth/[common, p2p],
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],
-  "."/[full/worker, sync_desc, sync_sched, protocol]
-
-{.push raises: [].}
+  ./full/[worker, worker_desc],
+  "."/[sync_desc, sync_sched, protocol]
 
 logScope:
   topics = "full-sync"
@@ -110,10 +111,13 @@ proc init*(
     chain: ChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
-    enableTicker = false): T =
+    enableTicker = false;
+    exCtrlFile = none(string);
+      ): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker, exCtrlFile)
   result.ctx.pool.rng = rng
+
 
 proc start*(ctx: FullSyncRef) =
   doAssert ctx.startSync()

@@ -159,21 +159,25 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.ethNode.addSnapHandlerCapability(
         nimbus.ethNode.peerPool,
         nimbus.chainRef)
+  # Cannot do without minimal `eth` capability
+  if ProtocolFlag.Eth notin protocols:
+    nimbus.ethNode.addEthHandlerCapability(
+      nimbus.ethNode.peerPool,
+      nimbus.chainRef)
 
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
-    let tickerOK =
-      conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
-    # Minimal capability needed for sync only
-    if ProtocolFlag.Eth notin protocols:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef)
+    let
+      noRecovery = conf.syncMode in {SyncMode.SnapCtx}
+      exCtrlFile = if conf.syncCtrlFile.isNone: none(string)
+                   else: some(conf.syncCtrlFile.get.string)
+      tickerOK = conf.logLevel in {
+        LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
     of SyncMode.Full:
       nimbus.fullSyncRef = FullSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        tickerOK)
+        tickerOK, exCtrlFile)
     of SyncMode.Snap, SyncMode.SnapCtx:
       # Minimal capability needed for sync only
       if ProtocolFlag.Snap notin protocols:
@@ -181,7 +185,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
           nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        nimbus.dbBackend, tickerOK, noRecovery = (conf.syncMode==SyncMode.Snap))
+        nimbus.dbBackend, tickerOK, noRecovery=noRecovery, exCtrlFile)
     of SyncMode.Default:
       nimbus.legaSyncRef = LegacySyncRef.new(
         nimbus.ethNode, nimbus.chainRef)

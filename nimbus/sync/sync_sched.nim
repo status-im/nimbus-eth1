@@ -330,7 +330,9 @@ proc initSync*[S,W](
     node: EthereumNode;
     chain: ChainRef,
     slots: int;
-    noisy = false) =
+    noisy = false;
+    exCtrlFile = none(string);
+      ) =
   ## Constructor
   # Leave one extra slot so that it can holds a *zombie* even if all slots
   # are full. The effect is that a re-connect on the latest zombie will be
@@ -338,6 +340,7 @@ proc initSync*[S,W](
   dsc.ctx = CtxRef[S](
     ethWireCtx: cast[EthWireRef](node.protocolState protocol.eth),
     buddiesMax: max(1, slots + 1),
+    exCtrlFile: exCtrlFile,
     chain: chain)
   dsc.pool = node.peerPool
   dsc.tickerOk = noisy

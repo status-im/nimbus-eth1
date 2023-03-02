@@ -103,7 +103,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
   ## Global set up
   ctx.pool.coveredAccounts = NodeTagRangeSet.init()
   noExceptionOops("worker.setup()"):
-    ctx.ethWireCtx.txPoolEnabled false
+    ctx.ethWireCtx.txPoolEnabled = false
     ctx.chain.com.syncReqNewHead = ctx.pivotUpdateBeaconHeaderCB
   ctx.pool.snapDb =
     if ctx.pool.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
@@ -134,7 +134,7 @@ proc release*(ctx: SnapCtxRef) =
     ctx.pool.ticker.stop()
     ctx.pool.ticker = nil
   noExceptionOops("worker.release()"):
-    ctx.ethWireCtx.txPoolEnabled true
+    ctx.ethWireCtx.txPoolEnabled = true
   ctx.chain.com.syncReqNewHead = nil
 
 proc start*(buddy: SnapBuddyRef): bool =

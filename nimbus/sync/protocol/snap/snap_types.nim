@@ -8,13 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   chronicles,
   eth/common,
-  stew/endians2,
   ../../../constants
 
-{.push raises: [].}
+logScope:
+  topics = "snap-wire"
 
 type
   SnapAccount* = object
@@ -149,7 +151,7 @@ method getAccountRange*(
     limit: Hash256;
     replySizeMax: uint64;
       ): (seq[SnapAccount], seq[SnapProof])
-      {.base.} =
+      {.base, raises: [CatchableError].} =
   notImplemented("getAccountRange")
 
 method getStorageRanges*(

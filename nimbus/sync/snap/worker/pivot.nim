@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, sets, sequtils],
   chronicles,
@@ -21,8 +23,6 @@ import
            range_fetch_accounts, range_fetch_storage_slots,
            storage_queue_helper],
   ./ticker
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-pivot"

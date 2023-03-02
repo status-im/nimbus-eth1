@@ -115,9 +115,10 @@ proc init*(
     dbBackend: ChainDb;
     enableTicker = false;
     noRecovery = false;
+    exCtrlFile = none(string);
       ): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, enableTicker)
+  result.initSync(ethNode, chain, maxPeers, enableTicker, exCtrlFile)
   result.ctx.chain = chain # explicitely override
   result.ctx.pool.rng = rng
   result.ctx.pool.dbBackend = dbBackend
