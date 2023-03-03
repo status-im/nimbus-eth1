@@ -210,7 +210,7 @@ p2pProtocol snap1(version = snapVersion,
 
         # For logging only
         nAccounts = accounts.len
-        nProof = proof.len
+        nProof = proof.nodes.len
 
       if nAccounts == 0 and nProof == 0:
         trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer
@@ -218,7 +218,7 @@ p2pProtocol snap1(version = snapVersion,
         trace trSnapSendReplying & "AccountRange (0x01)", peer,
           nAccounts, nProof
 
-      await response.send(accounts, SnapProofNodes(nodes: proof))
+      await response.send(accounts, proof)
 
     # User message 0x01: AccountRange.
     proc accountRange(
@@ -249,7 +249,7 @@ p2pProtocol snap1(version = snapVersion,
 
         # For logging only
         nSlots = slots.len
-        nProof = proof.len
+        nProof = proof.nodes.len
 
       if nSlots == 0 and nProof == 0:
         trace trSnapSendReplying & "EMPTY StorageRanges (0x03)", peer
@@ -257,7 +257,7 @@ p2pProtocol snap1(version = snapVersion,
         trace trSnapSendReplying & "StorageRanges (0x03)", peer,
           nSlots, nProof
 
-      await response.send(slots, SnapProofNodes(nodes: proof))
+      await response.send(slots, proof)
 
     # User message 0x03: StorageRanges.
     # Note: See comments in this file for a list of Geth quirks to expect.

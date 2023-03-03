@@ -186,7 +186,7 @@ method getAccountRange*(
     origin: Hash256;
     limit: Hash256;
     replySizeMax: uint64;
-      ): (seq[SnapAccount], seq[SnapProof])
+      ): (seq[SnapAccount], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch accounts list from database
   let
@@ -198,7 +198,8 @@ method getAccountRange*(
 
   let rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
   if rc.isOk:
-    return (rc.value.leafs.mapIt(it.to(SnapAccount)), rc.value.proof)
+    result[0] = rc.value.leafs.mapIt(it.to(SnapAccount))
+    result[1] = SnapProofNodes(nodes: rc.value.proof)
 
 
 method getStorageRanges*(
@@ -208,7 +209,7 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], seq[SnapProof])
+      ): (seq[seq[SnapStorage]], SnapProofNodes)
       {.gcsafe.} =
   notImplemented("getStorageRanges")
 

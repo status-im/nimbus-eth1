@@ -158,7 +158,7 @@ method getAccountRange*(
     origin: Hash256;
     limit: Hash256;
     replySizeMax: uint64;
-      ): (seq[SnapAccount], seq[SnapProof])
+      ): (seq[SnapAccount], SnapProofNodes)
       {.base, raises: [CatchableError].} =
   notImplemented("getAccountRange")
 
@@ -169,7 +169,7 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], seq[SnapProof])
+      ): (seq[seq[SnapStorage]], SnapProofNodes)
       {.base.} =
   notImplemented("getStorageRanges")
 
