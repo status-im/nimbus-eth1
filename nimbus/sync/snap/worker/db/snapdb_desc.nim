@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sequtils, tables],
   chronicles,
@@ -17,8 +19,6 @@ import
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
        hexary_paths, rocky_bulk_load]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -226,7 +226,7 @@ proc mergeProofs*(
     refs = @[ps.root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
-    let report = db.hexaryImport(rlpRec.data, nodes, refs)
+    let report = db.hexaryImport(rlpRec.to(Blob), nodes, refs)
     if report.error != NothingSerious:
       let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error

@@ -171,7 +171,7 @@ proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
   ## RLP mixin, decoding
   rlp.snapRead T
 
-proc read(rlp: var Rlp; t: var SnapProof; T: type Blob): T =
+proc read(rlp: var Rlp; T: type SnapProofNodes): T =
   ## RLP mixin, decoding
   rlp.snapRead T
 
@@ -179,9 +179,9 @@ proc append(writer: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP mixin, encoding
   writer.snapAppend account
 
-proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
+proc append(writer: var RlpWriter; spn: SnapProofNodes) =
   ## RLP mixin, encoding
-  writer.snapAppend node
+  writer.snapAppend spn
 
 
 p2pProtocol snap1(version = snapVersion,
@@ -210,7 +210,7 @@ p2pProtocol snap1(version = snapVersion,
 
         # For logging only
         nAccounts = accounts.len
-        nProof = proof.len
+        nProof = proof.nodes.len
 
       if nAccounts == 0 and nProof == 0:
         trace trSnapSendReplying & "EMPTY AccountRange (0x01)", peer
@@ -224,7 +224,7 @@ p2pProtocol snap1(version = snapVersion,
     proc accountRange(
         peer: Peer;
         accounts: openArray[SnapAccount];
-        proof: openArray[SnapProof])
+        proof: SnapProofNodes)
 
 
   requestResponse:
@@ -249,7 +249,7 @@ p2pProtocol snap1(version = snapVersion,
 
         # For logging only
         nSlots = slots.len
-        nProof = proof.len
+        nProof = proof.nodes.len
 
       if nSlots == 0 and nProof == 0:
         trace trSnapSendReplying & "EMPTY StorageRanges (0x03)", peer
@@ -264,7 +264,7 @@ p2pProtocol snap1(version = snapVersion,
     proc storageRanges(
         peer: Peer;
         slotLists: openArray[seq[SnapStorage]];
-        proof: openArray[SnapProof])
+        proof: SnapProofNodes)
 
 
   requestResponse:

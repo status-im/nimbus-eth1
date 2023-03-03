@@ -22,7 +22,7 @@ logScope:
   topics = "full-sync"
 
 type
-  FullSyncRef* = RunnerSyncRef[CtxData,BuddyData]
+  FullSyncRef* = RunnerSyncRef[FullCtxData,FullBuddyData]
 
 const
   extraTraceMessages = false # or true

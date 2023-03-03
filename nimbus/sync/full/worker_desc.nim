@@ -25,12 +25,12 @@ type
     FirstPivotUseRegardless         ## Force pivot if available
     PivotRunMode                    ## SNAFU after some magic
 
-  BuddyData* = object
+  FullBuddyData* = object
     ## Local descriptor data extension
     pivot*: BestPivotWorkerRef      ## Local pivot worker descriptor
     bQueue*: BlockQueueWorkerRef    ## Block queue worker
 
-  CtxData* = object
+  FullCtxData* = object
     ## Globally shared data extension
     rng*: ref HmacDrbgContext       ## Random generator, pre-initialised
     pivot*: BestPivotCtxRef         ## Global pivot descriptor
@@ -40,10 +40,10 @@ type
     suspendAt*: BlockNumber         ## Suspend if persistent head is larger
     ticker*: TickerRef              ## Logger ticker
 
-  FullBuddyRef* = BuddyRef[CtxData,BuddyData]
+  FullBuddyRef* = BuddyRef[FullCtxData,FullBuddyData]
     ## Extended worker peer descriptor
 
-  FullCtxRef* = CtxRef[CtxData]
+  FullCtxRef* = CtxRef[FullCtxData]
     ## Extended global descriptor
 
 # End

@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/[hashes, sequtils],
   chronicles,
   eth/common,
   ../../../constants
@@ -23,8 +24,12 @@ type
     accHash*: Hash256
     accBody* {.rlpCustomSerialization.}: Account
 
-  SnapProof* = object
-    data* {.rlpCustomSerialization.}: Blob
+  SnapProof* = distinct Blob
+    ## Rlp coded node data, to be handled different from a generic `Blob`
+
+  SnapProofNodes* = object
+    ## Wrapper around `seq[SnapProof]` for controlling serialisation.
+    nodes*: seq[SnapProof]
 
   SnapStorage* = object
     slotHash*: Hash256
@@ -33,6 +38,21 @@ type
   SnapWireBase* = ref object of RootRef
 
   SnapPeerState* = ref object of RootRef
+
+# ------------------------------------------------------------------------------
+# Public `SnapProof` type helpers
+# ------------------------------------------------------------------------------
+
+proc to*(data: Blob; T: type SnapProof): T = data.T
+proc to*(node: SnapProof; T: type Blob): T = node.T
+
+proc hash*(sp: SnapProof): Hash =
+  ## Mixin for Table/HashSet
+  sp.to(Blob).hash
+
+proc `==`*(a,b: SnapProof): bool =
+  ## Mixin for Table/HashSet
+  a.to(Blob) == b.to(Blob)
 
 # ------------------------------------------------------------------------------
 # Public serialisation helpers
@@ -105,37 +125,25 @@ proc snapAppend*(
 
 proc snapRead*(
     rlp: var Rlp;
-    T: type Blob;
+    T: type SnapProofNodes;
       ): T
-      {.gcsafe, raises: [RlpError]} =
-  ## Rlp decoding for a proof node.
-  rlp.read Blob
+      {.gcsafe, raises: [RlpError].} =
+  ## RLP decoding for a wrapped `SnapProof` sequence. This extra wrapper is
+  ## needed as the `SnapProof` items are `Blob` items at heart which is also
+  ## the serialised destination data type.
+  if rlp.isList:
+    for w in rlp.items:
+      result.nodes.add w.rawData.toSeq.to(SnapProof)
+  elif rlp.isBlob:
+    result.nodes.add rlp.rawData.toSeq.to(SnapProof)
 
-proc snapAppend*(
-    writer: var RlpWriter;
-    proofNode: Blob;
-      ) =
-  ## Rlp encoding for proof node.
-  var start = 0u8
-
-  # Need some magic to strip an extra layer that will be re-introduced by
-  # the RLP encoder as object wrapper. The problem is that the `proofNode`
-  # argument blob is encoded already and a second encoding must be avoided.
-  #
-  # This extra work is not an issue as the number of proof nodes in a list
-  # is typically small.
-
-  if proofNode.len < 57:
-    # <c0> + data(max 55)
-    start = 1u8
-  elif 0xf7 < proofNode[0]:
-    # <f7+sizeLen> + size + data ..
-    start = proofNode[0] - 0xf7 + 1
-  else:
-    # Oops, unexpected data -- encode as is
-    discard
-
-  writer.appendRawBytes proofNode[start ..< proofNode.len]
+proc snapAppend*(writer: var RlpWriter; spn: SnapProofNodes) =
+  ## RLP encoding for a wrapped `SnapProof` sequence. This extra wrapper is
+  ## needed as the `SnapProof` items are `Blob` items at heart which is also
+  ## the serialised destination data type.
+  writer.startList spn.nodes.len
+  for w in spn.nodes:
+    writer.appendRawBytes w.to(Blob)
 
 # ------------------------------------------------------------------------------
 # Public service stubs
@@ -150,7 +158,7 @@ method getAccountRange*(
     origin: Hash256;
     limit: Hash256;
     replySizeMax: uint64;
-      ): (seq[SnapAccount], seq[SnapProof])
+      ): (seq[SnapAccount], SnapProofNodes)
       {.base, raises: [CatchableError].} =
   notImplemented("getAccountRange")
 
@@ -161,7 +169,7 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], seq[SnapProof])
+      ): (seq[seq[SnapStorage]], SnapProofNodes)
       {.base.} =
   notImplemented("getStorageRanges")
 

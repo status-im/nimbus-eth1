@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sequtils, sets, tables],
   chronicles,
@@ -16,8 +18,6 @@ import
   ../../../protocol,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
-
-{.push raises: [].}
 
 type
   RangeLeaf* = object
@@ -54,7 +54,7 @@ proc nonLeafPathNodes(
     baseTag: NodeTag;                # Left boundary
     rootKey: NodeKey|RepairKey;      # State root
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
-      ): HashSet[Blob]
+      ): HashSet[SnapProof]
       {.gcsafe, raises: [CatchableError]} =
   ## Helper for `updateProof()`
   baseTag
@@ -62,7 +62,7 @@ proc nonLeafPathNodes(
     .path
     .mapIt(it.node)
     .filterIt(it.kind != Leaf)
-    .mapIt(it.convertTo(Blob))
+    .mapIt(it.convertTo(Blob).to(SnapProof))
     .toHashSet
 
 # ------------------------------------------------------------------------------
@@ -142,12 +142,12 @@ template updateProof(
 
   var rp = RangeProof(
     leafs: leafList,
-    proof: mapIt(toSeq(proof), SnapProof(data: it)))
+    proof: toSeq(proof))
 
   if 0 < nSizeUsed:
     rp.leafsSize = hexaryRangeRlpSize nSizeUsed
   if 0 < rp.proof.len:
-    rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.data.len, 0)
+    rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.to(Blob).len, 0)
 
   rp
 
