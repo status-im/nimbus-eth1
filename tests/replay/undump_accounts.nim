@@ -69,7 +69,7 @@ proc dumpAccounts*(
     blob.mapIt(it.toHex(2)).join.toLowerAscii
 
   proc ppStr(proof: SnapProof): string =
-    proof.data.ppStr
+    proof.to(Blob).ppStr
 
   proc ppStr(hash: Hash256): string =
     hash.data.mapIt(it.toHex(2)).join.toLowerAscii
@@ -183,7 +183,7 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
 
     of UndumpProofs:
       if flds.len == 1:
-        data.data.proof.add SnapProof(data: flds[0].toByteSeq)
+        data.data.proof.add flds[0].toByteSeq.to(SnapProof)
         nProofs.dec
         if nProofs <= 0:
           state = UndumpCommit

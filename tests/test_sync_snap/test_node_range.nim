@@ -16,7 +16,7 @@ import
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, results],
   unittest2,
-  ../../nimbus/sync/[protocol, types],
+  ../../nimbus/sync/[handlers, protocol, types],
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_envelope,  hexary_error, hexary_interpolate,
@@ -33,16 +33,16 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc ppNodeKeys(a: openArray[Blob], dbg = HexaryTreeDbRef(nil)): string =
+proc ppNodeKeys(a: openArray[SnapProof], dbg = HexaryTreeDbRef(nil)): string =
   result = "["
   if dbg.isNil:
-    result &= a.mapIt(it.digestTo(NodeKey).pp(collapse=true)).join(",")
+    result &= a.mapIt(it.to(Blob).digestTo(NodeKey).pp(collapse=true)).join(",")
   else:
-    result &= a.mapIt(it.digestTo(NodeKey).pp(dbg)).join(",")
+    result &= a.mapIt(it.to(Blob).digestTo(NodeKey).pp(dbg)).join(",")
   result &= "]"
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private functionsto(Blob)
 # ------------------------------------------------------------------------------
 
 proc print_data(
@@ -206,7 +206,7 @@ proc verifyRangeProof(
   # Import proof nodes
   var unrefs, refs: HashSet[RepairKey] # values ignored
   for rlpRec in proof:
-    let importError = xDb.hexaryImport(rlpRec.data, unrefs, refs).error
+    let importError = xDb.hexaryImport(rlpRec.to(Blob), unrefs, refs).error
     if importError != HexaryError(0):
       check importError == HexaryError(0)
       return err(importError)
@@ -224,7 +224,7 @@ proc verifyRangeProof(
       #"\n",
       #"\n    unrefs=[", unrefs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
       #"\n    refs=[", refs.toSeq.mapIt(it.pp(dbg)).join(","), "]",
-      "\n\n    proof=", proof.mapIt(it.data).ppNodeKeys(dbg),
+      "\n\n    proof=", proof.ppNodeKeys(dbg),
       "\n\n    first=", leafs[0].key,
       "\n    ", leafs[0].key.hexaryPath(rootKey,xDb).pp(dbg),
       "\n\n    last=", leafs[^1].key,
@@ -412,7 +412,7 @@ proc test_NodeRangeProof*(
         proof = rc.value.proof
 
         # Some sizes to verify (full data list)
-        check rc.value.proofSize == proof.encode.len
+        check rc.value.proofSize == proof.proofEncode.len
         check rc.value.leafsSize == leafsRlpLen
       else:
         # Make sure that the size calculation deliver the expected number
@@ -424,7 +424,7 @@ proc test_NodeRangeProof*(
         check rx.value.leafs.len == leafs.len
 
         # Some size to verify (truncated data list)
-        check rx.value.proofSize == rx.value.proof.encode.len
+        check rx.value.proofSize == rx.value.proof.proofEncode.len
 
         # Re-adjust proof
         proof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs).proof
@@ -442,7 +442,7 @@ proc test_NodeRangeProof*(
           noisy.say "***", "n=", n,
             " cutOff=", cutOff,
             " leafs=", leafs.len,
-            " proof=", proof.mapIt(it.data).ppNodeKeys(dbg),
+            " proof=", proof.ppNodeKeys(dbg),
             "\n\n   ",
             " base=", iv.minPt,
             "\n    ", iv.minPt.hexaryPath(rootKey,db).pp(dbg),

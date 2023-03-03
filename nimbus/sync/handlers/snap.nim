@@ -18,7 +18,7 @@ import
   ../../db/db_chain,
   ../../core/chain,
   ../snap/range_desc,
-  ../snap/worker/db/[hexary_desc, hexary_range, snapdb_desc, snapdb_accounts],
+  ../snap/worker/db/[hexary_desc, hexary_range],
   ../protocol,
   ../protocol/snap/snap_types
 
@@ -43,12 +43,12 @@ proc proofNodesSizeMax*(n: int): int {.gcsafe.}
 template logTxt(info: static[string]): static[string] =
   "handlers.snap." & info
 
-proc notImplemented(name: string) =
-  debug "snapWire: hHandler method not implemented", meth=name
+proc notImplemented(name: string) {.used.} =
+  debug "Wire handler method not implemented", meth=name
 
-proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
-  ## RLP mixin, encoding
-  writer.snapAppend node
+proc getAccountFn(chain: ChainRef): HexaryGetFn {.gcsafe.} =
+  let db = chain.com.db.db
+  return proc(key: openArray[byte]): Blob = db.get(key)
 
 # ------------------------------------------------------------------------------
 # Private functions: fetch leaf range
@@ -168,7 +168,13 @@ proc proofNodesSizeMax*(n: int): int =
     high(int)
 
 proc proofEncode*(proof: seq[SnapProof]): Blob =
-  rlp.encode proof
+  var writer = initRlpWriter()
+  writer.snapAppend SnapProofNodes(nodes: proof)
+  writer.finish
+
+proc proofDecode*(data: Blob): seq[SnapProof] {.gcsafe, raises: [RlpError].} =
+  var reader = data.rlpFromBytes
+  reader.snapRead(SnapProofNodes).nodes
 
 # ------------------------------------------------------------------------------
 # Public functions: snap wire protocol handlers
@@ -180,11 +186,11 @@ method getAccountRange*(
     origin: Hash256;
     limit: Hash256;
     replySizeMax: uint64;
-      ): (seq[SnapAccount], seq[SnapProof])
+      ): (seq[SnapAccount], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch accounts list from database
   let
-    db = SnapDbRef.init(ctx.chain.com.db.db).getAccountFn
+    db = ctx.chain.getAccountFn
     iv = NodeTagRange.new(origin.to(NodeTag), limit.to(NodeTag))
     sizeMax = min(replySizeMax,high(int).uint64).int
 
@@ -192,7 +198,8 @@ method getAccountRange*(
 
   let rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
   if rc.isOk:
-    return (rc.value.leafs.mapIt(it.to(SnapAccount)), rc.value.proof)
+    result[0] = rc.value.leafs.mapIt(it.to(SnapAccount))
+    result[1] = SnapProofNodes(nodes: rc.value.proof)
 
 
 method getStorageRanges*(
@@ -202,7 +209,7 @@ method getStorageRanges*(
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
-      ): (seq[seq[SnapStorage]], seq[SnapProof])
+      ): (seq[seq[SnapStorage]], SnapProofNodes)
       {.gcsafe.} =
   notImplemented("getStorageRanges")
 
