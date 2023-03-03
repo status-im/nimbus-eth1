@@ -9,6 +9,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, sequtils],
   chronos,
@@ -17,8 +19,6 @@ import
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -122,7 +122,7 @@ proc getStorageRanges*(
 
   let
     nSlotLists = snStoRanges.slotLists.len
-    nProof = snStoRanges.proof.len
+    nProof = snStoRanges.proof.nodes.len
 
   if nSlotLists == 0:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getstorageranges-0x02:
@@ -138,7 +138,9 @@ proc getStorageRanges*(
     return err(ComNoStorageForAccounts)
 
   # Assemble return structure for given peer response
-  var dd = GetStorageRanges(data: AccountStorageRange(proof: snStoRanges.proof))
+  var dd = GetStorageRanges(
+    data: AccountStorageRange(
+      proof: snStoRanges.proof.nodes))
 
   # Set the left proof boundary (if any)
   if 0 < nProof and iv.isSome:

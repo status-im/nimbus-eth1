@@ -110,12 +110,16 @@ proc  test_calcProofsListSizes*() =
 
   for n in [0, 1, 2, 126, 127]:
     let
-      nodeBlobsEncoded = SnapProof(data: nodeBlob).repeat(n).proofEncode
+      nodeSample = nodeBlob.to(SnapProof).repeat(n)
+      nodeBlobsEncoded = nodeSample.proofEncode
+      nodeBlobsDecoded = nodeBlobsEncoded.proofDecode
       nodeBlobsHex = nodeBlobsEncoded.toHex
       brNodesHex = brNode.repeat(n).convertTo(Blob).toHex
+    #echo "+++ ", n, " ", nodeBlobsEncoded.rlpFromBytes.inspect
     #echo ">>> ", n, " ", nodeBlobsHex
     #echo "<<< ", n, " ", brNodesHex
     check nodeBlobsEncoded.len == n.proofNodesSizeMax
+    check nodeBlobsDecoded == nodeSample
     check nodeBlobsHex == brNodesHex
 
 # ------------------------------------------------------------------------------

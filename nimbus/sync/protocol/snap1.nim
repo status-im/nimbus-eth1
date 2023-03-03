@@ -171,7 +171,7 @@ proc read(rlp: var Rlp, t: var SnapAccount, T: type Account): T =
   ## RLP mixin, decoding
   rlp.snapRead T
 
-proc read(rlp: var Rlp; t: var SnapProof; T: type Blob): T =
+proc read(rlp: var Rlp; T: type SnapProofNodes): T =
   ## RLP mixin, decoding
   rlp.snapRead T
 
@@ -179,9 +179,9 @@ proc append(writer: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP mixin, encoding
   writer.snapAppend account
 
-proc append(writer: var RlpWriter; t: SnapProof; node: Blob) =
+proc append(writer: var RlpWriter; spn: SnapProofNodes) =
   ## RLP mixin, encoding
-  writer.snapAppend node
+  writer.snapAppend spn
 
 
 p2pProtocol snap1(version = snapVersion,
@@ -218,13 +218,13 @@ p2pProtocol snap1(version = snapVersion,
         trace trSnapSendReplying & "AccountRange (0x01)", peer,
           nAccounts, nProof
 
-      await response.send(accounts, proof)
+      await response.send(accounts, SnapProofNodes(nodes: proof))
 
     # User message 0x01: AccountRange.
     proc accountRange(
         peer: Peer;
         accounts: openArray[SnapAccount];
-        proof: openArray[SnapProof])
+        proof: SnapProofNodes)
 
 
   requestResponse:
@@ -257,14 +257,14 @@ p2pProtocol snap1(version = snapVersion,
         trace trSnapSendReplying & "StorageRanges (0x03)", peer,
           nSlots, nProof
 
-      await response.send(slots, proof)
+      await response.send(slots, SnapProofNodes(nodes: proof))
 
     # User message 0x03: StorageRanges.
     # Note: See comments in this file for a list of Geth quirks to expect.
     proc storageRanges(
         peer: Peer;
         slotLists: openArray[seq[SnapStorage]];
-        proof: openArray[SnapProof])
+        proof: SnapProofNodes)
 
 
   requestResponse:
