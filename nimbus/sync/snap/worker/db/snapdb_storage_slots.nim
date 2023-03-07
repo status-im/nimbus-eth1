@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/tables,
   chronicles,
@@ -18,8 +20,6 @@ import
   "."/[hexary_desc, hexary_error, hexary_envelope, hexary_import,
        hexary_inspect, hexary_interpolate, hexary_paths, snapdb_desc,
        snapdb_persistent]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -114,7 +114,6 @@ proc importStorageSlots(
     base: NodeTag;             ## before or at first account entry in `data`
     data: AccountSlots;        ## Account storage descriptor
     proof: seq[SnapProof];    ## Storage slots proof data
-    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): Result[seq[NodeSpecs],HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
@@ -161,15 +160,14 @@ proc importStorageSlots(
     let bottomTag = slots[0].pathTag
     for w in innerSubTrie:
       if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-        if not noBaseBoundCheck:
-          # Verify that `base` is to the left of the first slot and there is
-          # nothing in between.
-          #
-          # Without `proof` data available there can only be a complete
-          # set/list of accounts so there are no dangling nodes in the first
-          # place. But there must be `proof` data for an empty list.
-          if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
-            return err(LowerBoundProofError)
+        # Verify that `base` is to the left of the first slot and there is
+        # nothing in between.
+        #
+        # Without `proof` data available there can only be a complete
+        # set/list of accounts so there are no dangling nodes in the first
+        # place. But there must be `proof` data for an empty list.
+        if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
+          return err(LowerBoundProofError)
         # Otherwise register left over entry
         dangling.add w
 
@@ -184,10 +182,9 @@ proc importStorageSlots(
     return err(LowerBoundProofError)
 
   else:
-    if not noBaseBoundCheck:
-      for w in proofStats.dangling:
-        if base <= w.partialPath.hexaryEnvelope.maxPt:
-          return err(LowerBoundProofError)
+    for w in proofStats.dangling:
+      if base <= w.partialPath.hexaryEnvelope.maxPt:
+        return err(LowerBoundProofError)
     dangling = proofStats.dangling
 
   ok(dangling)
@@ -233,7 +230,6 @@ proc importStorageSlots*(
     ps: SnapDbStorageSlotsRef; ## Re-usable session descriptor
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
     persistent = false;        ## store data on disk
-    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): seq[HexaryNodeReport] =
   ## Validate and import storage slots (using proofs as received with the snap
   ## message `StorageRanges`). This function accumulates data in a memory table
@@ -274,7 +270,7 @@ proc importStorageSlots*(
       block:
         itemInx = some(sTop)
         let rc = ps.importStorageSlots(
-          data.base, data.storages[sTop], data.proof, noBaseBoundCheck)
+          data.base, data.storages[sTop], data.proof)
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
           trace "Storage slots last item fails", peer, itemInx=sTop, nItems,
@@ -315,12 +311,11 @@ proc importStorageSlots*(
     pv: SnapDbRef;             ## Base descriptor on `ChainDBRef`
     peer: Peer;                ## For log messages, only
     data: AccountStorageRange; ## Account storage reply from `snap/1` protocol
-    noBaseBoundCheck = false;  ## Ignore left boundary proof check if `true`
       ): seq[HexaryNodeReport] =
   ## Variant of `importStorages()`
   SnapDbStorageSlotsRef.init(
     pv,  Hash256().to(NodeKey), Hash256(), peer).importStorageSlots(
-      data, persistent = true, noBaseBoundCheck)
+      data, persistent=true)
 
 
 proc importRawStorageSlotsNodes*(

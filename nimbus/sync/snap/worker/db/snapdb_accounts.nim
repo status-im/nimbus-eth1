@@ -173,7 +173,6 @@ proc importAccounts*(
     base: NodeTag;            ## Before or at first account entry in `data`
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
     persistent = false;       ## Store data on disk
-    noBaseBoundCheck = false; ## Ignore left boundary proof check if `true`
       ): Result[SnapAccountsGaps,HexaryError] =
   ## Validate and import accounts (using proofs as received with the snap
   ## message `AccountRange`). This function accumulates data in a memory table
@@ -205,16 +204,6 @@ proc importAccounts*(
   ##
   ##   Leaving out `(7&y,Y)` the boundary proofs still succeed but the
   ##   return value will be @[`(7&y,c)`].
-  ##
-  ## The left boundary proof might be omitted by passing `true` for the
-  ## `noBaseBoundCheck` argument. In this case, the boundary check must be
-  ## performed on the return code as
-  ## * if `data.accounts` is empty, the return value must be an empty list
-  ## * otherwise, all type `NodeSpecs` items `w` of the return code must
-  ##   satisfy
-  ##   ::
-  ##     let leastAccountPath = data.accounts[0].accKey.to(NodeTag)
-  ##     leastAccountPath <= w.partialPath.max(NodeKey).to(NodeTag)
   ##
   ## Besides the inner gaps, the function also returns the dangling nodes left
   ## from the `proof` list.
@@ -265,16 +254,17 @@ proc importAccounts*(
       let bottomTag = accounts[0].pathTag
       for w in innerSubTrie:
         if not ps.hexaDb.tab.hasKey(w.nodeKey.to(RepairKey)):
-          if not noBaseBoundCheck:
-            # Verify that `base` is to the left of the first account and there
-            # is nothing in between.
-            #
-            # Without `proof` data available there can only be a complete
-            # set/list of accounts so there are no dangling nodes in the first
-            # place. But there must be `proof` data for an empty list.
-            if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
-              return err(LowerBoundProofError)
-          # Otherwise register left over entry
+          # Verify that `base` is to the left of the first account and there
+          # is nothing in between. If there is an envelope to the left of
+          # the first account, then it might also cover a point before the
+          # first account.
+          #
+          # Without `proof` data available there can only be a complete
+          # set/list of accounts so there are no dangling nodes in the first
+          # place. But there must be `proof` data for an empty list.
+          if w.partialPath.hexaryEnvelope.maxPt < bottomTag:
+            return err(LowerBoundProofError)
+          # Otherwise register left over entry, a gap in the accounts list
           gaps.innerGaps.add w
 
       if persistent:
@@ -287,10 +277,9 @@ proc importAccounts*(
       return err(LowerBoundProofError)
 
     else:
-      if not noBaseBoundCheck:
-        for w in proofStats.dangling:
-          if base <= w.partialPath.hexaryEnvelope.maxPt:
-            return err(LowerBoundProofError)
+      for w in proofStats.dangling:
+        if base <= w.partialPath.hexaryEnvelope.maxPt:
+          return err(LowerBoundProofError)
       gaps.dangling = proofStats.dangling
 
   except RlpError:
@@ -317,12 +306,10 @@ proc importAccounts*(
     root: Hash256;            ## State root
     base: NodeTag;            ## Before or at first account entry in `data`
     data: PackedAccountRange; ## Re-packed `snap/1 ` reply data
-    noBaseBoundCheck = false; ## Ignore left bound proof check if `true`
       ): Result[SnapAccountsGaps,HexaryError] =
   ## Variant of `importAccounts()` for presistent storage, only.
   SnapDbAccountsRef.init(
-    pv, root, peer).importAccounts(
-      base, data, persistent=true, noBaseBoundCheck)
+    pv, root, peer).importAccounts(base, data, persistent=true)
 
 
 proc importRawAccountsNodes*(
