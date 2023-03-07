@@ -12,7 +12,6 @@
 
 import
   std/[sequtils, sets, tables],
-  chronicles,
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../../protocol,
@@ -25,10 +24,11 @@ type
     data*: Blob   ## Leaf node data
 
   RangeProof* = object
-    leafs*: seq[RangeLeaf]
-    leafsSize*: int
-    proof*: seq[SnapProof]
-    proofSize*: int
+    base*: NodeTag              ## No node between `base` and `leafs[0]`
+    leafs*: seq[RangeLeaf]      ## List of consecutive leaf nodes
+    leafsSize*: int             ## RLP encoded size of `leafs` on wire
+    proof*: seq[SnapProof]      ## Boundary proof
+    proofSize*: int             ##  RLP encoded size of `proof` on wire
 
 proc hexaryRangeRlpLeafListSize*(blobLen: int; lstLen = 0): (int,int) {.gcsafe.}
 proc hexaryRangeRlpSize*(blobLen: int): int {.gcsafe.}
@@ -51,17 +51,31 @@ proc rlpPairSize(aLen: int; bRlpLen: int): int =
     high(int)
 
 proc nonLeafPathNodes(
-    baseTag: NodeTag;                # Left boundary
+    nodeTag: NodeTag;                # Left boundary
     rootKey: NodeKey|RepairKey;      # State root
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
       ): HashSet[SnapProof]
       {.gcsafe, raises: [CatchableError]} =
   ## Helper for `updateProof()`
-  baseTag
+  nodeTag
     .hexaryPath(rootKey, db)
     .path
     .mapIt(it.node)
     .filterIt(it.kind != Leaf)
+    .mapIt(it.convertTo(Blob).to(SnapProof))
+    .toHashSet
+
+proc allPathNodes(
+    nodeTag: NodeTag;                # Left boundary
+    rootKey: NodeKey|RepairKey;      # State root
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+      ): HashSet[SnapProof]
+      {.gcsafe, raises: [CatchableError]} =
+  ## Helper for `updateProof()`
+  nodeTag
+    .hexaryPath(rootKey, db)
+    .path
+    .mapIt(it.node)
     .mapIt(it.convertTo(Blob).to(SnapProof))
     .toHashSet
 
@@ -74,20 +88,30 @@ template collectLeafs(
     rootKey: NodeKey|RepairKey;      # State root
     iv: NodeTagRange;                # Proofed range of leaf paths
     nSizeLimit: int;                 # List of RLP encoded data must be smaller
-    nSizeUsed: var int;              # Updated size counter for the raw list
       ): auto =
   ## Collect trie database leafs prototype. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var rc: Result[seq[RangeLeaf],HexaryError]
+  var rc: Result[RangeProof,HexaryError]
 
   block body:
+    let
+      nodeMax = maxPt(iv) # `inject` is for debugging (if any)
     var
       nodeTag = minPt(iv)
       prevTag: NodeTag
-      rls: seq[RangeLeaf]
+      rls: RangeProof
+
+    # Set up base node, the nearest node before `iv.minPt`
+    block:
+      let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyLeft(db)
+      if rx.isOk:
+        rls.base = getPartialPath(rx.value).convertTo(NodeKey).to(NodeTag)
+      elif rx.error != NearbyFailed:
+        rc = typeof(rc).err(rx.error)
+        break body
 
     # Fill leaf nodes from interval range unless size reached
-    while nodeTag <= maxPt(iv):
+    while nodeTag <= nodeMax:
       # The following logic might be sub-optimal. A strict version of the
       # `next()` function that stops with an error at dangling links could
       # be faster if the leaf nodes are not too far apart on the hexary trie.
@@ -102,24 +126,30 @@ template collectLeafs(
         rightTag = rightKey.to(NodeTag)
 
       # Prevents from semi-endless looping
-      if rightTag <= prevTag and 0 < rls.len:
+      if rightTag <= prevTag and 0 < rls.leafs.len:
         # Oops, should have been tackeled by `hexaryNearbyRight()`
         rc = typeof(rc).err(FailedNextNode)
         break body # stop here
 
       let (pairLen,listLen) =
-        hexaryRangeRlpLeafListSize(xPath.leafData.len, nSizeUsed)
+        hexaryRangeRlpLeafListSize(xPath.leafData.len, rls.leafsSize)
+
       if listLen < nSizeLimit:
-        nSizeUsed += pairLen
+        rls.leafsSize += pairLen
       else:
         break
 
-      rls.add RangeLeaf(
+      rls.leafs.add RangeLeaf(
         key:  rightKey,
         data: xPath.leafData)
 
       prevTag = nodeTag
       nodeTag = rightTag + 1.u256
+      # End loop
+
+    # Count outer RLP wrapper
+    if 0 < rls.leafs.len:
+      rls.leafsSize = hexaryRangeRlpSize rls.leafsSize
 
     rc = typeof(rc).ok(rls)
     # End body
@@ -130,24 +160,17 @@ template collectLeafs(
 template updateProof(
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
     rootKey: NodeKey|RepairKey;      # State root
-    baseTag: NodeTag;                # Left boundary
-    leafList: seq[RangeLeaf];        # Set of collected leafs
-    nSizeUsed: int;                  # To be stored into the result
+    rls: RangeProof;                 # Set of collected leafs and a `base`
       ): auto =
   ## Complement leafs list by adding proof nodes. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var proof = nonLeafPathNodes(baseTag, rootKey, db)
-  if 0 < leafList.len:
-    proof.incl nonLeafPathNodes(leafList[^1].key.to(NodeTag), rootKey, db)
+  var proof = allPathNodes(rls.base, rootKey, db)
+  if 0 < rls.leafs.len:
+    proof.incl nonLeafPathNodes(rls.leafs[^1].key.to(NodeTag), rootKey, db)
 
-  var rp = RangeProof(
-    leafs: leafList,
-    proof: toSeq(proof))
-
-  if 0 < nSizeUsed:
-    rp.leafsSize = hexaryRangeRlpSize nSizeUsed
-  if 0 < rp.proof.len:
-    rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.to(Blob).len, 0)
+  var rp = rls
+  rp.proof = toSeq(proof)
+  rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.to(Blob).len, 0)
 
   rp
 
@@ -163,23 +186,21 @@ proc hexaryRangeLeafsProof*(
       ): Result[RangeProof,HexaryError]
       {.gcsafe, raises: [CatchableError]} =
   ## Collect trie database leafs prototype and add proof.
-  var accSize = 0
-  let rc = db.collectLeafs(rootKey, iv, nSizeLimit, accSize)
+  let rc = db.collectLeafs(rootKey, iv, nSizeLimit)
   if rc.isErr:
     err(rc.error)
   else:
-    ok(db.updateProof(rootKey, iv.minPt, rc.value, accSize))
+    ok(db.updateProof(rootKey, rc.value))
 
 proc hexaryRangeLeafsProof*(
     db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
     rootKey: NodeKey;                # State root
-    baseTag: NodeTag;                # Left boundary
-    leafList: seq[RangeLeaf];        # Set of already collected leafs
+    rp: RangeProof;                  # Set of collected leafs and a `base`
       ): RangeProof
       {.gcsafe, raises: [CatchableError]} =
   ## Complement leafs list by adding proof nodes to the argument list
   ## `leafList`.
-  db.updateProof(rootKey, baseTag, leafList, 0)
+  db.updateProof(rootKey, rp)
 
 # ------------------------------------------------------------------------------
 # Public helpers

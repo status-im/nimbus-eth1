@@ -74,36 +74,37 @@ proc fetchLeafRange(
   # on wire. So the `sizeMax` is the argument size `replySizeMax` with some
   # space removed to accomodate for the proof nodes.
   let
-    sizeMax =replySizeMax - estimatedProofSize
+    sizeMax = replySizeMax - estimatedProofSize
     rc = db.hexaryRangeLeafsProof(rootKey, iv, sizeMax)
   if rc.isErr:
     error logTxt "fetchLeafRange(): database problem",
       iv, replySizeMax, error=rc.error
     return err() # database error
   let sizeOnWire = rc.value.leafsSize + rc.value.proofSize
+
   if sizeOnWire <= replySizeMax:
     return ok(rc.value)
 
   # Strip parts of leafs result and amend remainder by adding proof nodes
   var
-    leafs = rc.value.leafs
-    leafsTop = leafs.len - 1
+    rpl = rc.value
+    leafsTop = rpl.leafs.len - 1
     tailSize = 0
     tailItems = 0
     reduceBy = replySizeMax - sizeOnWire
   while tailSize <= reduceBy and tailItems < leafsTop:
     # Estimate the size on wire needed for the tail item
     const extraSize = (sizeof RangeLeaf()) - (sizeof newSeq[Blob](0))
-    tailSize += leafs[leafsTop - tailItems].data.len + extraSize
+    tailSize += rpl.leafs[leafsTop - tailItems].data.len + extraSize
     tailItems.inc
   if leafsTop <= tailItems:
     trace logTxt "fetchLeafRange(): stripping leaf list failed",
       iv, replySizeMax,leafsTop, tailItems
     return err() # package size too small
 
-  leafs.setLen(leafsTop - tailItems - 1) # chop off one more for slack
+  rpl.leafs.setLen(leafsTop - tailItems - 1) # chop off one more for slack
   let
-    leafProof = db.hexaryRangeLeafsProof(rootKey, iv.minPt, leafs)
+    leafProof = db.hexaryRangeLeafsProof(rootKey, rpl)
     strippedSizeOnWire = leafProof.leafsSize + leafProof.proofSize
   if strippedSizeOnWire <= replySizeMax:
     return ok(leafProof)
