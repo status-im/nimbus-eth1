@@ -19,7 +19,7 @@ import
 {.push raises: [].}
 
 logScope:
-  topics = "full-ticker"
+  topics = "full-tick"
 
 type
   TickerStats* = object

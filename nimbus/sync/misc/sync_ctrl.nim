@@ -51,6 +51,37 @@ proc syncCtrlBlockNumberFromFile*(
       debug "Exception while parsing block number", file, name, msg
   err()
 
+proc syncCtrlHashOrBlockNumFromFile*(
+    fileName: Option[string];
+      ): Result[HashOrNum,void] =
+  ## Returns a block number or a hash from the file name argument `fileName`.
+  ## A block number is decimal encoded and a hash is expexted to be a 66 hex
+  ## digits string startnib wiyh `0x`.
+  if fileName.isSome:
+    let file = fileName.get
+
+    # Parse value dump and fetch a header from the peer (if any)
+    try:
+      let data = file.getDataLine
+      if 0 < data.len:
+        if 66 == data.len:
+          let hash = HashOrNum(
+            isHash: true,
+            hash:   Hash256(
+              data: UInt256.fromHex(data).toBytesBE))
+          return ok(hash)
+        else:
+          let num = HashOrNum(
+            isHash: false,
+            number: parse(data,UInt256))
+          return ok(num)
+    except CatchableError as e:
+      let
+        name {.used.} = $e.name
+        msg {.used.} = e.msg
+      debug "Exception while parsing hash or block number", file, name, msg
+  err()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
