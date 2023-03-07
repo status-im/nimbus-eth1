@@ -86,14 +86,14 @@
 ## * "."/[sync_desc, sync_sched, protocol]
 ##
 
+{.push raises: [].}
+
 import
   std/hashes,
   chronos,
   eth/[common, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
-
-{.push raises: [].}
 
 static:
   # type `EthWireRef` is needed in `initSync()`

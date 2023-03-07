@@ -8,13 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sets, tables],
   eth/[common, trie/nibbles],
   ../../range_desc,
   "."/[hexary_desc, hexary_error]
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -48,6 +48,10 @@ proc hexaryImport*(
     blob16: Blob                    # reconstruct branch node
     top = 0                         # count entries
     rNode: RNodeRef                 # repair tree node
+
+  if not rlp.isList:
+    # Otherwise `rlp.items` will raise a `Defect`
+    return HexaryNodeReport(error: Rlp2Or17ListEntries)
 
   # Collect lists of either 2 or 17 blob entries.
   for w in rlp.items:
@@ -144,6 +148,10 @@ proc hexaryImport*(
     blob16: Blob                    # reconstruct branch node
     top = 0                         # count entries
     rNode: RNodeRef                 # repair tree node
+
+  if not rlp.isList:
+    # Otherwise `rlp.items` will raise a `Defect`
+    return HexaryNodeReport(error: Rlp2Or17ListEntries)
 
   # Collect lists of either 2 or 17 blob entries.
   for w in rlp.items:
