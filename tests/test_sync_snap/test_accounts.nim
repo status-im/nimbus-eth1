@@ -105,8 +105,8 @@ proc test_accountsMergeProofs*(
   # different from `.isImportOk`
   check desc.importAccounts(baseTag, packed, true).isOk
 
-  # check desc.merge(lowerBound, accounts) == OkHexDb
-  desc.assignPrettyKeys() # for debugging, make sure that state root ~ "$0"
+  # for debugging, make sure that state root ~ "$0"
+  desc.hexaDb.assignPrettyKeys(desc.root)
 
   # Update list of accounts. There might be additional accounts in the set
   # of proof nodes, typically before the `lowerBound` of each block. As

@@ -227,7 +227,7 @@ proc importAccounts*(
     innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   try:
     if 0 < data.proof.len:
-      let rc = ps.mergeProofs(ps.peer, data.proof)
+      let rc = ps.hexaDb.mergeProofs(ps.root, data.proof, ps.peer)
       if rc.isErr:
         return err(rc.error)
     block:

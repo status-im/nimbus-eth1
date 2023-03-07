@@ -127,7 +127,7 @@ proc importStorageSlots(
     proofStats: TrieNodeStat      # `proof` data dangling links
     innerSubTrie: seq[NodeSpecs]  # internal, collect dangling links
   if 0 < proof.len:
-    let rc = tmpDb.mergeProofs(ps.peer, proof)
+    let rc = tmpDb.hexaDb.mergeProofs(tmpDb.root, proof, ps.peer)
     if rc.isErr:
       return err(rc.error)
   block:
