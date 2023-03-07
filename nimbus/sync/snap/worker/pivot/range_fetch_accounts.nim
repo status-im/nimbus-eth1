@@ -163,8 +163,7 @@ proc accountsRangefetchImpl(
   let gaps = block:
     # No left boundary check needed. If there is a gap, the partial path for
     # that gap is returned by the import function to be registered, below.
-    let rc = db.importAccounts(
-      peer, stateRoot, iv.minPt, dd.data, noBaseBoundCheck = true)
+    let rc = db.importAccounts(peer, stateRoot, iv.minPt, dd.data)
     if rc.isErr:
       # Bad data, just try another peer
       buddy.ctrl.zombie = true

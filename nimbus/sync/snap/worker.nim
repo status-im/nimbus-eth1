@@ -21,7 +21,7 @@ import
   ./worker/[pivot, ticker],
   ./worker/com/com_error,
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
-  "."/[range_desc, worker_desc]
+  "."/[range_desc, update_beacon_header, worker_desc]
 
 {.push raises: [].}
 
@@ -126,6 +126,10 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
         checkpoint=("#" & $ctx.pool.pivotTable.topNumber() & "(0)")
       if not ctx.pool.ticker.isNil:
         ctx.pool.ticker.startRecovery()
+
+  if ctx.exCtrlFile.isSome:
+    warn "Snap sync accepts pivot block number or hash",
+      syncCtrlFile=ctx.exCtrlFile.get
   true
 
 proc release*(ctx: SnapCtxRef) =
@@ -179,6 +183,11 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ## * `buddy.ctrl.multiOk` is `false`
   ## * `buddy.ctrl.poolMode` is `false`
   ##
+  let ctx = buddy.ctx
+
+  # External beacon header updater
+  await buddy.updateBeaconHeaderFromFile()
+
   await buddy.pivotApprovePeer()
   buddy.ctrl.multiOk = true
 

@@ -179,10 +179,10 @@ type
       name: "sync-mode" .}: SyncMode
 
     syncCtrlFile* {.
-      desc: "Specify a file that is regularly checked for updates. It " &
-            "contains extra information specific to the type of sync " &
-            "process. This option is primaily intended only for sync " &
-            "testing and debugging."
+      desc: "Specify a file that is regularly checked for updates. If it " &
+            "exists it is checked for whether it contains extra information " &
+            "specific to the type of sync process. This option is primarily " &
+            "intended only for sync testing and debugging."
       abbr: "z"
       name: "sync-ctrl-file" }: Option[string]
 

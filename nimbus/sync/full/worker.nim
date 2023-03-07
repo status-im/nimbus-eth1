@@ -145,6 +145,17 @@ proc processStaged(buddy: FullBuddyRef): bool =
 
   return false
 
+
+proc suspendDownload(buddy: FullBuddyRef): bool =
+  ## Check whether downloading should be suspended
+  let ctx = buddy.ctx
+  if ctx.exCtrlFile.isSome:
+    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile
+    if rc.isOk:
+      ctx.pool.suspendAt = rc.value
+    if 0 < ctx.pool.suspendAt:
+      return ctx.pool.suspendAt < buddy.only.bQueue.topAccepted
+
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
@@ -378,7 +389,6 @@ proc runPool*(buddy: FullBuddyRef; last: bool): bool =
   buddy.ctx.poolMode = false
   true
 
-
 proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
   ## `true` which is typically done after finishing `runSingle()`. This
@@ -388,15 +398,10 @@ proc runMulti*(buddy: FullBuddyRef) {.async.} =
     ctx = buddy.ctx
     bq = buddy.only.bQueue
 
-  if ctx.exCtrlFile.isSome:
-    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile
-    if rc.isOk:
-      ctx.pool.suspendAt = rc.value
-    if 0 < ctx.pool.suspendAt:
-      if ctx.pool.suspendAt < buddy.only.bQueue.topAccepted:
-        # Sleep for a while, then leave
-        await sleepAsync(10.seconds)
-        return
+  if buddy.suspendDownload:
+    # Sleep for a while, then leave
+    await sleepAsync(10.seconds)
+    return
 
   # Fetch work item
   let rc = await bq.blockQueueWorker()

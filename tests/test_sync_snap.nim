@@ -230,22 +230,22 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
         accLst.test_accountsImport(desc, db.persistent)
 
       # debugging, make sure that state root ~ "$0"
-      desc.assignPrettyKeys()
+      hexaDb.assignPrettyKeys(root.to(NodeKey))
 
       # Beware: dumping a large database is not recommended
-      # true.say "***", "database dump\n    ", desc.dumpHexaDB()
+      # true.say "***", "database dump\n    ", hexaDb.dumpHexaDB(root)
 
       test &"Retrieve accounts & proofs for previous account ranges":
         if db.persistent:
           accLst.test_NodeRangeProof(getFn, dbg)
         else:
-          accLst.test_NodeRangeProof(hexaDB, dbg)
+          accLst.test_NodeRangeProof(hexaDb, dbg)
 
       test &"Verify left boundary checks":
         if db.persistent:
           accLst.test_NodeRangeLeftBoundary(getFn, dbg)
         else:
-          accLst.test_NodeRangeLeftBoundary(hexaDB, dbg)
+          accLst.test_NodeRangeLeftBoundary(hexaDb, dbg)
 
     block:
       # List of keys to be shared by sub-group

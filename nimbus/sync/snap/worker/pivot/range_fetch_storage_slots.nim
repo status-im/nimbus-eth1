@@ -61,6 +61,9 @@
 ## In general, if  an error occurs, the entry that caused the error is moved
 ## or re-stored onto the queue of partial requests `env.fetchStoragePart`.
 ##
+
+{.push raises: [].}
+
 import
   chronicles,
   chronos,
@@ -72,8 +75,6 @@ import
   ../com/[com_error, get_storage_ranges],
   ../db/[hexary_error, snapdb_storage_slots],
   ./storage_queue_helper
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-range"
@@ -137,9 +138,7 @@ proc storeStoragesSingleBatch(
   if 0 < gotSlotLists:
 
     # Verify/process storages data and save it to disk
-    let report = ctx.pool.snapDb.importStorageSlots(
-      peer, stoRange.data, noBaseBoundCheck = true)
-
+    let report = ctx.pool.snapDb.importStorageSlots(peer, stoRange.data)
     if 0 < report.len:
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here

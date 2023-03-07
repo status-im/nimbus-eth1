@@ -210,23 +210,22 @@ proc dbBackendRocksDb*(ps: SnapDbBaseRef): bool =
   not ps.base.rocky.isNil
 
 proc mergeProofs*(
-    ps: SnapDbBaseRef;        ## Session database
-    peer: Peer;               ## For log messages
+    xDb: HexaryTreeDbRef;     ## Session database
+    root: NodeKey;            ## State root
     proof: seq[SnapProof];    ## Node records
+    peer = Peer();            ## For log messages
     freeStandingOk = false;   ## Remove freestanding nodes
       ): Result[void,HexaryError]
       {.gcsafe, raises: [RlpError,KeyError].} =
   ## Import proof records (as received with snap message) into a hexary trie
   ## of the repair table. These hexary trie records can be extended to a full
   ## trie at a later stage and used for validating account data.
-  let
-    db = ps.hexaDb
   var
     nodes: HashSet[RepairKey]
-    refs = @[ps.root.to(RepairKey)].toHashSet
+    refs = @[root.to(RepairKey)].toHashSet
 
   for n,rlpRec in proof:
-    let report = db.hexaryImport(rlpRec.to(Blob), nodes, refs)
+    let report = xDb.hexaryImport(rlpRec.to(Blob), nodes, refs)
     if report.error != NothingSerious:
       let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error
@@ -242,24 +241,25 @@ proc mergeProofs*(
       else:
         # Delete unreferenced nodes
         for nodeKey in nodes:
-          db.tab.del(nodeKey)
+          xDb.tab.del(nodeKey)
         trace "mergeProofs() ignoring unrelated nodes", peer, nodes=nodes.len
 
   ok()
 
 
 proc verifyLowerBound*(
-    ps: SnapDbBaseRef;        ## Database session descriptor
-    peer: Peer;               ## For log messages
+    xDb: HexaryTreeDbRef;     ## Session database
+    root: NodeKey;            ## State root
     base: NodeTag;            ## Before or at first account entry in `data`
-    first: NodeTag;           ## First account key
+    first: NodeTag;           ## First account/storage key
+    peer = Peer();            ## For log messages
       ): Result[void,HexaryError]
       {.gcsafe, raises: [CatchableError].} =
   ## Verify that `base` is to the left of the first leaf entry and there is
   ## nothing in between.
   var error: HexaryError
 
-  let rc = base.hexaryNearbyRight(ps.root, ps.hexaDb)
+  let rc = base.hexaryNearbyRight(root, xDb)
   if rc.isErr:
     error = rc.error
   elif first == rc.value:
@@ -274,17 +274,18 @@ proc verifyLowerBound*(
 
 
 proc verifyNoMoreRight*(
-    ps: SnapDbBaseRef;        ## Database session descriptor
-    peer: Peer;               ## For log messages
+    xDb: HexaryTreeDbRef;     ## Session database
+    root: NodeKey;            ## State root
     base: NodeTag;            ## Before or at first account entry in `data`
+    peer = Peer();            ## For log messages
       ): Result[void,HexaryError]
       {.gcsafe, raises: [CatchableError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.
   let
-    root = ps.root.to(RepairKey)
+    root = root.to(RepairKey)
     base = base.to(NodeKey)
-  if base.hexaryPath(root, ps.hexaDb).hexaryNearbyRightMissing(ps.hexaDb):
+  if base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb):
     return ok()
 
   let error = LowerBoundProofError
@@ -314,10 +315,6 @@ proc assignPrettyKeys*(xDb: HexaryTreeDbRef; root: NodeKey) =
         of Branch: (for w in node.bLink: discard xDb.keyPp w)
         of Extension: discard xDb.keyPp node.eLink
         of Leaf: discard
-
-proc assignPrettyKeys*(ps: SnapDbBaseRef) =
-  ## Variant of `assignPrettyKeys()`
-  ps.hexaDb.assignPrettyKeys(ps.root)
 
 proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
   ## Pretty print helper compiling the path into the repair tree for the
@@ -353,14 +350,6 @@ proc dumpHexaDB*(xDb: HexaryTreeDbRef; root: NodeKey; indent = 4): string =
   ##
   ## Beware: dumping a large database is not recommended
   xDb.pp(root, indent)
-
-proc dumpHexaDB*(ps: SnapDbBaseRef; indent = 4): string =
-  ## Ditto
-  ps.hexaDb.pp(ps.root, indent)
-
-proc hexaryPpFn*(ps: SnapDbBaseRef): HexaryPpFn =
-  ## Key mapping function used in `HexaryTreeDB`
-  ps.hexaDb.keyPp
 
 # ------------------------------------------------------------------------------
 # End
