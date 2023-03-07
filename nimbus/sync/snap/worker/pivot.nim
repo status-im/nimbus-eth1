@@ -128,7 +128,11 @@ proc tickerStats*(
   proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
     if 0 < length:
       result[0] = sum / length.float
-      result[1] = sqrt(sqSum / length.float - result[0] * result[0])
+      let
+        sqSumAv = sqSum / length.float
+        rSq = result[0] * result[0]
+      if rSq < sqSumAv:
+        result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
   result = proc: SnapTickerStats =
     var
