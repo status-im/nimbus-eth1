@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  math,
   ../../common/common,
   ../../constants,
   ../../db/accounts_cache,
@@ -29,6 +30,9 @@ import
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+func gwei(n: uint64): UInt256 =
+  (n * (10'u64 ^ 9'u64)).u256
 
 proc procBlkPreamble(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
@@ -73,7 +77,7 @@ proc procBlkPreamble(vmState: BaseVMState;
       return false
 
     for withdrawal in body.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.u256)
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
 
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",
