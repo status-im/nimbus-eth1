@@ -136,8 +136,9 @@ proc accountsRangefetchImpl(
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
         when extraTraceMessages:
+          let reqLen {.used.} = $iv
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
-            reqLen=iv.len, error
+            reqLen, error
       return
     rc.value
 
@@ -168,8 +169,9 @@ proc accountsRangefetchImpl(
       # Bad data, just try another peer
       buddy.ctrl.zombie = true
       when extraTraceMessages:
+        let reqLen {.used.} = $iv
         trace logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
-          gotAccounts, gotStorage, reqLen=iv.len, covered, error=rc.error
+          gotAccounts, gotStorage, reqLen, covered, error=rc.error
       return
     rc.value
 

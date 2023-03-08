@@ -137,6 +137,13 @@ proc init*(
   ## Constructor variant
   HexaryTreeDbRef.init(ps.base)
 
+proc init*(
+    T: type HexaryTreeDbRef;
+      ): T =
+  ## Constructor variant. It provides a `HexaryTreeDbRef()` with a key key cache attached
+  ## for pretty printing. So this one is mainly for debugging.
+  HexaryTreeDbRef.init(SnapDbRef())
+
 # ---------------
 
 proc init*(

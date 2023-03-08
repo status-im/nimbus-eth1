@@ -31,6 +31,10 @@ type
     proof*: seq[SnapProof]      ## Boundary proof
     proofSize*: int             ##  RLP encoded size of `proof` on wire
 
+const
+  proofNodeSizeMax = 532
+    ## Branch node with all branches `high(UInt256)` within RLP list
+
 proc hexaryRangeRlpLeafListSize*(blobLen: int; lstLen = 0): (int,int) {.gcsafe.}
 proc hexaryRangeRlpSize*(blobLen: int): int {.gcsafe.}
 
@@ -213,16 +217,6 @@ proc hexaryRangeLeafsProof*(
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc to*(
-    rl: RangeLeaf;
-    T: type SnapAccount;
-      ): T
-      {.gcsafe, raises: [RlpError]} =
-  ## Convert the generic `RangeLeaf` argument to payload type.
-  T(accHash: rl.key.to(Hash256),
-    accBody: rl.data.decode(Account))
-
-
 proc hexaryRangeRlpSize*(blobLen: int): int =
   ## Returns the size of RLP encoded <blob> of argument length `blobLen`.
   if blobLen < 56:
@@ -265,6 +259,15 @@ proc hexaryRangeRlpLeafListSize*(blobLen: int; lstLen = 0): (int,int) =
     (pairLen, hexaryRangeRlpSize(pairLen + lstLen))
   else:
     (pairLen, high(int))
+
+proc hexaryRangeRlpNodesListSizeMax*(n: int): int =
+  ## Maximal size needs to RLP encode `n` nodes (handy for calculating the
+  ## space needed to store proof nodes.)
+  const nMax = high(int) div proofNodeSizeMax
+  if n <= nMax:
+    hexaryRangeRlpSize(n * proofNodeSizeMax)
+  else:
+    high(int)
 
 # ------------------------------------------------------------------------------
 # End

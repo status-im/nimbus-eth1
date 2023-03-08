@@ -31,10 +31,8 @@ type
     peerPool: PeerPool
 
 const
-  proofNodeSizeMax = 532
-    ## Branch node with all branches `high(UInt256)` within RLP list
-
-proc proofNodesSizeMax*(n: int): int {.gcsafe.}
+  estimatedProofSize = hexaryRangeRlpNodesListSizeMax(10)
+    ## Some expected upper limit, typically not mote than 10 proof nodes
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -46,9 +44,22 @@ template logTxt(info: static[string]): static[string] =
 proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth=name
 
-proc getAccountFn(chain: ChainRef): HexaryGetFn {.gcsafe.} =
+proc getAccountFn(
+    chain: ChainRef;
+      ): HexaryGetFn
+      {.gcsafe.} =
   let db = chain.com.db.db
-  return proc(key: openArray[byte]): Blob = db.get(key)
+  return proc(key: openArray[byte]): Blob =
+    db.get(key)
+
+proc to(
+    rl: RangeLeaf;
+    T: type SnapAccount;
+      ): T
+      {.gcsafe, raises: [RlpError]} =
+  ## Convert the generic `RangeLeaf` argument to payload type.
+  T(accHash: rl.key.to(Hash256),
+    accBody: rl.data.decode(Account))
 
 # ------------------------------------------------------------------------------
 # Private functions: fetch leaf range
@@ -62,22 +73,16 @@ proc fetchLeafRange(
     replySizeMax: int;                  # Updated size counter for the raw list
       ): Result[RangeProof,void]
       {.gcsafe, raises: [CatchableError].} =
-  let
-    rootKey = root.to(NodeKey)
-    estimatedProofSize = proofNodesSizeMax(10) # some expected upper limit
-
-  if replySizeMax <= estimatedProofSize:
-    trace logTxt "fetchLeafRange(): data size too small", iv, replySizeMax
-    return err() # package size too small
 
   # Assemble result Note that the size limit is the size of the leaf nodes
   # on wire. So the `sizeMax` is the argument size `replySizeMax` with some
   # space removed to accomodate for the proof nodes.
   let
+    rootKey = root.to(NodeKey)
     sizeMax = replySizeMax - estimatedProofSize
     rc = db.hexaryRangeLeafsProof(rootKey, iv, sizeMax)
   if rc.isErr:
-    error logTxt "fetchLeafRange(): database problem",
+    debug logTxt "fetchLeafRange: database problem",
       iv, replySizeMax, error=rc.error
     return err() # database error
   let sizeOnWire = rc.value.leafsSize + rc.value.proofSize
@@ -98,7 +103,7 @@ proc fetchLeafRange(
     tailSize += rpl.leafs[leafsTop - tailItems].data.len + extraSize
     tailItems.inc
   if leafsTop <= tailItems:
-    trace logTxt "fetchLeafRange(): stripping leaf list failed",
+    debug logTxt "fetchLeafRange: stripping leaf list failed",
       iv, replySizeMax,leafsTop, tailItems
     return err() # package size too small
 
@@ -109,7 +114,7 @@ proc fetchLeafRange(
   if strippedSizeOnWire <= replySizeMax:
     return ok(leafProof)
 
-  trace logTxt "fetchLeafRange(): data size problem",
+  debug logTxt "fetchLeafRange: data size problem",
     iv, replySizeMax, leafsTop, tailItems, strippedSizeOnWire
 
   err()
@@ -158,16 +163,6 @@ proc init*(
 # Public functions: helpers
 # ------------------------------------------------------------------------------
 
-proc proofNodesSizeMax*(n: int): int =
-  ## Max number of bytes needed to store a list of `n` RLP encoded hexary
-  ## nodes which is a `Branch` node where every link reference is set to
-  ## `high(UInt256)`.
-  const nMax = high(int) div proofNodeSizeMax
-  if n <= nMax:
-    hexaryRangeRlpSize(n * proofNodeSizeMax)
-  else:
-    high(int)
-
 proc proofEncode*(proof: seq[SnapProof]): Blob =
   var writer = initRlpWriter()
   writer.snapAppend SnapProofNodes(nodes: proof)
@@ -195,7 +190,11 @@ method getAccountRange*(
     iv = NodeTagRange.new(origin.to(NodeTag), limit.to(NodeTag))
     sizeMax = min(replySizeMax,high(int).uint64).int
 
-  trace logTxt "getAccountRange(): request data range", iv, replySizeMax
+  if sizeMax <= estimatedProofSize:
+    debug logTxt "getAccountRange: data size too small", iv, replySizeMax
+    return # package size too small
+
+  trace logTxt "getAccountRange: request data range", iv, replySizeMax
 
   let rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
   if rc.isOk:
