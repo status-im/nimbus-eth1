@@ -26,6 +26,7 @@ type
   RangeProof* = object
     base*: NodeTag              ## No node between `base` and `leafs[0]`
     leafs*: seq[RangeLeaf]      ## List of consecutive leaf nodes
+    leafsLast*: bool            ## If no leaf exceeds `max(base,leafs[])`
     leafsSize*: int             ## RLP encoded size of `leafs` on wire
     proof*: seq[SnapProof]      ## Boundary proof
     proofSize*: int             ##  RLP encoded size of `proof` on wire
@@ -102,16 +103,16 @@ template collectLeafs(
       rls: RangeProof
 
     # Set up base node, the nearest node before `iv.minPt`
-    block:
+    if 0.to(NodeTag) < nodeTag:
       let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyLeft(db)
       if rx.isOk:
         rls.base = getPartialPath(rx.value).convertTo(NodeKey).to(NodeTag)
-      elif rx.error != NearbyFailed:
+      elif rx.error notin {NearbyFailed,NearbyEmptyPath}:
         rc = typeof(rc).err(rx.error)
         break body
 
-    # Fill leaf nodes from interval range unless size reached
-    while nodeTag <= nodeMax:
+    # Fill leaf nodes (at least one) from interval range unless size reached
+    while nodeTag <= nodeMax or rls.leafs.len == 0:
       # The following logic might be sub-optimal. A strict version of the
       # `next()` function that stops with an error at dangling links could
       # be faster if the leaf nodes are not too far apart on the hexary trie.
@@ -119,7 +120,11 @@ template collectLeafs(
         xPath = block:
           let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyRight(db)
           if rx.isErr:
-            rc = typeof(rc).err(rx.error)
+            if rx.error notin {NearbyFailed,NearbyEmptyPath}:
+              rc = typeof(rc).err(rx.error)
+            else:
+              rls.leafsLast = true
+              rc = typeof(rc).ok(rls) # done ok, last node reached
             break body
           rx.value
         rightKey = getPartialPath(xPath).convertTo(NodeKey)
@@ -164,13 +169,15 @@ template updateProof(
       ): auto =
   ## Complement leafs list by adding proof nodes. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var proof = allPathNodes(rls.base, rootKey, db)
-  if 0 < rls.leafs.len:
-    proof.incl nonLeafPathNodes(rls.leafs[^1].key.to(NodeTag), rootKey, db)
-
   var rp = rls
-  rp.proof = toSeq(proof)
-  rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.to(Blob).len, 0)
+
+  if 0.to(NodeTag) < rp.base or not rp.leafsLast:
+    var proof = allPathNodes(rls.base, rootKey, db)
+    if 0 < rls.leafs.len:
+      proof.incl nonLeafPathNodes(rls.leafs[^1].key.to(NodeTag), rootKey, db)
+
+    rp.proof = toSeq(proof)
+    rp.proofSize = hexaryRangeRlpSize rp.proof.foldl(a + b.to(Blob).len, 0)
 
   rp
 
