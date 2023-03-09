@@ -393,17 +393,17 @@ proc hexaryNearbyRight*(
       if topLink.isZero or not db.tab.hasKey(topLink):
         return err(NearbyDanglingLink) # error
 
-      let nextNibble = rPath.tail[0].int8
-      if start and nextNibble < 15:
-        let nextNode = db.tab[topLink]
-        case nextNode.kind
-        of Leaf:
-          if rPath.tail <= nextNode.lPfx:
-            return rPath.completeLeast(topLink, db)
-        of Extension:
-          if rPath.tail <= nextNode.ePfx:
-            return rPath.completeLeast(topLink, db)
-        of Branch:
+      let nextNode = db.tab[topLink]
+      case nextNode.kind
+      of Leaf:
+        if rPath.tail <= nextNode.lPfx:
+          return rPath.completeLeast(topLink, db)
+      of Extension:
+        if rPath.tail <= nextNode.ePfx:
+          return rPath.completeLeast(topLink, db)
+      of Branch:
+        let nextNibble = rPath.tail[0].int8
+        if start and nextNibble < 15:
           # Step down and complete with a branch link on the child node
           step = RPathStep(
             key:    topLink,
@@ -484,22 +484,22 @@ proc hexaryNearbyRight*(
       if topLink.len == 0 or topLink.getFn().len == 0:
         return err(NearbyDanglingLink) # error
 
-      let nextNibble = xPath.tail[0].int8
-      if nextNibble < 15:
-        let nextNodeRlp = rlpFromBytes topLink.getFn()
-        case nextNodeRlp.listLen:
-        of 2:
-          if xPath.tail <= nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1]:
-            return xPath.completeLeast(topLink, getFn)
-        of 17:
+      let nextNodeRlp = rlpFromBytes topLink.getFn()
+      case nextNodeRlp.listLen:
+      of 2:
+        if xPath.tail <= nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1]:
+          return xPath.completeLeast(topLink, getFn)
+      of 17:
+        let nextNibble = xPath.tail[0].int8
+        if nextNibble < 15:
           # Step down and complete with a branch link on the child node
           step = XPathStep(
             key:    topLink,
             node:   nextNodeRlp.toBranchNode,
             nibble: nextNibble)
           xPath.path &= step
-        else:
-          return err(NearbyGarbledNode) # error
+      else:
+        return err(NearbyGarbledNode) # error
 
     # Find the next item to the right of the current top entry
     for inx in (step.nibble + 1) .. 15:
@@ -616,17 +616,17 @@ proc hexaryNearbyLeft*(
       if topLink.isZero or not db.tab.hasKey(topLink):
         return err(NearbyDanglingLink) # error
 
-      let nextNibble = rPath.tail[0].int8
-      if 0 < nextNibble:
-        let nextNode = db.tab[topLink]
-        case nextNode.kind
-        of Leaf:
-          if nextNode.lPfx <= rPath.tail:
-            return rPath.completeMost(topLink, db)
-        of Extension:
-          if nextNode.ePfx <= rPath.tail:
-            return rPath.completeMost(topLink, db)
-        of Branch:
+      let nextNode = db.tab[topLink]
+      case nextNode.kind
+      of Leaf:
+        if nextNode.lPfx <= rPath.tail:
+          return rPath.completeMost(topLink, db)
+      of Extension:
+        if nextNode.ePfx <= rPath.tail:
+          return rPath.completeMost(topLink, db)
+      of Branch:
+        let nextNibble = rPath.tail[0].int8
+        if 0 < nextNibble:
           # Step down and complete with a branch link on the child node
           step = RPathStep(
             key:    topLink,
@@ -708,22 +708,22 @@ proc hexaryNearbyLeft*(
       if topLink.len == 0 or topLink.getFn().len == 0:
         return err(NearbyDanglingLink) # error
 
-      let nextNibble = xPath.tail[0].int8
-      if 0 < nextNibble:
-        let nextNodeRlp = rlpFromBytes topLink.getFn()
-        case nextNodeRlp.listLen:
-        of 2:
-          if nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1] <= xPath.tail:
-            return xPath.completeMost(topLink, getFn)
-        of 17:
+      let nextNodeRlp = rlpFromBytes topLink.getFn()
+      case nextNodeRlp.listLen:
+      of 2:
+        if nextNodeRlp.listElem(0).toBytes.hexPrefixDecode[1] <= xPath.tail:
+          return xPath.completeMost(topLink, getFn)
+      of 17:
+        let nextNibble = xPath.tail[0].int8
+        if 0 < nextNibble:
           # Step down and complete with a branch link on the child node
           step = XPathStep(
             key:    topLink,
             node:   nextNodeRlp.toBranchNode,
             nibble: nextNibble)
           xPath.path &= step
-        else:
-          return err(NearbyGarbledNode) # error
+      else:
+        return err(NearbyGarbledNode) # error
 
     # Find the next item to the right of the new top entry
     for inx in (step.nibble - 1).countDown(0):
