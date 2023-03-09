@@ -10,6 +10,9 @@ import
   ../../../nimbus/rpc/rpc_types,
   ../../../nimbus/rpc/merge/mergeutils
 
+import eth/common/eth_types as common_eth_types
+type Hash256 = common_eth_types.Hash256
+
 const
   prevRandaoContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000316")
 

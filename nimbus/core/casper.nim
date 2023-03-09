@@ -11,9 +11,9 @@ import
 
 type
   CasperRef* = ref object
-    feeRecipient : EthAddress
-    timestamp    : EthTime
-    prevRandao   : Hash256
+    feeRecipient* : EthAddress
+    timestamp*    : EthTime
+    prevRandao*   : Hash256
 
 proc prepare*(ctx: CasperRef, header: var BlockHeader) =
   header.coinbase   = ctx.feeRecipient

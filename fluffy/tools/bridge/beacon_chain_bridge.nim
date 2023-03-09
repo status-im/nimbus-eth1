@@ -88,6 +88,8 @@ import
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
+type Hash256 = etypes.Hash256
+
 template asEthHash(hash: ethtypes.BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
 

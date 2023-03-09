@@ -178,7 +178,7 @@ proc makeNextTransaction*(t: TestEnv, recipient: EthAddress, amount: UInt256, pa
   inc t.nonce
   signTransaction(tx, t.vaultKey, chainId, eip155 = true)
 
-proc verifyPoWProgress*(t: TestEnv, lastBlockHash: Hash256): bool =
+proc verifyPoWProgress*(t: TestEnv, lastBlockHash: ethtypes.Hash256): bool =
   let res = waitFor verifyPoWProgress(t.rpcClient, lastBlockHash)
   if res.isErr:
     error "verify PoW Progress error", msg=res.error

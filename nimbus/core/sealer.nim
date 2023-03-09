@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[times, typetraits],
+  std/[sequtils, times, typetraits],
   pkg/[chronos,
     stew/results,
     chronicles,
@@ -30,8 +30,8 @@ import
   ../common/[common, context]
 
 
-from web3/ethtypes as web3types import nil
-from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1
+from web3/ethtypes as web3types import nil, TypedTransaction, WithdrawalV1, ExecutionPayloadV1OrV2, toExecutionPayloadV1OrV2, toExecutionPayloadV1
+from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1, PayloadAttributesV2, ExecutionPayloadV2
 
 type
   EngineState* = enum
@@ -139,9 +139,11 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
   int64 q
 
+proc toTypedTransaction(tx: Transaction): TypedTransaction =
+  web3types.TypedTransaction(rlp.encode(tx))
+
 proc generateExecutionPayload*(engine: SealingEngineRef,
-                               payloadAttrs: PayloadAttributesV1,
-                               payloadRes: var ExecutionPayloadV1): Result[void, string] =
+                               payloadAttrs: PayloadAttributesV1 | PayloadAttributesV2): Result[ExecutionPayloadV1OrV2, string] =
   let
     headBlock = try: engine.chain.db.getCanonicalHead()
                 except CatchableError: return err "No head block in database"
@@ -159,9 +161,9 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   let res = engine.generateBlock(blk)
   if res.isErr:
     error "sealing engine generateBlock error", msg = res.error
-    return res
+    return err(res.error)
 
-  # make sure both generated block header and payloadRes(ExecutionPayloadV1)
+  # make sure both generated block header and payloadRes(ExecutionPayloadV2)
   # produce the same blockHash
   blk.header.fee = some(blk.header.fee.get(UInt256.zero)) # force it with some(UInt256)
 
@@ -169,25 +171,35 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   if blk.header.extraData.len > 32:
     return err "extraData length should not exceed 32 bytes"
 
-  payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
-  payloadRes.feeRecipient = Web3Address blk.header.coinbase
-  payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
-  payloadRes.receiptsRoot = Web3BlockHash blk.header.receiptRoot.data
-  payloadRes.logsBloom = Web3Bloom blk.header.bloom
-  payloadRes.prevRandao = payloadAttrs.prevRandao
-  payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
-  payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
-  payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
-  payloadRes.timestamp = payloadAttrs.timestamp
-  payloadRes.extraData = web3types.DynamicBytes[0, 32] blk.header.extraData
-  payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
-  payloadRes.blockHash = Web3BlockHash blockHash.data
+  let transactions = blk.txs.map(toTypedTransaction)
 
-  for tx in blk.txs:
-    let txData = rlp.encode(tx)
-    payloadRes.transactions.add web3types.TypedTransaction(txData)
+  let withdrawals =
+    when payloadAttrs is PayloadAttributesV2:
+      some(payloadAttrs.withdrawals)
+    else:
+      none[seq[WithdrawalV1]]()
 
-  return ok()
+  return ok(ExecutionPayloadV1OrV2(
+    parentHash: Web3BlockHash blk.header.parentHash.data,
+    feeRecipient: Web3Address blk.header.coinbase,
+    stateRoot: Web3BlockHash blk.header.stateRoot.data,
+    receiptsRoot: Web3BlockHash blk.header.receiptRoot.data,
+    logsBloom: Web3Bloom blk.header.bloom,
+    prevRandao: payloadAttrs.prevRandao,
+    blockNumber: Web3Quantity blk.header.blockNumber.truncate(uint64),
+    gasLimit: Web3Quantity blk.header.gasLimit,
+    gasUsed: Web3Quantity blk.header.gasUsed,
+    timestamp: payloadAttrs.timestamp,
+    extraData: web3types.DynamicBytes[0, 32] blk.header.extraData,
+    baseFeePerGas: blk.header.fee.get(UInt256.zero),
+    blockHash: Web3BlockHash blockHash.data,
+    transactions: transactions,
+    withdrawals: withdrawals
+  ))
+
+proc generateExecutionPayloadV1*(engine: SealingEngineRef,
+                                 payloadAttrs: PayloadAttributesV1): Result[ExecutionPayloadV1, string] =
+  return generateExecutionPayload(engine, payloadAttrs).map(toExecutionPayloadV1)
 
 proc new*(_: type SealingEngineRef,
           chain: ChainRef,

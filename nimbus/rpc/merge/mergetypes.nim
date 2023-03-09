@@ -18,6 +18,7 @@ export merger, eth_types
 
 type
   EthBlockHeader* = eth_types.BlockHeader
+  Hash256 = eth_types.Hash256
 
 const
   # maxTrackedPayloads is the maximum number of prepared payloads the execution
@@ -40,7 +41,7 @@ type
 
   PayloadItem = object
     id: PayloadID
-    payload: ExecutionPayloadV1
+    payload: ExecutionPayloadV1OrV2
 
   HeaderItem = object
     hash: Hash256
@@ -81,15 +82,27 @@ proc get*(api: EngineApiRef, hash: Hash256, header: var EthBlockHeader): bool =
       return true
   false
 
-proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1) =
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1OrV2) =
   api.payloadQueue.put(PayloadItem(id: id, payload: payload))
 
-proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV1) =
+  api.put(id, payload.toExecutionPayloadV1OrV2)
+
+proc put*(api: EngineApiRef, id: PayloadID, payload: ExecutionPayloadV2) =
+  api.put(id, payload.toExecutionPayloadV1OrV2)
+
+proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1OrV2): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
       return true
   false
+
+proc get*(api: EngineApiRef, id: PayloadID, payload: var ExecutionPayloadV1): bool =
+  var p: ExecutionPayloadV1OrV2
+  let found = api.get(id, p)
+  payload = p.toExecutionPayloadV1
+  return found
 
 proc merger*(api: EngineApiRef): MergerRef =
   api.merger

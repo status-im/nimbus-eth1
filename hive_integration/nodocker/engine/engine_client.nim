@@ -1,7 +1,7 @@
 import
   std/[times, json, strutils],
   stew/byteutils,
-  eth/[common, rlp], chronos,
+  eth/[common, common/eth_types, rlp], chronos,
   web3/engine_api_types,
   json_rpc/[rpcclient, errors],
   ../../../tests/rpcclient/eth_api,
@@ -10,6 +10,8 @@ import
   ../../../premix/parser
 
 import web3/engine_api as web3_engine_api
+
+type Hash256 = eth_types.Hash256
 
 template wrapTry(body: untyped) =
   try:
@@ -40,6 +42,12 @@ proc newPayloadV1*(client: RpcClient,
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV1(payload)
+
+proc newPayloadV2*(client: RpcClient,
+      payload: ExecutionPayloadV2):
+        Result[PayloadStatusV1, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV2(payload)
 
 proc toBlockNumber(n: Option[HexQuantityStr]): common.BlockNumber =
   if n.isNone:
