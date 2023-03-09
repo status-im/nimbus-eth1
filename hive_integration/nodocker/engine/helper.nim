@@ -7,6 +7,9 @@ import
   ../../../nimbus/rpc/hexstrings,
   ../../../nimbus/transaction
 
+import eth/common/eth_types as common_eth_types
+type Hash256 = common_eth_types.Hash256
+
 type
   ExecutableData* = object
     parentHash*   : Hash256

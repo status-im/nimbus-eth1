@@ -7,6 +7,8 @@ import
 
 export ethtypes
 
+import eth/common/eth_types as common_eth_types
+
 type
   TestSpec* = object
     name*: string
@@ -32,7 +34,7 @@ template testCond*(expr, body: untyped) =
     else:
       return TestStatus.Failed
 
-proc `$`*(x: Option[Hash256]): string =
+proc `$`*(x: Option[common_eth_types.Hash256]): string =
   if x.isNone:
     "none"
   else:
