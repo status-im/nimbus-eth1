@@ -65,6 +65,20 @@ proc to(
 # Private functions: fetch leaf range
 # ------------------------------------------------------------------------------
 
+proc mkNodeTagRange(
+    origin: openArray[byte];
+    limit: openArray[byte];
+      ): Result[NodeTagRange,void] =
+  var (minPt, maxPt) = (low(NodeTag), high(NodeTag))
+
+  if 0 < origin.len or 0 < limit.len:
+    if not minPt.init(origin) or not maxPt.init(limit) or maxPt <= minPt:
+      debug logTxt "mkNodeTagRange: malformed range", origin, limit
+      return err()
+
+  ok(NodeTagRange.new(minPt, maxPt))
+
+
 proc fetchLeafRange(
     ctx: SnapWireRef;                   # Handler descriptor
     db: HexaryGetFn;                    # Database abstraction
@@ -179,15 +193,20 @@ proc proofDecode*(data: Blob): seq[SnapProof] {.gcsafe, raises: [RlpError].} =
 method getAccountRange*(
     ctx: SnapWireRef;
     root: Hash256;
-    origin: Hash256;
-    limit: Hash256;
+    origin: openArray[byte];
+    limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[SnapAccount], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch accounts list from database
   let
+    iv = block: # Calculate effective accounts range (if any)
+      let rc = origin.mkNodeTagRange limit
+      if rc.isErr:
+        return
+      rc.value # malformed interval
+
     db = ctx.chain.getAccountFn
-    iv = NodeTagRange.new(origin.to(NodeTag), limit.to(NodeTag))
     sizeMax = min(replySizeMax,high(int).uint64).int
 
   if sizeMax <= estimatedProofSize:
