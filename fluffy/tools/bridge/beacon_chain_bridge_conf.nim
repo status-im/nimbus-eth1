@@ -198,7 +198,7 @@ func asLightClientConf*(pc: BeaconBridgeConf): LightClientConf =
     directPeers: pc.directPeers,
     trustedBlockRoot: pc.trustedBlockRoot,
     web3Urls: @[],
-    jwtSecret: none(string),
+    jwtSecret: none(InputFile),
     stopAtEpoch: 0
   )
 
