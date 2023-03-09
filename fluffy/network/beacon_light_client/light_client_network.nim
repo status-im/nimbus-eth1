@@ -36,11 +36,12 @@ func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
 
 proc getLightClientBootstrap*(
     l: LightClientNetwork,
-    trustedRoot: Digest): Future[results.Opt[altair.LightClientBootstrap]] {.async.} =
+    trustedRoot: Digest):
+    Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
   let
     bk = LightClientBootstrapKey(blockHash: trustedRoot)
     ck = ContentKey(
-      contentType: lightClientbootstrap,
+      contentType: lightClientBootstrap,
       lightClientBootstrapKey: bk
     )
     keyEncoded = encode(ck)
@@ -50,15 +51,16 @@ proc getLightClientBootstrap*(
       await l.portalProtocol.contentLookup(keyEncoded, contentId)
 
   if bootstrapContentLookup.isNone():
-      warn "Failed fetching block header from the network", trustedRoot, contentKey = keyEncoded
-      return Opt.none(altair.LightClientBootstrap)
+      warn "Failed fetching LightClientBootstrap from the network",
+        trustedRoot, contentKey = keyEncoded
+      return Opt.none(ForkedLightClientBootstrap)
 
   let
     bootstrap = bootstrapContentLookup.unsafeGet()
-    decodingResult = decodeBootstrapForked(l.forkDigests, bootstrap.content)
+    decodingResult = decodeLightClientBootstrapForked(l.forkDigests, bootstrap.content)
 
   if decodingResult.isErr:
-    return Opt.none(altair.LightClientBootstrap)
+    return Opt.none(ForkedLightClientBootstrap)
   else:
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
@@ -67,7 +69,8 @@ proc getLightClientBootstrap*(
 proc getLightClientUpdatesByRange*(
     l: LightClientNetwork,
     startPeriod: uint64,
-    count: uint64): Future[results.Opt[seq[altair.LightClientUpdate]]] {.async.} =
+    count: uint64):
+    Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
   let
     bk = LightClientUpdateKey(startPeriod: startPeriod, count: count)
     ck = ContentKey(
@@ -82,20 +85,23 @@ proc getLightClientUpdatesByRange*(
 
   if updatesResult.isNone():
       warn "Failed fetching updates network", contentKey = keyEncoded
-      return Opt.none(seq[altair.LightClientUpdate])
+      return Opt.none(ForkedLightClientUpdateList)
 
   let
     updates = updatesResult.unsafeGet()
-    decodingResult = decodeLightClientUpdatesForked(l.forkDigests, updates.content)
+    decodingResult = decodeLightClientUpdatesByRange(
+      l.forkDigests, updates.content)
 
   if decodingResult.isErr:
-    return Opt.none(seq[altair.LightClientUpdate])
+    return Opt.none(ForkedLightClientUpdateList)
   else:
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
     return Opt.some(decodingResult.get())
 
-proc getUpdate(l: LightClientNetwork, ck: ContentKey):Future[results.Opt[seq[byte]]] {.async.} =
+proc getUpdate(
+    l: LightClientNetwork, ck: ContentKey):
+    Future[results.Opt[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(ck)
     contentID = toContentId(keyEncoded)
@@ -107,49 +113,52 @@ proc getUpdate(l: LightClientNetwork, ck: ContentKey):Future[results.Opt[seq[byt
 
   return ok(updateLooukup.get().content)
 
-# TODO: Currently both getLightClientFinalityUpdate and getLightClientOptimisticUpdate
+# TODO:
+# Currently both getLightClientFinalityUpdate and getLightClientOptimisticUpdate
 # are implemented in naive way as finding first peer with any of those updates
 # and treating it as latest. This will probably need to get improved.
 proc getLightClientFinalityUpdate*(
     l: LightClientNetwork,
     currentFinalSlot: uint64,
     currentOptimisticSlot: uint64
-  ): Future[results.Opt[altair.LightClientFinalityUpdate]] {.async.} =
+  ): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
 
   let
     ck = finalityUpdateContentKey(currentFinalSlot, currentOptimisticSlot)
     lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
-    return Opt.none(altair.LightClientFinalityUpdate)
+    return Opt.none(ForkedLightClientFinalityUpdate)
 
   let
     finalityUpdate = lookupResult.get()
-    decodingResult = decodeLightClientFinalityUpdateForked(l.forkDigests, finalityUpdate)
+    decodingResult = decodeLightClientFinalityUpdateForked(
+      l.forkDigests, finalityUpdate)
 
   if decodingResult.isErr:
-    return Opt.none(altair.LightClientFinalityUpdate)
+    return Opt.none(ForkedLightClientFinalityUpdate)
   else:
     return Opt.some(decodingResult.get())
 
 proc getLightClientOptimisticUpdate*(
     l: LightClientNetwork,
     currentOptimisticSlot: uint64
-  ): Future[results.Opt[altair.LightClientOptimisticUpdate]] {.async.} =
+  ): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
 
   let
     ck = optimisticUpdateContentKey(currentOptimisticSlot)
     lookupResult = await l.getUpdate(ck)
 
   if lookupResult.isErr:
-    return Opt.none(altair.LightClientOptimisticUpdate)
+    return Opt.none(ForkedLightClientOptimisticUpdate)
 
   let
     optimimsticUpdate = lookupResult.get()
-    decodingResult = decodeLightClientOptimisticUpdateForked(l.forkDigests, optimimsticUpdate)
+    decodingResult = decodeLightClientOptimisticUpdateForked(
+      l.forkDigests, optimimsticUpdate)
 
   if decodingResult.isErr:
-    return Opt.none(altair.LightClientOptimisticUpdate)
+    return Opt.none(ForkedLightClientOptimisticUpdate)
   else:
     return Opt.some(decodingResult.get())
 
@@ -168,7 +177,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol, lightClientProtocolId,
-      toContentIdHandler, createGetHandler(lightClientDb), stream, bootstrapRecords,
+      toContentIdHandler,
+      createGetHandler(lightClientDb), stream, bootstrapRecords,
       config = portalConfig)
 
   portalProtocol.dbPut = createStoreHandler(lightClientDb)
@@ -180,7 +190,7 @@ proc new*(
     forkDigests: forkDigests
   )
 
-# TODO this should be probably supplied by upper layer i.e Light client which uses
+# TODO: this should be probably supplied by upper layer i.e Light client which uses
 # light client network as data provider as only it has all necessary context to
 # validate data
 proc validateContent(

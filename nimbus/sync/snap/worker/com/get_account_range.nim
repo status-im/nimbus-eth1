@@ -12,6 +12,8 @@
 ## traversing leaves of the trie in leaf path order, making network requests
 ## using the `snap` protocol.
 
+{.push raises: [].}
+
 import
   std/sequtils,
   chronos,
@@ -20,8 +22,6 @@ import
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -79,7 +79,7 @@ proc getAccountRange*(
     let snAccRange = rc.value.get
     GetAccountRange(
       data:        PackedAccountRange(
-        proof:     snAccRange.proof,
+        proof:     snAccRange.proof.nodes,
         accounts:  snAccRange.accounts
           # Re-pack accounts data
           .mapIt(PackedAccount(

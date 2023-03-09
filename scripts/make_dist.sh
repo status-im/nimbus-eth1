@@ -39,4 +39,3 @@ ls -l dist
 
 # We rebuild everything inside the container, so we need to clean up afterwards.
 ${MAKE} --no-print-directory clean
-

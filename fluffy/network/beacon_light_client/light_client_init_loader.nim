@@ -22,7 +22,8 @@ type
     forks*: ForkDigests
     genesis_validators_root*: Eth2Digest
 
-proc loadNetworkData*(networkName: string): NetworkInitData {.raises: [CatchableError, Defect].}=
+proc loadNetworkData*(
+    networkName: string): NetworkInitData {.raises: [CatchableError].} =
   let
     metadata =
       try:

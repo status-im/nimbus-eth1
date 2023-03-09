@@ -8,14 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.used, push raises: [].}
+
 import
   eth/p2p,
   ../../core/[chain, tx_pool],
   ../protocol,
   ./eth as handlers_eth,
   ./snap as handlers_snap
-
-{.used, push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
@@ -51,7 +51,7 @@ proc addSnapHandlerCapability*(
     node: var EthereumNode;
     peerPool: PeerPool;
     chain = ChainRef(nil);
-     ) =
+      ) =
   ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
   ## in minimal/outbound mode.
   if chain.isNil:

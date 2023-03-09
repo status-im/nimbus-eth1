@@ -155,6 +155,12 @@ jobs:
       - name: Download artefacts
         uses: actions/download-artifact@v3
 
+      - name: Create statistics notes
+        run: |
+          cat linux_amd64_stat/* > stat_notes.md
+          cat macos_amd64_stat/* >> stat_notes.md
+          cat windows_amd64_stat/* >> stat_notes.md
+
       - name: Delete tag
         uses: dev-drprasad/delete-tag-and-release@v0.2.0
         with:
@@ -163,19 +169,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create statistics notes
-        run: |
-          cat linux_amd64_stat/* > stat_notes.md
-          cat macos_amd64_stat/* >> stat_notes.md
-          cat windows_amd64_stat/* >> stat_notes.md
-
       - name: Simulators results
-        run: |
-          gh release create sim-stat --target master \
-            --title 'Simulators results ("master" branch)' \
-            --notes-file stat_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          prerelease: true
+          commit: master
+          name: "Simulators results"
+          tag: sim-stat
+          bodyFile: "stat_notes.md"
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v2

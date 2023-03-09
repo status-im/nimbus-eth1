@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[tables, times, hashes, sets],
   chronicles, chronos,
@@ -18,7 +20,8 @@ import
   ../protocol/trace_config, # gossip noise control
   ../../core/[chain, tx_pool, tx_pool/tx_item]
 
-{.push raises: [].}
+logScope:
+  topics = "eth-wire"
 
 type
   HashToTime = TableRef[Hash256, Time]
@@ -317,7 +320,7 @@ proc onPeerConnected(ctx: EthWireRef, peer: Peer) =
   asyncSpawn ctx.sendNewTxHashes(txHashes, @[peer])
 
 proc onPeerDisconnected(ctx: EthWireRef, peer: Peer) =
-  debug "ethwire: remove peer from knownByPeer",
+  debug "remove peer from knownByPeer",
     peer
 
   ctx.knownByPeer.del(peer)
@@ -346,6 +349,7 @@ proc new*(_: type EthWireRef,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
+    enableTxPool: Enabled,
     lastCleanup: getTime())
   if txPool.isNil:
     ctx.enableTxPool = NotAvailable
@@ -372,12 +376,19 @@ proc setNewBlockHashesHandler*(ctx: EthWireRef, handler: NewBlockHashesHandler, 
   )
 
 # ------------------------------------------------------------------------------
-# Public functions: eth wire protocol handlers
+# Public getters/setters
 # ------------------------------------------------------------------------------
 
-proc txPoolEnabled*(ctx: EthWireRef; ena: bool) =
+proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) =
   if ctx.enableTxPool != NotAvailable:
     ctx.enableTxPool = if ena: Enabled else: Suspended
+
+proc txPoolEnabled*(ctx: EthWireRef): bool =
+  ctx.enableTxPool == Enabled
+
+# ------------------------------------------------------------------------------
+# Public functions: eth wire protocol handlers
+# ------------------------------------------------------------------------------
 
 method getStatus*(ctx: EthWireRef): EthState
     {.gcsafe, raises: [RlpError,EVMError].} =

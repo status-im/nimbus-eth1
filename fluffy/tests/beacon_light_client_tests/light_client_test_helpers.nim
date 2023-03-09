@@ -1,21 +1,17 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
   chronos,
-  eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types_rlp,
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
-  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[
     light_client_network,
-    light_client_content,
     light_client_db
   ],
   ../test_helpers
@@ -24,8 +20,8 @@ type LightClientNode* = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   lightClientNetwork*: LightClientNetwork
 
-proc getTestForkDigests*(): ForkDigests =
-  return ForkDigests(
+const testForkDigests* =
+  ForkDigests(
     phase0: ForkDigest([0'u8, 0, 0, 1]),
     altair: ForkDigest([0'u8, 0, 0, 2]),
     bellatrix: ForkDigest([0'u8, 0, 0, 3]),
@@ -36,27 +32,27 @@ proc getTestForkDigests*(): ForkDigests =
 proc newLCNode*(
     rng: ref HmacDrbgContext,
     port: int,
-    forks: ForkDigests = getTestForkDigests()): LightClientNode =
+    forkDigests: ForkDigests = testForkDigests): LightClientNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = LightClientDb.new("", inMemory = true)
     streamManager = StreamManager.new(node)
-    hn = LightClientNetwork.new(node, db, streamManager, forks)
+    network = LightClientNetwork.new(node, db, streamManager, forkDigests)
 
-  return LightClientNode(discoveryProtocol: node, lightClientNetwork: hn)
+  return LightClientNode(discoveryProtocol: node, lightClientNetwork: network)
 
-proc portalProtocol*(hn: LightClientNode): PortalProtocol =
-  hn.lightClientNetwork.portalProtocol
+func portalProtocol*(n: LightClientNode): PortalProtocol =
+  n.lightClientNetwork.portalProtocol
 
-proc localNode*(hn: LightClientNode): Node =
-  hn.discoveryProtocol.localNode
+func localNode*(n: LightClientNode): Node =
+  n.discoveryProtocol.localNode
 
-proc start*(hn: LightClientNode) =
-  hn.lightClientNetwork.start()
+proc start*(n: LightClientNode) =
+  n.lightClientNetwork.start()
 
-proc stop*(hn: LightClientNode) {.async.} =
-  hn.lightClientNetwork.stop()
-  await hn.discoveryProtocol.closeWait()
+proc stop*(n: LightClientNode) {.async.} =
+  n.lightClientNetwork.stop()
+  await n.discoveryProtocol.closeWait()
 
-proc containsId*(hn: LightClientNode, contentId: ContentId): bool =
-  return hn.lightClientNetwork.lightClientDb.get(contentId).isSome()
+proc containsId*(n: LightClientNode, contentId: ContentId): bool =
+  n.lightClientNetwork.lightClientDb.get(contentId).isSome()

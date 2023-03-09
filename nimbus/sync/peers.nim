@@ -7,7 +7,10 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
+  std/[hashes, tables],
   chronicles,
   chronos,
   eth/p2p,
@@ -32,27 +35,33 @@ type
     pool: PeerPool
     maxRetryCount: int # zero == infinite
     retryInterval: int # in seconds
-    reconnectStates: seq[ReconnectState]
+    reconnectStates: Table[Node,ReconnectState]
     reconnectFut: Future[void]
 
 logScope:
   topics = "PeerManagerRef"
 
-proc setConnected(pm: PeerManagerRef, peer: Peer, connected: bool) =
-  for n in pm.reconnectStates:
-    if peer.remote.id == n.node.id:
-      n.connected = connected
-      return
+template noKeyError(info: static[string]; code: untyped) =
+  try:
+    code
+  except KeyError as e:
+    raiseAssert "Not possible (" & info & "): " & e.msg
 
-  doAssert(false, "unreachable code")
+proc setConnected(pm: PeerManagerRef, peer: Peer, connected: bool) =
+  if pm.reconnectStates.hasKey(peer.remote):
+    noKeyError("setConnected"):
+      pm.reconnectStates[peer.remote].connected = connected
+  else:
+    # Peer was not registered a static, so ignore it
+    trace "Could not update non-static peer", peer, connected
 
 proc needReconnect(pm: PeerManagerRef): bool =
-  for n in pm.reconnectStates:
+  for n in pm.reconnectStates.values:
     if not n.connected:
       return true
 
 proc reconnect(pm: PeerManagerRef) {.async, gcsafe.} =
-  for n in pm.reconnectStates:
+  for n in pm.reconnectStates.values:
     if not n.connected and pm.state == Running:
       if n.retryCount < pm.maxRetryCount or pm.maxRetryCount == 0:
         trace "Reconnecting to", remote=n.node.node
@@ -93,7 +102,7 @@ proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
       retryCount: 0,
       connected: false
     )
-    pm.reconnectStates.add(state)
+    pm.reconnectStates[state.node] = state
 
 proc new*(_: type PeerManagerRef,
           pool: PeerPool,

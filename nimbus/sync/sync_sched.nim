@@ -86,14 +86,14 @@
 ## * "."/[sync_desc, sync_sched, protocol]
 ##
 
+{.push raises: [].}
+
 import
   std/hashes,
   chronos,
   eth/[common, p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
-
-{.push raises: [].}
 
 static:
   # type `EthWireRef` is needed in `initSync()`
@@ -330,7 +330,9 @@ proc initSync*[S,W](
     node: EthereumNode;
     chain: ChainRef,
     slots: int;
-    noisy = false) =
+    noisy = false;
+    exCtrlFile = none(string);
+      ) =
   ## Constructor
   # Leave one extra slot so that it can holds a *zombie* even if all slots
   # are full. The effect is that a re-connect on the latest zombie will be
@@ -338,6 +340,7 @@ proc initSync*[S,W](
   dsc.ctx = CtxRef[S](
     ethWireCtx: cast[EthWireRef](node.protocolState protocol.eth),
     buddiesMax: max(1, slots + 1),
+    exCtrlFile: exCtrlFile,
     chain: chain)
   dsc.pool = node.peerPool
   dsc.tickerOk = noisy

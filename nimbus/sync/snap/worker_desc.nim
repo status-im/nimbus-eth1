@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/hashes,
   eth/[common, p2p],
@@ -18,8 +20,6 @@ import
   ./worker/db/[snapdb_desc, snapdb_pivot],
   ./worker/ticker,
   ./range_desc
-
-{.push raises: [].}
 
 type
   SnapAccountsList* = SortedSet[NodeTag,Hash256]
@@ -83,12 +83,12 @@ type
     state*: SnapDbPivotRegistry        ## Saved recovery context state
     level*: int                        ## top level is zero
 
-  BuddyData* = object
+  SnapBuddyData* = object
     ## Per-worker local descriptor data extension
     errors*: ComErrorStatsRef          ## For error handling
     pivotEnv*: SnapPivotRef            ## Environment containing state root
 
-  CtxData* = object
+  SnapCtxData* = object
     ## Globally shared data extension
     rng*: ref HmacDrbgContext          ## Random generator
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
@@ -105,10 +105,10 @@ type
     # Info
     ticker*: TickerRef                 ## Ticker, logger
 
-  SnapBuddyRef* = BuddyRef[CtxData,BuddyData]
+  SnapBuddyRef* = BuddyRef[SnapCtxData,SnapBuddyData]
     ## Extended worker peer descriptor
 
-  SnapCtxRef* = CtxRef[CtxData]
+  SnapCtxRef* = CtxRef[SnapCtxData]
     ## Extended global descriptor
 
 # ------------------------------------------------------------------------------
@@ -129,15 +129,15 @@ proc hash*(a: Hash256): Hash =
 
 proc pivotAccountsCoverage*(ctx: SnapCtxRef): float =
   ## Returns the accounts coverage factor
-  ctx.data.coveredAccounts.fullFactor + ctx.data.covAccTimesFull.float
+  ctx.pool.coveredAccounts.fullFactor + ctx.pool.covAccTimesFull.float
 
 proc pivotAccountsCoverage100PcRollOver*(ctx: SnapCtxRef) =
   ## Roll over `coveredAccounts` registry when it reaches 100%.
-  if ctx.data.coveredAccounts.isFull:
+  if ctx.pool.coveredAccounts.isFull:
     # All of accounts hashes are covered by completed range fetch processes
     # for all pivot environments. So reset covering and record full-ness level.
-    ctx.data.covAccTimesFull.inc
-    ctx.data.coveredAccounts.clear()
+    ctx.pool.covAccTimesFull.inc
+    ctx.pool.coveredAccounts.clear()
 
 # ------------------------------------------------------------------------------
 # Public helpers: SnapTodoRanges

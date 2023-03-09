@@ -31,6 +31,7 @@ type
     tx: Transaction
     expectedHash: Hash256
     expectedLogs: Hash256
+    forkStr: string
     chainConfig: ChainConfig
     index: int
     tracerFlags: set[TracerFlags]
@@ -222,7 +223,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       name : ctx.name,
       pass : ctx.error.len == 0,
       root : vmState.stateDB.rootHash,
-      fork : $fork,
+      fork : ctx.forkStr,
       error: ctx.error
     )
     if conf.dumpEnabled:
@@ -273,6 +274,7 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
 
   template prepareFork(forkName: string) =
     try:
+      ctx.forkStr = forkName
       ctx.chainConfig = getChainConfig(forkName)
     except ValueError as ex:
       debugEcho ex.msg

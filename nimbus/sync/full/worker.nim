@@ -8,47 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises:[].}
+
 import
   std/[options],
   chronicles,
   chronos,
   eth/[common, p2p],
   ".."/[protocol, sync_desc],
-  ../misc/[best_pivot, block_queue],
-  ./ticker
-
-{.push raises:[].}
+  ../misc/[best_pivot, block_queue, sync_ctrl],
+  "."/[ticker, worker_desc]
 
 logScope:
   topics = "full-buddy"
-
-type
-  PivotState = enum
-    PivotStateInitial,              ## Initial state
-    FirstPivotSeen,                 ## Starting, first pivot seen
-    FirstPivotAccepted,             ## Accepted, waiting for second
-    FirstPivotUseRegardless         ## Force pivot if available
-    PivotRunMode                    ## SNAFU after some magic
-
-  BuddyData* = object
-    ## Local descriptor data extension
-    pivot: BestPivotWorkerRef       ## Local pivot worker descriptor
-    bQueue: BlockQueueWorkerRef     ## Block queue worker
-
-  CtxData* = object
-    ## Globally shared data extension
-    rng*: ref HmacDrbgContext       ## Random generator, pre-initialised
-    pivot: BestPivotCtxRef          ## Global pivot descriptor
-    pivotState: PivotState          ## For initial pivot control
-    pivotStamp: Moment              ## `PivotState` driven timing control
-    bCtx: BlockQueueCtxRef          ## Global block queue descriptor
-    ticker: TickerRef               ## Logger ticker
-
-  FullBuddyRef* = BuddyRef[CtxData,BuddyData]
-    ## Extended worker peer descriptor
-
-  FullCtxRef* = CtxRef[CtxData]
-    ## Extended global descriptor
 
 const
   extraTraceMessages = false # or true
@@ -98,13 +70,17 @@ proc topUsedNumber(
 proc tickerUpdater(ctx: FullCtxRef): TickerStatsUpdater =
   result = proc: TickerStats =
     var stats: BlockQueueStats
-    ctx.data.bCtx.blockQueueStats(stats)
+    ctx.pool.bCtx.blockQueueStats(stats)
+
+    let suspended =
+      0 < ctx.pool.suspendAt and ctx.pool.suspendAt < stats.topAccepted
 
     TickerStats(
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
+      suspended:       suspended,
       reOrg:           stats.reOrg)
 
 
@@ -116,7 +92,7 @@ proc processStaged(buddy: FullBuddyRef): bool =
     peer = buddy.peer
     chainDb = buddy.ctx.chain.db
     chain = buddy.ctx.chain
-    bq = buddy.data.bQueue
+    bq = buddy.only.bQueue
 
     # Get a work item, a list of headers + bodies
     wi = block:
@@ -135,16 +111,6 @@ proc processStaged(buddy: FullBuddyRef): bool =
   except CatchableError as e:
     error "Storing persistent blocks failed", peer, range=($wi.blocks),
       error = $e.name, msg = e.msg
-  #except Defect as e:
-  #  # Pass through
-  #  raise e
-  #except Exception as e:
-  #  # Notorious case where the `Chain` reference applied to
-  #  # `persistBlocks()` has the compiler traced a possible `Exception`
-  #  # (i.e. `ctx.chain` could be uninitialised.)
-  #  error "Exception while storing persistent blocks", peer,
-  #    range=($wi.blocks), error=($e.name), msg=e.msg
-  #  raise (ref Defect)(msg: $e.name & ": " & e.msg)
 
   # Something went wrong. Recycle work item (needs to be re-fetched, anyway)
   let
@@ -179,29 +145,44 @@ proc processStaged(buddy: FullBuddyRef): bool =
 
   return false
 
+
+proc suspendDownload(buddy: FullBuddyRef): bool =
+  ## Check whether downloading should be suspended
+  let ctx = buddy.ctx
+  if ctx.exCtrlFile.isSome:
+    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile
+    if rc.isOk:
+      ctx.pool.suspendAt = rc.value
+    if 0 < ctx.pool.suspendAt:
+      return ctx.pool.suspendAt < buddy.only.bQueue.topAccepted
+
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
 proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
   ## Global set up
-  ctx.data.pivot = BestPivotCtxRef.init(ctx.data.rng)
-  if tickerOK:
-    ctx.data.ticker = TickerRef.init(ctx.tickerUpdater)
-  else:
-    debug "Ticker is disabled"
+  ctx.pool.pivot = BestPivotCtxRef.init(ctx.pool.rng)
   let rc = ctx.topUsedNumber(backBlocks = 0)
   if rc.isErr:
-    ctx.data.bCtx = BlockQueueCtxRef.init()
+    ctx.pool.bCtx = BlockQueueCtxRef.init()
     return false
-  ctx.data.bCtx = BlockQueueCtxRef.init(rc.value + 1)
+  ctx.pool.bCtx = BlockQueueCtxRef.init(rc.value + 1)
+  if tickerOK:
+    ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
+  else:
+    debug "Ticker is disabled"
+
+  if ctx.exCtrlFile.isSome:
+    warn "Full sync accepts suspension request block number",
+      syncCtrlFile=ctx.exCtrlFile.get
   true
 
 proc release*(ctx: FullCtxRef) =
   ## Global clean up
-  ctx.data.pivot = nil
-  if not ctx.data.ticker.isNil:
-    ctx.data.ticker.stop()
+  ctx.pool.pivot = nil
+  if not ctx.pool.ticker.isNil:
+    ctx.pool.ticker.stop()
 
 proc start*(buddy: FullBuddyRef): bool =
   ## Initialise worker peer
@@ -210,20 +191,20 @@ proc start*(buddy: FullBuddyRef): bool =
     peer = buddy.peer
   if peer.supports(protocol.eth) and
      peer.state(protocol.eth).initialized:
-    if not ctx.data.ticker.isNil:
-      ctx.data.ticker.startBuddy()
-    buddy.data.pivot =
-      BestPivotWorkerRef.init(ctx.data.pivot, buddy.ctrl, buddy.peer)
-    buddy.data.bQueue = BlockQueueWorkerRef.init(
-      ctx.data.bCtx, buddy.ctrl, peer)
+    if not ctx.pool.ticker.isNil:
+      ctx.pool.ticker.startBuddy()
+    buddy.only.pivot =
+      BestPivotWorkerRef.init(ctx.pool.pivot, buddy.ctrl, buddy.peer)
+    buddy.only.bQueue = BlockQueueWorkerRef.init(
+      ctx.pool.bCtx, buddy.ctrl, peer)
     return true
 
 proc stop*(buddy: FullBuddyRef) =
   ## Clean up this peer
   buddy.ctrl.stopped = true
-  buddy.data.pivot.clear()
-  if not buddy.ctx.data.ticker.isNil:
-     buddy.ctx.data.ticker.stopBuddy()
+  buddy.only.pivot.clear()
+  if not buddy.ctx.pool.ticker.isNil:
+     buddy.ctx.pool.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -236,39 +217,39 @@ proc runDaemon*(ctx: FullCtxRef) {.async.} =
   ## as `true` not before there is some activity on the `runPool()`,
   ## `runSingle()`, or `runMulti()` functions.
   ##
-  case ctx.data.pivotState:
+  case ctx.pool.pivotState:
   of FirstPivotSeen:
-    let elapsed = Moment.now() - ctx.data.pivotStamp
+    let elapsed = Moment.now() - ctx.pool.pivotStamp
     if FirstPivotSeenTimeout < elapsed:
       # Switch to single peer pivot negotiation
-      ctx.data.pivot.pivotRelaxedMode(enable = true)
+      ctx.pool.pivot.pivotRelaxedMode(enable = true)
 
       # Currently no need for other monitor tasks
       ctx.daemon = false
 
       when extraTraceMessages:
         trace "First seen pivot timeout", elapsed,
-          pivotState=ctx.data.pivotState
+          pivotState=ctx.pool.pivotState
       return
     # Otherwise delay for some time
 
   of FirstPivotAccepted:
-    let elapsed = Moment.now() - ctx.data.pivotStamp
+    let elapsed = Moment.now() - ctx.pool.pivotStamp
     if FirstPivotAcceptedTimeout < elapsed:
       # Switch to single peer pivot negotiation
-      ctx.data.pivot.pivotRelaxedMode(enable = true)
+      ctx.pool.pivot.pivotRelaxedMode(enable = true)
 
       # Use currents pivot next time `runSingle()` is visited. This bent is
       # necessary as there must be a peer initialising and syncing blocks. But
       # this daemon has no peer assigned.
-      ctx.data.pivotState = FirstPivotUseRegardless
+      ctx.pool.pivotState = FirstPivotUseRegardless
 
       # Currently no need for other monitor tasks
       ctx.daemon = false
 
       when extraTraceMessages:
         trace "First accepted pivot timeout", elapsed,
-          pivotState=ctx.data.pivotState
+          pivotState=ctx.pool.pivotState
       return
     # Otherwise delay for some time
 
@@ -297,17 +278,17 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer {.used.} = buddy.peer
-    bq = buddy.data.bQueue
-    pv = buddy.data.pivot
+    bq = buddy.only.bQueue
+    pv = buddy.only.pivot
 
   when extraTraceMessages:
-    trace "Single mode begin", peer, pivotState=ctx.data.pivotState
+    trace "Single mode begin", peer, pivotState=ctx.pool.pivotState
 
-  case ctx.data.pivotState:
+  case ctx.pool.pivotState:
     of PivotStateInitial:
       # Set initial state on first encounter
-      ctx.data.pivotState = FirstPivotSeen
-      ctx.data.pivotStamp = Moment.now()
+      ctx.pool.pivotState = FirstPivotSeen
+      ctx.pool.pivotStamp = Moment.now()
       ctx.daemon = true # Start monitor
 
     of FirstPivotSeen, FirstPivotAccepted:
@@ -319,13 +300,13 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
       if rc.isOK:
         # Update/activate `bestNumber` from the pivot header
         bq.bestNumber = some(rc.value.blockNumber)
-        ctx.data.pivotState = PivotRunMode
+        ctx.pool.pivotState = PivotRunMode
         buddy.ctrl.multiOk = true
         trace "Single pivot accepted", peer, pivot=('#' & $bq.bestNumber.get)
         return # stop logging, otherwise unconditional return for this case
 
       when extraTraceMessages:
-        trace "Single mode stopped", peer, pivotState=ctx.data.pivotState
+        trace "Single mode stopped", peer, pivotState=ctx.pool.pivotState
       return # unconditional return for this case
 
     of PivotRunMode:
@@ -352,26 +333,26 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
   # Negotiate in order to derive the pivot header from this `peer`. This code
   # location here is reached when there was no compelling reason for the
   # `case()` handler to process and `return`.
-  if await pv.pivotNegotiate(buddy.data.bQueue.bestNumber):
+  if await pv.pivotNegotiate(buddy.only.bQueue.bestNumber):
     # Update/activate `bestNumber` from the pivot header
     bq.bestNumber = some(pv.pivotHeader.value.blockNumber)
-    ctx.data.pivotState = PivotRunMode
+    ctx.pool.pivotState = PivotRunMode
     buddy.ctrl.multiOk = true
     trace "Pivot accepted", peer, pivot=('#' & $bq.bestNumber.get)
     return
 
   if buddy.ctrl.stopped:
     when extraTraceMessages:
-      trace "Single mode stopped", peer, pivotState=ctx.data.pivotState
+      trace "Single mode stopped", peer, pivotState=ctx.pool.pivotState
     return # done with this buddy
 
   var napping = 2.seconds
-  case ctx.data.pivotState:
+  case ctx.pool.pivotState:
   of FirstPivotSeen:
     # Possible state transition
     if pv.pivotHeader(relaxedMode=true).isOk:
-      ctx.data.pivotState = FirstPivotAccepted
-      ctx.data.pivotStamp = Moment.now()
+      ctx.pool.pivotState = FirstPivotAccepted
+      ctx.pool.pivotStamp = Moment.now()
     napping = 300.milliseconds
   of FirstPivotAccepted:
     napping = 300.milliseconds
@@ -379,7 +360,7 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
     discard
 
   when extraTraceMessages:
-    trace "Single mode end", peer, pivotState=ctx.data.pivotState, napping
+    trace "Single mode end", peer, pivotState=ctx.pool.pivotState, napping
 
   # Without waiting, this function repeats every 50ms (as set with the constant
   # `sync_sched.execLoopTimeElapsedMin`.)
@@ -402,27 +383,32 @@ proc runPool*(buddy: FullBuddyRef; last: bool): bool =
   ## Note that this function does not run in `async` mode.
   ##
   # Mind the gap, fill in if necessary (function is peer independent)
-  buddy.data.bQueue.blockQueueGrout()
+  buddy.only.bQueue.blockQueueGrout()
 
   # Stop after running once regardless of peer
   buddy.ctx.poolMode = false
   true
-
 
 proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
   ## `true` which is typically done after finishing `runSingle()`. This
   ## instance can be simultaneously active for all peer workers.
   ##
-  # Fetch work item
   let
-    ctx {.used.} = buddy.ctx
-    bq = buddy.data.bQueue
-    rc = await bq.blockQueueWorker()
+    ctx = buddy.ctx
+    bq = buddy.only.bQueue
+
+  if buddy.suspendDownload:
+    # Sleep for a while, then leave
+    await sleepAsync(10.seconds)
+    return
+
+  # Fetch work item
+  let rc = await bq.blockQueueWorker()
   if rc.isErr:
     if rc.error == StagedQueueOverflow:
       # Mind the gap: Turn on pool mode if there are too may staged items.
-      buddy.ctx.poolMode = true
+      ctx.poolMode = true
     else:
       return
 

@@ -484,6 +484,10 @@ proc `bestNumber=`*(qd: BlockQueueWorkerRef; val: Option[BlockNumber]) =
   ## does something useful.
   qd.bestNumber = val
 
+proc topAccepted*(qd: BlockQueueWorkerRef): BlockNumber =
+  ## Getter
+  qd.global.topAccepted
+
 # ------------------------------------------------------------------------------
 # Public functions -- synchronous
 # ------------------------------------------------------------------------------

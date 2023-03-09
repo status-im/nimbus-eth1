@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, sets, sequtils],
   chronicles,
@@ -21,8 +23,6 @@ import
            range_fetch_accounts, range_fetch_storage_slots,
            storage_queue_helper],
   ./ticker
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-pivot"
@@ -60,7 +60,7 @@ proc init(
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]` range
   # sets. Deprioritise already processed ranges by moving it to the second set.
-  for iv in ctx.data.coveredAccounts.increasing:
+  for iv in ctx.pool.coveredAccounts.increasing:
     discard result.unprocessed[0].reduce iv
     discard result.unprocessed[1].merge iv
 
@@ -128,13 +128,17 @@ proc tickerStats*(
   proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
     if 0 < length:
       result[0] = sum / length.float
-      result[1] = sqrt(sqSum / length.float - result[0] * result[0])
+      let
+        sqSumAv = sqSum / length.float
+        rSq = result[0] * result[0]
+      if rSq < sqSumAv:
+        result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
   result = proc: SnapTickerStats =
     var
       aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
       count = 0
-    for kvp in ctx.data.pivotTable.nextPairs:
+    for kvp in ctx.pool.pivotTable.nextPairs:
 
       # Accounts mean & variance
       let aLen = kvp.data.nAccounts.float
@@ -152,9 +156,9 @@ proc tickerStats*(
         sSum += sLen
         sSqSum += sLen * sLen
     let
-      env = ctx.data.pivotTable.lastValue.get(otherwise = nil)
-      accCoverage = (ctx.data.coveredAccounts.fullFactor +
-                     ctx.data.covAccTimesFull.float)
+      env = ctx.pool.pivotTable.lastValue.get(otherwise = nil)
+      accCoverage = (ctx.pool.coveredAccounts.fullFactor +
+                     ctx.pool.covAccTimesFull.float)
       accFill = meanStdDev(uSum, uSqSum, count)
     var
       beaconBlock = none(BlockNumber)
@@ -165,13 +169,13 @@ proc tickerStats*(
       pivotBlock = some(env.stateHeader.blockNumber)
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
-    if 0 < ctx.data.beaconHeader.blockNumber:
-      beaconBlock = some(ctx.data.beaconHeader.blockNumber)
+    if 0 < ctx.pool.beaconHeader.blockNumber:
+      beaconBlock = some(ctx.pool.beaconHeader.blockNumber)
 
     SnapTickerStats(
       beaconBlock:   beaconBlock,
       pivotBlock:    pivotBlock,
-      nQueues:       ctx.data.pivotTable.len,
+      nQueues:       ctx.pool.pivotTable.len,
       nAccounts:     meanStdDev(aSum, aSqSum, count),
       nSlotLists:    meanStdDev(sSum, sSqSum, count),
       accountsFill:  (accFill[0], accFill[1], accCoverage),
@@ -273,7 +277,7 @@ proc saveCheckpoint*(
   if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  ctx.data.snapDb.savePivot SnapDbPivotRegistry(
+  ctx.pool.snapDb.savePivot SnapDbPivotRegistry(
     header:       env.stateHeader,
     nAccounts:    env.nAccounts,
     nSlotLists:   env.nSlotLists,
@@ -294,7 +298,7 @@ proc recoverPivotFromCheckpoint*(
   ## `processed`, `unprocessed`, and the `fetchStorageFull` lists are
   ## initialised.
   ##
-  let recov = ctx.data.recovery
+  let recov = ctx.pool.recovery
   if recov.isNil:
     return
 
@@ -306,7 +310,7 @@ proc recoverPivotFromCheckpoint*(
     if topLevel:
       env.fetchAccounts.unprocessed.reduce(minPt, maxPt)
     discard env.fetchAccounts.processed.merge(minPt, maxPt)
-    discard ctx.data.coveredAccounts.merge(minPt, maxPt)
+    discard ctx.pool.coveredAccounts.merge(minPt, maxPt)
     ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
 
   # Handle storage slots
@@ -316,7 +320,7 @@ proc recoverPivotFromCheckpoint*(
 
     if 0 < env.fetchAccounts.processed.covered(pt):
       # Ignoring slots that have accounts to be downloaded, anyway
-      let rc = ctx.data.snapDb.getAccountsData(stateRoot, w)
+      let rc = ctx.pool.snapDb.getAccountsData(stateRoot, w)
       if rc.isErr:
         # Oops, how did that account get lost?
         discard env.fetchAccounts.processed.reduce pt
@@ -342,12 +346,12 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   let
     ctx = buddy.ctx
     peer {.used.} = buddy.peer
-    beaconHeader = ctx.data.beaconHeader
+    beaconHeader = ctx.pool.beaconHeader
   var
     pivotHeader: BlockHeader
 
   block:
-    let rc = ctx.data.pivotTable.lastValue
+    let rc = ctx.pool.pivotTable.lastValue
     if rc.isOk:
       pivotHeader = rc.value.stateHeader
 
@@ -356,7 +360,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
     # If the entry before the previous entry is unused, then run a pool mode
     # based session (which should enable a pivot table purge).
     block:
-      let rc = ctx.data.pivotTable.beforeLast
+      let rc = ctx.pool.pivotTable.beforeLast
       if rc.isOk and rc.value.data.fetchAccounts.processed.isEmpty:
         ctx.poolMode = true
 
@@ -365,7 +369,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
         pivot=("#" & $pivotHeader.blockNumber),
         beacon=("#" & $beaconHeader.blockNumber), poolMode=ctx.poolMode
 
-    discard ctx.data.pivotTable.lruAppend(
+    discard ctx.pool.pivotTable.lruAppend(
       beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
       pivotTableLruEntriesMax)
 
@@ -380,10 +384,10 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe.} =
-    if ctx.data.beaconHeader.blockNumber < h.blockNumber:
+    if ctx.pool.beaconHeader.blockNumber < h.blockNumber:
       # when extraTraceMessages:
       #   trace "External beacon info update", header=("#" & $h.blockNumber)
-      ctx.data.beaconHeader = h
+      ctx.pool.beaconHeader = h
 
 # ------------------------------------------------------------------------------
 # End
