@@ -284,6 +284,41 @@ proc new*(
     blockCache: blockCache,
     chainId: chainId)
 
+# Used to be in eth1_monitor.nim; not sure why it was deleted,
+# so I copied it here. --Adam
+template awaitWithRetries*[T](lazyFutExpr: Future[T],
+                              retries = 3,
+                              timeout = 60.seconds): untyped =
+  const
+    reqType = astToStr(lazyFutExpr)
+  var
+    retryDelayMs = 16000
+    f: Future[T]
+    attempts = 0
+
+  while true:
+    f = lazyFutExpr
+    yield f or sleepAsync(timeout)
+    if not f.finished:
+      await cancelAndWait(f)
+    elif f.failed:
+      when not (f.error of CatchableError):
+        static: doAssert false, "f.error not CatchableError"
+      debug "Web3 request failed", req = reqType, err = f.error.msg
+    else:
+      break
+
+    inc attempts
+    if attempts >= retries:
+      var errorMsg = reqType & " failed " & $retries & " times"
+      if f.failed: errorMsg &= ". Last error: " & f.error.msg
+      raise newException(DataProviderFailure, errorMsg)
+
+    await sleepAsync(chronos.milliseconds(retryDelayMs))
+    retryDelayMs *= 2
+
+  read(f)
+
 proc verifyChaindId*(p: VerifiedRpcProxy): Future[void] {.async.} =
   let localId = p.chainId
 

@@ -78,8 +78,8 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
 func toFixedBytes(d: MDigest[256]): FixedBytes[32] =
   FixedBytes[32](d.data)
 
-template asEthHash(hash: BlockHash): Hash256 =
-  Hash256(data: distinctBase(hash))
+template asEthHash(hash: BlockHash): etypes.Hash256 =
+  etypes.Hash256(data: distinctBase(hash))
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]):
@@ -121,7 +121,7 @@ func blockHeaderSize(
   return uint64(len(rlp.encode(bh)))
 
 proc asBlockObject*(
-    p: ExecutionData): BlockObject {.raises: [RlpError].} =
+    p: ExecutionData): BlockObject {.raises: [RlpError, ValueError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
   # option of returning full transactions. It needs fixing at nim-web3 library
   # level
@@ -139,7 +139,7 @@ proc asBlockObject*(
     receiptsRoot: p.receiptsRoot,
     miner: p.feeRecipient,
     difficulty: UInt256.zero,
-    extraData: p.extraData.toHex,
+    extraData: fromHex(DynamicBytes[0, 32], p.extraData.toHex),
     gasLimit: p.gasLimit,
     gasUsed: p.gasUsed,
     timestamp: p.timestamp,
