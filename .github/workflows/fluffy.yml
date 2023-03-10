@@ -248,9 +248,12 @@ jobs:
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy
-          mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy.exe --help
+          rm -rf nimcache
+          mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-tools
+          rm -rf nimcache
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-test
+          rm -rf nimcache
 
       - name: Run fluffy tests (Linux)
         if: runner.os == 'Linux'
@@ -261,8 +264,8 @@ jobs:
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy --help
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           # CC is needed to select correct compiler 32/64 bit
           env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} fluffy-test
 
@@ -271,8 +274,8 @@ jobs:
         run: |
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} fluffy
-          make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy --help
+          make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} fluffy-test
 
