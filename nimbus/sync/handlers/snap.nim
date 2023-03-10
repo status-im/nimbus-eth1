@@ -13,12 +13,12 @@
 import
   std/sequtils,
   chronicles,
-  eth/p2p,
-  stew/interval_set,
+  eth/[p2p, trie/trie_defs],
+  stew/[byteutils, interval_set],
   ../../db/db_chain,
   ../../core/chain,
   ../snap/range_desc,
-  ../snap/worker/db/[hexary_desc, hexary_range],
+  ../snap/worker/db/[hexary_desc, hexary_paths, hexary_range],
   ../protocol,
   ../protocol/snap/snap_types
 
@@ -31,8 +31,14 @@ type
     peerPool: PeerPool
 
 const
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
+
   estimatedProofSize = hexaryRangeRlpNodesListSizeMax(10)
     ## Some expected upper limit, typically not mote than 10 proof nodes
+
+  emptySnapStorageList = seq[SnapStorage].default
+    ## Dummy list for empty slots
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -44,6 +50,8 @@ template logTxt(info: static[string]): static[string] =
 proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth=name
 
+# ----------------------------------
+
 proc getAccountFn(
     chain: ChainRef;
       ): HexaryGetFn
@@ -52,14 +60,34 @@ proc getAccountFn(
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
+proc getStorageSlotsFn(
+    chain: ChainRef;
+    accKey: NodeKey;
+      ): HexaryGetFn
+      {.gcsafe.} =
+  let db = chain.com.db.db
+  return proc(key: openArray[byte]): Blob =
+    db.get(key)
+
+# ----------------------------------
+
 proc to(
     rl: RangeLeaf;
     T: type SnapAccount;
       ): T
-      {.gcsafe, raises: [RlpError]} =
+      {.gcsafe, raises: [RlpError].} =
   ## Convert the generic `RangeLeaf` argument to payload type.
   T(accHash: rl.key.to(Hash256),
     accBody: rl.data.decode(Account))
+
+proc to(
+    rl: RangeLeaf;
+    T: type SnapStorage;
+      ): T
+      {.gcsafe.} =
+  ## Convert the generic `RangeLeaf` argument to payload type.
+  T(slotHash: rl.key.to(Hash256),
+    slotData: rl.data)
 
 # ------------------------------------------------------------------------------
 # Private functions: fetch leaf range
@@ -73,7 +101,8 @@ proc mkNodeTagRange(
 
   if 0 < origin.len or 0 < limit.len:
     if not minPt.init(origin) or not maxPt.init(limit) or maxPt <= minPt:
-      debug logTxt "mkNodeTagRange: malformed range", origin, limit
+      when extraTraceMessages:
+        trace logTxt "mkNodeTagRange: malformed range", origin, limit
       return err()
 
   ok(NodeTagRange.new(minPt, maxPt))
@@ -118,7 +147,7 @@ proc fetchLeafRange(
     tailItems.inc
   if leafsTop <= tailItems:
     debug logTxt "fetchLeafRange: stripping leaf list failed",
-      iv, replySizeMax,leafsTop, tailItems
+      iv, replySizeMax, leafsTop, tailItems
     return err() # package size too small
 
   rpl.leafs.setLen(leafsTop - tailItems - 1) # chop off one more for slack
@@ -199,6 +228,13 @@ method getAccountRange*(
       ): (seq[SnapAccount], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch accounts list from database
+  let sizeMax = min(replySizeMax, high(int).uint64).int
+  if sizeMax <= estimatedProofSize:
+    when extraTraceMessages:
+      trace logTxt "getAccountRange: max data size too small",
+        origin=origin.toHex, limit=limit.toHex, sizeMax
+    return # package size too small
+
   let
     iv = block: # Calculate effective accounts range (if any)
       let rc = origin.mkNodeTagRange limit
@@ -207,18 +243,19 @@ method getAccountRange*(
       rc.value # malformed interval
 
     db = ctx.chain.getAccountFn
-    sizeMax = min(replySizeMax,high(int).uint64).int
+    rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
 
-  if sizeMax <= estimatedProofSize:
-    debug logTxt "getAccountRange: data size too small", iv, replySizeMax
-    return # package size too small
+  if rc.isErr:
+    return # extraction failed
+  let
+    accounts = rc.value.leafs.mapIt(it.to(SnapAccount))
+    proof = rc.value.proof
 
-  trace logTxt "getAccountRange: request data range", iv, replySizeMax
+  #when extraTraceMessages:
+  #  trace logTxt "getAccountRange: done", iv, replySizeMax,
+  #    nAccounts=accounts.len, nProof=proof.len
 
-  let rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
-  if rc.isOk:
-    result[0] = rc.value.leafs.mapIt(it.to(SnapAccount))
-    result[1] = SnapProofNodes(nodes: rc.value.proof)
+  (accounts, SnapProofNodes(nodes: proof))
 
 
 method getStorageRanges*(
@@ -229,8 +266,84 @@ method getStorageRanges*(
     limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[seq[SnapStorage]], SnapProofNodes)
-      {.gcsafe.} =
-  notImplemented("getStorageRanges")
+      {.gcsafe, raises: [CatchableError].} =
+  ## Fetch storage slots list from database
+  let sizeMax = min(replySizeMax, high(int).uint64).int
+  if sizeMax <= estimatedProofSize:
+    when extraTraceMessages:
+      trace logTxt "getStorageRanges: max data size too small",
+        origin=origin.toHex, limit=limit.toHex, sizeMax
+    return # package size too small
+
+  let
+    iv = block: # Calculate effective slots range (if any)
+      let rc = origin.mkNodeTagRange limit
+      if rc.isErr:
+        return
+      rc.value # malformed interval
+
+    accGetFn = ctx.chain.getAccountFn
+    rootKey = root.to(NodeKey)
+
+  # Loop over accounts
+  var
+    dataAllocated = 0
+    slotLists: seq[seq[SnapStorage]]
+    proof: seq[SnapProof]
+  for accHash in accounts:
+    let
+      accKey = accHash.to(NodeKey)
+      accData = accKey.hexaryPath(rootKey, accGetFn).leafData
+
+    # Ignore missing account entry
+    if accData.len == 0:
+      slotLists.add emptySnapStorageList
+      dataAllocated.inc # empty list
+      when extraTraceMessages:
+        trace logTxt "getStorageRanges: no data", iv, sizeMax, dataAllocated,
+          accDataLen=accData.len
+      continue
+
+    # Ignore empty storage list
+    let stoRoot = rlp.decode(accData,Account).storageRoot
+    if stoRoot == emptyRlpHash:
+      slotLists.add emptySnapStorageList
+      dataAllocated.inc # empty list
+      trace logTxt "getStorageRanges: no slots", iv, sizeMax, dataAllocated,
+        accDataLen=accData.len, stoRoot
+      continue
+
+    # Collect data slots for this account
+    let
+      db = ctx.chain.getStorageSlotsFn(accKey)
+      rc = ctx.fetchLeafRange(db, stoRoot, iv, sizeMax - dataAllocated)
+    if rc.isErr:
+      when extraTraceMessages:
+        trace logTxt "getStorageRanges: failed", iv, sizeMax, dataAllocated,
+          accDataLen=accData.len, stoRoot
+      return # extraction failed
+
+    # Process data slots for this account
+    dataAllocated += rc.value.leafsSize
+
+    #trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
+    #  accKey, stoRoot, nSlots=rc.value.leafs.len, nProof=rc.value.proof.len
+
+    slotLists.add rc.value.leafs.mapIt(it.to(SnapStorage))
+    if 0 < rc.value.proof.len:
+      proof = rc.value.proof
+      break # only last entry has a proof
+
+    # Stop unless there is enough space left
+    if sizeMax - dataAllocated <= estimatedProofSize:
+      break
+
+  when extraTraceMessages:
+    trace logTxt "getStorageRanges: done", iv, sizeMax, dataAllocated,
+      nAccounts=accounts.len, nLeafLists=slotLists.len, nProof=proof.len
+
+  (slotLists, SnapProofNodes(nodes: proof))
+
 
 method getByteCodes*(
     ctx: SnapWireRef;
