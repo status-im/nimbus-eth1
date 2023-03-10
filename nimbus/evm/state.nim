@@ -16,6 +16,7 @@ import
   ../../stateless/[witness_from_tree, witness_types],
   ../db/accounts_cache,
   ../common/[common, evmforks],
+  ./async/data_sources,
   ./transaction_tracer,
   ./types
 
@@ -46,6 +47,7 @@ proc init(
   self.stateDB = ac
   self.touchedAccounts = initHashSet[EthAddress]()
   self.minerAddress = miner
+  self.asyncFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]())
 
 proc init(
       self:        BaseVMState;

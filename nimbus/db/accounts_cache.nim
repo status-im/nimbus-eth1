@@ -64,6 +64,13 @@ const
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
+
+# FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
+# take this out once those are gone.
+proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
+proc rawDb*(ac: AccountsCache): TrieDatabaseRef = ac.trie.db
+
+
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
            root: KeccakHash, pruneTrie: bool = true): AccountsCache =

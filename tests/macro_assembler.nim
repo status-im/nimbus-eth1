@@ -6,7 +6,7 @@ import
 import
   eth/trie/hexary,
   ../nimbus/db/[accounts_cache, distinct_tries],
-  ../nimbus/evm/[async_operations, types],
+  ../nimbus/evm/types,
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[vm_types, vm_state],
@@ -241,46 +241,23 @@ proc parseAssemblers(list: NimNode): seq[Assembler] =
     let body  = callSection[1]
     result.add parseAssembler(body)
 
-proc parseConcurrencyTest(list: NimNode): ConcurrencyTest =
-  list.expectKind nnkStmtList
-  for callSection in list:
-    callSection.expectKind(nnkCall)
-    let label = callSection[0].strVal
-    let body  = callSection[1]
-    case label.normalize
-    of "title": result.title = parseStringLiteral(body)
-    of "assemblers": result.assemblers = parseAssemblers(body)
-    else: error("unknown section '" & label & "'", callSection[0])
-
 type VMProxy = tuple[sym: NimNode, pr: NimNode]
 
-proc generateVMProxy(boa: Assembler, shouldBeAsync: bool): VMProxy =
+proc generateVMProxy(boa: Assembler): VMProxy =
   let
-    vmProxySym = genSym(nskProc, "asyncVMProxy")
+    vmProxySym = genSym(nskProc, "vmProxy")
     chainDB = ident(if boa.chainDBIdentName == "": "chainDB" else: boa.chainDBIdentName)
     vmState = ident(if boa.vmStateIdentName == "": "vmState" else: boa.vmStateIdentName)
     body = newLitFixed(boa)
-    returnType = if shouldBeAsync:
-                   quote do: Future[bool]
-                 else:
-                   quote do: bool
-    runVMProcName = ident(if shouldBeAsync: "asyncRunVM" else: "runVM")
     vmProxyProc = quote do:
-      proc `vmProxySym`(): `returnType` =
+      proc `vmProxySym`(): bool =
         let boa = `body`
-        let asyncFactory =
-          AsyncOperationFactory(
-            lazyDataSource:
-              if len(boa.initialStorage) == 0:
-                noLazyDataSource()
-              else:
-                fakeLazyDataSource(boa.initialStorage))
-        `runVMProcName`(`vmState`, `chainDB`, boa, asyncFactory)
+        runVM(`vmState`, `chainDB`, boa)
   (vmProxySym, vmProxyProc)
 
 proc generateAssemblerTest(boa: Assembler): NimNode =
   let
-    (vmProxySym, vmProxyProc) = generateVMProxy(boa, false)
+    (vmProxySym, vmProxyProc) = generateVMProxy(boa)
     title: string = boa.title
 
   result = quote do:
@@ -288,31 +265,6 @@ proc generateAssemblerTest(boa: Assembler): NimNode =
       `vmProxyProc`
       {.gcsafe.}:
         check `vmProxySym`()
-
-  when defined(macro_assembler_debug):
-    echo result.toStrLit.strVal
-
-type
-  AsyncVMProxyTestProc* = proc(): Future[bool]
-
-proc generateConcurrencyTest(t: ConcurrencyTest): NimNode =
-  let
-    vmProxies: seq[VMProxy] = t.assemblers.map(proc(boa: Assembler): VMProxy = generateVMProxy(boa, true))
-    vmProxyProcs: seq[NimNode] = vmProxies.map(proc(x: VMProxy): NimNode = x.pr)
-    vmProxySyms: seq[NimNode] = vmProxies.map(proc(x: VMProxy): NimNode = x.sym)
-    title: string = t.title
-
-  let runVMProxy = quote do:
-    {.gcsafe.}:
-      let procs: seq[AsyncVMProxyTestProc] = @(`vmProxySyms`)
-      let futures: seq[Future[bool]] = procs.map(proc(s: AsyncVMProxyTestProc): Future[bool] = s())
-      waitFor(allFutures(futures))
-
-  # Is there a way to use "quote" (or something like it) to splice
-  # in a statement list?
-  let stmtList = newStmtList(vmProxyProcs)
-  stmtList.add(runVMProxy)
-  result = newCall("test", newStrLitNode(title), stmtList)
 
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal
@@ -446,8 +398,7 @@ proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
   )
   signTransaction(unsignedTx, privateKey, chainId, false)
 
-proc runVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler, asyncFactory: AsyncOperationFactory): bool =
-  vmState.asyncFactory = asyncFactory
+proc runVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler): bool =
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
@@ -455,21 +406,8 @@ proc runVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler, asyncFactory: 
   let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
   verifyAsmResult(vmState, com, boa, asmResult)
 
-# FIXME-duplicatedForAsync
-proc asyncRunVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler, asyncFactory: AsyncOperationFactory): Future[bool] {.async.} =
-  vmState.asyncFactory = asyncFactory
-  vmState.mutateStateDB:
-    db.setCode(codeAddress, boa.code)
-    db.setBalance(codeAddress, 1_000_000.u256)
-  let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = await asyncTestCallEvm(tx, tx.getSender, vmState, boa.fork)
-  return verifyAsmResult(vmState, com, boa, asmResult)
-
 macro assembler*(list: untyped): untyped =
   result = parseAssembler(list).generateAssemblerTest()
-
-macro concurrentAssemblers*(list: untyped): untyped =
-  result = parseConcurrencyTest(list).generateConcurrencyTest()
 
 macro evmByteCode*(list: untyped): untyped =
   list.expectKind nnkStmtList

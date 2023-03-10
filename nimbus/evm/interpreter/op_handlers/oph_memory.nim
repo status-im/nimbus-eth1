@@ -14,7 +14,7 @@
 
 import
   ../../../errors,
-  ../../async_operations,
+  ../../async/operations,
   ../../code_stream,
   ../../computation,
   ../../memory,
@@ -168,7 +168,7 @@ const
     ## 0x54, Load word from storage.
     let cpt = k.cpt  # so it can safely be captured by the asyncChainTo closure below
     let (slot) = cpt.stack.popInt(1)
-    cpt.asyncChainTo(asyncFactory(cpt).lazyDataSource.ifNecessaryGetStorage(cpt, slot)):
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
       cpt.stack.push:
         cpt.getStorage(slot)
 

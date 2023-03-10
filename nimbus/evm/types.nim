@@ -14,6 +14,7 @@ import
   json_rpc/rpcclient,
   "."/[stack, memory, code_stream],
   ./interpreter/[gas_costs, op_codes],
+  ./async/data_sources,
   ../db/accounts_cache,
   ../common/[common, evmforks]
 
@@ -132,11 +133,3 @@ type
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
-
-  LazyDataSource* = ref object of RootObj
-    ifNecessaryGetStorage*:
-      proc(c: Computation, slot: UInt256): Future[void]
-        {.gcsafe, raises: [CatchableError].}
-
-  AsyncOperationFactory* = ref object of RootObj
-    lazyDataSource*: LazyDataSource
