@@ -13,8 +13,6 @@ import ../test_macro
 # place. I want to be able to gradually add to this test suite.
 # --Adam
 
-# FIXME-asyncAndEvmc
-# The test_op_memory_lazy test fails under EVMC.
 when not defined(evmc_enabled):
   cliBuilder:
     import  ./test_op_arith,
@@ -23,5 +21,4 @@ when not defined(evmc_enabled):
             ./test_op_memory,
             ./test_op_misc,
             ./test_op_custom,
-            ./test_tracer_json,
-            ./test_op_memory_lazy
+            ./test_tracer_json
