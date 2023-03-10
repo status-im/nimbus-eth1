@@ -13,6 +13,7 @@
 import
   std/sequtils,
   chronicles,
+  chronos,
   eth/[p2p, trie/trie_defs],
   stew/[byteutils, interval_set],
   ../../db/db_chain,
@@ -28,6 +29,7 @@ logScope:
 type
   SnapWireRef* = ref object of SnapWireBase
     chain: ChainRef
+    elaFetchMax: chronos.Duration
     peerPool: PeerPool
 
 const
@@ -39,6 +41,10 @@ const
 
   emptySnapStorageList = seq[SnapStorage].default
     ## Dummy list for empty slots
+
+  defaultElaFetchMax = 1500.milliseconds
+    ## Fetching accounts or slots can be extensive, stop in the middle if
+    ## it takes too long
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -114,6 +120,7 @@ proc fetchLeafRange(
     root: Hash256;                      # State root
     iv: NodeTagRange;                   # Proofed range of leaf paths
     replySizeMax: int;                  # Updated size counter for the raw list
+    stopAt: Moment;                     # Implies timeout
       ): Result[RangeProof,void]
       {.gcsafe, raises: [CatchableError].} =
 
@@ -123,7 +130,9 @@ proc fetchLeafRange(
   let
     rootKey = root.to(NodeKey)
     sizeMax = replySizeMax - estimatedProofSize
-    rc = db.hexaryRangeLeafsProof(rootKey, iv, sizeMax)
+    now = Moment.now()
+    timeout = if now < stopAt: stopAt - now else: 1.milliseconds
+    rc = db.hexaryRangeLeafsProof(rootKey, iv, sizeMax, timeout)
   if rc.isErr:
     debug logTxt "fetchLeafRange: database problem",
       iv, replySizeMax, error=rc.error
@@ -196,8 +205,9 @@ proc init*(
       ): T =
   ## Constructor (uses `init()` as suggested in style guide.)
   let ctx = T(
-    chain:    chain,
-    peerPool: peerPool)
+    chain:       chain,
+    elaFetchMax: defaultElaFetchMax,
+    peerPool:    peerPool)
 
   #ctx.setupPeerObserver()
   ctx
@@ -243,7 +253,8 @@ method getAccountRange*(
       rc.value # malformed interval
 
     db = ctx.chain.getAccountFn
-    rc = ctx.fetchLeafRange(db, root, iv, sizeMax)
+    stopAt = Moment.now() + ctx.elaFetchMax
+    rc = ctx.fetchLeafRange(db, root, iv, sizeMax, stopAt)
 
   if rc.isErr:
     return # extraction failed
@@ -284,10 +295,12 @@ method getStorageRanges*(
 
     accGetFn = ctx.chain.getAccountFn
     rootKey = root.to(NodeKey)
+    stopAt = Moment.now() + ctx.elaFetchMax
 
   # Loop over accounts
   var
     dataAllocated = 0
+    timeExceeded = false
     slotLists: seq[seq[SnapStorage]]
     proof: seq[SnapProof]
   for accHash in accounts:
@@ -316,7 +329,7 @@ method getStorageRanges*(
     # Collect data slots for this account
     let
       db = ctx.chain.getStorageSlotsFn(accKey)
-      rc = ctx.fetchLeafRange(db, stoRoot, iv, sizeMax - dataAllocated)
+      rc = ctx.fetchLeafRange(db, stoRoot, iv, sizeMax - dataAllocated, stopAt)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "getStorageRanges: failed", iv, sizeMax, dataAllocated,
@@ -338,9 +351,14 @@ method getStorageRanges*(
     if sizeMax - dataAllocated <= estimatedProofSize:
       break
 
+    if stopAt <= Moment.now():
+      timeExceeded = true
+      break
+
   when extraTraceMessages:
     trace logTxt "getStorageRanges: done", iv, sizeMax, dataAllocated,
-      nAccounts=accounts.len, nLeafLists=slotLists.len, nProof=proof.len
+      nAccounts=accounts.len, nLeafLists=slotLists.len, nProof=proof.len,
+      timeExceeded
 
   (slotLists, SnapProofNodes(nodes: proof))
 
