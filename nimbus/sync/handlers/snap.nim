@@ -18,7 +18,7 @@ import
   stew/[byteutils, interval_set],
   ../../db/db_chain,
   ../../core/chain,
-  ../snap/range_desc,
+  ../snap/[constants, range_desc],
   ../snap/worker/db/[hexary_desc, hexary_paths, hexary_range],
   ../protocol,
   ../protocol/snap/snap_types
@@ -30,6 +30,7 @@ type
   SnapWireRef* = ref object of SnapWireBase
     chain: ChainRef
     elaFetchMax: chronos.Duration
+    dataSizeMax: int
     peerPool: PeerPool
 
 const
@@ -45,6 +46,9 @@ const
   defaultElaFetchMax = 1500.milliseconds
     ## Fetching accounts or slots can be extensive, stop in the middle if
     ## it takes too long
+
+  defaultDataSizeMax = fetchRequestBytesLimit
+    ## Truncate maximum data size
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -207,6 +211,7 @@ proc init*(
   let ctx = T(
     chain:       chain,
     elaFetchMax: defaultElaFetchMax,
+    dataSizeMax: defaultDataSizeMax,
     peerPool:    peerPool)
 
   #ctx.setupPeerObserver()
@@ -238,7 +243,7 @@ method getAccountRange*(
       ): (seq[SnapAccount], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch accounts list from database
-  let sizeMax = min(replySizeMax, high(int).uint64).int
+  let sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
   if sizeMax <= estimatedProofSize:
     when extraTraceMessages:
       trace logTxt "getAccountRange: max data size too small",
@@ -279,7 +284,7 @@ method getStorageRanges*(
       ): (seq[seq[SnapStorage]], SnapProofNodes)
       {.gcsafe, raises: [CatchableError].} =
   ## Fetch storage slots list from database
-  let sizeMax = min(replySizeMax, high(int).uint64).int
+  let sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
   if sizeMax <= estimatedProofSize:
     when extraTraceMessages:
       trace logTxt "getStorageRanges: max data size too small",
