@@ -3,7 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   stew/byteutils,
   ../tests/[test_helpers, test_config],
-  ../nimbus/db/accounts_cache, ./witness_types,
+  ../nimbus/db/[accounts_cache, distinct_tries], ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness],
   ./multi_keys
 
@@ -13,7 +13,7 @@ type
     memDB: TrieDatabaseRef
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
-  var trie = initSecureHexaryTrie(tester.memdb, rootHash)
+  var trie = initAccountsTrie(tester.memdb, rootHash)
   let flags = {wfEIP170}
 
   try:
@@ -30,10 +30,10 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
     var root = tb.buildTree()
     check root.data == rootHash.data
 
-    let newTrie = initSecureHexaryTrie(tb.getDB(), root)
+    let newTrie = initAccountsTrie(tb.getDB(), root)
     for kd in tester.keys.keys:
-      let account = rlp.decode(trie.get(kd.address), Account)
-      let recordFound = newTrie.get(kd.address)
+      let account = rlp.decode(trie.getAccountBytes(kd.address), Account)
+      let recordFound = newTrie.getAccountBytes(kd.address)
       if recordFound.len > 0:
         let acc = rlp.decode(recordFound, Account)
         doAssert acc == account

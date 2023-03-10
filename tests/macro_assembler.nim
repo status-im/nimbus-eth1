@@ -5,7 +5,7 @@ import
 
 import
   eth/trie/hexary,
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/[accounts_cache, distinct_tries],
   ../nimbus/evm/[async_operations, types],
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
@@ -385,13 +385,13 @@ proc verifyAsmResult(vmState: BaseVMState, com: CommonRef, boa: Assembler, asmRe
 
   var
     storageRoot = stateDB.getStorageRoot(codeAddress)
-    trie = initSecureHexaryTrie(com.db.db, storageRoot)
+    trie = initStorageTrie(com.db.db, storageRoot)
 
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
     let keyBytes = (@(kv[0]))
-    let actual = trie.get(keyBytes).toHex()
+    let actual = trie.getSlotBytes(keyBytes).toHex()
     let zerosLen = 64 - (actual.len)
     let value = repeat('0', zerosLen) & actual
     if val != value:

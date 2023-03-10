@@ -2,7 +2,8 @@ import
   randutils, random, parseopt, strutils, os,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   nimcrypto/sysrand, ../stateless/[json_from_tree],
-  ../nimbus/db/storage_types, ./witness_types, ./multi_keys
+  ../nimbus/db/[storage_types, distinct_tries],
+  ./witness_types, ./multi_keys
 
 type
    DB = TrieDatabaseRef
@@ -38,12 +39,12 @@ proc randStorage(db: DB, numSlots: int): StorageKeys =
   if rand(0..1) == 0 or numSlots == 0:
     result = (emptyRlpHash, MultikeysRef(nil))
   else:
-    var trie = initSecureHexaryTrie(db)
+    var trie = initStorageTrie(db)
     var keys = newSeq[StorageSlot](numSlots)
 
     for i in 0..<numSlots:
       keys[i] = randStorageSlot()
-      trie.put(keys[i], rlp.encode(randU256()))
+      trie.putSlotBytes(keys[i], rlp.encode(randU256()))
 
     if rand(0..1) == 0:
       result = (trie.rootHash, MultikeysRef(nil))
@@ -65,7 +66,7 @@ proc randAddress(): EthAddress =
 
 proc runGenerator(numPairs, numSlots: int): string =
   var memDB = newMemoryDB()
-  var trie = initSecureHexaryTrie(memDB)
+  var trie = initAccountsTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
   var accs = newSeq[Account](numPairs)
 
@@ -73,7 +74,7 @@ proc runGenerator(numPairs, numSlots: int): string =
     let acc  = randAccount(memDB, numSlots)
     addrs[i] = (randAddress(), acc.codeTouched, acc.storageKeys)
     accs[i]  = acc.account
-    trie.put(addrs[i].address, rlp.encode(accs[i]))
+    trie.putAccountBytes(addrs[i].address, rlp.encode(accs[i]))
 
   var mkeys = newMultiKeys(addrs)
   let rootHash = trie.rootHash
