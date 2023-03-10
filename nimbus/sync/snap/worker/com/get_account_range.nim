@@ -45,7 +45,8 @@ proc getAccountRangeReq(
     peer = buddy.peer
   try:
     let reply = await peer.getAccountRange(
-      root, iv.minPt.to(Hash256), iv.maxPt.to(Hash256), fetchRequestBytesLimit)
+      root, iv.minPt.to(Hash256).data, iv.maxPt.to(Hash256).data,
+      fetchRequestBytesLimit)
     return ok(reply)
   except CatchableError as e:
     let error {.used.} = e.msg

@@ -118,7 +118,7 @@ proc  test_calcProofsListSizes*() =
     #echo "+++ ", n, " ", nodeBlobsEncoded.rlpFromBytes.inspect
     #echo ">>> ", n, " ", nodeBlobsHex
     #echo "<<< ", n, " ", brNodesHex
-    check nodeBlobsEncoded.len == n.proofNodesSizeMax
+    check nodeBlobsEncoded.len == n.hexaryRangeRlpNodesListSizeMax
     check nodeBlobsDecoded == nodeSample
     check nodeBlobsHex == brNodesHex
 

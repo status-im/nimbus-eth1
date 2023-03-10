@@ -155,8 +155,8 @@ proc notImplemented(name: string) =
 method getAccountRange*(
     ctx: SnapWireBase;
     root: Hash256;
-    origin: Hash256;
-    limit: Hash256;
+    origin: openArray[byte];
+    limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[SnapAccount], SnapProofNodes)
       {.base, raises: [CatchableError].} =
@@ -170,7 +170,7 @@ method getStorageRanges*(
     limit: openArray[byte];
     replySizeMax: uint64;
       ): (seq[seq[SnapStorage]], SnapProofNodes)
-      {.base.} =
+      {.base, raises: [CatchableError].} =
   notImplemented("getStorageRanges")
 
 method getByteCodes*(
