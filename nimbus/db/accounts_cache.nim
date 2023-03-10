@@ -3,6 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
+  ./distinct_tries,
   ./access_list as ac_access_list
 
 type
@@ -31,7 +32,7 @@ type
 
   AccountsCache* = ref object
     db: TrieDatabaseRef
-    trie: SecureHexaryTrie
+    trie: AccountsTrie
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
@@ -68,7 +69,7 @@ proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
            root: KeccakHash, pruneTrie: bool = true): AccountsCache =
   new result
   result.db = db
-  result.trie = initSecureHexaryTrie(db, root, pruneTrie)
+  result.trie = initAccountsTrie(db, root, pruneTrie)
   result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
@@ -137,7 +138,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
   # not found in cache, look into state trie
   let recordFound =
     try:
-      ac.trie.get(address)
+      ac.trie.getAccountBytes(address)
     except RlpError:
       raiseAssert("No RlpError should occur on trie access for an address")
   if recordFound.len > 0:
@@ -189,13 +190,13 @@ template createTrieKeyFromSlot(slot: UInt256): auto =
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
 
-template getAccountTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
+template getStorageTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initSecureHexaryTrie(db, acc.account.storageRoot, false)
+  initStorageTrie(db, acc.account.storageRoot, false)
 
 proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
   # share the same original storage between multiple
@@ -209,8 +210,8 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
   # Not in the original values cache - go to the DB.
   let
     slotAsKey = createTrieKeyFromSlot slot
-    accountTrie = getAccountTrie(db, acc)
-    foundRecord = accountTrie.get(slotAsKey)
+    storageTrie = getStorageTrie(db, acc)
+    foundRecord = storageTrie.getSlotBytes(slotAsKey)
 
   result = if foundRecord.len > 0:
             rlp.decode(foundRecord, UInt256)
@@ -263,22 +264,22 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
   if not clearCache and acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  var accountTrie = getAccountTrie(db, acc)
+  var storageTrie = getStorageTrie(db, acc)
 
   for slot, value in acc.overlayStorage:
     let slotAsKey = createTrieKeyFromSlot slot
 
     if value > 0:
       let encodedValue = rlp.encode(value)
-      accountTrie.put(slotAsKey, encodedValue)
+      storageTrie.putSlotBytes(slotAsKey, encodedValue)
     else:
-      accountTrie.del(slotAsKey)
+      storageTrie.delSlotBytes(slotAsKey)
 
     # TODO: this can be disabled if we do not perform
     #       accounts tracing
     # map slothash back to slot value
     # see iterator storage below
-    # slotHash can be obtained from accountTrie.put?
+    # slotHash can be obtained from storageTrie.putSlotBytes?
     let slotHash = keccakHash(slotAsKey)
     db.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
@@ -292,7 +293,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
         acc.originalStorage.del(slot)
     acc.overlayStorage.clear()
 
-  acc.account.storageRoot = accountTrie.rootHash
+  acc.account.storageRoot = storageTrie.rootHash
 
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
   ac.isDirty = true
@@ -449,9 +450,9 @@ proc persist*(ac: AccountsCache, clearCache: bool = true) =
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac.db, clearCache)
-      ac.trie.put address, rlp.encode(acc.account)
+      ac.trie.putAccountBytes address, rlp.encode(acc.account)
     of Remove:
-      ac.trie.del address
+      ac.trie.delAccountBytes address
       if not clearCache:
         cleanAccounts.incl address
     of DoNothing:

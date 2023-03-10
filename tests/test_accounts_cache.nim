@@ -188,7 +188,7 @@ proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
   # following function could be added to db/accounts_cache.nim:
   #
   #   proc clobberRootHash*(ac: AccountsCache; root: KeccakHash; prune = true) =
-  #     ac.trie = initSecureHexaryTrie(ac.db, rootHash, prune)
+  #     ac.trie = initAccountsTrie(ac.db, rootHash, prune)
   #
   # Then, beginning this very function `runTrial3crash()` with
   #

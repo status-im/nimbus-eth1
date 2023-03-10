@@ -3,7 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
   faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
-  ../nimbus/db/storage_types, ./witness_types, ./multi_keys
+  ../nimbus/db/[distinct_tries, storage_types], ./witness_types, ./multi_keys
 
 type
    DB = TrieDatabaseRef
@@ -39,13 +39,13 @@ proc randStorage(db: DB): StorageKeys =
   if rand(0..1) == 0:
     result = (emptyRlpHash, MultikeysRef(nil))
   else:
-    var trie = initSecureHexaryTrie(db)
+    var trie = initStorageTrie(db)
     let numPairs = rand(1..10)
     var keys = newSeq[StorageSlot](numPairs)
 
     for i in 0..<numPairs:
       keys[i] = randStorageSlot()
-      trie.put(keys[i], rlp.encode(randU256()))
+      trie.putSlotBytes(keys[i], rlp.encode(randU256()))
 
     if rand(0..1) == 0:
       result = (trie.rootHash, MultikeysRef(nil))
@@ -69,7 +69,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
              addIdenticalKeys: bool = false, addInvalidKeys: static[bool] = false) =
 
   var memDB = newMemoryDB()
-  var trie = initSecureHexaryTrie(memDB)
+  var trie = initAccountsTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
   var accs = newSeq[Account](numPairs)
 
@@ -77,7 +77,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
     let acc  = randAccount(memDB)
     addrs[i] = AccountKey(address: randAddress(), codeTouched: acc.codeTouched, storageKeys: acc.storageKeys)
     accs[i]  = acc.account
-    trie.put(addrs[i].address, rlp.encode(accs[i]))
+    trie.putAccountBytes(addrs[i].address, rlp.encode(accs[i]))
 
   when addInvalidKeys:
     # invalidAddress should not end up in block witness
@@ -102,9 +102,9 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
   let root = tb.buildTree()
   check root.data == rootHash.data
 
-  let newTrie = initSecureHexaryTrie(tb.getDB(), root)
+  let newTrie = initAccountsTrie(tb.getDB(), root)
   for i in 0..<numPairs:
-    let recordFound = newTrie.get(addrs[i].address)
+    let recordFound = newTrie.getAccountBytes(addrs[i].address)
     if recordFound.len > 0:
       let acc = rlp.decode(recordFound, Account)
       check acc == accs[i]
@@ -261,7 +261,7 @@ proc witnessKeysMain*() =
       ]
       let m  = initMultiKeys(keys, true)
       var memDB = newMemoryDB()
-      var trie = initSecureHexaryTrie(memDB)
+      var trie = initAccountsTrie(memDB)
       var acc  = randAccount(memDB)
 
       var tt = initHexaryTrie(memDB)
@@ -271,7 +271,7 @@ proc witnessKeysMain*() =
 
       let addrs = @[AccountKey(address: randAddress(), codeTouched: acc.codeTouched, storageKeys: m)]
 
-      trie.put(addrs[0].address, rlp.encode(acc.account))
+      trie.putAccountBytes(addrs[0].address, rlp.encode(acc.account))
       var mkeys = newMultiKeys(addrs)
       let rootHash = trie.rootHash
 
