@@ -27,7 +27,7 @@ import
   ./core/[chain, sealer, clique/clique_desc,
     clique/clique_sealer, tx_pool, block_import],
   ./rpc/merge/merger,
-  ./sync/[legacy, full, protocol, snap,
+  ./sync/[legacy, full, protocol, snap, stateless,
     protocol/les_protocol, handlers, peers]
 
 when defined(evmc_enabled):
@@ -60,6 +60,7 @@ type
     legaSyncRef: LegacySyncRef
     snapSyncRef: SnapSyncRef
     fullSyncRef: FullSyncRef
+    statelessSyncRef: StatelessSyncRef
     merger: MergerRef
 
 proc importBlocks(conf: NimbusConf, com: CommonRef) =
@@ -186,6 +187,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         nimbus.dbBackend, tickerOK, noRecovery=noRecovery, exCtrlFile)
+    of SyncMode.Stateless:
+      # FIXME-Adam: what needs to go here?
+      nimbus.statelessSyncRef = StatelessSyncRef.init()
     of SyncMode.Default:
       nimbus.legaSyncRef = LegacySyncRef.new(
         nimbus.ethNode, nimbus.chainRef)
@@ -205,7 +209,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     var waitForPeers = true
     case conf.syncMode:
-    of SyncMode.Snap, SyncMode.SnapCtx:
+    of SyncMode.Snap, SyncMode.SnapCtx, SyncMode.Stateless:
       waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -428,6 +432,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
           cast[pointer](nimbus.legaSyncRef))
       of SyncMode.Full:
         nimbus.fullSyncRef.start
+      of SyncMode.Stateless:
+        nimbus.statelessSyncRef.start
       of SyncMode.Snap, SyncMode.SnapCtx:
         nimbus.snapSyncRef.start
 
@@ -455,6 +461,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
     await nimbus.peerManager.stop()
+  if nimbus.statelessSyncRef.isNil.not:
+    nimbus.statelessSyncRef.stop()
   if nimbus.snapSyncRef.isNil.not:
     nimbus.snapSyncRef.stop()
   if nimbus.fullSyncRef.isNil.not:
