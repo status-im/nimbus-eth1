@@ -24,11 +24,8 @@ import
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/beacon_light_client/[
-    light_client_init_loader,
-    light_client_content,
+    beacon_light_client_init_loader,
     beacon_light_client,
-    light_client_db,
-    light_client_network
   ],
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
@@ -49,7 +46,7 @@ proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
     notice "Failed to initialize bridge client", error = err.msg
     return none(BridgeClient)
 
-proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
+proc run(config: PortalConf) {.raises: [CatchableError].} =
   # Make sure dataDir exists
   let pathExists = createPath(config.dataDir.string)
   if pathExists.isErr():

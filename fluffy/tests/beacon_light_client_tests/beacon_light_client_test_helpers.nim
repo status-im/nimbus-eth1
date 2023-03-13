@@ -11,8 +11,7 @@ import
   beacon_chain/spec/forks,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon_light_client/[
-    light_client_network,
-    light_client_db
+    beacon_light_client_network
   ],
   ../test_helpers
 

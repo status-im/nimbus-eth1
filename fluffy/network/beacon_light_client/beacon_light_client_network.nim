@@ -15,10 +15,12 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[light_client_content, light_client_db]
+  "."/[beacon_light_client_content, beacon_light_client_db]
+
+export beacon_light_client_content, beacon_light_client_db
 
 logScope:
-  topics = "portal_lc"
+  topics = "portal_beacon_lc"
 
 const
   lightClientProtocolId* = [byte 0x50, 0x1A]

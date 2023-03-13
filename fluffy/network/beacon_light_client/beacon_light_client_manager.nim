@@ -14,12 +14,12 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix, capella, deneb],
   beacon_chain/spec/[forks_light_client, digest],
   beacon_chain/beacon_clock,
-  "."/[light_client_network, light_client_content]
+  "."/[beacon_light_client_network, beacon_light_client_content]
 
 from beacon_chain/consensus_object_pools/block_pools_types import VerifierError
 
 logScope:
-  topics = "lcman"
+  topics = "beacon_lc_man"
 
 type
   Nothing = object
