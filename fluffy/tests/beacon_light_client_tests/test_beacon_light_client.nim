@@ -16,8 +16,8 @@ import
   beacon_chain/beacon_clock,
   beacon_chain/conf,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/beacon_light_client/[light_client_content, beacon_light_client],
-  "."/[light_client_test_data, light_client_test_helpers]
+  ../../network/beacon_light_client/beacon_light_client,
+  "."/[light_client_test_data, beacon_light_client_test_helpers]
 
 procSuite "Portal Beacon Light Client":
   let rng = newRng()

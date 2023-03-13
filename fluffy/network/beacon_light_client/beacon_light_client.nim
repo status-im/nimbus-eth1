@@ -13,11 +13,13 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
-  "."/[light_client_network, beacon_light_client_manager]
+  "."/[beacon_light_client_network, beacon_light_client_manager]
 
-export LightClientFinalizationMode
+export
+  LightClientFinalizationMode,
+  beacon_light_client_network, beacon_light_client_manager
 
-logScope: topics = "lightcl"
+logScope: topics = "portal_beacon_lc"
 
 type
   LightClientHeaderCallback* =

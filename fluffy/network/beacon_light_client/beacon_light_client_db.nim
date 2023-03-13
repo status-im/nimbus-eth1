@@ -16,7 +16,7 @@ import
   stint,
   stew/[results, byteutils],
   ssz_serialization,
-  ./light_client_content,
+  ./beacon_light_client_content,
   ../wire/portal_protocol
 
 export kvstore_sqlite3

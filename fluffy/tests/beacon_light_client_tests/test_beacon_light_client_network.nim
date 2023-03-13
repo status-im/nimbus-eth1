@@ -11,8 +11,8 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/datatypes/altair,
   ../../network/wire/portal_protocol,
-  ../../network/beacon_light_client/[light_client_network, light_client_content],
-  "."/[light_client_test_data, light_client_test_helpers]
+  ../../network/beacon_light_client/beacon_light_client_network,
+  "."/[light_client_test_data, beacon_light_client_test_helpers]
 
 procSuite "Beacon Light Client Content Network":
   let rng = newRng()
