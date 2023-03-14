@@ -46,6 +46,7 @@ type
     NearbyEmptyPath
     NearbyLeafExpected
     NearbyDanglingLink
+    NearbyPathTail
 
     # envelope
     DecomposeDegenerated

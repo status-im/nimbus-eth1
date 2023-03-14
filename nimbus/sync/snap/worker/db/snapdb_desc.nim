@@ -258,7 +258,10 @@ proc verifyNoMoreRight*(
   let
     root = root.to(RepairKey)
     base = base.to(NodeKey)
-  if base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb):
+    rc = base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb)
+  if rc.isErr:
+    return err(rc.error)
+  if rc.value:
     return ok()
 
   let error = LowerBoundProofError
