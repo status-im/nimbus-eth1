@@ -390,12 +390,16 @@ proc test_NodeRangeProof*(
   for n,w in inLst:
     doAssert 1 < w.data.accounts.len
     let
-      # Use the middle of the first two points as base
-      delta = (w.data.accounts[1].accKey.to(NodeTag) -
-               w.data.accounts[0].accKey.to(NodeTag)) div 2
-      base = w.data.accounts[0].accKey.to(NodeTag) + delta
+      first = w.data.accounts[0].accKey.to(NodeTag)
+      delta = (w.data.accounts[1].accKey.to(NodeTag) - first) div 2
+      # Use the middle of the first two points as base unless w.base is zero.
+      # This is needed as the range extractor needs the node before the `base`
+      # (if ateher is any) in order to assemble the proof. But this node might
+      # not be present in the partial database.
+      (base, start) = if w.base == 0.to(NodeTag): (w.base, 0)
+                      else: (first + delta, 1)
       # Assemble accounts list starting at the second item
-      accounts = w.data.accounts[1 ..< min(w.data.accounts.len,maxLen)]
+      accounts = w.data.accounts[start ..< min(w.data.accounts.len,maxLen)]
       iv = NodeTagRange.new(base, accounts[^1].accKey.to(NodeTag))
       rc = db.hexaryRangeLeafsProof(rootKey, iv)
     check rc.isOk
@@ -503,7 +507,7 @@ proc test_NodeRangeLeftBoundary*(
         check (n, j, leftKey) == (n, j, toLeftKey)
         rootKey.printCompareLeftNearby(leftKey, rightKey, db, dbg)
         return
-    noisy.say "***", "n=", n, " accounts=", accounts.len
+    # noisy.say "***", "n=", n, " accounts=", accounts.len
 
 # ------------------------------------------------------------------------------
 # End

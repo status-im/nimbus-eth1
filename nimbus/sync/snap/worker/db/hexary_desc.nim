@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sets, tables],
+  std/[hashes, sequtils, sets, tables],
   eth/[common, trie/nibbles],
   stint,
   ../../range_desc,
@@ -297,6 +297,26 @@ proc convertTo*(nodeList: openArray[XNodeObj]; T: type Blob): T =
   for w in nodeList:
     writer.append w
   writer.finish
+
+proc padPartialPath*(pfx: NibblesSeq; dblNibble: byte): NodeKey =
+  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`.
+  ## This function must be handled with some care regarding a meaningful value
+  ## for the `dblNibble` argument. Using values `0` or `255` is typically used
+  ## to create the minimum or maximum envelope value from the `pfx` argument.
+  # Pad with zeroes
+  var padded: NibblesSeq
+
+  let padLen = 64 - pfx.len
+  if 0 <= padLen:
+    padded = pfx & dblNibble.repeat(padlen div 2).initNibbleRange
+    if (padLen and 1) == 1:
+      padded = padded & @[dblNibble].initNibbleRange.slice(1)
+  else:
+    let nope = seq[byte].default.initNibbleRange
+    padded = pfx.slice(0,64) & nope # nope forces re-alignment
+
+  let bytes = padded.getBytes
+  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 # ------------------------------------------------------------------------------
 # End
