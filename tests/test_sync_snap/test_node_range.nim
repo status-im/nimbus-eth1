@@ -19,8 +19,9 @@ import
   ../../nimbus/sync/[handlers, protocol, types],
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_envelope,  hexary_error, hexary_interpolate,
-    hexary_nearby, hexary_paths, hexary_range, snapdb_accounts, snapdb_desc],
+    hexary_debug, hexary_desc, hexary_envelope,  hexary_error,
+    hexary_interpolate, hexary_nearby, hexary_paths, hexary_range,
+    snapdb_accounts, snapdb_debug, snapdb_desc],
   ../replay/[pp, undump_accounts],
   ./test_helpers
 
@@ -209,7 +210,6 @@ proc verifyRangeProof(
      ): Result[void,HexaryError] =
   ## Re-build temporary database and prove or disprove
   let
-    dumpOk = dbg.isNil.not
     noisy = dbg.isNil.not
     xDb = HexaryTreeDbRef()
   if not dbg.isNil:
@@ -252,7 +252,7 @@ proc verifyRangeProof(
       "\n\n    last=", leafs[^1].key,
       "\n    ", leafs[^1].key.hexaryPath(rootKey,xDb).pp(dbg),
       "\n\n    database dump",
-      "\n    ", xDb.dumpHexaDB(rootKey),
+      "\n    ", xDb.pp(rootKey),
       "\n"
 
 # ------------------------------------------------------------------------------
@@ -270,8 +270,6 @@ proc test_NodeRangeDecompose*(
   # stray account nodes in the proof *before* the left boundary.
   doAssert 2 < accKeys.len
 
-  const
-    isPersistent = db.type is HexaryTreeDbRef
   let
     rootKey = root.to(NodeKey)
     baseTag = accKeys[0].to(NodeTag) + 1.u256
@@ -486,7 +484,7 @@ proc test_NodeRangeLeftBoundary*(
   ## Verify left side boundary checks
   let
     rootKey = inLst[0].root.to(NodeKey)
-    noisy = not dbg.isNil
+    noisy {.used.} = not dbg.isNil
 
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:

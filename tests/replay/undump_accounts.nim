@@ -99,8 +99,6 @@ proc dumpAccounts*(
 
 iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
   var
-    line = ""
-    lno = 0
     state = UndumpHeader
     data: UndumpAccounts
     nAccounts = 0u

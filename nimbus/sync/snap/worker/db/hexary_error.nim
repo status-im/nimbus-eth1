@@ -28,6 +28,10 @@ type
     TooManySlotAccounts
     NoAccountsYet
 
+    # debug
+    LeafMaxExceeded
+    GarbledNextLeaf
+
     # range
     LeafNodeExpected
     FailedNextNode

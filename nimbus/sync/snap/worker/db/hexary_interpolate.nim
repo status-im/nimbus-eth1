@@ -14,14 +14,14 @@
 ## purposes, it should be replaced by the new facility of the upcoming
 ## re-factored database layer.
 
+{.push raises: [].}
+
 import
   std/[tables],
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
-
-{.push raises: [].}
 
 type
   RPathXStep = object
