@@ -113,6 +113,7 @@ type
     nibble*: int8                   ## Branch node selector (if any)
 
   RPath* = object
+    root*: RepairKey                ## Root node needed when `path.len == 0`
     path*: seq[RPathStep]
     tail*: NibblesSeq               ## Stands for non completed leaf path
 
@@ -123,6 +124,7 @@ type
     nibble*: int8                   ## Branch node selector (if any)
 
   XPath* = object
+    root*: NodeKey                  ## Root node needed when `path.len == 0`
     path*: seq[XPathStep]
     tail*: NibblesSeq               ## Stands for non completed leaf path
     depth*: int                     ## May indicate path length (typically 64)
@@ -367,10 +369,16 @@ proc pp*(w:openArray[RPathStep|XPathStep];db:HexaryTreeDbRef;indent=4): string =
   w.toSeq.mapIt(it.ppImpl(db)).join(indent.toPfx)
 
 proc pp*(w: RPath; db: HexaryTreeDbRef; indent=4): string =
-  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & ")"
+  result = "<" & w.root.pp(db) & ">"
+  if 0 < w.path.len:
+    result &= indent.toPfx & w.path.pp(db,indent)
+  result &= indent.toPfx & "(" & $w.tail & ")"
 
 proc pp*(w: XPath; db: HexaryTreeDbRef; indent=4): string =
-  w.path.pp(db,indent) & indent.toPfx & "(" & $w.tail & "," & $w.depth & ")"
+  result = "<" & w.root.pp(db) & ">"
+  if 0 < w.path.len:
+    result &= indent.toPfx & w.path.pp(db,indent)
+  result &= indent.toPfx & "(" & $w.tail & "," & $w.depth & ")"
 
 proc pp*(db: HexaryTreeDbRef; root: NodeKey; indent=4): string =
   ## Dump the entries from the a generic repair tree.

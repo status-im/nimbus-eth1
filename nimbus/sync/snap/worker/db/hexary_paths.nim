@@ -89,16 +89,15 @@ proc toExtensionNode(
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc pathExtend(
+proc rootPathExtend(
     path: RPath;
-    key: RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
       {.gcsafe, raises: [KeyError].} =
   ## For the given path, extend to the longest possible repair tree `db`
   ## path following the argument `path.tail`.
   result = path
-  var key = key
+  var key = path.root
   while db.tab.hasKey(key):
     let node = db.tab[key]
 
@@ -127,15 +126,14 @@ proc pathExtend(
       key = node.eLink
 
 
-proc pathExtend(
+proc rootPathExtend(
     path: XPath;
-    key: Blob;
     getFn: HexaryGetFn;
       ): XPath
       {.gcsafe, raises: [CatchableError]} =
   ## Ditto for `XPath` rather than `RPath`
   result = path
-  var key = key
+  var key = path.root.to(Blob)
   while true:
     let value = key.getFn()
     if value.len == 0:
@@ -432,7 +430,7 @@ proc hexaryPath*(
   ## Compute the longest possible repair tree `db` path matching the `nodeKey`
   ## nibbles. The `nodeNey` path argument comes before the `db` one for
   ## supporting a more functional notation.
-  RPath(tail: partialPath).pathExtend(rootKey.to(RepairKey), db)
+  RPath(root: rootKey.to(RepairKey), tail: partialPath).rootPathExtend(db)
 
 proc hexaryPath*(
     nodeKey: NodeKey;
@@ -469,7 +467,7 @@ proc hexaryPath*(
       ): XPath
       {.gcsafe, raises: [CatchableError]} =
   ## Compute the longest possible path on an arbitrary hexary trie.
-  XPath(tail: partialPath).pathExtend(rootKey.to(Blob), getFn)
+  XPath(root: rootKey, tail: partialPath).rootPathExtend(getFn)
 
 proc hexaryPath*(
     nodeKey: NodeKey;
@@ -614,7 +612,7 @@ proc next*(
           let
             branch = XPathStep(key: it.key, node: it.node, nibble: inx.int8)
             walk = path.path[0 ..< pLen] & branch
-            newPath = XPath(path: walk).pathLeast(link, getFn)
+            newPath = XPath(root: path.root, path: walk).pathLeast(link, getFn)
           if minDepth <= newPath.depth and 0 < newPath.leafData.len:
             return newPath
 
@@ -644,7 +642,7 @@ proc prev*(
           let
             branch = XPathStep(key: it.key, node: it.node, nibble: inx.int8)
             walk = path.path[0 ..< pLen] & branch
-            newPath = XPath(path: walk).pathMost(link, getFn)
+            newPath = XPath(root: path.root, path: walk).pathMost(link,getFn)
           if minDepth <= newPath.depth and 0 < newPath.leafData.len:
             return newPath
 
