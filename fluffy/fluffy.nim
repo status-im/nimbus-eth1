@@ -11,7 +11,7 @@ import
   std/os,
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient,
-  json_rpc/rpcproxy, stew/[byteutils, io2],
+  json_rpc/rpcproxy, stew/[byteutils, io2, results],
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/beacon_clock,
@@ -45,6 +45,70 @@ proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   except CatchableError as err:
     notice "Failed to initialize bridge client", error = err.msg
     return none(BridgeClient)
+
+proc initBeaconLightClient(
+      network: LightClientNetwork, networkData: NetworkInitData,
+      trustedBlockRoot: Option[Eth2Digest]): LightClient =
+  let
+    getBeaconTime = networkData.clock.getBeaconTimeFn()
+
+    refDigests = newClone networkData.forks
+
+    lc = LightClient.new(
+      network,
+      network.portalProtocol.baseProtocol.rng,
+      networkData.metadata.cfg,
+      refDigests,
+      getBeaconTime,
+      networkData.genesis_validators_root,
+      LightClientFinalizationMode.Optimistic
+    )
+
+  # TODO: For now just log new headers. Ultimately we should also use callbacks
+  # for each lc object to save them to db and offer them to the network.
+  # TODO-2: The above statement sounds that this work should really be done at a
+  # later lower, and these callbacks are rather for use for the "application".
+  proc onFinalizedHeader(
+      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
+    withForkyHeader(finalizedHeader):
+      when lcDataFork > LightClientDataFork.None:
+        info "New LC finalized header",
+          finalized_header = shortLog(forkyHeader)
+
+  proc onOptimisticHeader(
+      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
+    withForkyHeader(optimisticHeader):
+      when lcDataFork > LightClientDataFork.None:
+        info "New LC optimistic header",
+          optimistic_header = shortLog(forkyHeader)
+
+  lc.onFinalizedHeader = onFinalizedHeader
+  lc.onOptimisticHeader = onOptimisticHeader
+  lc.trustedBlockRoot = trustedBlockRoot
+
+  # proc onSecond(time: Moment) =
+  #   let wallSlot = getBeaconTime().slotOrZero()
+  #   # TODO this is a place to enable/disable gossip based on the current status
+  #   # of light client
+  #   # lc.updateGossipStatus(wallSlot + 1)
+
+  # proc runOnSecondLoop() {.async.} =
+  #   let sleepTime = chronos.seconds(1)
+  #   while true:
+  #     let start = chronos.now(chronos.Moment)
+  #     await chronos.sleepAsync(sleepTime)
+  #     let afterSleep = chronos.now(chronos.Moment)
+  #     let sleepTime = afterSleep - start
+  #     onSecond(start)
+  #     let finished = chronos.now(chronos.Moment)
+  #     let processingTime = finished - afterSleep
+  #     trace "onSecond task completed", sleepTime, processingTime
+
+  # onSecond(Moment.now())
+
+  # asyncSpawn runOnSecondLoop()
+
+  lc
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
   # Make sure dataDir exists
@@ -113,8 +177,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     )
     streamManager = StreamManager.new(d)
 
-    stateNetwork = StateNetwork.new(d, db, streamManager,
-      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
+    stateNetwork = Opt.some(StateNetwork.new(
+      d, db, streamManager,
+      bootstrapRecords = bootstrapRecords,
+      portalConfig = portalConfig))
 
     accumulator =
       # Building an accumulator from header epoch files takes > 2m30s and is
@@ -132,8 +198,31 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         except SszError as err:
           raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-    historyNetwork = HistoryNetwork.new(d, db, streamManager, accumulator,
-      bootstrapRecords = bootstrapRecords, portalConfig = portalConfig)
+    historyNetwork = Opt.some(HistoryNetwork.new(
+      d, db, streamManager, accumulator,
+      bootstrapRecords = bootstrapRecords,
+      portalConfig = portalConfig))
+
+    beaconLightClient =
+      # TODO: Currently disabled by default as it is not sufficiently polished.
+      # Eventually this should be always-on functionality.
+      if config.trustedBlockRoot.isSome():
+        let
+          # Fluffy works only over mainnet data currently
+          networkData = loadNetworkData("mainnet")
+          beaconLightClientDb = LightClientDb.new(
+            config.dataDir / "lightClientDb")
+          lightClientNetwork = LightClientNetwork.new(
+            d,
+            beaconLightClientDb,
+            streamManager,
+            networkData.forks,
+            bootstrapRecords = bootstrapRecords)
+
+        Opt.some(initBeaconLightClient(
+          lightClientNetwork, networkData, config.trustedBlockRoot))
+      else:
+        Opt.none(LightClient)
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and
@@ -143,6 +232,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     fatal "Failed to write the enr file", file = enrFile
     quit 1
 
+
+  ## Start metrics HTTP server
   if config.metricsEnabled:
     let
       address = config.metricsAddress
@@ -155,100 +246,38 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     # TODO: Ideally we don't have the Exception here
     except Exception as exc: raiseAssert exc.msg
 
+  ## Starting the different networks.
+  d.start()
+  if stateNetwork.isSome():
+    stateNetwork.get().start()
+  if historyNetwork.isSome():
+    historyNetwork.get().start()
+  if beaconLightClient.isSome():
+    let lc = beaconLightClient.get()
+    lc.network.start()
+    lc.start()
+
+  ## Starting the JSON-RPC APIs
   if config.rpcEnabled:
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
     var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
-    rpcHttpServerWithProxy.installEthApiHandlers(historyNetwork)
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
-    rpcHttpServerWithProxy.installPortalApiHandlers(stateNetwork.portalProtocol, "state")
-    rpcHttpServerWithProxy.installPortalApiHandlers(historyNetwork.portalProtocol, "history")
-    rpcHttpServerWithProxy.installPortalDebugApiHandlers(stateNetwork.portalProtocol, "state")
-    rpcHttpServerWithProxy.installPortalDebugApiHandlers(historyNetwork.portalProtocol, "history")
-    # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
-    # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
+    if stateNetwork.isSome():
+      rpcHttpServerWithProxy.installPortalApiHandlers(
+        stateNetwork.get().portalProtocol, "state")
+    if historyNetwork.isSome():
+      rpcHttpServerWithProxy.installEthApiHandlers(historyNetwork.get())
+      rpcHttpServerWithProxy.installPortalApiHandlers(
+        historyNetwork.get().portalProtocol, "history")
+      rpcHttpServerWithProxy.installPortalDebugApiHandlers(
+        historyNetwork.get().portalProtocol, "history")
+    if beaconLightClient.isSome():
+      rpcHttpServerWithProxy.installPortalApiHandlers(
+        beaconLightClient.get().network.portalProtocol, "beaconLightClient")
+    # TODO: Test proxy with remote node over HTTPS
     waitFor rpcHttpServerWithProxy.start()
 
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
-
-  d.start()
-
-  # TODO: Currently disabled by default as it is not stable/polished enough,
-  # ultimatetely this should probably be always on.
-  if config.trustedBlockRoot.isSome():
-    # fluffy light client works only over mainnet data
-    let
-      networkData = loadNetworkData("mainnet")
-
-      db = LightClientDb.new(config.dataDir / "lightClientDb")
-
-      lightClientNetwork = LightClientNetwork.new(
-        d,
-        db,
-        streamManager,
-        networkData.forks,
-        bootstrapRecords = bootstrapRecords)
-
-      getBeaconTime = networkData.clock.getBeaconTimeFn()
-
-      refDigests = newClone networkData.forks
-
-      lc = LightClient.new(
-        lightClientNetwork,
-        rng,
-        networkData.metadata.cfg,
-        refDigests,
-        getBeaconTime,
-        networkData.genesis_validators_root,
-        LightClientFinalizationMode.Optimistic
-      )
-
-    # TODO: For now just log headers. Ultimately we should also use callbacks for each
-    # lc object to save them to db and offer them to the network.
-    proc onFinalizedHeader(
-        lightClient: LightClient, finalizedHeader: ForkedLightClientHeader) =
-      withForkyHeader(finalizedHeader):
-        when lcDataFork > LightClientDataFork.None:
-          info "New LC finalized header",
-            finalized_header = shortLog(forkyHeader)
-
-    proc onOptimisticHeader(
-        lightClient: LightClient, optimisticHeader: ForkedLightClientHeader) =
-      withForkyHeader(optimisticHeader):
-        when lcDataFork > LightClientDataFork.None:
-          info "New LC optimistic header",
-            optimistic_header = shortLog(forkyHeader)
-
-    lc.onFinalizedHeader = onFinalizedHeader
-    lc.onOptimisticHeader = onOptimisticHeader
-    lc.trustedBlockRoot = config.trustedBlockRoot
-
-    proc onSecond(time: Moment) =
-      let wallSlot = getBeaconTime().slotOrZero()
-      # TODO this is a place to enable/disable gossip based on the current status
-      # of light client
-      # lc.updateGossipStatus(wallSlot + 1)
-
-    proc runOnSecondLoop() {.async.} =
-      let sleepTime = chronos.seconds(1)
-      while true:
-        let start = chronos.now(chronos.Moment)
-        await chronos.sleepAsync(sleepTime)
-        let afterSleep = chronos.now(chronos.Moment)
-        let sleepTime = afterSleep - start
-        onSecond(start)
-        let finished = chronos.now(chronos.Moment)
-        let processingTime = finished - afterSleep
-        trace "onSecond task completed", sleepTime, processingTime
-
-    onSecond(Moment.now())
-
-    lightClientNetwork.start()
-    lc.start()
-
-    asyncSpawn runOnSecondLoop()
-
-  historyNetwork.start()
-  stateNetwork.start()
 
   runForever()
 

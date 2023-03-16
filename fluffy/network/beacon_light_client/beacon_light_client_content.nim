@@ -103,10 +103,15 @@ func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
   except SszError as e:
     err(e.msg)
 
-# TODO: Not sure at this point how this API should look best, but the current
-# version is a bit weird as it provides both a Forked object and a forkDigest
-# Lets see when we get to used it in the bridge, might require something
-# like `forkDigestAtEpoch` instead.
+# Yes, this API is odd as you pass a SomeForkedLightClientObject yet still have
+# to also pass the ForkDigest. This is because we can't just select the right
+# digest through the LightClientDataFork here as LightClientDataFork and
+# ConsensusFork are not mapped 1-to-1. There is loss of fork data.
+# This means we need to get the ConsensusFork directly, which is possible by
+# passing the epoch (slot) from the object through `forkDigestAtEpoch`. This
+# however requires the runtime config which is part of the `Eth2Node` object.
+# Not something we would like to include as a parameter here, so we stick with
+# just passing the forkDigest and doing the work outside of this encode call.
 func encodeForkedLightClientObject*(
     obj: SomeForkedLightClientObject,
     forkDigest: ForkDigest): seq[byte] =

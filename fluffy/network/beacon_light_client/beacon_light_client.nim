@@ -27,7 +27,7 @@ type
       gcsafe, raises: [].}
 
   LightClient* = ref object
-    network: LightClientNetwork
+    network*: LightClientNetwork
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
     getBeaconTime: GetBeaconTimeFn
