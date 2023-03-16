@@ -18,6 +18,7 @@ export
   vms.`$`,
   vms.blockNumber,
   vms.buildWitness,
+  vms.clearSelfDestructsAndEmptyAccounts,
   vms.coinbase,
   vms.difficulty,
   vms.disableTracing,

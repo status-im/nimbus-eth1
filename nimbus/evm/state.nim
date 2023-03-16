@@ -387,3 +387,14 @@ func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationIn
   # should timestamp be adding 12 or something?
   # Also, can I get the TD? Do I need to?
   forkDeterminationInfo(vmState.blockNumber, vmState.timestamp)
+
+proc clearSelfDestructsAndEmptyAccounts*(vmState: BaseVMState, fork: EVMFork, miner: EthAddress): void =
+  vmState.mutateStateDB:
+    for deletedAccount in vmState.selfDestructs:
+      db.deleteAccount(deletedAccount)
+
+    if fork >= FkSpurious:
+      vmState.touchedAccounts.incl(miner)
+      # EIP158/161 state clearing
+      for account in vmState.touchedAccounts:
+        db.deleteAccountIfEmpty(account)

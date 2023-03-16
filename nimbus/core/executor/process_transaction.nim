@@ -88,17 +88,7 @@ proc processTransactionImpl(
       vmState.cumulativeGasUsed += gasBurned
       result = ok(gasBurned)
 
-  vmState.mutateStateDB:
-    for deletedAccount in vmState.selfDestructs:
-      db.deleteAccount deletedAccount
-
-    if fork >= FkSpurious:
-      vmState.touchedAccounts.incl(miner)
-      # EIP158/161 state clearing
-      for account in vmState.touchedAccounts:
-        if db.accountExists(account) and db.isEmptyAccount(account):
-          debug "state clearing", account
-          db.deleteAccount(account)
+  vmState.clearSelfDestructsAndEmptyAccounts(fork, miner)
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
