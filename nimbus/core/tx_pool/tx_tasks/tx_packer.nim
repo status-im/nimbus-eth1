@@ -112,17 +112,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
 
   # Update account database
-  vmState.mutateStateDB:
-    for deletedAccount in vmState.selfDestructs:
-      db.deleteAccount deletedAccount
-
-    if FkSpurious <= xp.chain.nextFork:
-      vmState.touchedAccounts.incl(xp.chain.feeRecipient)
-      # EIP158/161 state clearing
-      for account in vmState.touchedAccounts:
-        if db.accountExists(account) and db.isEmptyAccount(account):
-          debug "state clearing", account
-          db.deleteAccount account
+  vmState.clearSelfDestructsAndEmptyAccounts(xp.chain.nextFork, xp.chain.feeRecipient)
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()

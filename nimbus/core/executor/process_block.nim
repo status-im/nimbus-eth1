@@ -78,6 +78,7 @@ proc procBlkPreamble(vmState: BaseVMState;
 
     for withdrawal in body.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+      vmState.stateDB.deleteAccountIfEmpty(withdrawal.address)
 
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",

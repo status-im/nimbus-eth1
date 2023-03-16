@@ -1,5 +1,6 @@
 import
   tables, hashes, sets,
+  chronicles,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
@@ -442,6 +443,11 @@ proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   let acc = ac.getAccount(address)
   acc.kill()
+
+proc deleteAccountIfEmpty*(ac: AccountsCache, address: EthAddress): void =
+  if ac.accountExists(address) and ac.isEmptyAccount(address):
+    debug "state clearing", address
+    ac.deleteAccount(address)
 
 proc persist*(ac: AccountsCache, clearCache: bool = true) =
   # make sure all savepoint already committed
