@@ -66,8 +66,12 @@ func normalizeNumber(n: JsonNode): JsonNode =
     result = n
   elif str == "0x00":
     result = newJString("0x0")
+  elif str == "0x0000000000000000000000000000000000000000":
+    # withdrawalsAddressBounds contains this; it's meant as an address, not a number,
+    # so it shouldn't be shortened to "0x0"
+    result = n
   elif str[2] == '0':
-    var i =  2
+    var i = 2
     while str[i] == '0':
       inc i
     result = newJString("0x" & str.substr(i))
