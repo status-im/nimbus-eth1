@@ -32,7 +32,7 @@ import
 # ------------------------------------------------------------------------------
 
 func gwei(n: uint64): UInt256 =
-  (n * (10'u64 ^ 9'u64)).u256
+  n.u256 * (10 ^ 9).u256
 
 proc procBlkPreamble(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
