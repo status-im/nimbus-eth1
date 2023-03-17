@@ -51,6 +51,14 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + accessListStoragePrefix00.json                                  OK
 ```
 OK: 7/7 Fail: 0/7 Skip: 0/7
+## ttEIP3860
+```diff
++ DataTestEnoughGasInitCode.json                                  OK
++ DataTestInitCodeLimit.json                                      OK
++ DataTestInitCodeTooBig.json                                     OK
++ DataTestNotEnoughGasInitCode.json                               OK
+```
+OK: 4/4 Fail: 0/4 Skip: 0/4
 ## ttGasLimit
 ```diff
 + NotEnoughGasLimit.json                                          OK
@@ -262,4 +270,4 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 OK: 59/59 Fail: 0/59 Skip: 0/59
 
 ---TOTAL---
-OK: 208/208 Fail: 0/208 Skip: 0/208
+OK: 212/212 Fail: 0/212 Skip: 0/212
