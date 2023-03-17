@@ -12,6 +12,7 @@
 
 import
   std/[sequtils, sets, tables],
+  chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
@@ -109,8 +110,9 @@ template collectLeafs(
       ): auto =
   ## Collect trie database leafs prototype. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var rc: Result[RangeProof,HexaryError]
-
+  var
+    rc: Result[RangeProof,HexaryError]
+    ttd = stopAt
   block body:
     let
       nodeMax = maxPt(iv) # `inject` is for debugging (if any)
@@ -165,7 +167,7 @@ template collectLeafs(
         key:  rightKey,
         data: xPath.leafData)
 
-      if timeIsOver(stopAt):
+      if timeIsOver(ttd):
         break # timout
 
       prevTag = nodeTag

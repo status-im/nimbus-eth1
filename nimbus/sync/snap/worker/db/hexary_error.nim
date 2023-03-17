@@ -32,6 +32,9 @@ type
     LeafMaxExceeded
     GarbledNextLeaf
 
+    # snap handler
+    DataSizeError
+
     # range
     LeafNodeExpected
     FailedNextNode

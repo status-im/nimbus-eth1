@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, strutils],
   chronicles,
   chronos,
   eth/[p2p, trie/trie_defs],
@@ -19,7 +19,7 @@ import
   ../../db/db_chain,
   ../../core/chain,
   ../snap/[constants, range_desc],
-  ../snap/worker/db/[hexary_desc, hexary_paths, hexary_range],
+  ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths, hexary_range],
   ../protocol,
   ../protocol/snap/snap_types
 
@@ -43,7 +43,7 @@ const
   emptySnapStorageList = seq[SnapStorage].default
     ## Dummy list for empty slots
 
-  defaultElaFetchMax = 1500.milliseconds
+  defaultElaFetchMax = 990.milliseconds
     ## Fetching accounts or slots can be extensive, stop in the middle if
     ## it takes too long
 
@@ -70,7 +70,7 @@ proc getAccountFn(
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
-proc getStorageSlotsFn(
+proc getStoSlotFn(
     chain: ChainRef;
     accKey: NodeKey;
       ): HexaryGetFn
@@ -106,26 +106,37 @@ proc to(
 proc mkNodeTagRange(
     origin: openArray[byte];
     limit: openArray[byte];
+    nAccounts = 1;
       ): Result[NodeTagRange,void] =
   var (minPt, maxPt) = (low(NodeTag), high(NodeTag))
 
   if 0 < origin.len or 0 < limit.len:
+
+    # Range applies only if there is exactly one account. A number of accounts
+    # different from 1 may be used by `getStorageRanges()`
+    if nAccounts == 0:
+      return err() # oops: no account
+
+    # Veriify range atguments
     if not minPt.init(origin) or not maxPt.init(limit) or maxPt <= minPt:
       when extraTraceMessages:
         trace logTxt "mkNodeTagRange: malformed range", origin, limit
       return err()
+
+    if 1 < nAccounts:
+      return ok(NodeTagRange.new(low(NodeTag), high(NodeTag)))
 
   ok(NodeTagRange.new(minPt, maxPt))
 
 
 proc fetchLeafRange(
     ctx: SnapWireRef;                   # Handler descriptor
-    db: HexaryGetFn;                    # Database abstraction
+    getFn: HexaryGetFn;                 # Database abstraction
     root: Hash256;                      # State root
     iv: NodeTagRange;                   # Proofed range of leaf paths
     replySizeMax: int;                  # Updated size counter for the raw list
     stopAt: Moment;                     # Implies timeout
-      ): Result[RangeProof,void]
+      ): Result[RangeProof,HexaryError]
       {.gcsafe, raises: [CatchableError].} =
 
   # Assemble result Note that the size limit is the size of the leaf nodes
@@ -136,44 +147,48 @@ proc fetchLeafRange(
     sizeMax = replySizeMax - estimatedProofSize
     now = Moment.now()
     timeout = if now < stopAt: stopAt - now else: 1.milliseconds
-    rc = db.hexaryRangeLeafsProof(rootKey, iv, sizeMax, timeout)
+    rc = getFn.hexaryRangeLeafsProof(rootKey, iv, sizeMax, timeout)
   if rc.isErr:
-    debug logTxt "fetchLeafRange: database problem",
+    error logTxt "fetchLeafRange: database problem",
       iv, replySizeMax, error=rc.error
-    return err() # database error
-  let sizeOnWire = rc.value.leafsSize + rc.value.proofSize
+    return rc # database error
 
+  let sizeOnWire = rc.value.leafsSize + rc.value.proofSize
   if sizeOnWire <= replySizeMax:
-    return ok(rc.value)
+    return rc
+
+  # Estimate the overhead size on wire needed for a single leaf tail item
+  const leafExtraSize = (sizeof RangeLeaf()) - (sizeof newSeq[Blob](0))
+
+  let nLeafs = rc.value.leafs.len
+  when extraTraceMessages:
+    trace logTxt "fetchLeafRange: reducing reply sample",
+      iv, sizeOnWire, replySizeMax, nLeafs
 
   # Strip parts of leafs result and amend remainder by adding proof nodes
-  var
-    rpl = rc.value
-    leafsTop = rpl.leafs.len - 1
-    tailSize = 0
-    tailItems = 0
-    reduceBy = replySizeMax - sizeOnWire
-  while tailSize <= reduceBy and tailItems < leafsTop:
-    # Estimate the size on wire needed for the tail item
-    const extraSize = (sizeof RangeLeaf()) - (sizeof newSeq[Blob](0))
-    tailSize += rpl.leafs[leafsTop - tailItems].data.len + extraSize
+  var (tailSize, tailItems, reduceBy) = (0, 0, replySizeMax - sizeOnWire)
+  while tailSize <= reduceBy:
     tailItems.inc
-  if leafsTop <= tailItems:
-    debug logTxt "fetchLeafRange: stripping leaf list failed",
-      iv, replySizeMax, leafsTop, tailItems
-    return err() # package size too small
+    if nLeafs <= tailItems:
+      when extraTraceMessages:
+        trace logTxt "fetchLeafRange: stripping leaf list failed",
+          iv, replySizeMax, nLeafs, tailItems
+      return err(DataSizeError) # empty tail (package size too small)
+    tailSize += rc.value.leafs[^tailItems].data.len + leafExtraSize
 
-  rpl.leafs.setLen(leafsTop - tailItems - 1) # chop off one more for slack
+  # Provide truncated leafs list
   let
-    leafProof = db.hexaryRangeLeafsProof(rootKey, rpl)
+    leafProof = getFn.hexaryRangeLeafsProof(
+      rootKey, RangeProof(leafs: rc.value.leafs[0 ..< nLeafs - tailItems]))
     strippedSizeOnWire = leafProof.leafsSize + leafProof.proofSize
   if strippedSizeOnWire <= replySizeMax:
     return ok(leafProof)
 
-  debug logTxt "fetchLeafRange: data size problem",
-    iv, replySizeMax, leafsTop, tailItems, strippedSizeOnWire
+  when extraTraceMessages:
+    trace logTxt "fetchLeafRange: data size problem",
+      iv, replySizeMax, nLeafs, tailItems, strippedSizeOnWire
 
-  err()
+  err(DataSizeError)
 
 # ------------------------------------------------------------------------------
 # Private functions: peer observer
@@ -254,8 +269,8 @@ method getAccountRange*(
     iv = block: # Calculate effective accounts range (if any)
       let rc = origin.mkNodeTagRange limit
       if rc.isErr:
-        return
-      rc.value # malformed interval
+        return # malformed interval
+      rc.value
 
     db = ctx.chain.getAccountFn
     stopAt = Moment.now() + ctx.elaFetchMax
@@ -293,10 +308,10 @@ method getStorageRanges*(
 
   let
     iv = block: # Calculate effective slots range (if any)
-      let rc = origin.mkNodeTagRange limit
+      let rc = origin.mkNodeTagRange(limit, accounts.len)
       if rc.isErr:
-        return
-      rc.value # malformed interval
+        return # malformed interval
+      rc.value
 
     accGetFn = ctx.chain.getAccountFn
     rootKey = root.to(NodeKey)
@@ -331,18 +346,29 @@ method getStorageRanges*(
         accDataLen=accData.len, stoRoot
       continue
 
-    # Collect data slots for this account
+    # Stop unless there is enough space left
+    if sizeMax - dataAllocated <= estimatedProofSize:
+      break
+
+    # Prepare for data collection
     let
-      db = ctx.chain.getStorageSlotsFn(accKey)
-      rc = ctx.fetchLeafRange(db, stoRoot, iv, sizeMax - dataAllocated, stopAt)
+      slotsGetFn = ctx.chain.getStoSlotFn(accKey)
+      sizeLeft = sizeMax - dataAllocated
+
+    # Collect data slots for this account
+    let rc = ctx.fetchLeafRange(slotsGetFn, stoRoot, iv, sizeLeft, stopAt)
     if rc.isErr:
       when extraTraceMessages:
-        trace logTxt "getStorageRanges: failed", iv, sizeMax, dataAllocated,
-          accDataLen=accData.len, stoRoot
+        trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
+          accDataLen=accData.len, stoRoot, error=rc.error
       return # extraction failed
 
     # Process data slots for this account
     dataAllocated += rc.value.leafsSize
+
+    when extraTraceMessages:
+      if accounts.len == 1:
+        trace logTxt "getStorageRanges: single account", iv, accKey, stoRoot
 
     #trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
     #  accKey, stoRoot, nSlots=rc.value.leafs.len, nProof=rc.value.proof.len
