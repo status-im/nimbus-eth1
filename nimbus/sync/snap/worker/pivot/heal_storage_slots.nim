@@ -38,7 +38,9 @@
 ## healing algorithm again.
 ##
 
-# ###### --- CHECK DEADLOCK ---- ####
+# ###### --- CHECK FOR DEADLOCK ---- ####
+
+{.push raises: [].}
 
 import
   std/[math, sequtils, tables],
@@ -47,13 +49,11 @@ import
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, keyed_queue],
   ../../../../utils/prettify,
-  "../../.."/[sync_desc, types],
+  "../../.."/[sync_desc, protocol, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
   ../db/[hexary_desc, hexary_envelope, snapdb_storage_slots],
   "."/[find_missing_nodes, storage_queue_helper]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-heal"
@@ -162,18 +162,20 @@ proc getNodesFromNetwork(
     storageRoot = kvp.key
     fetchNodes = missing[0 ..< fetchRequestTrieNodesMax]
 
+  if fetchNodes.len == 0:
+    return # Nothing to do
+
   # Initalise for `getTrieNodes()` for fetching nodes from the network
   var
     nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
-    pathList: seq[seq[Blob]]     # Function argument for `getTrieNodes()`
+    req = SnapTriePaths(accPath: accpath)
   for w in fetchNodes:
-    pathList.add @[w.partialPath]
+    req.slotPaths.add w.partialPath
     nodeKey[w.partialPath] = w.nodeKey
 
   # Fetch nodes from the network.
   let
     pivot = "#" & $env.stateHeader.blockNumber # for logging
-    req = @[accPath] & fetchNodes.mapIt(it.partialPath)
     rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
   if rc.isOk:
     # Reset error counts for detecting repeated timeouts, network errors, etc.

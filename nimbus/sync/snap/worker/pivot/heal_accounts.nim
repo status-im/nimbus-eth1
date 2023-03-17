@@ -35,6 +35,9 @@
 ## must be solved by fetching and storing more accounts and running this
 ## healing algorithm again.
 ##
+
+{.push raises: [].}
+
 import
   std/[math, sequtils, tables],
   chronicles,
@@ -42,13 +45,11 @@ import
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
   stew/[byteutils, interval_set],
   ../../../../utils/prettify,
-  "../../.."/[sync_desc, types],
+  "../../.."/[sync_desc, protocol, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
   ../db/[hexary_desc, hexary_envelope, hexary_error, snapdb_accounts],
   "."/[find_missing_nodes, storage_queue_helper, swap_in]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-heal"
@@ -162,9 +163,9 @@ proc fetchMissingNodes(
   # Initalise for fetching nodes from the network via `getTrieNodes()`
   var
     nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
-    pathList: seq[seq[Blob]]     # Function argument for `getTrieNodes()`
+    pathList: seq[SnapTriePaths] # Function argument for `getTrieNodes()`
   for w in fetchNodes:
-    pathList.add @[w.partialPath]
+    pathList.add SnapTriePaths(accPath: w.partialPath)
     nodeKey[w.partialPath] = w.nodeKey
 
   # Fetch nodes from the network.

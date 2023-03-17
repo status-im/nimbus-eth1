@@ -405,7 +405,7 @@ method getByteCodes*(
 method getTrieNodes*(
     ctx: SnapWireRef;
     root: Hash256;
-    paths: openArray[seq[Blob]];
+    paths: openArray[SnapTriePaths];
     replySizeMax: uint64;
       ): seq[Blob]
       {.gcsafe.} =
