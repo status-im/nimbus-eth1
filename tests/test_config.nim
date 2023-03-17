@@ -1,6 +1,5 @@
 import
-  std/[parseopt, strutils, options],
-  ../nimbus/common/evmforks
+  std/[parseopt, strutils, options]
 
 type
   ConfigStatus* = enum

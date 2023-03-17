@@ -1,6 +1,5 @@
 import
-  tables, hashes, sets,
-  chronicles,
+  std/[tables, hashes, sets],
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
@@ -9,11 +8,9 @@ import
 
 type
   AccountFlag = enum
-    IsAlive
+    Alive
     IsNew
-    IsDirty
-    IsTouched
-    IsClone
+    Dirty
     CodeLoaded
     CodeChanged
     StorageChanged
@@ -37,6 +34,7 @@ type
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
+    touched: HashSet[EthAddress]
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -55,10 +53,8 @@ const
   emptyAcc = newAccount()
 
   resetFlags = {
-    IsDirty,
+    Dirty,
     IsNew,
-    IsTouched,
-    IsClone,
     CodeChanged,
     StorageChanged
     }
@@ -154,7 +150,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     try:
       result = RefAccount(
         account: rlp.decode(recordFound, Account),
-        flags: {IsAlive}
+        flags: {Alive}
         )
     except RlpError:
       raiseAssert("No RlpError should occur on decoding account from trie")
@@ -164,7 +160,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     # it's a request for new account
     result = RefAccount(
       account: newAccount(),
-      flags: {IsAlive, IsNew}
+      flags: {Alive, IsNew}
       )
 
   # cache the account
@@ -173,7 +169,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
 proc clone(acc: RefAccount, cloneStorage: bool): RefAccount =
   new(result)
   result.account = acc.account
-  result.flags = acc.flags + {IsClone}
+  result.flags = acc.flags
   result.code = acc.code
 
   if cloneStorage:
@@ -187,7 +183,7 @@ proc isEmpty(acc: RefAccount): bool =
     acc.account.nonce == 0
 
 template exists(acc: RefAccount): bool =
-  IsAlive in acc.flags
+  Alive in acc.flags
 
 template createTrieKeyFromSlot(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
@@ -235,7 +231,7 @@ proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 
     result = acc.originalStorageValue(slot, db)
 
 proc kill(acc: RefAccount) =
-  acc.flags.excl IsAlive
+  acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
   acc.account = newAccount()
@@ -249,8 +245,8 @@ type
 
 proc persistMode(acc: RefAccount): PersistMode =
   result = DoNothing
-  if IsAlive in acc.flags:
-    if IsNew in acc.flags or IsDirty in acc.flags:
+  if Alive in acc.flags:
+    if IsNew in acc.flags or Dirty in acc.flags:
       result = Update
   else:
     if IsNew notin acc.flags:
@@ -308,12 +304,12 @@ proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): Ref
   result = ac.getAccount(address)
   if address in ac.savePoint.cache:
     # it's already in latest savepoint
-    result.flags.incl IsDirty
+    result.flags.incl Dirty
     return
 
   # put a copy into latest savepoint
   result = result.clone(cloneStorage)
-  result.flags.incl IsDirty
+  result.flags.incl Dirty
   ac.savePoint.cache[address] = result
 
 proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
@@ -379,25 +375,30 @@ proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
   doAssert not acc.isNil
   doAssert acc.exists()
-  result = acc.isEmpty()
+  acc.isEmpty()
 
 proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    result = true
-    return
+    return true
   if not acc.exists():
-    result = true
-  else:
-    result = acc.isEmpty()
+    return true
+  acc.isEmpty()
 
 proc setBalance*(ac: AccountsCache, address: EthAddress, balance: UInt256) =
   let acc = ac.getAccount(address)
-  acc.flags.incl {IsTouched, IsAlive}
+  acc.flags.incl {Alive}
   if acc.account.balance != balance:
     ac.makeDirty(address).account.balance = balance
 
 proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
+  # EIP161: We must check emptiness for the objects such that the account
+  # clearing (0,0,0 objects) can take effect.
+  if delta == 0.u256:
+    let acc = ac.getAccount(address)
+    if acc.isEmpty:
+      ac.touched.incl address
+    return
   ac.setBalance(address, ac.getBalance(address) + delta)
 
 proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inline.} =
@@ -405,7 +406,7 @@ proc subBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
 
 proc setNonce*(ac: AccountsCache, address: EthAddress, nonce: AccountNonce) =
   let acc = ac.getAccount(address)
-  acc.flags.incl {IsTouched, IsAlive}
+  acc.flags.incl {Alive}
   if acc.account.nonce != nonce:
     ac.makeDirty(address).account.nonce = nonce
 
@@ -414,7 +415,7 @@ proc incNonce*(ac: AccountsCache, address: EthAddress) {.inline.} =
 
 proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
-  acc.flags.incl {IsTouched, IsAlive}
+  acc.flags.incl {Alive}
   let codeHash = keccakHash(code)
   if acc.account.codeHash != codeHash:
     var acc = ac.makeDirty(address)
@@ -424,7 +425,7 @@ proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
 
 proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
   let acc = ac.getAccount(address)
-  acc.flags.incl {IsTouched, IsAlive}
+  acc.flags.incl {Alive}
   let oldValue = acc.storageValue(slot, ac.db)
   if oldValue != value:
     var acc = ac.makeDirty(address)
@@ -433,7 +434,7 @@ proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
 
 proc clearStorage*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
-  acc.flags.incl {IsTouched, IsAlive}
+  acc.flags.incl {Alive}
   if acc.account.storageRoot != emptyRlpHash:
     # there is no point to clone the storage since we want to remove it
     ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
@@ -444,9 +445,16 @@ proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc deleteAccountIfEmpty*(ac: AccountsCache, address: EthAddress): void =
-  if ac.accountExists(address) and ac.isEmptyAccount(address):
-    debug "state clearing", address
+proc deleteAccountIfEmpty*(ac: AccountsCache, address: EthAddress) =
+  # see https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+  if not acc.isEmpty:
+    return
+  if not acc.exists:
+    return
+  if address in ac.touched or Dirty in acc.flags:
     ac.deleteAccount(address)
 
 proc persist*(ac: AccountsCache, clearCache: bool = true) =
@@ -478,6 +486,8 @@ proc persist*(ac: AccountsCache, clearCache: bool = true) =
   else:
     for x in cleanAccounts:
       ac.savePoint.cache.del x
+
+  ac.touched.clear()
 
   # EIP2929
   ac.savePoint.accessList.clear()

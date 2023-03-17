@@ -212,10 +212,9 @@ proc copyCode(host: TransactionHost, address: HostAddress,
 proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.show.} =
   host.vmState.mutateStateDB:
     let closingBalance = db.getBalance(address)
-    let beneficiaryBalance = db.getBalance(beneficiary)
 
     # Transfer to beneficiary
-    db.setBalance(beneficiary, beneficiaryBalance + closingBalance)
+    db.addBalance(beneficiary, closingBalance)
 
     # Zero balance of account being deleted.
     # This must come after sending to the beneficiary in case the

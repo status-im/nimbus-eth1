@@ -17,7 +17,7 @@ import
   ../premix/parser, test_config,
   ../nimbus/[vm_state, vm_types, errors, constants],
   ../nimbus/db/accounts_cache,
-  ../nimbus/utils/utils,
+  ../nimbus/utils/[utils, debug],
   ../nimbus/core/[executor, validate, pow/header],
   ../stateless/[tree_from_witness, witness_types],
   ../tools/common/helpers as chp,
@@ -299,67 +299,26 @@ proc runTester(tester: var Tester, com: CommonRef, testStatusIMPL: var TestStatu
     if tester.debugMode:
       tester.collectDebugData()
 
-proc dumpAccount(stateDB: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
-  result = %{
-    "name": %name,
-    "address": %($address),
-    "nonce": %toHex(stateDB.getNonce(address)),
-    "balance": %stateDB.getBalance(address).toHex(),
-    "codehash": %($stateDB.getCodeHash(address)),
-    "storageRoot": %($stateDB.getStorageRoot(address))
-  }
-
-proc dumpDebugData(tester: Tester, vmState: BaseVMState, accountList: JsonNode): JsonNode =
-  var accounts = newJObject()
-  var i = 0
-  for ac, _ in accountList:
-    let account = ethAddressFromHex(ac)
-    accounts[$account] = dumpAccount(vmState.readOnlyStateDB, account, "acc" & $i)
-    inc i
-
-  %{
-    "debugData": tester.debugData,
-    "accounts": accounts
-  }
-
-proc accountList(fixture: JsonNode): JsonNode =
-  if fixture["postState"].kind == JObject:
-    fixture["postState"]
-  else:
-    fixture["pre"]
-
-proc debugDataFromAccountList(tester: Tester, fixture: JsonNode): JsonNode =
-  let accountList = fixture.accountList
+proc debugDataFromAccountList(tester: Tester): JsonNode =
   let vmState = tester.vmState
-  if vmState.isNil:
-    %{"debugData": tester.debugData}
-  else:
-    dumpDebugData(tester, vmState, accountList)
+  result = %{"debugData": tester.debugData}
+  if not vmState.isNil:
+    result["accounts"] = vmState.dumpAccounts()
 
 proc debugDataFromPostStateHash(tester: Tester): JsonNode =
-  var
-    accounts = newJObject()
-    accountList = newSeq[EthAddress]()
-    vmState = tester.vmState
-
-  for address in vmState.stateDB.addresses:
-    accountList.add address
-
-  for i, ac in accountList:
-    accounts[ac.toHex] = dumpAccount(vmState.readOnlyStateDB, ac, "acc" & $i)
-
+  let vmState = tester.vmState
   %{
     "debugData": tester.debugData,
     "postStateHash": %($vmState.readOnlyStateDB.rootHash),
     "expectedStateHash": %($tester.postStateHash),
-    "accounts": accounts
+    "accounts": vmState.dumpAccounts()
   }
 
-proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtureIndex: int, success: bool) =
+proc dumpDebugData(tester: Tester, fixtureName: string, fixtureIndex: int, success: bool) =
   let debugData = if tester.postStateHash != Hash256():
                     debugDataFromPostStateHash(tester)
                   else:
-                    debugDataFromAccountList(tester, fixture)
+                    debugDataFromAccountList(tester)
 
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
@@ -423,7 +382,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       success = false
 
     if tester.debugMode:
-      tester.dumpDebugData(fixture, fixtureName, fixtureIndex, success)
+      tester.dumpDebugData(fixtureName, fixtureIndex, success)
 
     fixtureTested = true
     check success == true

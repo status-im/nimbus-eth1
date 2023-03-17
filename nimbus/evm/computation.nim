@@ -335,12 +335,10 @@ proc merge*(c, child: Computation) =
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
     {.gcsafe, raises: [CatchableError].} =
   c.vmState.mutateStateDB:
-    let
-      localBalance = c.getBalance(c.msg.contractAddress)
-      beneficiaryBalance = c.getBalance(beneficiary)
+    let localBalance = c.getBalance(c.msg.contractAddress)
 
     # Transfer to beneficiary
-    db.setBalance(beneficiary, localBalance + beneficiaryBalance)
+    db.addBalance(beneficiary, localBalance)
 
     # Zero the balance of the address being deleted.
     # This must come after sending to beneficiary in case the

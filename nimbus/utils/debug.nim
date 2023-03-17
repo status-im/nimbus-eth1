@@ -66,6 +66,11 @@ proc dumpAccount(stateDB: AccountsCache, address: EthAddress): JsonNode =
     "storage": storage
   }
 
+proc dumpAccounts*(vmState: BaseVMState): JsonNode =
+  result = newJObject()
+  for ac in vmState.stateDB.addresses:
+    result[ac.toHex] = dumpAccount(vmState.stateDB, ac)
+
 proc debugAccounts*(vmState: BaseVMState): string =
   var
     accounts = newJObject()

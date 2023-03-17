@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  os, macros, json, strformat, strutils, os, tables,
+  std/[os, macros, json, strformat, strutils, tables],
   stew/byteutils, net, eth/[keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
   ../nimbus/[constants, config, transaction, errors],

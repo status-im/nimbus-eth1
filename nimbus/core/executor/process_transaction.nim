@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/[sets],
   ../../common/common,
   ../../db/accounts_cache,
   ../../transaction/call_evm,

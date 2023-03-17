@@ -147,7 +147,6 @@ proc runTest(appDir: string, spec: TestSpec): bool =
       echo "path: $1, error: $2" %
         [jsc.path, jsc.error]
       return false
-
   return true
 
 const
@@ -400,6 +399,15 @@ const
       base  : "testdata/00-510",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "Berlin", "2000000000000000000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Legacy Byzantium State Clearing",
+      base  : "testdata/00-511",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Byzantium", "-1"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",

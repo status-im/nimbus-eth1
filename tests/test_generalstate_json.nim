@@ -13,7 +13,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/db/accounts_cache,
   ../nimbus/common/common,
-  ../nimbus/utils/utils,
+  ../nimbus/utils/[utils, debug],
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -33,6 +33,7 @@ type
     debugMode: bool
     trace: bool
     index: int
+    fork: string
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
@@ -48,41 +49,15 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256
   else:
     return keccakHash(toBytes($blockNumber))
 
-proc dumpAccount(stateDB: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
-  result = %{
-    "name": %name,
-    "address": %($address),
-    "nonce": %toHex(stateDB.getNonce(address)),
-    "balance": %stateDB.getBalance(address).toHex(),
-    "codehash": %($stateDB.getCodeHash(address)),
-    "storageRoot": %($stateDB.getStorageRoot(address))
-  }
-
-proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gasUsed: GasInt, success: bool) =
-  let recipient = tester.tx.getRecipient(sender)
-  let miner = tester.header.coinbase
-  var accounts = newJObject()
-
-  accounts[$miner] = dumpAccount(vmState.readOnlyStateDB, miner, "miner")
-  accounts[$sender] = dumpAccount(vmState.readOnlyStateDB, sender, "sender")
-  accounts[$recipient] = dumpAccount(vmState.readOnlyStateDB, recipient, "recipient")
-
-  let accountList = [sender, miner, recipient]
-  var i = 0
-  for ac, _ in tester.pre:
-    let account = ethAddressFromHex(ac)
-    if account notin accountList:
-      accounts[$account] = dumpAccount(vmState.readOnlyStateDB, account, "pre" & $i)
-      inc i
-
+proc dumpDebugData(tester: Tester, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
   let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
   let debugData = %{
     "gasUsed": %gasUsed,
     "structLogs": tracingResult,
-    "accounts": accounts
+    "accounts": vmState.dumpAccounts()
   }
   let status = if success: "_success" else: "_failed"
-  writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
+  writeFile(tester.name & "_" & tester.fork & "_" & $tester.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   let
@@ -116,7 +91,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     check(tester.expectedLogs == actualLogsHash)
     if tester.debugMode:
       let success = tester.expectedLogs == actualLogsHash and obtainedHash == tester.expectedHash
-      tester.dumpDebugData(vmState, sender, gasUsed, success)
+      tester.dumpDebugData(vmState, gasUsed, success)
 
   let rc = vmState.processTransaction(
                 tester.tx, sender, tester.header, fork)
@@ -163,25 +138,30 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
       debugEcho "selected fork not available: " & conf.fork
       return
 
+    tester.fork = conf.fork
     let forkData = post[conf.fork]
     prepareFork(conf.fork)
     if conf.index.isNone:
       for subTest in forkData:
         runSubTest(subTest)
+        inc tester.index
     else:
-      let index = conf.index.get()
-      if index > forkData.len or index < 0:
+      tester.index = conf.index.get()
+      if tester.index > forkData.len or tester.index < 0:
         debugEcho "selected index out of range(0-$1), requested $2" %
-          [$forkData.len, $index]
+          [$forkData.len, $tester.index]
         return
 
-      let subTest = forkData[index]
+      let subTest = forkData[tester.index]
       runSubTest(subTest)
   else:
     for forkName, forkData in post:
       prepareFork(forkName)
+      tester.fork = forkName
+      tester.index = 0
       for subTest in forkData:
         runSubTest(subTest)
+        inc tester.index
 
 proc generalStateJsonMain*(debugMode = false) =
   const
@@ -193,7 +173,7 @@ proc generalStateJsonMain*(debugMode = false) =
     # run all test fixtures
     if config.legacy:
       suite "generalstate json tests":
-        jsonTest(legacyFolder , "GeneralStateTests", testFixture, skipGSTTests)
+        jsonTest(legacyFolder, "GeneralStateTests", testFixture, skipGSTTests)
     else:
       suite "new generalstate json tests":
         jsonTest(newFolder, "newGeneralStateTests", testFixture, skipNewGSTTests)
