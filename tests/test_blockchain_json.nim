@@ -11,7 +11,7 @@
 import
   std/[json, os, tables, strutils, options],
   unittest2,
-  eth/rlp, eth/trie/trie_defs,
+  eth/rlp, eth/trie/trie_defs, eth/common/eth_types_rlp,
   stew/byteutils,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
@@ -127,6 +127,7 @@ proc parseWithdrawals(withdrawals: JsonNode): Option[seq[Withdrawal]] =
 proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
   for fixture in blocks:
     var t: TestBlock
+    t.withdrawals = none[seq[Withdrawal]]()
     for key, value in fixture:
       case key
       of "blockHeader":
@@ -231,7 +232,6 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
   var rlp = rlpFromBytes(tb.blockRLP)
   tb.header = rlp.read(EthHeader).header
   tb.body = rlp.readRecordType(BlockBody, false)
-  tb.body.withdrawals = tb.withdrawals
   tester.importBlock(com, tb, checkSeal, validation)
 
 func shouldCheckSeal(tester: Tester): bool =
