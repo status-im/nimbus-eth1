@@ -64,7 +64,9 @@ import
   ../../nimbus/db/select_backend,
   ../../nimbus/sync/protocol,
   ../../nimbus/sync/snap/range_desc,
-  ../../nimbus/sync/snap/worker/db/[snapdb_accounts, snapdb_desc],
+  ../../nimbus/sync/snap/worker/db/[
+    hexary_debug, hexary_desc, hexary_error,
+    snapdb_accounts, snapdb_debug, snapdb_desc],
   ../replay/[pp, undump_accounts],
   ./test_helpers
 
@@ -97,10 +99,13 @@ proc test_accountsMergeProofs*(
       ) =
   ## Merge account proofs
   # Load/accumulate data from several samples (needs some particular sort)
-  let baseTag = inList.mapIt(it.base).sortMerge
-  let packed = PackedAccountRange(
-    accounts: inList.mapIt(it.data.accounts).sortMerge,
-    proof:    inList.mapIt(it.data.proof).flatten)
+  let
+    getFn = desc.getAccountFn
+    baseTag = inList.mapIt(it.base).sortMerge
+    packed = PackedAccountRange(
+      accounts: inList.mapIt(it.data.accounts).sortMerge,
+      proof:    inList.mapIt(it.data.proof).flatten)
+    nAccounts = packed.accounts.len
   # Merging intervals will produce gaps, so the result is expected OK but
   # different from `.isImportOk`
   check desc.importAccounts(baseTag, packed, true).isOk
@@ -114,21 +119,29 @@ proc test_accountsMergeProofs*(
   # need to check for additional records only on either end of a range.
   var keySet = packed.accounts.mapIt(it.accKey).toHashSet
   for w in inList:
-    var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accKey)
+    var key = desc.prevAccountsChainDbKey(w.data.accounts[0].accKey, getFn)
     while key.isOk and key.value notin keySet:
       keySet.incl key.value
-      let newKey = desc.prevAccountsChainDbKey(key.value)
+      let newKey = desc.prevAccountsChainDbKey(key.value, getFn)
       check newKey != key
       key = newKey
-    key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accKey)
+    key = desc.nextAccountsChainDbKey(w.data.accounts[^1].accKey, getFn)
     while key.isOk and key.value notin keySet:
       keySet.incl key.value
-      let newKey = desc.nextAccountsChainDbKey(key.value)
+      let newKey = desc.nextAccountsChainDbKey(key.value, getFn)
       check newKey != key
       key = newKey
   accKeys = toSeq(keySet).mapIt(it.to(NodeTag)).sorted(cmp)
                          .mapIt(it.to(NodeKey))
-  check packed.accounts.len <= accKeys.len
+  # Some database samples have a few more account keys which come in by the
+  # proof nodes.
+  check nAccounts <= accKeys.len
+
+  # Verify against table importer
+  let
+    xDb = HexaryTreeDbRef.init() # Can dump database with `.pp(xDb)`
+    rc = xDb.fromPersistent(desc.root, getFn, accKeys.len + 100)
+  check rc == Result[int,HexaryError].ok(accKeys.len)
 
 
 proc test_accountsRevisitStoredItems*(
@@ -137,6 +150,8 @@ proc test_accountsRevisitStoredItems*(
     noisy = false;
       ) =
   ## Revisit stored items on ChainDBRef
+  let
+    getFn = desc.getAccountFn
   var
     nextAccount = accKeys[0]
     prevAccount: NodeKey
@@ -145,12 +160,13 @@ proc test_accountsRevisitStoredItems*(
     count.inc
     let
       pfx = $count & "#"
-      byChainDB = desc.getAccountsChainDb(accKey)
-      byNextKey = desc.nextAccountsChainDbKey(accKey)
-      byPrevKey = desc.prevAccountsChainDbKey(accKey)
-    noisy.say "*** find",
-      "<", count, "> byChainDb=", byChainDB.pp
-    check byChainDB.isOk
+      byChainDB = desc.getAccountsData(accKey, persistent=true)
+      byNextKey = desc.nextAccountsChainDbKey(accKey, getFn)
+      byPrevKey = desc.prevAccountsChainDbKey(accKey, getFn)
+    if byChainDB.isErr:
+      noisy.say "*** find",
+        "<", count, "> byChainDb=", byChainDB.pp
+      check byChainDB.isOk
 
     # Check `next` traversal funcionality. If `byNextKey.isOk` fails, the
     # `nextAccount` value is still the old one and will be different from

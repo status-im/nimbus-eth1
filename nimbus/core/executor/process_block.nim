@@ -73,7 +73,6 @@ proc procBlkPreamble(vmState: BaseVMState;
   if vmState.determineFork >= FkShanghai:
     if header.withdrawalsRoot.isNone:
       raise ValidationError.newException("Post-Shanghai block header must have withdrawalsRoot")
-      #return false
     elif body.withdrawals.isNone:
       raise ValidationError.newException("Post-Shanghai block body must have withdrawals")
     else:

@@ -65,7 +65,6 @@ type
     fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts
     fetchStoragePart*: SnapSlotsQueue  ## Partial storage trie to com[plete
     parkedStorage*: HashSet[NodeKey]   ## Storage batch items in use
-    storageDone*: bool                 ## Done with storage, block sync next
 
     # Info
     nAccounts*: uint64                 ## Imported # of accounts

@@ -12,6 +12,7 @@
 
 import
   std/[sequtils, sets, tables],
+  chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
@@ -109,8 +110,9 @@ template collectLeafs(
       ): auto =
   ## Collect trie database leafs prototype. This directive is provided as
   ## `template` for avoiding varying exceprion annotations.
-  var rc: Result[RangeProof,HexaryError]
-
+  var
+    rc: Result[RangeProof,HexaryError]
+    ttd = stopAt
   block body:
     let
       nodeMax = maxPt(iv) # `inject` is for debugging (if any)
@@ -121,9 +123,9 @@ template collectLeafs(
 
     # Set up base node, the nearest node before `iv.minPt`
     if 0.to(NodeTag) < nodeTag:
-      let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyLeft(db)
+      let rx = nodeTag.hexaryNearbyLeft(rootKey, db)
       if rx.isOk:
-        rls.base = getPartialPath(rx.value).convertTo(NodeKey).to(NodeTag)
+        rls.base = rx.value
       elif rx.error notin {NearbyFailed,NearbyEmptyPath}:
         rc = typeof(rc).err(rx.error)
         break body
@@ -149,7 +151,7 @@ template collectLeafs(
 
       # Prevents from semi-endless looping
       if rightTag <= prevTag and 0 < rls.leafs.len:
-        # Oops, should have been tackeled by `hexaryNearbyRight()`
+        # Oops, should have been tackled by `hexaryNearbyRight()`
         rc = typeof(rc).err(FailedNextNode)
         break body # stop here
 
@@ -165,7 +167,7 @@ template collectLeafs(
         key:  rightKey,
         data: xPath.leafData)
 
-      if timeIsOver(stopAt):
+      if timeIsOver(ttd):
         break # timout
 
       prevTag = nodeTag

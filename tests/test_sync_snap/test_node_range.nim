@@ -19,8 +19,9 @@ import
   ../../nimbus/sync/[handlers, protocol, types],
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[
-    hexary_desc, hexary_envelope,  hexary_error, hexary_interpolate,
-    hexary_nearby, hexary_paths, hexary_range, snapdb_accounts, snapdb_desc],
+    hexary_debug, hexary_desc, hexary_envelope,  hexary_error,
+    hexary_interpolate, hexary_nearby, hexary_paths, hexary_range,
+    snapdb_accounts, snapdb_debug, snapdb_desc],
   ../replay/[pp, undump_accounts],
   ./test_helpers
 
@@ -209,7 +210,6 @@ proc verifyRangeProof(
      ): Result[void,HexaryError] =
   ## Re-build temporary database and prove or disprove
   let
-    dumpOk = dbg.isNil.not
     noisy = dbg.isNil.not
     xDb = HexaryTreeDbRef()
   if not dbg.isNil:
@@ -252,7 +252,7 @@ proc verifyRangeProof(
       "\n\n    last=", leafs[^1].key,
       "\n    ", leafs[^1].key.hexaryPath(rootKey,xDb).pp(dbg),
       "\n\n    database dump",
-      "\n    ", xDb.dumpHexaDB(rootKey),
+      "\n    ", xDb.pp(rootKey),
       "\n"
 
 # ------------------------------------------------------------------------------
@@ -270,8 +270,6 @@ proc test_NodeRangeDecompose*(
   # stray account nodes in the proof *before* the left boundary.
   doAssert 2 < accKeys.len
 
-  const
-    isPersistent = db.type is HexaryTreeDbRef
   let
     rootKey = root.to(NodeKey)
     baseTag = accKeys[0].to(NodeTag) + 1.u256
@@ -392,12 +390,16 @@ proc test_NodeRangeProof*(
   for n,w in inLst:
     doAssert 1 < w.data.accounts.len
     let
-      # Use the middle of the first two points as base
-      delta = (w.data.accounts[1].accKey.to(NodeTag) -
-               w.data.accounts[0].accKey.to(NodeTag)) div 2
-      base = w.data.accounts[0].accKey.to(NodeTag) + delta
+      first = w.data.accounts[0].accKey.to(NodeTag)
+      delta = (w.data.accounts[1].accKey.to(NodeTag) - first) div 2
+      # Use the middle of the first two points as base unless w.base is zero.
+      # This is needed as the range extractor needs the node before the `base`
+      # (if ateher is any) in order to assemble the proof. But this node might
+      # not be present in the partial database.
+      (base, start) = if w.base == 0.to(NodeTag): (w.base, 0)
+                      else: (first + delta, 1)
       # Assemble accounts list starting at the second item
-      accounts = w.data.accounts[1 ..< min(w.data.accounts.len,maxLen)]
+      accounts = w.data.accounts[start ..< min(w.data.accounts.len,maxLen)]
       iv = NodeTagRange.new(base, accounts[^1].accKey.to(NodeTag))
       rc = db.hexaryRangeLeafsProof(rootKey, iv)
     check rc.isOk
@@ -486,7 +488,7 @@ proc test_NodeRangeLeftBoundary*(
   ## Verify left side boundary checks
   let
     rootKey = inLst[0].root.to(NodeKey)
-    noisy = not dbg.isNil
+    noisy {.used.} = not dbg.isNil
 
   # Assuming the `inLst` entries have been stored in the DB already
   for n,w in inLst:
@@ -505,7 +507,7 @@ proc test_NodeRangeLeftBoundary*(
         check (n, j, leftKey) == (n, j, toLeftKey)
         rootKey.printCompareLeftNearby(leftKey, rightKey, db, dbg)
         return
-    noisy.say "***", "n=", n, " accounts=", accounts.len
+    # noisy.say "***", "n=", n, " accounts=", accounts.len
 
 # ------------------------------------------------------------------------------
 # End

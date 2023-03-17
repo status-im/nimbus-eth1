@@ -70,14 +70,15 @@
 ## * then there is a ``w = partialPath & w-ext`` in ``W`` with
 ##   ``p-ext = w-ext & some-ext``.
 ##
+
+{.push raises: [].}
+
 import
   std/[algorithm, sequtils, tables],
   eth/[common, trie/nibbles],
   stew/interval_set,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -135,24 +136,6 @@ template noRlpErrorOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc padPartialPath(pfx: NibblesSeq; dblNibble: byte): NodeKey =
-  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`
-  # Pad with zeroes
-  var padded: NibblesSeq
-
-  let padLen = 64 - pfx.len
-  if 0 <= padLen:
-    padded = pfx & dblNibble.repeat(padlen div 2).initNibbleRange
-    if (padLen and 1) == 1:
-      padded = padded & @[dblNibble].initNibbleRange.slice(1)
-  else:
-    let nope = seq[byte].default.initNibbleRange
-    padded = pfx.slice(0,64) & nope # nope forces re-alignment
-
-  let bytes = padded.getBytes
-  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
-
 
 proc doDecomposeLeft(
     envQ: RPath|XPath;

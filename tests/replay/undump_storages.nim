@@ -104,8 +104,6 @@ proc dumpStorages*(
 
 iterator undumpNextStorages*(gzFile: string): UndumpStorages =
   var
-    line = ""
-    lno = 0
     state = UndumpStoragesHeader
     data: UndumpStorages
     nAccounts = 0u
