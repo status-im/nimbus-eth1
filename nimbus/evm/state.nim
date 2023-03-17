@@ -388,6 +388,9 @@ func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationIn
   # Also, can I get the TD? Do I need to?
   forkDeterminationInfo(vmState.blockNumber, vmState.timestamp)
 
+func determineFork*(vmState: BaseVMState): EVMFork =
+  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+
 proc clearSelfDestructsAndEmptyAccounts*(vmState: BaseVMState, fork: EVMFork, miner: EthAddress): void =
   vmState.mutateStateDB:
     for deletedAccount in vmState.selfDestructs:

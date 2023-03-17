@@ -20,6 +20,7 @@ export
   vms.buildWitness,
   vms.clearSelfDestructsAndEmptyAccounts,
   vms.coinbase,
+  vms.determineFork,
   vms.difficulty,
   vms.disableTracing,
   vms.enableTracing,
