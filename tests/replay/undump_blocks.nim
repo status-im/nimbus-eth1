@@ -24,9 +24,6 @@ template say(args: varargs[untyped]) =
   # echo args
   discard
 
-proc toByteSeq(s: string): seq[byte] =
-  utils.fromHex(s)
-
 # ------------------------------------------------------------------------------
 # Public capture
 # ------------------------------------------------------------------------------
@@ -90,8 +87,6 @@ iterator undumpNextGroup*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
   var
     headerQ: seq[BlockHeader]
     bodyQ: seq[BlockBody]
-    line = ""
-    lno = 0
     current = 0u
     start = 0u
     top = 0u

@@ -225,14 +225,21 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
         return # nothing to do
       rc.value
     pivot = "#" & $env.stateHeader.blockNumber # for logging
+    nStorQuAtStart = env.fetchStorageFull.len +
+                     env.fetchStoragePart.len +
+                     env.parkedStorage.len
 
   buddy.only.pivotEnv = env
 
   # Full sync processsing based on current snapshot
   # -----------------------------------------------
-  if env.storageDone:
+
+  # Check whether this pivot is fully downloaded
+  if env.fetchAccounts.processed.isFull and nStorQuAtStart == 0:
     trace "Snap full sync -- not implemented yet", peer, pivot
     await sleepAsync(5.seconds)
+    # flip over to single mode for getting new instructins
+    buddy.ctrl.multiOk = false
     return
 
   # Snapshot sync processing
@@ -248,9 +255,8 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
         nAccounts {.used.} = env.nAccounts
         nSlotLists {.used.} = env.nSlotLists
         processed {.used.} = env.fetchAccounts.processed.fullFactor.toPC(2)
-        nStoQu {.used.} = env.fetchStorageFull.len + env.fetchStoragePart.len
       trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
-        nStoQu
+        nStoQu=nStorQuAtStart
 
   # This one is the syncing work horse which downloads the database
   await env.execSnapSyncAction(buddy)
@@ -260,7 +266,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     nAccounts = env.nAccounts
     nSlotLists = env.nSlotLists
     processed = env.fetchAccounts.processed.fullFactor.toPC(2)
-    nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
+    nStoQuLater = env.fetchStorageFull.len + env.fetchStoragePart.len
 
   if env.archived:
     # Archive pivot if it became stale
@@ -273,11 +279,11 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     let rc = env.saveCheckpoint(ctx)
     if rc.isErr:
       error "Failed to save recovery checkpoint", peer, pivot, nAccounts,
-       nSlotLists, processed, nStoQu, error=rc.error
+       nSlotLists, processed, nStoQu=nStoQuLater, error=rc.error
     else:
       when extraTraceMessages:
         trace "Saved recovery checkpoint", peer, pivot, nAccounts, nSlotLists,
-          processed, nStoQu, blobSize=rc.value
+          processed, nStoQu=nStoQuLater, blobSize=rc.value
 
 # ------------------------------------------------------------------------------
 # End

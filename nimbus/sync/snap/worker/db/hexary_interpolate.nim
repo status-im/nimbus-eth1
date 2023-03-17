@@ -14,14 +14,14 @@
 ## purposes, it should be replaced by the new facility of the upcoming
 ## re-factored database layer.
 
+{.push raises: [].}
+
 import
   std/[tables],
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, hexary_paths]
-
-{.push raises: [].}
 
 type
   RPathXStep = object
@@ -114,6 +114,7 @@ proc rTreeExtendLeaf(
     if not key.isNodeKey:
       rPath.path[^1].node.bLink[nibble] = key
     return RPath(
+      root: rPath.root,
       path: rPath.path & RPathStep(key: key, node: leaf, nibble: -1),
       tail: EmptyNibbleRange)
 
@@ -129,7 +130,10 @@ proc rTreeExtendLeaf(
     let
       nibble = rPath.tail[0].int8
       xStep = RPathStep(key: key, node: node, nibble: nibble)
-      xPath = RPath(path: rPath.path & xStep, tail: rPath.tail.slice(1))
+      xPath = RPath(
+        root: rPath.root,
+        path: rPath.path & xStep,
+        tail: rPath.tail.slice(1))
     return db.rTreeExtendLeaf(xPath, db.newRepairKey())
 
 

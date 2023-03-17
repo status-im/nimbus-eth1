@@ -11,13 +11,13 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/tables,
   chronicles,
   eth/[common, p2p, trie/db, trie/nibbles],
   ../../../../db/[select_backend, storage_types],
   ../../../protocol,
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby,
+  "."/[hexary_debug, hexary_desc, hexary_error, hexary_import, hexary_nearby,
        hexary_paths, rocky_bulk_load]
 
 logScope:
@@ -46,47 +46,20 @@ type
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-template noPpError(info: static[string]; code: untyped) =
+template noKeyError(info: static[string]; code: untyped) =
   try:
     code
-  except ValueError as e:
-    raiseAssert "Inconveivable (" & info & "): " & e.msg
   except KeyError as e:
     raiseAssert "Not possible (" & info & "): " & e.msg
-  except CatchableError as e:
-    raiseAssert "Ooops (" & info & ") " & $e.name & ": " & e.msg
 
-proc toKey(a: RepairKey; pv: SnapDbRef): uint =
-  if not a.isZero:
-    noPpError("pp(RepairKey)"):
-      if not pv.keyMap.hasKey(a):
-        pv.keyMap[a] = pv.keyMap.len.uint + 1
-      result = pv.keyMap[a]
-
-proc toKey(a: RepairKey; ps: SnapDbBaseRef): uint =
-  a.toKey(ps.base)
-
-proc toKey(a: NodeKey; ps: SnapDbBaseRef): uint =
-  a.to(RepairKey).toKey(ps)
-
-#proc toKey(a: NodeTag; ps: SnapDbBaseRef): uint =
-#  a.to(NodeKey).toKey(ps)
-
-proc ppImpl(a: RepairKey; pv: SnapDbRef): string =
-  "$" & $a.toKey(pv)
-
-# ------------------------------------------------------------------------------
-# Debugging, pretty printing
-# ------------------------------------------------------------------------------
-
-proc pp*(a: NodeKey; ps: SnapDbBaseRef): string =
-  if a.isZero: "ø" else:"$" & $a.toKey(ps)
-
-proc pp*(a: RepairKey; ps: SnapDbBaseRef): string =
-  if a.isZero: "ø" elif a.isNodeKey: "$" & $a.toKey(ps) else: "@" & $a.toKey(ps)
-
-proc pp*(a: NodeTag; ps: SnapDbBaseRef): string =
-  a.to(NodeKey).pp(ps)
+proc keyPp(a: RepairKey; pv: SnapDbRef): string =
+  if a.isZero:
+    return "ø"
+  if not pv.keyMap.hasKey(a):
+    pv.keyMap[a] = pv.keyMap.len.uint + 1
+  result = if a.isNodeKey: "$" else: "@"
+  noKeyError("pp(RepairKey)"):
+    result &= $pv.keyMap[a]
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -127,7 +100,7 @@ proc init*(
       ): T =
   ## Constructor for inner hexary trie database
   let xDb = HexaryTreeDbRef()
-  xDb.keyPp = proc(key: RepairKey): string = key.ppImpl(pv) # will go away
+  xDb.keyPp = proc(key: RepairKey): string = key.keyPp(pv) # will go away
   return xDb
 
 proc init*(
@@ -136,13 +109,6 @@ proc init*(
       ): T =
   ## Constructor variant
   HexaryTreeDbRef.init(ps.base)
-
-proc init*(
-    T: type HexaryTreeDbRef;
-      ): T =
-  ## Constructor variant. It provides a `HexaryTreeDbRef()` with a key key cache attached
-  ## for pretty printing. So this one is mainly for debugging.
-  HexaryTreeDbRef.init(SnapDbRef())
 
 # ---------------
 
@@ -292,71 +258,16 @@ proc verifyNoMoreRight*(
   let
     root = root.to(RepairKey)
     base = base.to(NodeKey)
-  if base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb):
+    rc = base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb)
+  if rc.isErr:
+    return err(rc.error)
+  if rc.value:
     return ok()
 
   let error = LowerBoundProofError
   when extraTraceMessages:
     trace "verifyLeftmostBound()", peer, base=base.pp, error
   err(error)
-
-# ------------------------------------------------------------------------------
-# Debugging (and playing with the hexary database)
-# ------------------------------------------------------------------------------
-
-proc assignPrettyKeys*(xDb: HexaryTreeDbRef; root: NodeKey) =
-  ## Prepare for pretty pringing/debugging. Run early enough this function
-  ## sets the root key to `"$"`, for instance.
-  if not xDb.keyPp.isNil:
-    noPpError("validate(1)"):
-      # Make keys assigned in pretty order for printing
-      let rootKey = root.to(RepairKey)
-      discard xDb.keyPp rootKey
-      var keysList = toSeq(xDb.tab.keys)
-      if xDb.tab.hasKey(rootKey):
-        keysList = @[rootKey] & keysList
-      for key in keysList:
-        let node = xDb.tab[key]
-        discard xDb.keyPp key
-        case node.kind:
-        of Branch: (for w in node.bLink: discard xDb.keyPp w)
-        of Extension: discard xDb.keyPp node.eLink
-        of Leaf: discard
-
-proc dumpPath*(ps: SnapDbBaseRef; key: NodeTag): seq[string] =
-  ## Pretty print helper compiling the path into the repair tree for the
-  ## argument `key`.
-  noPpError("dumpPath"):
-    let rPath= key.hexaryPath(ps.root, ps.hexaDb)
-    result = rPath.path.mapIt(it.pp(ps.hexaDb)) & @["(" & rPath.tail.pp & ")"]
-
-proc dumpHexaDB*(xDb: HexaryTreeDbRef; root: NodeKey; indent = 4): string =
-  ## Dump the entries from the a generic accounts trie. These are
-  ## key value pairs for
-  ## ::
-  ##   Branch:    ($1,b(<$2,$3,..,$17>,))
-  ##   Extension: ($18,e(832b5e..06e697,$19))
-  ##   Leaf:      ($20,l(cc9b5d..1c3b4,f84401..f9e5129d[#70]))
-  ##
-  ## where keys are typically represented as `$<id>` or `¶<id>` or `ø`
-  ## depending on whether a key is final (`$<id>`), temporary (`¶<id>`)
-  ## or unset/missing (`ø`).
-  ##
-  ## The node types are indicated by a letter after the first key before
-  ## the round brackets
-  ## ::
-  ##   Branch:    'b', 'þ', or 'B'
-  ##   Extension: 'e', '€', or 'E'
-  ##   Leaf:      'l', 'ł', or 'L'
-  ##
-  ## Here a small letter indicates a `Static` node which was from the
-  ## original `proofs` list, a capital letter indicates a `Mutable` node
-  ## added on the fly which might need some change, and the decorated
-  ## letters stand for `Locked` nodes which are like `Static` ones but
-  ## added later (typically these nodes are update `Mutable` nodes.)
-  ##
-  ## Beware: dumping a large database is not recommended
-  xDb.pp(root, indent)
 
 # ------------------------------------------------------------------------------
 # End

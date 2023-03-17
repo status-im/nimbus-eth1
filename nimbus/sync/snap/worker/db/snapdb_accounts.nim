@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, tables],
+  std/tables,
   chronicles,
   eth/[common, p2p, rlp, trie/nibbles],
   stew/[byteutils, interval_set],
@@ -42,15 +42,6 @@ proc getAccountFn*(ps: SnapDbAccountsRef): HexaryGetFn
 
 proc to(h: Hash256; T: type NodeKey): T =
   h.data.T
-
-proc convertTo(data: openArray[byte]; T: type Hash256): T =
-  discard result.data.NodeKey.init(data) # size error => zero
-
-template noKeyError(info: static[string]; code: untyped) =
-  try:
-    code
-  except KeyError as e:
-    raiseAssert "Not possible (" & info & "): " & e.msg
 
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
@@ -448,71 +439,6 @@ proc getAccountsData*(
   ## Variant of `getAccountsData()` for persistent storage.
   SnapDbAccountsRef.init(
     pv, root, Peer()).getAccountsData(path, persistent=true)
-
-# ------------------------------------------------------------------------------
-# Public functions: additional helpers
-# ------------------------------------------------------------------------------
-
-proc sortMerge*(base: openArray[NodeTag]): NodeTag =
-  ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
-  ## so that there are no overlap which would be rejected by `merge()`.
-  ##
-  ## This function selects a `NodeTag` from a list.
-  result = high(NodeTag)
-  for w in base:
-    if w < result:
-      result = w
-
-proc sortMerge*(acc: openArray[seq[PackedAccount]]): seq[PackedAccount] =
-  ## Helper for merging several `(NodeTag,seq[PackedAccount])` data sets
-  ## so that there are no overlap which would be rejected by `merge()`.
-  ##
-  ## This function flattens and sorts the argument account lists.
-  noKeyError("sortMergeAccounts"):
-    var accounts: Table[NodeTag,PackedAccount]
-    for accList in acc:
-      for item in accList:
-        accounts[item.accKey.to(NodeTag)] = item
-    result = toSeq(accounts.keys).sorted(cmp).mapIt(accounts[it])
-
-proc getAccountsChainDb*(
-    ps: SnapDbAccountsRef;
-    accKey: NodeKey;
-      ): Result[Account,HexaryError] =
-  ## Fetch account via `ChainDBRef`
-  ps.getAccountsData(accKey, persistent = true)
-
-proc nextAccountsChainDbKey*(
-    ps: SnapDbAccountsRef;
-    accKey: NodeKey;
-      ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `ChainDBRef`, the one next to the
-  ## argument account key.
-  noExceptionOops("getChainDbAccount()"):
-    let path = accKey
-               .hexaryPath(ps.root, ps.getAccountFn)
-               .next(ps.getAccountFn)
-               .getNibbles
-    if 64 == path.len:
-      return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
-
-  err(AccountNotFound)
-
-proc prevAccountsChainDbKey*(
-    ps: SnapDbAccountsRef;
-    accKey: NodeKey;
-      ): Result[NodeKey,HexaryError] =
-  ## Fetch the account path on the `ChainDBRef`, the one before to the
-  ## argument account.
-  noExceptionOops("getChainDbAccount()"):
-    let path = accKey
-               .hexaryPath(ps.root, ps.getAccountFn)
-               .prev(ps.getAccountFn)
-               .getNibbles
-    if 64 == path.len:
-      return ok(path.getBytes.convertTo(Hash256).to(NodeKey))
-
-  err(AccountNotFound)
 
 # ------------------------------------------------------------------------------
 # End

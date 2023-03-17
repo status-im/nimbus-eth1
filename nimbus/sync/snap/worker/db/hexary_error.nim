@@ -28,6 +28,13 @@ type
     TooManySlotAccounts
     NoAccountsYet
 
+    # debug
+    LeafMaxExceeded
+    GarbledNextLeaf
+
+    # snap handler
+    DataSizeError
+
     # range
     LeafNodeExpected
     FailedNextNode
@@ -42,6 +49,7 @@ type
     NearbyEmptyPath
     NearbyLeafExpected
     NearbyDanglingLink
+    NearbyPathTail
 
     # envelope
     DecomposeDegenerated

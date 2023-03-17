@@ -23,7 +23,7 @@ import
   ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, hexary_envelope, hexary_error, hexary_inspect, hexary_nearby,
-    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_desc],
+    hexary_paths, rocky_bulk_load, snapdb_accounts, snapdb_debug, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[
     bulk_test_xx, snap_test_xx,
@@ -91,12 +91,12 @@ proc findFilePath(file: string;
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
 
-proc setTraceLevel =
+proc setTraceLevel {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
-proc setErrorLevel =
+proc setErrorLevel {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
@@ -144,12 +144,12 @@ proc flushDbDir(s: string; subDir = "") =
       let instDir = if subDir == "": baseDir / $n else: baseDir / subDir / $n
       if (instDir / "nimbus" / "data").dirExists:
         # Typically under Windows: there might be stale file locks.
-        try: instDir.removeDir except: discard
-    try: (baseDir / subDir).removeDir except: discard
+        try: instDir.removeDir except CatchableError: discard
+    try: (baseDir / subDir).removeDir except CatchableError: discard
     block dontClearUnlessEmpty:
       for w in baseDir.walkDir:
         break dontClearUnlessEmpty
-      try: baseDir.removeDir except: discard
+      try: baseDir.removeDir except CatchableError: discard
 
 
 proc flushDbs(db: TestDbs) =
@@ -233,7 +233,7 @@ proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
       hexaDb.assignPrettyKeys(root.to(NodeKey))
 
       # Beware: dumping a large database is not recommended
-      # true.say "***", "database dump\n    ", hexaDb.dumpHexaDB(root)
+      # true.say "***", "database dump\n    ", hexaDb.pp(root.to(NodeKey))
 
       test &"Retrieve accounts & proofs for previous account ranges":
         if db.persistent:
