@@ -507,12 +507,6 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
-## ori
-```diff
-- CreateEOF1.json                                                 Fail
-- EOF1ValidInvalid.json                                           Fail
-```
-OK: 0/2 Fail: 2/2 Skip: 0/2
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -1214,22 +1208,6 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + variedContext.json                                              OK
 ```
 OK: 7/7 Fail: 0/7 Skip: 0/7
-## stEIP3540
-```diff
-- CREATE2_EOF1.json                                               Fail
-+ CREATE2_EOF1Invalid.json                                        OK
-- CREATE2_EOF1Invalid_FromEOF.json                                Fail
-- CREATE2_EOF1_FromEOF.json                                       Fail
-- CREATE_EOF1.json                                                Fail
-+ CREATE_EOF1Invalid.json                                         OK
-- CREATE_EOF1Invalid_FromEOF.json                                 Fail
-- CREATE_EOF1_FromEOF.json                                        Fail
-- CreateTransactionEOF1.json                                      Fail
-+ CreateTransactionInvalidEOF1.json                               OK
-- EOF1_Calls.json                                                 Fail
-- EOF1_Execution.json                                             Fail
-```
-OK: 3/12 Fail: 9/12 Skip: 0/12
 ## stEIP3607
 ```diff
 + initCollidingWithNonEmptyAccount.json                           OK
@@ -1245,21 +1223,6 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + coinbaseWarmAccountCallGasFail.json                             OK
 ```
 OK: 2/2 Fail: 0/2 Skip: 0/2
-## stEIP3670
-```diff
-- CREATE2_EOF1DeployValidOpcodes.json                             Fail
-+ CREATE2_EOF1Invalid.json                                        OK
-+ CREATE2_EOF1InvalidOpcodes.json                                 OK
-- CREATE2_EOF1Invalid_FromEOF.json                                Fail
-- CREATE_EOF1DeployValidOpcodes.json                              Fail
-+ CREATE_EOF1Invalid.json                                         OK
-+ CREATE_EOF1InvalidOpcodes.json                                  OK
-- CREATE_EOF1Invalid_FromEOF.json                                 Fail
-+ CreateTransactionEOF1InvalidOpcodes.json                        OK
-- CreateTransactionEOF1ValidOpcodes.json                          Fail
-+ CreateTransactionInvalidEOF1.json                               OK
-```
-OK: 6/11 Fail: 5/11 Skip: 0/11
 ## stEIP3855-push0
 ```diff
 + push0.json                                                      OK
@@ -3423,4 +3386,4 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2919/3041 Fail: 16/3041 Skip: 106/3041
+OK: 2910/3016 Fail: 0/3016 Skip: 106/3016
