@@ -1,5 +1,24 @@
 newBlockchainTests
 ===
+## bc4895-withdrawals
+```diff
++ amountIs0.json                                                  OK
++ amountIs0TouchAccount.json                                      OK
++ amountIs0TouchAccountAndTransaction.json                        OK
++ differentValidatorToTheSameAddress.json                         OK
++ incorrectWithdrawalsRoot.json                                   OK
++ shanghaiWithoutWithdrawalsRLP.json                              OK
++ twoIdenticalIndex.json                                          OK
++ twoIdenticalIndexDifferentValidator.json                        OK
++ withdrawalsAddressBounds.json                                   OK
++ withdrawalsAmountBounds.json                                    OK
++ withdrawalsIndexBounds.json                                     OK
++ withdrawalsRLPlessElements.json                                 OK
++ withdrawalsRLPmoreElements.json                                 OK
++ withdrawalsRLPnotAList.json                                     OK
++ withdrawalsValidatorIndexBounds.json                            OK
+```
+OK: 15/15 Fail: 0/15 Skip: 0/15
 ## bcArrowGlacierToMerge
 ```diff
 + difficultyFormula.json                                          OK
@@ -69,8 +88,10 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 ```diff
 + basefeeExample.json                                             OK
 + mergeExample.json                                               OK
++ optionsTest.json                                                OK
++ shanghaiExample.json                                            OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 4/4 Fail: 0/4 Skip: 0/4
 ## bcExploitTest
 ```diff
   DelegateCallSpam.json                                           Skip
@@ -157,6 +178,11 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + wrongUncleHash.json                                             OK
 ```
 OK: 22/22 Fail: 0/22 Skip: 0/22
+## bcMergeToShanghai
+```diff
++ shanghaiBeforeTransition.json                                   OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcMultiChainTest
 ```diff
 + CallContractFromNotBestBlock.json                               OK
@@ -335,6 +361,8 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + randomStatetest594.json                                         OK
 + randomStatetest619.json                                         OK
   randomStatetest94.json                                          Skip
++ refundReset.json                                                OK
++ selfdestructBalance.json                                        OK
 + simpleSuicide.json                                              OK
 + suicideCoinbase.json                                            OK
 + suicideCoinbaseState.json                                       OK
@@ -362,7 +390,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + transactionFromSelfDestructedContract.json                      OK
 + txCost-sec73.json                                               OK
 ```
-OK: 89/90 Fail: 0/90 Skip: 1/90
+OK: 91/92 Fail: 0/92 Skip: 1/92
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -460,6 +488,7 @@ OK: 23/23 Fail: 0/23 Skip: 0/23
 + dataTx2.json                                                    OK
 + diff1024.json                                                   OK
 + eip2930.json                                                    OK
++ emptyPostTransfer.json                                          OK
 + gasLimitTooHigh.json                                            OK
 + gasLimitTooHigh2.json                                           OK
 + gasPrice0.json                                                  OK
@@ -468,7 +497,7 @@ OK: 23/23 Fail: 0/23 Skip: 0/23
 + timeDiff13.json                                                 OK
 + timeDiff14.json                                                 OK
 ```
-OK: 18/18 Fail: 0/18 Skip: 0/18
+OK: 19/19 Fail: 0/19 Skip: 0/19
 ## bcWalletTest
 ```diff
 + wallet2outOf3txs.json                                           OK
@@ -950,7 +979,6 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + CREATE2_Bounds2.json                                            OK
 + CREATE2_Bounds3.json                                            OK
 + CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
-+ CREATE2_EOF1.json                                               OK
 + CREATE2_FirstByte_loop.json                                     OK
 + CREATE2_HighNonce.json                                          OK
 + CREATE2_HighNonceDelegatecall.json                              OK
@@ -999,7 +1027,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 51/52 Fail: 0/52 Skip: 1/52
+OK: 50/51 Fail: 0/51 Skip: 1/51
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -1013,7 +1041,6 @@ OK: 51/52 Fail: 0/52 Skip: 1/52
 + CREATE_EContractCreateNEContractInInitOOG_Tr.json               OK
 + CREATE_EContractCreateNEContractInInit_Tr.json                  OK
 + CREATE_EContract_ThenCALLToNonExistentAcc.json                  OK
-+ CREATE_EOF1.json                                                OK
 + CREATE_EmptyContract.json                                       OK
 + CREATE_EmptyContractAndCallIt_0wei.json                         OK
 + CREATE_EmptyContractAndCallIt_1wei.json                         OK
@@ -1047,7 +1074,7 @@ OK: 51/52 Fail: 0/52 Skip: 1/52
 + createFailResult.json                                           OK
 + createLargeResult.json                                          OK
 ```
-OK: 44/44 Fail: 0/44 Skip: 0/44
+OK: 43/43 Fail: 0/43 Skip: 0/43
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -1190,6 +1217,26 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + transactionCollidingWithNonEmptyAccount_send.json               OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
+## stEIP3651-warmcoinbase
+```diff
++ coinbaseWarmAccountCallGas.json                                 OK
++ coinbaseWarmAccountCallGasFail.json                             OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
+## stEIP3855-push0
+```diff
++ push0.json                                                      OK
++ push0Gas.json                                                   OK
++ push0Gas2.json                                                  OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
+## stEIP3860-limitmeterinitcode
+```diff
++ create2InitCodeSizeLimit.json                                   OK
++ createInitCodeSizeLimit.json                                    OK
++ creationTxInitCodeSizeLimit.json                                OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stExample
 ```diff
 + accessListExample.json                                          OK
@@ -1614,11 +1661,12 @@ OK: 102/102 Fail: 0/102 Skip: 0/102
   Callcode50000.json                                              Skip
   Create1000.json                                                 Skip
   Create1000Byzantium.json                                        Skip
+  Create1000Shnghai.json                                          Skip
   QuadraticComplexitySolidity_CallDataCopy.json                   Skip
   Return50000.json                                                Skip
   Return50000_2.json                                              Skip
 ```
-OK: 0/16 Fail: 0/16 Skip: 16/16
+OK: 0/17 Fail: 0/17 Skip: 17/17
 ## stRandom
 ```diff
 + randomStatetest0.json                                           OK
@@ -2180,6 +2228,7 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + refund600.json                                                  OK
 + refundFF.json                                                   OK
 + refundMax.json                                                  OK
++ refundResetFrontier.json                                        OK
 + refundSSTORE.json                                               OK
 + refundSuicide50procentCap.json                                  OK
 + refund_CallA.json                                               OK
@@ -2197,7 +2246,7 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + refund_multimpleSuicide.json                                    OK
 + refund_singleSuicide.json                                       OK
 ```
-OK: 22/22 Fail: 0/22 Skip: 0/22
+OK: 23/23 Fail: 0/23 Skip: 0/23
 ## stReturnDataTest
 ```diff
 + call_ecrec_success_empty_then_returndatasize.json               OK
@@ -2417,6 +2466,7 @@ OK: 18/18 Fail: 0/18 Skip: 0/18
 + StackDepthLimitSEC.json                                         OK
 + block504980.json                                                OK
 + deploymentError.json                                            OK
++ eoaEmpty.json                                                   OK
 + failed_tx_xcf416c53.json                                        OK
 + gasPrice0.json                                                  OK
 + makeMoney.json                                                  OK
@@ -2425,7 +2475,7 @@ OK: 18/18 Fail: 0/18 Skip: 0/18
 + sha3_deja.json                                                  OK
 + tx_e1c174e2.json                                                OK
 ```
-OK: 12/14 Fail: 0/14 Skip: 2/14
+OK: 13/15 Fail: 0/15 Skip: 2/15
 ## stStackTests
 ```diff
 + shallowStack.json                                               OK
@@ -2801,9 +2851,9 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + createWithInvalidOpcode.json                                    OK
 + currentAccountBalance.json                                      OK
 + doubleSelfdestructTest.json                                     OK
-+ doubleSelfdestructTest2.json                                    OK
 + doubleSelfdestructTouch.json                                    OK
 + extcodecopy.json                                                OK
++ multiSelfdestruct.json                                          OK
 + return0.json                                                    OK
 + return1.json                                                    OK
 + return2.json                                                    OK
@@ -2842,7 +2892,6 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + ContractStoreClearsSuccess.json                                 OK
 + CreateMessageReverted.json                                      OK
 + CreateMessageSuccess.json                                       OK
-+ CreateTransactionEOF1.json                                      OK
 + CreateTransactionSuccess.json                                   OK
 + EmptyTransaction3.json                                          OK
 + HighGasLimit.json                                               OK
@@ -2871,7 +2920,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + TransactionToItself.json                                        OK
 + ValueOverflow.json                                              OK
 ```
-OK: 32/32 Fail: 0/32 Skip: 0/32
+OK: 31/31 Fail: 0/31 Skip: 0/31
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -3337,4 +3386,4 @@ OK: 0/3 Fail: 0/3 Skip: 3/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2882/2987 Fail: 0/2987 Skip: 105/2987
+OK: 2910/3016 Fail: 0/3016 Skip: 106/3016
