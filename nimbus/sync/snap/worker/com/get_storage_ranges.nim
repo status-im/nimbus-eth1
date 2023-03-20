@@ -36,9 +36,6 @@ type
     leftOver*: seq[AccountSlotsHeader]
     data*: AccountStorageRange
 
-const
-  emptyBlob = seq[byte].default
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -66,7 +63,7 @@ proc getStorageRangesReq(
       reply = await peer.getStorageRanges(
         root, accounts,
         # here the interval bounds are of empty `Blob` type
-        emptyBlob, emptyBlob,
+        EmptyBlob, EmptyBlob,
         fetchRequestBytesLimit)
     return ok(reply)
 
@@ -117,6 +114,8 @@ proc getStorageRanges*(
         return err(ComResponseTimeout)
       if nAccounts < rc.value.get.slotLists.len:
         # Ooops, makes no sense
+        trace trSnapRecvReceived & "too many slot lists", peer, pivot,
+          nAccounts, nReceived=rc.value.get.slotLists.len
         return err(ComTooManyStorageSlots)
       rc.value.get
 

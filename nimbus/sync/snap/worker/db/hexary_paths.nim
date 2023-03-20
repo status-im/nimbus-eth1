@@ -16,7 +16,7 @@ import
   std/[sequtils, sets, tables],
   eth/[common, trie/nibbles],
   stew/[byteutils, interval_set],
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   ./hexary_desc
 
 # ------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ proc rootPathExtend(
       if result.tail.len == result.tail.sharedPrefixLen(node.lPfx):
         # Bingo, got full path
         result.path.add RPathStep(key: key, node: node, nibble: -1)
-        result.tail = EmptyNibbleRange
+        result.tail = EmptyNibbleSeq
       return
     of Branch:
       if result.tail.len == 0:
@@ -153,7 +153,7 @@ proc rootPathExtend(
           # Bingo, got full path
           let node = nodeRlp.toLeafNode(pathSegment)
           result.path.add XPathStep(key: key, node: node, nibble: -1)
-          result.tail = EmptyNibbleRange
+          result.tail = EmptyNibbleSeq
         return
 
       # Extension node

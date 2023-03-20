@@ -13,7 +13,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_paths]
 
 {.push raises: [].}
@@ -200,7 +200,7 @@ proc hexaryInspectTrie*(
     reVisit = resumeCtx.memCtx
 
   if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleRange)
+    reVisit.add (rootKey,EmptyNibbleSeq)
   else:
     # Add argument paths
     for w in partialPaths:
@@ -292,7 +292,7 @@ proc hexaryInspectTrie*(
     reVisit = resumeCtx.hddCtx
 
   if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleRange)
+    reVisit.add (rootKey,EmptyNibbleSeq)
   else:
     # Add argument paths
     for w in partialPaths:

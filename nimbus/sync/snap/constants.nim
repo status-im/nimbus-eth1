@@ -10,7 +10,18 @@
 
 {.push raises: [].}
 
+import
+  eth/trie/nibbles
+
 const
+  EmptyBlob* = seq[byte].default
+    ## Useful shortcut
+
+  EmptyNibbleSeq* = EmptyBlob.initNibbleRange
+    ## Useful shortcut
+
+  # ---------
+
   pivotTableLruEntriesMax* = 50
     ## Max depth of pivot table. On overflow, the oldest one will be removed.
 

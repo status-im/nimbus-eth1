@@ -20,7 +20,7 @@ import
   std/[tables],
   eth/[common, trie/nibbles],
   stew/results,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_error, hexary_paths]
 
 type
@@ -116,7 +116,7 @@ proc rTreeExtendLeaf(
     return RPath(
       root: rPath.root,
       path: rPath.path & RPathStep(key: key, node: leaf, nibble: -1),
-      tail: EmptyNibbleRange)
+      tail: EmptyNibbleSeq)
 
 proc rTreeExtendLeaf(
     db: HexaryTreeDbRef;

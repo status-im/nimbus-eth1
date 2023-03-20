@@ -14,7 +14,7 @@ import
   std/[hashes, sequtils, sets, tables],
   eth/[common, trie/nibbles],
   stint,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   ./hexary_error
 
 type
@@ -156,16 +156,9 @@ type
     dangling*: seq[NodeSpecs]       ## Missing inner sub-tries
     error*: HexaryError             ## Error code, or `NothingSerious`
 
-const
-  EmptyNodeBlob* = seq[byte].default
-  EmptyNibbleRange* = EmptyNodeBlob.initNibbleRange
-
 static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
-
-var
-  disablePrettyKeys* = false      ## Degugging, print raw keys if `true`
 
 proc isNodeKey*(a: RepairKey): bool {.gcsafe.}
 proc isZero*(a: RepairKey): bool {.gcsafe.}
@@ -178,7 +171,7 @@ proc append(writer: var RlpWriter, node: RNodeRef) =
   ## Mixin for RLP writer
   proc appendOk(writer: var RlpWriter; key: RepairKey): bool =
     if key.isZero:
-      writer.append(EmptyNodeBlob)
+      writer.append(EmptyBlob)
     elif key.isNodeKey:
       var hash: Hash256
       (addr hash.data[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
