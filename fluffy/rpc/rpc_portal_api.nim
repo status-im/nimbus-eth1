@@ -195,9 +195,9 @@ proc installPortalApiHandlers*(
         raise newException(ValueError, "Invalid content key")
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        raise newException(ValueError, "Content not found")
+        return "0x"
 
-    return contentResult.content.toHex()
+    return "0x" & contentResult.content.toHex()
 
   rpcServer.rpc("portal_" & network & "Store") do(
       contentKey: string, contentValue: string) -> bool:
@@ -219,9 +219,9 @@ proc installPortalApiHandlers*(
 
     let contentResult = p.dbGet(key, contentId)
     if contentResult.isOk():
-      return contentResult.get().toHex()
+      return "0x" & contentResult.get().toHex()
     else:
-      return "0x0"
+      return "0x"
 
   rpcServer.rpc("portal_" & network & "Gossip") do(
       contentKey: string, contentValue: string) -> int:
