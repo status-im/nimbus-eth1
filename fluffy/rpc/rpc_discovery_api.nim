@@ -98,31 +98,6 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
 
-  # Note:
-  # These are difficult to support in our current discv5 implementation and it
-  # should be proven first that they are deemed useful before implementing them.
-  rpcServer.rpc("discv5_sendPing") do(enr: Record) -> string:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
-  rpcServer.rpc("discv5_sendPong") do(enr: Record, requestId: string) -> bool:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
-  rpcServer.rpc("discv5_sendFindNode") do(
-      enr: Record, distances: seq[uint16]) -> string:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
-  rpcServer.rpc("discv5_sendNodes") do(
-      enr: Record, nodes: seq[Record], requestId: string) -> uint8:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
-  rpcServer.rpc("discv5_sendTalkRequest") do(
-      enr: Record, protocolId: string, payload: string) -> string:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
-  rpcServer.rpc("discv5_sendTalkResponse") do(
-      enr: Record, payload: string, requestId: string) -> bool:
-    raise newException(ValueError, "This JSON-RPC is not supported")
-
   rpcServer.rpc("discv5_ping") do(enr: Record) -> PongResponse:
     let
       node = toNodeWithAddress(enr)
