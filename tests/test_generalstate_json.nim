@@ -87,7 +87,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     let obtainedHash = vmState.readOnlyStateDB.rootHash
     check obtainedHash == tester.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
-    let actualLogsHash = hashLogEntries(logEntries)
+    let actualLogsHash = rlpHash(logEntries)
     check(tester.expectedLogs == actualLogsHash)
     if tester.debugMode:
       let success = tester.expectedLogs == actualLogsHash and obtainedHash == tester.expectedHash

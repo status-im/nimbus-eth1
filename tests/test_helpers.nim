@@ -7,7 +7,7 @@
 
 import
   std/[os, macros, json, strformat, strutils, tables],
-  stew/byteutils, net, eth/[keys, rlp, p2p], unittest2,
+  stew/byteutils, net, eth/[keys, p2p], unittest2,
   testutils/markdown_reports,
   ../nimbus/[constants, config, transaction, errors],
   ../nimbus/db/accounts_cache,
@@ -137,9 +137,6 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
     if wantedNonce != actualNonce:
       raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
-
-proc hashLogEntries*(logs: seq[Log]): Hash256 =
-  keccakHash(rlp.encode(logs))
 
 proc setupEthNode*(
     conf: NimbusConf, ctx: EthContext,

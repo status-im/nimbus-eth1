@@ -215,7 +215,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
 
   vmState.mutateStateDB:
     setupStateDB(pre, db)
-    db.persist() # settle accounts storage
+    db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
     ctx.verifyResult(vmState)

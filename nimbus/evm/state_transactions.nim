@@ -52,10 +52,6 @@ proc postExecComputation(c: Computation) =
     if c.fork < FkLondon:
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
-    shallowCopy(c.vmState.selfDestructs, c.selfDestructs)
-    shallowCopy(c.vmState.logEntries, c.logEntries)
-    c.vmState.touchedAccounts.incl c.touchedAccounts
-
   c.vmState.status = c.isSuccess
 
 proc execComputation*(c: Computation)

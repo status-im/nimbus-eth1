@@ -14,7 +14,7 @@ const
   lowMemoryCompileTime {.used.} = lowmem > 0
 
 import
-  std/[macros, sets, strformat],
+  std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, utils/utils, db/accounts_cache],
   "."/[code_stream, computation],
@@ -25,12 +25,6 @@ import
 
 logScope:
   topics = "vm opcode"
-
-const
-  ripemdAddr = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
-      result[19] = x.byte
-    initAddress(3)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -105,7 +99,6 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
 
       genLowMemDispatcher(fork, c.instr, desc)
 
-
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == evmcCall:
@@ -121,14 +114,12 @@ proc afterExecCall(c: Computation) =
   if c.isError or c.fork >= FkByzantium:
     if c.msg.contractAddress == ripemdAddr:
       # Special case to account for geth+parity bug
-      c.vmState.touchedAccounts.incl c.msg.contractAddress
+      c.vmState.stateDB.ripemdSpecial()
 
   if c.isSuccess:
     c.commit()
-    c.touchedAccounts.incl c.msg.contractAddress
   else:
     c.rollback()
-
 
 proc beforeExecCreate(c: Computation): bool
     {.gcsafe, raises: [ValueError].} =
@@ -178,7 +169,6 @@ proc afterExecCreate(c: Computation)
     c.commit()
   else:
     c.rollback()
-
 
 proc beforeExec(c: Computation): bool
     {.gcsafe, raises: [ValueError].} =

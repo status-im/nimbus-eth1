@@ -87,11 +87,11 @@ proc processTransactionImpl(
       vmState.cumulativeGasUsed += gasBurned
       result = ok(gasBurned)
 
-  vmState.clearSelfDestructsAndEmptyAccounts(fork, miner)
-
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
-  vmState.stateDB.persist(clearCache = false)
+  vmState.stateDB.persist(
+    clearEmptyAccount = fork >= FkSpurious,
+    clearCache = false)
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -195,8 +195,6 @@ proc newComputation*(vmState: BaseVMState, message: Message,
   result.stack = newStack()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
-  result.touchedAccounts = initHashSet[EthAddress]()
-  result.selfDestructs = initHashSet[EthAddress]()
 
   if result.msg.isCreate():
     result.msg.contractAddress = result.generateContractAddress(salt)
@@ -214,8 +212,6 @@ proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): C
   result.stack = newStack()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
-  result.touchedAccounts = initHashSet[EthAddress]()
-  result.selfDestructs = initHashSet[EthAddress]()
   result.code = newCodeStream(code)
 
 template gasCosts*(c: Computation): untyped =
@@ -236,9 +232,6 @@ template isError*(c: Computation): bool =
 
 func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
-
-proc isSelfDestructed*(c: Computation, address: EthAddress): bool =
-  result = address in c.selfDestructs
 
 proc snapshot*(c: Computation) =
   c.savePoint = c.vmState.stateDB.beginSavepoint()
@@ -327,10 +320,7 @@ template asyncChainTo*(c: Computation, asyncOperation: Future[void], after: unty
     after
 
 proc merge*(c, child: Computation) =
-  c.logEntries.add child.logEntries
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-  c.selfDestructs.incl child.selfDestructs
-  c.touchedAccounts.incl child.touchedAccounts
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
     {.gcsafe, raises: [CatchableError].} =
@@ -345,17 +335,16 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress)
     # contract named itself as the beneficiary.
     db.setBalance(c.msg.contractAddress, 0.u256)
 
+    # Register the account to be deleted
+    db.selfDestruct(c.msg.contractAddress)
+
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
 
-  c.touchedAccounts.incl beneficiary
-  # Register the account to be deleted
-  c.selfDestructs.incl(c.msg.contractAddress)
-
 proc addLogEntry*(c: Computation, log: Log) =
-  c.logEntries.add(log)
+  c.vmState.stateDB.addLogEntry(log)
 
 proc getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
@@ -363,7 +352,8 @@ proc getGasRefund*(c: Computation): GasInt =
 
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
-  c.gasMeter.refundGas(cost * c.selfDestructs.len)
+  let num  = c.vmState.stateDB.selfDestructLen
+  c.gasMeter.refundGas(cost * num)
 
 proc tracingEnabled*(c: Computation): bool =
   TracerFlags.EnableTracing in c.vmState.tracer.flags

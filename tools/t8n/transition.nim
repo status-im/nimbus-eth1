@@ -220,7 +220,6 @@ proc exec(ctx: var TransContext,
 
     vmState.mutateStateDB:
       db.addBalance(ctx.env.currentCoinbase, mainReward)
-      db.persist(clearCache = false)
 
   let miner = ctx.env.currentCoinbase
   let fork = vmState.com.toEVMFork
@@ -411,7 +410,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     vmState.mutateStateDB:
       db.setupAlloc(ctx.alloc)
-      db.persist(clearCache = false)
+      db.persist(clearEmptyAccount = false, clearCache = false)
 
     let res = exec(ctx, vmState, conf.stateReward, header)
 

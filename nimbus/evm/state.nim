@@ -43,9 +43,7 @@ proc init(
   self.blockDifficulty = difficulty
   self.com = com
   self.tracer = tracer
-  self.logEntries = @[]
   self.stateDB = ac
-  self.touchedAccounts = initHashSet[EthAddress]()
   self.minerAddress = miner
   self.asyncFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]())
 
@@ -326,8 +324,7 @@ proc getTracingResult*(vmState: BaseVMState): JsonNode {.inline.} =
   vmState.tracer.trace
 
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
-  shallowCopy(result, vmState.logEntries)
-  vmState.logEntries = @[]
+  vmState.stateDB.getAndClearLogEntries()
 
 proc enableTracing*(vmState: BaseVMState) =
   vmState.tracer.flags.incl EnableTracing
@@ -390,14 +387,3 @@ func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationIn
 
 func determineFork*(vmState: BaseVMState): EVMFork =
   vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
-
-proc clearSelfDestructsAndEmptyAccounts*(vmState: BaseVMState, fork: EVMFork, miner: EthAddress): void =
-  vmState.mutateStateDB:
-    for deletedAccount in vmState.selfDestructs:
-      db.deleteAccount(deletedAccount)
-
-    if fork >= FkSpurious:
-      vmState.touchedAccounts.incl(miner)
-      # EIP158/161 state clearing
-      for account in vmState.touchedAccounts:
-        db.deleteAccountIfEmpty(account)

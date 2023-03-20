@@ -59,9 +59,6 @@ type
     code*:            seq[byte]
     cachedTxContext*: bool
     txContext*:       EvmcTxContext
-    logEntries*:      seq[Log]
-    touchedAccounts*: HashSet[EthAddress]
-    selfDestructs*:   HashSet[EthAddress]
     depth*:           int
     saveComputation*: seq[Computation]
     hostInterface*:   ptr evmc_host_interface

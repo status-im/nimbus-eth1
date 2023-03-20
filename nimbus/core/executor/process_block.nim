@@ -83,7 +83,6 @@ proc procBlkPreamble(vmState: BaseVMState;
 
       for withdrawal in body.withdrawals.get:
         vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
-        vmState.stateDB.deleteAccountIfEmpty(withdrawal.address)
   else:
     if header.withdrawalsRoot.isSome:
       raise ValidationError.newException("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -111,7 +110,8 @@ proc procBlkEpilogue(vmState: BaseVMState;
   vmState.mutateStateDB:
     if vmState.generateWitness:
       db.collectWitnessData()
-    db.persist(ClearCache in vmState.flags)
+    let clearEmptyAccount = vmState.determineFork >= FkSpurious
+    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
 
   let stateDb = vmState.stateDB
   if header.stateRoot != stateDb.rootHash:

@@ -220,15 +220,7 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.sh
     # This must come after sending to the beneficiary in case the
     # contract named itself as the beneficiary.
     db.setBalance(address, 0.u256)
-
-  # TODO: Calling via `computation` is necessary to make some tests pass.
-  # Here's one that passes only with this:
-  #   tests/fixtures/eth_tests/GeneralStateTests/stRandom2/randomStatetest487.json
-  # We can't keep using `computation` though.
-  host.computation.touchedAccounts.incl(beneficiary)
-  host.computation.selfDestructs.incl(address)
-  #host.touchedAccounts.incl(beneficiary)
-  #host.selfDestructs.incl(address)
+    db.selfDestruct(address)
 
 template call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # `call` is special.  The C stack usage must be kept small for deeply nested
@@ -266,13 +258,7 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     copyMem(log.data[0].addr, data, data_size.int)
 
   log.address = address
-
-  # TODO: Calling via `computation` is necessary to makes some tests pass.
-  # Here's one that passes only with this:
-  #   tests/fixtures/eth_tests/GeneralStateTests/stRandom2/randomStatetest583.json
-  # We can't keep using `computation` though.
-  host.computation.logEntries.add(log)
-  #host.logEntries.add(log)
+  host.vmState.stateDB.addlogEntry(log)
 
 proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
   host.vmState.mutateStateDB:

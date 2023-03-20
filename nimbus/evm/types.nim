@@ -46,12 +46,9 @@ type
     blockDifficulty*: UInt256
     flags*         : set[VMFlag]
     tracer*        : TransactionTracer
-    logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
     stateDB*       : AccountsCache
     cumulativeGasUsed*: GasInt
-    touchedAccounts*: HashSet[EthAddress]
-    selfDestructs* : HashSet[EthAddress]
     txOrigin*      : EthAddress
     txGasPrice*    : GasInt
     gasCosts*      : GasCosts
@@ -89,9 +86,6 @@ type
     output*:                seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    touchedAccounts*:       HashSet[EthAddress]
-    selfDestructs*:         HashSet[EthAddress]
-    logEntries*:            seq[Log]
     savePoint*:             SavePoint
     instr*:                 Op
     opIndex*:               int

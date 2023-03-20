@@ -17,8 +17,12 @@ import
   ./pow/[difficulty, header],
   ./pow,
   chronicles,
-  nimcrypto/utils,
   stew/[objects, results]
+
+# chronicles stuff
+when loggingEnabled or enabledLogLevel >= NONE:
+  import
+    nimcrypto/utils
 
 from stew/byteutils
   import nil

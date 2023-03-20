@@ -31,9 +31,6 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
     if touched:
       db.addBalance(miner, 0.u256)
 
-    if fork >= FkSpurious:
-      db.deleteAccountIfEmpty(miner)
-
     # db.persist is an important step when using accounts_cache
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
@@ -41,4 +38,6 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(clearCache = false)
+    db.persist(
+      clearEmptyAccount = fork >= FkSpurious,
+      clearCache = false)

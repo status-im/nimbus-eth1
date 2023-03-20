@@ -18,7 +18,6 @@ export
   vms.`$`,
   vms.blockNumber,
   vms.buildWitness,
-  vms.clearSelfDestructsAndEmptyAccounts,
   vms.coinbase,
   vms.determineFork,
   vms.difficulty,

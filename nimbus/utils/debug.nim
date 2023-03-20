@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[options, times, json, strutils, sets],
+  std/[options, times, json, strutils],
   ../common/common,
   stew/byteutils,
   ../vm_state,
@@ -98,12 +98,9 @@ proc debug*(vms: BaseVMState): string =
   result.add "prevRandao       : " & $vms.prevRandao          & "\n"
   result.add "blockDifficulty  : " & $vms.blockDifficulty     & "\n"
   result.add "flags            : " & $vms.flags               & "\n"
-  result.add "logEntries.len   : " & $vms.logEntries.len      & "\n"
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
   result.add "stateDB.root     : " & $vms.stateDB.rootHash    & "\n"
   result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
-  result.add "touchedAccs.len  : " & $vms.touchedAccounts.len & "\n"
-  result.add "selfDestructs.len: " & $vms.selfDestructs.len   & "\n"
   result.add "txOrigin         : " & $vms.txOrigin            & "\n"
   result.add "txGasPrice       : " & $vms.txGasPrice          & "\n"
   result.add "fork             : " & $vms.fork                & "\n"

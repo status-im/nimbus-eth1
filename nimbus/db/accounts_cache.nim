@@ -6,11 +6,15 @@ import
   ./distinct_tries,
   ./access_list as ac_access_list
 
+const
+  debugAccountsCache = false
+
 type
   AccountFlag = enum
     Alive
     IsNew
     Dirty
+    Touched
     CodeLoaded
     CodeChanged
     StorageChanged
@@ -34,7 +38,7 @@ type
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
-    touched: HashSet[EthAddress]
+    ripemdSpecial: bool
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -46,8 +50,12 @@ type
   SavePoint* = ref object
     parentSavepoint: SavePoint
     cache: Table[EthAddress, RefAccount]
+    selfDestruct: HashSet[EthAddress]
+    logEntries: seq[Log]
     accessList: ac_access_list.AccessList
     state: TransactionState
+    when debugAccountsCache:
+      depth: int
 
 const
   emptyAcc = newAccount()
@@ -55,18 +63,34 @@ const
   resetFlags = {
     Dirty,
     IsNew,
+    Touched,
     CodeChanged,
     StorageChanged
     }
 
-proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
+  ripemdAddr* = block:
+    proc initAddress(x: int): EthAddress {.compileTime.} =
+      result[19] = x.byte
+    initAddress(3)
 
+when debugAccountsCache:
+  import
+    stew/byteutils
+
+  proc inspectSavePoint(name: string, x: SavePoint) =
+    debugEcho "*** ", name, ": ", x.depth, " ***"
+    var sp = x
+    while sp != nil:
+      for address, acc in sp.cache:
+        debugEcho address.toHex, " ", acc.flags
+      sp = sp.parentSavepoint
+
+proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
 # FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
 # take this out once those are gone.
 proc rawTrie*(ac: AccountsCache): AccountsTrie = ac.trie
 proc rawDb*(ac: AccountsCache): TrieDatabaseRef = ac.trie.db
-
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
@@ -99,6 +123,11 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
 
+  when debugAccountsCache:
+    if not result.parentSavePoint.isNil:
+      result.depth = result.parentSavePoint.depth + 1
+    inspectSavePoint("snapshot", result)
+
 proc rollback*(ac: var AccountsCache, sp: SavePoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
@@ -106,6 +135,9 @@ proc rollback*(ac: var AccountsCache, sp: SavePoint) =
   doAssert ac.savePoint == sp and sp.state == Pending
   ac.savePoint = sp.parentSavepoint
   sp.state = RolledBack
+
+  when debugAccountsCache:
+    inspectSavePoint("rollback", ac.savePoint)
 
 proc commit*(ac: var AccountsCache, sp: SavePoint) =
   # Transactions should be handled in a strictly nested fashion.
@@ -120,7 +152,12 @@ proc commit*(ac: var AccountsCache, sp: SavePoint) =
     sp.parentSavepoint.cache[k] = v
 
   ac.savePoint.accessList.merge(sp.accessList)
+  ac.savePoint.selfDestruct.incl sp.selfDestruct
+  ac.savePoint.logEntries.add sp.logEntries
   sp.state = Committed
+
+  when debugAccountsCache:
+    inspectSavePoint("commit", ac.savePoint)
 
 proc dispose*(ac: var AccountsCache, sp: SavePoint) {.inline.} =
   if sp.state == Pending:
@@ -397,7 +434,7 @@ proc addBalance*(ac: AccountsCache, address: EthAddress, delta: UInt256) {.inlin
   if delta == 0.u256:
     let acc = ac.getAccount(address)
     if acc.isEmpty:
-      ac.touched.incl address
+      ac.makeDirty(address).flags.incl Touched
     return
   ac.setBalance(address, ac.getBalance(address) + delta)
 
@@ -445,8 +482,26 @@ proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc deleteAccountIfEmpty*(ac: AccountsCache, address: EthAddress) =
-  # see https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
+proc selfDestruct*(ac: AccountsCache, address: EthAddress) =
+  ac.savePoint.selfDestruct.incl address
+
+proc selfDestructLen*(ac: AccountsCache): int =
+  ac.savePoint.selfDestruct.len
+
+proc addLogEntry*(ac: AccountsCache, log: Log) =
+  ac.savePoint.logEntries.add log
+
+proc logEntries*(ac: AccountsCache): seq[Log] =
+  ac.savePoint.logEntries
+
+proc getAndClearLogEntries*(ac: AccountsCache): seq[Log] =
+  result = ac.savePoint.logEntries
+  ac.savePoint.logEntries.setLen(0)
+
+proc ripemdSpecial*(ac: AccountsCache) =
+  ac.ripemdSpecial = true
+
+proc deleteEmptyAccount(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -454,13 +509,31 @@ proc deleteAccountIfEmpty*(ac: AccountsCache, address: EthAddress) =
     return
   if not acc.exists:
     return
-  if address in ac.touched or Dirty in acc.flags:
-    ac.deleteAccount(address)
+  acc.kill()
 
-proc persist*(ac: AccountsCache, clearCache: bool = true) =
+proc clearEmptyAccounts(ac: AccountsCache) =
+  for address, acc in ac.savePoint.cache:
+    if Touched in acc.flags and
+        acc.isEmpty and acc.exists:
+      acc.kill()
+
+  # https://github.com/ethereum/EIPs/issues/716
+  if ac.ripemdSpecial:
+    ac.deleteEmptyAccount(ripemdAddr)
+    ac.ripemdSpecial = false
+
+proc persist*(ac: AccountsCache, 
+              clearEmptyAccount: bool = false, 
+              clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   var cleanAccounts = initHashSet[EthAddress]()
+
+  if clearEmptyAccount:
+    ac.clearEmptyAccounts()
+  
+  for address in ac.savePoint.selfDestruct:
+    ac.deleteAccount(address)
 
   for address, acc in ac.savePoint.cache:
     case acc.persistMode()
@@ -487,7 +560,7 @@ proc persist*(ac: AccountsCache, clearCache: bool = true) =
     for x in cleanAccounts:
       ac.savePoint.cache.del x
 
-  ac.touched.clear()
+  ac.savePoint.selfDestruct.clear()
 
   # EIP2929
   ac.savePoint.accessList.clear()

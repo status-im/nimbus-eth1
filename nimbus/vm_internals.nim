@@ -94,7 +94,6 @@ export
   bChp.isError,
   bChp.isOriginComputation,
   bChp.isSuccess,
-  bChp.isSelfDestructed,
   bChp.merge,
   bChp.newComputation,
   bChp.prepareTracer,

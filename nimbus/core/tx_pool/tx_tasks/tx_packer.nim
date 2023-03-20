@@ -71,7 +71,10 @@ proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [RlpError].} =
   ## Smart wrapper
   if not pst.cleanState:
-    pst.xp.chain.vmState.stateDB.persist(clearCache = false)
+    let fork = pst.xp.chain.nextFork
+    pst.xp.chain.vmState.stateDB.persist(
+      clearEmptyAccount = fork >= FkSpurious,
+      clearCache = false)
     pst.cleanState = true
 
 # ------------------------------------------------------------------------------
@@ -111,9 +114,6 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   let reward = gasBurned.u256 * gasTip.uint64.u256
   vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
 
-  # Update account database
-  vmState.clearSelfDestructsAndEmptyAccounts(xp.chain.nextFork, xp.chain.feeRecipient)
-
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
 
@@ -123,7 +123,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # that the account cache has been saved, the `persist()` call is
   # obligatory here.
   if xp.chain.nextFork < FkByzantium:
-    pst.persist
+    pst.persist()
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
@@ -188,7 +188,9 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   # Commit account state DB
   vmState.stateDB.commit(accTx)
 
-  vmState.stateDB.persist(clearCache = false)
+  vmState.stateDB.persist(
+    clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
+    clearCache = false)
   # let midRoot = vmState.stateDB.rootHash -- notused
 
   # Finish book-keeping and move item to `packed` bucket
@@ -215,7 +217,9 @@ proc vmExecCommit(pst: TxPackerStateRef)
     if vmState.generateWitness:
       db.collectWitnessData()
     # Finish up, then vmState.stateDB.rootHash may be accessed
-    db.persist(ClearCache in vmState.flags)
+    db.persist(
+      clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
+      clearCache = ClearCache in vmState.flags)
 
   # Update flexi-array, set proper length
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems

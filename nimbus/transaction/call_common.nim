@@ -264,7 +264,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   shallowCopy(result.output, c.output)
   result.contractAddress = if call.isCreate: c.msg.contractAddress
                            else: default(HostAddress)
-  shallowCopy(result.logEntries, c.logEntries)
+  result.logEntries = host.vmState.stateDB.logEntries()
   result.stack = c.stack
   result.memory = c.memory
 
