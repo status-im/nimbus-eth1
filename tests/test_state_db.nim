@@ -216,5 +216,71 @@ proc stateDBMain*() =
       check ac.verifySlots(0xcc, 0x01)
       check ac.verifySlots(0xdd, 0x04)
 
+    test "transient storage operations":
+      var ac = init(AccountsCache, acDB)
+
+      proc tStore(ac: AccountsCache, address, slot, val: int) =
+        ac.setTransientStorage(address.initAddr, slot.u256, val.u256)
+
+      proc tLoad(ac: AccountsCache, address, slot: int): UInt256 =
+        ac.getTransientStorage(address.initAddr, slot.u256)
+
+      proc vts(ac: AccountsCache, address, slot, val: int): bool =
+        ac.tLoad(address, slot) == val.u256
+
+      ac.tStore(0xaa, 3, 66)
+      ac.tStore(0xbb, 1, 33)
+      ac.tStore(0xbb, 2, 99)
+
+      check ac.vts(0xaa, 3, 66)
+      check ac.vts(0xbb, 1, 33)
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xaa, 1, 33) == false
+      check ac.vts(0xbb, 1, 66) == false
+
+      var sp = ac.beginSavepoint
+      # some new ones
+      ac.tStore(0xaa, 3, 77)
+      ac.tStore(0xbb, 1, 55)
+      ac.tStore(0xcc, 7, 88)
+
+      check ac.vts(0xaa, 3, 77)
+      check ac.vts(0xbb, 1, 55)
+      check ac.vts(0xcc, 7, 88)
+
+      check ac.vts(0xaa, 3, 66) == false
+      check ac.vts(0xbb, 1, 33) == false
+      check ac.vts(0xbb, 2, 99)
+
+      ac.rollback(sp)
+      check ac.vts(0xaa, 3, 66)
+      check ac.vts(0xbb, 1, 33)
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xcc, 7, 88) == false
+
+      sp = ac.beginSavepoint
+      ac.tStore(0xaa, 3, 44)
+      ac.tStore(0xaa, 4, 55)
+      ac.tStore(0xbb, 1, 22)
+      ac.tStore(0xdd, 2, 66)
+
+      ac.commit(sp)
+      check ac.vts(0xaa, 3, 44)
+      check ac.vts(0xaa, 4, 55)
+      check ac.vts(0xbb, 1, 22)
+      check ac.vts(0xbb, 1, 55) == false
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xcc, 7, 88) == false
+      check ac.vts(0xdd, 2, 66)
+
+      ac.clearTransientStorage()
+      check ac.vts(0xaa, 3, 44) == false
+      check ac.vts(0xaa, 4, 55) == false
+      check ac.vts(0xbb, 1, 22) == false
+      check ac.vts(0xbb, 1, 55) == false
+      check ac.vts(0xbb, 2, 99) == false
+      check ac.vts(0xcc, 7, 88) == false
+      check ac.vts(0xdd, 2, 66) == false
+
 when isMainModule:
   stateDBMain()

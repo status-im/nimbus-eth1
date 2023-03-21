@@ -54,6 +54,7 @@ type
     GasBlockhash,       # Payment for BLOCKHASH operation.
     GasExtCodeHash,     # Payment for contract's code hashing
     GasInitcodeWord     # Payment for each word (rounded up) for initcode
+    GasWarmStorageRead  # Transient storage read and write cost.
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
@@ -706,6 +707,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
 
+          # b0s: Transient storage operations
+          Tload:          fixed GasWarmStorageRead,
+          Tstore:         fixed GasWarmStorageRead,
+
           # f0s: System operations
           Create:         complex `prefix gasCreate`,
           Call:           complex `prefix gasCall`,
@@ -759,7 +764,8 @@ const
     GasCopy:            3,
     GasBlockhash:       20,
     GasExtCodeHash:     400,
-    GasInitcodeWord:    0       # Changed to 2 in EIP-3860
+    GasInitcodeWord:    0,      # Changed to 2 in EIP-3860
+    GasWarmStorageRead: WarmStorageReadCost
   ]
 
 # Create the schedule for each forks

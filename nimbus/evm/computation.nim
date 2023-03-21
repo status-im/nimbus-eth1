@@ -186,6 +186,22 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
+template setTransientStorage*(c: Computation, slot, val: UInt256) =
+  when evmc_enabled:
+    # TODO: EIP-1153
+    discard
+  else:
+    c.vmState.stateDB.
+      setTransientStorage(c.msg.contractAddress, slot, val)
+
+template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
+  when evmc_enabled:
+    # TODO: EIP-1153
+    0.u256
+  else:
+    c.vmState.readOnlyStateDB.
+      getTransientStorage(c.msg.contractAddress, slot)
+
 proc newComputation*(vmState: BaseVMState, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result

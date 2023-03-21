@@ -305,6 +305,22 @@ const
     ##       on machine state during execution.
     discard
 
+  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0xb3, Load word from transient storage.
+    let
+      slot = k.cpt.stack.peek()
+      val  = k.cpt.getTransientStorage(slot)
+    k.cpt.stack.top(val)
+
+  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0xb4, Save word to transient storage.
+    checkInStaticContext(k.cpt)
+
+    let
+      slot = k.cpt.stack.popInt()
+      val  = k.cpt.stack.popInt()
+    k.cpt.setTransientStorage(slot, val)
+
 #[
   EIP-2315: temporary disabled
   Reason  : not included in berlin hard fork
@@ -493,6 +509,22 @@ const
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
             run:  jumpDestOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Tload,     ## 0xb3, Load word from transient storage.
+     forks: Vm2Op1153AndLater,
+     name: "tLoad",
+     info: "Load word from transient storage",
+     exec: (prep: vm2OpIgnore,
+            run:  tloadOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Tstore,     ## 0xb4, Save word to transient storage.
+     forks: Vm2Op1153AndLater,
+     name: "tStore",
+     info: "Save word to transient storage",
+     exec: (prep: vm2OpIgnore,
+            run:  tstoreOp,
             post: vm2OpIgnore))]
 
 #[

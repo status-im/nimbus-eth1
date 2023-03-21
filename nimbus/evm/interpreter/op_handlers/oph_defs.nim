@@ -86,6 +86,10 @@ const
   Vm2OpShanghaiAndLater* =
     Vm2OpParisAndLater - {FkParis}
 
+  # TODO: fix this after EIP-1153 accepted in a fork
+  Vm2Op1153AndLater* =
+    Vm2OpShanghaiAndLater - {FkShanghai}
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
