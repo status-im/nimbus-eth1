@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, times, tables, os],
+  std/[json, strutils, times, tables, os, math],
   eth/[rlp, trie, eip1559],
   stint, stew/results,
   "."/[config, types, helpers],
@@ -82,6 +82,11 @@ proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
     stderr.write(dis.stderr.pretty)
     stderr.write("\n")
 
+proc calcWithdrawalsRoot(w: Option[seq[Withdrawal]]): Option[Hash256] =
+  if w.isNone:
+    return none(Hash256)
+  calcWithdrawalsRoot(w.get).some()
+
 proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
     coinbase   : env.currentCoinbase,
@@ -91,7 +96,8 @@ proc envToHeader(env: EnvStruct): BlockHeader =
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,
     stateRoot  : emptyRlpHash,
-    fee        : env.currentBaseFee
+    fee        : env.currentBaseFee,
+    withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot()
   )
 
 proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
@@ -142,6 +148,9 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
 proc dumpTrace(txIndex: int, txHash: Hash256, traceResult: JsonNode) =
   let fName = "trace-$1-$2.jsonl" % [$txIndex, $txHash]
   writeFile(fName, traceResult.pretty)
+
+func gwei(n: uint64): UInt256 =
+  n.u256 * (10 ^ 9).u256
 
 proc exec(ctx: var TransContext,
           vmState: BaseVMState,
@@ -221,6 +230,10 @@ proc exec(ctx: var TransContext,
     vmState.mutateStateDB:
       db.addBalance(ctx.env.currentCoinbase, mainReward)
 
+  if ctx.env.withdrawals.isSome:
+    for withdrawal in ctx.env.withdrawals.get:
+      vmState.stateDB.addBalance(withdrawal.address, withdrawal.amount.gwei)
+
   let miner = ctx.env.currentCoinbase
   let fork = vmState.com.toEVMFork
   coinbaseStateClearing(vmState, miner, fork, stateReward.isSome())
@@ -239,7 +252,8 @@ proc exec(ctx: var TransContext,
     # therefore we cannot use vmState.difficulty
     currentDifficulty: ctx.env.currentDifficulty,
     gasUsed     : vmState.cumulativeGasUsed,
-    currentBaseFee: ctx.env.currentBaseFee
+    currentBaseFee: ctx.env.currentBaseFee,
+    withdrawalsRoot: header.withdrawalsRoot
   )
 
 template wrapException(body: untyped) =
@@ -370,6 +384,9 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         ctx.env.currentBaseFee = some(calcBaseFee(ctx.env))
       else:
         raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
+
+    if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
+      raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
 
     if com.forkGTE(MergeFork):
       if ctx.env.currentRandom.isNone:

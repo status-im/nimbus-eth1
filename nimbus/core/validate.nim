@@ -20,7 +20,7 @@ import
   stew/[objects, results]
 
 # chronicles stuff
-when loggingEnabled or enabledLogLevel >= NONE:
+when loggingEnabled or enabledLogLevel > NONE:
   import
     nimcrypto/utils
 

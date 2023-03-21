@@ -85,6 +85,14 @@ proc fromJson(T: type Ommer, n: JsonNode): Ommer =
     address: fromJson(EthAddress, n, "address")
   )
 
+proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
+  Withdrawal(
+    index: fromJson(uint64, n, "index"),
+    validatorIndex: fromJson(uint64, n, "validatorIndex"),
+    address: fromJson(EthAddress, n, "address"),
+    amount: fromJson(uint64, n, "amount")
+  )
+
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x
 
@@ -164,6 +172,13 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
     let w = n["ommers"]
     for v in w:
       ctx.env.ommers.add Ommer.fromJson(v)
+
+  if n.hasKey("withdrawals"):
+    let w = n["withdrawals"]
+    var withdrawals: seq[Withdrawal]
+    for v in w:
+      withdrawals.add Withdrawal.fromJson(v)
+    ctx.env.withdrawals = some(withdrawals)
 
 proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   var tx: Transaction
@@ -397,3 +412,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["rejected"] = @@(x.rejected)
   if x.currentBaseFee.isSome:
     result["currentBaseFee"] = @@(x.currentBaseFee)
+  if x.withdrawalsRoot.isSome:
+    result["withdrawalsRoot"] = @@(x.withdrawalsRoot)

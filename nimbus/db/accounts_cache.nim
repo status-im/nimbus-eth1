@@ -522,8 +522,8 @@ proc clearEmptyAccounts(ac: AccountsCache) =
     ac.deleteEmptyAccount(ripemdAddr)
     ac.ripemdSpecial = false
 
-proc persist*(ac: AccountsCache, 
-              clearEmptyAccount: bool = false, 
+proc persist*(ac: AccountsCache,
+              clearEmptyAccount: bool = false,
               clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
@@ -531,7 +531,7 @@ proc persist*(ac: AccountsCache,
 
   if clearEmptyAccount:
     ac.clearEmptyAccounts()
-  
+
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
@@ -550,7 +550,10 @@ proc persist*(ac: AccountsCache,
       if not clearCache:
         cleanAccounts.incl address
     of DoNothing:
-      discard
+      # dead man tell no tales
+      # remove touched dead account from cache      
+      if not clearCache and Alive notin acc.flags:
+        cleanAccounts.incl address
 
     acc.flags = acc.flags - resetFlags
 

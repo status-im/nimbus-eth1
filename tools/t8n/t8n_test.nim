@@ -411,7 +411,16 @@ const
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
-    )
+    ),
+    TestSpec(
+      name  : "Test withdrawals transition",
+      base  : "testdata/26",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Shanghai", ""
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =
