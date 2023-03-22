@@ -14,7 +14,7 @@ import
   std/[sequtils, strutils],
   chronicles,
   chronos,
-  eth/[p2p, trie/trie_defs],
+  eth/[common, p2p, trie/nibbles, trie/trie_defs],
   stew/[byteutils, interval_set],
   ../../db/db_chain,
   ../../core/chain,
@@ -33,9 +33,16 @@ type
     dataSizeMax: int
     peerPool: PeerPool
 
+  SlotsSpecs = object
+    slotFn: HexaryGetFn                 # For accessing storage slots
+    stoRoot: NodeKey                    # Storage root
+
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
+
+  estimatedNodeSize = hexaryRangeRlpNodesListSizeMax(1)
+    ## Some expected upper limit for a single node
 
   estimatedProofSize = hexaryRangeRlpNodesListSizeMax(10)
     ## Some expected upper limit, typically not mote than 10 proof nodes
@@ -63,19 +70,19 @@ proc notImplemented(name: string) {.used.} =
 # ----------------------------------
 
 proc getAccountFn(
-    chain: ChainRef;
+    ctx: SnapWireRef;
       ): HexaryGetFn
       {.gcsafe.} =
-  let db = chain.com.db.db
+  let db = ctx.chain.com.db.db
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
 proc getStoSlotFn(
-    chain: ChainRef;
+    ctx: SnapWireRef;
     accKey: NodeKey;
       ): HexaryGetFn
       {.gcsafe.} =
-  let db = chain.com.db.db
+  let db = ctx.chain.com.db.db
   return proc(key: openArray[byte]): Blob =
     db.get(key)
 
@@ -103,11 +110,75 @@ proc to(
 # Private functions: fetch leaf range
 # ------------------------------------------------------------------------------
 
+proc getSlotsSpecs(
+    ctx: SnapWireRef;                   # Handler descriptor
+    rootKey: NodeKey;                   # State root
+    accGetFn: HexaryGetFn;              # Database abstraction
+    accKey: NodeKey;                    # Current account
+      ): Result[SlotsSpecs,void]
+      {.gcsafe, raises: [CatchableError].} =
+  ## Retrieve storage slots specs from account data
+  let accData = accKey.hexaryPath(rootKey, accGetFn).leafData
+
+  # Ignore missing account entry
+  if accData.len == 0:
+    when extraTraceMessages:
+      trace logTxt "getSlotsSpecs: no such account", accKey
+    return err()
+
+  # Ignore empty storage list
+  let stoRoot = rlp.decode(accData,Account).storageRoot
+  if stoRoot == emptyRlpHash:
+    when extraTraceMessages:
+      trace logTxt "getSlotsSpecs: no slots", accKey
+    return err()
+
+  ok(SlotsSpecs(
+    slotFn:  ctx.getStoSlotFn(accKey),
+    stoRoot: stoRoot.to(NodeKey)))
+
+
+iterator doTrieNodeSpecs(
+    ctx: SnapWireRef;                   # Handler descriptor
+    rootKey: NodeKey;                   # State root
+    pGroups: openArray[SnapTriePaths];  # Group of partial paths
+      ): (NodeKey, HexaryGetFn, Blob, int)
+      {.gcsafe, raises: [CatchableError].} =
+  ## Helper for `getTrieNodes()` to cycle over `pathGroups`
+  let accGetFn = ctx.getAccountFn
+
+  for w in pGroups:
+    # Special case: fetch account node
+    if w.slotPaths.len == 0:
+      yield (rootKey, accGetFn, w.accPath, 0)
+      continue
+
+    # Compile account key
+    var accKey: NodeKey
+    if accKey.init(w.accPath):
+      # Derive slot specs from accounts
+      let rc = ctx.getSlotsSpecs(rootKey, accGetFn, accKey)
+      if rc.isOk:
+        # Loop over slot paths
+        for path in w.slotPaths:
+          when extraTraceMessages:
+            trace logTxt "doTrieNodeSpecs",
+              rootKey=rc.value.stoRoot, slotPath=path.toHex
+          yield (rc.value.stoRoot, rc.value.slotFn, path, w.slotPaths.len)
+        continue
+
+    # Fail on this group
+    when extraTraceMessages:
+      trace logTxt "doTrieNodeSpecs (blind)", nBlind=w.slotPaths.len
+    yield (NodeKey.default, nil, EmptyBlob, w.slotPaths.len)
+
+
 proc mkNodeTagRange(
     origin: openArray[byte];
     limit: openArray[byte];
     nAccounts = 1;
       ): Result[NodeTagRange,void] =
+  ## Verify and convert range arguments to interval
   var (minPt, maxPt) = (low(NodeTag), high(NodeTag))
 
   if 0 < origin.len or 0 < limit.len:
@@ -117,10 +188,11 @@ proc mkNodeTagRange(
     if nAccounts == 0:
       return err() # oops: no account
 
-    # Veriify range atguments
-    if not minPt.init(origin) or not maxPt.init(limit) or maxPt <= minPt:
+    # Verify range arguments
+    if not minPt.init(origin) or not maxPt.init(limit) or maxPt < minPt:
       when extraTraceMessages:
-        trace logTxt "mkNodeTagRange: malformed range", origin, limit
+        trace logTxt "mkNodeTagRange: malformed range",
+          origin=origin.toHex, limit=limit.toHex
       return err()
 
     if 1 < nAccounts:
@@ -132,18 +204,14 @@ proc mkNodeTagRange(
 proc fetchLeafRange(
     ctx: SnapWireRef;                   # Handler descriptor
     getFn: HexaryGetFn;                 # Database abstraction
-    root: Hash256;                      # State root
+    rootKey: NodeKey;                   # State root
     iv: NodeTagRange;                   # Proofed range of leaf paths
     replySizeMax: int;                  # Updated size counter for the raw list
     stopAt: Moment;                     # Implies timeout
       ): Result[RangeProof,HexaryError]
       {.gcsafe, raises: [CatchableError].} =
-
-  # Assemble result Note that the size limit is the size of the leaf nodes
-  # on wire. So the `sizeMax` is the argument size `replySizeMax` with some
-  # space removed to accomodate for the proof nodes.
+  ## Generic leaf fetcher
   let
-    rootKey = root.to(NodeKey)
     sizeMax = replySizeMax - estimatedProofSize
     now = Moment.now()
     timeout = if now < stopAt: stopAt - now else: 1.milliseconds
@@ -266,15 +334,15 @@ method getAccountRange*(
     return # package size too small
 
   let
+    rootKey = root.to(NodeKey)
     iv = block: # Calculate effective accounts range (if any)
       let rc = origin.mkNodeTagRange limit
       if rc.isErr:
         return # malformed interval
       rc.value
 
-    db = ctx.chain.getAccountFn
     stopAt = Moment.now() + ctx.elaFetchMax
-    rc = ctx.fetchLeafRange(db, root, iv, sizeMax, stopAt)
+    rc = ctx.fetchLeafRange(ctx.getAccountFn, rootKey, iv, sizeMax, stopAt)
 
   if rc.isErr:
     return # extraction failed
@@ -313,8 +381,8 @@ method getStorageRanges*(
         return # malformed interval
       rc.value
 
-    accGetFn = ctx.chain.getAccountFn
     rootKey = root.to(NodeKey)
+    accGetFn = ctx.getAccountFn
     stopAt = Moment.now() + ctx.elaFetchMax
 
   # Loop over accounts
@@ -324,58 +392,42 @@ method getStorageRanges*(
     slotLists: seq[seq[SnapStorage]]
     proof: seq[SnapProof]
   for accHash in accounts:
+    let sp = block:
+      let rc = ctx.getSlotsSpecs(rootKey, accGetFn, accHash.to(NodeKey))
+      if rc.isErr:
+        slotLists.add emptySnapStorageList
+        dataAllocated.inc # empty list
+        continue
+      rc.value
+
+    # Collect data slots for this account => `rangeProof`
     let
-      accKey = accHash.to(NodeKey)
-      accData = accKey.hexaryPath(rootKey, accGetFn).leafData
-
-    # Ignore missing account entry
-    if accData.len == 0:
-      slotLists.add emptySnapStorageList
-      dataAllocated.inc # empty list
-      when extraTraceMessages:
-        trace logTxt "getStorageRanges: no data", iv, sizeMax, dataAllocated,
-          accDataLen=accData.len
-      continue
-
-    # Ignore empty storage list
-    let stoRoot = rlp.decode(accData,Account).storageRoot
-    if stoRoot == emptyRlpHash:
-      slotLists.add emptySnapStorageList
-      dataAllocated.inc # empty list
-      trace logTxt "getStorageRanges: no slots", iv, sizeMax, dataAllocated,
-        accDataLen=accData.len, stoRoot
-      continue
-
-    # Stop unless there is enough space left
-    if sizeMax - dataAllocated <= estimatedProofSize:
-      break
-
-    # Prepare for data collection
-    let
-      slotsGetFn = ctx.chain.getStoSlotFn(accKey)
       sizeLeft = sizeMax - dataAllocated
-
-    # Collect data slots for this account
-    let rc = ctx.fetchLeafRange(slotsGetFn, stoRoot, iv, sizeLeft, stopAt)
-    if rc.isErr:
-      when extraTraceMessages:
-        trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
-          accDataLen=accData.len, stoRoot, error=rc.error
-      return # extraction failed
+      rangeProof = block:
+        let rc = ctx.fetchLeafRange(sp.slotFn, sp.stoRoot, iv, sizeLeft, stopAt)
+        if rc.isErr:
+          when extraTraceMessages:
+            trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
+              accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot, error=rc.error
+          return # extraction failed
+        rc.value
 
     # Process data slots for this account
-    dataAllocated += rc.value.leafsSize
+    dataAllocated += rangeProof.leafsSize
 
     when extraTraceMessages:
       if accounts.len == 1:
-        trace logTxt "getStorageRanges: single account", iv, accKey, stoRoot
+        trace logTxt "getStorageRanges: single account", iv,
+          accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot
 
-    #trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
-    #  accKey, stoRoot, nSlots=rc.value.leafs.len, nProof=rc.value.proof.len
+    #when extraTraceMessages:
+    #  trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
+    #    accKey, stoRoot, nSlots=rangeProof.leafs.len,
+    #    nProof=rangeProof.proof.len
 
-    slotLists.add rc.value.leafs.mapIt(it.to(SnapStorage))
-    if 0 < rc.value.proof.len:
-      proof = rc.value.proof
+    slotLists.add rangeProof.leafs.mapIt(it.to(SnapStorage))
+    if 0 < rangeProof.proof.len:
+      proof = rangeProof.proof
       break # only last entry has a proof
 
     # Stop unless there is enough space left
@@ -402,14 +454,64 @@ method getByteCodes*(
       {.gcsafe.} =
   notImplemented("getByteCodes")
 
+
 method getTrieNodes*(
     ctx: SnapWireRef;
     root: Hash256;
-    paths: openArray[SnapTriePaths];
+    pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.gcsafe.} =
-  notImplemented("getTrieNodes")
+      {.gcsafe, raises: [CatchableError].} =
+  ## Fetch nodes from the database
+  let
+    sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
+    someSlack = sizeMax.hexaryRangeRlpSize() - sizeMax
+  if sizeMax <= someSlack:
+    when extraTraceMessages:
+      trace logTxt "getTrieNodes: max data size too small",
+        root=root.to(NodeKey), nPathGroups=pathGroups.len, sizeMax, someSlack
+    return # package size too small
+  let
+    rootKey = root.to(NodeKey)
+    effSizeMax = sizeMax - someSlack
+    stopAt = Moment.now() + ctx.elaFetchMax
+  var
+    dataAllocated = 0
+    timeExceeded = false
+    logPartPath: seq[Blob]
+
+  for (stateKey,getFn,partPath,n) in ctx.doTrieNodeSpecs(rootKey, pathGroups):
+    # Special case: no data available
+    if getFn.isNil:
+      if effSizeMax < dataAllocated + n:
+        break # no need to add trailing empty nodes
+      result &= EmptyBlob.repeat(n)
+      dataAllocated += n
+      continue
+
+    # Fetch node blob
+    let node = block:
+      let steps = partPath.hexPrefixDecode[1].hexaryPath(stateKey, getFn)
+      if 0 < steps.path.len and
+         steps.tail.len == 0 and steps.path[^1].nibble < 0:
+        let data = steps.path[^1].node.convertTo(Blob)
+        data
+      else:
+        EmptyBlob
+
+    if effSizeMax < dataAllocated + node.len:
+      break
+    if stopAt <= Moment.now():
+      timeExceeded = true
+      break
+    result &= node
+
+  when extraTraceMessages:
+    let
+      nGroups {.used.} = pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0)
+      nPaths {.used.} = pathGroups.len
+    trace logTxt "getTrieNodes: done", sizeMax, dataAllocated, nGroups, nPaths,
+      nResult=result.len, timeExceeded
 
 # ------------------------------------------------------------------------------
 # End
