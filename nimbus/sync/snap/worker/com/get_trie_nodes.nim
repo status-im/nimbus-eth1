@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, sequtils],
   chronos,
@@ -15,8 +17,6 @@ import
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
   ./com_error
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-fetch"
@@ -26,8 +26,13 @@ type
   #   nodes*: seq[Blob]
 
   GetTrieNodes* = object
-    leftOver*: seq[seq[Blob]]
-    nodes*: seq[NodeSpecs] ## `nodeKey` field unused with `NodeSpecs`
+    leftOver*: seq[SnapTriePaths] ## Unprocessed data
+    nodes*: seq[NodeSpecs]        ## `nodeKey` field unused with `NodeSpecs`
+
+  ProcessReplyStep = object
+    leftOver: SnapTriePaths       # Unprocessed data sets
+    nodes: seq[NodeSpecs]         # Processed nodes
+    topInx: int                   # Index of first unprocessed item
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -36,7 +41,7 @@ type
 proc getTrieNodesReq(
     buddy: SnapBuddyRef;
     stateRoot: Hash256;
-    paths: seq[seq[Blob]];
+    paths: seq[SnapTriePaths];
     pivot: string;
       ): Future[Result[Option[SnapTrieNodes],void]]
       {.async.} =
@@ -53,15 +58,56 @@ proc getTrieNodesReq(
       error
     return err()
 
+
+proc processReplyStep(
+    paths: SnapTriePaths;
+    nodeBlobs: seq[Blob];
+    startInx: int
+      ): ProcessReplyStep =
+  ## Process reply item, return unprocessed remainder
+  # Account node request
+  if paths.slotPaths.len == 0:
+    if nodeBlobs[startInx].len == 0:
+      result.leftOver.accPath = paths.accPath
+    else:
+      result.nodes.add NodeSpecs(
+        partialPath: paths.accPath,
+        data:        nodeBlobs[startInx])
+    result.topInx = startInx + 1
+    return
+
+  # Storage paths request
+  let
+    nSlotPaths = paths.slotPaths.len
+    maxLen = min(nSlotPaths, nodeBlobs.len - startInx)
+
+  # Fill up nodes
+  for n in 0 ..< maxlen:
+    let nodeBlob = nodeBlobs[startInx + n]
+    if 0 < nodeBlob.len:
+      result.nodes.add NodeSpecs(
+        partialPath: paths.slotPaths[n],
+        data:        nodeBlob)
+    else:
+      result.leftOver.slotPaths.add paths.slotPaths[n]
+    result.topInx = startInx + maxLen
+
+  # Was that all for this step? Otherwise add some left over.
+  if maxLen < nSlotPaths:
+    result.leftOver.slotPaths &= paths.slotPaths[maxLen ..< nSlotPaths]
+
+  if 0 < result.leftOver.slotPaths.len:
+    result.leftOver.accPath = paths.accPath
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc getTrieNodes*(
     buddy: SnapBuddyRef;
-    stateRoot: Hash256;         ## Current DB base (see `pivot` for logging)
-    paths: seq[seq[Blob]];      ## Nodes to fetch
-    pivot: string;              ## For logging, instead of `stateRoot`
+    stateRoot: Hash256;         # Current DB base (see `pivot` for logging)
+    paths: seq[SnapTriePaths];  # Nodes to fetch
+    pivot: string;              # For logging, instead of `stateRoot`
       ): Future[Result[GetTrieNodes,ComError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the trie nodes requested
@@ -73,7 +119,7 @@ proc getTrieNodes*(
   if nPaths == 0:
     return err(ComEmptyRequestArguments)
 
-  let nTotal = paths.mapIt(it.len).foldl(a+b, 0)
+  let nTotal = paths.mapIt(min(1,it.slotPaths.len)).foldl(a+b, 0)
 
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetTrieNodes", peer, pivot, nPaths, nTotal
@@ -111,50 +157,19 @@ proc getTrieNodes*(
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
-  var dd = GetTrieNodes()
-
-  # For each request group/sub-sequence, analyse the results
-  var nInx = 0
-  block loop:
-    for n in 0 ..< nPaths:
-      let pathLen = paths[n].len
-
-      # Account node request
-      if pathLen < 2:
-        if trieNodes[nInx].len == 0:
-          dd.leftOver.add paths[n]
-        else:
-          dd.nodes.add NodeSpecs(
-            partialPath: paths[n][0],
-            data:        trieNodes[nInx])
-        nInx.inc
-        if nInx < nNodes:
-          continue
-        # all the rest needs to be re-processed
-        dd.leftOver = dd.leftOver & paths[n+1 ..< nPaths]
-        break loop
-
-      # Storage request for account followed by storage slot paths
-      if 1 < pathLen:
-        var pushBack: seq[Blob]
-        for i in 1 ..< pathLen:
-          if trieNodes[nInx].len == 0:
-            pushBack.add paths[n][i]
-          else:
-            dd.nodes.add NodeSpecs(
-              partialPath: paths[n][i],
-              data:        trieNodes[nInx])
-          nInx.inc
-          if nInx < nNodes:
-            continue
-          # all the rest needs to be re-processed
-          #
-          # add:              account & pushBack & rest  ...
-          dd.leftOver.add paths[n][0] & pushBack & paths[n][i+1 ..< pathLen]
-          dd.leftOver = dd.leftOver & paths[n+1 ..< nPaths]
-          break loop
-        if 0 < pushBack.len:
-          dd.leftOver.add paths[n][0] & pushBack
+  var
+    dd = GetTrieNodes()
+    inx = 0
+  for p in paths:
+    let step = p.processReplyStep(trieNodes, inx)
+    if 0 < step.leftOver.accPath.len or
+       0 < step.leftOver.slotPaths.len:
+      dd.leftOver.add step.leftOver
+    if 0 < step.nodes.len:
+      dd.nodes &= step.nodes
+    inx = step.topInx
+    if trieNodes.len <= inx:
+      break
 
   trace trSnapRecvReceived & "TrieNodes", peer, pivot,
     nPaths, nNodes, nLeftOver=dd.leftOver.len

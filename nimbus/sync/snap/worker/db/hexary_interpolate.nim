@@ -20,7 +20,7 @@ import
   std/[tables],
   eth/[common, trie/nibbles],
   stew/results,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_error, hexary_paths]
 
 type
@@ -116,7 +116,7 @@ proc rTreeExtendLeaf(
     return RPath(
       root: rPath.root,
       path: rPath.path & RPathStep(key: key, node: leaf, nibble: -1),
-      tail: EmptyNibbleRange)
+      tail: EmptyNibbleSeq)
 
 proc rTreeExtendLeaf(
     db: HexaryTreeDbRef;
@@ -522,7 +522,7 @@ proc hexaryInterpolate*(
     dbItems: var seq[RLeafSpecs];  # List of path and leaf items
     bootstrap = false;             # Can create root node on-the-fly
       ): Result[void,HexaryError]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## From the argument list `dbItems`, leaf nodes will be added to the hexary
   ## trie while interpolating the path for the leaf nodes by adding  missing
   ## nodes. This action is typically not a full trie rebuild. Some partial node

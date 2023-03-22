@@ -35,6 +35,10 @@ type
     slotHash*: Hash256
     slotData*: Blob
 
+  SnapTriePaths* = object
+    accPath*: Blob
+    slotPaths*: seq[Blob]
+
   SnapWireBase* = ref object of RootRef
 
   SnapPeerState* = ref object of RootRef
@@ -145,6 +149,31 @@ proc snapAppend*(writer: var RlpWriter; spn: SnapProofNodes) =
   for w in spn.nodes:
     writer.appendRawBytes w.to(Blob)
 
+# ---------------------
+
+proc snapRead*(
+    rlp: var Rlp;
+    T: type SnapTriePaths;
+      ): T
+      {.gcsafe, raises: [RlpError].} =
+  ## RLP decoding
+  if not rlp.isList:
+    raise newException(RlpTypeMismatch, "List expected")
+  var first = true
+  for w in rlp.items:
+    if first:
+      result.accPath = rlp.read(Blob)
+      first = false
+    else:
+      result.slotPaths.add rlp.read(Blob)
+
+proc snapAppend*(writer: var RlpWriter; stn: SnapTriePaths) =
+  ## RLP encoding
+  writer.startList(1 + stn.slotPaths.len)
+  writer.append(stn.accPath)
+  for w in stn.slotPaths:
+    writer.append(w)
+
 # ------------------------------------------------------------------------------
 # Public service stubs
 # ------------------------------------------------------------------------------
@@ -184,10 +213,10 @@ method getByteCodes*(
 method getTrieNodes*(
     ctx: SnapWireBase;
     root: Hash256;
-    paths: openArray[seq[Blob]];
+    pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.base.} =
+      {.base, raises: [CatchableError].} =
   notImplemented("getTrieNodes")
 
 # ------------------------------------------------------------------------------

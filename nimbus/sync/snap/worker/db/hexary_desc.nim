@@ -11,10 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables],
+  std/[hashes, sets, tables],
   eth/[common, trie/nibbles],
   stint,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   ./hexary_error
 
 type
@@ -156,16 +156,9 @@ type
     dangling*: seq[NodeSpecs]       ## Missing inner sub-tries
     error*: HexaryError             ## Error code, or `NothingSerious`
 
-const
-  EmptyNodeBlob* = seq[byte].default
-  EmptyNibbleRange* = EmptyNodeBlob.initNibbleRange
-
 static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
-
-var
-  disablePrettyKeys* = false      ## Degugging, print raw keys if `true`
 
 proc isNodeKey*(a: RepairKey): bool {.gcsafe.}
 proc isZero*(a: RepairKey): bool {.gcsafe.}
@@ -178,7 +171,7 @@ proc append(writer: var RlpWriter, node: RNodeRef) =
   ## Mixin for RLP writer
   proc appendOk(writer: var RlpWriter; key: RepairKey): bool =
     if key.isZero:
-      writer.append(EmptyNodeBlob)
+      writer.append(EmptyBlob)
     elif key.isNodeKey:
       var hash: Hash256
       (addr hash.data[0]).copyMem(unsafeAddr key.ByteArray33[1], 32)
@@ -297,26 +290,6 @@ proc convertTo*(nodeList: openArray[XNodeObj]; T: type Blob): T =
   for w in nodeList:
     writer.append w
   writer.finish
-
-proc padPartialPath*(pfx: NibblesSeq; dblNibble: byte): NodeKey =
-  ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`.
-  ## This function must be handled with some care regarding a meaningful value
-  ## for the `dblNibble` argument. Using values `0` or `255` is typically used
-  ## to create the minimum or maximum envelope value from the `pfx` argument.
-  # Pad with zeroes
-  var padded: NibblesSeq
-
-  let padLen = 64 - pfx.len
-  if 0 <= padLen:
-    padded = pfx & dblNibble.repeat(padlen div 2).initNibbleRange
-    if (padLen and 1) == 1:
-      padded = padded & @[dblNibble].initNibbleRange.slice(1)
-  else:
-    let nope = seq[byte].default.initNibbleRange
-    padded = pfx.slice(0,64) & nope # nope forces re-alignment
-
-  let bytes = padded.getBytes
-  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 # ------------------------------------------------------------------------------
 # End

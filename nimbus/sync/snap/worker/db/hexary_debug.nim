@@ -17,8 +17,11 @@ import
   chronos,
   eth/[common, trie/nibbles],
   stew/results,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_error]
+
+var
+  disablePrettyKeys* = false      ## Degugging, print raw keys if `true`
 
 proc next*(path: XPath; getFn: HexaryGetFn; minDepth = 64): XPath
     {.gcsafe, raises: [CatchableError].}
@@ -228,7 +231,7 @@ proc pathLeast(
   ## For the partial path given, extend by branch nodes with least node
   ## indices.
   result = path
-  result.tail = EmptyNibbleRange
+  result.tail = EmptyNibbleSeq
   result.depth = result.getNibblesImpl.len
 
   var
@@ -318,7 +321,7 @@ proc pathMost(
   ## For the partial path given, extend by branch nodes with greatest node
   ## indices.
   result = path
-  result.tail = EmptyNibbleRange
+  result.tail = EmptyNibbleSeq
   result.depth = result.getNibblesImpl.len
 
   var

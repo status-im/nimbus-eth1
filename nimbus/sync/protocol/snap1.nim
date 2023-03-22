@@ -55,6 +55,10 @@ proc read(rlp: var Rlp; T: type SnapProofNodes): T =
   ## RLP mixin, decoding
   rlp.snapRead T
 
+proc read(rlp: var Rlp; T: type SnapTriePaths): T =
+  ## RLP mixin, decoding
+  rlp.snapRead T
+
 proc append(writer: var RlpWriter, t: SnapAccount, account: Account) =
   ## RLP mixin, encoding
   writer.snapAppend account
@@ -62,6 +66,10 @@ proc append(writer: var RlpWriter, t: SnapAccount, account: Account) =
 proc append(writer: var RlpWriter; spn: SnapProofNodes) =
   ## RLP mixin, encoding
   writer.snapAppend spn
+
+proc append(writer: var RlpWriter; stn: SnapTriePaths) =
+  ## RLP mixin, encoding
+  writer.snapAppend stn
 
 
 p2pProtocol snap1(version = snapVersion,
@@ -180,15 +188,15 @@ p2pProtocol snap1(version = snapVersion,
     proc getTrieNodes(
         peer: Peer;
         root: Hash256;
-        paths: openArray[seq[Blob]];
+        pathGroups: openArray[SnapTriePaths];
         replySizeMax: uint64;
           ) =
       trace trSnapRecvReceived & "GetTrieNodes (0x06)", peer, root,
-        nPaths=paths.len, replySizeMax
+        nPathGroups=pathGroups.len, replySizeMax
 
       let
         ctx = peer.networkState()
-        nodes = ctx.getTrieNodes(root, paths, replySizeMax)
+        nodes = ctx.getTrieNodes(root, pathGroups, replySizeMax)
 
         # For logging only
         nNodes = nodes.len

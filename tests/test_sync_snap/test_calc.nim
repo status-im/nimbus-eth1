@@ -122,6 +122,58 @@ proc  test_calcProofsListSizes*() =
     check nodeBlobsDecoded == nodeSample
     check nodeBlobsHex == brNodesHex
 
+
+proc  test_calcTrieNodeTranscode*() =
+  ## RLP encode/decode of `SnapTriePaths` objects
+  let
+    raw = @[
+      # Accounts
+      SnapTriePaths(accPath: @[1.byte]),
+      SnapTriePaths(accPath: @[2.byte]),
+      SnapTriePaths(accPath: @[3.byte]),
+
+      # Storage slots
+      SnapTriePaths(
+        accPath:   4.u256.NodeTag.to(Blob),
+        slotPaths: @[@[4.byte,1.byte], @[4.byte,2.byte], @[4.byte,3.byte]]),
+      SnapTriePaths(
+        accPath:   5.u256.NodeTag.to(Blob),
+        slotPaths: @[@[5.byte,4.byte], @[5.byte,5.byte], @[5.byte,6.byte]]),
+      SnapTriePaths(
+        accPath:   6.u256.NodeTag.to(Blob),
+        slotPaths: @[@[6.byte,7.byte], @[6.byte,8.byte], @[6.byte,9.byte]]),
+
+      # Accounts contd.
+      SnapTriePaths(accPath: @[7.byte]),
+      SnapTriePaths(accPath: @[8.byte]),
+      SnapTriePaths(accPath: @[9.byte])]
+
+    cured = @[
+      @[@[1.byte]],
+      @[@[2.byte]],
+      @[@[3.byte]],
+
+      @[4.u256.NodeTag.to(Blob),
+        @[4.byte,1.byte], @[4.byte,2.byte], @[4.byte,3.byte]],
+      @[5.u256.NodeTag.to(Blob),
+        @[5.byte,4.byte], @[5.byte,5.byte], @[5.byte,6.byte]],
+      @[6.u256.NodeTag.to(Blob),
+        @[6.byte,7.byte], @[6.byte,8.byte], @[6.byte,9.byte]],
+
+      @[@[7.byte]],
+      @[@[8.byte]],
+      @[@[9.byte]]]
+
+  # cook it
+  proc append(w: var RlpWriter; p: SnapTriePaths) = w.snapAppend p
+  let cooked = rlp.encode raw
+  check cooked == rlp.encode cured
+
+  # reverse
+  proc read(rlp: var Rlp; T: type SnapTriePaths): T = rlp.snapRead T
+  check raw == rlp.decode(cooked, seq[SnapTriePaths])
+  check cured == rlp.decode(cooked, seq[seq[Blob]])
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

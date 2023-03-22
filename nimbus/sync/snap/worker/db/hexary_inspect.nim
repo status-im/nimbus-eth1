@@ -8,15 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[sequtils, strutils, tables],
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
-  ../../range_desc,
+  "../.."/[constants, range_desc],
   "."/[hexary_desc, hexary_paths]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-db"
@@ -151,7 +151,7 @@ proc hexaryInspectTrie*(
     stopAtLevel = 64u8;                  # Width-first depth level
     maxDangling = high(int);             # Maximal number of dangling results
       ): TrieNodeStat
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Starting with the argument list `paths`, find all the non-leaf nodes in
   ## the hexary trie which have at least one node key reference missing in
   ## the trie database. The references for these nodes are collected and
@@ -200,7 +200,7 @@ proc hexaryInspectTrie*(
     reVisit = resumeCtx.memCtx
 
   if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleRange)
+    reVisit.add (rootKey,EmptyNibbleSeq)
   else:
     # Add argument paths
     for w in partialPaths:
@@ -292,7 +292,7 @@ proc hexaryInspectTrie*(
     reVisit = resumeCtx.hddCtx
 
   if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleRange)
+    reVisit.add (rootKey,EmptyNibbleSeq)
   else:
     # Add argument paths
     for w in partialPaths:
