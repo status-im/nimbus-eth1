@@ -24,13 +24,13 @@ import
 logScope:
   topics = "snap-db"
 
-const
-  extraTraceMessages = false or true
-
 type
   SnapDbStorageSlotsRef* = ref object of SnapDbBaseRef
     peer: Peer                  ## For log messages
     accKey: NodeKey             ## Accounts address hash (curr.unused)
+
+const
+  extraTraceMessages = false or true
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -115,7 +115,7 @@ proc importStorageSlots(
     data: AccountSlots;        ## Account storage descriptor
     proof: seq[SnapProof];    ## Storage slots proof data
       ): Result[seq[NodeSpecs],HexaryError]
-      {.gcsafe, raises: [RlpError,KeyError].} =
+      {.gcsafe, raises: [CatchableError,KeyError].} =
   ## Process storage slots for a particular storage root. See `importAccounts()`
   ## for comments on the return value.
   let
@@ -262,9 +262,10 @@ proc importStorageSlots*(
           NodeTag.default, data.storages[n], @[])
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
+          let p {.used.} = data.storages[n]
           trace "Storage slots item fails", peer, itemInx=n, nItems,
-            nSlots=data.storages[n].data.len, proofs=0,
-            error=rc.error, nErrors=result.len
+            accKey=p.account.accKey, stoRoot=p.account.storageRoot.to(NodeKey),
+            nSlots=p.data.len, proofs=0, error=rc.error, nErrors=result.len
 
       # Final one might come with proof data
       block:
@@ -273,8 +274,10 @@ proc importStorageSlots*(
           data.base, data.storages[sTop], data.proof)
         if rc.isErr:
           result.add HexaryNodeReport(slot: itemInx, error: rc.error)
+          let p {.used.} = data.storages[sTop]
           trace "Storage slots last item fails", peer, itemInx=sTop, nItems,
-            nSlots=data.storages[sTop].data.len, proofs=data.proof.len,
+            accKey=p.account.accKey, stoRoot=p.account.storageRoot.to(NodeKey),
+            nSlots=p.data.len, proofs=data.proof.len,
             error=rc.error, nErrors=result.len
         elif 0 < rc.value.len:
           result.add HexaryNodeReport(slot: itemInx, dangling: rc.value)
@@ -291,8 +294,6 @@ proc importStorageSlots*(
       trace "Storage slot node error", peer, itemInx, nItems,
         nSlots=data.storages[sTop].data.len, proofs=data.proof.len,
         error=RlpEncoding, nErrors=result.len
-    except KeyError as e:
-      raiseAssert "Not possible @ importStorages: " & e.msg
     except OSError as e:
       result.add HexaryNodeReport(slot: itemInx, error: OSErrorException)
       error "Import storage slots exception", peer, itemInx, nItems,
@@ -301,6 +302,8 @@ proc importStorageSlots*(
       result.add HexaryNodeReport(slot: itemInx, error: IOErrorException)
       error "Import storage slots exception", peer, itemInx, nItems,
         name=($e.name), msg=e.msg, nErrors=result.len
+    except CatchableError as e:
+       raiseAssert "Inconceivable @ importStorages: " & e.msg
 
   #when extraTraceMessages:
   #  if result.len == 0:

@@ -15,82 +15,11 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_paths]
+  "."/[hexary_desc, hexary_error, hexary_nodes_helper, hexary_paths]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc isZeroLink(a: Blob): bool =
-  ## Persistent database has `Blob` as key
-  a.len == 0
-
-proc isZeroLink(a: RepairKey): bool =
-  ## Persistent database has `RepairKey` as key
-  a.isZero
-
-proc toBranchNode(
-    rlp: Rlp
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError].} =
-  var rlp = rlp
-  XNodeObj(kind: Branch, bLink: rlp.read(array[17,Blob]))
-
-proc toLeafNode(
-    rlp: Rlp;
-    pSegm: NibblesSeq
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError].} =
-  XNodeObj(kind: Leaf, lPfx: pSegm, lData: rlp.listElem(1).toBytes)
-
-proc toExtensionNode(
-    rlp: Rlp;
-    pSegm: NibblesSeq
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError].} =
-  XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
-
-proc getNode(
-    nodeKey: RepairKey;            # Node key
-    db: HexaryTreeDbRef;           # Database
-      ): Result[RNodeRef,HexaryError]
-      {.gcsafe, raises: [KeyError].} =
-  ## Fetch root node for given path
-  if db.tab.hasKey(nodeKey):
-    return ok(db.tab[nodeKey])
-  err(NearbyDanglingLink)
-
-proc getNode(
-    nodeKey: openArray[byte];      # Node key
-    getFn: HexaryGetFn;            # Database abstraction
-      ): Result[XNodeObj,HexaryError]
-      {.gcsafe, raises: [CatchableError].} =
-  ## Variant of `getRootNode()`
-  let nodeData = nodeKey.getFn
-  if 0 < nodeData.len:
-    let nodeRlp = rlpFromBytes nodeData
-    case nodeRlp.listLen:
-    of 17:
-      return ok(nodeRlp.toBranchNode)
-    of 2:
-      let (isLeaf,pfx) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-      if isleaf:
-        return ok(nodeRlp.toLeafNode pfx)
-      else:
-        return ok(nodeRlp.toExtensionNode pfx)
-    else:
-      return err(NearbyGarbledNode)
-  err(NearbyDanglingLink)
-
-proc getNode(
-    nodeKey: NodeKey;              # Node key
-    getFn: HexaryGetFn;            # Database abstraction
-      ): Result[XNodeObj,HexaryError]
-      {.gcsafe, raises: [CatchableError].} =
-  ## Variant of `getRootNode()`
-  nodeKey.ByteArray32.getNode(getFn)
-
-# --------------------
 
 proc branchNibbleMin(node: XNodeObj|RNodeRef; minInx: int8): int8 =
   ## Find the least index for an argument branch `node` link with index

@@ -17,7 +17,7 @@ import
   eth/[common, trie/nibbles],
   stew/[byteutils, interval_set],
   "../.."/[constants, range_desc],
-  ./hexary_desc
+  "."/[hexary_desc, hexary_nodes_helper]
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -63,127 +63,59 @@ proc getNibblesImpl(path: XPath|RPath; start, maxLen: int): NibblesSeq =
     of Leaf:
       result = result & it.node.lPfx
 
-
-proc toBranchNode(
-    rlp: Rlp
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError]} =
-  var rlp = rlp
-  XNodeObj(kind: Branch, bLink: rlp.read(array[17,Blob]))
-
-proc toLeafNode(
-    rlp: Rlp;
-    pSegm: NibblesSeq
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError]} =
-  XNodeObj(kind: Leaf, lPfx: pSegm, lData: rlp.listElem(1).toBytes)
-
-proc toExtensionNode(
-    rlp: Rlp;
-    pSegm: NibblesSeq
-      ): XNodeObj
-      {.gcsafe, raises: [RlpError]} =
-  XNodeObj(kind: Extension, ePfx: pSegm, eLink: rlp.listElem(1).toBytes)
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc rootPathExtend(
-    path: RPath;
-    db: HexaryTreeDbRef;
-      ): RPath
-      {.gcsafe, raises: [KeyError].} =
-  ## For the given path, extend to the longest possible repair tree `db`
+    path: RPath|XPath;                    # Partially expanded path
+    db: HexaryTreeDbRef|HexaryGetFn;      # Database abstraction
+      ): auto
+      {.gcsafe, raises: [CatchableError].} =
+  ## For the given path, extend to the longest possible `db` database
   ## path following the argument `path.tail`.
   result = path
-  var key = path.root
-  while db.tab.hasKey(key):
-    let node = db.tab[key]
+
+  when typeof(path) is RPath:
+    var key = path.root
+  else:
+    var key = path.root.to(Blob)
+
+  while true:
+    let rc = key.getNode(db)
+    if rc.isErr:
+      break
+    let node = rc.value
 
     case node.kind:
     of Leaf:
       if result.tail.len == result.tail.sharedPrefixLen(node.lPfx):
         # Bingo, got full path
-        result.path.add RPathStep(key: key, node: node, nibble: -1)
+        result.path.add typeof(path.path[0])(key: key, node: node, nibble: -1)
         result.tail = EmptyNibbleSeq
       return
+
     of Branch:
       if result.tail.len == 0:
-        result.path.add RPathStep(key: key, node: node, nibble: -1)
+        result.path.add typeof(path.path[0])(key: key, node: node, nibble: -1)
         return
       let nibble = result.tail[0].int8
-      if node.bLink[nibble].isZero:
+      if node.bLink[nibble].isZeroLink:
         return
-      result.path.add RPathStep(key: key, node: node, nibble: nibble)
+      result.path.add typeof(path.path[0])(key: key, node: node, nibble: nibble)
       result.tail = result.tail.slice(1)
       key = node.bLink[nibble]
+
     of Extension:
+      if result.tail.len == 0:
+        result.path.add typeof(path.path[0])(key: key, node: node, nibble: -1)
+        result.tail = EmptyNibbleSeq # clean up internal indexing
+        return
       if node.ePfx.len != result.tail.sharedPrefixLen(node.ePfx):
         return
-      result.path.add RPathStep(key: key, node: node, nibble: -1)
+      result.path.add typeof(path.path[0])(key: key, node: node, nibble: -1)
       result.tail = result.tail.slice(node.ePfx.len)
       key = node.eLink
-
-
-proc rootPathExtend(
-    path: XPath;
-    getFn: HexaryGetFn;
-      ): XPath
-      {.gcsafe, raises: [CatchableError]} =
-  ## Ditto for `XPath` rather than `RPath`
-  result = path
-  var key = path.root.to(Blob)
-  while true:
-    let value = key.getFn()
-    if value.len == 0:
-      return
-    var nodeRlp = rlpFromBytes value
-
-    case nodeRlp.listLen:
-    of 2:
-      let
-        (isLeaf, pathSegment) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-        nSharedNibbles = result.tail.sharedPrefixLen(pathSegment)
-        fullPath = (nSharedNibbles == pathSegment.len)
-
-      # Leaf node
-      if isLeaf:
-        if result.tail.len == nSharedNibbles:
-          # Bingo, got full path
-          let node = nodeRlp.toLeafNode(pathSegment)
-          result.path.add XPathStep(key: key, node: node, nibble: -1)
-          result.tail = EmptyNibbleSeq
-        return
-
-      # Extension node
-      if fullPath:
-        let node = nodeRlp.toExtensionNode(pathSegment)
-        if node.eLink.len == 0:
-          return
-        result.path.add XPathStep(key: key, node: node, nibble: -1)
-        result.tail = result.tail.slice(nSharedNibbles)
-        key = node.eLink
-      else:
-        return
-
-    of 17:
-      # Branch node
-      let node = nodeRlp.toBranchNode
-      if result.tail.len == 0:
-        result.path.add XPathStep(key: key, node: node, nibble: -1)
-        return
-      let inx = result.tail[0].int8
-      if node.bLink[inx].len == 0:
-        return
-      result.path.add XPathStep(key: key, node: node, nibble: inx)
-      result.tail = result.tail.slice(1)
-      key = node.bLink[inx]
-    else:
-      return
-
-    # end while
-  # notreached
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -245,7 +177,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;     # State root
     db: HexaryTreeDbRef;            # Database
       ): RPath
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Compute the longest possible repair tree `db` path matching the `nodeKey`
   ## nibbles. The `nodeNey` path argument comes before the `db` one for
   ## supporting a more functional notation.
@@ -256,7 +188,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a node key.
   nodeKey.to(NibblesSeq).hexaryPath(rootKey, db)
 
@@ -265,7 +197,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a node tag.
   nodeTag.to(NodeKey).hexaryPath(rootKey, db)
 
@@ -274,7 +206,7 @@ proc hexaryPath*(
     rootKey: NodeKey|RepairKey;
     db: HexaryTreeDbRef;
       ): RPath
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPath` for a  hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPath(rootKey, db)
 
@@ -325,7 +257,7 @@ proc hexaryPathNodeKey*(
     db: HexaryTreeDbRef;           # Database
     missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Returns the `NodeKey` equivalent for the argment `partialPath` if this
   ## node is available in the database. If the argument flag `missingOk` is
   ## set`true` and the last node addressed by the argument path is missing,
@@ -349,7 +281,7 @@ proc hexaryPathNodeKey*(
     db: HexaryTreeDbRef;           # Database
     missingOk = false;             # Also return key for missing node
       ): Result[NodeKey,void]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryPathNodeKey()` for hex encoded partial path.
   partialPath.hexPrefixDecode[1].hexaryPathNodeKey(rootKey, db, missingOk)
 
@@ -392,7 +324,7 @@ proc hexaryPathNodeKeys*(
     db: HexaryTreeDbRef;           # Database
     missingOk = false;             # Also return key for missing node
       ): HashSet[NodeKey]
-      {.gcsafe, raises: [KeyError]} =
+      {.gcsafe, raises: [CatchableError]} =
   ## Convert a list of path segments to a set of node keys
   partialPaths.toSeq
     .mapIt(it.hexaryPathNodeKey(rootKey, db, missingOk))

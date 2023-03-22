@@ -78,33 +78,16 @@ import
   eth/[common, trie/nibbles],
   stew/interval_set,
   ../../range_desc,
-  "."/[hexary_desc, hexary_error, hexary_nearby, hexary_paths]
+  "."/[hexary_desc, hexary_error, hexary_nearby, hexary_nodes_helper,
+       hexary_paths]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc `==`(a, b: XNodeObj): bool =
-  if a.kind == b.kind:
-    case a.kind:
-    of Leaf:
-      return a.lPfx == b.lPfx and a.lData == b.lData
-    of Extension:
-      return a.ePfx == b.ePfx and a.eLink == b.eLink
-    of Branch:
-      return a.bLink == b.bLink
-
 proc eq(a, b: XPathStep|RPathStep): bool =
   a.key == b.key and a.nibble == b.nibble and a.node == b.node
 
-
-proc isZeroLink(a: Blob): bool =
-  ## Persistent database has `Blob` as key
-  a.len == 0
-
-proc isZeroLink(a: RepairKey): bool =
-  ## Persistent database has `RepairKey` as key
-  a.isZero
 
 proc convertTo(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use
