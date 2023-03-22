@@ -1,20 +1,20 @@
 import
-  macrocache, strutils, sequtils, unittest2, times,
-  stew/byteutils, chronicles, eth/keys,
+  std/[macrocache, strutils, times],
+  eth/keys,
+  unittest2,
+  chronicles,
+  eth/trie/hexary,
+  stew/byteutils,
   stew/shims/macros
 
 import
-  eth/trie/hexary,
   ../nimbus/db/[accounts_cache, distinct_tries],
   ../nimbus/evm/types,
   ../nimbus/vm_internals,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/[vm_types, vm_state],
-  ../nimbus/core/pow/difficulty
-
-# Need to exclude ServerCommand because it contains something
-# called Stop that interferes with the EVM operation named Stop.
-import chronos except ServerCommand
+  ../nimbus/core/pow/difficulty,
+  ../tools/common/helpers
 
 # Ditto, for GasPrice.
 import ../nimbus/transaction except GasPrice
@@ -35,25 +35,22 @@ type
   Storage* = tuple[key, val: VMWord]
 
   Assembler* = object
-    title*: string
-    chainDBIdentName*: string
-    vmStateIdentName*: string
-    stack*: seq[VMWord]
-    memory*: seq[VMWord]
-    initialStorage*: seq[Storage]
-    storage*: seq[Storage]
-    code*: seq[byte]
-    logs*: seq[Log]
-    success*: bool
+    title*   : string
+    stack*   : seq[VMWord]
+    memory*  : seq[VMWord]
+    storage* : seq[Storage]
+    code*    : seq[byte]
+    logs*    : seq[Log]
+    success* : bool
     gasLimit*: GasInt
-    gasUsed*: GasInt
-    data*: seq[byte]
-    output*: seq[byte]
-    fork*: EVMFork
+    gasUsed* : GasInt
+    data*    : seq[byte]
+    output*  : seq[byte]
 
-  ConcurrencyTest* = object
-    title*: string
-    assemblers*: seq[Assembler]
+  MacroAssembler = object
+    setup    : NimNode
+    asmBlock : Assembler
+    forkStr  : string
 
 const
   idToOpcode = CacheTable"NimbusMacroAssembler"
@@ -101,11 +98,6 @@ proc parseStringLiteral(node: NimNode): string =
   strNode.expectKind(nnkStrLit)
   strNode.strVal
 
-proc parseIdent(node: NimNode): string =
-  let identNode = node[0]
-  identNode.expectKind(nnkIdent)
-  identNode.strVal
-
 proc parseSuccess(list: NimNode): bool =
   list.expectKind nnkStmtList
   list[0].expectKind(nnkIdent)
@@ -119,7 +111,7 @@ proc parseData(list: NimNode): seq[byte] =
     result.add hexToSeqByte(n.strVal)
 
 proc parseLog(node: NimNode): Log =
-  node.expectKind(nnkPar)
+  node.expectKind({nnkPar, nnkTupleConstr})
   for item in node:
     item.expectKind(nnkExprColonExpr)
     let label = item[0].strVal
@@ -195,70 +187,62 @@ proc parseCode(codes: NimNode): seq[byte] =
     else:
       error("unknown syntax: " & line.toStrLit.strVal, line)
 
-proc parseFork(fork: NimNode): EVMFork =
+proc parseFork(fork: NimNode): string =
   fork[0].expectKind({nnkIdent, nnkStrLit})
-  # Normalise whitespace and uppercase each word because `parseEnum` matches
-  # enum string values not symbols, and the strings are uppercase in `EVMFork`.
-  parseEnum[EVMFork]("EVMC_" & fork[0].strVal.splitWhitespace().map(toUpperAscii).join("_"))
+  fork[0].strVal
 
 proc parseGasUsed(gas: NimNode): GasInt =
   gas[0].expectKind(nnkIntLit)
   result = gas[0].intVal
 
-proc parseAssembler(list: NimNode): Assembler =
-  result.success = true
-  result.fork = FkFrontier
-  result.gasUsed = -1
+proc parseAssembler(list: NimNode): MacroAssembler =
+  result.forkStr = "Frontier"
+  result.asmBlock.success = true
+  result.asmBlock.gasUsed = -1
   list.expectKind nnkStmtList
   for callSection in list:
     callSection.expectKind(nnkCall)
     let label = callSection[0].strVal
     let body  = callSection[1]
     case label.normalize
-    of "title": result.title = parseStringLiteral(body)
-    of "vmstate": result.vmStateIdentName = parseIdent(body)
-    of "chaindb": result.chainDBIdentName = parseIdent(body)
-    of "code"  : result.code = parseCode(body)
-    of "memory": result.memory = parseVMWords(body)
-    of "stack" : result.stack = parseVMWords(body)
-    of "storage": result.storage = parseStorage(body)
-    of "initialstorage": result.initialStorage = parseStorage(body)
-    of "logs": result.logs = parseLogs(body)
-    of "success": result.success = parseSuccess(body)
-    of "data": result.data = parseData(body)
-    of "output": result.output = parseData(body)
-    of "fork": result.fork = parseFork(body)
-    of "gasused": result.gasUsed = parseGasUsed(body)
+    of "title"  : result.asmBlock.title   = parseStringLiteral(body)
+    of "code"   : result.asmBlock.code    = parseCode(body)
+    of "memory" : result.asmBlock.memory  = parseVMWords(body)
+    of "stack"  : result.asmBlock.stack   = parseVMWords(body)
+    of "storage": result.asmBlock.storage = parseStorage(body)
+    of "logs"   : result.asmBlock.logs    = parseLogs(body)
+    of "success": result.asmBlock.success = parseSuccess(body)
+    of "data"   : result.asmBlock.data    = parseData(body)
+    of "output" : result.asmBlock.output  = parseData(body)
+    of "gasused": result.asmBlock.gasUsed = parseGasUsed(body)
+    of "fork"   : result.forkStr = parseFork(body)
+    of "setup"  : result.setup   = body
     else: error("unknown section '" & label & "'", callSection[0])
-
-proc parseAssemblers(list: NimNode): seq[Assembler] =
-  result = @[]
-  list.expectKind nnkStmtList
-  for callSection in list:
-    # Should we do something with the label? Or is the
-    # assembler's "title" section good enough?
-    # let label = callSection[0].strVal
-    let body  = callSection[1]
-    result.add parseAssembler(body)
 
 type VMProxy = tuple[sym: NimNode, pr: NimNode]
 
-proc generateVMProxy(boa: Assembler): VMProxy =
+proc generateVMProxy(masm: MacroAssembler): VMProxy =
   let
     vmProxySym = genSym(nskProc, "vmProxy")
-    chainDB = ident(if boa.chainDBIdentName == "": "chainDB" else: boa.chainDBIdentName)
-    vmState = ident(if boa.vmStateIdentName == "": "vmState" else: boa.vmStateIdentName)
-    body = newLitFixed(boa)
+    body = newLitFixed(masm.asmBlock)
+    setup = if masm.setup.isNil:
+              newEmptyNode()
+            else:
+              masm.setup
+    vmState = ident("vmState")
+    fork = masm.forkStr
     vmProxyProc = quote do:
       proc `vmProxySym`(): bool =
+        let `vmState` = initVMEnv(`fork`)
+        `setup`
         let boa = `body`
-        runVM(`vmState`, `chainDB`, boa)
+        runVM(`vmState`, boa)
   (vmProxySym, vmProxyProc)
 
-proc generateAssemblerTest(boa: Assembler): NimNode =
+proc generateAssemblerTest(masm: MacroAssembler): NimNode =
   let
-    (vmProxySym, vmProxyProc) = generateVMProxy(boa)
-    title: string = boa.title
+    (vmProxySym, vmProxyProc) = generateVMProxy(masm)
+    title: string = masm.asmBlock.title
 
   result = quote do:
     test `title`:
@@ -269,30 +253,35 @@ proc generateAssemblerTest(boa: Assembler): NimNode =
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal
 
-proc initDatabase*(networkId = MainNet): (BaseVMState, CommonRef) =
-  let com = CommonRef.new(newMemoryDB(), false, networkId, networkParams(networkId))
-  com.initializeEmptyDb()
+const
+  codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
+  coinbase = hexToByteArray[20]("bb7b8287f3f0a933474a79eae42cbca977791171")
 
+proc initVMEnv*(network: string): BaseVMState =
   let
-    parent = getCanonicalHead(com.db)
-    coinbase = hexToByteArray[20]("bb7b8287f3f0a933474a79eae42cbca977791171")
-    timestamp = parent.timestamp + initDuration(seconds = 1)
+    conf = getChainConfig(network)
+    com = CommonRef.new(
+      newMemoryDB(),
+      conf,
+      false,
+      conf.chainId.NetworkId)
+    parent = BlockHeader(stateRoot: EMPTY_ROOT_HASH)
+    parentHash = rlpHash(parent)
     header = BlockHeader(
       blockNumber: 1.u256,
-      stateRoot: parent.stateRoot,
-      parentHash: parent.blockHash,
+      stateRoot: EMPTY_ROOT_HASH,
+      parentHash: parentHash,
       coinbase: coinbase,
-      timestamp: timestamp,
-      difficulty: com.calcDifficulty(timestamp, parent),
+      timestamp: fromUnix(0x1234),
+      difficulty: 1003.u256,
       gasLimit: 100_000
     )
-    vmState = BaseVMState.new(header, com)
 
-  (vmState, com)
+  com.initializeEmptyDb()
+  BaseVMState.new(parent, header, com)
 
-const codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
-
-proc verifyAsmResult(vmState: BaseVMState, com: CommonRef, boa: Assembler, asmResult: CallResult): bool =
+proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult): bool =
+  let com = vmState.com
   if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
@@ -385,7 +374,7 @@ proc verifyAsmResult(vmState: BaseVMState, com: CommonRef, boa: Assembler, asmRe
 
   result = true
 
-proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
+proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
   let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
   let unsignedTx = Transaction(
     txType: TxLegacy,
@@ -394,17 +383,20 @@ proc createSignedTx(boaData: Blob, chainId: ChainId): Transaction =
     gasLimit: 500_000_000.GasInt,
     to: codeAddress.some,
     value: 500.u256,
-    payload: boaData
+    payload: payload
   )
   signTransaction(unsignedTx, privateKey, chainId, false)
 
-proc runVM*(vmState: BaseVMState, com: CommonRef, boa: Assembler): bool =
+proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
+  let
+    com  = vmState.com
+    fork = com.toEVMFork()
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
-  verifyAsmResult(vmState, com, boa, asmResult)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork)
+  verifyAsmResult(vmState, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =
   result = parseAssembler(list).generateAssemblerTest()

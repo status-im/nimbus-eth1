@@ -1,9 +1,9 @@
-import macro_assembler, unittest2, macros, strutils
+import
+  std/[macros, strutils],
+  macro_assembler, unittest2
 
 proc opMemoryMain*() =
   suite "Memory Opcodes":
-    let (vmState, chainDB) = initDatabase()
-
     assembler: # PUSH1 OP
       title: "PUSH1"
       code:
@@ -516,152 +516,124 @@ proc opMemoryMain*() =
         SSTORE
       success: false
       stack: "0x22"
-  #[
+
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_1"
       code: "60006000556000600055"
-      fork: constantinople
-      # assertEquals(412, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 412
 
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_2"
       code: "60006000556001600055"
-      fork: constantinople
-      # assertEquals(20212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 20212
 
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_3"
       code: "60016000556000600055"
-      fork: constantinople
-      # assertEquals(20212, program.getResult().getGasUsed())
-      # assertEquals(19800, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 20212
 
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_4"
       code: "60016000556002600055"
-      fork: constantinople
-      # assertEquals(20212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 20212
 
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_5"
       code: "60016000556001600055"
-      fork: constantinople
-      # assertEquals(20212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
-
+      fork: Constantinople
+      gasUsed: 20212
+#[
     # Sets Storage row on "cow" address:
     # 0: 1
     # private void setStorageToOne(VM vm) {
     #       # Sets storage value to 1 and commits
     #           code: "60006000556001600055"
-    #           fork: constantinople
+    #           fork: Constantinople
     #       invoke.getRepository().commit()
     #       invoke.setOrigRepository(invoke.getRepository())
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_6"
       code: "60006000556000600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(15000, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_7"
       code: "60006000556001600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(4800, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_8"
       code: "60006000556002600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_9"
       code: "60026000556000600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(15000, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_10"
       code: "60026000556003600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_11"
       code: "60026000556001600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(4800, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_12"
       code: "60026000556002600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_13"
       code: "60016000556000600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(15000, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_14"
       code: "60016000556002600055"
-      fork: constantinople
-      # assertEquals(5212, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 5212
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_15"
       code: "60016000556001600055"
-      fork: constantinople
-      # assertEquals(412, program.getResult().getGasUsed())
-      # assertEquals(0, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 412
 
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_16"
       code: "600160005560006000556001600055"
-      fork: constantinople
-      # assertEquals(40218, program.getResult().getGasUsed())
-      # assertEquals(19800, program.getResult().getFutureRefund())
+      fork: Constantinople
+      gasUsed: 40218
 
-    setStorageToOne(vm)
     assembler: # SSTORE EIP1283
       title: "SSTORE_NET_17"
       code: "600060005560016000556000600055"
-      fork: constantinople
-      # assertEquals(10218, program.getResult().getGasUsed())
-      # assertEquals(19800, program.getResult().getFutureRefund())
-  ]#
+      fork: Constantinople
+      gasUsed: 10218
+]#
     assembler: # SLOAD OP
       title: "SLOAD_1"
       code:
         PUSH1 "0xAA"
         SLOAD
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000022"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SLOAD OP
       title: "SLOAD_2"
@@ -707,7 +679,7 @@ proc opMemoryMain*() =
         SLOAD
         PC
       stack:
-        "0x0000000000000000000000000000000000000000000000000000000000000022"
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
         "0x0000000000000000000000000000000000000000000000000000000000000008"
       memory:
         "0x00"

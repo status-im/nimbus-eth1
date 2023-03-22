@@ -2,8 +2,6 @@ import macro_assembler, unittest2
 
 proc opArithMain*() =
   suite "Arithmetic Opcodes":
-    let (vmState, chainDB) = initDatabase()
-
     assembler:
       title: "ADD_1"
       code:
@@ -297,7 +295,7 @@ proc opArithMain*() =
 
         SDIV
       stack:   "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000" # half of the hi bits are set
-      fork: constantinople
+      fork: Constantinople
 
     assembler: # SUB OP
       title: "SUB_1"

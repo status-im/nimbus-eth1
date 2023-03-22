@@ -1,6 +1,6 @@
 import
-  std/[strutils, math, tables, times],
-  eth/[keys, trie/hexary],
+  std/[math, tables, times],
+  eth/[keys],
   stew/[byteutils, results], unittest2,
   ../nimbus/db/state_db,
   ../nimbus/core/chain,

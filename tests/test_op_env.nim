@@ -1,13 +1,11 @@
 import
-  macro_assembler, unittest2, macros,
+  macro_assembler, unittest2,
   stew/byteutils, ../nimbus/common/common,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/accounts_cache
 
 proc opEnvMain*() =
   suite "Environmental Information Opcodes":
-    let (vmState, chainDB) = initDatabase()
-
     assembler: # EVM bug reported in discord
       title: "stack's operator [] bug"
       code:
@@ -19,7 +17,7 @@ proc opEnvMain*() =
         GAS
         STATICCALL
         CALL
-      fork: london
+      fork: London
       success: false
       memory: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -194,7 +192,6 @@ proc opEnvMain*() =
 
   suite "Environmental Information Opcodes 2":
     let
-      (vmState, chainDB) = initDatabase()
       acc = hexToByteArray[20]("0xfbe0afcd7658ba86be41922059dd879c192d4c73")
       code = hexToSeqByte("0x0102030405060708090A0B0C0D0E0F" &
         "611234600054615566602054603E6000602073471FD3AD3E9EEADEEC4608B92D" &
@@ -202,11 +199,11 @@ proc opEnvMain*() =
         "51602001600a5254516040016014525451606001601e52545160800160285254" &
         "60a052546016604860003960166000f26000603f556103e756600054600053602002351234")
 
-    vmState.mutateStateDB:
-      db.setCode(acc, code)
-
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_1"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push1 "0x04" # size
         Push1 "0x07" # code pos
@@ -222,6 +219,9 @@ proc opEnvMain*() =
 
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_2"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push1 "0x3E"
         Push1 "0x07"
@@ -239,6 +239,9 @@ proc opEnvMain*() =
 
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_3"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push1 "0x5E"
         Push1 "0x07"
@@ -257,6 +260,9 @@ proc opEnvMain*() =
 
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_4"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -308,6 +314,9 @@ proc opEnvMain*() =
     # 0x94 == 148 bytes
     assembler: # EXTCODESIZE OP
       title: "EXTCODESIZE_1"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
@@ -320,29 +329,31 @@ proc opEnvMain*() =
 
     assembler: # EIP2929 EXTCODESIZE OP
       title: "EIP2929 EXTCODESIZE_1"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
         STOP
       stack: "0x94"
-      fork: berlin
+      fork: Berlin
       gasused: 2603
 
     assembler: # EIP2929 EXTCODEHASH OP
       title: "EIP2929 EXTCODEHASH_1"
+      setup:
+        vmState.mutateStateDB:
+          db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeHash
         STOP
       stack:
         "0xc862129bffb73168481c6a51fd36afb8342887fbc5314c763ac731c732d7310c"
-      fork: berlin
+      fork: Berlin
       gasused: 2603
 
-    #[
-    ## TODO: Fixme using MergeFork
-    ## properly rather than using hacky wacky
-    vmState.ttdReached = true
     assembler:
       title: "EIP-4399 PrevRandao 0"
       code:
@@ -350,20 +361,18 @@ proc opEnvMain*() =
         STOP
       stack:
         "0x0000000000000000000000000000000000000000000000000000000000000000"
-      fork: london
+      fork: Merge
 
-    vmState.prevRandao = EMPTY_UNCLE_HASH
     assembler:
       title: "EIP-4399 PrevRandao: EMPTY_UNCLE_HASH"
+      setup:
+        vmState.prevRandao = EMPTY_UNCLE_HASH
       code:
         PrevRandao
         STOP
       stack:
         "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-      fork: london
-
-    vmState.ttdReached = false
-    ]#
+      fork: Merge
 
 when isMainModule:
   opEnvMain()

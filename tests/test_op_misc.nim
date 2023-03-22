@@ -1,11 +1,10 @@
 import
-  macro_assembler, unittest2, macros,
-  stew/byteutils, eth/common
+  macro_assembler,
+  unittest2,
+  eth/common
 
 proc opMiscMain*() =
   suite "Misc Opcodes":
-    let (vmState, chainDB) = initDatabase()
-
     assembler: # LOG0 OP
       title: "Log0"
       code:

@@ -1,11 +1,10 @@
 import
-  macro_assembler, unittest2,
+  macro_assembler,
+  unittest2,
   eth/common
 
 proc opCustomMain*() =
   suite "Custom Opcodes Test":
-    let (vmState, chainDB) = initDatabase()
-
     assembler: # CALLDATASIZE OP
       title: "CALLDATASIZE_1"
       data:
@@ -192,7 +191,7 @@ proc opCustomMain*() =
         Address
         Balance
       stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
-      fork: berlin
+      fork: Berlin
       gasused: 102
 
     assembler: # ORIGIN OP
@@ -254,7 +253,7 @@ proc opCustomMain*() =
       code:
         Push1 "0x00"
         Blockhash
-      stack: "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+      stack: "0xc3bd2d00745c03048a5616146a96f5ff78e54efb9e5b04af208cdaff6f3830ee"
 
     # current block coinbase/miner
     assembler: # COINBASE OP
@@ -268,7 +267,7 @@ proc opCustomMain*() =
       title: "TIMESTAMP_1"
       code:
         TimeStamp
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000001234"
 
     # current block number
     assembler: # NUMBER OP
@@ -282,7 +281,7 @@ proc opCustomMain*() =
       title: "DIFFICULTY_1"
       code:
         Difficulty
-      stack: "0x0000000000000000000000000000000000000000000000000000000400800000"
+      stack: "0x00000000000000000000000000000000000000000000000000000000000003eb"
 
     # tx gas price
     assembler: # GASPRICE OP

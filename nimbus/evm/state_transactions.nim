@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  std/sets,
   chronos,
   eth/common/eth_types,
   ../constants,

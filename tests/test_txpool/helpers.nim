@@ -39,7 +39,6 @@ export
   tx_packer.packerVmExec,
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
-  tx_tabs.any,
   tx_tabs.decAccount,
   tx_tabs.dispose,
   tx_tabs.eq,

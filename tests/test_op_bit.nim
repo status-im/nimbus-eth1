@@ -2,8 +2,6 @@ import macro_assembler, unittest2
 
 proc opBitMain*() =
   suite "Bitwise Opcodes":
-    let (vmState, chainDB) = initDatabase()
-
     assembler: # AND OP
       title: "AND_1"
       code:
@@ -114,7 +112,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x00"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SHL OP
@@ -123,7 +121,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x01"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000002"
 
     assembler: # SHL OP
@@ -132,7 +130,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0xff"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x8000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -141,7 +139,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH2 "0x0100"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -150,7 +148,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH2 "0x0101"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -159,7 +157,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x00"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SHL OP
@@ -168,7 +166,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x01"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
 
     assembler: # SHL OP
@@ -177,7 +175,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xff"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x8000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -186,7 +184,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH2 "0x0100"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -195,7 +193,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0x01"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHL OP
@@ -204,7 +202,7 @@ proc opBitMain*() =
         PUSH32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x01"
         SHL
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
 
     assembler: # SHR OP
@@ -213,7 +211,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x00"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SHR OP
@@ -222,7 +220,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x01"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHR OP
@@ -231,7 +229,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0x01"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x4000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHR OP
@@ -240,7 +238,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0xff"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SHR OP
@@ -249,7 +247,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH2 "0x0100"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHR OP
@@ -258,7 +256,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH2 "0x0101"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHR OP
@@ -267,7 +265,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x00"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SHR OP
@@ -276,7 +274,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x01"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SHR OP
@@ -285,7 +283,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xff"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SHR OP
@@ -294,7 +292,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH2 "0x0100"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SHR OP
@@ -303,7 +301,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0x01"
         SHR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SAR OP
@@ -312,7 +310,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x00"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SAR OP
@@ -321,7 +319,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         PUSH1 "0x01"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SAR OP
@@ -330,7 +328,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0x01"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xC000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SAR OP
@@ -339,7 +337,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0xff"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -348,7 +346,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH2 "0x0100"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -357,7 +355,7 @@ proc opBitMain*() =
         PUSH32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         PUSH2 "0x0101"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -366,7 +364,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x00"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -375,7 +373,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0x01"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -384,7 +382,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xff"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -393,7 +391,7 @@ proc opBitMain*() =
         PUSH32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH2 "0x0100"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
     assembler: # SAR OP
@@ -402,7 +400,7 @@ proc opBitMain*() =
         PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0x01"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SAR OP
@@ -411,7 +409,7 @@ proc opBitMain*() =
         PUSH32 "0x4000000000000000000000000000000000000000000000000000000000000000"
         PUSH1 "0xfe"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SAR OP
@@ -420,7 +418,7 @@ proc opBitMain*() =
         PUSH32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xf8"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x000000000000000000000000000000000000000000000000000000000000007F"
 
     assembler: # SAR OP
@@ -429,7 +427,7 @@ proc opBitMain*() =
         PUSH32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xfe"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     assembler: # SAR OP
@@ -438,7 +436,7 @@ proc opBitMain*() =
         PUSH32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH1 "0xff"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # SAR OP
@@ -447,7 +445,7 @@ proc opBitMain*() =
         PUSH32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         PUSH2 "0x0100"
         SAR
-      fork: constantinople
+      fork: Constantinople
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
     assembler: # ISZERO OP
@@ -657,4 +655,3 @@ proc opBitMain*() =
 
 when isMainModule:
   opBitMain()
-
