@@ -82,6 +82,7 @@ import
   libp2p/protocols/pubsub/errors,
   ../../rpc/portal_rpc_client,
   ../../network/history/history_content,
+  ../../network/beacon_light_client/beacon_light_client_content,
   ../../common/common_types,
   ./beacon_chain_bridge_conf
 
@@ -157,6 +158,10 @@ proc asPortalBlockData*(
 
   (hash, headerWithProof, body)
 
+func forkDigestAtEpoch(
+    forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
+  forkDigests.atEpoch(epoch, cfg)
+
 proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
@@ -225,12 +230,12 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               blockhash = history_content.`$`hash
 
             block: # gossip header
-              let contentKey = ContentKey.init(blockHeader, hash)
+              let contentKey = history_content.ContentKey.init(blockHeader, hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
                 let peers = await rpcHttpclient.portal_historyGossip(
-                  encodedContentKey.toHex(),
+                  toHex(encodedContentKey),
                   SSZ.encode(headerWithProof).toHex())
                 info "Block header gossiped", peers,
                     contentKey = encodedContentKey.toHex()
@@ -245,7 +250,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
             await sleepAsync(1.seconds)
 
             block: # gossip block
-              let contentKey = ContentKey.init(blockBody, hash)
+              let contentKey = history_content.ContentKey.init(blockBody, hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
@@ -266,6 +271,148 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     lightClient = createLightClient(
       network, rng, lcConfig, cfg, forkDigests, getBeaconTime,
       genesis_validators_root, LightClientFinalizationMode.Optimistic)
+
+  ### Beacon Light Client content bridging specific callbacks
+  proc onBootstrap(
+      lightClient: LightClient,
+      bootstrap: ForkedLightClientBootstrap) =
+    withForkyObject(bootstrap):
+      when lcDataFork > LightClientDataFork.None:
+        info "New Beacon LC bootstrap",
+          forkyObject, slot = forkyObject.header.beacon.slot
+
+        let
+          root = hash_tree_root(forkyObject.header)
+          contentKey = encode(bootstrapContentKey(root))
+          contentId = beacon_light_client_content.toContentId(contentKey)
+          forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.header.beacon.slot), cfg)
+          content = encodeBootstrapForked(
+            forkDigest,
+            bootstrap
+          )
+
+        proc GossipRpcAndClose() {.async.} =
+          try:
+            let
+              contentKeyHex = contentKey.asSeq().toHex()
+              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+                contentKeyHex,
+                content.toHex())
+            info "Beacon LC bootstrap gossiped", peers,
+                contentKey = contentKeyHex
+          except CatchableError as e:
+            error "JSON-RPC error", error = $e.msg
+
+          await rpcHttpclient.close()
+
+        asyncSpawn(GossipRpcAndClose())
+
+  proc onUpdate(lightClient: LightClient, update: ForkedLightClientUpdate) =
+    withForkyObject(update):
+      when lcDataFork > LightClientDataFork.None:
+        info "New Beacon LC update",
+          update, slot = forkyObject.attested_header.beacon.slot
+
+        let
+          period = forkyObject.attested_header.beacon.slot.sync_committee_period
+          contentKey = encode(updateContentKey(period.uint64, uint64(1)))
+          contentId = beacon_light_client_content.toContentId(contentKey)
+          forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
+          content = encodeLightClientUpdatesForked(
+            forkDigest,
+            @[update]
+          )
+
+        proc GossipRpcAndClose() {.async.} =
+          try:
+            let
+              contentKeyHex = contentKey.asSeq().toHex()
+              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+                contentKeyHex,
+                content.toHex())
+            info "Beacon LC bootstrap gossiped", peers,
+                contentKey = contentKeyHex
+          except CatchableError as e:
+            error "JSON-RPC error", error = $e.msg
+
+          await rpcHttpclient.close()
+
+        asyncSpawn(GossipRpcAndClose())
+
+  proc onOptimisticUpdate(
+      lightClient: LightClient,
+      update: ForkedLightClientOptimisticUpdate) =
+    withForkyObject(update):
+      when lcDataFork > LightClientDataFork.None:
+        info "New Beacon LC optimistic update",
+          update, slot = forkyObject.attested_header.beacon.slot
+
+        let
+          slot = forkyObject.attested_header.beacon.slot
+          contentKey = encode(optimisticUpdateContentKey(slot.uint64))
+          contentId = beacon_light_client_content.toContentId(contentKey)
+          forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
+          content = encodeOptimisticUpdateForked(
+            forkDigest,
+            update
+          )
+
+        proc GossipRpcAndClose() {.async.} =
+          try:
+            let
+              contentKeyHex = contentKey.asSeq().toHex()
+              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+                contentKeyHex,
+                content.toHex())
+            info "Beacon LC bootstrap gossiped", peers,
+                contentKey = contentKeyHex
+          except CatchableError as e:
+            error "JSON-RPC error", error = $e.msg
+
+          await rpcHttpclient.close()
+
+        asyncSpawn(GossipRpcAndClose())
+
+  proc onFinalityUpdate(
+      lightClient: LightClient,
+      update: ForkedLightClientFinalityUpdate) =
+    withForkyObject(update):
+      when lcDataFork > LightClientDataFork.None:
+        info "New Beacon LC finality update",
+          update, slot = forkyObject.attested_header.beacon.slot
+        let
+          finalizedSlot = forkyObject.finalized_header.beacon.slot
+          optimisticSlot = forkyObject.attested_header.beacon.slot
+          contentKey = encode(finalityUpdateContentKey(
+            finalizedSlot.uint64, optimisticSlot.uint64))
+          contentId = beacon_light_client_content.toContentId(contentKey)
+          forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg)
+          content = encodeFinalityUpdateForked(
+            forkDigest,
+            update
+          )
+
+        proc GossipRpcAndClose() {.async.} =
+          try:
+            let
+              contentKeyHex = contentKey.asSeq().toHex()
+              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+                contentKeyHex,
+                content.toHex())
+            info "Beacon LC bootstrap gossiped", peers,
+                contentKey = contentKeyHex
+          except CatchableError as e:
+            error "JSON-RPC error", error = $e.msg
+
+          await rpcHttpclient.close()
+
+        asyncSpawn(GossipRpcAndClose())
+
+  ###
 
   waitFor rpcHttpclient.connect(config.rpcAddress, Port(config.rpcPort), false)
 
@@ -309,6 +456,12 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
+
+  if config.beaconLightClient:
+    lightClient.bootstrapObserver = onBootstrap
+    lightClient.updateObserver = onUpdate
+    lightClient.finalityUpdateObserver = onFinalityUpdate
+    lightClient.optimisticUpdateObserver = onOptimisticUpdate
 
   func shouldSyncOptimistically(wallSlot: Slot): bool =
     let optimisticHeader = lightClient.optimisticHeader

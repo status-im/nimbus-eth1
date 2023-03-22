@@ -18,11 +18,11 @@ export net, conf
 
 proc defaultVerifiedProxyDataDir*(): string =
   let dataDir = when defined(windows):
-    "AppData" / "Roaming" / "NimbusVerifiedProxy"
+    "AppData" / "Roaming" / "FluffyBeaconChainBridge"
   elif defined(macosx):
-    "Library" / "Application Support" / "NimbusVerifiedProxy"
+    "Library" / "Application Support" / "FluffyBeaconChainBridge"
   else:
-    ".cache" / "nimbus-verified-proxy"
+    ".cache" / "fluffy-beacon-chain-bridge"
 
   getHomeDir() / dataDir
 
@@ -63,6 +63,12 @@ type BeaconBridgeConf* = object
     defaultValueDesc: $defaultDataVerifiedProxyDirDesc
     abbr: "d"
     name: "data-dir" .}: OutDir
+
+  # Bridge options
+  beaconLightClient* {.
+    desc: "Enable beacon light client content bridging"
+    defaultValue: false
+    name: "beacon-light-client" .}: bool
 
   # Network
   eth2Network* {.
