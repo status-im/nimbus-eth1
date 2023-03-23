@@ -232,6 +232,47 @@ proc hexaryRangeLeafsProof*(
   ## `leafList`.
   db.updateProof(rootKey, rp)
 
+
+proc hexaryRangeInflate*(
+    db: HexaryGetFn|HexaryTreeDbRef; # Database abstraction
+    rootKey: NodeKey;                # State root
+    nodeKey: NodeTag;                # Centre of inflated interval
+      ): NodeTagRange
+      {.gcsafe, raises: [CatchableError]} =
+  ## Calculate the largest leaf range interval containing only the argument
+  ## `nodeKey`.
+  ##
+  ## If the database is fully allocated, then the returned interval ends right
+  ## before or after the next neighbour leaf node, or at the range type
+  ## boundaries `low(NodeTag)` or `high(NodeTag)`.
+  ##
+  ## If the database is partially allocated only and some of the neighbour
+  ## nodes are missing, the returned interval is not extended towards this
+  ## end.
+  var
+    leftPt = nodeKey
+    rightPt = nodeKey
+
+  if low(NodeTag) < nodeKey:
+    let
+      pt = nodeKey - 1.u256
+      rc = pt.hexaryPath(rootKey,db).hexaryNearbyLeft(db)
+    if rc.isOk:
+      leftPt = rc.value.getPartialPath.convertTo(NodeKey).to(NodeTag) + 1.u256
+    elif rc.error == NearbyBeyondRange:
+      leftPt = low(NodeTag)
+
+  if nodeKey < high(NodeTag):
+    let
+      pt = nodeKey + 1.u256
+      rc = pt.hexaryPath(rootKey,db).hexaryNearbyRight(db)
+    if rc.isOk:
+      rightPt = rc.value.getPartialPath.convertTo(NodeKey).to(NodeTag) - 1.u256
+    elif rc.error == NearbyBeyondRange:
+      rightPt = high(NodeTag)
+
+  NodeTagRange.new(leftPt, rightPt)
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------

@@ -241,6 +241,55 @@ proc verifyRangeProof(
       check result == Result[void,HexaryError].ok()
       break verify
 
+    # Inflated interval around first point
+    block:
+      let iv0 = xDb.hexaryRangeInflate(rootKey, leaf0Tag)
+      # Verify left end
+      if baseTag == low(NodeTag):
+        if iv0.minPt != low(NodeTag):
+          check iv0.minPt == low(NodeTag)
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+      elif leafBeforeBase:
+        check iv0.minPt < baseTag
+      # Verify right end
+      if 1 < leafs.len:
+        if iv0.maxPt + 1.u256 != leafs[1].key.to(NodeTag):
+          check iv0.maxPt + 1.u256 == leafs[1].key.to(NodeTag)
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+
+    # Inflated interval around last point
+    if 1 < leafs.len:
+      let
+        uPt = leafs[^1].key.to(NodeTag)
+        ivX = xDb.hexaryRangeInflate(rootKey, uPt)
+      # Verify left end
+      if leafs[^2].key.to(NodeTag) != ivX.minPt - 1.u256:
+        check leafs[^2].key.to(NodeTag) == ivX.minPt - 1.u256
+        result = Result[void,HexaryError].err(NearbyFailed)
+        break verify
+      # Verify right end
+      if uPt < high(NodeTag):
+        let
+          uPt1 = uPt + 1.u256
+          rx = uPt1.hexaryPath(rootKey,xDb).hexaryNearbyRightMissing(xDb)
+          ry = uPt1.hexaryNearbyRight(rootKey, xDb)
+        if rx.isErr:
+          if ry.isOk:
+            check rx.isErr and ry.isErr
+            result = Result[void,HexaryError].err(NearbyFailed)
+            break verify
+        elif rx.value != ry.isErr:
+          check rx.value == ry.isErr
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+        if rx.get(otherwise=false):
+          if ivX.minPt + 1.u256 != high(NodeTag):
+            check ivX.minPt + 1.u256 == high(NodeTag)
+            result = Result[void,HexaryError].err(NearbyFailed)
+            break verify
+
     return ok()
 
   if noisy:
