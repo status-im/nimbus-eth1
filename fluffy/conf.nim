@@ -163,13 +163,6 @@ type
       defaultValueDesc: $defaultAdminListenAddressDesc
       name: "rpc-address" .}: ValidIpAddress
 
-    bridgeUri* {.
-      hidden
-      defaultValue: none(string)
-      defaultValueDesc: ""
-      desc: "if provided, enables getting data from bridge node"
-      name: "bridge-client-uri" .}: Option[string]
-
     # it makes little sense to have default value here in final release, but until then
     # it would be troublesome to add some fake uri param every time
     proxyUri* {.

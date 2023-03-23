@@ -19,8 +19,7 @@ import
   beacon_chain/spec/datatypes/altair,
   beacon_chain/gossip_processing/light_client_processor,
   ./conf, ./network_metadata, ./common/common_utils,
-  ./rpc/[rpc_eth_api, bridge_client, rpc_discovery_api, rpc_portal_api,
-    rpc_portal_debug_api],
+  ./rpc/[rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/beacon_light_client/[
@@ -30,21 +29,6 @@ import
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
   ./content_db
-
-proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
-  try:
-    if (maybeUri.isSome()):
-      let uri = maybeUri.unsafeGet()
-      # TODO: Add possiblity to start client on differnt transports based on uri.
-      let httpClient = newRpcHttpClient()
-      waitFor httpClient.connect(uri)
-      notice "Initialized bridge client:", uri = uri
-      return some[BridgeClient](httpClient)
-    else:
-      return none(BridgeClient)
-  except CatchableError as err:
-    notice "Failed to initialize bridge client", error = err.msg
-    return none(BridgeClient)
 
 proc initBeaconLightClient(
       network: LightClientNetwork, networkData: NetworkInitData,
@@ -276,8 +260,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         beaconLightClient.get().network.portalProtocol, "beaconLightClient")
     # TODO: Test proxy with remote node over HTTPS
     waitFor rpcHttpServerWithProxy.start()
-
-  let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
   runForever()
 
