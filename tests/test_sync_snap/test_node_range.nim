@@ -207,6 +207,7 @@ proc verifyRangeProof(
     leafs: seq[RangeLeaf];
     proof: seq[SnapProof];
     dbg = HexaryTreeDbRef(nil);
+    leafBeforeBase = true;
      ): Result[void,HexaryError] =
   ## Re-build temporary database and prove or disprove
   let
@@ -217,6 +218,7 @@ proc verifyRangeProof(
 
   result = ok()
   block verify:
+    let leaf0Tag = leafs[0].key.to(NodeTag)
 
     # Import proof nodes
     result = xDb.mergeProofs(rootKey, proof)
@@ -234,7 +236,7 @@ proc verifyRangeProof(
       break verify
 
     # Left proof
-    result = xDb.verifyLowerBound(rootKey, baseTag, leafs[0].key.to(NodeTag))
+    result = xDb.verifyLowerBound(rootKey, baseTag, leaf0Tag)
     if result.isErr:
       check result == Result[void,HexaryError].ok()
       break verify
@@ -396,7 +398,7 @@ proc test_NodeRangeProof*(
       # This is needed as the range extractor needs the node before the `base`
       # (if ateher is any) in order to assemble the proof. But this node might
       # not be present in the partial database.
-      (base, start) = if w.base == 0.to(NodeTag): (w.base, 0)
+      (base, start) = if w.base == low(NodeTag): (w.base, 0)
                       else: (first + delta, 1)
       # Assemble accounts list starting at the second item
       accounts = w.data.accounts[start ..< min(w.data.accounts.len,maxLen)]

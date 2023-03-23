@@ -50,6 +50,7 @@ type
     NearbyLeafExpected
     NearbyDanglingLink
     NearbyPathTail
+    NearbyBeyondRange
 
     # envelope
     DecomposeDegenerated

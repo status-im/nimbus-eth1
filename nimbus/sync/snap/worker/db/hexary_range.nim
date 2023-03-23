@@ -126,7 +126,7 @@ template collectLeafs(
       let rx = nodeTag.hexaryNearbyLeft(rootKey, db)
       if rx.isOk:
         rls.base = rx.value
-      elif rx.error notin {NearbyFailed,NearbyEmptyPath}:
+      elif rx.error != NearbyBeyondRange:
         rc = typeof(rc).err(rx.error)
         break body
 
@@ -139,7 +139,7 @@ template collectLeafs(
         xPath = block:
           let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyRight(db)
           if rx.isErr:
-            if rx.error notin {NearbyFailed,NearbyEmptyPath}:
+            if rx.error != NearbyBeyondRange:
               rc = typeof(rc).err(rx.error)
             else:
               rls.leafsLast = true

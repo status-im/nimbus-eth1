@@ -108,6 +108,26 @@ proc getNode*(
 
 # ------------------
 
+proc branchNibbleMin*(node: XNodeObj|RNodeRef; minInx: int8): int8 =
+  ## Find the least index for an argument branch `node` link with index
+  ## greater or equal the argument `nibble`.
+  if node.kind == Branch:
+    for n in minInx .. 15:
+      if not node.bLink[n].isZeroLink:
+        return n
+  -1
+
+proc branchNibbleMax*(node: XNodeObj|RNodeRef; maxInx: int8): int8 =
+  ## Find the greatest index for an argument branch `node` link with index
+  ## less or equal the argument `nibble`.
+  if node.kind == Branch:
+    for n in maxInx.countDown 0:
+      if not node.bLink[n].isZeroLink:
+        return n
+  -1
+
+# --------------------
+
 proc padPartialPath*(pfx: NibblesSeq; dblNibble: byte): NodeKey =
   ## Extend (or cut) `partialPath` nibbles sequence and generate `NodeKey`.
   ## This function must be handled with some care regarding a meaningful value
