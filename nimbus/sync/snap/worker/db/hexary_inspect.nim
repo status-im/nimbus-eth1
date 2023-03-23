@@ -16,7 +16,7 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   "../.."/[constants, range_desc],
-  "."/[hexary_desc, hexary_paths]
+  "."/[hexary_desc, hexary_nodes_helper, hexary_paths]
 
 logScope:
   topics = "snap-db"
@@ -64,58 +64,157 @@ proc convertTo(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use
   discard result.init(key.ByteArray33[1 .. 32])
 
-proc convertTo(key: Blob; T: type NodeKey): T =
-  ## Might be lossy, check before use
-  discard result.init(key)
+proc convertTo(key: NodeKey; T: type NodeKey): T =
+  ## For simplifying generic functions
+  key
+
+proc convertTo(key: RepairKey; T: type RepairKey): T =
+  ## For simplifying generic functions
+  key
+
+proc isNodeKey(key: Blob): bool =
+  ## For simplifying generic functions
+  key.len == 32 or key.len == 0
+
+proc to(key: NodeKey; T: type NodeKey): T =
+  ## For simplifying generic functions
+  key
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc processLink(
-    db: HexaryTreeDbRef;
-    stats: var TrieNodeStat;
-    inspect: var seq[(RepairKey,NibblesSeq)];
-    trail: NibblesSeq;
-    child: RepairKey;
-      ) =
-  ## Helper for `hexaryInspect()`
-  if not child.isZero:
+proc processLink[Q](
+    db: HexaryTreeDbRef|HexaryGetFn;     # Database abstraction
+    stats: var TrieNodeStat;             # Collecting results
+    inspect: var Q;                      # Intermediate todo list
+    trail: NibblesSeq;                   # Todo list argument
+    child: RepairKey|Blob;               # Todo list argument
+      ) {.gcsafe, raises: [CatchableError]} =
+  ## Helper for `inspectTrieImpl()`
+  if not child.isZeroLink:
     if not child.isNodeKey:
       # Oops -- caught in the middle of a repair process? Just register
       # this node
       stats.dangling.add NodeSpecs(
         partialPath: trail.hexPrefixEncode(isLeaf = false))
-    elif db.tab.hasKey(child):
-      inspect.add (child,trail)
+    elif child.getNode(db).isOk:
+      inspect.add (child.convertTo(typeof(inspect[0][0])), trail)
     else:
       stats.dangling.add NodeSpecs(
         partialPath: trail.hexPrefixEncode(isLeaf = false),
         nodeKey:     child.convertTo(NodeKey))
 
-proc processLink(
-    getFn: HexaryGetFn;
-    stats: var TrieNodeStat;
-    inspect: var seq[(NodeKey,NibblesSeq)];
-    trail: NibblesSeq;
-    child: Rlp;
-      ) {.gcsafe, raises: [CatchableError]} =
-  ## Ditto
-  if not child.isEmpty:
-    let childBlob = child.toBytes
-    if childBlob.len != 32:
-      # Oops -- that is wrong, although the only sensible action is to
-      # register the node and otherwise ignore it
-      stats.dangling.add NodeSpecs(
-        partialPath: trail.hexPrefixEncode(isLeaf = false))
+proc inspectTrieImpl(
+    db: HexaryTreeDbRef|HexaryGetFn;     # Database abstraction
+    rootKey: NodeKey|RepairKey;          # State root
+    partialPaths: seq[Blob];             # Starting paths for search
+    resumeCtx: TrieNodeStatCtxRef;       # Context for resuming inspection
+    suspendAfter: uint64;                # To be resumed
+    stopAtLevel: uint8;                  # Width-first depth level
+    maxDangling: int;                    # Maximal number of dangling results
+      ): TrieNodeStat
+      {.gcsafe, raises: [CatchableError]} =
+  ## ...
+  when extraTraceMessages:
+    let nPaths = partialPaths.len
+
+  if rootKey.getNode(db).isErr:
+    when extraTraceMessages:
+      trace "Hexary inspect: missing root", nPaths, maxDangling,
+        rootKey=rootKey.convertTo(NodeKey)
+    return TrieNodeStat()
+
+  var
+    reVisit: seq[(typeof(rootKey),NibblesSeq)]
+    again: seq[(typeof(rootKey),NibblesSeq)]
+    resumeOk = false
+
+  # Initialise lists from previous session
+  if not resumeCtx.isNil:
+    when typeof(db) is HexaryTreeDbRef:
+      if not resumeCtx.persistent and 0 < resumeCtx.memCtx.len:
+        resumeOk = true
+        reVisit = resumeCtx.memCtx
     else:
-      let childKey = childBlob.convertTo(NodeKey)
-      if 0 < child.toBytes.getFn().len:
-        inspect.add (childKey,trail)
-      else:
-        stats.dangling.add NodeSpecs(
-          partialPath: trail.hexPrefixEncode(isLeaf = false),
-          nodeKey:     childKey)
+      if resumeCtx.persistent and 0 < resumeCtx.hddCtx.len:
+        resumeOk = true
+        reVisit = resumeCtx.hddCtx
+
+  if partialPaths.len == 0 and not resumeOk:
+    reVisit.add (rootKey,EmptyNibbleSeq)
+  else:
+    # Add argument paths
+    for w in partialPaths:
+      let (isLeaf,nibbles) = hexPrefixDecode w
+      if not isLeaf:
+        let rc = nibbles.hexaryPathNodeKey(rootKey, db, missingOk=false)
+        if rc.isOk:
+          reVisit.add (rc.value.to(typeof(rootKey)), nibbles)
+
+  # Stopping on `suspendAfter` has precedence over `stopAtLevel`
+  while 0 < reVisit.len and result.count <= suspendAfter:
+    when extraTraceMessages:
+      trace "Hexary inspect processing", nPaths, maxDangling,
+        level=result.level, nReVisit=reVisit.len, nDangling=result.dangling.len
+
+    if stopAtLevel < result.level:
+      result.stopped = true
+      break
+
+    for n in 0 ..< reVisit.len:
+      if suspendAfter < result.count or
+         maxDangling <= result.dangling.len:
+        # Swallow rest
+        again &= reVisit[n ..< reVisit.len]
+        break
+
+      let
+        (rKey, parentTrail) = reVisit[n]
+        rc = rKey.getNode(db)
+      if rc.isErr:
+        continue # ignore this node
+      let node = rc.value
+
+      case node.kind:
+      of Extension:
+        let
+          trail = parentTrail & node.ePfx
+          child = node.eLink
+        db.processLink(stats=result, inspect=again, trail, child)
+      of Branch:
+        for n in 0 ..< 16:
+          let
+            trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
+            child = node.bLink[n]
+          db.processLink(stats=result, inspect=again, trail, child)
+      of Leaf:
+        # Ooops, forget node and key
+        discard
+
+      result.count.inc
+      # End `for`
+
+    result.level.inc
+    swap(reVisit, again)
+    again.setLen(0)
+    # End while
+
+  # Collect left overs for resuming search
+  if 0 < reVisit.len:
+    when typeof(db) is HexaryTreeDbRef:
+      result.resumeCtx = TrieNodeStatCtxRef(
+        persistent: false,
+        memCtx:     reVisit)
+    else:
+      result.resumeCtx = TrieNodeStatCtxRef(
+        persistent: true,
+        hddCtx:     reVisit)
+
+  when extraTraceMessages:
+    trace "Hexary inspect finished", nPaths, maxDangling,
+      level=result.level, nResumeCtx=reVisit.len, nDangling=result.dangling.len,
+      maxLevel=stopAtLevel, stopped=result.stopped
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -143,10 +242,10 @@ proc to*(resumeCtx: TrieNodeStatCtxRef; T: type seq[NodeSpecs]): T =
 
 
 proc hexaryInspectTrie*(
-    db: HexaryTreeDbRef;                 # Database
-    root: NodeKey;                       # State root
-    partialPaths: seq[Blob] = @[];       # Starting paths for search
-    resumeCtx: TrieNodeStatCtxRef = nil; # Context for resuming inspection
+    db: HexaryTreeDbRef;                 # Database abstraction
+    rootKey: NodeKey;                    # State root
+    partialPaths = EmptyBlobSeq;         # Starting paths for search
+    resumeCtx = TrieNodeStatCtxRef(nil); # Context for resuming inspection
     suspendAfter = high(uint64);         # To be resumed
     stopAtLevel = 64u8;                  # Width-first depth level
     maxDangling = high(int);             # Maximal number of dangling results
@@ -182,86 +281,16 @@ proc hexaryInspectTrie*(
   ##       let state = hexaryInspectTrie(db, root, paths, resumeCtx=ctx, 1024)
   ##       ...
   ##       ctx = state.resumeCtx
+  ##       paths = EmptyBlobSeq
   ##
-  let rootKey = root.to(RepairKey)
-  if not db.tab.hasKey(rootKey):
-    return TrieNodeStat()
-
-  var
-    reVisit: seq[(RepairKey,NibblesSeq)]
-    again: seq[(RepairKey,NibblesSeq)]
-    resumeOk = false
-
-  # Initialise lists from previous session
-  if not resumeCtx.isNil and
-     not resumeCtx.persistent and
-     0 < resumeCtx.memCtx.len:
-    resumeOk = true
-    reVisit = resumeCtx.memCtx
-
-  if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleSeq)
-  else:
-    # Add argument paths
-    for w in partialPaths:
-      let (isLeaf,nibbles) = hexPrefixDecode w
-      if not isLeaf:
-        let rc = nibbles.hexaryPathNodeKey(rootKey, db, missingOk=false)
-        if rc.isOk:
-          reVisit.add (rc.value.to(RepairKey), nibbles)
-
-  # Stopping on `suspendAfter` has precedence over `stopAtLevel`
-  while 0 < reVisit.len and result.count <= suspendAfter:
-    if stopAtLevel < result.level:
-      result.stopped = true
-      break
-
-    for n in 0 ..< reVisit.len:
-      if suspendAfter < result.count or
-         maxDangling <= result.dangling.len:
-        # Swallow rest
-        again &= reVisit[n ..< reVisit.len]
-        break
-
-      let
-        (rKey, parentTrail) = reVisit[n]
-        node = db.tab[rKey]
-        # parent = rKey.convertTo(NodeKey) -- unused
-
-      case node.kind:
-      of Extension:
-        let
-          trail = parentTrail & node.ePfx
-          child = node.eLink
-        db.processLink(stats=result, inspect=again, trail, child)
-      of Branch:
-        for n in 0 ..< 16:
-          let
-            trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
-            child = node.bLink[n]
-          db.processLink(stats=result, inspect=again, trail, child)
-      of Leaf:
-        # Ooops, forget node and key
-        discard
-
-      result.count.inc
-      # End `for`
-
-    result.level.inc
-    swap(reVisit, again)
-    again.setLen(0)
-    # End while
-
-  if 0 < reVisit.len:
-    result.resumeCtx = TrieNodeStatCtxRef(
-      persistent: false,
-      memCtx:     reVisit)
+  db.inspectTrieImpl(rootKey.to(RepairKey),
+    partialPaths, resumeCtx, suspendAfter, stopAtLevel, maxDangling)
 
 
 proc hexaryInspectTrie*(
     getFn: HexaryGetFn;                  # Database abstraction
     rootKey: NodeKey;                    # State root
-    partialPaths: seq[Blob] = @[];       # Starting paths for search
+    partialPaths = EmptyBlobSeq;         # Starting paths for search
     resumeCtx: TrieNodeStatCtxRef = nil; # Context for resuming inspection
     suspendAfter = high(uint64);         # To be resumed
     stopAtLevel = 64u8;                  # Width-first depth level
@@ -269,99 +298,8 @@ proc hexaryInspectTrie*(
       ): TrieNodeStat
       {.gcsafe, raises: [CatchableError]} =
   ## Variant of `hexaryInspectTrie()` for persistent database.
-  when extraTraceMessages:
-    let nPaths = paths.len
-
-  let root = rootKey.to(Blob)
-  if root.getFn().len == 0:
-    when extraTraceMessages:
-      trace "Hexary inspect: missing root", nPaths, maxLeafPaths,
-        rootKey=root.toHex
-    return TrieNodeStat()
-
-  var
-    reVisit: seq[(NodeKey,NibblesSeq)]
-    again: seq[(NodeKey,NibblesSeq)]
-    resumeOk = false
-
-  # Initialise lists from previous session
-  if not resumeCtx.isNil and
-     resumeCtx.persistent and
-     0 < resumeCtx.hddCtx.len:
-    resumeOk = true
-    reVisit = resumeCtx.hddCtx
-
-  if partialPaths.len == 0 and not resumeOk:
-    reVisit.add (rootKey,EmptyNibbleSeq)
-  else:
-    # Add argument paths
-    for w in partialPaths:
-      let (isLeaf,nibbles) = hexPrefixDecode w
-      if not isLeaf:
-        let rc = nibbles.hexaryPathNodeKey(rootKey, getFn, missingOk=false)
-        if rc.isOk:
-          reVisit.add (rc.value, nibbles)
-
-  # Stopping on `suspendAfter` has precedence over `stopAtLevel`
-  while 0 < reVisit.len and result.count <= suspendAfter:
-    when extraTraceMessages:
-      trace "Hexary inspect processing", nPaths, maxLeafPaths,
-        level=result.level, nReVisit=reVisit.len, nDangling=result.dangling.len
-
-    if stopAtLevel < result.level:
-      result.stopped = true
-      break
-
-    for n in 0 ..< reVisit.len:
-      if suspendAfter < result.count or
-         maxDangling <= result.dangling.len:
-        # Swallow rest
-        again = again & reVisit[n ..< reVisit.len]
-        break
-
-      let
-        (parent, parentTrail) = reVisit[n]
-        parentBlob = parent.to(Blob).getFn()
-      if parentBlob.len == 0:
-        # Ooops, forget node and key
-        continue
-
-      let nodeRlp = rlpFromBytes parentBlob
-      case nodeRlp.listLen:
-      of 2:
-        let (isLeaf,xPfx) = hexPrefixDecode nodeRlp.listElem(0).toBytes
-        if not isleaf:
-          let
-            trail = parentTrail & xPfx
-            child = nodeRlp.listElem(1)
-          getFn.processLink(stats=result, inspect=again, trail, child)
-      of 17:
-        for n in 0 ..< 16:
-          let
-            trail = parentTrail & @[n.byte].initNibbleRange.slice(1)
-            child = nodeRlp.listElem(n)
-          getFn.processLink(stats=result, inspect=again, trail, child)
-      else:
-        # Ooops, forget node and key
-        discard
-
-      result.count.inc
-      # End `for`
-
-    result.level.inc
-    swap(reVisit, again)
-    again.setLen(0)
-    # End while
-
-  if 0 < reVisit.len:
-    result.resumeCtx = TrieNodeStatCtxRef(
-      persistent: true,
-      hddCtx:     reVisit)
-
-  when extraTraceMessages:
-    trace "Hexary inspect finished", nPaths, maxLeafPaths,
-      level=result.level, nResumeCtx=reVisit.len, nDangling=result.dangling.len,
-      maxLevel=stopAtLevel, stopped=result.stopped
+  getFn.inspectTrieImpl(
+    rootKey, partialPaths, resumeCtx, suspendAfter, stopAtLevel, maxDangling)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging

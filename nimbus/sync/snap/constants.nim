@@ -11,10 +11,13 @@
 {.push raises: [].}
 
 import
-  eth/trie/nibbles
+  eth/[common, trie/nibbles]
 
 const
   EmptyBlob* = seq[byte].default
+    ## Useful shortcut
+
+  EmptyBlobSeq* = seq[Blob].default
     ## Useful shortcut
 
   EmptyNibbleSeq* = EmptyBlob.initNibbleRange
