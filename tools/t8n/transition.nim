@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, times, tables, os, math],
+  std/[json, strutils, times, tables, os, math, streams],
   eth/[rlp, trie, eip1559],
   stint, stew/results,
   "."/[config, types, helpers],
@@ -114,8 +114,7 @@ proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
 
 proc genAddress(vmState: BaseVMState, tx: Transaction, sender: EthAddress): EthAddress =
   if tx.to.isNone:
-    let creationNonce = vmState.readOnlyStateDB().getNonce(sender)
-    result = generateAddress(sender, creationNonce)
+    result = generateAddress(sender, tx.nonce)
 
 proc toTxReceipt(vmState: BaseVMState,
                  rec: Receipt,
@@ -145,9 +144,42 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
     logs.add rec.logs
   rlpHash(logs)
 
-proc dumpTrace(txIndex: int, txHash: Hash256, traceResult: JsonNode) =
-  let fName = "trace-$1-$2.jsonl" % [$txIndex, $txHash]
-  writeFile(fName, traceResult.pretty)
+template stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 1 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
+proc encodeHexInt(x: SomeInteger): JsonNode =
+  %("0x" & x.toHex.stripLeadingZeros.toLowerAscii)
+
+proc toHex(x: Hash256): string =
+  "0x" & x.data.toHex
+
+proc dumpTrace(txIndex: int, txHash: Hash256, vmState: BaseVMstate) =
+  let txHash = "0x" & toLowerAscii($txHash)
+  let fName = "trace-$1-$2.jsonl" % [$txIndex, txHash]
+  let trace = vmState.getTracingResult()
+  var s = newFileStream(fName, fmWrite)
+
+  trace["gasUsed"] = encodeHexInt(vmState.tracerGasUsed)
+  trace.delete("gas")
+  let stateRoot = %{
+    "stateRoot": %(vmState.readOnlyStateDB.rootHash.toHex)
+  }
+
+  let logs = trace["structLogs"]
+  trace.delete("structLogs")
+  for x in logs:
+    if "error" in x:
+      trace["error"] = x["error"]
+      x.delete("error")
+    s.writeLine($x)
+
+  s.writeLine($trace)
+  s.writeLine($stateRoot)
+  s.close()
 
 func gwei(n: uint64): UInt256 =
   n.u256 * (10 ^ 9).u256
@@ -192,7 +224,7 @@ proc exec(ctx: var TransContext,
     let rc = vmState.processTransaction(tx, sender, header)
 
     if vmState.tracingEnabled:
-      dumpTrace(txIndex, rlpHash(tx), vmState.getTracingResult)
+      dumpTrace(txIndex, rlpHash(tx), vmState)
 
     if rc.isErr:
       rejected.add RejectedTx(
@@ -321,7 +353,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       TracerFlags.DisableStorage,
       TracerFlags.DisableState,
       TracerFlags.DisableStateDiff,
-      TracerFlags.DisableReturnData
+      TracerFlags.DisableReturnData,
+      TracerFlags.GethCompatibility
     }
 
     if conf.traceEnabled:

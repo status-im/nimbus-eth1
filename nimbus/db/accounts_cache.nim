@@ -474,7 +474,13 @@ proc clearStorage*(ac: AccountsCache, address: EthAddress) =
   acc.flags.incl {Alive}
   if acc.account.storageRoot != emptyRlpHash:
     # there is no point to clone the storage since we want to remove it
-    ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
+    let acc = ac.makeDirty(address, cloneStorage = false)
+    acc.account.storageRoot = emptyRlpHash
+    if acc.originalStorage.isNil.not:
+      # also clear originalStorage cache, otherwise
+      # both getStorage and getCommittedStorage will
+      # return wrong value
+      acc.originalStorage.clear()
 
 proc deleteAccount*(ac: AccountsCache, address: EthAddress) =
   # make sure all savepoints already committed
@@ -551,7 +557,7 @@ proc persist*(ac: AccountsCache,
         cleanAccounts.incl address
     of DoNothing:
       # dead man tell no tales
-      # remove touched dead account from cache      
+      # remove touched dead account from cache
       if not clearCache and Alive notin acc.flags:
         cleanAccounts.incl address
 
@@ -621,13 +627,13 @@ func update(wd: var WitnessData, acc: RefAccount) =
 
   if not acc.originalStorage.isNil:
     for k, v in acc.originalStorage:
-      if v == 0: continue
+      if v.isZero: continue
       wd.storageKeys.incl k
 
   for k, v in acc.overlayStorage:
-    if v == 0 and k notin wd.storageKeys:
+    if v.isZero and k notin wd.storageKeys:
       continue
-    if v == 0 and k in wd.storageKeys:
+    if v.isZero and k in wd.storageKeys:
       wd.storageKeys.excl k
       continue
     wd.storageKeys.incl k

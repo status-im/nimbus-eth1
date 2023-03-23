@@ -421,6 +421,33 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "Revert In Create In Init Create2",
+      base  : "testdata/00-512",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Revert In Create In Init",
+      base  : "testdata/00-513",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Init collision 3",
+      base  : "testdata/00-514",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =

@@ -27,7 +27,12 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   # make appear at the top of json object
   tracer.trace["gas"] = %0
   tracer.trace["failed"] = %false
-  tracer.trace["returnValue"] = %""
+
+  if TracerFlags.GethCompatibility in tracer.flags:
+    tracer.trace["returnData"] = %""
+  else:
+    tracer.trace["returnValue"] = %""
+
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
   tracer.accounts = initHashSet[EthAddress]()
@@ -105,7 +110,11 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op):
     const chunkLen = 32
     let numChunks = c.memory.len div chunkLen
     for i in 0 ..< numChunks:
-      mem.add(%c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex())
+      let memHex = c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+      if TracerFlags.GethCompatibility in tracer.flags:
+        mem.add(%("0x" & memHex.toLowerAscii))
+      else:
+        mem.add(%memHex)
     j["memory"] = mem
 
   if TracerFlags.EnableAccount in tracer.flags:
@@ -153,8 +162,12 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
 
   if op in {Return, Revert} and TracerFlags.DisableReturnData notin tracer.flags:
     let returnValue = %("0x" & toHex(c.output, true))
-    j["returnValue"] = returnValue
-    tracer.trace["returnValue"] = returnValue
+    if TracerFlags.GethCompatibility in tracer.flags:
+      j["returnData"] = returnValue
+      tracer.trace["returnData"] = returnValue
+    else:
+      j["returnValue"] = returnValue
+      tracer.trace["returnValue"] = returnValue
 
   trace "Op", json = j.pretty()
 
