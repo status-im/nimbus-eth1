@@ -112,12 +112,13 @@ const
     ## The maximal number of nodes visited at level 3 is *4KiB* and at level 4
     ## is *64Kib*.
 
-  healAccountsBatchMax* = 10 * 1024
-    ## Keep on gloing in healing task up until this many nodes have been
-    ## fetched from the network or some error contition terminates the task.
-    ##
-    ## This constant should be larger than `fetchRequestStorageSlotsMax`
+  healAccountsInspectionPlanBRetryMax* = 2
+    ## Retry inspection if this may times unless there is at least one dangling
+    ## node found.
 
+  healAccountsInspectionPlanBRetryNapMSecs* = 2
+    ## Sleep beween inspection retrys to allow thread switch. If this constant
+    ## is set `0`, `1`ns wait is used.
 
   healSlorageSlotsTrigger* = 0.70
     ## Consider per account storage slost healing if a per-account hexary
@@ -125,6 +126,12 @@ const
 
   healStorageSlotsInspectionPlanBLevel* = 4
     ## Similar to `healAccountsInspectionPlanBLevel`
+
+  healStorageSlotsInspectionPlanBRetryMax* = 2
+    ## Similar to `healAccountsInspectionPlanBRetryMax`
+
+  healStorageSlotsInspectionPlanBRetryNapMSecs* = 2
+    ## Similar to `healAccountsInspectionPlanBRetryNapMSecs`
 
   healStorageSlotsBatchMax* = 32
     ## Maximal number of storage tries to to heal in a single batch run. Only
@@ -160,7 +167,6 @@ const
 
 static:
   doAssert storageSlotsQuPrioThresh < accountsSaveStorageSlotsMax
-  doAssert fetchRequestTrieNodesMax < healAccountsBatchMax
 
 
 # Deprecated, to be expired
