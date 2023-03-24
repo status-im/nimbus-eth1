@@ -237,12 +237,13 @@ proc registerAccountLeaf(
   let
     peer {.used.} = buddy.peer
     pt = accKey.to(NodeTag)
+    iv = NodeTagRange.new(pt,pt)
 
   # Register isolated leaf node
-  if 0 < env.fetchAccounts.processed.merge(pt,pt) :
+  if 0 < env.fetchAccounts.processed.merge iv:
     env.nAccounts.inc
-    env.fetchAccounts.unprocessed.reduce(pt,pt)
-    discard buddy.ctx.pool.coveredAccounts.merge(pt,pt)
+    env.fetchAccounts.unprocessed.reduce iv
+    discard buddy.ctx.pool.coveredAccounts.merge iv
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:

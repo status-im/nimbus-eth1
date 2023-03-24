@@ -165,19 +165,26 @@ proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
   discard q[0].merge(iv)
   discard q[1].reduce(iv)
 
-proc merge*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
-  ## Variant of `merge()`
-  q.merge NodeTagRange.new(minPt, maxPt)
+proc mergeSplit*(q: var SnapTodoRanges; iv: NodeTagRange) =
+  ## Ditto w/priorities partially reversed
+  if 1 < iv.len:
+    let
+      midPt = iv.minPt + ((iv.maxPt - iv.minPt) shr 1)
+      iv1 = NodeTagRange.new(iv.minPt, midPt)
+      iv2 = NodeTagRange.new(midPt + 1.u256, iv.maxPt)
+    discard q[0].reduce iv1
+    discard q[1].merge iv1
+    discard q[0].merge iv2
+    discard q[1].reduce iv2
+  else:
+    discard q[0].reduce iv
+    discard q[1].merge iv
 
 
 proc reduce*(q: var SnapTodoRanges; iv: NodeTagRange) =
   ## Unconditionally remove the node range from the account ranges list
   discard q[0].reduce(iv)
   discard q[1].reduce(iv)
-
-proc reduce*(q: var SnapTodoRanges; minPt, maxPt: NodeTag) =
-  ## Variant of `reduce()`
-  q.reduce NodeTagRange.new(minPt, maxPt)
 
 
 iterator ivItems*(q: var SnapTodoRanges): NodeTagRange =
