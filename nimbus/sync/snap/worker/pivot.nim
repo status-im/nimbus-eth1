@@ -308,7 +308,7 @@ proc recoverPivotFromCheckpoint*(
   # Import processed interval
   for (minPt,maxPt) in recov.state.processed:
     if topLevel:
-      env.fetchAccounts.unprocessed.reduce(minPt, maxPt)
+      env.fetchAccounts.unprocessed.reduce NodeTagRange.new(minPt, maxPt)
     discard env.fetchAccounts.processed.merge(minPt, maxPt)
     discard ctx.pool.coveredAccounts.merge(minPt, maxPt)
     ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over

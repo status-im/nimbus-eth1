@@ -123,7 +123,8 @@ proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     kvp: SnapSlotsQueuePair;
     env: SnapPivotRef;
-      ): seq[NodeSpecs] =
+      ): Future[seq[NodeSpecs]]
+      {.async.} =
   ## Find some missing glue nodes in storage slots database.
   let
     ctx = buddy.ctx
@@ -133,17 +134,18 @@ proc compileMissingNodesList(
     getFn = ctx.pool.snapDb.getStorageSlotsFn(kvp.data.accKey)
 
   if not slots.processed.isFull:
-    noExceptionOops("compileMissingNodesList"):
-      let (missing, nLevel {.used.}, nVisited {.used.}) =
-        slots.findMissingNodes(
-          rootKey, getFn, healStorageSlotsInspectionPlanBLevel)
+    let mlv = await slots.findMissingNodes(
+      rootKey, getFn,
+      healStorageSlotsInspectionPlanBLevel,
+      healStorageSlotsInspectionPlanBRetryMax,
+      healStorageSlotsInspectionPlanBRetryNapMSecs)
 
-      when extraTraceMessages:
-        trace logTxt "missing nodes", peer,
-          ctx=buddy.healingCtx(env), nLevel, nVisited,
-          nResult=missing.len, result=missing.toPC
+    when extraTraceMessages:
+      trace logTxt "missing nodes", peer,
+        ctx=buddy.healingCtx(env), nLevel=mlv.level, nVisited=mlv.visited,
+        nResult=mlv.missing.len, result=mlv.missing.toPC
 
-      result = missing
+    return mlv.missing
 
 
 proc getNodesFromNetwork(
@@ -221,7 +223,7 @@ proc storageSlotsHealing(
     ctx = buddy.ctx
     db = ctx.pool.snapDb
     peer = buddy.peer
-    missing = buddy.compileMissingNodesList(kvp, env)
+    missing = await buddy.compileMissingNodesList(kvp, env)
 
   if missing.len == 0:
     trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(kvp,env)

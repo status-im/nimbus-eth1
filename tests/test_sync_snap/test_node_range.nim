@@ -207,6 +207,7 @@ proc verifyRangeProof(
     leafs: seq[RangeLeaf];
     proof: seq[SnapProof];
     dbg = HexaryTreeDbRef(nil);
+    leafBeforeBase = true;
      ): Result[void,HexaryError] =
   ## Re-build temporary database and prove or disprove
   let
@@ -217,6 +218,7 @@ proc verifyRangeProof(
 
   result = ok()
   block verify:
+    let leaf0Tag = leafs[0].key.to(NodeTag)
 
     # Import proof nodes
     result = xDb.mergeProofs(rootKey, proof)
@@ -234,10 +236,59 @@ proc verifyRangeProof(
       break verify
 
     # Left proof
-    result = xDb.verifyLowerBound(rootKey, baseTag, leafs[0].key.to(NodeTag))
+    result = xDb.verifyLowerBound(rootKey, baseTag, leaf0Tag)
     if result.isErr:
       check result == Result[void,HexaryError].ok()
       break verify
+
+    # Inflated interval around first point
+    block:
+      let iv0 = xDb.hexaryRangeInflate(rootKey, leaf0Tag)
+      # Verify left end
+      if baseTag == low(NodeTag):
+        if iv0.minPt != low(NodeTag):
+          check iv0.minPt == low(NodeTag)
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+      elif leafBeforeBase:
+        check iv0.minPt < baseTag
+      # Verify right end
+      if 1 < leafs.len:
+        if iv0.maxPt + 1.u256 != leafs[1].key.to(NodeTag):
+          check iv0.maxPt + 1.u256 == leafs[1].key.to(NodeTag)
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+
+    # Inflated interval around last point
+    if 1 < leafs.len:
+      let
+        uPt = leafs[^1].key.to(NodeTag)
+        ivX = xDb.hexaryRangeInflate(rootKey, uPt)
+      # Verify left end
+      if leafs[^2].key.to(NodeTag) != ivX.minPt - 1.u256:
+        check leafs[^2].key.to(NodeTag) == ivX.minPt - 1.u256
+        result = Result[void,HexaryError].err(NearbyFailed)
+        break verify
+      # Verify right end
+      if uPt < high(NodeTag):
+        let
+          uPt1 = uPt + 1.u256
+          rx = uPt1.hexaryPath(rootKey,xDb).hexaryNearbyRightMissing(xDb)
+          ry = uPt1.hexaryNearbyRight(rootKey, xDb)
+        if rx.isErr:
+          if ry.isOk:
+            check rx.isErr and ry.isErr
+            result = Result[void,HexaryError].err(NearbyFailed)
+            break verify
+        elif rx.value != ry.isErr:
+          check rx.value == ry.isErr
+          result = Result[void,HexaryError].err(NearbyFailed)
+          break verify
+        if rx.get(otherwise=false):
+          if ivX.minPt + 1.u256 != high(NodeTag):
+            check ivX.minPt + 1.u256 == high(NodeTag)
+            result = Result[void,HexaryError].err(NearbyFailed)
+            break verify
 
     return ok()
 
@@ -396,7 +447,7 @@ proc test_NodeRangeProof*(
       # This is needed as the range extractor needs the node before the `base`
       # (if ateher is any) in order to assemble the proof. But this node might
       # not be present in the partial database.
-      (base, start) = if w.base == 0.to(NodeTag): (w.base, 0)
+      (base, start) = if w.base == low(NodeTag): (w.base, 0)
                       else: (first + delta, 1)
       # Assemble accounts list starting at the second item
       accounts = w.data.accounts[start ..< min(w.data.accounts.len,maxLen)]

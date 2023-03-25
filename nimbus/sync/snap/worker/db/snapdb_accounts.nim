@@ -368,7 +368,7 @@ proc importRawAccountsNodes*(
 
   when extraTraceMessages:
     if nErrors == 0:
-      trace "Raw account nodes imported", peer, slot, nItems, report=result.len
+      trace "Raw account nodes imported", peer, slot, nItems, nReport=result.len
 
 proc importRawAccountsNodes*(
     pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`

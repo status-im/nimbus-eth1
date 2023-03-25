@@ -110,7 +110,7 @@ proc storageQueueAppendPartialBisect*(
     env.fetchStoragePart.del acc.storageRoot     # Oops, nothing to do
     return                                       # Done
   let halfTag = rc.value.minPt + ((rc.value.maxPt - rc.value.minPt) div 2)
-  data.slots.unprocessed.merge(rc.value.minPt, halfTag)
+  data.slots.unprocessed.merge NodeTagRange.new(rc.value.minPt, halfTag)
 
 
 proc storageQueueAppend*(

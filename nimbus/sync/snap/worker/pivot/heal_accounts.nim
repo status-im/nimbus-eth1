@@ -39,7 +39,7 @@
 {.push raises: [].}
 
 import
-  std/[math, sequtils, tables],
+  std/[math, sequtils, sets, tables],
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
@@ -48,7 +48,8 @@ import
   "../../.."/[sync_desc, protocol, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_trie_nodes],
-  ../db/[hexary_desc, hexary_envelope, hexary_error, snapdb_accounts],
+  ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_nearby,
+         hexary_paths, hexary_range, snapdb_accounts],
   "."/[find_missing_nodes, storage_queue_helper, swap_in]
 
 logScope:
@@ -57,6 +58,8 @@ logScope:
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
+
+  EmptyBlobSet = HashSet[Blob].default
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
@@ -69,7 +72,8 @@ proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
 
 proc `$`(rs: NodeTagRangeSet): string =
-  rs.fullFactor.toPC(0)
+  let ff = rs.fullFactor
+  if 0.99 <= ff and ff < 1.0: "99%" else: ff.toPC(0)
 
 proc `$`(iv: NodeTagRange): string =
   iv.fullFactor.toPC(3)
@@ -99,13 +103,6 @@ template discardRlpError(info: static[string]; code: untyped) =
   except RlpError:
     discard
 
-template noExceptionOops(info: static[string]; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raiseAssert "Inconveivable (" &
-      info & "): name=" & $e.name & " msg=" & e.msg
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -113,7 +110,8 @@ template noExceptionOops(info: static[string]; code: untyped) =
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): seq[NodeSpecs] =
+      ): Future[seq[NodeSpecs]]
+      {.async.} =
   ## Find some missing glue nodes in accounts database.
   let
     ctx = buddy.ctx
@@ -127,21 +125,31 @@ proc compileMissingNodesList(
     discard ctx.swapInAccounts(env)
 
   if not fa.processed.isFull:
-    noExceptionOops("compileMissingNodesList"):
-      let (missing, nLevel {.used.}, nVisited {.used.}) = fa.findMissingNodes(
-        rootKey, getFn, healAccountsInspectionPlanBLevel)
+    let mlv = await fa.findMissingNodes(
+      rootKey, getFn,
+      healAccountsInspectionPlanBLevel,
+      healAccountsInspectionPlanBRetryMax,
+      healAccountsInspectionPlanBRetryNapMSecs)
 
-      when extraTraceMessages:
-        trace logTxt "missing nodes", peer,
-          ctx=buddy.healingCtx(env), nLevel, nVisited,
-          nResult=missing.len, result=missing.toPC
+    # Clean up empty account ranges found while looking for nodes
+    if not mlv.emptyGaps.isNil:
+      for w in mlv.emptyGaps.increasing:
+        discard env.fetchAccounts.processed.merge w
+        env.fetchAccounts.unprocessed.reduce w
+        discard buddy.ctx.pool.coveredAccounts.merge w
 
-      result = missing
+    when extraTraceMessages:
+      trace logTxt "missing nodes", peer,
+        ctx=buddy.healingCtx(env), nLevel=mlv.level, nVisited=mlv.visited,
+        nResult=mlv.missing.len, result=mlv.missing.toPC
+
+    return mlv.missing
 
 
 proc fetchMissingNodes(
     buddy: SnapBuddyRef;
-    missingNodes: seq[NodeSpecs];
+    missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
+    ignore: HashSet[Blob];              # Except for these partial paths listed
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
@@ -150,47 +158,43 @@ proc fetchMissingNodes(
   let
     ctx {.used.} = buddy.ctx
     peer {.used.} = buddy.peer
-    stateRoot = env.stateHeader.stateRoot
+    rootHash = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
-
-    nMissingNodes= missingNodes.len
-    nFetchNodes = max(0, nMissingNodes - fetchRequestTrieNodesMax)
-
-    # There is no point in fetching too many nodes as it will be rejected. So
-    # rest of the `missingNodes` list is ignored to be picked up later.
-    fetchNodes = missingNodes[0 ..< nFetchNodes]
 
   # Initalise for fetching nodes from the network via `getTrieNodes()`
   var
     nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
     pathList: seq[SnapTriePaths] # Function argument for `getTrieNodes()`
-  for w in fetchNodes:
-    pathList.add SnapTriePaths(accPath: w.partialPath)
-    nodeKey[w.partialPath] = w.nodeKey
 
-  # Fetch nodes from the network.
-  let rc = await buddy.getTrieNodes(stateRoot, pathList, pivot)
-  if rc.isOk:
-    # Reset error counts for detecting repeated timeouts, network errors, etc.
-    buddy.only.errors.resetComError()
+  # There is no point in fetching too many nodes as it will be rejected. So
+  # rest of the `missingNodes` list is ignored to be picked up later.
+  for w in missingNodes:
+    if w.partialPath notin ignore and not nodeKey.hasKey(w.partialPath):
+      pathList.add SnapTriePaths(accPath: w.partialPath)
+      nodeKey[w.partialPath] = w.nodeKey
+      if fetchRequestTrieNodesMax <= pathList.len:
+        break
 
-    # Forget about unfetched missing nodes, will be picked up later
-    return rc.value.nodes.mapIt(NodeSpecs(
-      partialPath: it.partialPath,
-      nodeKey:     nodeKey[it.partialPath],
-      data:        it.data))
+  if 0 < pathList.len:
+    # Fetch nodes from the network.
+    let rc = await buddy.getTrieNodes(rootHash, pathList, pivot)
+    if rc.isOk:
+      # Reset error counts for detecting repeated timeouts, network errors, etc.
+      buddy.only.errors.resetComError()
 
-  # Process error ...
-  let
-    error = rc.error
-    ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
-  when extraTraceMessages:
-    if ok:
-      trace logTxt "fetch nodes error => stop", peer,
-        ctx=buddy.healingCtx(env), error
-    else:
-      trace logTxt "fetch nodes error", peer,
-        ctx=buddy.healingCtx(env), error
+      # Forget about unfetched missing nodes, will be picked up later
+      return rc.value.nodes.mapIt(NodeSpecs(
+        partialPath: it.partialPath,
+        nodeKey:     nodeKey[it.partialPath],
+        data:        it.data))
+
+    # Process error ...
+    let
+      error = rc.error
+      ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
+    when extraTraceMessages:
+      trace logTxt "reply error", peer, ctx=buddy.healingCtx(env),
+         error, stop=ok
 
   return @[]
 
@@ -235,18 +239,34 @@ proc registerAccountLeaf(
   ## Process single account node as would be done with an interval by
   ## the `storeAccounts()` function
   let
-    peer {.used.} = buddy.peer
+    ctx = buddy.ctx
+    peer = buddy.peer
+    rootKey = env.stateHeader.stateRoot.to(NodeKey)
+    getFn = ctx.pool.snapDb.getAccountFn
     pt = accKey.to(NodeTag)
 
+  # Extend interval [pt,pt] if possible
+  var iv: NodeTagRange
+  try:
+    iv = getFn.hexaryRangeInflate(rootKey, pt)
+  except CatchableError as e:
+    error logTxt "inflating interval oops", peer, ctx=buddy.healingCtx(env),
+      accKey, name=($e.name), msg=e.msg
+    iv = NodeTagRange.new(pt,pt)
+
   # Register isolated leaf node
-  if 0 < env.fetchAccounts.processed.merge(pt,pt) :
+  if 0 < env.fetchAccounts.processed.merge iv:
     env.nAccounts.inc
-    env.fetchAccounts.unprocessed.reduce(pt,pt)
-    discard buddy.ctx.pool.coveredAccounts.merge(pt,pt)
+    env.fetchAccounts.unprocessed.reduce iv
+    discard buddy.ctx.pool.coveredAccounts.merge iv
 
     # Update storage slots batch
     if acc.storageRoot != emptyRlpHash:
       env.storageQueueAppendFull(acc.storageRoot, accKey)
+
+  #when extraTraceMessages:
+  #  trace logTxt "registered single account", peer, ctx=buddy.healingCtx(env),
+  #    leftSlack=(iv.minPt < pt), rightSlack=(pt < iv.maxPt)
 
 # ------------------------------------------------------------------------------
 # Private functions: do the healing for one round
@@ -254,8 +274,9 @@ proc registerAccountLeaf(
 
 proc accountsHealingImpl(
     buddy: SnapBuddyRef;
+    ignore: HashSet[Blob];
     env: SnapPivotRef;
-      ): Future[int]
+      ): Future[(int,HashSet[Blob])]
       {.async.} =
   ## Fetching and merging missing account trie database nodes. It returns the
   ## number of nodes fetched from the network, and -1 upon error.
@@ -269,16 +290,16 @@ proc accountsHealingImpl(
     discard
 
   # Update for changes since last visit
-  let missingNodes = buddy.compileMissingNodesList(env)
+  let missingNodes = await buddy.compileMissingNodesList(env)
   if missingNodes.len == 0:
     # Nothing to do
     trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(env)
-    return 0 # nothing to do
+    return (0,EmptyBlobSet) # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
-  let fetchedNodes = await buddy.fetchMissingNodes(missingNodes, env)
+  let fetchedNodes = await buddy.fetchMissingNodes(missingNodes, ignore, env)
   if fetchedNodes.len == 0:
-    return 0
+    return (0,EmptyBlobSet)
 
   # Store nodes onto disk
   let
@@ -289,23 +310,20 @@ proc accountsHealingImpl(
     # Storage error, just run the next lap (not much else that can be done)
     error logTxt "error updating persistent database", peer,
       ctx=buddy.healingCtx(env), nFetchedNodes, error=report[^1].error
-    return -1
+    return (-1,EmptyBlobSet)
 
   # Filter out error and leaf nodes
   var
-    nIgnored = 0
     nLeafNodes = 0 # for logging
+    rejected: HashSet[Blob]
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let inx = w.slot.unsafeGet
 
-      if w.kind.isNone:
-        # Error report without node referenece
-        discard
-
-      elif w.error != NothingSerious:
-        # Node error, will need to pick up later and download again
-        nIgnored.inc
+      # Node error, will need to pick up later and download again. Node that
+      # there need not be an expicit node specs (so `kind` is opted out.)
+      if w.kind.isNone or w.error != HexaryError(0):
+        rejected.incl fetchedNodes[inx].partialPath
 
       elif w.kind.unsafeGet == Leaf:
         # Leaf node has been stored, double check
@@ -316,10 +334,10 @@ proc accountsHealingImpl(
           nLeafNodes.inc
 
   when extraTraceMessages:
-    trace logTxt "merged into database", peer,
-      ctx=buddy.healingCtx(env), nFetchedNodes, nLeafNodes
+    trace logTxt "merged into database", peer, ctx=buddy.healingCtx(env),
+      nFetchedNodes, nLeafNodes, nRejected=rejected.len
 
-  return nFetchedNodes - nIgnored
+  return (nFetchedNodes - rejected.len, rejected)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -330,27 +348,32 @@ proc healAccounts*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
-  let
-    ctx {.used.} = buddy.ctx
-    peer {.used.} = buddy.peer
-
   when extraTraceMessages:
+    let
+      ctx {.used.} = buddy.ctx
+      peer {.used.} = buddy.peer
     trace logTxt "started", peer, ctx=buddy.healingCtx(env)
 
+  let
+    fa = env.fetchAccounts
   var
     nNodesFetched = 0
     nFetchLoop = 0
-  # Stop after `healAccountsBatchMax` nodes have been fetched
-  while nNodesFetched < healAccountsBatchMax:
-    var nNodes = await buddy.accountsHealingImpl(env)
+    ignore: HashSet[Blob]
+
+  while not fa.processed.isFull() and
+        buddy.ctrl.running and
+        not env.archived:
+    var (nNodes, rejected) = await buddy.accountsHealingImpl(ignore, env)
     if nNodes <= 0:
       break
+    ignore = ignore + rejected
     nNodesFetched.inc(nNodes)
     nFetchLoop.inc
 
   when extraTraceMessages:
     trace logTxt "job done", peer, ctx=buddy.healingCtx(env),
-      nNodesFetched, nFetchLoop, runState=buddy.ctrl.state
+      nNodesFetched, nFetchLoop, nIgnore=ignore.len, runState=buddy.ctrl.state
 
 # ------------------------------------------------------------------------------
 # End

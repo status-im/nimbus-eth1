@@ -35,6 +35,9 @@
 ##   B. Employ the `hexaryInspect()` trie perusal function in a limited mode
 ##   for finding dangling (i.e. missing) sub-nodes below the allocated nodes.
 ##
+##   C. Remove empry intervals from the accounting ranges. This is a pure
+##   maintenance process that applies if A and B fail.
+##
 ## Discussion
 ## ----------
 ##
@@ -52,19 +55,46 @@
 ## no general solution for *plan B* by recursively searching the whole hexary
 ## trie database for more dangling nodes.
 ##
+{.push raises: [].}
+
 import
   std/sequtils,
+  chronicles,
+  chronos,
   eth/common,
   stew/interval_set,
   "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
-  ../db/[hexary_desc, hexary_envelope, hexary_inspect]
+  ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
+         hexary_nearby]
 
-{.push raises: [].}
+logScope:
+  topics = "snap-find"
+
+type
+  MissingNodesSpecs* = object
+    ## Return type for `findMissingNodes()`
+    missing*: seq[NodeSpecs]
+    level*: uint8
+    visited*: uint64
+    emptyGaps*: NodeTagRangeSet
+
+const
+  extraTraceMessages = false # or true
+    ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Find missing nodes " & info
+
+template ignExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    trace logTxt "Ooops", `info`=info, name=($e.name), msg=(e.msg)
 
 template noExceptionOops(info: static[string]; code: untyped) =
   try:
@@ -82,7 +112,10 @@ proc findMissingNodes*(
     rootKey: NodeKey;
     getFn: HexaryGetFn;
     planBLevelMax: uint8;
-      ): (seq[NodeSpecs],uint8,uint64) =
+    planBRetryMax: int;
+    planBRetrySleepMs: int;
+      ): Future[MissingNodesSpecs]
+      {.async.} =
   ## Find some missing nodes in the hexary trie database.
   var nodes: seq[NodeSpecs]
 
@@ -92,40 +125,79 @@ proc findMissingNodes*(
       # Get unallocated nodes to be fetched
       let rc = ranges.processed.hexaryEnvelopeDecompose(rootKey, getFn)
       if rc.isOk:
-        nodes = rc.value
-
-        # The gaps between resuling envelopes are either ranges that have
-        # no leaf nodes, or they are contained in the `processed` range. So
-        # these gaps are be merged back into the `processed` set of ranges.
-        let gaps = NodeTagRangeSet.init()
-        discard gaps.merge(low(NodeTag),high(NodeTag))       # All range
-        for w in nodes: discard gaps.reduce w.hexaryEnvelope # Remove envelopes
-
-        # Merge gaps into `processed` range and update `unprocessed` ranges
-        for iv in gaps.increasing:
-          discard ranges.processed.merge iv
-          ranges.unprocessed.reduce iv
-
-        # Check whether the hexary trie is complete
-        if ranges.processed.isFull:
-          return
-
-        # Remove allocated nodes
-        let missing = nodes.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
+        # Extract nodes from the list that do not exisit in the database
+        # and need to be fetched (and allocated.)
+        let missing = rc.value.filterIt(it.nodeKey.ByteArray32.getFn().len == 0)
         if 0 < missing.len:
-          return (missing, 0u8, 0u64)
+          when extraTraceMessages:
+            trace logTxt "plan A", nNodes=nodes.len, nMissing=missing.len
+          return MissingNodesSpecs(missing: missing)
+
+  when extraTraceMessages:
+    trace logTxt "plan A not applicable", nNodes=nodes.len
 
   # Plan B, carefully employ `hexaryInspect()`
+  var nRetryCount = 0
   if 0 < nodes.len:
-    try:
+    ignExceptionOops("compileMissingNodesList"):
       let
         paths = nodes.mapIt it.partialPath
+        suspend = if planBRetrySleepMs <= 0: 1.nanoseconds
+                  else: planBRetrySleepMs.milliseconds
+      var
+        maxLevel = planBLevelMax
         stats = getFn.hexaryInspectTrie(rootKey, paths,
-          stopAtLevel = planBLevelMax,
+          stopAtLevel = maxLevel,
           maxDangling = fetchRequestTrieNodesMax)
-      result = (stats.dangling, stats.level, stats.count)
-    except CatchableError:
-      discard
+
+      while stats.dangling.len == 0 and
+            nRetryCount < planBRetryMax and
+            not stats.resumeCtx.isNil:
+        await sleepAsync suspend
+        nRetryCount.inc
+        maxLevel = (120 * maxLevel + 99) div 100  # ~20% increase
+        trace logTxt "plan B retry", nRetryCount, maxLevel
+        stats = getFn.hexaryInspectTrie(rootKey,
+          resumeCtx = stats.resumeCtx,
+          stopAtLevel = maxLevel,
+          maxDangling = fetchRequestTrieNodesMax)
+
+      result = MissingNodesSpecs(
+        missing: stats.dangling,
+        level:   stats.level,
+        visited: stats.count)
+
+      if 0 < result.missing.len:
+        when extraTraceMessages:
+          trace logTxt "plan B", nNodes=nodes.len, nDangling=result.missing.len,
+            level=result.level, nVisited=result.visited, nRetryCount
+        return
+
+  when extraTraceMessages:
+    trace logTxt "plan B not applicable", nNodes=nodes.len,
+      level=result.level, nVisited=result.visited, nRetryCount
+
+  # Plan C, clean up intervals
+
+  # Calculate `gaps` as the complement of the `processed` set of intervals
+  let gaps = NodeTagRangeSet.init()
+  discard gaps.merge(low(NodeTag),high(NodeTag))
+  for w in ranges.processed.increasing: discard gaps.reduce w
+
+  # Clean up empty gaps in the processed range
+  result.emptyGaps = NodeTagRangeSet.init()
+  for gap in gaps.increasing:
+    let rc = gap.minPt.hexaryNearbyRight(rootKey,getFn)
+    if rc.isOk:
+      # So there is a right end in the database and there is no leaf in
+      # the right open interval interval [gap.minPt,rc.value).
+      discard result.emptyGaps.merge(gap.minPt, rc.value)
+    elif rc.error == NearbyBeyondRange:
+      discard result.emptyGaps.merge(gap.minPt, high(NodeTag))
+
+  when extraTraceMessages:
+    trace logTxt "plan C", nGapFixes=result.emptyGaps.chunks,
+      nGapOpen=(ranges.processed.chunks - result.emptyGaps.chunks)
 
 # ------------------------------------------------------------------------------
 # End

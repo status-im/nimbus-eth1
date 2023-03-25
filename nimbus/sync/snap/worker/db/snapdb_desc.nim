@@ -255,18 +255,18 @@ proc verifyNoMoreRight*(
       {.gcsafe, raises: [CatchableError].} =
   ## Verify that there is are no more leaf entries to the right of and
   ## including `base`.
-  let
-    root = root.to(RepairKey)
-    base = base.to(NodeKey)
-    rc = base.hexaryPath(root, xDb).hexaryNearbyRightMissing(xDb)
-  if rc.isErr:
-    return err(rc.error)
-  if rc.value:
+  var error: HexaryError
+
+  let rc = base.hexaryNearbyRight(root, xDb)
+  if rc.isOk:
+    error = LowerBoundProofError
+  elif rc.error != NearbyBeyondRange:
+    error = rc.error
+  else:
     return ok()
 
-  let error = LowerBoundProofError
   when extraTraceMessages:
-    trace "verifyLeftmostBound()", peer, base=base.pp, error
+    trace "verifyLeftmostBound()", peer, base, root, error
   err(error)
 
 # ------------------------------------------------------------------------------

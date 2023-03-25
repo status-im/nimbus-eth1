@@ -114,26 +114,28 @@ proc getTrieNodes*(
   ## (if any.)
   let
     peer {.used.} = buddy.peer
-    nPaths = paths.len
+    nGroups = paths.len
 
-  if nPaths == 0:
+  if nGroups == 0:
     return err(ComEmptyRequestArguments)
 
-  let nTotal = paths.mapIt(min(1,it.slotPaths.len)).foldl(a+b, 0)
+  let nTotal = paths.mapIt(max(1,it.slotPaths.len)).foldl(a+b, 0)
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetTrieNodes", peer, pivot, nPaths, nTotal
+    trace trSnapSendSending & "GetTrieNodes", peer, pivot, nGroups, nTotal
 
   let trieNodes = block:
     let rc = await buddy.getTrieNodesReq(stateRoot, paths, pivot)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nPaths
+      trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nGroups
       return err(ComResponseTimeout)
     let blobs = rc.value.get.nodes
     if nTotal < blobs.len:
       # Ooops, makes no sense
+      trace trSnapRecvError & "too many TrieNodes", peer, pivot,
+        nGroups, nExpected=nTotal, nReceived=blobs.len
       return err(ComTooManyTrieNodes)
     blobs
 
@@ -153,7 +155,7 @@ proc getTrieNodes*(
     #   nodes.
     # * The responding node is allowed to return less data than requested
     #   (serving QoS limits), but the node must return at least one trie node.
-    trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nPaths, nNodes
+    trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nGroups, nNodes
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
@@ -172,7 +174,7 @@ proc getTrieNodes*(
       break
 
   trace trSnapRecvReceived & "TrieNodes", peer, pivot,
-    nPaths, nNodes, nLeftOver=dd.leftOver.len
+    nGroups, nNodes, nLeftOver=dd.leftOver.len
 
   return ok(dd)
 

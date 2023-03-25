@@ -41,6 +41,8 @@
 ##   the account including administrative data is queued in
 ##   `env.fetchStorageFull`.
 ##
+{.push raises: [].}
+
 import
   chronicles,
   chronos,
@@ -53,8 +55,6 @@ import
   ../com/[com_error, get_account_range],
   ../db/[hexary_envelope, snapdb_accounts],
   "."/[storage_queue_helper, swap_in]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-range"
@@ -132,7 +132,7 @@ proc accountsRangefetchImpl(
       pivot = "#" & $env.stateHeader.blockNumber
       rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
-      fa.unprocessed.merge iv # fail => interval back to pool
+      fa.unprocessed.mergeSplit iv # fail => interval back to pool
       let error = rc.error
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
         when extraTraceMessages:
@@ -151,7 +151,7 @@ proc accountsRangefetchImpl(
 
   # Now, we fully own the scheduler. The original interval will savely be placed
   # back for a moment (the `unprocessed` range set to be corrected below.)
-  fa.unprocessed.merge iv
+  fa.unprocessed.mergeSplit iv
 
   # Processed accounts hashes are set up as a set of intervals which is needed
   # if the data range returned from the network contains holes.
@@ -232,13 +232,21 @@ proc rangeFetchAccounts*(
     when extraTraceMessages:
       trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
 
-    var nFetchAccounts = 0                     # for logging
+    static:
+      doAssert 0 <= accountsFetchRetryMax
+    var
+      nFetchAccounts = 0                     # for logging
+      nRetry = 0
     while not fa.processed.isFull() and
           buddy.ctrl.running and
-          not env.archived:
-      nFetchAccounts.inc
-      if not await buddy.accountsRangefetchImpl(env):
-        break
+          not env.archived and
+          nRetry <= accountsFetchRetryMax:
+      # May repeat fetching with re-arranged request intervals
+      if await buddy.accountsRangefetchImpl(env):
+        nFetchAccounts.inc
+        nRetry = 0
+      else:
+        nRetry.inc
 
       # Clean up storage slots queue first it it becomes too large
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
