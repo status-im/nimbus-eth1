@@ -116,8 +116,9 @@ type
     cumulativeGasUsed*: HexQuantityStr    # the total amount of gas used when this transaction was executed in the block.
     gasUsed*: HexQuantityStr              # the amount of gas used by this specific transaction alone.
     contractAddress*: Option[EthAddress]  # the contract address created, if the transaction was a contract creation, otherwise null.
-    logs*: seq[Log]                       # list of log objects which this transaction generated.
+    logs*: seq[FilterLog]                 # list of log objects which this transaction generated.
     logsBloom*: FixedBytes[256]           # bloom filter for light clients to quickly retrieve related logs.
+    `type`*: HexQuantityStr
     root*: Option[Hash256]                # post-transaction stateroot (pre Byzantium).
     status*: Option[HexQuantityStr]       # 1 = success, 0 = failure.
     effectiveGasPrice*: HexQuantityStr    # The actual value per gas deducted from the senders account.

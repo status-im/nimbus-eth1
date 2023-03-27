@@ -205,6 +205,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result.to = some(tx.destination)
   result.cumulativeGasUsed = encodeQuantity(receipt.cumulativeGasUsed.uint64)
   result.gasUsed = encodeQuantity(gasUsed.uint64)
+  result.`type` = encodeQuantity(uint(receipt.receiptType.ord))
 
   if tx.contractCreation:
     var sender: EthAddress
@@ -212,7 +213,30 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
       let contractAddress = generateAddress(sender, tx.nonce)
       result.contractAddress = some(contractAddress)
 
-  result.logs = receipt.logs
+  for log in receipt.logs:
+    # TODO: Work everywhere with either `Hash256` as topic or `array[32, byte]`
+    var topics: seq[Hash256]
+    for topic in log.topics:
+      topics.add(Hash256(data: topic))
+
+    let logObject = FilterLog(
+      removed: false,
+      # TODO: Not sure what is difference between logIndex and TxIndex and how
+      # to calculate it.
+      logIndex: some(result.transactionIndex),
+      # Note: the next 4 fields cause a lot of duplication of data, but the spec
+      # is what it is. Not sure if other clients actually add this.
+      transactionIndex: some(result.transactionIndex),
+      transactionHash: some(result.transactionHash),
+      blockHash: some(result.blockHash),
+      blockNumber: some(result.blockNumber),
+      # The actual fields
+      address: log.address,
+      data: log.data,
+      topics: topics
+    )
+    result.logs.add(logObject)
+
   result.logsBloom = FixedBytes[256] receipt.bloom
 
   # post-transaction stateroot (pre Byzantium).
