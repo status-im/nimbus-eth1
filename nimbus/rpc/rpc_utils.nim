@@ -205,6 +205,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result.to = some(tx.destination)
   result.cumulativeGasUsed = encodeQuantity(receipt.cumulativeGasUsed.uint64)
   result.gasUsed = encodeQuantity(gasUsed.uint64)
+  result.`type` = encodeQuantity(uint(receipt.receiptType.ord))
 
   if tx.contractCreation:
     var sender: EthAddress
