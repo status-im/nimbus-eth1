@@ -33,7 +33,7 @@ type
   Web3UrlKind* = enum
     HttpUrl, WsUrl
 
-  ValidatedWeb3Url* = object
+  Web3Url* = object
     kind*: Web3UrlKind
     web3Url*: string
 
@@ -80,7 +80,7 @@ type VerifiedProxyConf* = object
   # No default - Needs to be provided by the user
   web3url* {.
     desc: "URL of the web3 data provider"
-    name: "web3-url" .}: ValidatedWeb3Url
+    name: "web3-url" .}: Web3Url
 
   # Local JSON-RPC server
   rpcAddress* {.
@@ -166,20 +166,22 @@ type VerifiedProxyConf* = object
     name: "direct-peer" .}: seq[string]
 
 
-proc parseCmdArg*(T: type ValidatedWeb3Url, p: string): T
-      {.raises: [ConfigurationError].} =
-  let url = parseUri(p)
-  let normalizedScheme = url.scheme.toLowerAscii()
+proc parseCmdArg*(
+    T: type Web3Url, p: string): T {.raises: [ConfigurationError].} =
+  let
+    url = parseUri(p)
+    normalizedScheme = url.scheme.toLowerAscii()
+
   if (normalizedScheme == "http" or normalizedScheme == "https"):
-    ValidatedWeb3Url(kind: HttpUrl, web3Url: p)
+    Web3Url(kind: HttpUrl, web3Url: p)
   elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    ValidatedWeb3Url(kind: WsUrl, web3Url: p)
+    Web3Url(kind: WsUrl, web3Url: p)
   else:
     raise newException(
       ConfigurationError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
 
-proc completeCmdArg*(T: type ValidatedWeb3Url, val: string): seq[string] =
+proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   return @[]
 
 func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
@@ -210,10 +212,9 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
 
 # TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
 # it contain `set[TLSFlags]` which does not have proper toml serialization
-func asClientConfig*(url: ValidatedWeb3Url): ClientConfig =
+func asClientConfig*(url: Web3Url): ClientConfig =
   case url.kind
   of HttpUrl:
     getHttpClientConfig(url.web3Url)
   of WsUrl:
     getWebSocketClientConfig(url.web3Url, flags = {})
-

@@ -111,7 +111,7 @@ func fromBlockBody(T: type BlockBodySSZ, body: BlockBody): T =
 
   BlockBodySSZ(transactions: transactions, uncles: uncles)
 
-func fromReceipts(T: type ReceiptsSSZ, receipts: seq[Receipt]): T =
+func fromReceipts*(T: type ReceiptsSSZ, receipts: seq[Receipt]): T =
   var receiptsSSZ: ReceiptsSSZ
   for receipt in receipts:
     discard receiptsSSZ.add(ReceiptByteList(rlp.encode(receipt)))
@@ -190,7 +190,7 @@ proc validateBlockBodyBytes*(
 
   BlockBody.fromPortalBlockBody(body)
 
-proc validateReceipts(
+proc validateReceipts*(
     receipts: ReceiptsSSZ, receiptsRoot: KeccakHash): Result[void, string] =
   let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
 

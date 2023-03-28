@@ -16,6 +16,13 @@
 # The injection into the Portal network is done via the `portal_historyGossip`
 # JSON-RPC endpoint of a running Fluffy node.
 #
+# If a web3 provider is configured, then block receipts will also be injected
+# into the network whenever there is a new block. The web3 provider is needed
+# to request the receipts. The receipts root is verified against the root
+# provided bij the exection payload of the beacon block.
+# To get the block receipts, the web3 provider currently needs to support the
+# `eth_getBlockReceipts` JSON-RPC endpoint (not in standard specification).
+#
 # Other, currently not implemented, options to seed data:
 # - Backfill post-merge block headers & bodies block into the network. Could
 #   walk down the parent blocks and seed them. Could also verify if the data is
@@ -31,10 +38,6 @@
 #     (epoch accumulator)   fluffy -> bridge
 #     (portal content)      bridge -> fluffy
 #   This seems awfully cumbersome. Other options sound better, see comment down.
-# - Also receipts need to be requested from an execution JSON-RPC endpoint, but
-#   they can be verified because of consensus light client sync.
-#   Of course, if you are using a trusted execution endpoint for that, you can
-#   get the block headers and bodies also through that channel.
 #
 # Data seeding of Epoch accumulators is unlikely to be supported by this bridge.
 # It is currently done by first downloading and storing all headers into files
@@ -64,7 +67,6 @@
 
 import
   std/[os, strutils, options],
-  web3/ethtypes,
   chronicles, chronos, confutils,
   eth/[keys, rlp], eth/[trie, trie/db],
   # Need to rename this because of web3 ethtypes and ambigious indentifier mess
@@ -80,11 +82,16 @@ import
   # Weirdness. Need to import this to be able to do errors.ValidationResult as
   # else we get an ambiguous identifier, ValidationResult from eth & libp2p.
   libp2p/protocols/pubsub/errors,
-  ../../rpc/portal_rpc_client,
-  ../../network/history/history_content,
+  ../../../nimbus/rpc/rpc_types,
+  ../../rpc/[portal_rpc_client, eth_rpc_client],
+  ../../network/history/[history_content, history_network],
   ../../network/beacon_light_client/beacon_light_client_content,
   ../../common/common_types,
   ./beacon_chain_bridge_conf
+
+from stew/objects import checkedEnumAssign
+from stew/byteutils import readHexChar
+from web3/ethtypes import BlockHash
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
@@ -97,6 +104,86 @@ template asEthHash(hash: ethtypes.BlockHash): Hash256 =
 # TODO: Ugh why isn't gasLimit and gasUsed a uint64 in nim-eth / nimbus-eth1 :(
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
+
+# TODO: Cannot use the `hexToInt` from rpc_utils as it importing that causes a
+# strange "Exception can raise an unlisted exception: Exception` compile error.
+func hexToInt(
+    s: string, T: typedesc[SomeInteger]): T {.raises: [ValueError].} =
+  var i = 0
+  if s[i] == '0' and (s[i+1] in {'x', 'X'}):
+    inc(i, 2)
+  if s.len - i > sizeof(T) * 2:
+    raise newException(ValueError, "Input hex too big for destination int")
+
+  var res: T = 0
+  while i < s.len:
+    res = res shl 4 or readHexChar(s[i]).T
+    inc(i)
+
+  res
+
+func asTxType(quantity: HexQuantityStr): Result[TxType, string] =
+  let value =
+    try:
+      hexToInt(quantity.string, uint8)
+    except ValueError as e:
+      return err("Invalid data for TxType: " & e.msg)
+
+  var txType: TxType
+  if not checkedEnumAssign(txType, value):
+    err("Invalid data for TxType: " & $value)
+  else:
+    ok(txType)
+
+func asReceipt(
+    receiptObject: rpc_types.ReceiptObject): Result[Receipt, string] =
+  let receiptType = asTxType(receiptObject.`type`).valueOr:
+    return err("Failed conversion to TxType" & error)
+
+  var logs: seq[Log]
+  if receiptObject.logs.len > 0:
+    for log in receiptObject.logs:
+      var topics: seq[Topic]
+      for topic in log.topics:
+        topics.add(Topic(topic.data))
+
+      logs.add(Log(
+        address: log.address,
+        data: log.data,
+        topics: topics
+      ))
+
+  let cumulativeGasUsed =
+    try:
+      hexToInt(receiptObject.cumulativeGasUsed.string, GasInt)
+    except ValueError as e:
+      return err("Invalid data for cumulativeGasUsed: " & e.msg)
+
+  if receiptObject.status.isSome():
+    let status =
+      try:
+        hexToInt(receiptObject.status.get().string, int)
+      except ValueError as e:
+        return err("Invalid data for status: " & e.msg)
+    ok(Receipt(
+      receiptType: receiptType,
+      isHash: false,
+      status: status == 1,
+      cumulativeGasUsed: cumulativeGasUsed,
+      bloom: BloomFilter(receiptObject.logsBloom),
+      logs: logs
+    ))
+  elif receiptObject.root.isSome():
+    ok(Receipt(
+      receiptType: receiptType,
+      isHash: true,
+      hash: receiptObject.root.get(),
+      cumulativeGasUsed: cumulativeGasUsed,
+      bloom: BloomFilter(receiptObject.logsBloom),
+      logs: logs
+    ))
+  else:
+    err("No root nor status field in the JSON receipt object")
 
 proc asPortalBlockData*(
     payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3):
@@ -162,6 +249,58 @@ func forkDigestAtEpoch(
     forkDigests: ForkDigests, epoch: Epoch, cfg: RuntimeConfig): ForkDigest =
   forkDigests.atEpoch(epoch, cfg)
 
+proc getBlockReceipts(
+    client: RpcClient, transactions: seq[TypedTransaction], blockHash: Hash256):
+    Future[Result[seq[Receipt], string]] {.async.} =
+  ## Note: This makes use of `eth_getBlockReceipts` JSON-RPC endpoint which is
+  ## only supported by Alchemy.
+  var receipts: seq[Receipt]
+  if transactions.len() > 0:
+    let receiptObjects =
+      # TODO: Add some retries depending on the failure
+      try:
+        await client.eth_getBlockReceipts(blockHash)
+      except CatchableError as e:
+        await client.close()
+        return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
+
+    await client.close()
+
+    for receiptObject in receiptObjects:
+      let receipt = asReceipt(receiptObject).valueOr:
+        return err(error)
+      receipts.add(receipt)
+
+  return ok(receipts)
+
+# TODO: This requires a seperate call for each transactions, which in reality
+# takes too long and causes too much overhead. To make this usable the JSON-RPC
+# code needs to get support for batch requests.
+proc getBlockReceipts(
+    client: RpcClient, transactions: seq[TypedTransaction]):
+    Future[Result[seq[Receipt], string]] {.async.} =
+  var receipts: seq[Receipt]
+  for tx in transactions:
+    let txHash = keccakHash(tx.distinctBase)
+    let receiptObjectOpt =
+      # TODO: Add some retries depending on the failure
+      try:
+        await client.eth_getTransactionReceipt(txHash)
+      except CatchableError as e:
+        await client.close()
+        return err("JSON-RPC eth_getTransactionReceipt failed: " & e.msg)
+
+    await client.close()
+
+    if receiptObjectOpt.isNone():
+      return err("eth_getTransactionReceipt returned no receipt")
+
+    let receipt = asReceipt(receiptObjectOpt.get()).valueOr:
+      return err(error)
+    receipts.add(receipt)
+
+  return ok(receipts)
+
 proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type
   var lcConfig = config.asLightClientConf()
@@ -206,7 +345,19 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
       forkDigests, getBeaconTime, genesis_validators_root
     )
 
-    rpcHttpclient = newRpcHttpClient()
+    portalRpcClient = newRpcHttpClient()
+
+    web3Client: Opt[RpcClient] =
+      if config.web3Url.isNone():
+        Opt.none(RpcClient)
+      else:
+        let client: RpcClient =
+          case config.web3Url.get().kind
+          of HttpUrl:
+            newRpcHttpClient()
+          of WsUrl:
+            newRpcWebSocketClient()
+        Opt.some(client)
 
     optimisticHandler = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
@@ -222,9 +373,10 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
 
-            # TODO: Get rid of the asEngineExecutionPayload step
+            # TODO: Get rid of the asEngineExecutionPayload step?
+            let executionPayload = payload.asEngineExecutionPayload()
             let (hash, headerWithProof, body) =
-              asPortalBlockData(payload.asEngineExecutionPayload())
+              asPortalBlockData(executionPayload)
 
             logScope:
               blockhash = history_content.`$`hash
@@ -234,7 +386,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
-                let peers = await rpcHttpclient.portal_historyGossip(
+                let peers = await portalRpcClient.portal_historyGossip(
                   toHex(encodedContentKey),
                   SSZ.encode(headerWithProof).toHex())
                 info "Block header gossiped", peers,
@@ -242,19 +394,19 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
 
-              await rpcHttpclient.close()
+              await portalRpcClient.close()
 
             # For bodies to get verified, the header needs to be available on
             # the network. Wait a little to get the headers propagated through
             # the network.
-            await sleepAsync(1.seconds)
+            await sleepAsync(2.seconds)
 
             block: # gossip block
               let contentKey = history_content.ContentKey.init(blockBody, hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
-                let peers = await rpcHttpclient.portal_historyGossip(
+                let peers = await portalRpcClient.portal_historyGossip(
                   encodedContentKey.toHex(),
                   SSZ.encode(body).toHex())
                 info "Block body gossiped", peers,
@@ -262,7 +414,39 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               except CatchableError as e:
                 error "JSON-RPC error", error = $e.msg
 
-            await rpcHttpclient.close()
+            await portalRpcClient.close()
+
+            if web3Client.isSome():
+              # get receipts
+              let receipts =
+                (await web3Client.get().getBlockReceipts(
+                    executionPayload.transactions, hash)).valueOr:
+                # (await web3Client.get().getBlockReceipts(
+                #     executionPayload.transactions)).valueOr:
+                  error "Error getting block receipts", error
+                  return
+
+              let sszReceipts = ReceiptsSSZ.fromReceipts(receipts)
+              if validateReceipts(sszReceipts, payload.receiptsRoot).isErr():
+                error "Receipts root is invalid"
+                return
+
+              # gossip receipts
+              let contentKey = history_content.ContentKey.init(
+                history_content.ContentType.receipts, hash)
+              let encodedContentKeyHex = contentKey.encode.asSeq().toHex()
+
+              try:
+                let peers = await portalRpcClient.portal_historyGossip(
+                  encodedContentKeyHex,
+                  SSZ.encode(sszReceipts).toHex())
+                info "Block receipts gossiped", peers,
+                    contentKey = encodedContentKeyHex
+              except CatchableError as e:
+                error "JSON-RPC error for portal_historyGossip", error = $e.msg
+
+              await portalRpcClient.close()
+
       return
 
     optimisticProcessor = initOptimisticProcessor(
@@ -296,7 +480,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconLightClientGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -304,7 +488,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
-          await rpcHttpclient.close()
+          await portalRpcClient.close()
 
         asyncSpawn(GossipRpcAndClose())
 
@@ -329,7 +513,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconLightClientGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -337,7 +521,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
-          await rpcHttpclient.close()
+          await portalRpcClient.close()
 
         asyncSpawn(GossipRpcAndClose())
 
@@ -364,7 +548,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconLightClientGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -372,7 +556,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
-          await rpcHttpclient.close()
+          await portalRpcClient.close()
 
         asyncSpawn(GossipRpcAndClose())
 
@@ -400,7 +584,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           try:
             let
               contentKeyHex = contentKey.asSeq().toHex()
-              peers = await rpcHttpclient.portal_beaconLightClientGossip(
+              peers = await portalRpcClient.portal_beaconLightClientGossip(
                 contentKeyHex,
                 content.toHex())
             info "Beacon LC bootstrap gossiped", peers,
@@ -408,13 +592,17 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
           except CatchableError as e:
             error "JSON-RPC error", error = $e.msg
 
-          await rpcHttpclient.close()
+          await portalRpcClient.close()
 
         asyncSpawn(GossipRpcAndClose())
 
   ###
 
-  waitFor rpcHttpclient.connect(config.rpcAddress, Port(config.rpcPort), false)
+  waitFor portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
+
+  if web3Client.isSome():
+    if config.web3Url.get().kind == HttpUrl:
+      waitFor (RpcHttpClient(web3Client.get())).connect(config.web3Url.get().web3Url)
 
   info "Listening to incoming network requests"
   network.initBeaconSync(cfg, forkDigests, genesisBlockRoot, getBeaconTime)
