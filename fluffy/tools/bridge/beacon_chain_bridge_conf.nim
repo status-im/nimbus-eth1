@@ -12,7 +12,7 @@ import
   json_serialization/std/net,
   beacon_chain/light_client,
   beacon_chain/conf,
-  json_rpc/[rpcproxy]
+  json_rpc/rpcproxy
 
 export net, conf
 
@@ -33,7 +33,7 @@ type
   Web3UrlKind* = enum
     HttpUrl, WsUrl
 
-  ValidatedWeb3Url* = object
+  Web3Url* = object
     kind*: Web3UrlKind
     web3Url*: string
 
@@ -58,40 +58,46 @@ type BeaconBridgeConf* = object
 
   # Storage
   dataDir* {.
-    desc: "The directory where nimbus_verified_proxy will store all data"
+    desc: "The directory where beacon_chain_bridge will store all data"
     defaultValue: defaultVerifiedProxyDataDir()
     defaultValueDesc: $defaultDataVerifiedProxyDirDesc
     abbr: "d"
     name: "data-dir" .}: OutDir
 
-  # Bridge options
+  # Portal JSON-RPC API server to connect to
+  rpcAddress* {.
+    desc: "Listening address of the Portal JSON-RPC server"
+    defaultValue: "127.0.0.1"
+    name: "rpc-address" .}: string
+
+  rpcPort* {.
+    desc: "Listening port of the Portal JSON-RPC server"
+    defaultValue: 8545
+    name: "rpc-port" .}: Port
+
+  ## Bridge options
+
   beaconLightClient* {.
     desc: "Enable beacon light client content bridging"
     defaultValue: false
     name: "beacon-light-client" .}: bool
+
+  web3Url* {.
+    desc: "Execution layer JSON-RPC API URL"
+    name: "web3-url" .}: Option[Web3Url]
+
+  ## Beacon chain light client specific options
+
+  # For Consensus light sync - No default - Needs to be provided by the user
+  trustedBlockRoot* {.
+    desc: "Recent trusted finalized block root to initialize the consensus light client from"
+    name: "trusted-block-root" .}: Eth2Digest
 
   # Network
   eth2Network* {.
     desc: "The Eth2 network to join"
     defaultValueDesc: "mainnet"
     name: "network" .}: Option[string]
-
-  # Consensus light sync
-  # No default - Needs to be provided by the user
-  trustedBlockRoot* {.
-    desc: "Recent trusted finalized block root to initialize the consensus light client from"
-    name: "trusted-block-root" .}: Eth2Digest
-
-  # Local JSON-RPC server
-  rpcAddress* {.
-    desc: "Listening address of the JSON-RPC server"
-    defaultValue: "127.0.0.1"
-    name: "rpc-address" .}: string
-
-  rpcPort* {.
-    desc: "Listening port of the JSON-RPC server"
-    defaultValue: 8545
-    name: "rpc-port" .}: Port
 
   # Libp2p
   bootstrapNodes* {.
@@ -164,22 +170,23 @@ type BeaconBridgeConf* = object
           "Peering agreements are established out of band and must be reciprocal"
     name: "direct-peer" .}: seq[string]
 
+proc parseCmdArg*(
+    T: type Web3Url, p: string): T {.raises: [ConfigurationError].} =
+  let
+    url = parseUri(p)
+    normalizedScheme = url.scheme.toLowerAscii()
 
-
-proc parseCmdArg*(T: type ValidatedWeb3Url, p: string): T
-      {.raises: [ConfigurationError].} =
-  let url = parseUri(p)
-  let normalizedScheme = url.scheme.toLowerAscii()
   if (normalizedScheme == "http" or normalizedScheme == "https"):
-    ValidatedWeb3Url(kind: HttpUrl, web3Url: p)
+    Web3Url(kind: HttpUrl, web3Url: p)
   elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    ValidatedWeb3Url(kind: WsUrl, web3Url: p)
+    Web3Url(kind: WsUrl, web3Url: p)
   else:
     raise newException(
-      ConfigurationError, "Web3 url should have defined scheme (http/https/ws/wss)"
+      ConfigurationError,
+      "The Web3 URL must specify one of following protocols: http/https/ws/wss"
     )
 
-proc completeCmdArg*(T: type ValidatedWeb3Url, val: string): seq[string] =
+proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   return @[]
 
 func asLightClientConf*(pc: BeaconBridgeConf): LightClientConf =
@@ -207,12 +214,3 @@ func asLightClientConf*(pc: BeaconBridgeConf): LightClientConf =
     jwtSecret: none(InputFile),
     stopAtEpoch: 0
   )
-
-# TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
-# it contain `set[TLSFlags]` which does not have proper toml serialization
-func asClientConfig*(url: ValidatedWeb3Url): ClientConfig =
-  case url.kind
-  of HttpUrl:
-    getHttpClientConfig(url.web3Url)
-  of WsUrl:
-    getWebSocketClientConfig(url.web3Url, flags = {})

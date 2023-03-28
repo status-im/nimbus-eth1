@@ -12,6 +12,6 @@ import
   web3/conversions, # sigh
   ../../nimbus/rpc/[rpc_types, hexstrings]
 
-export rpcclient, rpc_types, errors
+export rpcclient, rpc_types, hexstrings, errors
 
 createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_eth_calls.nim")
