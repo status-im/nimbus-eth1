@@ -65,6 +65,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   chronicles,
   chronos,
   eth/[common, p2p],
@@ -124,7 +125,7 @@ proc storeStoragesSingleBatch(
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
-      let error = rc.error
+      let error = rc.unsafeError
       if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
         trace logTxt "fetch error => stop", peer, ctx=buddy.fetchCtx(env),
           nReq=req.len, error
@@ -198,7 +199,7 @@ proc storeStoragesSingleBatch(
     env.nSlotLists.inc(gotSlotLists)
 
   # Return unprocessed left overs to batch queue
-  env.storageQueueAppend(stoRange.leftOver, req[^1].subRange)
+  env.storageQueueAppend(stoRange.leftOver.mapIt(it.account), req[^1].subRange)
   return true
 
 # ------------------------------------------------------------------------------

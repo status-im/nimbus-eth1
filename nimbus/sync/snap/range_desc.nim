@@ -71,6 +71,11 @@ type
     storageRoot*: Hash256           ## Start of storage tree
     subRange*: Option[NodeTagRange] ## Sub-range of slot range covered
 
+  AccountSlotsChanged* = object
+    ## Variant of `AccountSlotsHeader` representing some transition
+    account*: AccountSlotsHeader    ## Account header
+    newRange*: Option[NodeTagRange] ## New sub-range (if-any)
+
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
     ## be incomplete and the `proof` is needed for proving validity.
@@ -82,6 +87,8 @@ type
     ## Account storage descriptor
     account*: AccountSlotsHeader
     data*: seq[SnapStorage]
+
+# See below for definition of constant `FullNodeTagRange`
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -188,6 +195,10 @@ proc hash*(a: NodeTag): Hash =
 proc digestTo*(data: Blob; T: type NodeTag): T =
   ## Hash the `data` argument
   keccakHash(data).to(T)
+
+const
+  # Cannot be defined earlier: `NodeTag` operations needed
+  FullNodeTagRange* = NodeTagRange.new(low(NodeTag),high(NodeTag))
 
 # ------------------------------------------------------------------------------
 # Public functions: `NodeTagRange` helpers
