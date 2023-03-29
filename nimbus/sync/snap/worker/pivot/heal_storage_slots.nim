@@ -38,8 +38,6 @@
 ## healing algorithm again.
 ##
 
-# ###### --- CHECK FOR DEADLOCK ---- ####
-
 {.push raises: [].}
 
 import
@@ -94,7 +92,7 @@ proc healingCtx(
 
 proc healingCtx(
     buddy: SnapBuddyRef;
-    kvp: SnapSlotsQueuePair;
+    kvp: StoQuSlotsKVP;
     env: SnapPivotRef;
       ): string =
   "{" &
@@ -121,7 +119,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
-    kvp: SnapSlotsQueuePair;
+    kvp: StoQuSlotsKVP;
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
@@ -150,8 +148,9 @@ proc compileMissingNodesList(
 
 proc getNodesFromNetwork(
     buddy: SnapBuddyRef;
-    kvp: SnapSlotsQueuePair;
-    missing: seq[NodeSpecs];
+    kvp: StoQuSlotsKVP;
+    missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
+    ignore: HashSet[Blob];              # Except for these partial paths listed
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
@@ -162,37 +161,43 @@ proc getNodesFromNetwork(
     peer {.used.} = buddy.peer
     accPath = kvp.data.accKey.to(Blob)
     storageRoot = kvp.key
-    fetchNodes = missing[0 ..< fetchRequestTrieNodesMax]
-
-  if fetchNodes.len == 0:
-    return # Nothing to do
-
-  # Initalise for `getTrieNodes()` for fetching nodes from the network
-  var
-    nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
-    req = SnapTriePaths(accPath: accpath)
-  for w in fetchNodes:
-    req.slotPaths.add w.partialPath
-    nodeKey[w.partialPath] = w.nodeKey
-
-  # Fetch nodes from the network.
-  let
     pivot = "#" & $env.stateHeader.blockNumber # for logging
-    rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
-  if rc.isOk:
-    # Reset error counts for detecting repeated timeouts, network errors, etc.
-    buddy.only.errors.resetComError()
 
-    return rc.value.nodes.mapIt(NodeSpecs(
-      partialPath: it.partialPath,
-      nodeKey:     nodeKey[it.partialPath],
-      data:        it.data))
+  # Initalise for fetching nodes from the network via `getTrieNodes()`
+  var
+    nodeKey: Table[Blob,NodeKey]          # Temporary `path -> key` mapping
+    req = SnapTriePaths(accPath: accPath) # Argument for `getTrieNodes()`
 
-  let error = rc.error
-  if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
+  # There is no point in fetching too many nodes as it will be rejected. So
+  # rest of the `missingNodes` list is ignored to be picked up later.
+  for w in missingNodes:
+    if w.partialPath notin ignore and not nodeKey.hasKey(w.partialPath):
+      req.slotPaths.add w.partialPath
+      nodeKey[w.partialPath] = w.nodeKey
+      if fetchRequestTrieNodesMax <= req.slotPaths.len:
+        break
+
+  if 0 < req.slotPaths.len:
+    # Fetch nodes from the network.
+    let rc = await buddy.getTrieNodes(storageRoot, @[req], pivot)
+    if rc.isOk:
+      # Reset error counts for detecting repeated timeouts, network errors, etc.
+      buddy.only.errors.resetComError()
+
+      return rc.value.nodes.mapIt(NodeSpecs(
+        partialPath: it.partialPath,
+        nodeKey:     nodeKey[it.partialPath],
+        data:        it.data))
+
+    # Process error ...
+    let
+      error = rc.error
+      ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
     when extraTraceMessages:
-      trace logTxt "fetch nodes error => stop", peer,
-         ctx=buddy.healingCtx(kvp,env), error
+      trace logTxt "reply error", peer, ctx=buddy.healingCtx(kvp,env),
+        error, stop=ok
+
+  return @[]
 
 
 proc slotKey(node: NodeSpecs): (bool,NodeKey) =
@@ -214,7 +219,8 @@ proc slotKey(node: NodeSpecs): (bool,NodeKey) =
 
 proc storageSlotsHealing(
     buddy: SnapBuddyRef;
-    kvp: SnapSlotsQueuePair;
+    kvp: StoQuSlotsKVP;
+    ignore: HashSet[Blob];           # Except for these partial paths listed
     env: SnapPivotRef;
       ) {.async.} =
   ## Returns `true` is the sub-trie is complete (probably inherited), and
@@ -233,7 +239,7 @@ proc storageSlotsHealing(
     trace logTxt "started", peer, ctx=buddy.healingCtx(kvp,env)
 
   # Get next batch of nodes that need to be merged it into the database
-  let nodeSpecs = await buddy.getNodesFromNetwork(kvp, missing, env)
+  let nodeSpecs = await buddy.getNodesFromNetwork(kvp, missing, ignore, env)
   if nodeSpecs.len == 0:
     return
 
@@ -287,7 +293,7 @@ proc healStorageSlots*(
     peer {.used.} = buddy.peer
 
   # Extract healing slot items from partial slots list
-  var toBeHealed: seq[SnapSlotsQueuePair]
+  var toBeHealed: seq[StoQuSlotsKVP]
   for kvp in env.fetchStoragePart.nextPairs:
     # Delete from queue and process this entry
     env.fetchStoragePart.del kvp.key
@@ -300,7 +306,10 @@ proc healStorageSlots*(
         break
 
   # Run against local batch
-  let nHealerQueue = toBeHealed.len
+  let
+    nHealerQueue = toBeHealed.len
+  var
+    ignore: HashSet[Blob]
   if 0 < nHealerQueue:
     when extraTraceMessages:
       trace logTxt "processing", peer, ctx=buddy.healingCtx(env), nHealerQueue
@@ -315,7 +324,7 @@ proc healStorageSlots*(
         break
 
       let kvp = toBeHealed[n]
-      await buddy.storageSlotsHealing(kvp, env)
+      await buddy.storageSlotsHealing(kvp, ignore, env)
 
       # Re-queue again unless ready
       env.parkedStorage.excl kvp.data.accKey        # un-register

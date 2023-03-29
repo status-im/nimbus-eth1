@@ -13,18 +13,18 @@
 ##
 ## Public descriptors
 
+{.push raises: [].}
+
 import
   #std/options,
   eth/[common, p2p],
   ../core/chain,
   ../db/db_chain,
-  ./handlers
+  ./handlers/eth
 
 export
   chain,
   db_chain
-
-{.push raises: [].}
 
 type
   BuddyRunState* = enum

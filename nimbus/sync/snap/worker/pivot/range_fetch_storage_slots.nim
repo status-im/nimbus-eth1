@@ -65,20 +65,20 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/sets,
   chronicles,
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   stint,
   ../../../sync_desc,
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_storage_ranges],
   ../db/[hexary_error, snapdb_storage_slots],
   ./storage_queue_helper
 
 logScope:
-  topics = "snap-range"
+  topics = "snap-slot"
 
 const
   extraTraceMessages = false or true
@@ -94,27 +94,26 @@ proc fetchCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): string =
-  let
-    nStoQu = (env.fetchStorageFull.len +
-              env.fetchStoragePart.len +
-              env.parkedStorage.len)
   "{" &
-    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
-    "runState=" & $buddy.ctrl.state & "," &
-    "nStoQu=" & $nStoQu & "," &
+    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "ctl=" & $buddy.ctrl.state & "," &
+    "nQuFull=" & $env.fetchStorageFull.len & "," &
+    "nQuPart=" & $env.fetchStoragePart.len & "," &
+    "nParked=" & $env.parkedStorage.len & "," &
     "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc storeStoragesSingleBatch(
+proc fetchStorageSlotsImpl(
     buddy: SnapBuddyRef;
     req: seq[AccountSlotsHeader];
     env: SnapPivotRef;
-      ): Future[bool]
+      ): Future[Result[HashSet[NodeKey],void]]
       {.async.} =
-  ## Fetch account storage slots and store them in the database.
+  ## Fetch account storage slots and store them in the database, returns
+  ## number of error or -1 for total failure.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -125,29 +124,28 @@ proc storeStoragesSingleBatch(
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
-      let error = rc.unsafeError
-      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
-        trace logTxt "fetch error => stop", peer, ctx=buddy.fetchCtx(env),
-          nReq=req.len, error
-      return false # all of `req` failed
+      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+        trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
+          nReq=req.len, error=rc.error
+      return err() # all of `req` failed
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
   buddy.only.errors.resetComError()
 
-  var gotSlotLists = stoRange.data.storages.len
-  if 0 < gotSlotLists:
+  var
+    nSlotLists = stoRange.data.storages.len
+    reject: HashSet[NodeKey]
 
+  if 0 < nSlotLists:
     # Verify/process storages data and save it to disk
     let report = ctx.pool.snapDb.importStorageSlots(peer, stoRange.data)
     if 0 < report.len:
       if report[^1].slot.isNone:
         # Failed to store on database, not much that can be done here
-        gotSlotLists.dec(report.len - 1) # for logging only
-
         error logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
-          nSlotLists=gotSlotLists, nReq=req.len, error=report[^1].error
-        return false # all of `req` failed
+          nSlotLists=0, nReq=req.len, error=report[^1].error
+        return err() # all of `req` failed
 
       # Push back error entries to be processed later
       for w in report:
@@ -156,17 +154,15 @@ proc storeStoragesSingleBatch(
         let
           inx = w.slot.get
           acc = stoRange.data.storages[inx].account
+          splitOk = w.error in {RootNodeMismatch,RightBoundaryProofFailed}
 
-        if w.error == RootNodeMismatch:
-          # Some pathological case, needs further investigation. For the
-          # moment, provide partial fetches.
-          env.storageQueueAppendPartialBisect acc
+        reject.incl acc.accKey
 
-        elif w.error == RightBoundaryProofFailed and
-             acc.subRange.isSome and 1 < acc.subRange.unsafeGet.len:
-          # Some pathological case, needs further investigation. For the
-          # moment, provide a partial fetches.
-          env.storageQueueAppendPartialBisect acc
+        if splitOk:
+          # Some pathological cases need further investigation. For the
+          # moment, provide partial split requeue. So a different range
+          # will be unqueued and processed, next time.
+          env.storageQueueAppendPartialSplit acc
 
         else:
           # Reset any partial result (which would be the last entry) to
@@ -174,33 +170,24 @@ proc storeStoragesSingleBatch(
           # re-fetched completely for this account.
           env.storageQueueAppendFull acc
 
-          # Last entry might be partial (if any)
-          #
-          # Forget about partial result processing if the last partial entry
-          # was reported because
-          # * either there was an error processing it
-          # * or there were some gaps reprored as dangling links
-          stoRange.data.proof = @[]
-
-        # Update local statistics counter for `nSlotLists` counter update
-        gotSlotLists.dec
-
-        error logTxt "processing error", peer, ctx=buddy.fetchCtx(env),
-          nSlotLists=gotSlotLists, nReqInx=inx, nReq=req.len,
+        error logTxt "import error", peer, ctx=buddy.fetchCtx(env), splitOk,
+          nSlotLists, nRejected=reject.len, nReqInx=inx, nReq=req.len,
           nDangling=w.dangling.len, error=w.error
 
-    # Update statistics
-    if gotSlotLists == 1 and
-       req[0].subRange.isSome and
-       env.fetchStoragePart.hasKey req[0].storageRoot:
-      # Successful partial request, but not completely done with yet.
-      gotSlotLists = 0
+  # Return unprocessed left overs to batch queue. The `req[^1].subRange` is
+  # the original range requested for the last item (if any.)
+  let (_,removed) = env.storageQueueUpdate(stoRange.leftOver, reject)
 
-    env.nSlotLists.inc(gotSlotLists)
+  # Update statistics. The variable removed is set if the queue for a partial
+  # slot range was logically removed. A partial slot range list has one entry.
+  # So the correction factor for the slot lists statistics is `removed - 1`.
+  env.nSlotLists.inc(nSlotLists - reject.len + (removed - 1))
 
-  # Return unprocessed left overs to batch queue
-  env.storageQueueAppend(stoRange.leftOver.mapIt(it.account), req[^1].subRange)
-  return true
+  # Clean up, un-park successful slots (if any)
+  for w in stoRange.data.storages:
+    env.parkedStorage.excl w.account.accKey
+
+  return ok(reject)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -215,63 +202,58 @@ proc rangeFetchStorageSlots*(
   ## each work item on the queue at least once.For partial partial slot range
   ## items this means in case of success that the outstanding range has become
   ## at least smaller.
+  when extraTraceMessages:
+    trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # request queues for handling full/partial replies and re-fetch issues. For
   # all practical puroses, this request queue should mostly be empty.
-  if 0 < env.fetchStorageFull.len or 0 < env.fetchStoragePart.len:
-    let
-      ctx = buddy.ctx
-      peer {.used.} = buddy.peer
+  for (fetchFn, failMax) in [
+        (storageQueueFetchFull, storageSlotsFetchFailedFullMax),
+        (storageQueueFetchPartial, storageSlotsFetchFailedPartialMax)]:
 
-    when extraTraceMessages:
-      trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
-
+    var
+      ignored: HashSet[NodeKey]
+      rc = Result[HashSet[NodeKey],void].ok(ignored) # set ok() start value
 
     # Run batch even if `archived` flag is set in order to shrink the queues.
-    var delayed: seq[AccountSlotsHeader]
-    while buddy.ctrl.running:
+    while buddy.ctrl.running and
+          rc.isOk and
+          ignored.len <= failMax:
+
       # Pull out the next request list from the queue
-      let (req, nComplete {.used.}, nPartial {.used.}) =
-        ctx.storageQueueFetchFull(env)
-      if req.len == 0:
+      let reqList = buddy.ctx.fetchFn(env, ignored)
+      if reqList.len == 0:
+        when extraTraceMessages:
+          trace logTxt "queue exhausted", peer=buddy.peer,
+            ctx=buddy.fetchCtx(env),
+            isPartQueue=(fetchFn==storageQueueFetchPartial)
         break
 
-      when extraTraceMessages:
-        trace logTxt "fetch full", peer, ctx=buddy.fetchCtx(env),
-          nStorageQuFull=env.fetchStorageFull.len, nReq=req.len,
-          nPartial, nComplete
-
-      if await buddy.storeStoragesSingleBatch(req, env):
-        for w in req:
-          env.parkedStorage.excl w.accKey              # Done with these items
+      # Process list, store in database. The `reqList` is re-queued accordingly
+      # in the `fetchStorageSlotsImpl()` function unless there is an error. In
+      # the error case, the whole argument list `reqList` is left untouched.
+      rc = await buddy.fetchStorageSlotsImpl(reqList, env)
+      if rc.isOk:
+        for w in rc.value:
+          ignored.incl w                      # Ignoring bogus response items
       else:
-        delayed &= req
-    env.storageQueueAppend delayed
-
-    # Ditto for partial queue
-    delayed.setLen(0)
-    while buddy.ctrl.running:
-      # Pull out the next request item from the queue
-      let rc = env.storageQueueFetchPartial()
-      if rc.isErr:
-        break
+        # Push back unprocessed jobs after error
+        env.storageQueueAppendPartialSplit reqList
 
       when extraTraceMessages:
-        let
-          subRange {.used.} = rc.value.subRange.get
-          account {.used.} = rc.value.accKey
-        trace logTxt "fetch partial", peer, ctx=buddy.fetchCtx(env),
-          nStorageQuPart=env.fetchStoragePart.len, subRange, account
+        trace logTxt "processed", peer=buddy.peer, ctx=buddy.fetchCtx(env),
+          isPartQueue=(fetchFn==storageQueueFetchPartial),
+          nReqList=reqList.len,
+          nIgnored=ignored.len,
+          subRange0=reqList[0].subRange.get(otherwise=FullNodeTagRange),
+          account0=reqList[0].accKey,
+          rc=(if rc.isOk: rc.value.len else: -1)
+      # End `while`
+    # End `for`
 
-      if await buddy.storeStoragesSingleBatch(@[rc.value], env):
-        env.parkedStorage.excl rc.value.accKey         # Done with this item
-      else:
-        delayed.add rc.value
-    env.storageQueueAppend delayed
-
-    when extraTraceMessages:
-      trace logTxt "done", peer, ctx=buddy.fetchCtx(env)
+  when extraTraceMessages:
+    trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env)
 
 # ------------------------------------------------------------------------------
 # End

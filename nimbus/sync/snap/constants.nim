@@ -82,6 +82,14 @@ const
     ## If there are too many dangling nodes, no data will be saved and restart
     ## has to perform from scratch or an earlier checkpoint.
 
+  # --------------
+
+  storageSlotsFetchFailedFullMax* = fetchRequestStorageSlotsMax + 100
+    ## Maximal number of failures when fetching full range storage slots.
+    ## These failed slot ranges are only called for once in the same cycle.
+
+  storageSlotsFetchFailedPartialMax* = 300
+    ## Ditto for partial range storage slots.
 
   storageSlotsTrieInheritPerusalMax* = 30_000
     ## Maximal number of nodes to visit in order to find out whether this
@@ -108,26 +116,33 @@ const
   healAccountsInspectionPlanBLevel* = 4
     ## Search this level deep for missing nodes if `hexaryEnvelopeDecompose()`
     ## only produces existing nodes.
-    ##
-    ## The maximal number of nodes visited at level 3 is *4KiB* and at level 4
-    ## is *64Kib*.
 
   healAccountsInspectionPlanBRetryMax* = 2
-    ## Retry inspection if this may times unless there is at least one dangling
-    ## node found.
+    ## Retry inspection with depth level argument starting at
+    ## `healAccountsInspectionPlanBLevel-1` and counting down at most this
+    ## many times until there is at least one dangling node found and the
+    ## depth level argument remains positive. The cumulative depth of the
+    ## iterated seach is
+    ## ::
+    ##      b        1
+    ##      Σ ν  =  --- (b - a + 1) (a + b)
+    ##      a        2
+    ## for
+    ## ::
+    ##      b = healAccountsInspectionPlanBLevel
+    ##      a = b - healAccountsInspectionPlanBRetryMax
+    ##
 
   healAccountsInspectionPlanBRetryNapMSecs* = 2
     ## Sleep beween inspection retrys to allow thread switch. If this constant
     ## is set `0`, `1`ns wait is used.
 
-  healSlorageSlotsTrigger* = 0.70
-    ## Consider per account storage slost healing if a per-account hexary
-    ## sub-trie has reached this factor of completeness.
+  # --------------
 
-  healStorageSlotsInspectionPlanBLevel* = 4
+  healStorageSlotsInspectionPlanBLevel* = 5
     ## Similar to `healAccountsInspectionPlanBLevel`
 
-  healStorageSlotsInspectionPlanBRetryMax* = 2
+  healStorageSlotsInspectionPlanBRetryMax* = 99 # 5 + 4 + .. + 1 => 15
     ## Similar to `healAccountsInspectionPlanBRetryMax`
 
   healStorageSlotsInspectionPlanBRetryNapMSecs* = 2
@@ -167,17 +182,8 @@ const
 
 static:
   doAssert storageSlotsQuPrioThresh < accountsSaveStorageSlotsMax
-
-
-# Deprecated, to be expired
-const
-  healInspectionBatch* = 10_000
-    ## Number of nodes to inspect in a single batch. In between batches, a
-    ## task/thread switch is allowed.
-
-  healInspectionBatchWaitNanoSecs* = 500
-    ## Wait some time asynchroneously after processing `healInspectionBatch`
-    ## nodes to allow for a pseudo -task switch.
+  doAssert 0 <= storageSlotsFetchFailedFullMax
+  doAssert 0 <= storageSlotsFetchFailedPartialMax
 
 # ------------------------------------------------------------------------------
 # End

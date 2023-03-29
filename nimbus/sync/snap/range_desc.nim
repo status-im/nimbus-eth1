@@ -13,9 +13,10 @@
 import
   std/[math, sequtils, strutils, hashes],
   eth/common,
-  stew/[byteutils, interval_set],
+  stew/interval_set,
   stint,
   ../../constants,
+  ../../utils/prettify,
   ../protocol,
   ../types
 
@@ -216,10 +217,33 @@ proc isEmpty*(lrs: openArray[NodeTagRangeSet]): bool =
       return false
   true
 
+proc isEmpty*(iv: NodeTagRange): bool =
+  ## Ditto for an interval range.
+  false # trivially by definition
+
+
 proc isFull*(lrs: NodeTagRangeSet): bool =
   ## Returns `true` if the argument set `lrs` contains of the single
   ## interval [low(NodeTag),high(NodeTag)].
   lrs.total == 0 and 0 < lrs.chunks
+
+proc isFull*(lrs: openArray[NodeTagRangeSet]): bool =
+  ## Variant of `isFull()` where intervals are distributed across several
+  ## sets. This function makes sense only if the interval sets are mutually
+  ## disjunct.
+  var accu: NodeTag
+  for ivSet in lrs:
+    if 0 < ivSet.total:
+      if high(NodeTag) - ivSet.total < accu:
+        return true
+      accu = accu + ivSet.total
+    elif 0 < ivSet.chunks:
+      # number of points in `ivSet` is `2^256 + 1`
+      return true
+
+proc isFull*(iv: NodeTagRange): bool =
+  ## Ditto for an interval range.
+  iv == FullNodeTagRange
 
 
 proc emptyFactor*(lrs: NodeTagRangeSet): float =
@@ -246,9 +270,11 @@ proc emptyFactor*(lrs: openArray[NodeTagRangeSet]): float =
       discard
     else: # number of points in `ivSet` is `2^256 + 1`
       return 0.0
+  # Calculate: (2^256 - accu) / 2^256
   if accu == 0.to(NodeTag):
-    return 1.0
-  ((high(NodeTag) - accu).u256 + 1).to(float) / (2.0^256)
+    1.0
+  else:
+    ((high(NodeTag) - accu).u256 + 1).to(float) / (2.0^256)
 
 
 proc fullFactor*(lrs: NodeTagRangeSet): float =
@@ -260,6 +286,22 @@ proc fullFactor*(lrs: NodeTagRangeSet): float =
     0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
     1.0 # number of points in `lrs` is `2^256 + 1`
+
+proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
+  ## Variant of `fullFactor()` where intervals are distributed across several
+  ## sets. This function makes sense only if the interval sets are mutually
+  ## disjunct.
+  var accu: NodeTag
+  for ivSet in lrs:
+    if 0 < ivSet.total:
+      if high(NodeTag) - ivSet.total < accu:
+        return 1.0
+      accu = accu + ivSet.total
+    elif ivSet.chunks == 0:
+      discard
+    else: # number of points in `ivSet` is `2^256 + 1`
+      return 1.0
+  accu.u256.to(float) / (2.0^256)
 
 proc fullFactor*(iv: NodeTagRange): float =
   ## Relative covered length of an inetrval, i.e. `#points-covered / 2^256`
@@ -277,8 +319,16 @@ proc `$`*(nodeTag: NodeTag): string =
     "2^256-1"
   elif nodeTag == 0.u256.NodeTag:
     "0"
+  elif nodeTag == 2.u256.pow(255).NodeTag:
+    "2^255" # 800...
+  elif nodeTag == 2.u256.pow(254).NodeTag:
+    "2^254" # 400..
+  elif nodeTag == 2.u256.pow(253).NodeTag:
+    "2^253" # 200...
+  elif nodeTag == 2.u256.pow(251).NodeTag:
+    "2^252" # 100...
   else:
-    nodeTag.to(Hash256).data.toHex
+    nodeTag.UInt256.toHex
 
 proc `$`*(nodeKey: NodeKey): string =
   $nodeKey.to(NodeTag)
@@ -302,6 +352,37 @@ proc `$`*(a, b: NodeTag): string =
 
 proc `$`*(iv: NodeTagRange): string =
   leafRangePp iv
+
+
+proc fullPC3*(w: NodeTagRangeSet|NodeTagRange): string =
+  ## Pretty print fill state of range sets.
+  if w.isEmpty:
+    "0%"
+  elif w.isFull:
+    "100%"
+  else:
+    let ff = w.fullFactor
+    if ff <= 0.99999:
+      ff.toPC(3)
+    else:
+      "99.999"
+
+proc fullPC3*(w: openArray[NodeTagRangeSet]): string =
+  ## Variant of `fullPC3()` where intervals are distributed across several
+  ## sets. This function makes sense only if the interval sets are mutually
+  ## disjunct.
+  if w.isEmpty:
+    "0%"
+  else:
+    let partition = "~" & $w.mapIt(it.chunks).foldl(a+b)
+    if w.isFull:
+      "100%" & partition
+    else:
+      let ff = w.fullFactor
+      if ff <= 0.99999:
+        ff.toPC(3) & partition
+      else:
+        "99.999" & partition
 
 
 proc dump*(
