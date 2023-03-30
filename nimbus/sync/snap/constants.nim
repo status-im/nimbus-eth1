@@ -11,10 +11,14 @@
 {.push raises: [].}
 
 import
+  std/sets,
   eth/[common, trie/nibbles]
 
 const
   EmptyBlob* = seq[byte].default
+    ## Useful shortcut
+
+  EmptyBlobSet* = HashSet[Blob].default
     ## Useful shortcut
 
   EmptyBlobSeq* = seq[Blob].default

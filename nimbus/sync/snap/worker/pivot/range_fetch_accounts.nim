@@ -57,7 +57,7 @@ import
   "."/[storage_queue_helper, swap_in]
 
 logScope:
-  topics = "snap-range"
+  topics = "snap-acc"
 
 const
   extraTraceMessages = false or true
@@ -70,19 +70,19 @@ const
 template logTxt(info: static[string]): static[string] =
   "Accounts range " & info
 
-#proc `$`(rs: NodeTagRangeSet): string =
-#  rs.fullFactor.toPC(0)
+proc `$`(rs: NodeTagRangeSet): string =
+  rs.fullPC3
 
 proc `$`(iv: NodeTagRange): string =
-  iv.fullFactor.toPC(3)
+  iv.fullPC3
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ): string {.used.} =
   "{" &
-    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
-    "runState=" & $buddy.ctrl.state & "," &
+    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "ctl=" & $buddy.ctrl.state & "," &
     "nStoQu=" & $env.storageQueueTotal() & "," &
     "nSlotLists=" & $env.nSlotLists & "}"
 
@@ -133,12 +133,10 @@ proc accountsRangefetchImpl(
       rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
       fa.unprocessed.mergeSplit iv # fail => interval back to pool
-      let error = rc.error
-      if await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors):
+      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
         when extraTraceMessages:
-          let reqLen {.used.} = $iv
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
-            reqLen, error
+            reqLen=iv, error=rc.error
       return
     rc.value
 
@@ -169,9 +167,8 @@ proc accountsRangefetchImpl(
       # Bad data, just try another peer
       buddy.ctrl.zombie = true
       when extraTraceMessages:
-        let reqLen {.used.} = $iv
         trace logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
-          gotAccounts, gotStorage, reqLen, covered, error=rc.error
+          gotAccounts, gotStorage, reqLen=iv, covered, error=rc.error
       return
     rc.value
 
@@ -232,8 +229,6 @@ proc rangeFetchAccounts*(
     when extraTraceMessages:
       trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
 
-    static:
-      doAssert 0 <= accountsFetchRetryMax
     var
       nFetchAccounts = 0                     # for logging
       nRetry = 0

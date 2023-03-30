@@ -152,11 +152,13 @@ proc findMissingNodes*(
 
       while stats.dangling.len == 0 and
             nRetryCount < planBRetryMax and
+            1 < maxLevel and
             not stats.resumeCtx.isNil:
         await sleepAsync suspend
         nRetryCount.inc
-        maxLevel = (120 * maxLevel + 99) div 100  # ~20% increase
-        trace logTxt "plan B retry", nRetryCount, maxLevel
+        maxLevel.dec
+        when extraTraceMessages:
+          trace logTxt "plan B retry", nRetryCount, maxLevel
         stats = getFn.hexaryInspectTrie(rootKey,
           resumeCtx = stats.resumeCtx,
           stopAtLevel = maxLevel,
@@ -181,7 +183,7 @@ proc findMissingNodes*(
 
   # Calculate `gaps` as the complement of the `processed` set of intervals
   let gaps = NodeTagRangeSet.init()
-  discard gaps.merge(low(NodeTag),high(NodeTag))
+  discard gaps.merge FullNodeTagRange
   for w in ranges.processed.increasing: discard gaps.reduce w
 
   # Clean up empty gaps in the processed range
