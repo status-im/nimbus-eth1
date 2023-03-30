@@ -18,13 +18,13 @@ import
   ../../test_history_util
 
 type
-  JsonHeaderContent* = object
+  JsonPortalContent* = object
     content_key*: string
     content_value*: string
 
-  JsonHeaderContentTable* = Table[string, JsonHeaderContent]
+  JsonPortalContentTable* = Table[string, JsonPortalContent]
 
-suite "Headers with Proof":
+suite "History Content Encoding":
   test "HeaderWithProof Decoding and Verifying":
     const dataFile =
       "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
@@ -35,18 +35,23 @@ suite "Headers with Proof":
       except SszError as err:
         raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-    let res = readJsonType(dataFile, JsonHeaderContentTable)
+    let res = readJsonType(dataFile, JsonPortalContentTable)
     check res.isOk()
-    let headerContent = res.get()
+    let content = res.get()
 
-    for k, v in headerContent:
+    for k, v in content:
+      # TODO: strange assignment failure when using try/except ValueError
+      # for the hexToSeqByte() here.
       let
-        # TODO: strange assignment failure when using try/except ValueError
-        # for the hexToSeqByte() here.
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentEncoded = v.content_value.hexToSeqByte()
+
+      # Decode content
+      let
         contentKey = decodeSsz(
-          v.content_key.hexToSeqByte(), ContentKey)
+          contentKeyEncoded, ContentKey)
         contentValue = decodeSsz(
-          v.content_value.hexToSeqByte(), BlockHeaderWithProof)
+          contentEncoded, BlockHeaderWithProof)
 
       check:
         contentKey.isOk()
@@ -59,6 +64,11 @@ suite "Headers with Proof":
       let header = res.get()
 
       check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+
+      # Encode content
+      check:
+        SSZ.encode(blockHeaderWithProof) == contentEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
 
   test "HeaderWithProof Building and Encoding":
     const
@@ -75,9 +85,9 @@ suite "Headers with Proof":
         buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
           raiseAssert "Could not build headers with proof"
 
-    let res = readJsonType(headersWithProofFile, JsonHeaderContentTable)
+    let res = readJsonType(headersWithProofFile, JsonPortalContentTable)
     check res.isOk()
-    let headerContent = res.get()
+    let content = res.get()
 
     # Go over all content keys and headers with generated proofs and compare
     # them with the ones from the test vectors.
@@ -85,10 +95,77 @@ suite "Headers with Proof":
       let
         blockNumber = blockHeaders[i].blockNumber
         contentKey =
-          headerContent[blockNumber.toString()].content_key.hexToSeqByte()
+          content[blockNumber.toString()].content_key.hexToSeqByte()
         contentValue =
-          headerContent[blockNumber.toString()].content_value.hexToSeqByte()
+          content[blockNumber.toString()].content_value.hexToSeqByte()
 
       check:
         contentKey == headerContentKey
         contentValue == headerWithProof
+
+  test "Block Body Encoding":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/bodies/14764013.json"
+
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
+
+    for k, v in content:
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentEncoded = v.content_value.hexToSeqByte()
+
+      # Decode content
+      let
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(contentEncoded, BlockBodySSZ)
+
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
+
+      let portalBlockBody = contentValue.get()
+
+      let res = BlockBody.fromPortalBlockBody(portalBlockBody)
+      check res.isOk()
+      let blockBody = res.get()
+
+      # Encode content
+      check:
+        encode(blockBody) == contentEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+
+  test "Receipts Encoding":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/receipts/14764013.json"
+
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
+
+    for k, v in content:
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentEncoded = v.content_value.hexToSeqByte()
+
+      # Decode content
+      let
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(contentEncoded, ReceiptsSSZ)
+
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
+
+      let portalReceipts = contentValue.get()
+
+      let res = seq[Receipt].fromReceipts(portalReceipts)
+      check res.isOk()
+      let receipts = res.get()
+
+      # Encode content
+      check:
+        encode(receipts) == contentEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded

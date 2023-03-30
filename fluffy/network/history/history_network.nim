@@ -74,7 +74,7 @@ func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
 
 ## Calls to go from SSZ decoded types to RLP fully decoded types
 
-func fromPortalBlockBody(
+func fromPortalBlockBody*(
     T: type BlockBody, body: BlockBodySSZ): Result[T, string] =
   ## Get the full decoded BlockBody from the SSZ-decoded `PortalBlockBody`.
   try:
@@ -88,7 +88,7 @@ func fromPortalBlockBody(
   except RlpError as e:
     err("RLP decoding failed: " & e.msg)
 
-func fromReceipts(
+func fromReceipts*(
     T: type seq[Receipt], receipts: ReceiptsSSZ): Result[T, string] =
   ## Get the full decoded seq[Receipt] from the SSZ-decoded `Receipts`.
   try:
