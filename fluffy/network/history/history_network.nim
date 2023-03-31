@@ -54,6 +54,7 @@ type
     contentQueue*: AsyncQueue[(ContentKeysList, seq[seq[byte]])]
     accumulator*: FinishedAccumulator
     processContentLoop: Future[void]
+    statusLogLoop: Future[void]
 
   Block* = (BlockHeader, BlockBody)
 
@@ -651,6 +652,26 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
   except CancelledError:
     trace "processContentLoop canceled"
 
+proc statusLogLoop(n: HistoryNetwork) {.async.} =
+  try:
+    while true:
+      # This is the data radius percentage compared to full storage. This will
+      # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
+      # radius drop.
+      # TODO: Get some float precision calculus?
+      let radiusPercentage =
+        n.portalProtocol.dataRadius div (UInt256.high() div u256(100))
+
+      info "History network status",
+        radius = radiusPercentage.toString(10) & "%",
+        dbSize = $(n.contentDB.size() div 1000) & "kb",
+        contentSize = $(n.contentDB.contentSize() div 1000) & "kb",
+        routingTableNodes = n.portalProtocol.routingTable.len()
+
+      await sleepAsync(60.seconds)
+  except CancelledError:
+    trace "statusLogLoop canceled"
+
 proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
@@ -658,6 +679,7 @@ proc start*(n: HistoryNetwork) =
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
+  n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()
