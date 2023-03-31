@@ -213,7 +213,7 @@ proc unusedSize(db: ContentDB): int64 =
 proc realSize*(db: ContentDB): int64 =
   db.size() - db.unusedSize()
 
-proc contentSize(db: ContentDB): int64 =
+proc contentSize*(db: ContentDB): int64 =
   ## Returns total size of content stored in DB
   var size: int64 = 0
   discard (db.contentSizeStmt.exec do(res: int64):
