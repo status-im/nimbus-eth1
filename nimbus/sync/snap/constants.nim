@@ -157,6 +157,9 @@ const
     ## this many items will be removed from the batch queue. These items will
     ## then be processed one by one.
 
+  healStorageSlotsFailedMax* = 300
+    ## Ditto for partial range storage slots.
+
   # --------------
 
   comErrorsTimeoutMax* = 3
