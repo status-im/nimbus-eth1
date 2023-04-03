@@ -34,6 +34,24 @@ import
 func gwei(n: uint64): UInt256 =
   n.u256 * (10 ^ 9).u256
 
+# Factored this out of procBlkPreamble so that it can be used directly for
+# stateless execution of specific transactions.
+proc processTransactions*(vmState: BaseVMState;
+                          header: BlockHeader;
+                          transactions: seq[Transaction]): Result[void, string]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  vmState.receipts = newSeq[Receipt](transactions.len)
+  vmState.cumulativeGasUsed = 0
+  for txIndex, tx in transactions:
+    var sender: EthAddress
+    if not tx.getSender(sender):
+      return err("Could not get sender for tx with index " & $(txIndex) & ": " & $(tx))
+    let rc = vmState.processTransaction(tx, sender, header)
+    if rc.isErr:
+      return err("Error processing tx with index " & $(txIndex) & ": " & $(tx))
+    vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+  ok()
+
 proc procBlkPreamble(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
     {.gcsafe, raises: [CatchableError].} =
@@ -57,18 +75,9 @@ proc procBlkPreamble(vmState: BaseVMState;
       #trace "Has transactions",
       #  blockNumber = header.blockNumber,
       #  blockHash = header.blockHash
-      vmState.receipts = newSeq[Receipt](body.transactions.len)
-      vmState.cumulativeGasUsed = 0
-      for txIndex, tx in body.transactions:
-        var sender: EthAddress
-        if not tx.getSender(sender):
-          debug "Could not get sender",
-            txIndex, tx
-          return false
-        let rc = vmState.processTransaction(tx, sender, header)
-        if rc.isErr:
-          return false
-        vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+      let r = processTransactions(vmState, header, body.transactions)
+      if r.isErr:
+        error("error in processing transactions", err=r.error)
 
   if vmState.determineFork >= FkShanghai:
     if header.withdrawalsRoot.isNone:

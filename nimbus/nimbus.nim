@@ -28,7 +28,8 @@ import
     clique/clique_sealer, tx_pool, block_import],
   ./rpc/merge/merger,
   ./sync/[legacy, full, protocol, snap, stateless,
-    protocol/les_protocol, handlers, peers]
+    protocol/les_protocol, handlers, peers],
+  ./evm/async/data_sources/json_rpc_data_source
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -217,6 +218,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       enableDiscovery = conf.discovery != DiscoveryType.None,
       waitForPeers = waitForPeers)
 
+proc maybeStatelessAsyncDataSource*(nimbus: NimbusNode, conf: NimbusConf): Option[AsyncDataSource] =
+  if conf.syncMode == SyncMode.Stateless:
+    let rpcClient = waitFor(makeAnRpcClient(conf.statelessModeDataSourceUrl))
+    let asyncDataSource = realAsyncDataSource(nimbus.ethNode.peerPool, rpcClient, false)
+    some(asyncDataSource)
+  else:
+    none[AsyncDataSource]()
+
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
                    com: CommonRef, protocols: set[ProtocolFlag]) =
   # metrics logging
@@ -358,30 +367,32 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.sealingEngine.start()
 
   if conf.engineApiEnabled:
+    let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
     if conf.engineApiPort != conf.rpcPort:
       nimbus.engineApiServer = newRpcHttpServer(
         [initTAddress(conf.engineApiAddress, conf.engineApiPort)],
         authHooks = @[httpJwtAuthHook, httpCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer, nimbus.merger, maybeAsyncDataSource)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiServer)
       nimbus.engineApiServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.rpcServer, nimbus.merger, maybeAsyncDataSource)
 
     info "Starting engine API server", port = conf.engineApiPort
 
   if conf.engineApiWsEnabled:
+    let maybeAsyncDataSource = maybeStatelessAsyncDataSource(nimbus, conf)
     if conf.engineApiWsPort != conf.wsPort:
       nimbus.engineApiWsServer = newRpcWebSocketServer(
         initTAddress(conf.engineApiWsAddress, conf.engineApiWsPort),
         authHooks = @[wsJwtAuthHook, wsCorsHook]
       )
-      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiWsServer, nimbus.merger, maybeAsyncDataSource)
       setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, nimbus.engineApiWsServer)
       nimbus.engineApiWsServer.start()
     else:
-      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger)
+      setupEngineAPI(nimbus.sealingEngine, nimbus.wsRpcServer, nimbus.merger, maybeAsyncDataSource)
 
     info "Starting WebSocket engine API server", port = conf.engineApiWsPort
 

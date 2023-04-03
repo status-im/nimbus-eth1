@@ -1,5 +1,6 @@
 import
   std/[sequtils, typetraits, options],
+  times,
   chronicles,
   chronos,
   nimcrypto,
@@ -15,12 +16,261 @@ import
   ../../../sync/protocol,
   ../../../sync/protocol/eth66 as proto_eth66,
   ../../../db/[db_chain, distinct_tries, incomplete_db, storage_types],
-  ../data_fetching,
-  ../data_sources,
-  ../rpc_api
+  ../data_sources
+
+from ../../../sync/protocol/eth66 import getNodeData
+
+from ../../../rpc/rpc_utils import toHash
+from web3 import Web3, BlockHash, BlockObject, FixedBytes, Address, ProofResponse, StorageProof, newWeb3, fromJson, fromHex, eth_getBlockByHash, eth_getBlockByNumber, eth_getCode, eth_getProof, blockId, `%`
+#from ../../../premix/downloader import request
+#from ../../../premix/parser import prefixHex, parseBlockHeader, parseReceipt, parseTransaction
+
+from eth/common import BlockHeader
+
+# Trying to do things the new web3 way:
+from ../../../nimbus_verified_proxy/validate_proof import getAccountFromProof
 
 
 export AsyncOperationFactory, AsyncDataSource
+
+
+var durationSpentDoingFetches*: times.Duration
+var fetchCounter*: int
+
+
+func toHash*(s: string): Hash256 {.raises: [Defect, ValueError].} =
+  hexToPaddedByteArray[32](s).toHash
+
+func toHash*(h: BlockHash): Hash256 {.raises: [Defect, ValueError].} =
+  distinctBase(h).toHash
+
+func toWeb3BlockHash*(h: Hash256): BlockHash =
+  BlockHash(h.data)
+
+func web3AddressToEthAddress(a: web3.Address): EthAddress =
+  distinctBase(a)
+
+
+proc makeAnRpcClient*(web3Url: string): Future[RpcClient] {.async.} =
+  let myWeb3: Web3 = waitFor(newWeb3(web3Url))
+  return myWeb3.provider
+
+
+#[
+  BlockObject* = ref object
+    number*: Quantity                 # the block number. null when its pending block.
+    hash*: Hash256                    # hash of the block. null when its pending block.
+    parentHash*: Hash256              # hash of the parent block.
+    sha3Uncles*: Hash256              # SHA3 of the uncles data in the block.
+    logsBloom*: FixedBytes[256]       # the bloom filter for the logs of the block. null when its pending block.
+    transactionsRoot*: Hash256        # the root of the transaction trie of the block.
+    stateRoot*: Hash256               # the root of the final state trie of the block.
+    receiptsRoot*: Hash256            # the root of the receipts trie of the block.
+    miner*: Address                   # the address of the beneficiary to whom the mining rewards were given.
+    difficulty*: UInt256              # integer of the difficulty for this block.
+    extraData*: DynamicBytes[0, 32]   # the "extra data" field of this block.
+    gasLimit*: Quantity               # the maximum gas allowed in this block.
+    gasUsed*: Quantity                # the total used gas by all transactions in this block.
+    timestamp*: Quantity              # the unix timestamp for when the block was collated.
+    nonce*: Option[FixedBytes[8]]     # hash of the generated proof-of-work. null when its pending block.
+    size*: Quantity                   # integer the size of this block in bytes.
+    totalDifficulty*: UInt256         # integer of the total difficulty of the chain until this block.
+    transactions*: seq[TxHash]        # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
+    uncles*: seq[Hash256]             # list of uncle hashes.
+    baseFeePerGas*: Option[UInt256]   # EIP-1559
+    withdrawalsRoot*: Option[Hash256] # EIP-4895
+    excessDataGas*:   Option[UInt256] # EIP-4844
+]#
+
+func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
+  let nonce: BlockNonce = if o.nonce.isSome: distinctBase(o.nonce.get) else: default(BlockNonce)
+  BlockHeader(
+    parentHash: o.parentHash.toHash,
+    ommersHash: o.sha3Uncles.toHash,
+    coinbase: o.miner.web3AddressToEthAddress,
+    stateRoot: o.stateRoot.toHash,
+    txRoot: o.transactionsRoot.toHash,
+    receiptRoot: o.receiptsRoot.toHash,
+    bloom: distinctBase(o.logsBloom),
+    difficulty: o.difficulty,
+    blockNumber: distinctBase(o.number).u256,
+    gasLimit: int64(distinctBase(o.gasLimit)),
+    gasUsed: int64(distinctBase(o.gasUsed)),
+    timestamp: initTime(int64(distinctBase(o.timestamp)), 0),
+    extraData: distinctBase(o.extraData),
+    #mixDigest: o.mixHash.toHash, # AARDVARK what's this?
+    nonce: nonce,
+    fee: o.baseFeePerGas,
+    withdrawalsRoot: o.withdrawalsRoot.map(toHash),
+    excessDataGas: o.excessDataGas
+  )
+
+proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: Hash256): Future[BlockHeader] {.async.} =
+  let t0 = now()
+  let blockObject: BlockObject = await rpcClient.eth_getBlockByHash(h.toWeb3BlockHash, false)
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  return blockHeaderFromBlockObject(blockObject)
+
+proc fetchBlockHeaderWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[BlockHeader] {.async.} =
+  let t0 = now()
+  let bid = blockId(n.truncate(uint64))
+  let blockObject: BlockObject = await rpcClient.eth_getBlockByNumber(bid, false)
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  return blockHeaderFromBlockObject(blockObject)
+
+#[
+proc parseBlockBodyAndFetchUncles(rpcClient: RpcClient, r: JsonNode): Future[BlockBody] {.async.} =
+  var body: BlockBody
+  for tn in r["transactions"].getElems:
+    body.transactions.add(parseTransaction(tn))
+  for un in r["uncles"].getElems:
+    let uncleHash: Hash256 = un.getStr.toHash
+    let uncleHeader = await fetchBlockHeaderWithHash(rpcClient, uncleHash)
+    body.uncles.add(uncleHeader)
+  return body
+  
+proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
+  let t0 = now()
+  let r = request("eth_getBlockByHash", %[%h.prefixHex, %true], some(rpcClient))
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  if r.kind == JNull:
+    error "requested block not available", blockHash=h
+    raise newException(ValueError, "Error when retrieving block header and body")
+  let header = parseBlockHeader(r)
+  let body = await parseBlockBodyAndFetchUncles(rpcClient, r)
+  return (header, body)
+
+proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[(BlockHeader, BlockBody)] {.async.} =
+  let t0 = now()
+  let r = request("eth_getBlockByNumber", %[%n.prefixHex, %true], some(rpcClient))
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  if r.kind == JNull:
+    error "requested block not available", blockNumber=n
+    raise newException(ValueError, "Error when retrieving block header and body")
+  let header = parseBlockHeader(r)
+  let body = await parseBlockBodyAndFetchUncles(rpcClient, r)
+  return (header, body)
+]#
+
+proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
+  doAssert(false, "AARDVARK not implemented")
+
+proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[(BlockHeader, BlockBody)] {.async.} =
+  doAssert(false, "AARDVARK not implemented")
+
+func mdigestFromFixedBytes*(arg: FixedBytes[32]): MDigest[256] =
+  MDigest[256](data: distinctBase(arg))
+
+func mdigestFromString*(s: string): MDigest[256] =
+  mdigestFromFixedBytes(FixedBytes[32].fromHex(s))
+
+type
+  AccountProof* = seq[seq[byte]]
+
+proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq[UInt256], blockNumber: BlockNumber): Future[(Account, AccountProof, seq[StorageProof])] {.async.} =
+  let t0 = now()
+  debug "Got to fetchAccountAndSlots", address=address, slots=slots, blockNumber=blockNumber
+  #let blockNumberHexStr: HexQuantityStr = encodeQuantity(blockNumber)
+  let blockNumberUint64 = blockNumber.truncate(uint64)
+  let a = web3.Address(address)
+  let bid = blockId(blockNumber.truncate(uint64))
+  debug "About to call eth_getProof", address=address, slots=slots, blockNumber=blockNumber
+  let proofResponse: ProofResponse = await rpcClient.eth_getProof(a, slots, bid)
+  debug "Received response to eth_getProof", proofResponse=proofResponse
+  
+  let acc = Account(
+    nonce: distinctBase(proofResponse.nonce),
+    balance: proofResponse.balance,
+    storageRoot: mdigestFromFixedBytes(proofResponse.storageHash),
+    codeHash: mdigestFromFixedBytes(proofResponse.codeHash)
+  )
+  debug "Parsed response to eth_getProof", acc=acc
+  let mptNodesBytes: seq[seq[byte]] = proofResponse.accountProof.mapIt(distinctBase(it))
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  return (acc, mptNodesBytes, proofResponse.storageProof)
+
+proc fetchCode*(client: RpcClient, blockNumber: BlockNumber, address: EthAddress): Future[seq[byte]] {.async.} =
+  let t0 = now()
+  let a = web3.Address(address)
+  let bid = blockId(blockNumber.truncate(uint64))
+  let fetchedCode: seq[byte] = await client.eth_getCode(a, bid)
+  durationSpentDoingFetches += now() - t0
+  fetchCounter += 1
+  return fetchedCode
+
+
+
+
+
+
+const bytesLimit = 2 * 1024 * 1024
+const maxNumberOfPeersToAttempt = 3
+
+proc fetchUsingGetTrieNodes(peer: Peer, stateRoot: Hash256, paths: seq[SnapTriePaths]): Future[seq[seq[byte]]] {.async.} =
+  let r = await peer.getTrieNodes(stateRoot, paths, bytesLimit)
+  if r.isNone:
+    raise newException(CatchableError, "AARDVARK: received None in GetTrieNodes response")
+  else:
+    return r.get.nodes
+
+proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
+  #[
+  let r: Option[seq[seq[byte]]] = none[seq[seq[byte]]]() # AARDVARK await peer.getNodeData(nodeHashes)
+  if r.isNone:
+    raise newException(CatchableError, "AARDVARK: received None in GetNodeData response")
+  else:
+    echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA fetchUsingGetNodeData received nodes: " & $(r.get.data)
+    return r.get.data
+  ]#
+  # AARDVARK whatever
+  return @[]
+
+proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe.})): Future[seq[Future[R]]] {.async.} =
+  var attempts: seq[Future[R]]
+  while true:
+    #info("AARDVARK: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
+    for nodeOfSomeSort, peer in peerPool.connectedNodes:
+      if peer.supports(protocolType):
+        info("AARDVARK: findPeersAndMakeSomeCalls calling peer", protocolName, peer)
+        attempts.add(initiateAttempt(peer))
+        if attempts.len >= maxNumberOfPeersToAttempt:
+          break
+      #else:
+      #  info("AARDVARK: peer does not support protocol", protocolName, peer)
+    if attempts.len == 0:
+      warn("AARDVARK: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
+      await sleepAsync(5000)
+    else:
+      if attempts.len < maxNumberOfPeersToAttempt:
+        warn("AARDVARK: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)
+      break
+  return attempts
+
+proc findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths]): Future[seq[Future[seq[seq[byte]]]]] =
+  findPeersAndMakeSomeCalls(peerPool, "snap", protocol.snap, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetTrieNodes(peer, stateRoot, paths)))
+
+#[
+proc findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool: PeerPool, stateRoot: Hash256, nodeHashes: seq[Hash256]): Future[seq[Future[seq[seq[byte]]]]] =
+  findPeersAndMakeSomeCalls(peerPool, "eth66", eth66, (proc(peer: Peer): Future[seq[seq[byte]]] = fetchUsingGetNodeData(peer, nodeHashes)))
+]#
+
+proc fetchNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
+  let attempts = await findPeersAndMakeSomeAttemptsToCallGetTrieNodes(peerPool, stateRoot, paths)
+  #let attempts = await findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool, stateRoot, nodeHashes)
+  let completedAttempt = await one(attempts)
+  let nodes: seq[seq[byte]] = completedAttempt.read
+  info("AARDVARK: fetchNodes received nodes", nodes)
+  return nodes
+
+
+
+
+
 
 
 proc verifyFetchedAccount(stateRoot: Hash256, address: EthAddress, acc: Account, accProof: seq[seq[byte]]): Result[void, string] =
@@ -60,6 +310,15 @@ proc fetchAndVerifyCode(client: RpcClient, p: CodeFetchingInfo, desiredCodeHash:
       let fetchedCodeHash = verificationRes.error
       error("code hash values do not match", p=p, desiredCodeHash=desiredCodeHash, fetchedCodeHash=fetchedCodeHash)
       raise newException(CatchableError, "async code received code for " & $(p.address) & " whose hash (" & $(fetchedCodeHash) & ") does not match the desired hash (" & $(desiredCodeHash) & ")")
+
+proc putCode*(db: TrieDatabaseRef, codeHash: Hash256, code: seq[byte]) =
+  when defined(geth):
+    db.put(codeHash.data, code)
+  else:
+    db.put(contractHashKey(codeHash).toOpenArray, code)
+
+proc putCode*(trie: AccountsTrie, codeHash: Hash256, code: seq[byte]) =
+  putCode(distinctBase(trie).db, codeHash, code)
 
 proc storeCode(trie: AccountsTrie, p: CodeFetchingInfo, desiredCodeHash: Hash256, fetchedCode: seq[byte]) =
   trie.putCode(desiredCodeHash, fetchedCode)
@@ -170,9 +429,9 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: TrieDatabaseRef, bloc
     doAssert(slotsToActuallyFetch.len == storageProofs.len, "We should get back the same number of storage proofs as slots that we asked for. I think.")
 
     for storageProof in storageProofs:
-      let slot       = UInt256.fromHex(string(storageProof.key))
-      let fetchedVal = UInt256.fromHex(string(storageProof.value))
-      let storageMptNodes = storageProof.proof.mapIt(hexToSeqByte(string(it)))
+      let slot: UInt256 = storageProof.key
+      let fetchedVal: UInt256 = storageProof.value
+      let storageMptNodes: seq[seq[byte]] = storageProof.proof.mapIt(distinctBase(it))
       let storageVerificationRes = verifyFetchedSlot(acc.storageRoot, slot, fetchedVal, storageMptNodes)
       let whatAreWeVerifying = ("storage proof", address, acc, slot, fetchedVal)
       raiseExceptionIfError(whatAreWeVerifying, storageVerificationRes)
