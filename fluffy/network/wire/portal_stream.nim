@@ -258,7 +258,9 @@ proc readContentOffer(
     # This means FIN didn't arrive yet, perhaps it got dropped but it might also
     # be still in flight. Closing the socket (= sending FIN) ourselves.
     # Not waiting here for its ACK however, so no `closeWait`
-    socket.close()
+    # Using closeWait so that it waits for an ACK on the FIN and can potentially
+    # also still ACK a FIN it receives.
+    await socket.closeWait()
 
   # TODO: This could currently create a backlog of content items to be validated
   # as `AcceptConnectionCallback` is `asyncSpawn`'ed and there are no limits
