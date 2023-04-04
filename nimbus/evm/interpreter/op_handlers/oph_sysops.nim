@@ -18,6 +18,7 @@ import
   ../../memory,
   ../../stack,
   ../../types,
+  ../../async/operations,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -77,73 +78,80 @@ const
 
   selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xff, Halt execution and register account for later deletion.
-    let beneficiary = k.cpt.stack.popAddress()
-    k.cpt.selfDestruct(beneficiary)
+    let cpt = k.cpt
+    let beneficiary = cpt.stack.popAddress()
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+      cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip150 (auto generated comment)
-    let beneficiary = k.cpt.stack.popAddress()
+    let cpt = k.cpt
+    let beneficiary = cpt.stack.popAddress()
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+      let gasParams = GasParams(
+        kind: SelfDestruct,
+        sd_condition: not cpt.accountExists(beneficiary))
 
-    let gasParams = GasParams(
-      kind: SelfDestruct,
-      sd_condition: not k.cpt.accountExists(beneficiary))
-
-    let gasCost =
-      k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-    k.cpt.gasMeter.consumeGas(
-      gasCost, reason = "SELFDESTRUCT EIP150")
-    k.cpt.selfDestruct(beneficiary)
+      let gasCost =
+        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+      cpt.gasMeter.consumeGas(
+        gasCost, reason = "SELFDESTRUCT EIP150")
+      cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip161 (auto generated comment)
-    checkInStaticContext(k.cpt)
+    let cpt = k.cpt
+    checkInStaticContext(cpt)
 
-    let
-      beneficiary = k.cpt.stack.popAddress()
-      isDead = not k.cpt.accountExists(beneficiary)
-      balance = k.cpt.getBalance(k.cpt.msg.contractAddress)
+    let beneficiary = cpt.stack.popAddress()
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+      let
+        isDead = not cpt.accountExists(beneficiary)
+        balance = cpt.getBalance(cpt.msg.contractAddress)
 
-    let gasParams = GasParams(
-      kind: SelfDestruct,
-      sd_condition: isDead and not balance.isZero)
+      let gasParams = GasParams(
+        kind: SelfDestruct,
+        sd_condition: isDead and not balance.isZero)
 
-    let gasCost =
-      k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-    k.cpt.gasMeter.consumeGas(
-      gasCost, reason = "SELFDESTRUCT EIP161")
-    k.cpt.selfDestruct(beneficiary)
+      let gasCost =
+        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+      cpt.gasMeter.consumeGas(
+        gasCost, reason = "SELFDESTRUCT EIP161")
+      cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEIP2929 (auto generated comment)
-    checkInStaticContext(k.cpt)
+    let cpt = k.cpt
+    checkInStaticContext(cpt)
 
-    let
-      beneficiary = k.cpt.stack.popAddress()
-      isDead = not k.cpt.accountExists(beneficiary)
-      balance = k.cpt.getBalance(k.cpt.msg.contractAddress)
+    let beneficiary = cpt.stack.popAddress()
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, beneficiary)):
+      let
+        isDead = not cpt.accountExists(beneficiary)
+        balance = cpt.getBalance(cpt.msg.contractAddress)
 
-    let gasParams = GasParams(
-      kind: SelfDestruct,
-      sd_condition: isDead and not balance.isZero)
+      let gasParams = GasParams(
+        kind: SelfDestruct,
+        sd_condition: isDead and not balance.isZero)
 
-    var gasCost =
-      k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+      var gasCost =
+        cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
 
-    when evmc_enabled:
-      if k.cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
-        gasCost = gasCost + ColdAccountAccessCost
-    else:
-      k.cpt.vmState.mutateStateDB:
-        if not db.inAccessList(beneficiary):
-          db.accessList(beneficiary)
+      when evmc_enabled:
+        if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
           gasCost = gasCost + ColdAccountAccessCost
+      else:
+        cpt.vmState.mutateStateDB:
+          if not db.inAccessList(beneficiary):
+            db.accessList(beneficiary)
+            gasCost = gasCost + ColdAccountAccessCost
 
-    k.cpt.gasMeter.consumeGas(
-      gasCost, reason = "SELFDESTRUCT EIP161")
-    k.cpt.selfDestruct(beneficiary)
+      cpt.gasMeter.consumeGas(
+        gasCost, reason = "SELFDESTRUCT EIP161")
+      cpt.selfDestruct(beneficiary)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

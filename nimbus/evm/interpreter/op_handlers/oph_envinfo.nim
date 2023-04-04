@@ -18,6 +18,7 @@ import
   ../../computation,
   ../../memory,
   ../../stack,
+  ../../async/operations,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -71,17 +72,21 @@ const
 
   balanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x31, Get balance of the given account.
-    let address = k.cpt.stack.popAddress
-    k.cpt.stack.push:
-      k.cpt.getBalance(address)
+    let cpt = k.cpt
+    let address = cpt.stack.popAddress
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
+      cpt.stack.push:
+        cpt.getBalance(address)
 
   balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
-    let address = k.cpt.stack.popAddress()
+    let cpt = k.cpt
+    let address = cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(address)
-    k.cpt.stack.push:
-      k.cpt.getBalance(address)
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, address)):
+      cpt.gasEip2929AccountCheck(address)
+      cpt.stack.push:
+        cpt.getBalance(address)
 
   # ------------------
 
@@ -144,23 +149,27 @@ const
 
   codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x38, Get size of code running in current environment.
-    k.cpt.stack.push:
-      k.cpt.code.len
+    let cpt = k.cpt
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress)):
+      cpt.stack.push:
+        cpt.code.len
 
 
   codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x39, Copy code running in current environment to memory.
-    let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
+    let cpt = k.cpt
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, cpt.msg.contractAddress)):
+      let (memStartPos, copyStartPos, size) = cpt.stack.popInt(3)
 
-    # TODO tests: https://github.com/status-im/nimbus/issues/67
-    let (memPos, copyPos, len) =
-      (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
+      # TODO tests: https://github.com/status-im/nimbus/issues/67
+      let (memPos, copyPos, len) =
+        (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[CodeCopy].m_handler(k.cpt.memory.len, memPos, len),
-      reason = "CodeCopy fee")
+      cpt.gasMeter.consumeGas(
+        cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
+        reason = "CodeCopy fee")
 
-    k.cpt.memory.writePaddedResult(k.cpt.code.bytes, memPos, copyPos, len)
+      cpt.memory.writePaddedResult(cpt.code.bytes, memPos, copyPos, len)
 
 
   gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -172,51 +181,59 @@ const
 
   extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3b, Get size of an account's code
+    let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    k.cpt.stack.push:
-      k.cpt.getCodeSize(address)
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      cpt.stack.push:
+        cpt.getCodeSize(address)
 
   extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3b, Get size of an account's code
-    let address = k.cpt.stack.popAddress()
+    let cpt = k.cpt
+    let address = cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(address)
-    k.cpt.stack.push:
-      k.cpt.getCodeSize(address)
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      cpt.gasEip2929AccountCheck(address)
+      cpt.stack.push:
+        cpt.getCodeSize(address)
 
   # -----------
 
   extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3c, Copy an account's code to memory.
-    let address = k.cpt.stack.popAddress()
+    let cpt = k.cpt
+    let address = cpt.stack.popAddress()
 
-    let (memStartPos, codeStartPos, size) = k.cpt.stack.popInt(3)
-    let (memPos, codePos, len) =
-      (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
+      let (memPos, codePos, len) =
+        (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
-      reason = "ExtCodeCopy fee")
+      cpt.gasMeter.consumeGas(
+        cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
+        reason = "ExtCodeCopy fee")
 
-    let codeBytes = k.cpt.getCode(address)
-    k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+      let codeBytes = cpt.getCode(address)
+      cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
 
 
   extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3c, Copy an account's code to memory.
-    let address = k.cpt.stack.popAddress()
+    let cpt = k.cpt
+    let address = cpt.stack.popAddress()
 
-    let (memStartPos, codeStartPos, size) = k.cpt.stack.popInt(3)
-    let (memPos, codePos, len) = (memStartPos.cleanMemRef,
-                                  codeStartPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
-      reason = "ExtCodeCopy fee")
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      let (memStartPos, codeStartPos, size) = cpt.stack.popInt(3)
+      let (memPos, codePos, len) = (memStartPos.cleanMemRef,
+                                    codeStartPos.cleanMemRef, size.cleanMemRef)
+      cpt.gasMeter.consumeGas(
+        cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
+        reason = "ExtCodeCopy fee")
 
-    k.cpt.gasEip2929AccountCheck(address)
+      cpt.gasEip2929AccountCheck(address)
 
-    let codeBytes = k.cpt.getCode(address)
-    k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+      let codeBytes = cpt.getCode(address)
+      cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
 
   # -----------
 
@@ -251,18 +268,22 @@ const
 
   extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3f, Returns the keccak256 hash of a contract’s code
+    let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
-    k.cpt.stack.push:
-      k.cpt.getCodeHash(address)
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      cpt.stack.push:
+        cpt.getCodeHash(address)
 
   extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
+    let cpt = k.cpt
     let address = k.cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(address)
+    cpt.asyncChainTo(ifNecessaryGetCode(cpt.vmState, address)):
+      cpt.gasEip2929AccountCheck(address)
 
-    k.cpt.stack.push:
-      k.cpt.getCodeHash(address)
+      cpt.stack.push:
+        cpt.getCodeHash(address)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

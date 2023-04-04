@@ -174,91 +174,101 @@ const
 
   sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
-    let (slot) = k.cpt.stack.popInt(1)
+    let cpt = k.cpt
+    let (slot) = cpt.stack.popInt(1)
 
-    when evmc_enabled:
-      let gasCost = if k.cpt.host.accessStorage(k.cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
-                      ColdSloadCost
-                    else:
-                      WarmStorageReadCost
-      k.cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
-    else:
-      k.cpt.vmState.mutateStateDB:
-        let gasCost = if not db.inAccessList(k.cpt.msg.contractAddress, slot):
-                        db.accessList(k.cpt.msg.contractAddress, slot)
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      when evmc_enabled:
+        let gasCost = if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
                         ColdSloadCost
                       else:
                         WarmStorageReadCost
-        k.cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
-    k.cpt.stack.push:
-      k.cpt.getStorage(slot)
+        cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+      else:
+        cpt.vmState.mutateStateDB:
+          let gasCost = if not db.inAccessList(cpt.msg.contractAddress, slot):
+                          db.accessList(cpt.msg.contractAddress, slot)
+                          ColdSloadCost
+                        else:
+                          WarmStorageReadCost
+          cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+      cpt.stack.push:
+        cpt.getStorage(slot)
 
   # -------
 
   sstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, Save word to storage.
-    let (slot, newValue) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    let (slot, newValue) = cpt.stack.popInt(2)
 
-    checkInStaticContext(k.cpt)
-    when evmc_enabled:
-      sstoreEvmc(k.cpt, slot, newValue)
-    else:
-      sstoreImpl(k.cpt, slot, newValue)
+    checkInStaticContext(cpt)
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      when evmc_enabled:
+        sstoreEvmc(cpt, slot, newValue)
+      else:
+        sstoreImpl(cpt, slot, newValue)
 
 
   sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP1283: sstore for Constantinople and later
-    let (slot, newValue) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    let (slot, newValue) = cpt.stack.popInt(2)
 
-    checkInStaticContext(k.cpt)
-    when evmc_enabled:
-      sstoreEvmc(k.cpt, slot, newValue)
-    else:
-      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+    checkInStaticContext(cpt)
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      when evmc_enabled:
+        sstoreEvmc(cpt, slot, newValue)
+      else:
+        sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
   sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP2200: sstore for Istanbul and later
-    let (slot, newValue) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    let (slot, newValue) = cpt.stack.popInt(2)
 
-    checkInStaticContext(k.cpt)
+    checkInStaticContext(cpt)
     const SentryGasEIP2200 = 2300
 
-    if k.cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+    if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
       raise newException(
         OutOfGas,
         "Gas not enough to perform EIP2200 SSTORE")
 
-    when evmc_enabled:
-      sstoreEvmc(k.cpt, slot, newValue)
-    else:
-      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      when evmc_enabled:
+        sstoreEvmc(cpt, slot, newValue)
+      else:
+        sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
   sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP2929: sstore for Berlin and later
-    let (slot, newValue) = k.cpt.stack.popInt(2)
-    checkInStaticContext(k.cpt)
+    let cpt = k.cpt
+    let (slot, newValue) = cpt.stack.popInt(2)
+    checkInStaticContext(cpt)
 
     # Minimum gas required to be present for an SSTORE call, not consumed
     const SentryGasEIP2200 = 2300
 
-    if k.cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+    if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
       raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
-    when evmc_enabled:
-      if k.cpt.host.accessStorage(k.cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
-        k.cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
-    else:
-      k.cpt.vmState.mutateStateDB:
-        if not db.inAccessList(k.cpt.msg.contractAddress, slot):
-          db.accessList(k.cpt.msg.contractAddress, slot)
-          k.cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+    cpt.asyncChainTo(ifNecessaryGetSlot(cpt.vmState, cpt.msg.contractAddress, slot)):
+      when evmc_enabled:
+        if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
+          cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+      else:
+        cpt.vmState.mutateStateDB:
+          if not db.inAccessList(cpt.msg.contractAddress, slot):
+            db.accessList(cpt.msg.contractAddress, slot)
+            cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
 
-    when evmc_enabled:
-      sstoreEvmc(k.cpt, slot, newValue)
-    else:
-      sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+      when evmc_enabled:
+        sstoreEvmc(cpt, slot, newValue)
+      else:
+        sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
   # -------
 

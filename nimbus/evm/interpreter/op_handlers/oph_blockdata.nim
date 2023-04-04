@@ -16,6 +16,7 @@ import
   eth/common,
   ../../computation,
   ../../stack,
+  ../../async/operations,
   ../op_codes,
   ./oph_defs
 
@@ -31,9 +32,11 @@ when not defined(evmc_enabled):
 const
   blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-    let (blockNumber) = k.cpt.stack.popInt(1)
-    k.cpt.stack.push:
-      k.cpt.getBlockHash(blockNumber)
+    let cpt = k.cpt
+    let (blockNumber) = cpt.stack.popInt(1)
+    cpt.asyncChainTo(ifNecessaryGetBlockHeaderByNumber(cpt.vmState, blockNumber)):
+      cpt.stack.push:
+        cpt.getBlockHash(blockNumber)
 
   coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x41, Get the block's beneficiary address.
@@ -67,8 +70,10 @@ const
 
   selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x47, Get current contract's balance.
-    k.cpt.stack.push:
-      k.cpt.getBalance(k.cpt.msg.contractAddress)
+    let cpt = k.cpt
+    cpt.asyncChainTo(ifNecessaryGetAccount(cpt.vmState, cpt.msg.contractAddress)):
+      cpt.stack.push:
+        cpt.getBalance(cpt.msg.contractAddress)
 
   baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x48, Get the block's base fee.

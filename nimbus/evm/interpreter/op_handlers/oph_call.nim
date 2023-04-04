@@ -22,6 +22,7 @@ import
   ../../memory,
   ../../stack,
   ../../types,
+  ../../async/operations,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -196,171 +197,176 @@ else:
 const
   callOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf1, Message-Call into an account
+    let cpt = k.cpt
 
-    if emvcStatic == k.cpt.msg.flags and k.cpt.stack[^3, UInt256] > 0.u256:
+    if emvcStatic == cpt.msg.flags and cpt.stack[^3, UInt256] > 0.u256:
       raise newException(
         StaticContextError,
         "Cannot modify state while inside of a STATICCALL context")
-    let
-      p = k.cpt.callParams
+    
+    let p = cpt.callParams
+    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
+      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+        var (gasCost, childGasLimit) = cpt.gasCosts[Call].c_handler(
+          p.value,
+          GasParams(
+            kind:             Call,
+            c_isNewAccount:   not cpt.accountExists(p.contractAddress),
+            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_contractGas:    p.gas,
+            c_currentMemSize: cpt.memory.len,
+            c_memOffset:      p.memOffset,
+            c_memLength:      p.memLength))
 
-    var (gasCost, childGasLimit) = k.cpt.gasCosts[Call].c_handler(
-      p.value,
-      GasParams(
-        kind:             Call,
-        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
-        c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    p.gas,
-        c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+        # EIP 2046: temporary disabled
+        # reduce gas fee for precompiles
+        # from 700 to 40
+        if gasCost >= 0:
+          cpt.gasMeter.consumeGas(gasCost, reason = $Call)
 
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    if gasCost >= 0:
-      k.cpt.gasMeter.consumeGas(gasCost, reason = $Call)
+        cpt.returnData.setLen(0)
 
-    k.cpt.returnData.setLen(0)
+        if cpt.msg.depth >= MaxCallDepth:
+          debug "Computation Failure",
+            reason = "Stack too deep",
+            maximumDepth = MaxCallDepth,
+            depth = cpt.msg.depth
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    if k.cpt.msg.depth >= MaxCallDepth:
-      debug "Computation Failure",
-        reason = "Stack too deep",
-        maximumDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
+        if gasCost < 0 and childGasLimit <= 0:
+          raise newException(
+            OutOfGas, "Gas not enough to perform calculation (call)")
 
-    if gasCost < 0 and childGasLimit <= 0:
-      raise newException(
-        OutOfGas, "Gas not enough to perform calculation (call)")
+        cpt.memory.extend(p.memInPos, p.memInLen)
+        cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    k.cpt.memory.extend(p.memInPos, p.memInLen)
-    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
+        let senderBalance = cpt.getBalance(p.sender)
+        if senderBalance < p.value:
+          #debug "Insufficient funds",
+          #  available = senderBalance,
+          #  needed = cpt.msg.value
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    let senderBalance = k.cpt.getBalance(p.sender)
-    if senderBalance < p.value:
-      #debug "Insufficient funds",
-      #  available = senderBalance,
-      #  needed = k.cpt.msg.value
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
-
-    when evmc_enabled:
-      let
-        msg = new(nimbus_message)
-        c   = k.cpt
-      msg[] = nimbus_message(
-        kind        : evmcCall.ord.evmc_call_kind,
-        depth       : (k.cpt.msg.depth + 1).int32,
-        gas         : childGasLimit,
-        sender      : p.sender,
-        recipient   : p.contractAddress,
-        code_address: p.codeAddress,
-        input_data  : k.cpt.memory.readPtr(p.memInPos),
-        input_size  : p.memInLen.uint,
-        value       : toEvmc(p.value),
-        flags       : p.flags.uint32
-      )
-      c.execSubCall(msg, p)
-    else:
-      k.cpt.execSubCall(
-        memPos = p.memOutPos,
-        memLen = p.memOutLen,
-        childMsg = Message(
-          kind:            evmcCall,
-          depth:           k.cpt.msg.depth + 1,
-          gas:             childGasLimit,
-          sender:          p.sender,
-          contractAddress: p.contractAddress,
-          codeAddress:     p.codeAddress,
-          value:           p.value,
-          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-          flags:           p.flags))
+        when evmc_enabled:
+          let
+            msg = new(nimbus_message)
+            c   = cpt
+          msg[] = nimbus_message(
+            kind        : evmcCall.ord.evmc_call_kind,
+            depth       : (cpt.msg.depth + 1).int32,
+            gas         : childGasLimit,
+            sender      : p.sender,
+            recipient   : p.contractAddress,
+            code_address: p.codeAddress,
+            input_data  : cpt.memory.readPtr(p.memInPos),
+            input_size  : p.memInLen.uint,
+            value       : toEvmc(p.value),
+            flags       : p.flags.uint32
+          )
+          c.execSubCall(msg, p)
+        else:
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
   callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
-      p = k.cpt.callCodeParams
+      cpt = k.cpt
+      p = cpt.callCodeParams
 
-    var (gasCost, childGasLimit) = k.cpt.gasCosts[CallCode].c_handler(
-      p.value,
-      GasParams(
-        kind:             CallCode,
-        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
-        c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    p.gas,
-        c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
+      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+        var (gasCost, childGasLimit) = cpt.gasCosts[CallCode].c_handler(
+          p.value,
+          GasParams(
+            kind:             CallCode,
+            c_isNewAccount:   not cpt.accountExists(p.contractAddress),
+            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_contractGas:    p.gas,
+            c_currentMemSize: cpt.memory.len,
+            c_memOffset:      p.memOffset,
+            c_memLength:      p.memLength))
 
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    if gasCost >= 0:
-      k.cpt.gasMeter.consumeGas(gasCost, reason = $CallCode)
+        # EIP 2046: temporary disabled
+        # reduce gas fee for precompiles
+        # from 700 to 40
+        if gasCost >= 0:
+          cpt.gasMeter.consumeGas(gasCost, reason = $CallCode)
 
-    k.cpt.returnData.setLen(0)
+        cpt.returnData.setLen(0)
 
-    if k.cpt.msg.depth >= MaxCallDepth:
-      debug "Computation Failure",
-        reason = "Stack too deep",
-        maximumDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
+        if cpt.msg.depth >= MaxCallDepth:
+          debug "Computation Failure",
+            reason = "Stack too deep",
+            maximumDepth = MaxCallDepth,
+            depth = cpt.msg.depth
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    if gasCost < 0 and childGasLimit <= 0:
-      raise newException(
-        OutOfGas, "Gas not enough to perform calculation (callCode)")
+        # EIP 2046: temporary disabled
+        # reduce gas fee for precompiles
+        # from 700 to 40
+        if gasCost < 0 and childGasLimit <= 0:
+          raise newException(
+            OutOfGas, "Gas not enough to perform calculation (callCode)")
 
-    k.cpt.memory.extend(p.memInPos, p.memInLen)
-    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
+        cpt.memory.extend(p.memInPos, p.memInLen)
+        cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    let senderBalance = k.cpt.getBalance(p.sender)
-    if senderBalance < p.value:
-      #debug "Insufficient funds",
-      #  available = senderBalance,
-      #  needed = k.cpt.msg.value
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
+        let senderBalance = cpt.getBalance(p.sender)
+        if senderBalance < p.value:
+          #debug "Insufficient funds",
+          #  available = senderBalance,
+          #  needed = cpt.msg.value
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    when evmc_enabled:
-      let
-        msg = new(nimbus_message)
-        c   = k.cpt
-      msg[] = nimbus_message(
-        kind        : evmcCallCode.ord.evmc_call_kind,
-        depth       : (k.cpt.msg.depth + 1).int32,
-        gas         : childGasLimit,
-        sender      : p.sender,
-        recipient   : p.contractAddress,
-        code_address: p.codeAddress,
-        input_data  : k.cpt.memory.readPtr(p.memInPos),
-        input_size  : p.memInLen.uint,
-        value       : toEvmc(p.value),
-        flags       : p.flags.uint32
-      )
-      c.execSubCall(msg, p)
-    else:
-      k.cpt.execSubCall(
-        memPos = p.memOutPos,
-        memLen = p.memOutLen,
-        childMsg = Message(
-          kind:            evmcCallCode,
-          depth:           k.cpt.msg.depth + 1,
-          gas:             childGasLimit,
-          sender:          p.sender,
-          contractAddress: p.contractAddress,
-          codeAddress:     p.codeAddress,
-          value:           p.value,
-          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-          flags:           p.flags))
+        when evmc_enabled:
+          let
+            msg = new(nimbus_message)
+            c   = cpt
+          msg[] = nimbus_message(
+            kind        : evmcCallCode.ord.evmc_call_kind,
+            depth       : (cpt.msg.depth + 1).int32,
+            gas         : childGasLimit,
+            sender      : p.sender,
+            recipient   : p.contractAddress,
+            code_address: p.codeAddress,
+            input_data  : cpt.memory.readPtr(p.memInPos),
+            input_size  : p.memInLen.uint,
+            value       : toEvmc(p.value),
+            flags       : p.flags.uint32
+          )
+          c.execSubCall(msg, p)
+        else:
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCallCode,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
@@ -368,72 +374,75 @@ const
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
     let
-      p = k.cpt.delegateCallParams
+      cpt = k.cpt
+      p = cpt.delegateCallParams
 
-    var (gasCost, childGasLimit) = k.cpt.gasCosts[DelegateCall].c_handler(
-      p.value,
-      GasParams(
-        kind: DelegateCall,
-        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
-        c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    p.gas,
-        c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
+      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+        var (gasCost, childGasLimit) = cpt.gasCosts[DelegateCall].c_handler(
+          p.value,
+          GasParams(
+            kind: DelegateCall,
+            c_isNewAccount:   not cpt.accountExists(p.contractAddress),
+            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_contractGas:    p.gas,
+            c_currentMemSize: cpt.memory.len,
+            c_memOffset:      p.memOffset,
+            c_memLength:      p.memLength))
 
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    if gasCost >= 0:
-      k.cpt.gasMeter.consumeGas(gasCost, reason = $DelegateCall)
+        # EIP 2046: temporary disabled
+        # reduce gas fee for precompiles
+        # from 700 to 40
+        if gasCost >= 0:
+          cpt.gasMeter.consumeGas(gasCost, reason = $DelegateCall)
 
-    k.cpt.returnData.setLen(0)
-    if k.cpt.msg.depth >= MaxCallDepth:
-      debug "Computation Failure",
-        reason = "Stack too deep",
-        maximumDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
+        cpt.returnData.setLen(0)
+        if cpt.msg.depth >= MaxCallDepth:
+          debug "Computation Failure",
+            reason = "Stack too deep",
+            maximumDepth = MaxCallDepth,
+            depth = cpt.msg.depth
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    if gasCost < 0 and childGasLimit <= 0:
-      raise newException(
-        OutOfGas, "Gas not enough to perform calculation (delegateCall)")
+        if gasCost < 0 and childGasLimit <= 0:
+          raise newException(
+            OutOfGas, "Gas not enough to perform calculation (delegateCall)")
 
-    k.cpt.memory.extend(p.memInPos, p.memInLen)
-    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
+        cpt.memory.extend(p.memInPos, p.memInLen)
+        cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    when evmc_enabled:
-      let
-        msg = new(nimbus_message)
-        c   = k.cpt
-      msg[] = nimbus_message(
-        kind        : evmcDelegateCall.ord.evmc_call_kind,
-        depth       : (k.cpt.msg.depth + 1).int32,
-        gas         : childGasLimit,
-        sender      : p.sender,
-        recipient   : p.contractAddress,
-        code_address: p.codeAddress,
-        input_data  : k.cpt.memory.readPtr(p.memInPos),
-        input_size  : p.memInLen.uint,
-        value       : toEvmc(p.value),
-        flags       : p.flags.uint32
-      )
-      c.execSubCall(msg, p)
-    else:
-      k.cpt.execSubCall(
-        memPos = p.memOutPos,
-        memLen = p.memOutLen,
-        childMsg = Message(
-          kind:            evmcDelegateCall,
-          depth:           k.cpt.msg.depth + 1,
-          gas:             childGasLimit,
-          sender:          p.sender,
-          contractAddress: p.contractAddress,
-          codeAddress:     p.codeAddress,
-          value:           p.value,
-          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-          flags:           p.flags))
+        when evmc_enabled:
+          let
+            msg = new(nimbus_message)
+            c   = cpt
+          msg[] = nimbus_message(
+            kind        : evmcDelegateCall.ord.evmc_call_kind,
+            depth       : (cpt.msg.depth + 1).int32,
+            gas         : childGasLimit,
+            sender      : p.sender,
+            recipient   : p.contractAddress,
+            code_address: p.codeAddress,
+            input_data  : cpt.memory.readPtr(p.memInPos),
+            input_size  : p.memInLen.uint,
+            value       : toEvmc(p.value),
+            flags       : p.flags.uint32
+          )
+          c.execSubCall(msg, p)
+        else:
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcDelegateCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
@@ -441,77 +450,80 @@ const
     ## 0xfa, Static message-call into an account.
 
     let
-      p = k.cpt.staticCallParams
+      cpt = k.cpt
+      p = cpt.staticCallParams
 
-    var (gasCost, childGasLimit) = k.cpt.gasCosts[StaticCall].c_handler(
-      p.value,
-      GasParams(
-        kind: StaticCall,
-        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
-        c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    p.gas,
-        c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+    cpt.asyncChainTo(ifNecessaryGetAccounts(cpt.vmState, @[p.sender])):
+      cpt.asyncChainTo(ifNecessaryGetCodeForAccounts(cpt.vmState, @[p.contractAddress, p.codeAddress])):
+        var (gasCost, childGasLimit) = cpt.gasCosts[StaticCall].c_handler(
+          p.value,
+          GasParams(
+            kind: StaticCall,
+            c_isNewAccount:   not cpt.accountExists(p.contractAddress),
+            c_gasBalance:     cpt.gasMeter.gasRemaining,
+            c_contractGas:    p.gas,
+            c_currentMemSize: cpt.memory.len,
+            c_memOffset:      p.memOffset,
+            c_memLength:      p.memLength))
 
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    #
-    # when opCode == StaticCall:
-    #  if k.cpt.fork >= FkBerlin and codeAddress.toInt <= MaxPrecompilesAddr:
-    #    gasCost = gasCost - 660.GasInt
-    if gasCost >= 0:
-      k.cpt.gasMeter.consumeGas(gasCost, reason = $StaticCall)
+        # EIP 2046: temporary disabled
+        # reduce gas fee for precompiles
+        # from 700 to 40
+        #
+        # when opCode == StaticCall:
+        #  if cpt.fork >= FkBerlin and codeAddress.toInt <= MaxPrecompilesAddr:
+        #    gasCost = gasCost - 660.GasInt
+        if gasCost >= 0:
+          cpt.gasMeter.consumeGas(gasCost, reason = $StaticCall)
 
-    k.cpt.returnData.setLen(0)
+        cpt.returnData.setLen(0)
 
-    if k.cpt.msg.depth >= MaxCallDepth:
-      debug "Computation Failure",
-        reason = "Stack too deep",
-        maximumDepth = MaxCallDepth,
-        depth = k.cpt.msg.depth
-      k.cpt.gasMeter.returnGas(childGasLimit)
-      return
+        if cpt.msg.depth >= MaxCallDepth:
+          debug "Computation Failure",
+            reason = "Stack too deep",
+            maximumDepth = MaxCallDepth,
+            depth = cpt.msg.depth
+          cpt.gasMeter.returnGas(childGasLimit)
+          return
 
-    if gasCost < 0 and childGasLimit <= 0:
-      raise newException(
-        OutOfGas, "Gas not enough to perform calculation (staticCall)")
+        if gasCost < 0 and childGasLimit <= 0:
+          raise newException(
+            OutOfGas, "Gas not enough to perform calculation (staticCall)")
 
-    k.cpt.memory.extend(p.memInPos, p.memInLen)
-    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
+        cpt.memory.extend(p.memInPos, p.memInLen)
+        cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    when evmc_enabled:
-      let
-        msg = new(nimbus_message)
-        c   = k.cpt
-      msg[] = nimbus_message(
-        kind        : evmcCall.ord.evmc_call_kind,
-        depth       : (k.cpt.msg.depth + 1).int32,
-        gas         : childGasLimit,
-        sender      : p.sender,
-        recipient   : p.contractAddress,
-        code_address: p.codeAddress,
-        input_data  : k.cpt.memory.readPtr(p.memInPos),
-        input_size  : p.memInLen.uint,
-        value       : toEvmc(p.value),
-        flags       : p.flags.uint32
-      )
-      c.execSubCall(msg, p)
-    else:
-      k.cpt.execSubCall(
-        memPos = p.memOutPos,
-        memLen = p.memOutLen,
-        childMsg = Message(
-          kind:            evmcCall,
-          depth:           k.cpt.msg.depth + 1,
-          gas:             childGasLimit,
-          sender:          p.sender,
-          contractAddress: p.contractAddress,
-          codeAddress:     p.codeAddress,
-          value:           p.value,
-          data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-          flags:           p.flags))
+        when evmc_enabled:
+          let
+            msg = new(nimbus_message)
+            c   = cpt
+          msg[] = nimbus_message(
+            kind        : evmcCall.ord.evmc_call_kind,
+            depth       : (cpt.msg.depth + 1).int32,
+            gas         : childGasLimit,
+            sender      : p.sender,
+            recipient   : p.contractAddress,
+            code_address: p.codeAddress,
+            input_data  : cpt.memory.readPtr(p.memInPos),
+            input_size  : p.memInLen.uint,
+            value       : toEvmc(p.value),
+            flags       : p.flags.uint32
+          )
+          c.execSubCall(msg, p)
+        else:
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
