@@ -8,21 +8,21 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, sets],
   chronicles,
   chronos,
-  eth/[common, p2p],
+  eth/p2p,
   stew/[interval_set, keyed_queue],
-  ../../common as nimcom,
-  ../../db/select_backend,
-  ".."/[handlers, protocol, sync_desc],
+  "../.."/[common, db/select_backend],
+  ".."/[handlers/eth, protocol, sync_desc],
   ./worker/[pivot, ticker],
+  ./worker/pivot/storage_queue_helper,
   ./worker/com/com_error,
   ./worker/db/[hexary_desc, snapdb_desc, snapdb_pivot],
   "."/[range_desc, update_beacon_header, worker_desc]
-
-{.push raises: [].}
 
 logScope:
   topics = "snap-buddy"
@@ -71,14 +71,14 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
   #    nAccounts=recov.state.nAccounts, nDangling=recov.state.dangling.len
 
   # Update pivot data from recovery checkpoint
-  env.recoverPivotFromCheckpoint(ctx, topLevel)
+  env.pivotRecoverFromCheckpoint(ctx, topLevel)
 
   # Fetch next recovery record if there is any
   if recov.state.predecessor.isZero:
     #when extraTraceMessages:
     #  trace "Recovery done", checkpoint, topLevel
     return false
-  let rc = ctx.pool.snapDb.recoverPivot(recov.state.predecessor)
+  let rc = ctx.pool.snapDb.pivotRecoverDB(recov.state.predecessor)
   if rc.isErr:
     when extraTraceMessages:
       trace "Recovery stopped at pivot stale checkpoint", checkpoint, topLevel
@@ -114,7 +114,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
 
   # Check for recovery mode
   block:
-    let rc = ctx.pool.snapDb.recoverPivot()
+    let rc = ctx.pool.snapDb.pivotRecoverDB()
     if rc.isOk:
       ctx.pool.recovery = SnapRecoveryRef(state: rc.value)
       ctx.daemon = true
@@ -224,9 +224,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
         return # nothing to do
       rc.value
     pivot = "#" & $env.stateHeader.blockNumber # for logging
-    nStorQuAtStart = env.fetchStorageFull.len +
-                     env.fetchStoragePart.len +
-                     env.parkedStorage.len
+    fa = env.fetchAccounts
 
   buddy.only.pivotEnv = env
 
@@ -234,7 +232,7 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   # -----------------------------------------------
 
   # Check whether this pivot is fully downloaded
-  if env.fetchAccounts.processed.isFull and nStorQuAtStart == 0:
+  if fa.processed.isFull and env.storageQueueTotal() == 0:
     trace "Snap full sync -- not implemented yet", peer, pivot
     await sleepAsync(5.seconds)
     # flip over to single mode for getting new instructins
@@ -251,19 +249,17 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   when extraTraceMessages:
     block:
       trace "Multi sync runner", peer, pivot, nAccounts=env.nAccounts,
-        nSlotLists=env.nSlotLists,
-        processed=env.fetchAccounts.processed.fullPC3,
-        nStoQu=nStorQuAtStart
+        processed=fa.processed.fullPC3, nStoQu=env.storageQueueTotal(),
+        nSlotLists=env.nSlotLists
 
   # This one is the syncing work horse which downloads the database
   await env.execSnapSyncAction(buddy)
 
   # Various logging entries (after accounts and storage slots download)
   let
-    nAccounts {.used.} = env.nAccounts
-    nSlotLists {.used.} = env.nSlotLists
-    processed {.used.} = env.fetchAccounts.processed.fullPC3
-    nStoQuLater {.used.} = env.fetchStorageFull.len + env.fetchStoragePart.len
+    nAccounts = env.nAccounts
+    nSlotLists = env.nSlotLists
+    processed = fa.processed.fullPC3
 
   if env.archived:
     # Archive pivot if it became stale
@@ -276,11 +272,11 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
     let rc = env.saveCheckpoint(ctx)
     if rc.isErr:
       error "Failed to save recovery checkpoint", peer, pivot, nAccounts,
-       nSlotLists, processed, nStoQu=nStoQuLater, error=rc.error
+       processed, nStoQu=env.storageQueueTotal(), nSlotLists, error=rc.error
     else:
       when extraTraceMessages:
-        trace "Saved recovery checkpoint", peer, pivot, nAccounts, nSlotLists,
-          processed, nStoQu=nStoQuLater, blobSize=rc.value
+        trace "Saved recovery checkpoint", peer, pivot, nAccounts, processed,
+          nStoQu=env.storageQueueTotal(),  nSlotLists, blobSize=rc.value
 
 # ------------------------------------------------------------------------------
 # End

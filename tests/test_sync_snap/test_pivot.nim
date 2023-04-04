@@ -38,7 +38,7 @@ proc test_pivotStoreRead*(
     slotAccounts = seq[NodeKey].default
   for n in 0 ..< accKeys.len:
     let w = accKeys[n]
-    check dbBase.savePivot(
+    check dbBase.pivotSaveDB(
       SnapDbPivotRegistry(
         header:       BlockHeader(stateRoot: w.to(Hash256)),
         nAccounts:    n.uint64,
@@ -50,7 +50,7 @@ proc test_pivotStoreRead*(
       sleep(50)
     # verify latest state root
     block:
-      let rc = dbBase.recoverPivot()
+      let rc = dbBase.pivotRecoverDB()
       check rc.isOk
       if rc.isOk:
         check rc.value.nAccounts == n.uint64
@@ -64,13 +64,13 @@ proc test_pivotStoreRead*(
   for n in 0 ..< accKeys.len:
     let w = accKeys[n]
     block:
-      let rc = dbBase.recoverPivot(w)
+      let rc = dbBase.pivotRecoverDB(w)
       check rc.isOk
       if rc.isOk:
         check rc.value.nAccounts == n.uint64
         check rc.value.nSlotLists == n.uint64
     # Update record in place
-    check dbBase.savePivot(
+    check dbBase.pivotSaveDB(
       SnapDbPivotRegistry(
         header:       BlockHeader(stateRoot: w.to(Hash256)),
         nAccounts:    n.uint64,
@@ -81,7 +81,7 @@ proc test_pivotStoreRead*(
       # There might be a race condition on Windows (seen on qemu/win7)
       sleep(50)
     block:
-      let rc = dbBase.recoverPivot(w)
+      let rc = dbBase.pivotRecoverDB(w)
       check rc.isOk
       if rc.isOk:
         check rc.value.nAccounts == n.uint64

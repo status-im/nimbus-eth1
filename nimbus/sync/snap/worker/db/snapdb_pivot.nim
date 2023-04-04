@@ -44,37 +44,37 @@ template handleRlpException(info: static[string]; code: untyped) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc savePivot*(
+proc pivotSaveDB*(
     pv: SnapDbRef;                ## Base descriptor on `ChainDBRef`
     data: SnapDbPivotRegistry;    ## Registered data record
       ): Result[int,HexaryError] =
   ## Register pivot environment
-  handleRlpException("savePivot()"):
+  handleRlpException("pivotSaveDB()"):
     let rlpData = rlp.encode(data)
     pv.kvDb.persistentStateRootPut(data.header.stateRoot.to(NodeKey), rlpData)
     return ok(rlpData.len)
   # notreached
 
-proc recoverPivot*(
+proc pivotRecoverDB*(
   pv: SnapDbRef;                  ## Base descriptor on `ChainDBRef`
   stateRoot: NodeKey;             ## Check for a particular state root
     ): Result[SnapDbPivotRegistry,HexaryError] =
   ## Restore pivot environment for a particular state root.
   let rc = pv.kvDb.persistentStateRootGet(stateRoot)
   if rc.isOk:
-    handleRlpException("recoverPivot()"):
+    handleRlpException("rpivotRecoverDB()"):
       var r = rlp.decode(rc.value.data, SnapDbPivotRegistry)
       r.predecessor = rc.value.key
       return ok(r)
   err(StateRootNotFound)
 
-proc recoverPivot*(
+proc pivotRecoverDB*(
   pv: SnapDbRef;                  ## Base descriptor on `ChainDBRef`
     ): Result[SnapDbPivotRegistry,HexaryError] =
   ## Restore pivot environment that was saved latest.
   let rc = pv.kvDb.persistentStateRootGet(NodeKey.default)
   if rc.isOk:
-    return pv.recoverPivot(rc.value.key)
+    return pv.pivotRecoverDB(rc.value.key)
   err(StateRootNotFound)
 
 # ------------------------------------------------------------------------------

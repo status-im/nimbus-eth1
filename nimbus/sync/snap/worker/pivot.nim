@@ -287,7 +287,7 @@ proc saveCheckpoint*(
   if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  ctx.pool.snapDb.savePivot SnapDbPivotRegistry(
+  ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
     header:       env.stateHeader,
     nAccounts:    env.nAccounts,
     nSlotLists:   env.nSlotLists,
@@ -298,7 +298,7 @@ proc saveCheckpoint*(
                    toSeq(env.parkedStorage.items))
 
 
-proc recoverPivotFromCheckpoint*(
+proc pivotRecoverFromCheckpoint*(
     env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Global context (containing save state)
     topLevel: bool;                 # Full data set on top level only

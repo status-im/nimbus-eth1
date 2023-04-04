@@ -58,7 +58,7 @@ logScope:
   topics = "snap-slot"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ const
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Storage slots healing " & info
+  "Storage slots heal " & info
 
 proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
@@ -344,9 +344,7 @@ proc healStorageSlots*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetching and merging missing slorage slots trie database nodes.
-  when extraTraceMessages:
-    let peer {.used.} = buddy.peer
-    trace logTxt "started", peer, ctx=buddy.healingCtx(env)
+  trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)
 
   var
     nNodesFetched = 0
@@ -363,8 +361,8 @@ proc healStorageSlots*(
       let rc = env.storageQueueUnlinkPartialItem visited
       if rc.isErr:
         when extraTraceMessages:
-          trace logTxt "queue exhausted", peer, ctx=buddy.healingCtx(env),
-            nIgnore=ignore.len, nVisited=visited.len
+          trace logTxt "queue exhausted", peer=buddy.peer,
+            ctx=buddy.healingCtx(env), nIgnore=ignore.len, nVisited=visited.len
         break
       rc.value
 
@@ -383,9 +381,8 @@ proc healStorageSlots*(
     ignore = ignore + rejected
     nNodesFetched.inc(nNodes)
 
-  when extraTraceMessages:
-    trace logTxt "done", peer, ctx=buddy.healingCtx(env),
-      nNodesFetched, nFetchLoop, nIgnore=ignore.len, nVisited=visited.len
+  trace logTxt "done", peer=buddy.peer, ctx=buddy.healingCtx(env),
+    nNodesFetched, nFetchLoop, nIgnore=ignore.len, nVisited=visited.len
 
 # ------------------------------------------------------------------------------
 # End
