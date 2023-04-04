@@ -53,13 +53,11 @@ import
   "."/[find_missing_nodes, storage_queue_helper, swap_in]
 
 logScope:
-  topics = "snap-heal"
+  topics = "snap-acc"
 
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
-
-  EmptyBlobSet = HashSet[Blob].default
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
@@ -72,11 +70,10 @@ proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
 
 proc `$`(rs: NodeTagRangeSet): string =
-  let ff = rs.fullFactor
-  if 0.99 <= ff and ff < 1.0: "99%" else: ff.toPC(0)
+  rs.fullPC3
 
 proc `$`(iv: NodeTagRange): string =
-  iv.fullFactor.toPC(3)
+  iv.fullPC3
 
 proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
   let sumUp = w.mapIt(it.hexaryEnvelope.len).foldl(a+b, 0.u256)
@@ -88,7 +85,8 @@ proc healingCtx(
       ): string =
   let ctx = buddy.ctx
   "{" &
-    "pivot=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "ctl=" & $buddy.ctrl.state & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & $env.fetchAccounts.processed & "/" &
                   $ctx.pool.coveredAccounts ) & "}"
@@ -146,7 +144,7 @@ proc compileMissingNodesList(
     return mlv.missing
 
 
-proc fetchMissingNodes(
+proc getNodesFromNetwork(
     buddy: SnapBuddyRef;
     missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
     ignore: HashSet[Blob];              # Except for these partial paths listed
@@ -156,7 +154,6 @@ proc fetchMissingNodes(
   ## Extract from `nodes.missing` the next batch of nodes that need
   ## to be merged it into the database
   let
-    ctx {.used.} = buddy.ctx
     peer {.used.} = buddy.peer
     rootHash = env.stateHeader.stateRoot
     pivot = "#" & $env.stateHeader.blockNumber # for logging
@@ -205,11 +202,7 @@ proc kvAccountLeaf(
     env: SnapPivotRef;
       ): (bool,NodeKey,Account) =
   ## Re-read leaf node from persistent database (if any)
-  let
-    peer {.used.} = buddy.peer
-  var
-    nNibbles = -1
-
+  var nNibbles = -1
   discardRlpError("kvAccountLeaf"):
     let
       nodeRlp = rlpFromBytes node.data
@@ -226,7 +219,7 @@ proc kvAccountLeaf(
       return (true, nodeKey, accData)
 
   when extraTraceMessages:
-    trace logTxt "non-leaf node path or corrupt data", peer,
+    trace logTxt "non-leaf node path or corrupt data", peer=buddy.peer,
       ctx=buddy.healingCtx(env), nNibbles
 
 
@@ -297,7 +290,7 @@ proc accountsHealingImpl(
     return (0,EmptyBlobSet) # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
-  let fetchedNodes = await buddy.fetchMissingNodes(missingNodes, ignore, env)
+  let fetchedNodes = await buddy.getNodesFromNetwork(missingNodes, ignore, env)
   if fetchedNodes.len == 0:
     return (0,EmptyBlobSet)
 
@@ -308,8 +301,8 @@ proc accountsHealingImpl(
 
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
-    error logTxt "error updating persistent database", peer,
-      ctx=buddy.healingCtx(env), nFetchedNodes, error=report[^1].error
+    error logTxt "databse error", peer, ctx=buddy.healingCtx(env),
+      nFetchedNodes, error=report[^1].error
     return (-1,EmptyBlobSet)
 
   # Filter out error and leaf nodes
@@ -349,9 +342,7 @@ proc healAccounts*(
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   when extraTraceMessages:
-    let
-      ctx {.used.} = buddy.ctx
-      peer {.used.} = buddy.peer
+    let peer {.used.} = buddy.peer
     trace logTxt "started", peer, ctx=buddy.healingCtx(env)
 
   let
@@ -364,7 +355,7 @@ proc healAccounts*(
   while not fa.processed.isFull() and
         buddy.ctrl.running and
         not env.archived:
-    var (nNodes, rejected) = await buddy.accountsHealingImpl(ignore, env)
+    let (nNodes, rejected) = await buddy.accountsHealingImpl(ignore, env)
     if nNodes <= 0:
       break
     ignore = ignore + rejected
@@ -372,8 +363,8 @@ proc healAccounts*(
     nFetchLoop.inc
 
   when extraTraceMessages:
-    trace logTxt "job done", peer, ctx=buddy.healingCtx(env),
-      nNodesFetched, nFetchLoop, nIgnore=ignore.len, runState=buddy.ctrl.state
+    trace logTxt "done", peer, ctx=buddy.healingCtx(env),
+      nNodesFetched, nFetchLoop, nIgnore=ignore.len
 
 # ------------------------------------------------------------------------------
 # End

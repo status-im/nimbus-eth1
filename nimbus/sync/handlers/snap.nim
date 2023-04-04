@@ -123,7 +123,7 @@ proc getSlotsSpecs(
   # Ignore missing account entry
   if accData.len == 0:
     when extraTraceMessages:
-      trace logTxt "getSlotsSpecs: no such account", accKey
+      trace logTxt "getSlotsSpecs: no such account", accKey, rootKey
     return err()
 
   # Ignore empty storage list
@@ -169,7 +169,8 @@ iterator doTrieNodeSpecs(
 
     # Fail on this group
     when extraTraceMessages:
-      trace logTxt "doTrieNodeSpecs (blind)", nBlind=w.slotPaths.len
+      trace logTxt "doTrieNodeSpecs (blind)", accPath=w.accPath.toHex,
+        nBlind=w.slotPaths.len, nBlind0=w.slotPaths[0].toHex
     yield (NodeKey.default, nil, EmptyBlob, w.slotPaths.len)
 
 
@@ -416,14 +417,9 @@ method getStorageRanges*(
     dataAllocated += rangeProof.leafsSize
 
     when extraTraceMessages:
-      if accounts.len == 1:
-        trace logTxt "getStorageRanges: single account", iv,
-          accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot
-
-    #when extraTraceMessages:
-    #  trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
-    #    accKey, stoRoot, nSlots=rangeProof.leafs.len,
-    #    nProof=rangeProof.proof.len
+      trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
+        nAccounts=accounts.len, accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot,
+        nSlots=rangeProof.leafs.len, nProof=rangeProof.proof.len
 
     slotLists.add rangeProof.leafs.mapIt(it.to(SnapStorage))
     if 0 < rangeProof.proof.len:
@@ -494,8 +490,7 @@ method getTrieNodes*(
       let steps = partPath.hexPrefixDecode[1].hexaryPath(stateKey, getFn)
       if 0 < steps.path.len and
          steps.tail.len == 0 and steps.path[^1].nibble < 0:
-        let data = steps.path[^1].node.convertTo(Blob)
-        data
+        steps.path[^1].node.convertTo(Blob)
       else:
         EmptyBlob
 

@@ -33,8 +33,11 @@ type
   #  proof*: seq[SnapProof]
 
   GetStorageRanges* = object
-    leftOver*: seq[AccountSlotsHeader]
+    leftOver*: seq[AccountSlotsChanged]
     data*: AccountStorageRange
+
+const
+  extraTraceMessages = false or true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -68,9 +71,8 @@ proc getStorageRangesReq(
     return ok(reply)
 
   except CatchableError as e:
-    let error {.used.} = e.msg
     trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
-      error
+      name=($e.name), error=(e.msg)
     return err()
 
 # ------------------------------------------------------------------------------
@@ -84,25 +86,28 @@ proc getStorageRanges*(
     pivot: string;                     ## For logging, instead of `stateRoot`
       ): Future[Result[GetStorageRanges,ComError]]
       {.async.} =
-  ## Fetch data using the `snap#` protocol, returns the range covered.
+  ## Fetch data using the `snap/1` protocol, returns the range covered.
   ##
-  ## If the first `accounts` argument sequence item has the `firstSlot` field
-  ## set non-zero, only this account is fetched with a range. Otherwise all
-  ## accounts are asked for without a range (non-zero `firstSlot` fields are
-  ## ignored of later sequence items.)
-  let
-    peer {.used.} = buddy.peer
-  var
-    nAccounts = accounts.len
-
+  ## If the first `accounts` argument sequence item has the optional `subRange`
+  ## field set, only this account is fetched with for the range `subRange`.
+  ## Otherwise all accounts are asked for without a range (`subRange` fields
+  ## are ignored for later accounts list items.)
+  var nAccounts = accounts.len
   if nAccounts == 0:
     return err(ComEmptyAccountsArguments)
 
-  if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetStorageRanges", peer, pivot, nAccounts
+  let
+    peer {.used.} = buddy.peer
+    iv = accounts[0].subRange
+
+  when trSnapTracePacketsOk:
+    when extraTraceMessages:
+      trace trSnapSendSending & "GetStorageRanges", peer, pivot, nAccounts,
+        iv=iv.get(otherwise=FullNodeTagRange)
+    else:
+      trace trSnapSendSending & "GetStorageRanges", peer, pivot, nAccounts
 
   let
-    iv = accounts[0].subRange
     snStoRanges = block:
       let rc = await buddy.getStorageRangesReq(stateRoot,
         accounts.mapIt(it.accKey.to(Hash256)), iv, pivot)
@@ -119,7 +124,6 @@ proc getStorageRanges*(
         return err(ComTooManyStorageSlots)
       rc.value.get
 
-  let
     nSlotLists = snStoRanges.slotLists.len
     nProof = snStoRanges.proof.nodes.len
 
@@ -148,40 +152,52 @@ proc getStorageRanges*(
   # Filter remaining `slots` responses:
   # * Accounts for empty ones go back to the `leftOver` list.
   for n in 0 ..< nSlotLists:
-    # Empty data for a slot indicates missing data
-    if snStoRanges.slotLists[n].len == 0:
-      dd.leftOver.add accounts[n]
-    else:
+    if 0 < snStoRanges.slotLists[n].len or (n == nSlotLists-1 and 0 < nProof):
+      # Storage slot data available. The last storage slots list may
+      # be a proved empty sub-range.
       dd.data.storages.add AccountSlots(
         account: accounts[n], # known to be no fewer accounts than slots
         data:    snStoRanges.slotLists[n])
 
-  # Complete the part that was not answered by the peer
-  if nProof == 0:
-    # assigning empty slice is ok
-    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
+    else: # if n < nSlotLists-1 or nProof == 0:
+      # Empty data here indicate missing data
+      dd.leftOver.add AccountSlotsChanged(
+        account: accounts[n])
 
-  else:
-    # Ok, we have a proof now
-    if 0 < snStoRanges.slotLists[^1].len:
-      # If the storage data for the last account comes with a proof, then the
-      # data set is incomplete. So record the missing part on the `dd.leftOver`
-      # list.
+  if 0 < nProof:
+    # Ok, we have a proof now. In that case, there is always a duplicate
+    # of the proved entry on the  `dd.leftOver` list.
+    #
+    # Note that `storages[^1]` exists due to the clause
+    # `(n==nSlotLists-1 and 0<nProof)` in the above `for` loop.
+    let topAcc = dd.data.storages[^1].account
+    dd.leftOver.add AccountSlotsChanged(account: topAcc)
+    if 0 < dd.data.storages[^1].data.len:
       let
-        reqTop = if accounts[0].subRange.isNone: high(NodeTag)
-                 else: accounts[0].subRange.unsafeGet.maxPt
-        respTop = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
-      if respTop < reqTop:
-        dd.leftOver.add AccountSlotsHeader(
-          subRange:    some(NodeTagRange.new(respTop + 1.u256, reqTop)),
-          accKey:      accounts[nSlotLists-1].accKey,
-          storageRoot: accounts[nSlotLists-1].storageRoot)
+        reqMaxPt = topAcc.subRange.get(otherwise = FullNodeTagRange).maxPt
+        respMaxPt = dd.data.storages[^1].data[^1].slotHash.to(NodeTag)
+      if respMaxPt < reqMaxPt:
+        dd.leftOver[^1].newRange = some(
+          NodeTagRange.new(respMaxPt + 1.u256, reqMaxPt))
+  elif 0 < dd.data.storages.len:
+    let topAcc = dd.data.storages[^1].account
+    if topAcc.subRange.isSome:
+      #
+      # Fringe case when a partial request was answered without a proof.
+      # This means, that the interval requested covers the complete trie.
+      #
+      # Copying the request to the `leftOver`, the ranges reflect the new
+      # state: `topAcc.subRange.isSome` and `newRange.isNone`.
+      dd.leftOver.add AccountSlotsChanged(account: topAcc)
 
-    # Do thew rest (assigning empty slice is ok)
-    dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts]
+  # Complete the part that was not answered by the peer.
+  dd.leftOver = dd.leftOver & accounts[nSlotLists ..< nAccounts].mapIt(
+    AccountSlotsChanged(account: it))
 
-  trace trSnapRecvReceived & "StorageRanges", peer, pivot, nAccounts,
-    nSlotLists, nProof, nLeftOver=dd.leftOver.len
+  when trSnapTracePacketsOk:
+    trace trSnapRecvReceived & "StorageRanges", peer, pivot, nAccounts,
+      nSlotLists, nProof, nSlotLstRc=dd.data.storages.len,
+      nLeftOver=dd.leftOver.len
 
   return ok(dd)
 

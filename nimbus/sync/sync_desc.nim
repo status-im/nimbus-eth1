@@ -13,18 +13,18 @@
 ##
 ## Public descriptors
 
+{.push raises: [].}
+
 import
   #std/options,
   eth/[common, p2p],
   ../core/chain,
   ../db/db_chain,
-  ./handlers
+  ./handlers/eth
 
 export
   chain,
   db_chain
-
-{.push raises: [].}
 
 type
   BuddyRunState* = enum
@@ -120,6 +120,13 @@ proc `stopped=`*(ctrl: BuddyCtrlRef; value: bool) =
       ctrl.runState = Running
     else:
       discard
+
+proc `forceRun=`*(ctrl: BuddyCtrlRef; value: bool) =
+  ## Setter, gets out of `Zombie` jail/locked state with `true argument.
+  if value:
+    ctrl.runState = Running
+  else:
+    ctrl.stopped = true
 
 # ------------------------------------------------------------------------------
 # End

@@ -32,9 +32,6 @@ type
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
 
-  SnapSlotsQueuePair* = KeyedQueuePair[Hash256,SnapSlotsQueueItemRef]
-    ## Key-value return code from `SnapSlotsQueue` handler
-
   SnapSlotsQueueItemRef* = ref object
     ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
     ## where the optional `subRange` interval has been replaced by an interval
@@ -71,7 +68,7 @@ type
     nSlotLists*: uint64                ## Imported # of account storage tries
 
     # Mothballing, ready to be swapped into newer pivot record
-    storageAccounts*: SnapAccountsList ## Accounts with missing stortage slots
+    storageAccounts*: SnapAccountsList ## Accounts with missing storage slots
     archived*: bool                    ## Not latest pivot, anymore
 
   SnapPivotTable* = KeyedQueue[Hash256,SnapPivotRef]
@@ -142,7 +139,7 @@ proc pivotAccountsCoverage100PcRollOver*(ctx: SnapCtxRef) =
 # Public helpers: SnapTodoRanges
 # ------------------------------------------------------------------------------
 
-proc init*(q: var SnapTodoRanges) =
+proc init*(q: var SnapTodoRanges; clear = false) =
   ## Populate node range sets with maximal range in the first range set. This
   ## kind of pair or interval sets is managed as follows:
   ## * As long as possible, fetch and merge back intervals on the first set.
@@ -152,7 +149,8 @@ proc init*(q: var SnapTodoRanges) =
   ## is considered after the prioitised intervals are exhausted.
   q[0] = NodeTagRangeSet.init()
   q[1] = NodeTagRangeSet.init()
-  discard q[0].merge(low(NodeTag),high(NodeTag))
+  if not clear:
+    discard q[0].merge FullNodeTagRange
 
 proc clear*(q: var SnapTodoRanges) =
   ## Reset argument range sets empty.
@@ -167,8 +165,12 @@ proc merge*(q: var SnapTodoRanges; iv: NodeTagRange) =
 
 proc mergeSplit*(q: var SnapTodoRanges; iv: NodeTagRange) =
   ## Ditto w/priorities partially reversed
-  if 1 < iv.len:
+  if iv.len == 1:
+    discard q[0].reduce iv
+    discard q[1].merge iv
+  else:
     let
+      # note that (`iv.len` == 0) => (`iv` == `FullNodeTagRange`)
       midPt = iv.minPt + ((iv.maxPt - iv.minPt) shr 1)
       iv1 = NodeTagRange.new(iv.minPt, midPt)
       iv2 = NodeTagRange.new(midPt + 1.u256, iv.maxPt)
@@ -176,9 +178,6 @@ proc mergeSplit*(q: var SnapTodoRanges; iv: NodeTagRange) =
     discard q[1].merge iv1
     discard q[0].merge iv2
     discard q[1].reduce iv2
-  else:
-    discard q[0].reduce iv
-    discard q[1].merge iv
 
 
 proc reduce*(q: var SnapTodoRanges; iv: NodeTagRange) =
@@ -194,8 +193,9 @@ iterator ivItems*(q: var SnapTodoRanges): NodeTagRange =
       yield iv
 
 
-proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
-  ## Fetch interval from node ranges with maximal size `maxLen`
+proc fetch*(q: var SnapTodoRanges; maxLen = 0.u256): Result[NodeTagRange,void] =
+  ## Fetch interval from node ranges with maximal size `maxLen`, where
+  ## `0.u256` is interpreted as `2^256`.
 
   # Swap batch queues if the first one is empty
   if q[0].isEmpty:
@@ -207,9 +207,17 @@ proc fetch*(q: var SnapTodoRanges; maxLen: UInt256): Result[NodeTagRange,void] =
     return err()
 
   let
-    val = rc.value
-    iv = if 0 < val.len and val.len <= maxLen: val # val.len==0 => 2^256
-         else: NodeTagRange.new(val.minPt, val.minPt + (maxLen - 1.u256))
+    jv = rc.value
+    iv = block:
+      if maxLen == 0 or (0 < jv.len and jv.len <= maxLen):
+        jv
+      else:
+        # Note that either:
+        #   (`jv.len` == 0)  => (`jv` == `FullNodeTagRange`) => `jv.minPt` == 0
+        # or
+        #   (`maxLen` < `jv.len`) => (`jv.minPt`+`maxLen` <= `jv.maxPt`)
+        NodeTagRange.new(jv.minPt, jv.minPt + maxLen)
+
   discard q[0].reduce(iv)
   ok(iv)
 

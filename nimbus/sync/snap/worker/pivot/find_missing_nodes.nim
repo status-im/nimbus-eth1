@@ -114,6 +114,7 @@ proc findMissingNodes*(
     planBLevelMax: uint8;
     planBRetryMax: int;
     planBRetrySleepMs: int;
+    forcePlanBOk = false;
       ): Future[MissingNodesSpecs]
       {.async.} =
   ## Find some missing nodes in the hexary trie database.
@@ -138,7 +139,7 @@ proc findMissingNodes*(
 
   # Plan B, carefully employ `hexaryInspect()`
   var nRetryCount = 0
-  if 0 < nodes.len:
+  if 0 < nodes.len or forcePlanBOk:
     ignExceptionOops("compileMissingNodesList"):
       let
         paths = nodes.mapIt it.partialPath
@@ -152,11 +153,13 @@ proc findMissingNodes*(
 
       while stats.dangling.len == 0 and
             nRetryCount < planBRetryMax and
+            1 < maxLevel and
             not stats.resumeCtx.isNil:
         await sleepAsync suspend
         nRetryCount.inc
-        maxLevel = (120 * maxLevel + 99) div 100  # ~20% increase
-        trace logTxt "plan B retry", nRetryCount, maxLevel
+        maxLevel.dec
+        when extraTraceMessages:
+          trace logTxt "plan B retry", forcePlanBOk, nRetryCount, maxLevel
         stats = getFn.hexaryInspectTrie(rootKey,
           resumeCtx = stats.resumeCtx,
           stopAtLevel = maxLevel,
@@ -169,19 +172,20 @@ proc findMissingNodes*(
 
       if 0 < result.missing.len:
         when extraTraceMessages:
-          trace logTxt "plan B", nNodes=nodes.len, nDangling=result.missing.len,
-            level=result.level, nVisited=result.visited, nRetryCount
+          trace logTxt "plan B", forcePlanBOk, nNodes=nodes.len,
+            nDangling=result.missing.len, level=result.level,
+            nVisited=result.visited, nRetryCount
         return
 
   when extraTraceMessages:
-    trace logTxt "plan B not applicable", nNodes=nodes.len,
+    trace logTxt "plan B not applicable", forcePlanBOk, nNodes=nodes.len,
       level=result.level, nVisited=result.visited, nRetryCount
 
   # Plan C, clean up intervals
 
   # Calculate `gaps` as the complement of the `processed` set of intervals
   let gaps = NodeTagRangeSet.init()
-  discard gaps.merge(low(NodeTag),high(NodeTag))
+  discard gaps.merge FullNodeTagRange
   for w in ranges.processed.increasing: discard gaps.reduce w
 
   # Clean up empty gaps in the processed range

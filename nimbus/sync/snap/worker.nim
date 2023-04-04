@@ -9,14 +9,13 @@
 # except according to those terms.
 
 import
-  std/[options, sets, strutils],
+  std/[options, sets],
   chronicles,
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   ../../common as nimcom,
   ../../db/select_backend,
-  ../../utils/prettify,
   ".."/[handlers, protocol, sync_desc],
   ./worker/[pivot, ticker],
   ./worker/com/com_error,
@@ -251,11 +250,9 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   when extraTraceMessages:
     block:
-      let
-        nAccounts {.used.} = env.nAccounts
-        nSlotLists {.used.} = env.nSlotLists
-        processed {.used.} = env.fetchAccounts.processed.fullFactor.toPC(2)
-      trace "Multi sync runner", peer, pivot, nAccounts, nSlotLists, processed,
+      trace "Multi sync runner", peer, pivot, nAccounts=env.nAccounts,
+        nSlotLists=env.nSlotLists,
+        processed=env.fetchAccounts.processed.fullPC3,
         nStoQu=nStorQuAtStart
 
   # This one is the syncing work horse which downloads the database
@@ -263,10 +260,10 @@ proc runMulti*(buddy: SnapBuddyRef) {.async.} =
 
   # Various logging entries (after accounts and storage slots download)
   let
-    nAccounts = env.nAccounts
-    nSlotLists = env.nSlotLists
-    processed = env.fetchAccounts.processed.fullFactor.toPC(2)
-    nStoQuLater = env.fetchStorageFull.len + env.fetchStoragePart.len
+    nAccounts {.used.} = env.nAccounts
+    nSlotLists {.used.} = env.nSlotLists
+    processed {.used.} = env.fetchAccounts.processed.fullPC3
+    nStoQuLater {.used.} = env.fetchStorageFull.len + env.fetchStoragePart.len
 
   if env.archived:
     # Archive pivot if it became stale

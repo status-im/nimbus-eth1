@@ -72,10 +72,10 @@ proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
 
 proc `$`(rs: NodeTagRangeSet): string =
-  rs.fullFactor.toPC(3)
+  rs.fullPC3
 
 proc `$`(iv: NodeTagRange): string =
-  iv.fullFactor.toPC(3)
+  iv.fullPC3
 
 proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
   let sumUp = w.mapIt(it.hexaryEnvelope.len).foldl(a+b, 0.u256)
