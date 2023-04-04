@@ -67,11 +67,6 @@ const
 
   # --------------
 
-  accountsFetchRetryMax* = 2
-    ## The request intervals will be slightly re-arranged after failure.
-    ## So re-trying to fetch another range might be successful (set to 0
-    ## for disabling retries.)
-
   accountsSaveProcessedChunksMax* = 1000
     ## Recovery data are stored if the processed ranges list contains no more
     ## than this many range *chunks*.

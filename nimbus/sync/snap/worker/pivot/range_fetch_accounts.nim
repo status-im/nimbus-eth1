@@ -218,30 +218,21 @@ proc rangeFetchAccounts*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetch accounts and store them in the database.
-  let
-    fa = env.fetchAccounts
-
+  let fa = env.fetchAccounts
   if not fa.processed.isFull():
-    let
-      ctx {.used.} = buddy.ctx
-      peer {.used.} = buddy.peer
 
     when extraTraceMessages:
-      trace logTxt "start", peer, ctx=buddy.fetchCtx(env)
+      trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
 
-    var
-      nFetchAccounts = 0                     # for logging
-      nRetry = 0
+    var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
           buddy.ctrl.running and
-          not env.archived and
-          nRetry <= accountsFetchRetryMax:
+          not env.archived:
       # May repeat fetching with re-arranged request intervals
-      if await buddy.accountsRangefetchImpl(env):
-        nFetchAccounts.inc
-        nRetry = 0
-      else:
-        nRetry.inc
+      if not await buddy.accountsRangefetchImpl(env):
+        break
+
+      nFetchAccounts.inc
 
       # Clean up storage slots queue first it it becomes too large
       let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
@@ -249,7 +240,8 @@ proc rangeFetchAccounts*(
         break
 
     when extraTraceMessages:
-      trace logTxt "done", peer, ctx=buddy.fetchCtx(env), nFetchAccounts
+      trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env),
+        nFetchAccounts
 
 # ------------------------------------------------------------------------------
 # End
