@@ -834,9 +834,9 @@ proc offer(p: PortalProtocol, o: OfferRequest):
               socket.close()
               return err("Error writing requested data")
 
+    await socket.closeWait()
     debug "Content successfully offered"
 
-    await socket.closeWait()
     return ok(m.contentKeys)
   else:
     warn "Offer failed due to accept request failure ",
