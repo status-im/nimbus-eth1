@@ -257,7 +257,9 @@ proc readContentOffer(
   else:
     # This means FIN didn't arrive yet, perhaps it got dropped but it might also
     # be still in flight. Closing the socket (= sending FIN) ourselves.
-    # Not waiting here for its ACK however, so no `closeWait`
+    # Not waiting here for its ACK however, so no `closeWait`. Underneath the
+    # socket will still wait for the FIN-ACK (or timeout) before it destroys the
+    # socket.
     socket.close()
 
   # TODO: This could currently create a backlog of content items to be validated
