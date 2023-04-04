@@ -239,7 +239,7 @@ proc execSnapSyncAction*(
       await buddy.rangeFetchStorageSlots(env)
     else:
       rangeFetchOk = false
-    if env.archived:
+    if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
       return
 
     # Uncconditonally try healing if enabled.
@@ -250,7 +250,7 @@ proc execSnapSyncAction*(
       # physically disconnected.
       buddy.ctrl.forceRun = true
       await buddy.healAccounts(env)
-      if env.archived:
+      if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
         return
 
   # Some additional storage slots might have been popped up

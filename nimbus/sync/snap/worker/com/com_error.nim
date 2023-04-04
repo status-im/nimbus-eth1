@@ -19,6 +19,7 @@ type
   ComErrorStatsRef* = ref object
     ## particular error counters so connections will not be cut immediately
     ## after a particular error.
+    peerDegraded*: bool
     nTimeouts*: uint
     nNoData*: uint
     nNetwork*: uint
@@ -61,6 +62,7 @@ proc stopAfterSeriousComError*(
     if comErrorsTimeoutMax < stats.nTimeouts:
       # Mark this peer dead, i.e. avoid fetching from this peer for a while
       ctrl.zombie = true
+      stats.peerDegraded = true
       return true
 
     when 0 < comErrorsTimeoutSleepMSecs:
@@ -71,6 +73,7 @@ proc stopAfterSeriousComError*(
     stats.nNetwork.inc
     if comErrorsNetworkMax < stats.nNetwork:
       ctrl.zombie = true
+      stats.peerDegraded = true
       return true
 
     when 0 < comErrorsNetworkSleepMSecs:
@@ -84,6 +87,7 @@ proc stopAfterSeriousComError*(
      ComNoTrieNodesAvailable:
     stats.nNoData.inc
     if comErrorsNoDataMax < stats.nNoData:
+      # Mark this peer dead, i.e. avoid fetching from this peer for a while
       ctrl.zombie = true
       return true
 
