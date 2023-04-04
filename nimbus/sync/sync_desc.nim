@@ -121,6 +121,13 @@ proc `stopped=`*(ctrl: BuddyCtrlRef; value: bool) =
     else:
       discard
 
+proc `forceRun=`*(ctrl: BuddyCtrlRef; value: bool) =
+  ## Setter, gets out of `Zombie` jail/locked state with `true argument.
+  if value:
+    ctrl.runState = Running
+  else:
+    ctrl.stopped = true
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

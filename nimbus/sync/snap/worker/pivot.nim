@@ -226,6 +226,7 @@ proc execSnapSyncAction*(
       if buddy.ctrl.stopped or env.archived:
         return
 
+  var rangeFetchOk = true
   if not env.fetchAccounts.processed.isFull:
     await buddy.rangeFetchAccounts(env)
 
@@ -234,26 +235,35 @@ proc execSnapSyncAction*(
 
     # Run at least one round fetching storage slosts even if the `archived`
     # flag is set in order to keep the batch queue small.
-    if not buddy.ctrl.stopped:
+    if buddy.ctrl.running:
       await buddy.rangeFetchStorageSlots(env)
-
-    if buddy.ctrl.stopped or env.archived:
+    else:
+      rangeFetchOk = false
+    if env.archived:
       return
 
+    # Uncconditonally try healing if enabled.
     if env.accountsHealingOk(ctx):
+      # Let this procedure decide whether to ditch this peer (if any.) The idea
+      # is that the healing process might address different peer ressources
+      # than the fetch procedure. So that peer might still be useful unless
+      # physically disconnected.
+      buddy.ctrl.forceRun = true
       await buddy.healAccounts(env)
-      if buddy.ctrl.stopped or env.archived:
+      if env.archived:
         return
 
   # Some additional storage slots might have been popped up
-  await buddy.rangeFetchStorageSlots(env)
-  if buddy.ctrl.stopped or env.archived:
-    return
+  if rangeFetchOk:
+    await buddy.rangeFetchStorageSlots(env)
+    if env.archived:
+      return
 
   # Don't bother with storage slots healing before accounts healing takes
   # place. This saves communication bandwidth. The pivot might change soon,
   # anyway.
   if env.accountsHealingOk(ctx):
+    buddy.ctrl.forceRun = true
     await buddy.healStorageSlots(env)
 
 
