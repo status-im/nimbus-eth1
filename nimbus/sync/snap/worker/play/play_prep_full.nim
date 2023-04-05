@@ -15,11 +15,20 @@ import
   stew/keyed_queue,
   ../../../sync_desc,
   ../../worker_desc,
+  ../ticker,
   play_desc
 
 const
   extraTraceMessages = false or true
     ## Enabled additional logging noise
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc blindTicker(ctx: SnapCtxRef): TickerFullStatsUpdater =
+  result = proc: TickerFullStats =
+    discard
 
 # ------------------------------------------------------------------------------
 # Private functions, transitional handlers preparing for full sync
@@ -50,6 +59,13 @@ proc prepFullSyncSingle(buddy: SnapBuddyRef) {.async.} =
 
   when extraTraceMessages:
     trace "Full sync prepare in single mode", peer, pivot
+
+  # update ticker (currently blind)
+  ctx.pool.ticker.init(cb = ctx.blindTicker())
+
+  # Cosmetics: allow other processes (e.g. ticker) to log the current
+  # state. There is no other intended purpose of this wait state.
+  await sleepAsync 1100.milliseconds
 
   ctx.playMode = FullSyncMode
   buddy.ctrl.multiOk = true
