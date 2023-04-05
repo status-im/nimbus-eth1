@@ -19,7 +19,8 @@ import
   beacon_chain/spec/datatypes/altair,
   beacon_chain/gossip_processing/light_client_processor,
   ./conf, ./network_metadata, ./common/common_utils,
-  ./rpc/[rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
+  ./rpc/[rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api,
+    rpc_portal_debug_api],
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/beacon_light_client/[
@@ -246,6 +247,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
     var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
+    rpcHttpServerWithProxy.installWeb3ApiHandlers()
     if stateNetwork.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
         stateNetwork.get().portalProtocol, "state")
