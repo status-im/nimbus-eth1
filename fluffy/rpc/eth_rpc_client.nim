@@ -15,3 +15,4 @@ import
 export rpcclient, rpc_types, hexstrings, errors
 
 createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_eth_calls.nim")
+createRpcSigs(RpcClient, currentSourcePath.parentDir / "rpc_calls" / "rpc_web3_calls.nim")
