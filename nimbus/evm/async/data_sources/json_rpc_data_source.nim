@@ -389,7 +389,7 @@ proc assertThatWeHaveStoredBlockHeader(chainDB: ChainDBRef, blockNumber: BlockNu
   let h = chainDB.getBlockHash(blockNumber)
   doAssert(h == header.blockHash, "stored the block header for block " & $(blockNumber))
 
-template raiseExceptionIfError[E](whatAreWeVerifying: untyped, r: Result[void, E]) =
+proc raiseExceptionIfError[V, E](whatAreWeVerifying: V, r: Result[void, E]) =
   if r.isErr:
     error("async code failed to verify", whatAreWeVerifying=whatAreWeVerifying, err=r.error)
     raise newException(CatchableError, "async code failed to verify: " & $(whatAreWeVerifying) & ", error is: " & $(r.error))
