@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2022 Status Research & Development GmbH
+# Copyright (c) 2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,143 +7,220 @@
 
 {.used.}
 
+{.push raises: [].}
+
 import
-  unittest2, stew/byteutils, stint,
-  ssz_serialization, ssz_serialization/[proofs, merkleization],
-  ../../../network/history/[history_content, accumulator]
+  unittest2, stew/byteutils,
+  eth/common/eth_types_rlp,
+  ../../../network_metadata,
+  ../../../eth_data/[history_data_json_store, history_data_ssz_e2s],
+  ../../../network/history/[history_content, history_network, accumulator],
+  ../../test_history_util
 
-# According to test vectors:
-# https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md#history-network-keys
+type
+  JsonPortalContent* = object
+    content_key*: string
+    content_value*: string
 
-suite "History ContentKey Encodings":
-  test "BlockHeader":
-    # Input
-    const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+  JsonPortalContentTable* = Table[string, JsonPortalContent]
 
-    # Output
+suite "History Content Encodings":
+  test "HeaderWithProof Building and Encoding":
     const
-      contentKeyHex =
-        "00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
-      contentId =
-        "28281392725701906550238743427348001871342819822834514257505083923073246729726"
-      # or
-      contentIdHexBE =
-        "3e86b3767b57402ea72e369ae0496ce47cc15be685bec3b4726b9f316e3895fe"
+      headerFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
+      accumulatorFile = "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
+      headersWithProofFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
 
-    let contentKey = ContentKey(
-      contentType: blockHeader,
-      blockHeaderKey: BlockKey(blockHash: blockHash))
+    let
+      blockHeaders = readBlockHeaders(headerFile).valueOr:
+        raiseAssert "Invalid header file: " & headerFile
+      epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
+        raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
+      blockHeadersWithProof =
+        buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
+          raiseAssert "Could not build headers with proof"
+      accumulator =
+        try:
+          SSZ.decode(finishedAccumulator, FinishedAccumulator)
+        except SszError as err:
+          raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-    let encoded = encode(contentKey)
-    check encoded.asSeq.toHex == contentKeyHex
-    let decoded = decode(encoded)
-    check decoded.isSome()
 
-    let contentKeyDecoded = decoded.get()
-    check:
-      contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.blockHeaderKey == contentKey.blockHeaderKey
+    let res = readJsonType(headersWithProofFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
 
-      toContentId(contentKey) == parse(contentId, StUint[256], 10)
-      # In stint this does BE hex string
-      toContentId(contentKey).toHex() == contentIdHexBE
+    for i, (headerContentKey, headerWithProof) in blockHeadersWithProof:
+      # Go over all content keys and headers with generated proofs and compare
+      # them with the ones from the test vectors.
+      let
+        blockNumber = blockHeaders[i].blockNumber
+        contentKeyEncoded =
+          content[blockNumber.toString()].content_key.hexToSeqByte()
+        contentValueEncoded =
+          content[blockNumber.toString()].content_value.hexToSeqByte()
 
-  test "BlockBody":
-    # Input
-    const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+      check:
+        contentKeyEncoded == headerContentKey
+        contentValueEncoded == headerWithProof
 
-    # Output
+      # Also run the encode/decode loopback and verification of the header
+      # proofs.
+      let
+        contentKey = decodeSsz(
+          contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(
+          contentValueEncoded, BlockHeaderWithProof)
+
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
+
+      let blockHeaderWithProof = contentValue.get()
+
+      let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
+      check res.isOk()
+      let header = res.get()
+
+      check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+
+      # Encode content
+      check:
+        SSZ.encode(blockHeaderWithProof) == contentValueEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+  test "HeaderWithProof Encoding/Decoding and Verification":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.json"
+
+    let accumulator =
+      try:
+        SSZ.decode(finishedAccumulator, FinishedAccumulator)
+      except SszError as err:
+        raiseAssert "Invalid baked-in accumulator: " & err.msg
+
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
+
+    for k, v in content:
+      # TODO: strange assignment failure when using try/except ValueError
+      # for the hexToSeqByte() here.
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentValueEncoded = v.content_value.hexToSeqByte()
+
+      # Decode content
+      let
+        contentKey = decodeSsz(
+          contentKeyEncoded, ContentKey)
+        contentValue = decodeSsz(
+          contentValueEncoded, BlockHeaderWithProof)
+
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
+
+      let blockHeaderWithProof = contentValue.get()
+
+      let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
+      check res.isOk()
+      let header = res.get()
+
+      check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+
+      # Encode content
+      check:
+        SSZ.encode(blockHeaderWithProof) == contentValueEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+  test "Block Body Encoding/Decoding and Verification":
     const
-      contentKeyHex =
-        "01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
-      contentId =
-        "106696502175825986237944249828698290888857178633945273402044845898673345165419"
-      # or
-      contentIdHexBE =
-        "ebe414854629d60c58ddd5bf60fd72e41760a5f7a463fdcb169f13ee4a26786b"
+      dataFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/bodies/14764013.json"
+      headersWithProofFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.json"
 
-    let contentKey = ContentKey(
-      contentType: blockBody,
-      blockBodyKey: BlockKey(blockHash: blockHash))
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
 
-    let encoded = encode(contentKey)
-    check encoded.asSeq.toHex == contentKeyHex
-    let decoded = decode(encoded)
-    check decoded.isSome()
+    let headersRes = readJsonType(headersWithProofFile, JsonPortalContentTable)
+    check headersRes.isOk()
+    let headers = headersRes.get()
 
-    let contentKeyDecoded = decoded.get()
-    check:
-      contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.blockBodyKey == contentKey.blockBodyKey
+    for k, v in content:
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentValueEncoded = v.content_value.hexToSeqByte()
 
-      toContentId(contentKey) == parse(contentId, StUint[256], 10)
-      # In stint this does BE hex string
-      toContentId(contentKey).toHex() == contentIdHexBE
+      # Get the header for validation of body
+      let
+        headerEncoded = headers[k].content_value.hexToSeqByte()
+        headerWithProofRes = decodeSsz(
+          headerEncoded, BlockHeaderWithProof)
+      check headerWithProofRes.isOk()
+      let headerRes = decodeRlp(
+        headerWithProofRes.get().header.asSeq(), BlockHeader)
+      check headerRes.isOk()
+      let header = headerRes.get()
 
-  test "Receipts":
-    # Input
-    const blockHash = BlockHash.fromHex(
-      "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+      # Decode content key
+      let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+      check contentKey.isOk()
 
-    # Output
+      # Decode (SSZ + RLP decode step) and validate block body
+      let contentValue = validateBlockBodyBytes(
+        contentValueEncoded, header.txRoot, header.ommersHash)
+      check contentValue.isOk()
+
+      # Encode content and content key
+      check:
+        encode(contentValue.get()) == contentValueEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+
+  test "Receipts Encoding/Decoding and Verification":
     const
-      contentKeyHex =
-        "02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
-      contentId =
-        "76230538398907151249589044529104962263309222250374376758768131420767496438948"
-      # or
-      contentIdHexBE =
-        "a888f4aafe9109d495ac4d4774a6277c1ada42035e3da5e10a04cc93247c04a4"
+      dataFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/receipts/14764013.json"
+      headersWithProofFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/14764013.json"
 
-    let contentKey = ContentKey(
-      contentType: receipts,
-      receiptsKey: BlockKey(blockHash: blockHash))
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
 
-    let encoded = encode(contentKey)
-    check encoded.asSeq.toHex == contentKeyHex
-    let decoded = decode(encoded)
-    check decoded.isSome()
+    let headersRes = readJsonType(headersWithProofFile, JsonPortalContentTable)
+    check headersRes.isOk()
+    let headers = headersRes.get()
 
-    let contentKeyDecoded = decoded.get()
-    check:
-      contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.receiptsKey == contentKey.receiptsKey
+    for k, v in content:
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentValueEncoded = v.content_value.hexToSeqByte()
 
-      toContentId(contentKey) == parse(contentId, StUint[256], 10)
-      # In stint this does BE hex string
-      toContentId(contentKey).toHex() == contentIdHexBE
+      # Get the header for validation of receipts
+      let
+        headerEncoded = headers[k].content_value.hexToSeqByte()
+        headerWithProofRes = decodeSsz(
+          headerEncoded, BlockHeaderWithProof)
+      check headerWithProofRes.isOk()
+      let headerRes = decodeRlp(
+        headerWithProofRes.get().header.asSeq(), BlockHeader)
+      check headerRes.isOk()
+      let header = headerRes.get()
 
-  test "Epoch Accumulator":
-    # Input
-    const epochHash = Digest.fromHex(
-      "0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+      # Decode content key
+      let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+      check contentKey.isOk()
 
-    # Output
-    const
-      contentKeyHex =
-        "03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491"
-      contentId =
-        "72232402989179419196382321898161638871438419016077939952896528930608027961710"
-      # or
-      contentIdHexBE =
-        "9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e"
+      # Decode (SSZ + RLP decode step) and validate receipts
+      let contentValue = validateReceiptsBytes(
+        contentValueEncoded, header.receiptRoot)
+      check contentValue.isOk()
 
-    let contentKey = ContentKey(
-      contentType: epochAccumulator,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash))
-
-    let encoded = encode(contentKey)
-    check encoded.asSeq.toHex == contentKeyHex
-    let decoded = decode(encoded)
-    check decoded.isSome()
-
-    let contentKeyDecoded = decoded.get()
-    check:
-      contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.epochAccumulatorKey == contentKey.epochAccumulatorKey
-
-      toContentId(contentKey) == parse(contentId, StUint[256], 10)
-      # In stint this does BE hex string
-      toContentId(contentKey).toHex() == contentIdHexBE
+      # Encode content
+      check:
+        encode(contentValue.get()) == contentValueEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
