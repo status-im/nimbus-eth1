@@ -113,7 +113,7 @@ proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
     trace "Ticker is disabled"
 
   # Check for recovery mode
-  if not ctx.pool.noRecovery:
+  block:
     let rc = ctx.pool.snapDb.recoverPivot()
     if rc.isOk:
       ctx.pool.recovery = SnapRecoveryRef(state: rc.value)

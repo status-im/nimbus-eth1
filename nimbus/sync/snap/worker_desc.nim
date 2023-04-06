@@ -96,7 +96,6 @@ type
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
-    noRecovery*: bool                  ## Ignore recovery checkpoints
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger
