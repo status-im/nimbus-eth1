@@ -81,14 +81,14 @@ logScope:
   topics = "snap-slot"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Storage slots range " & info
+  "Storage slots fetch " & info
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
@@ -142,6 +142,8 @@ proc fetchStorageSlotsImpl(
     let report = ctx.pool.snapDb.importStorageSlots(peer, stoRange.data)
     if 0 < report.len:
       if report[^1].slot.isNone:
+        # Bad data, just try another peer
+        buddy.ctrl.zombie = true
         # Failed to store on database, not much that can be done here
         error logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
           nSlotLists=0, nReq=req.len, error=report[^1].error
@@ -202,8 +204,7 @@ proc rangeFetchStorageSlots*(
   ## each work item on the queue at least once.For partial partial slot range
   ## items this means in case of success that the outstanding range has become
   ## at least smaller.
-  when extraTraceMessages:
-    trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
+  trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
 
   # Fetch storage data and save it on disk. Storage requests are managed by
   # request queues for handling full/partial replies and re-fetch issues. For
@@ -252,8 +253,7 @@ proc rangeFetchStorageSlots*(
       # End `while`
     # End `for`
 
-  when extraTraceMessages:
-    trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env)
+  trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env)
 
 # ------------------------------------------------------------------------------
 # End

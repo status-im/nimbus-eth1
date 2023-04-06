@@ -121,7 +121,7 @@ proc reverseUpdate*(
 proc tickerStats*(
     pivotTable: var SnapPivotTable; # Pivot table
     ctx: SnapCtxRef;                # Some global context
-      ): TickerStatsUpdater =
+      ): TickerSnapStatsUpdater =
   ## This function returns a function of type `TickerStatsUpdater` that prints
   ## out pivot table statitics. The returned fuction is supposed to drive
   ## ticker` module.
@@ -134,7 +134,7 @@ proc tickerStats*(
       if rSq < sqSumAv:
         result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
-  result = proc: SnapTickerStats =
+  result = proc: TickerSnapStats =
     var
       aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
       count = 0
@@ -172,7 +172,7 @@ proc tickerStats*(
     if 0 < ctx.pool.beaconHeader.blockNumber:
       beaconBlock = some(ctx.pool.beaconHeader.blockNumber)
 
-    SnapTickerStats(
+    TickerSnapStats(
       beaconBlock:   beaconBlock,
       pivotBlock:    pivotBlock,
       nQueues:       ctx.pool.pivotTable.len,
@@ -239,7 +239,7 @@ proc execSnapSyncAction*(
       await buddy.rangeFetchStorageSlots(env)
     else:
       rangeFetchOk = false
-    if env.archived:
+    if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
       return
 
     # Uncconditonally try healing if enabled.
@@ -250,7 +250,7 @@ proc execSnapSyncAction*(
       # physically disconnected.
       buddy.ctrl.forceRun = true
       await buddy.healAccounts(env)
-      if env.archived:
+      if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
         return
 
   # Some additional storage slots might have been popped up
@@ -287,7 +287,7 @@ proc saveCheckpoint*(
   if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  ctx.pool.snapDb.savePivot SnapDbPivotRegistry(
+  ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
     header:       env.stateHeader,
     nAccounts:    env.nAccounts,
     nSlotLists:   env.nSlotLists,
@@ -298,7 +298,7 @@ proc saveCheckpoint*(
                    toSeq(env.parkedStorage.items))
 
 
-proc recoverPivotFromCheckpoint*(
+proc pivotRecoverFromCheckpoint*(
     env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Global context (containing save state)
     topLevel: bool;                 # Full data set on top level only

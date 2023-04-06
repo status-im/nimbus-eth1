@@ -56,7 +56,7 @@ logScope:
   topics = "snap-acc"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -64,7 +64,7 @@ const
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Accounts healing " & info
+  "Accounts heal " & info
 
 proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
@@ -341,9 +341,7 @@ proc healAccounts*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
-  when extraTraceMessages:
-    let peer {.used.} = buddy.peer
-    trace logTxt "started", peer, ctx=buddy.healingCtx(env)
+  trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)
 
   let
     fa = env.fetchAccounts
@@ -362,9 +360,8 @@ proc healAccounts*(
     nNodesFetched.inc(nNodes)
     nFetchLoop.inc
 
-  when extraTraceMessages:
-    trace logTxt "done", peer, ctx=buddy.healingCtx(env),
-      nNodesFetched, nFetchLoop, nIgnore=ignore.len
+  trace logTxt "done", peer=buddy.peer, ctx=buddy.healingCtx(env),
+    nNodesFetched, nFetchLoop, nIgnore=ignore.len
 
 # ------------------------------------------------------------------------------
 # End

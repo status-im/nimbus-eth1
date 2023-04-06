@@ -379,11 +379,11 @@ proc setNewBlockHashesHandler*(ctx: EthWireRef, handler: NewBlockHashesHandler, 
 # Public getters/setters
 # ------------------------------------------------------------------------------
 
-proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) =
+proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) {.gcsafe, raises: [].} =
   if ctx.enableTxPool != NotAvailable:
     ctx.enableTxPool = if ena: Enabled else: Suspended
 
-proc txPoolEnabled*(ctx: EthWireRef): bool =
+proc txPoolEnabled*(ctx: EthWireRef): bool {.gcsafe, raises: [].} =
   ctx.enableTxPool == Enabled
 
 # ------------------------------------------------------------------------------

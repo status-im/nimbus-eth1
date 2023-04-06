@@ -12,6 +12,7 @@
 
 import
   std/hashes,
+  chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
@@ -82,7 +83,20 @@ type
   SnapBuddyData* = object
     ## Per-worker local descriptor data extension
     errors*: ComErrorStatsRef          ## For error handling
-    pivotEnv*: SnapPivotRef            ## Environment containing state root
+
+  SnapSyncModeType* = enum
+    ## Current sync mode, after a snapshot has been downloaded, the system
+    ## proceeds with full sync.
+    SnapSyncMode = 0                   ## Start mode
+    PreFullSyncMode
+    FullSyncMode
+
+  SnapSyncSpecs* = object
+    ## Full specs for all sync modes. This table must be held in the main
+    ## descriptor and initialised at run time. The table values are opaque
+    ## and will be specified in the worker module(s).
+    active*: SnapSyncModeType
+    tab*: array[SnapSyncModeType,RootRef]
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -96,7 +110,9 @@ type
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
-    noRecovery*: bool                  ## Ignore recovery checkpoints
+
+    # Snap/full mode muliplexing
+    syncMode*: SnapSyncSpecs           ## Sync mode data contaier
 
     # Info
     ticker*: TickerRef                 ## Ticker, logger

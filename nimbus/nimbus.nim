@@ -169,7 +169,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
     let
-      noRecovery = conf.syncMode in {SyncMode.SnapCtx}
       exCtrlFile = if conf.syncCtrlFile.isNone: none(string)
                    else: some(conf.syncCtrlFile.get.string)
       tickerOK = conf.logLevel in {
@@ -179,14 +178,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.fullSyncRef = FullSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
         tickerOK, exCtrlFile)
-    of SyncMode.Snap, SyncMode.SnapCtx:
+    of SyncMode.Snap:
       # Minimal capability needed for sync only
       if ProtocolFlag.Snap notin protocols:
         nimbus.ethNode.addSnapHandlerCapability(
           nimbus.ethNode.peerPool)
       nimbus.snapSyncRef = SnapSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        nimbus.dbBackend, tickerOK, noRecovery=noRecovery, exCtrlFile)
+        nimbus.dbBackend, tickerOK, exCtrlFile)
     of SyncMode.Stateless:
       # FIXME-Adam: what needs to go here?
       nimbus.statelessSyncRef = StatelessSyncRef.init()
@@ -209,7 +208,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if conf.maxPeers > 0:
     var waitForPeers = true
     case conf.syncMode:
-    of SyncMode.Snap, SyncMode.SnapCtx, SyncMode.Stateless:
+    of SyncMode.Snap, SyncMode.Stateless:
       waitForPeers = false
     of SyncMode.Full, SyncMode.Default:
       discard
@@ -434,7 +433,7 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
         nimbus.fullSyncRef.start
       of SyncMode.Stateless:
         nimbus.statelessSyncRef.start
-      of SyncMode.Snap, SyncMode.SnapCtx:
+      of SyncMode.Snap:
         nimbus.snapSyncRef.start
 
     if nimbus.state == Starting:

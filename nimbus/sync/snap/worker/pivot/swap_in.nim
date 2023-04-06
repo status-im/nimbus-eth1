@@ -58,7 +58,7 @@ type
     pivot: SnapPivotRef          ## Accounts only
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------

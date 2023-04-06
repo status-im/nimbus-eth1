@@ -60,7 +60,7 @@ logScope:
   topics = "snap-acc"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ const
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Accounts range " & info
+  "Accounts fetch " & info
 
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
@@ -166,9 +166,9 @@ proc accountsRangefetchImpl(
     if rc.isErr:
       # Bad data, just try another peer
       buddy.ctrl.zombie = true
-      when extraTraceMessages:
-        trace logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
-          gotAccounts, gotStorage, reqLen=iv, covered, error=rc.error
+      # Failed to store on database, not much that can be done here
+      error logTxt "import failed", peer, ctx=buddy.fetchCtx(env),
+        gotAccounts, gotStorage, reqLen=iv, covered, error=rc.error
       return
     rc.value
 
@@ -218,13 +218,12 @@ proc rangeFetchAccounts*(
     env: SnapPivotRef;
       ) {.async.} =
   ## Fetch accounts and store them in the database.
+  trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
+
   let fa = env.fetchAccounts
+  var nFetchAccounts = 0                     # for logging
   if not fa.processed.isFull():
 
-    when extraTraceMessages:
-      trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)
-
-    var nFetchAccounts = 0                     # for logging
     while not fa.processed.isFull() and
           buddy.ctrl.running and
           not env.archived:
@@ -239,9 +238,7 @@ proc rangeFetchAccounts*(
       if storageSlotsQuPrioThresh < nStoQu:
         break
 
-    when extraTraceMessages:
-      trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env),
-        nFetchAccounts
+  trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env), nFetchAccounts
 
 # ------------------------------------------------------------------------------
 # End

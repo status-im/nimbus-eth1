@@ -26,6 +26,25 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc updateBeaconHeaderbuBlockNumber*(
+    buddy: SnapBuddyRef;             # Worker peer
+    num: BlockNumber;                # Block number to sync against
+      ) {.async.} =
+  ## This function updates the beacon header according to the blok number
+  ## argument.
+  ##
+  ## This function is typically used for testing and debugging.
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+
+  trace "fetch beacon header", peer, num
+  if ctx.pool.beaconHeader.blockNumber < num:
+    let rc = await buddy.getBlockHeader(num)
+    if rc.isOk:
+      ctx.pool.beaconHeader = rc.value
+
+
 proc updateBeaconHeaderFromFile*(
     buddy: SnapBuddyRef;             # Worker peer
       ) {.async.} =
@@ -62,10 +81,8 @@ proc updateBeaconHeaderFromFile*(
       if ctx.pool.beaconHeader.blockNumber < num:
         rc = await buddy.getBlockHeader(num)
   except CatchableError as e:
-    let
-      name {.used.} = $e.name
-      msg {.used.} = e.msg
-    trace "Exception while parsing beacon info", peer, isHash, name, msg
+    trace "Exception while parsing beacon info", peer, isHash,
+      name=($e.name), msg=(e.msg)
 
   if rc.isOk:
     if ctx.pool.beaconHeader.blockNumber < rc.value.blockNumber:

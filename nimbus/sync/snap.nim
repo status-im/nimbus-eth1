@@ -114,7 +114,6 @@ proc init*(
     maxPeers: int;
     dbBackend: ChainDb;
     enableTicker = false;
-    noRecovery = false;
     exCtrlFile = none(string);
       ): T =
   new result
@@ -122,7 +121,6 @@ proc init*(
   result.ctx.chain = chain # explicitely override
   result.ctx.pool.rng = rng
   result.ctx.pool.dbBackend = dbBackend
-  result.ctx.pool.noRecovery = noRecovery
   # Required to have been initialised via `addEthHandlerCapability()`
   doAssert not result.ctx.ethWireCtx.isNil
 
