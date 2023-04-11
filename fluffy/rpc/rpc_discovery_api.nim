@@ -134,6 +134,6 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     else:
       return talkresp.get().toHex()
 
-  rpcServer.rpc("discv5_recursiveFindNode") do(nodeId: NodeId) -> seq[Record]:
+  rpcServer.rpc("discv5_recursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
     let discovered = await d.lookup(nodeId)
     return discovered.map(proc(n: Node): Record = n.record)
