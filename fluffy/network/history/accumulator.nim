@@ -122,7 +122,7 @@ func getEpochIndex*(header: BlockHeader): uint64 =
   ## Get the index for the historical epochs
   getEpochIndex(blockNumber)
 
-func getHeaderRecordIndex(blockNumber: uint64, epochIndex: uint64): uint64 =
+func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
   uint64(blockNumber - epochIndex * epochSize)
 
