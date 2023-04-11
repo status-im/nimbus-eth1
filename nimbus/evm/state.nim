@@ -39,6 +39,7 @@ proc init(
   self.parent = parent
   self.timestamp = timestamp
   self.gasLimit = gasLimit
+  self.gasPool = gasLimit
   self.fee = fee
   self.prevRandao = prevRandao
   self.blockDifficulty = difficulty
@@ -67,7 +68,7 @@ proc init(
     ac        = ac,
     parent    = parent,
     timestamp = timestamp,
-    gasLimit  = gasLimit,
+    gasLimit  = gasLimit,    
     fee       = fee,
     prevRandao= prevRandao,
     difficulty= difficulty,

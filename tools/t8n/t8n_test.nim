@@ -457,6 +457,15 @@ const
       output: T8nOutput(alloc: false, result: false),
       expExitCode: ErrorJson.int,
     ),
+    TestSpec(
+      name  : "GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast_Frontier",
+      base  : "testdata/00-516",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =

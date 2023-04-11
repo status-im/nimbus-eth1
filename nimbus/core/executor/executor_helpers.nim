@@ -55,6 +55,8 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
   else:
     rec.isHash = true
     rec.hash   = vmState.stateDB.rootHash
+    # we set the status for the t8n output consistency
+    rec.status = vmState.status
 
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed

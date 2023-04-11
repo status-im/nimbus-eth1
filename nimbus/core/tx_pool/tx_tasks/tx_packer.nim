@@ -129,6 +129,11 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
+  # Return remaining gas to the block gas counter so it is
+  # available for the next transaction.
+  vmState.gasPool += item.tx.gasLimit - gasBurned
+
+  # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
@@ -169,6 +174,14 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   let
     xp = pst.xp
     vmState = xp.chain.vmState
+
+  # Verify we have enough gas in gasPool
+  if vmState.gasPool < item.tx.gasLimit:
+    # skip this transaction and
+    # continue with next account
+    # if we don't have enough gas
+    return ok(false)
+  vmState.gasPool -= item.tx.gasLimit
 
   # Validate transaction relative to the current vmState
   if not xp.classifyValidatePacked(vmState, item):

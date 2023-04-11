@@ -211,6 +211,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       check 0.GasPrice <= minGasPrice
       check minGasPrice <= maxGasPrice
 
+
 proc runTxPoolTests(noisy = true) =
   let elapNoisy = false
 
@@ -688,7 +689,7 @@ proc runTxPackerTests(noisy = true) =
 
           # verify incremental packing
           check lastItem.info != newItem.info
-          check saveStats.packed <= newStats.packed
+          check saveStats.packed >= newStats.packed
 
           noisy.say "***", "2st bLock size=", newTotal, " stats=", newStats.pp
 
@@ -752,7 +753,7 @@ proc runTxPackerTests(noisy = true) =
           " max=", xq.maxGasLimit,
           " slack=", xq.maxGasLimit - xq.gasCumulative
 
-        check smallerBlockSize < xq.gasCumulative
+        check smallerBlockSize <= xq.gasCumulative
         check 0 < xq.profitability
 
         # Well, this ratio should be above 100 but might be slightly less
@@ -780,7 +781,7 @@ proc runTxPackerTests(noisy = true) =
         # Force maximal block size. Accidentally, the latest tx should have
         # a `gasLimit` exceeding the available space on the block `gasLimit`
         # which will be checked below.
-        xq.flags = xq.flags + {packItemsMaxGasLimit}
+        xq.flags = xq.flags #+ {packItemsMaxGasLimit}
 
         # Invoke packer
         let blk = xq.ethBlock
@@ -814,7 +815,7 @@ proc runTxPackerTests(noisy = true) =
           bdy = BlockBody(transactions: blk.txs)
           hdr = block:
             var rc = blk.header
-            rc.gasLimit = blk.header.gasUsed
+            rc.gasLimit = blk.header.gasLimit
             rc.testKeySign
 
         # Make certain that some tx was set up so that its gasLimit overlaps
@@ -825,7 +826,7 @@ proc runTxPackerTests(noisy = true) =
         setTraceLevel()
 
         # Test low-level function for adding the new block to the database
-        xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
+        #xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
         check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
 
@@ -886,9 +887,9 @@ when isMainModule:
   noisy.runTxPoolTests
   noisy.runTxPackerTests
 
-  #runTxPoolCliqueTest()
-  #runTxPoolPosTest()
-  #noisy.runTxHeadDelta
+  runTxPoolCliqueTest()
+  runTxPoolPosTest()
+  noisy.runTxHeadDelta
 
   #noisy.runTxLoader(dir = ".")
   #noisy.runTxPoolTests

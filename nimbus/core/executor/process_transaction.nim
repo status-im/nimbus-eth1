@@ -34,15 +34,17 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
   if FkLondon <= fork:
     result = header.baseFee
 
-proc commitOrRollbackDependingOnGasUsed(vmState: BaseVMState, accTx: SavePoint, gasLimit: GasInt, gasBurned: GasInt, priorityFee: GasInt): Result[GasInt, void] {.raises: [Defect, RlpError].} =
+proc commitOrRollbackDependingOnGasUsed(vmState: BaseVMState, accTx: SavePoint,
+        header: BlockHeader, tx: Transaction,
+        gasBurned: GasInt, priorityFee: GasInt): Result[GasInt, void] {.raises: [Defect, RlpError].} =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  if gasLimit < vmState.cumulativeGasUsed + gasBurned:
+  if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
     vmState.stateDB.rollback(accTx)
     debug "invalid tx: block header gasLimit reached",
-      maxLimit = gasLimit,
+      maxLimit = header.gasLimit,
       gasUsed  = vmState.cumulativeGasUsed,
       addition = gasBurned
     return err()
@@ -51,6 +53,10 @@ proc commitOrRollbackDependingOnGasUsed(vmState: BaseVMState, accTx: SavePoint, 
     vmState.stateDB.commit(accTx)
     vmState.stateDB.addBalance(vmState.coinbase(), gasBurned.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasBurned
+
+    # Return remaining gas to the block gas counter so it is
+    # available for the next transaction.
+    vmState.gasPool += tx.gasLimit - gasBurned
     return ok(gasBurned)
 
 proc asyncProcessTransactionImpl(
@@ -66,7 +72,7 @@ proc asyncProcessTransactionImpl(
 
   #trace "Sender", sender
   #trace "txHash", rlpHash = ty.rlpHash
-  
+
   let
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
@@ -81,6 +87,14 @@ proc asyncProcessTransactionImpl(
   if tx.to.isSome:
     await ifNecessaryGetCode(vmState, tx.to.get)
 
+  # buy gas, then the gas goes into gasMeter
+  if vmState.gasPool < tx.gasLimit:
+    debug "gas limit reached",
+      gasLimit = vmState.gasPool,
+      gasNeeded = tx.gasLimit
+    return
+  vmState.gasPool -= tx.gasLimit
+
   # Actually, the eip-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
@@ -94,7 +108,7 @@ proc asyncProcessTransactionImpl(
       accTx = vmState.stateDB.beginSavepoint
       gasBurned = tx.txCallEvm(sender, vmState, fork)
 
-    res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header.gasLimit, gasBurned, priorityFee)
+    res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()

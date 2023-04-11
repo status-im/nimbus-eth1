@@ -38,6 +38,7 @@ type
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
     com*           : CommonRef
+    gasPool*       : GasInt
     parent*        : BlockHeader
     timestamp*     : EthTime
     gasLimit*      : GasInt

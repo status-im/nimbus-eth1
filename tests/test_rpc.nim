@@ -55,7 +55,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     Return
 
   let
-    vmHeader = BlockHeader(parentHash: parentHash)
+    vmHeader = BlockHeader(parentHash: parentHash, gasLimit: 5_000_000)
     vmState = BaseVMState.new(
       parent    = BlockHeader(stateRoot: parent.stateRoot),
       header    = vmHeader,
@@ -75,7 +75,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     )
     unsignedTx2 = Transaction(
       txType  : TxLegacy,
-      nonce   : 0,
+      nonce   : 1,
       gasPrice: 1_200,
       gasLimit: 70_000,
       value   : 2.u256,
@@ -91,7 +91,8 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
     let sender = tx.getSender()
-    discard vmState.processTransaction(tx, sender, vmHeader)
+    let rc = vmState.processTransaction(tx, sender, vmHeader)
+    doAssert(rc.isOk, "Invalid transaction")
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
