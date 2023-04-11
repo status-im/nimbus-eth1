@@ -34,8 +34,14 @@ proc parseHexOrInt[T](x: string): T =
     else:
       parseInt(x).T
 
-template fromJson(T: type EthAddress, n: JsonNode, field: string): EthAddress =
-  hexToByteArray(n[field].getStr(), sizeof(T))
+proc fromJson(T: type EthAddress, n: JsonNode, field: string): EthAddress =
+  let x = n[field].getStr()
+  var xlen = x.len
+  if x.startsWith("0x"):
+    xlen = xlen - 2
+  if xlen != sizeof(T) * 2:
+    raise newError(ErrorJson, "malformed Eth address " & x)
+  hexToByteArray(x, sizeof(T))
 
 template fromJson(T: type Blob, n: JsonNode, field: string): Blob =
   hexToSeqByte(n[field].getStr())

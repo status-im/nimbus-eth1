@@ -448,6 +448,15 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "Malicious withdrawals address",
+      base  : "testdata/00-515",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Shanghai", "",
+      ),
+      output: T8nOutput(alloc: false, result: false),
+      expExitCode: ErrorJson.int,
+    ),
   ]
 
 proc main() =
