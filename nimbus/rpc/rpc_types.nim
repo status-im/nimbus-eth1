@@ -74,6 +74,7 @@ type
     baseFeePerGas*: Option[HexQuantityStr]
     transactions*: seq[JsonNode]    # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
     uncles*: seq[Hash256]           # list of uncle hashes.
+    withdrawals*: seq[WithdrawalObject] # list of validator withdrawals
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
@@ -91,6 +92,12 @@ type
     v*: HexQuantityStr                # ECDSA recovery id
     r*: HexQuantityStr                # 32 Bytes - ECDSA signature r
     s*: HexQuantityStr                # 32 Bytes - ECDSA signature s
+
+  WithdrawalObject* = object
+    index*: HexQuantityStr
+    validatorIndex*: HexQuantityStr
+    address*: EthAddress
+    amount*: HexQuantityStr
 
   FilterLog* = object
     # Returned to user

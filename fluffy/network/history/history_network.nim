@@ -159,8 +159,8 @@ func validateBlockHeaderBytes*(
   if header.excessDataGas.isSome:
     return err("EIP-4844 not yet implemented")
 
-  if header.withdrawalsRoot.isSome:
-    return err("Withdrawals not yet implemented")
+  # TODO: Verify timestamp with Shanghai timestamp to if isSome()
+  # TODO 2: Verify block number with merge block to check ommerhash
 
   if not (header.blockHash() == hash):
     err("Block header hash does not match")
@@ -171,6 +171,7 @@ proc validateBlockBody(
     body: BlockBodySSZ, txsRoot, ommersHash: KeccakHash):
     Result[void, string] =
   ## Validate the block body against the txRoot amd ommersHash from the header.
+  # TODO: should be checked for hash for empty uncles after merge block
   let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
   if calculatedOmmersHash != ommersHash:
     return err("Invalid ommers hash")
@@ -178,6 +179,8 @@ proc validateBlockBody(
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
   if calculatedTxsRoot != txsRoot:
     return err("Invalid transactions root")
+
+  # TODO: Add root check for withdrawals after Shanghai
 
   ok()
 
