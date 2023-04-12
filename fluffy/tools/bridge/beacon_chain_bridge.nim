@@ -204,10 +204,35 @@ proc asPortalBlockData*(
 
     return tr.rootHash()
 
+  # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
+  # could get the Roots through there instead.
+  proc calculateWithdrawalsRoot(
+    items: openArray[WithdrawalV1]):
+      Hash256 {.raises: [].} =
+
+    var tr = initHexaryTrie(newMemoryDB())
+    for i, w in items:
+      try:
+        let withdrawal = Withdrawal(
+          index: distinctBase(w.index),
+          validatorIndex: distinctBase(w.validatorIndex),
+          address: distinctBase(w.address),
+          amount: distinctBase(w.amount)
+        )
+        tr.put(rlp.encode(i), rlp.encode(withdrawal))
+      except RlpError as e:
+        raiseAssert(e.msg)
+
+    return tr.rootHash()
+
   let
     txRoot = calculateTransactionData(payload.transactions)
+    withdrawalsRoot =
+      when type(payload) is ExecutionPayloadV1:
+        options.none(Hash256)
+      else:
+        some(calculateWithdrawalsRoot(payload.withdrawals))
 
-    # TODO: update according to payload type
     header = etypes.BlockHeader(
       parentHash: payload.parentHash.asEthHash,
       ommersHash: EMPTY_UNCLE_HASH,
@@ -225,8 +250,8 @@ proc asPortalBlockData*(
       mixDigest: payload.prevRandao.asEthHash,
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
-      withdrawalsRoot: options.none(Hash256), # TODO: Update later
-      excessDataGas: options.none(UInt256) # TODO: Update later
+      withdrawalsRoot: withdrawalsRoot,
+      excessDataGas: options.none(UInt256) # TODO: Update later according to fork
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -237,6 +262,8 @@ proc asPortalBlockData*(
   for tx in payload.transactions:
     discard transactions.add(TransactionByteList(distinctBase(tx)))
 
+  # TODO: Specifications are not ready for Shanghai/Capella on how to add the
+  # withdrawals here.
   let body = BlockBodySSZ(
     transactions: transactions,
     uncles: Uncles(@[byte 0xc0]))
