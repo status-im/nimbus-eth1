@@ -50,7 +50,8 @@ template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
     k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
     vmOpHandlers[fork][op].run(k)
 
-    if k.cpt.tracingEnabled:
+    # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+    if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
       k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 
@@ -60,7 +61,8 @@ template handleOtherDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
 
     vmOpHandlers[fork][op].run(k)
 
-    if k.cpt.tracingEnabled:
+    # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+    if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
       k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 # ------------------------------------------------------------------------------
@@ -98,18 +100,28 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     # Wrap innner case/switch into outer case/switch
     let branchStmt = block:
       case op
-      of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
-        quote do:
-          `forkCaseSubExpr`
-          if not `k`.cpt.continuation.isNil:
-            break
       of Stop, Return, Revert, SelfDestruct:
         quote do:
           `forkCaseSubExpr`
           break
       else:
+        # FIXME-manyOpcodesNowRequireContinuations
+        # We used to have another clause in this case statement for various
+        # opcodes that *don't* need to check for a continuation. But now
+        # there are many opcodes that need to, because they call asyncChainTo
+        # (and so they set a pendingAsyncOperation and a continuation that
+        # needs to be noticed by the interpreter_dispatch loop). And that
+        # will become even more true once we implement speculative execution,
+        # because that will mean that even reading from the stack might
+        # require waiting.
+        #
+        # Anyway, the point is that now we might as well just do this check
+        # for *every* opcode (other than Return/Revert/etc, which need to
+        # break no matter what).
         quote do:
           `forkCaseSubExpr`
+          if not `k`.cpt.continuation.isNil:
+            break
 
     result.add nnkOfBranch.newTree(asOp, branchStmt)
 
@@ -135,13 +147,12 @@ template genLowMemDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx) =
     handleOtherDirective(fork, op, k)
 
   case c.instr
-  of Create, Create2, Call, CallCode, DelegateCall, StaticCall, Sload:
-    if not k.cpt.continuation.isNil:
-      break
   of Return, Revert, SelfDestruct:
     break
   else:
-    discard
+    # FIXME-manyOpcodesNowRequireContinuations
+    if not k.cpt.continuation.isNil:
+      break
 
 # ------------------------------------------------------------------------------
 # Debugging ...

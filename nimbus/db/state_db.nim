@@ -126,12 +126,7 @@ template createTrieKeyFromSlot(slot: UInt256): auto =
   # morally equivalent to toByteRange_Unnecessary but with different types
 
 template getStorageTrie(db: AccountStateDB, account: Account): auto =
-  # TODO: implement `prefix-db` to solve issue #228 permanently.
-  # the `prefix-db` will automatically insert account address to the
-  # underlying-db key without disturb how the trie works.
-  # it will create virtual container for each account.
-  # see nim-eth#9
-  initStorageTrie(trieDB(db), account.storageRoot, false)
+  storageTrieForAccount(db.trie, account, false)
 
 proc clearStorage*(db: AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)

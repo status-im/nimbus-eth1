@@ -21,17 +21,18 @@ import
   ./types
 
 proc init(
-      self:        BaseVMState;
-      ac:          AccountsCache;
-      parent:      BlockHeader;
-      timestamp:   EthTime;
-      gasLimit:    GasInt;
-      fee:         Option[UInt256];
-      prevRandao:  Hash256;
-      difficulty:  UInt256;
-      miner:       EthAddress;
-      com:         CommonRef;
-      tracer:      TransactionTracer)
+      self:         BaseVMState;
+      ac:           AccountsCache;
+      parent:       BlockHeader;
+      timestamp:    EthTime;
+      gasLimit:     GasInt;
+      fee:          Option[UInt256];
+      prevRandao:   Hash256;
+      difficulty:   UInt256;
+      miner:        EthAddress;
+      com:          CommonRef;
+      tracer:       TransactionTracer,
+      asyncFactory: AsyncOperationFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]()))
     {.gcsafe.} =
   ## Initialisation helper
   self.prevHeaders = @[]
@@ -45,7 +46,7 @@ proc init(
   self.tracer = tracer
   self.stateDB = ac
   self.minerAddress = miner
-  self.asyncFactory = AsyncOperationFactory(maybeDataSource: none[AsyncDataSource]())
+  self.asyncFactory = asyncFactory
 
 proc init(
       self:        BaseVMState;
@@ -266,6 +267,30 @@ proc init*(
       com         = com,
       tracerFlags = tracerFlags)
     return true
+
+proc statelessInit*(
+      vmState:      BaseVMState;
+      parent:       BlockHeader;     ## parent header, account sync position
+      header:       BlockHeader;     ## header with tx environment data fields
+      com:          CommonRef;       ## block chain config
+      asyncFactory: AsyncOperationFactory;
+      tracerFlags:  set[TracerFlags] = {}): bool
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  var tracer: TransactionTracer
+  tracer.initTracer(tracerFlags)
+  vmState.init(
+    ac          = AccountsCache.init(com.db.db, parent.stateRoot, com.pruneTrie),
+    parent      = parent,
+    timestamp   = header.timestamp,
+    gasLimit    = header.gasLimit,
+    fee         = header.fee,
+    prevRandao  = header.prevRandao,
+    difficulty  = header.difficulty,
+    miner       = com.minerAddress(header),
+    com         = com,
+    tracer      = tracer,
+    asyncFactory = asyncFactory)
+  return true
 
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
   vmState.minerAddress

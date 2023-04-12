@@ -440,6 +440,13 @@ proc persistHeaderToDbWithoutSetHead*(db: ChainDBRef; header: BlockHeader) =
   db.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
   db.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
+# FIXME-Adam: This seems like a bad idea. I don't see a way to get the score
+# in stateless mode, but it seems dangerous to just shove the header into
+# the DB *without* also storing the score.
+proc persistHeaderToDbWithoutSetHeadOrScore*(db: ChainDBRef; header: BlockHeader) =
+  db.addBlockNumberToHashLookup(header)
+  db.db.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+
 proc persistUncles*(db: ChainDBRef, uncles: openArray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.

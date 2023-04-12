@@ -17,8 +17,10 @@ import
   eth/common/eth_types_rlp,
   ../common/common,
   ".."/core/chain/[chain_desc, persist_blocks],
+  ".."/stateless_runner,
   ../constants,
   ../core/[tx_pool, sealer],
+  ../evm/async/data_sources,
   ./merge/[mergetypes, mergeutils],
   # put chronicles import last because Nim
   # compiler resolve `$` for logging
@@ -90,7 +92,7 @@ template unsafeQuantityToInt64(q: Quantity): int64 =
 # null.) --Adam
 
 # https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#engine_newpayloadv1
-proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, payload: ExecutionPayloadV1 | ExecutionPayloadV2): PayloadStatusV1 {.raises: [CatchableError].} =
+proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: CommonRef, maybeAsyncDataSource: Option[AsyncDataSource], payload: ExecutionPayloadV1 | ExecutionPayloadV2): PayloadStatusV1 {.raises: [CatchableError].} =
   trace "Engine API request received",
     meth = "newPayload", number = $(distinctBase payload.blockNumber), hash = payload.blockHash
 
@@ -115,6 +117,17 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
     warn "Ignoring already known beacon payload",
       number = header.blockNumber, hash = blockHash
     return validStatus(blockHash)
+
+  # FIXME-Adam - I'm adding this here, but I don't actually think this is the right place.
+  # For one thing, it won't even persist the new block. But let's worry about persisting
+  # after I've gotten a block to come out actually correct. --Adam
+  if maybeAsyncDataSource.isSome:
+    let r = statelesslyRunBlock(maybeAsyncDataSource.get, com, header, toBlockBody(payload))
+    if r.isErr:
+      error "Stateless execution failed", error=r.error
+      return invalidStatus()
+    else:
+      return validStatus(r.get)
 
   # If the parent is missing, we - in theory - could trigger a sync, but that
   # would also entail a reorg. That is problematic if multiple sibling blocks
@@ -460,10 +473,11 @@ const supportedMethods: HashSet[string] =
 # I'm trying to keep the handlers below very thin, and move the
 # bodies up to the various procs above. Once we have multiple
 # versions, they'll need to be able to share code.
-proc setupEngineApi*(
+proc setupEngineAPI*(
     sealingEngine: SealingEngineRef,
     server: RpcServer,
-    merger: MergerRef) =
+    merger: MergerRef,
+    maybeAsyncDataSource: Option[AsyncDataSource] = none[AsyncDataSource]()) =
 
   let
     api = EngineApiRef.new(merger)
@@ -474,14 +488,14 @@ proc setupEngineApi*(
 
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    return handle_newPayload(sealingEngine, api, com, payload)
+    return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload)
   
   server.rpc("engine_newPayloadV2") do(payload: ExecutionPayloadV1OrV2) -> PayloadStatusV1:
     let p = payload.toExecutionPayloadV1OrExecutionPayloadV2
     if p.isOk:
-      return handle_newPayload(sealingEngine, api, com, p.get)
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, p.get)
     else:
-      return handle_newPayload(sealingEngine, api, com, p.error)
+      return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, p.error)
 
   server.rpc("engine_getPayloadV1") do(payloadId: PayloadID) -> ExecutionPayloadV1:
     let r = handle_getPayload(api, payloadId)

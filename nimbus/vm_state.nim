@@ -32,6 +32,7 @@ export
   vms.getAndClearLogEntries,
   vms.getTracingResult,
   vms.init,
+  vms.statelessInit,
   vms.mutateStateDB,
   vms.new,
   vms.reinit,

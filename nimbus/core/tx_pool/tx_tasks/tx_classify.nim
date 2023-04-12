@@ -223,7 +223,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
                              vmState: BaseVMState; item: TxItemRef): bool =
   ## Verify the argument `item` against the accounts database. This function
   ## is a wrapper around the `verifyTransaction()` call to be used in a similar
-  ## fashion as in `processTransactionImpl()`.
+  ## fashion as in `asyncProcessTransactionImpl()`.
   let
     roDB = vmState.readOnlyStateDB
     baseFee = xp.chain.baseFee.uint64.u256

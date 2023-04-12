@@ -35,6 +35,9 @@ template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   SecureHexaryTrie(trie).get(address)
 
+proc maybeGetAccountBytes*(trie: AccountsTrie, address: EthAddress): Option[seq[byte]] =
+  SecureHexaryTrie(trie).maybeGet(address)
+
 proc putAccountBytes*(trie: var AccountsTrie, address: EthAddress, value: openArray[byte]) =
   SecureHexaryTrie(trie).put(address, value)
 
@@ -49,11 +52,31 @@ template initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): Stora
 template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
   StorageTrie(initSecureHexaryTrie(db, isPruning))
 
+template createTrieKeyFromSlot*(slot: UInt256): auto =
+  # XXX: This is too expensive. Similar to `createRangeFromAddress`
+  # Converts a number to hex big-endian representation including
+  # prefix and leading zeros:
+  slot.toByteArrayBE
+  # Original py-evm code:
+  # pad32(int_to_big_endian(slot))
+  # morally equivalent to toByteRange_Unnecessary but with different types
+
 proc getSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): seq[byte] =
   SecureHexaryTrie(trie).get(slotAsKey)
+
+proc maybeGetSlotBytes*(trie: StorageTrie, slotAsKey: openArray[byte]): Option[seq[byte]] =
+  SecureHexaryTrie(trie).maybeGet(slotAsKey)
 
 proc putSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte], value: openArray[byte]) =
   SecureHexaryTrie(trie).put(slotAsKey, value)
 
 proc delSlotBytes*(trie: var StorageTrie, slotAsKey: openArray[byte]) =
   SecureHexaryTrie(trie).del(slotAsKey)
+
+proc storageTrieForAccount*(trie: AccountsTrie, account: Account, isPruning = true): StorageTrie =
+  # TODO: implement `prefix-db` to solve issue #228 permanently.
+  # the `prefix-db` will automatically insert account address to the
+  # underlying-db key without disturb how the trie works.
+  # it will create virtual container for each account.
+  # see nim-eth#9
+  initStorageTrie(SecureHexaryTrie(trie).db, account.storageRoot, isPruning)
