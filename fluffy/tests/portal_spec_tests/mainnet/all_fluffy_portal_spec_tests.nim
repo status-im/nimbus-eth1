@@ -11,6 +11,7 @@ import
   ./test_portal_wire_encoding,
   ./test_history_content_keys,
   ./test_history_content,
+  ./test_history_validation,
   ./test_header_content,
   ./test_state_content,
   ./test_accumulator_root

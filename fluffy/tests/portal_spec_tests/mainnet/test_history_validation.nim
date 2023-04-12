@@ -13,9 +13,9 @@ import
   unittest2, stint,
   stew/[byteutils, results],
   eth/[common/eth_types, rlp],
-  ../common/common_types,
-  ../eth_data/history_data_json_store,
-  ../network/history/history_network
+  ../../../common/common_types,
+  ../../../eth_data/history_data_json_store,
+  ../../../network/history/history_network
 
 const
   dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"

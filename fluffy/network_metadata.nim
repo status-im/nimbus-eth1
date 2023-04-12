@@ -8,7 +8,10 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strutils, os, macros]
+  std/[sequtils, strutils, os, macros],
+  stew/results,
+  chronos/timer,
+  eth/common/eth_types
 
 proc loadBootstrapNodes(
     path: string): seq[string] {.raises: [IOError].} =
@@ -62,3 +65,40 @@ const
 
   finishedAccumulator* = loadEncodedAccumulator(
     portalTestDir / "mainnet" / "history" / "accumulator" / "finished_accumulator.ssz")
+
+type
+  # TODO: I guess we could use the nimbus ChainConfig but:
+  # - Only need some of the values right now
+  # - `EthTime` uses std/times while chronos Moment is sufficient and more
+  # sensible
+  ChainConfig* = object
+    mergeForkBlock*     : uint64
+    shanghaiTime*       : Opt[Moment]
+    cancunTime*         : Opt[Moment]
+
+const
+  # Allow this to be adjusted at compile time for testing. If more constants
+  # need to be adjusted we can add some more  ChainConfig presets either at
+  # compile or runtime.
+  mergeBlockNumber* {.intdefine.}: uint64 = 15537394
+
+  chainConfig* = ChainConfig(
+    mergeForkBlock: mergeBlockNumber,
+    shanghaiTime: Opt.some(Moment.init(1681338455'i64, Second)),
+    cancunTime: Opt.none(Moment)
+  )
+
+func isTimestampForked(forkTime: Opt[Moment], timestamp: Moment): bool =
+  if forkTime.isNone():
+    false
+  else:
+    forkTime.get() <= timestamp
+
+func isPoSBlock*(c: ChainConfig, blockNumber: uint64): bool =
+  c.mergeForkBlock <= blockNumber
+
+func isShanghai*(c: ChainConfig, timestamp: Moment): bool =
+  isTimestampForked(c.shanghaiTime, timestamp)
+
+func isCancun*(c: ChainConfig, timestamp: Moment): bool =
+  isTimestampForked(c.cancunTime, timestamp)

@@ -13,8 +13,11 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   ../../content_db,
   ../../../nimbus/constants,
+  ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator]
+
+from std/times import toUnix
 
 logScope:
   topics = "portal_hist"
@@ -159,8 +162,25 @@ func validateBlockHeaderBytes*(
   if header.excessDataGas.isSome:
     return err("EIP-4844 not yet implemented")
 
-  # TODO: Verify timestamp with Shanghai timestamp to if isSome()
-  # TODO 2: Verify block number with merge block to check ommerhash
+  # TODO: I don't think these checks are actually needed when we are using
+  # a historical roots + headers with proof setup, as verifying the proofs and
+  # checking the block hash would be sufficient in that case. However, we are
+  # not at this stage yet, so we add them for now to be certain we are not
+  # adding at least these invalid blocks. Also, there always will be blocks
+  # which are not yet in the accumulators.
+  if isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)) and
+      header.ommersHash != EMPTY_UNCLE_HASH:
+    return err("Expected empty uncles for a PoS block")
+
+  let timestamp = Moment.init(header.timestamp.toUnix(), Second)
+  if isShanghai(chainConfig, timestamp) and header.withdrawalsRoot.isNone():
+    return err("Expected withdrawalsRoot from Shanghai fork")
+
+  if (not isShanghai(chainConfig, timestamp)) and
+      header.withdrawalsRoot.isSome():
+    return err("Expected no withdrawalsRoot before Shanghai fork")
+  # More checks can be added, see:
+  # https://github.com/ethereum/go-ethereum/blob/91faf2c55958d182677f15dc30c0ad9847342395/consensus/beacon/consensus.go#L227
 
   if not (header.blockHash() == hash):
     err("Block header hash does not match")

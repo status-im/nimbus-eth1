@@ -11,6 +11,7 @@ import
   eth/rlp, eth/common/eth_types_rlp,
   ssz_serialization, ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
+  ../../network_metadata,
   ./history_content
 
 export ssz_serialization, merkleization, proofs, eth_types_rlp
@@ -21,10 +22,6 @@ export ssz_serialization, merkleization, proofs, eth_types_rlp
 
 const
   epochSize* = 8192 # blocks
-  # Allow this to be adjusted at compile time for testing. If more constants
-  # need to be adjusted we can add some presets file.
-  mergeBlockNumber* {.intdefine.}: uint64 = 15537394
-
   # Note: This is like a ceil(mergeBlockNumber / epochSize)
   # Could use ceilDiv(mergeBlockNumber, epochSize) in future versions
   preMergeEpochs* = (mergeBlockNumber + epochSize - 1) div epochSize

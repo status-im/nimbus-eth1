@@ -14,6 +14,7 @@ import
   eth/common/eth_types_rlp,
   ../eth_data/history_data_json_store,
   ../network/history/[history_content, accumulator],
+  ../network_metadata,
   ./test_helpers
 
 suite "Header Accumulator":

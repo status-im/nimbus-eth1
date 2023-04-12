@@ -10,7 +10,8 @@ import
   eth/[keys, rlp],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/history/[accumulator, history_content]
+  ../network/history/[accumulator, history_content],
+  ../network_metadata
 
 proc localAddress*(port: int): Address =
   Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))

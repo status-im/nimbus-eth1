@@ -14,7 +14,7 @@ import
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../network/history/[history_network, accumulator, history_content],
   ../../nimbus/constants,
-  ../content_db,
+  ../content_db, ../network_metadata,
   ./test_helpers
 
 type HistoryNode = ref object
