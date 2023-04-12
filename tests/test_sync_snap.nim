@@ -202,8 +202,11 @@ proc miscRunner(noisy = true) =
     test "RLP proofs list sizes":
       test_calcProofsListSizes()
 
-    test "RLP en/decode GetTrieNodes argument list":
+    test "RLP en/decode GetTrieNodes arguments list":
       test_calcTrieNodeTranscode()
+
+    test "RLP en/decode BockBody arguments list":
+      test_calcBlockBodyTranscode()
 
 
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =

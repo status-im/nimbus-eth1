@@ -33,6 +33,16 @@ var
 # Private helpers for `test_calcAccountsListSizes()`
 # ------------------------------------------------------------------------------
 
+# Kludge, should be fixed in `eth/common/eth_types_rlp`
+proc append(w: var RlpWriter, b: BlockBody) =
+  ## helper for ` test_calcBlockBodyTranscode()`
+  w.ethAppend b
+
+proc `==`(a,b: ChainId): bool {.borrow.}
+  ## helper for ` test_calcBlockBodyTranscode()`
+
+# ------------------
+
 proc randAccSize(r: var Rand): int =
   ## Print random account size
   accObjRlpMin + r.rand(accBlobs.len - 1)
@@ -123,8 +133,8 @@ proc  test_calcProofsListSizes*() =
     check nodeBlobsHex == brNodesHex
 
 
-proc  test_calcTrieNodeTranscode*() =
-  ## RLP encode/decode of `SnapTriePaths` objects
+proc test_calcTrieNodeTranscode*() =
+  ## RLP encode/decode a list of `SnapTriePaths` objects
   let
     raw = @[
       # Accounts
@@ -173,6 +183,30 @@ proc  test_calcTrieNodeTranscode*() =
   proc read(rlp: var Rlp; T: type SnapTriePaths): T = rlp.snapRead T
   check raw == rlp.decode(cooked, seq[SnapTriePaths])
   check cured == rlp.decode(cooked, seq[seq[Blob]])
+
+
+proc test_calcBlockBodyTranscode*() =
+  ## RLP encode/decode a list of `BlockBody` objects. Note that tere is/was a
+  ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.
+  ## This has been fixed temporarily via `protocol/eth/eth_types.ethAppend()`.
+  let blkSeq = @[
+    BlockBody(
+      transactions: @[
+        Transaction(nonce: 1)]),
+    BlockBody(
+      uncles: @[
+        BlockHeader(nonce: [0x20u8,0,0,0,0,0,0,0])]),
+    BlockBody(),
+    BlockBody(
+      transactions: @[
+        Transaction(nonce: 3),
+        Transaction(nonce: 4)])]
+
+  let trBlkSeq = blkSeq.encode.decode(typeof blkSeq)
+
+  check trBlkSeq.len == blkSeq.len
+  for n in 0 ..< min(trBlkSeq.len, trBlkSeq.len):
+    check (n, trBlkSeq[n]) == (n, blkSeq[n])
 
 # ------------------------------------------------------------------------------
 # End
