@@ -16,6 +16,7 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
+  ../misc/[best_pivot, block_queue],
   ../sync_desc,
   ./worker/com/com_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
@@ -68,6 +69,9 @@ type
     nAccounts*: uint64                 ## Imported # of accounts
     nSlotLists*: uint64                ## Imported # of account storage tries
 
+    # Checkponting
+    savedFullPivotOk*: bool            ## This fully completed pivot was saved
+
     # Mothballing, ready to be swapped into newer pivot record
     storageAccounts*: SnapAccountsList ## Accounts with missing storage slots
     archived*: bool                    ## Not latest pivot, anymore
@@ -84,11 +88,14 @@ type
     ## Per-worker local descriptor data extension
     errors*: ComErrorStatsRef          ## For error handling
 
+    # Full sync continuation parameters
+    bPivot*: BestPivotWorkerRef        ## Local pivot worker descriptor
+    bQueue*: BlockQueueWorkerRef       ## Block queue worker
+
   SnapSyncModeType* = enum
     ## Current sync mode, after a snapshot has been downloaded, the system
     ## proceeds with full sync.
     SnapSyncMode = 0                   ## Start mode
-    PreFullSyncMode
     FullSyncMode
 
   SnapSyncSpecs* = object
@@ -111,11 +118,16 @@ type
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
 
-    # Snap/full mode muliplexing
-    syncMode*: SnapSyncSpecs           ## Sync mode data contaier
-
     # Info
     ticker*: TickerRef                 ## Ticker, logger
+
+    # Snap/full mode muliplexing
+    syncMode*: SnapSyncSpecs           ## Sync mode methods & data
+    fullPivot*: SnapPivotRef           ## Start full sync from here
+
+    # Full sync continuation parameters
+    bPivot*: BestPivotCtxRef           ## Global pivot descriptor
+    bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
 
   SnapBuddyRef* = BuddyRef[SnapCtxData,SnapBuddyData]
     ## Extended worker peer descriptor

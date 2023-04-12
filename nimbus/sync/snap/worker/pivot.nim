@@ -200,6 +200,12 @@ proc tickerStats*(
 # Public functions: particular pivot
 # ------------------------------------------------------------------------------
 
+proc pivotCompleteOk*(env: SnapPivotRef): bool =
+  ## Returns `true` iff the pivot covers a complete set of accounts ans
+  ## storage slots.
+  env.fetchAccounts.processed.isFull and env.storageQueueTotal() == 0
+
+
 proc pivotMothball*(env: SnapPivotRef) =
   ## Clean up most of this argument `env` pivot record and mark it `archived`.
   ## Note that archived pivots will be checked for swapping in already known
@@ -231,6 +237,9 @@ proc execSnapSyncAction*(
   ## Execute a synchronisation run.
   let
     ctx = buddy.ctx
+
+  if env.savedFullPivotOk:
+    return # no need to do anything
 
   block:
     # Clean up storage slots queue first it it becomes too large
@@ -288,6 +297,9 @@ proc saveCheckpoint*(
   ## Save current sync admin data. On success, the size of the data record
   ## saved is returned (e.g. for logging.)
   ##
+  if env.savedFullPivotOk:
+    return ok(0) # no need to do anything
+
   let
     fa = env.fetchAccounts
     nStoQu = env.storageQueueTotal()
@@ -301,7 +313,7 @@ proc saveCheckpoint*(
   if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
+  result = ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
     header:       env.stateHeader,
     nAccounts:    env.nAccounts,
     nSlotLists:   env.nSlotLists,
@@ -310,6 +322,9 @@ proc saveCheckpoint*(
     slotAccounts: (toSeq(env.fetchStorageFull.nextKeys) &
                    toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)) &
                    toSeq(env.parkedStorage.items))
+
+  if result.isOk and env.pivotCompleteOk():
+    env.savedFullPivotOk = true
 
 
 proc pivotRecoverFromCheckpoint*(
@@ -353,7 +368,15 @@ proc pivotRecoverFromCheckpoint*(
         env.storageQueueAppendFull(rc.value.storageRoot, w)
 
   # Handle mothballed pivots for swapping in (see `pivotMothball()`)
-  if not topLevel:
+  if topLevel:
+    env.savedFullPivotOk = env.pivotCompleteOk()
+    when extraTraceMessages:
+      trace logTxt "recovered top level record",
+        pivot=env.stateHeader.blockNumber.toStr,
+        savedFullPivotOk=env.savedFullPivotOk,
+        processed=env.fetchAccounts.processed.fullPC3,
+        nStoQuTotal=env.storageQueueTotal()
+  else:
     for kvp in env.fetchStorageFull.nextPairs:
       let rc = env.storageAccounts.insert(kvp.data.accKey.to(NodeTag))
       if rc.isOk:

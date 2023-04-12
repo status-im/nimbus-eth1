@@ -15,7 +15,7 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[sync_desc, types],
+  "../../.."/[handlers/eth, protocol, sync_desc, types],
   ".."/[pivot, ticker],
   ../pivot/storage_queue_helper,
   ../db/[hexary_desc, snapdb_pivot],
@@ -33,6 +33,51 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
+template logTxt(info: static[string]): static[string] =
+  "Snap worker " & info
+
+template ignoreException(info: static[string]; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    error "Exception at " & info & ":", name=($e.name), msg=(e.msg)
+
+# --------------
+
+proc disableWireServices(ctx: SnapCtxRef) =
+  ## Helper for `setup()`: Temporarily stop useless wire protocol services.
+  ctx.ethWireCtx.txPoolEnabled = false
+
+proc enableWireServices(ctx: SnapCtxRef) =
+  ## Helper for `release()`
+  ctx.ethWireCtx.txPoolEnabled = true
+
+# --------------
+
+proc enableRpcMagic(ctx: SnapCtxRef) =
+  ## Helper for `setup()`: Enable external pivot update via RPC
+  ctx.chain.com.syncReqNewHead = ctx.pivotUpdateBeaconHeaderCB
+
+proc disableRpcMagic(ctx: SnapCtxRef) =
+  ## Helper for `release()`
+  ctx.chain.com.syncReqNewHead = nil
+
+# --------------
+
+proc detectSnapSyncRecovery(ctx: SnapCtxRef) =
+  ## Helper for `setup()`: Initiate snap sync recovery (if any)
+  let rc = ctx.pool.snapDb.pivotRecoverDB()
+  if rc.isOk:
+    ctx.pool.recovery = SnapRecoveryRef(state: rc.value)
+    ctx.daemon = true
+
+    # Set up early initial pivot
+    ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
+    trace logTxt "recovery started",
+      checkpoint=(ctx.pool.pivotTable.topNumber.toStr & "(0)")
+    if not ctx.pool.ticker.isNil:
+      ctx.pool.ticker.startRecovery()
+
 proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
   let recov = ctx.pool.recovery
   if recov.isNil:
@@ -44,7 +89,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     env = block:
       let rc = ctx.pool.pivotTable.eq recov.state.header.stateRoot
       if rc.isErr:
-        error "Recovery pivot context gone", checkpoint, topLevel
+        error logTxt "recovery pivot context gone", checkpoint, topLevel
         return false
       rc.value
 
@@ -67,7 +112,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
   let rc = ctx.pool.snapDb.pivotRecoverDB(recov.state.predecessor)
   if rc.isErr:
     when extraTraceMessages:
-      trace "Recovery stopped at pivot stale checkpoint", checkpoint, topLevel
+      trace logTxt "stale pivot, recovery stopped", checkpoint, topLevel
     return false
 
   # Set up next level pivot checkpoint
@@ -80,23 +125,98 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
 
   return true # continue recovery
 
+# --------------
+
+proc snapSyncCompleteOk(
+    env: SnapPivotRef;              # Current pivot environment
+    ctx: SnapCtxRef;                # Some global context
+      ): Future[bool]
+      {.async.} =
+  ## Check whether this pivot is fully downloaded. The `async` part is for
+  ## debugging, only and should not be used on a large database as it uses
+  ## quite a bit of computation ressources.
+  if env.pivotCompleteOk():
+    if env.nAccounts <= 1_000_000: # Larger sizes might be infeasible
+      if not await env.pivotVerifyComplete(ctx):
+        error logTxt "inconsistent state, pivot incomplete",
+          pivot = env.stateHeader.blockNumber.toStr
+        return false
+    ctx.pool.fullPivot = env
+    ctx.poolMode = true # Fast sync mode must be synchronized among all peers
+    return true
+
 # ------------------------------------------------------------------------------
-# Private functions, snap sync handlers
+# Private functions, snap sync admin handlers
 # ------------------------------------------------------------------------------
 
-proc snapSyncPool(buddy: SnapBuddyRef, last: bool; lap: int): bool =
+proc snapSyncSetup(ctx: SnapCtxRef) =
+  # For snap sync book keeping
+  ctx.pool.coveredAccounts = NodeTagRangeSet.init()
+  ctx.pool.ticker.init(cb = ctx.pool.pivotTable.tickerStats(ctx))
+
+  ctx.enableRpcMagic()          # Allow external pivot update via RPC
+  ctx.disableWireServices()     # Stop unwanted public services
+  ctx.detectSnapSyncRecovery()  # Check for recovery mode
+
+proc snapSyncRelease(ctx: SnapCtxRef) =
+  ctx.disableRpcMagic()         # Disable external pivot update via RPC
+  ctx.enableWireServices()      # re-enable public services
+  ctx.pool.ticker.stop()
+
+proc snapSyncStart(buddy: SnapBuddyRef): bool =
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+  if peer.supports(protocol.snap) and
+     peer.supports(protocol.eth) and
+     peer.state(protocol.eth).initialized:
+    ctx.pool.ticker.startBuddy()
+    buddy.ctrl.multiOk = false # confirm default mode for soft restart
+    return true
+
+proc snapSyncStop(buddy: SnapBuddyRef) =
+  buddy.ctx.pool.ticker.stopBuddy()
+
+# ------------------------------------------------------------------------------
+# Private functions, snap sync action handlers
+# ------------------------------------------------------------------------------
+
+proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   ## Enabled when `buddy.ctrl.poolMode` is `true`
   ##
-  let ctx = buddy.ctx
-  result = true
+  let
+    ctx = buddy.ctx
+    env = ctx.pool.fullPivot
 
-  # Clean up empty pivot slots (never the top one)
+  # Check whether the snapshot is complete. If so, switch to full sync mode.
+  # This process needs to be applied to all buddy peers.
+  if not env.isNil:
+    ignoreException("snapSyncPool"):
+      # Stop all peers
+      ctx.playMethod.stop(buddy)
+      # After the last buddy peer was stopped switch to full sync mode
+      # and repeat that loop over buddy peers for re-starting them.
+      if last:
+        when extraTraceMessages:
+          trace logTxt "switch to full sync", peer=buddy.peer, last, laps,
+            pivot=env.stateHeader.blockNumber.toStr,
+            mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
+        ctx.playMethod.release(ctx)
+        ctx.pool.syncMode.active = FullSyncMode
+        ctx.playMethod.setup(ctx)
+        ctx.poolMode = true # repeat looping over peers
+    return false # do stop magically when looping over peers is exhausted
+
+  # Clean up empty pivot slots (never the top one.) This needs to be run on
+  # a single peer only. So the loop can stop immediately (returning `true`)
+  # after this job is done.
   var rc = ctx.pool.pivotTable.beforeLast
   while rc.isOK:
     let (key, env) = (rc.value.key, rc.value.data)
     if env.fetchAccounts.processed.isEmpty:
       ctx.pool.pivotTable.del key
     rc = ctx.pool.pivotTable.prev(key)
+  true # Stop ok
 
 
 proc snapSyncDaemon(ctx: SnapCtxRef) {.async.} =
@@ -118,10 +238,14 @@ proc snapSyncSingle(buddy: SnapBuddyRef) {.async.} =
   ## * `buddy.ctrl.multiOk` is `false`
   ## * `buddy.ctrl.poolMode` is `false`
   ##
-  let ctx = buddy.ctx
-
   # External beacon header updater
   await buddy.updateBeaconHeaderFromFile()
+
+  # Dedicate some process cycles to the recovery process (if any)
+  if not buddy.ctx.pool.recovery.isNil:
+    when extraTraceMessages:
+      trace "Throttling single mode in favour of recovery", peer=buddy.peer
+    await sleepAsync 900.milliseconds
 
   await buddy.pivotApprovePeer()
   buddy.ctrl.multiOk = true
@@ -143,23 +267,19 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
         return # nothing to do
       rc.value
 
-    peer = buddy.peer
-    pivot = env.stateHeader.blockNumber.toStr # for logging
-    fa = env.fetchAccounts
-
   # Check whether this pivot is fully downloaded
-  if env.fetchAccounts.processed.isFull and env.storageQueueTotal() == 0:
-    # Switch to full sync => final state
-    ctx.playMode = PreFullSyncMode
-    trace "Switch to full sync", peer, pivot, nAccounts=env.nAccounts,
-      processed=fa.processed.fullPC3, nStoQu=env.storageQueueTotal(),
-      nSlotLists=env.nSlotLists
+  if await env.snapSyncCompleteOk(ctx):
     return
 
   # If this is a new snap sync pivot, the previous one can be cleaned up and
   # archived. There is no point in keeping some older space consuming state
   # data any longer.
   ctx.pool.pivotTable.beforeTopMostlyClean()
+
+  let
+    peer = buddy.peer
+    pivot = env.stateHeader.blockNumber.toStr # for logging
+    fa = env.fetchAccounts
 
   when extraTraceMessages:
     trace "Multi sync runner", peer, pivot, nAccounts=env.nAccounts,
@@ -178,7 +298,7 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   # Archive this pivot eveironment if it has become stale
   if env.archived:
     when extraTraceMessages:
-      trace "Mothballing", peer, pivot, nAccounts, nSlotLists
+      trace logTxt "mothballing", peer, pivot, nAccounts, nSlotLists
     env.pivotMothball()
     return
 
@@ -186,12 +306,17 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   let rc = env.saveCheckpoint(ctx)
   if rc.isOk:
     when extraTraceMessages:
-      trace "Saved recovery checkpoint", peer, pivot, nAccounts, processed,
-        nStoQu=env.storageQueueTotal(),  nSlotLists, blobSize=rc.value
+      trace logTxt "saved checkpoint", peer, pivot, nAccounts,
+        processed, nStoQu=env.storageQueueTotal(),  nSlotLists,
+        blobSize=rc.value
     return
 
-  error "Failed to save recovery checkpoint", peer, pivot, nAccounts,
-    processed, nStoQu=env.storageQueueTotal(), nSlotLists, error=rc.error
+  error logTxt "failed to save checkpoint", peer, pivot, nAccounts,
+    processed, nStoQu=env.storageQueueTotal(), nSlotLists,
+    error=rc.error
+
+  # Check whether this pivot is fully downloaded
+  discard await env.snapSyncCompleteOk(ctx)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -200,10 +325,14 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 proc playSnapSyncSpecs*: PlaySyncSpecs =
   ## Return snap sync handler environment
   PlaySyncSpecs(
-    pool:   snapSyncPool,
-    daemon: snapSyncDaemon,
-    single: snapSyncSingle,
-    multi:  snapSyncMulti)
+    setup:   snapSyncSetup,
+    release: snapSyncRelease,
+    start:   snapSyncStart,
+    stop:    snapSyncStop,
+    pool:    snapSyncPool,
+    daemon:  snapSyncDaemon,
+    single:  snapSyncSingle,
+    multi:   snapSyncMulti)
 
 # ------------------------------------------------------------------------------
 # End

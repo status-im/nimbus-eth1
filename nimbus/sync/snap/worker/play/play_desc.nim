@@ -17,6 +17,11 @@ type
     ctx: SnapCtxRef): Future[void]
       {.gcsafe, raises: [CatchableError].}
 
+  PlayVoidCtxFn* = proc(
+    ctx: SnapCtxRef)
+      {.gcsafe, raises: [CatchableError].}
+
+
   PlayVoidFutureBuddyFn* = proc(
     buddy: SnapBuddyRef): Future[void]
       {.gcsafe, raises: [CatchableError].}
@@ -25,8 +30,21 @@ type
     buddy: SnapBuddyRef; last: bool; laps: int): bool
       {.gcsafe, raises: [CatchableError].}
 
+  PlayBoolBuddyFn* = proc(
+    buddy: SnapBuddyRef): bool
+      {.gcsafe, raises: [CatchableError].}
+
+  PlayVoidBuddyFn* = proc(
+    buddy: SnapBuddyRef)
+      {.gcsafe, raises: [CatchableError].}
+
+
   PlaySyncSpecs* = ref object of RootRef
     ## Holds sync mode specs & methods for a particular sync state
+    setup*: PlayVoidCtxFn
+    release*: PlayVoidCtxFn
+    start*: PlayBoolBuddyFn
+    stop*: PlayVoidBuddyFn
     pool*: PlayBoolBuddyBoolIntFn
     daemon*: PlayVoidFutureCtxFn
     single*: PlayVoidFutureBuddyFn
@@ -36,13 +54,9 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playSyncSpecs*(ctx: SnapCtxRef): PlaySyncSpecs =
+proc playMethod*(ctx: SnapCtxRef): PlaySyncSpecs =
   ## Getter
   ctx.pool.syncMode.tab[ctx.pool.syncMode.active].PlaySyncSpecs
-
-proc `playMode=`*(ctx: SnapCtxRef; val: SnapSyncModeType) =
-  ## Setter
-  ctx.pool.syncMode.active = val
 
 # ------------------------------------------------------------------------------
 # End
