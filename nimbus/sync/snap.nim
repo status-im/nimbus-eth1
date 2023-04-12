@@ -11,9 +11,9 @@
 {.push raises: [].}
 
 import
-  eth/[common, p2p],
   chronicles,
   chronos,
+  eth/p2p,
   ../db/select_backend,
   ../core/chain,
   ./snap/[worker, worker_desc],
@@ -90,9 +90,9 @@ proc runStop(buddy: SnapBuddyRef) =
   tracerFrameBuddy("runStop", buddy):
     worker.stop(buddy)
 
-proc runPool(buddy: SnapBuddyRef; last: bool): bool =
+proc runPool(buddy: SnapBuddyRef; last: bool; laps: int): bool =
   tracerFrameBuddy("runPool", buddy):
-    result = worker.runPool(buddy, last)
+    result = worker.runPool(buddy, last=last, laps=laps)
 
 proc runSingle(buddy: SnapBuddyRef) {.async.} =
   tracerFrameBuddy("runSingle", buddy):

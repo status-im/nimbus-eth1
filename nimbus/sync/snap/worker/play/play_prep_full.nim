@@ -34,8 +34,7 @@ proc blindTicker(ctx: SnapCtxRef): TickerFullStatsUpdater =
 # Private functions, transitional handlers preparing for full sync
 # ------------------------------------------------------------------------------
 
-proc prepFullSyncPool(buddy: SnapBuddyRef, last: bool): bool =
-  buddy.ctx.poolMode = false
+proc prepFullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   true
 
 proc prepFullSyncDaemon(ctx: SnapCtxRef) {.async.} =

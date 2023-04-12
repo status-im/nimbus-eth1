@@ -85,11 +85,10 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
 # Private functions, snap sync handlers
 # ------------------------------------------------------------------------------
 
-proc snapSyncPool(buddy: SnapBuddyRef, last: bool): bool =
+proc snapSyncPool(buddy: SnapBuddyRef, last: bool; lap: int): bool =
   ## Enabled when `buddy.ctrl.poolMode` is `true`
   ##
   let ctx = buddy.ctx
-  ctx.poolMode = false
   result = true
 
   # Clean up empty pivot slots (never the top one)

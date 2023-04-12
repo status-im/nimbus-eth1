@@ -14,17 +14,20 @@ import
 
 type
   PlayVoidFutureCtxFn* = proc(
-    ctx: SnapCtxRef): Future[void] {.gcsafe, raises: [CatchableError].}
+    ctx: SnapCtxRef): Future[void]
+      {.gcsafe, raises: [CatchableError].}
 
   PlayVoidFutureBuddyFn* = proc(
-    buddy: SnapBuddyRef): Future[void] {.gcsafe, raises: [CatchableError].}
+    buddy: SnapBuddyRef): Future[void]
+      {.gcsafe, raises: [CatchableError].}
 
-  PlayBoolBuddyFn* = proc(
-    buddy: SnapBuddyRef, last: bool): bool {.gcsafe, raises: [CatchableError].}
+  PlayBoolBuddyBoolIntFn* = proc(
+    buddy: SnapBuddyRef, last: bool; laps: int): bool
+      {.gcsafe, raises: [CatchableError].}
 
   PlaySyncSpecs* = ref object of RootRef
     ## Holds sync mode specs & methods for a particular sync state
-    pool*: PlayBoolBuddyFn
+    pool*: PlayBoolBuddyBoolIntFn
     daemon*: PlayVoidFutureCtxFn
     single*: PlayVoidFutureBuddyFn
     multi*: PlayVoidFutureBuddyFn

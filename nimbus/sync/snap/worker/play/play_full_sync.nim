@@ -26,8 +26,7 @@ const
 # Private functions, full sync handlers
 # ------------------------------------------------------------------------------
 
-proc fullSyncPool(buddy: SnapBuddyRef, last: bool): bool =
-  buddy.ctx.poolMode = false
+proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   true
 
 proc fullSyncDaemon(ctx: SnapCtxRef) {.async.} =

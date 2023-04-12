@@ -157,10 +157,10 @@ proc runSingle*(buddy: SnapBuddyRef) {.async.} =
   ignoreException("runSingle"):
     await buddy.ctx.playSyncSpecs.single(buddy)
 
-proc runPool*(buddy: SnapBuddyRef, last: bool): bool =
+proc runPool*(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   ## Sync processsing multiplexer
   ignoreException("runPool"):
-    result = buddy.ctx.playSyncSpecs.pool(buddy,last)
+    result = buddy.ctx.playSyncSpecs.pool(buddy,last,laps)
 
 proc runMulti*(buddy: SnapBuddyRef) {.async.} =
   ## Sync processsing multiplexer
