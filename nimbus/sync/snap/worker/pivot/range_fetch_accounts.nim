@@ -48,9 +48,7 @@ import
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
-  stint,
-  ../../../../utils/prettify,
-  ../../../sync_desc,
+  "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_account_range],
   ../db/[hexary_envelope, snapdb_accounts],
@@ -81,7 +79,7 @@ proc fetchCtx(
     env: SnapPivotRef;
       ): string {.used.} =
   "{" &
-    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "nStoQu=" & $env.storageQueueTotal() & "," &
     "nSlotLists=" & $env.nSlotLists & "}"
@@ -129,7 +127,7 @@ proc accountsRangefetchImpl(
   # Process received accounts and stash storage slots to fetch later
   let dd = block:
     let
-      pivot = "#" & $env.stateHeader.blockNumber
+      pivot = env.stateHeader.blockNumber.toStr
       rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
       fa.unprocessed.mergeSplit iv # fail => interval back to pool

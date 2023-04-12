@@ -14,9 +14,9 @@ import
   std/[math, sets, sequtils],
   chronicles,
   chronos,
-  eth/[common, p2p, trie/trie_defs],
+  eth/[p2p, trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
-  ../../sync_desc,
+  "../.."/[sync_desc, types],
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
@@ -355,7 +355,6 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   ## it will not proceed to the next scheduler task.
   let
     ctx = buddy.ctx
-    peer {.used.} = buddy.peer
     beaconHeader = ctx.pool.beaconHeader
   var
     pivotHeader: BlockHeader
@@ -375,9 +374,9 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
         ctx.poolMode = true
 
     when extraTraceMessages:
-      trace "New pivot from beacon chain", peer,
-        pivot=("#" & $pivotHeader.blockNumber),
-        beacon=("#" & $beaconHeader.blockNumber), poolMode=ctx.poolMode
+      trace "New pivot from beacon chain", peer=buddy.peer,
+        pivot=pivotHeader.blockNumber.toStr,
+        beacon=beaconHeader.blockNumber.toStr, poolMode=ctx.poolMode
 
     discard ctx.pool.pivotTable.lruAppend(
       beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
@@ -396,7 +395,7 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   result = proc(h: BlockHeader) {.gcsafe.} =
     if ctx.pool.beaconHeader.blockNumber < h.blockNumber:
       # when extraTraceMessages:
-      #   trace "External beacon info update", header=("#" & $h.blockNumber)
+      #   trace "External beacon info update", header=h.blockNumber.toStr
       ctx.pool.beaconHeader = h
 
 # ------------------------------------------------------------------------------

@@ -55,18 +55,17 @@
 ## would have no effect. In that case, the record with the largest block
 ## numbers are deleted from the `<staged>` list.
 ##
+{.push raises:[].}
 
 import
   std/[algorithm, options, sequtils, strutils],
   chronicles,
   chronos,
-  eth/[common, p2p],
+  eth/p2p,
   stew/[byteutils, interval_set, sorted_set],
   ../../db/db_chain,
   ../../utils/utils,
   ".."/[protocol, sync_desc, types]
-
-{.push raises:[].}
 
 logScope:
   topics = "block-queue"
@@ -134,7 +133,10 @@ type
     nStagedQueue*: int
     reOrg*: bool
 
-let
+const
+  extraTraceMessages = false or true
+    ## Enabled additional logging noise
+
   highBlockNumber = high(BlockNumber)
   highBlockRange = BlockRange.new(highBlockNumber,highBlockNumber)
 
@@ -163,23 +165,19 @@ proc reduce(ivSet: BlockRangeSetRef; wi: BlockItemRef): Uint256 =
 
 # ---------------
 
-proc pp(n: BlockNumber): string =
-  ## Dedicated pretty printer (`$` is defined elsewhere using `UInt256`)
-  if n == highBlockNumber: "high" else:"#" & $n
-
 proc `$`(iv: BlockRange): string =
   ## Needed for macro generated DSL files like `snap.nim` because the
   ## `distinct` flavour of `NodeTag` is discarded there.
-  result = "[" & iv.minPt.pp
+  result = "[" & iv.minPt.toStr
   if iv.minPt != iv.maxPt:
-    result &= "," & iv.maxPt.pp
+    result &= "," & iv.maxPt.toStr
   result &= "]"
 
 proc `$`(n: Option[BlockRange]): string =
   if n.isNone: "n/a" else: $n.get
 
 proc `$`(n: Option[BlockNumber]): string =
-  if n.isNone: "n/a" else: n.get.pp
+  n.toStr
 
 proc `$`(brs: BlockRangeSetRef): string =
   "{" & toSeq(brs.increasing).mapIt($it).join(",") & "}"
@@ -227,6 +225,8 @@ proc newWorkItem(qd: BlockQueueWorkerRef): Result[BlockItemRef,BlockQueueRC] =
   # Check whether there is somthing to do at all
   if qd.bestNumber.isNone or
      qd.bestNumber.unsafeGet < rc.value.minPt:
+    when extraTraceMessages:
+      trace "no new work item", bestNumer=qd.bestNumber.toStr, range=rc.value
     return err(NoMorePeerBlocks) # no more data for this peer
 
   # Compute interval

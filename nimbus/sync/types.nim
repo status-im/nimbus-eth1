@@ -8,12 +8,12 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[math, hashes],
   eth/common/eth_types_rlp,
   stew/byteutils
-
-{.push raises: [].}
 
 type
   BlockHash* = distinct Hash256
@@ -105,6 +105,13 @@ func `$`*(hashOrNum: HashOrNum): string =
   # It's always obvious which one from the visible length of the string.
   if hashOrNum.isHash: $hashOrNum.hash
   else: $hashOrNum.number
+
+func toStr*(n: BlockNumber): string =
+  ## Pretty print block number, explicitely format with a leading hash `#`
+  if n == high(BlockNumber): "high" else:"#" & $n
+
+func toStr*(n: Option[BlockNumber]): string =
+  if n.isNone: "n/a" else: n.get.toStr
 
 # ------------------------------------------------------------------------------
 # Public debug printing helpers

@@ -15,7 +15,7 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  ../../../sync_desc,
+  "../../.."/[sync_desc, types],
   ".."/[pivot, ticker],
   ../pivot/storage_queue_helper,
   ../db/[hexary_desc, snapdb_pivot],
@@ -39,8 +39,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     return false
 
   let
-    checkpoint =
-      "#" & $recov.state.header.blockNumber & "(" & $recov.level & ")"
+    checkpoint = recov.state.header.blockNumber.toStr & "(" & $recov.level & ")"
     topLevel = recov.level == 0
     env = block:
       let rc = ctx.pool.pivotTable.eq recov.state.header.stateRoot
@@ -145,7 +144,7 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
       rc.value
 
     peer = buddy.peer
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    pivot = env.stateHeader.blockNumber.toStr # for logging
     fa = env.fetchAccounts
 
   # Check whether this pivot is fully downloaded

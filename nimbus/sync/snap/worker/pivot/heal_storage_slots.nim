@@ -86,7 +86,7 @@ proc healingCtx(
     env: SnapPivotRef;
       ): string {.used.} =
   "{" &
-    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "nStoQu=" & $env.storageQueueTotal() & "," &
     "nQuPart=" & $env.fetchStoragePart.len & "," &
@@ -99,7 +99,7 @@ proc healingCtx(
     env: SnapPivotRef;
       ): string =
   "{" &
-    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "processed=" & $kvp.data.slots.processed & "," &
     "nStoQu=" & $env.storageQueueTotal() & "," &
@@ -171,7 +171,7 @@ proc getNodesFromNetwork(
     peer {.used.} = buddy.peer
     accPath = kvp.data.accKey.to(Blob)
     rootHash = env.stateHeader.stateRoot
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    pivot = env.stateHeader.blockNumber.toStr # for logging in `getTrieNodes()`
 
   # Initalise for fetching nodes from the network via `getTrieNodes()`
   var

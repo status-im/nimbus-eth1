@@ -22,7 +22,7 @@ type
       {.gcsafe, raises: [CatchableError].}
 
   PlayBoolBuddyBoolIntFn* = proc(
-    buddy: SnapBuddyRef, last: bool; laps: int): bool
+    buddy: SnapBuddyRef; last: bool; laps: int): bool
       {.gcsafe, raises: [CatchableError].}
 
   PlaySyncSpecs* = ref object of RootRef

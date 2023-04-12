@@ -16,7 +16,7 @@ import
   eth/p2p,
   stew/[interval_set, keyed_queue],
   "../.."/[common, db/select_backend],
-  ".."/[handlers/eth, protocol, sync_desc],
+  ".."/[handlers/eth, protocol, sync_desc, types],
   ./worker/[pivot, play, ticker],
   ./worker/com/com_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
@@ -84,7 +84,7 @@ proc detectSnapSyncRecovery(ctx: SnapCtxRef) =
     # Set up early initial pivot
     ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
     trace "Snap sync recovery started",
-      checkpoint=("#" & $ctx.pool.pivotTable.topNumber() & "(0)")
+      checkpoint=(ctx.pool.pivotTable.topNumber.toStr & "(0)")
     if not ctx.pool.ticker.isNil:
       ctx.pool.ticker.startRecovery()
 

@@ -380,9 +380,8 @@ proc pivotNegotiate*(
       if rx.isOk:
         bp.global.trusted.incl peer
         when extraTraceMessages:
-          let bestHeader {.used.} =
-            if bp.header.isSome: "#" & $bp.header.get.blockNumber
-            else: "nil"
+          let bestHeader {.used.} = if bp.header.isNone: "n/a"
+                                    else: bp.header.unsafeGet.blockNumber.toStr
           trace "Accepting peer", peer, trusted=bp.global.trusted.len,
             untrusted=bp.global.untrusted.len, runState=bp.ctrl.state,
             bestHeader
@@ -397,9 +396,8 @@ proc pivotNegotiate*(
   if bp.global.trusted.len == 0:
     bp.global.trusted.incl peer
     when extraTraceMessages:
-      let bestHeader {.used.} =
-        if bp.header.isSome: "#" & $bp.header.get.blockNumber
-        else: "nil"
+      let bestHeader {.used.} = if bp.header.isNone: "n/a"
+                                else: bp.header.unsafeGet.blockNumber.toStr
       trace "Assume initial trusted peer", peer,
         trusted=bp.global.trusted.len, runState=bp.ctrl.state, bestHeader
     return false
@@ -465,9 +463,8 @@ proc pivotNegotiate*(
   # Evaluate status, finally
   if bp.global.minPeers <= bp.global.trusted.len:
     when extraTraceMessages:
-      let bestHeader {.used.} =
-        if bp.header.isSome: "#" & $bp.header.get.blockNumber
-        else: "nil"
+      let bestHeader {.used.} = if bp.header.isNone: "n/a"
+                                else: bp.header.unsafeGet.blockNumber.toStr
       trace "Peer trusted now", peer,
         trusted=bp.global.trusted.len, runState=bp.ctrl.state, bestHeader
     return true

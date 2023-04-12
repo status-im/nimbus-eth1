@@ -257,7 +257,7 @@ proc swapInAccounts*(
     return # nothing to do
 
   let
-    pivot {.used.} = "#" & $env.stateHeader.blockNumber # Logging & debugging
+    pivot {.used.} = env.stateHeader.blockNumber.toStr # Logging & debugging
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.pool.snapDb.getAccountFn
 

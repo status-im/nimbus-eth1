@@ -13,7 +13,7 @@ import
   chronos,
   eth/p2p,
   stew/keyed_queue,
-  ../../../sync_desc,
+  "../../.."/[sync_desc, types],
   ../../worker_desc,
   ../ticker,
   play_desc
@@ -54,7 +54,7 @@ proc prepFullSyncSingle(buddy: SnapBuddyRef) {.async.} =
       rc.value
 
     peer = buddy.peer
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    pivot = env.stateHeader.blockNumber.toStr # for logging
 
   when extraTraceMessages:
     trace "Full sync prepare in single mode", peer, pivot
