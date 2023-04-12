@@ -153,6 +153,21 @@ ifneq ($(if $(ENABLE_LEGACY_ETH66),$(ENABLE_LEGACY_ETH66),1),0)
 NIM_PARAMS := $(NIM_PARAMS) -d:legacy_eth66_enabled
 endif
 
+local-testnet-minimal:
+	pushd vendor/nimbus-eth2 && \
+		env \
+			NIMBUS_ETH1_BINARY=../../build/nimbus \
+		./scripts/launch_local_testnet.sh \
+			--nodes=3 \
+			--stop-at-epoch=7 \
+			--disable-htop \
+			--reuse-binaries \
+			--run-nimbus-eth1 \
+			--dl-nimbus-eth2 \
+			--verbose \
+			--kill-old-processes && \
+	popd
+
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common
 	rm -rf nimbus.nims && \
