@@ -160,10 +160,10 @@ func decodeForkedLightClientObject(
 
   let
     forkDigest = ForkDigest(array[4, byte].initCopyFrom(data))
-    contextFork = forkDigests.stateForkForDigest(forkDigest).valueOr:
+    contextFork = forkDigests.consensusForkForDigest(forkDigest).valueOr:
       return Result[ObjType, string].err("Unknown fork")
 
-  withLcDataFork(lcDataForkAtStateFork(contextFork)):
+  withLcDataFork(lcDataForkAtConsensusFork(contextFork)):
     when lcDataFork > LightClientDataFork.None:
       let res = decodeSsz(data.toOpenArray(4, len(data) - 1), ObjType.Forky(lcDataFork))
       if res.isOk:

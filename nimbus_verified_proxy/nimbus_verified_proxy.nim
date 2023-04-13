@@ -107,7 +107,7 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
         opt = signedBlock.toBlockId(),
         wallSlot = getBeaconTime().slotOrZero
       withBlck(signedBlock):
-        when stateFork >= ConsensusFork.Bellatrix:
+        when consensusFork >= ConsensusFork.Bellatrix:
           if blck.message.is_execution_block:
             template payload(): auto = blck.message.body.execution_payload
             blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
@@ -138,6 +138,16 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.bellatrix),
     proc (signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
+      toValidationResult(
+        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+  network.addValidator(
+    getBeaconBlocksTopic(forkDigests.capella),
+    proc (signedBlock: capella.SignedBeaconBlock): ValidationResult =
+      toValidationResult(
+        optimisticProcessor.processSignedBeaconBlock(signedBlock)))
+  network.addValidator(
+    getBeaconBlocksTopic(forkDigests.deneb),
+    proc (signedBlock: deneb.SignedBeaconBlock): ValidationResult =
       toValidationResult(
         optimisticProcessor.processSignedBeaconBlock(signedBlock)))
   lightClient.installMessageValidators()
@@ -204,11 +214,11 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       oldGossipForks = currentGossipState - targetGossipState
 
     for gossipFork in oldGossipForks:
-      let forkDigest = forkDigests[].atStateFork(gossipFork)
+      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
       network.unsubscribe(getBeaconBlocksTopic(forkDigest))
 
     for gossipFork in newGossipForks:
-      let forkDigest = forkDigests[].atStateFork(gossipFork)
+      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest), blocksTopicParams,
         enableTopicMetrics = true)
