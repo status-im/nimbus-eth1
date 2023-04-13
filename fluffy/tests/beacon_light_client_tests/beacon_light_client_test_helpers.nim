@@ -25,7 +25,7 @@ const testForkDigests* =
     altair: ForkDigest([0'u8, 0, 0, 2]),
     bellatrix: ForkDigest([0'u8, 0, 0, 3]),
     capella: ForkDigest([0'u8, 0, 0, 4]),
-    eip4844: ForkDigest([0'u8, 0, 0, 5])
+    deneb: ForkDigest([0'u8, 0, 0, 5])
   )
 
 proc newLCNode*(
