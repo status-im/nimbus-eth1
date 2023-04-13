@@ -13,4 +13,4 @@ proc discv5_ping(nodeId: Record): PongResponse
 proc discv5_findNode(nodeId: Record, distances: seq[uint16]): seq[Record]
 proc discv5_talkReq(nodeId: Record, protocol, payload: string): string
 
-proc discv5_recursiveFindNode(nodeId: NodeId): seq[Record]
+proc discv5_recursiveFindNodes(nodeId: NodeId): seq[Record]
