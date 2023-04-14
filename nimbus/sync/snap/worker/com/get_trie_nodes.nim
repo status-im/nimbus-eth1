@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sequtils],
+  std/sequtils,
   chronos,
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],

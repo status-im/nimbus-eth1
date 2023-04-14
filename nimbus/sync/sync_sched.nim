@@ -38,18 +38,21 @@
 ##   Clean up this worker peer.
 ##
 ##
-## *runPool(buddy: BuddyRef[S,W], last: bool): bool*
+## *runPool(buddy: BuddyRef[S,W], last: bool; laps: int): bool*
 ##   Once started, the function `runPool()` is called for all worker peers in
 ##   sequence as the body of an iteration as long as the function returns
 ##   `false`. There will be no other worker peer functions activated
 ##   simultaneously.
 ##
 ##   This procedure is started if the global flag `buddy.ctx.poolMode` is set
-##   `true` (default is `false`.) It is the responsibility of the `runPool()`
-##   instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-##   peer instance.
+##   `true` (default is `false`.) It will be automatically reset before the
+##   the loop starts. Re-setting it again results in repeating the loop. The
+##   argument `laps` (starting with `0`) indicated the currend lap of the
+##   repeated loops. To avoid continous looping, the number of `laps` is
+##   limited (see `exexPoolModeMax`, below.)
 ##
-##   The argument `last` is set `true` if the last entry is reached.
+##   The argument `last` is set `true` if the last entry of the current loop
+##   has been reached.
 ##
 ##   Note:
 ##   + This function does *not* runs in `async` mode.
@@ -91,7 +94,7 @@
 import
   std/hashes,
   chronos,
-  eth/[common, p2p, p2p/peer_pool, p2p/private/p2p_types],
+  eth/[p2p, p2p/peer_pool, p2p/private/p2p_types],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
 
@@ -133,6 +136,9 @@ const
 
   execLoopPollingTime = 50.milliseconds
     ## Single asynchroneous time interval wait state for event polling
+
+  execPoolModeLoopMax = 100
+    ## Avoids continuous looping
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -201,11 +207,25 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
           if worker.ctrl.stopped:
             dsc.monitorLock = false
             break taskExecLoop
-        var count = dsc.buddies.len
-        for w in dsc.buddies.nextValues:
-          count.dec
-          if worker.runPool(count == 0):
-            break # `true` => stop
+
+        var count = 0
+        while count < execPoolModeLoopMax:
+          ctx.poolMode = false
+          # Pool mode: stop this round if returned `true`,
+          #            last invocation this round with `true` argument
+          var delayed = BuddyRef[S,W](nil)
+          for w in dsc.buddies.nextValues:
+            # Execute previous (aka delayed) item (unless first)
+            if delayed.isNil or not delayed.runPool(last=false, laps=count):
+              delayed = w.worker
+            else:
+              delayed = nil # not executing any final item
+              break # `true` => stop
+          if not delayed.isNil:
+            discard delayed.runPool(last=true, laps=count) # final item
+          if not ctx.poolMode:
+            break
+          count.inc
         dsc.monitorLock = false
 
       else:

@@ -135,7 +135,7 @@ template collectLeafs(
       # The following logic might be sub-optimal. A strict version of the
       # `next()` function that stops with an error at dangling links could
       # be faster if the leaf nodes are not too far apart on the hexary trie.
-      var
+      let
         xPath = block:
           let rx = nodeTag.hexaryPath(rootKey,db).hexaryNearbyRight(db)
           if rx.isErr:

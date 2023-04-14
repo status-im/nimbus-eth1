@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/options,
   chronos,
   eth/[common, p2p],
   stew/byteutils,
@@ -43,7 +42,7 @@ proc getBlockHeader*(
       skip:       0,
       reverse:    false)
 
-  trace trEthSendSendingGetBlockHeaders, peer, header=("#" & $num), reqLen
+  trace trEthSendSendingGetBlockHeaders, peer, header=num.toStr, reqLen
 
   var hdrResp: Option[blockHeadersObj]
   try:

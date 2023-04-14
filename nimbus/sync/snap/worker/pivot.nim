@@ -14,9 +14,9 @@ import
   std/[math, sets, sequtils],
   chronicles,
   chronos,
-  eth/[common, p2p, trie/trie_defs],
+  eth/[p2p, trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
-  ../../sync_desc,
+  "../.."/[sync_desc, types],
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
@@ -32,6 +32,20 @@ const
     ## Enabled additional logging noise
 
 proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
+
+
+# ------------------------------------------------------------------------------
+# Private helpers, logging
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Pivot " & info
+
+template ignExceptionOops(info: static[string]; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    trace logTxt "Ooops", `info`=info, name=($e.name), msg=(e.msg)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -186,6 +200,12 @@ proc tickerStats*(
 # Public functions: particular pivot
 # ------------------------------------------------------------------------------
 
+proc pivotCompleteOk*(env: SnapPivotRef): bool =
+  ## Returns `true` iff the pivot covers a complete set of accounts ans
+  ## storage slots.
+  env.fetchAccounts.processed.isFull and env.storageQueueTotal() == 0
+
+
 proc pivotMothball*(env: SnapPivotRef) =
   ## Clean up most of this argument `env` pivot record and mark it `archived`.
   ## Note that archived pivots will be checked for swapping in already known
@@ -217,6 +237,9 @@ proc execSnapSyncAction*(
   ## Execute a synchronisation run.
   let
     ctx = buddy.ctx
+
+  if env.savedFullPivotOk:
+    return # no need to do anything
 
   block:
     # Clean up storage slots queue first it it becomes too large
@@ -274,6 +297,9 @@ proc saveCheckpoint*(
   ## Save current sync admin data. On success, the size of the data record
   ## saved is returned (e.g. for logging.)
   ##
+  if env.savedFullPivotOk:
+    return ok(0) # no need to do anything
+
   let
     fa = env.fetchAccounts
     nStoQu = env.storageQueueTotal()
@@ -287,7 +313,7 @@ proc saveCheckpoint*(
   if accountsSaveStorageSlotsMax < nStoQu:
     return err(TooManySlotAccounts)
 
-  ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
+  result = ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
     header:       env.stateHeader,
     nAccounts:    env.nAccounts,
     nSlotLists:   env.nSlotLists,
@@ -296,6 +322,9 @@ proc saveCheckpoint*(
     slotAccounts: (toSeq(env.fetchStorageFull.nextKeys) &
                    toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)) &
                    toSeq(env.parkedStorage.items))
+
+  if result.isOk and env.pivotCompleteOk():
+    env.savedFullPivotOk = true
 
 
 proc pivotRecoverFromCheckpoint*(
@@ -339,7 +368,15 @@ proc pivotRecoverFromCheckpoint*(
         env.storageQueueAppendFull(rc.value.storageRoot, w)
 
   # Handle mothballed pivots for swapping in (see `pivotMothball()`)
-  if not topLevel:
+  if topLevel:
+    env.savedFullPivotOk = env.pivotCompleteOk()
+    when extraTraceMessages:
+      trace logTxt "recovered top level record",
+        pivot=env.stateHeader.blockNumber.toStr,
+        savedFullPivotOk=env.savedFullPivotOk,
+        processed=env.fetchAccounts.processed.fullPC3,
+        nStoQuTotal=env.storageQueueTotal()
+  else:
     for kvp in env.fetchStorageFull.nextPairs:
       let rc = env.storageAccounts.insert(kvp.data.accKey.to(NodeTag))
       if rc.isOk:
@@ -355,7 +392,6 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   ## it will not proceed to the next scheduler task.
   let
     ctx = buddy.ctx
-    peer {.used.} = buddy.peer
     beaconHeader = ctx.pool.beaconHeader
   var
     pivotHeader: BlockHeader
@@ -375,9 +411,9 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
         ctx.poolMode = true
 
     when extraTraceMessages:
-      trace "New pivot from beacon chain", peer,
-        pivot=("#" & $pivotHeader.blockNumber),
-        beacon=("#" & $beaconHeader.blockNumber), poolMode=ctx.poolMode
+      trace logTxt "new pivot from beacon chain", peer=buddy.peer,
+        pivot=pivotHeader.blockNumber.toStr,
+        beacon=beaconHeader.blockNumber.toStr, poolMode=ctx.poolMode
 
     discard ctx.pool.pivotTable.lruAppend(
       beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
@@ -396,8 +432,150 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   result = proc(h: BlockHeader) {.gcsafe.} =
     if ctx.pool.beaconHeader.blockNumber < h.blockNumber:
       # when extraTraceMessages:
-      #   trace "External beacon info update", header=("#" & $h.blockNumber)
+      #   trace logTxt "external beacon info update", header=h.blockNumber.toStr
       ctx.pool.beaconHeader = h
+
+# ------------------------------------------------------------------------------
+# Public function, debugging
+# ------------------------------------------------------------------------------
+
+import
+  db/[hexary_desc, hexary_inspect, hexary_nearby, hexary_paths,
+      snapdb_storage_slots]
+
+const
+  pivotVerifyExtraBlurb = false # or true
+  inspectSuspendAfter = 10_000
+  inspectExtraNap = 100.milliseconds
+
+proc pivotVerifyComplete*(
+    env: SnapPivotRef;              # Current pivot environment
+    ctx: SnapCtxRef;                # Some global context
+    inspectAccountsTrie = false;    # Check for dangling links
+    walkAccountsDB = true;          # Walk accounts db
+    inspectSlotsTries = true;       # Check dangling links (if `walkAccountsDB`)
+      ): Future[bool]
+      {.async,discardable.} =
+  ## Check the database whether the pivot is complete -- not advidsed on a
+  ## production system as the process takes a lot of ressources.
+  let
+    rootKey = env.stateHeader.stateRoot.to(NodeKey)
+    accFn = ctx.pool.snapDb.getAccountFn
+
+  # Verify consistency of accounts trie database. This should not be needed
+  # if `walkAccountsDB` is set. In case that there is a dangling link that would
+  # have been detected by `hexaryInspectTrie()`, the `hexaryNearbyRight()`
+  # function should fail at that point as well.
+  if inspectAccountsTrie:
+    var
+      stats = accFn.hexaryInspectTrie(rootKey,
+        suspendAfter=inspectSuspendAfter,
+        maxDangling=1)
+      nVisited = stats.count
+      nRetryCount = 0
+    while stats.dangling.len == 0 and not stats.resumeCtx.isNil:
+      when pivotVerifyExtraBlurb:
+        trace logTxt "accounts db inspect ..", nVisited, nRetryCount
+      await sleepAsync inspectExtraNap
+      nRetryCount.inc
+      stats = accFn.hexaryInspectTrie(rootKey,
+        resumeCtx=stats.resumeCtx,
+        suspendAfter=inspectSuspendAfter,
+        maxDangling=1)
+      nVisited += stats.count
+      # End while
+
+    if stats.dangling.len != 0:
+      error logTxt "accounts trie has danglig links", nVisited, nRetryCount
+      return false
+    trace logTxt "accounts trie ok", nVisited, nRetryCount
+    # End `if inspectAccountsTrie`
+
+  # Visit accounts and make sense of storage slots
+  if walkAccountsDB:
+    var
+      nAccounts = 0
+      nStorages = 0
+      nRetryTotal = 0
+      nodeTag = low(NodeTag)
+    while true:
+      if (nAccounts mod inspectSuspendAfter) == 0 and 0 < nAccounts:
+        when pivotVerifyExtraBlurb:
+          trace logTxt "accounts db walk ..",
+            nAccounts, nStorages, nRetryTotal, inspectSlotsTries
+        await sleepAsync inspectExtraNap
+
+      # Find next account key => `nodeTag`
+      let rc = nodeTag.hexaryPath(rootKey,accFn).hexaryNearbyRight(accFn)
+      if rc.isErr:
+        if rc.error == NearbyBeyondRange:
+          break # No more accounts
+        error logTxt "accounts db problem", nodeTag,
+          nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
+          error=rc.error
+        return false
+      nodeTag = rc.value.getPartialPath.convertTo(NodeKey).to(NodeTag)
+      nAccounts.inc
+
+      # Decode accounts data
+      var accData: Account
+      try:
+        accData = rc.value.leafData.decode(Account)
+      except RlpError as e:
+        error logTxt "account data problem", nodeTag,
+          nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
+          name=($e.name), msg=(e.msg)
+        return false
+
+      # Check for storage slots for this account
+      if accData.storageRoot != emptyRlpHash:
+        nStorages.inc
+        if inspectSlotsTries:
+          let
+            slotFn = ctx.pool.snapDb.getStorageSlotsFn(nodeTag.to(NodeKey))
+            stoKey = accData.storageRoot.to(NodeKey)
+          var
+            stats = slotFn.hexaryInspectTrie(stoKey,
+              suspendAfter=inspectSuspendAfter,
+              maxDangling=1)
+            nVisited = stats.count
+            nRetryCount = 0
+          while stats.dangling.len == 0 and not stats.resumeCtx.isNil:
+            when pivotVerifyExtraBlurb:
+              trace logTxt "storage slots inspect ..", nodeTag,
+                nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
+                nVisited, nRetryCount
+            await sleepAsync inspectExtraNap
+            nRetryCount.inc
+            nRetryTotal.inc
+            stats = accFn.hexaryInspectTrie(stoKey,
+              resumeCtx=stats.resumeCtx,
+              suspendAfter=inspectSuspendAfter,
+              maxDangling=1)
+            nVisited += stats.count
+
+          if stats.dangling.len != 0:
+            error logTxt "storage slots trie has dangling link", nodeTag,
+              nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
+              nVisited, nRetryCount
+            return false
+          if nVisited == 0:
+            error logTxt "storage slots trie is empty", nodeTag,
+              nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
+              nVisited, nRetryCount
+            return false
+
+      # Set up next node key for looping
+      if nodeTag == high(NodeTag):
+        break
+      nodeTag = nodeTag + 1.u256
+      # End while
+
+    trace logTxt "accounts db walk ok",
+      nAccounts, nStorages, nRetryTotal, inspectSlotsTries
+    # End `if walkAccountsDB`
+
+  return true
 
 # ------------------------------------------------------------------------------
 # End

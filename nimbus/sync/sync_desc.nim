@@ -16,8 +16,7 @@
 {.push raises: [].}
 
 import
-  #std/options,
-  eth/[common, p2p],
+  eth/p2p,
   ../core/chain,
   ../db/db_chain,
   ./handlers/eth

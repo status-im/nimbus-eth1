@@ -13,7 +13,7 @@
 import
   std/[algorithm, tables],
   chronicles,
-  eth/[common, rlp, trie/db],
+  eth/[common, trie/db],
   ../../../../db/kvstore_rocksdb,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
@@ -63,10 +63,10 @@ proc convertTo(key: RepairKey; T: type NodeTag): T =
   ## Might be lossy, check before use
   UInt256.fromBytesBE(key.ByteArray33[1 .. 32]).T
 
-proc toAccountsKey(a: RepairKey): ByteArray33 =
+proc toAccountsKey(a: RepairKey): auto =
   a.convertTo(NodeKey).toAccountsKey
 
-proc toStorageSlotsKey(a: RepairKey): ByteArray33 =
+proc toStorageSlotsKey(a: RepairKey): auto =
   a.convertTo(NodeKey).toStorageSlotsKey
 
 proc stateRootGet*(db: TrieDatabaseRef; nodeKey: Nodekey): Blob =
@@ -107,9 +107,21 @@ proc persistentStateRootGet*(
 # Public functions: store/put
 # ------------------------------------------------------------------------------
 
+proc persistentBlockHeaderPut*(
+    db: TrieDatabaseRef;
+    hdr: BlockHeader;
+      ) =
+  ## Store a single header. This function is intended to finalise snap sync
+  ## with storing a universal pivot header not unlike genesis.
+  let hashKey = hdr.blockHash
+  db.TrieDatabaseRef.put( # see `nimbus/db/db_chain.db()`
+    hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
+  db.TrieDatabaseRef.put(
+    hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
+
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
-    base: TrieDatabaseRef
+    base: TrieDatabaseRef;
       ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction
@@ -125,7 +137,7 @@ proc persistentAccountsPut*(
 
 proc persistentStorageSlotsPut*(
     db: HexaryTreeDbRef;
-    base: TrieDatabaseRef
+    base: TrieDatabaseRef;
       ): Result[void,HexaryError] =
   ## Bulk store using transactional `put()`
   let dbTx = base.beginTransaction

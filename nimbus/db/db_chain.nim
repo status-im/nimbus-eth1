@@ -407,16 +407,20 @@ proc getReceipts*(db: ChainDBRef; receiptRoot: Hash256): seq[Receipt] =
     receipts.add(r)
   return receipts
 
-proc persistHeaderToDb*(db: ChainDBRef; header: BlockHeader, 
-                        forceCanonical: bool): seq[BlockHeader] =
-  let isGenesis = header.parentHash == GENESIS_PARENT_HASH
+proc persistHeaderToDb*(
+    db: ChainDBRef;
+    header: BlockHeader;
+    forceCanonical: bool;
+    startOfHistory = GENESIS_PARENT_HASH;
+      ): seq[BlockHeader] =
+  let isStartOfHistory = header.parentHash == startOfHistory
   let headerHash = header.blockHash
-  if not isGenesis and not db.headerExists(header.parentHash):
+  if not isStartOfHistory and not db.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
         $headerHash & " with unknown parent " & $header.parentHash)
   db.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
-  let score = if isGenesis: header.difficulty
+  let score = if isStartOfHistory: header.difficulty
               else: db.getScore(header.parentHash) + header.difficulty
   db.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
 
@@ -431,10 +435,14 @@ proc persistHeaderToDb*(db: ChainDBRef; header: BlockHeader,
   if score > headScore or forceCanonical:
     return db.setAsCanonicalChainHead(headerHash)
 
-proc persistHeaderToDbWithoutSetHead*(db: ChainDBRef; header: BlockHeader) =
-  let isGenesis = header.parentHash == GENESIS_PARENT_HASH
+proc persistHeaderToDbWithoutSetHead*(
+    db: ChainDBRef;
+    header: BlockHeader;
+    startOfHistory = GENESIS_PARENT_HASH;
+      ) =
+  let isStartOfHistory = header.parentHash == startOfHistory
   let headerHash = header.blockHash
-  let score = if isGenesis: header.difficulty
+  let score = if isStartOfHistory: header.difficulty
               else: db.getScore(header.parentHash) + header.difficulty
 
   db.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))

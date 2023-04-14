@@ -9,17 +9,18 @@
 
 import
   ../worker_desc,
-  ./play/[play_desc, play_full_sync, play_prep_full, play_snap_sync]
+  ./play/[play_desc, play_full_sync, play_snap_sync]
 
 export
   PlaySyncSpecs,
-  playSyncSpecs,
-  `playMode=`
+  playMethod
 
-proc playInit*(desc: var SnapSyncSpecs) =
+proc playSetup*(ctx: SnapCtxRef) =
   ## Set up sync mode specs table. This cannot be done at compile time.
-  desc.tab[SnapSyncMode] = playSnapSyncSpecs()
-  desc.tab[PreFullSyncMode] = playPrepFullSpecs()
-  desc.tab[FullSyncMode] = playFullSyncSpecs()
+  ctx.pool.syncMode.tab[SnapSyncMode] = playSnapSyncSpecs()
+  ctx.pool.syncMode.tab[FullSyncMode] = playFullSyncSpecs()
+
+proc playRelease*(ctx: SnapCtxRef) =
+  discard
 
 # End

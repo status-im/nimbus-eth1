@@ -155,11 +155,26 @@ proc kvDb*(pv: SnapDbRef): TrieDatabaseRef =
 # Public functions, select sub-tables for persistent storage
 # ------------------------------------------------------------------------------
 
-proc toAccountsKey*(a: NodeKey): ByteArray33 =
-  a.ByteArray32.snapSyncAccountKey.data
+proc toBlockHeaderKey*(a: Hash256): ByteArray33 =
+  a.genericHashKey.data
 
-proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
-  a.ByteArray32.snapSyncStorageSlotKey.data
+proc toBlockNumberKey*(a: BlockNumber): ByteArray33 =
+  static:
+    doAssert 32 == sizeof BlockNumber # needed in `blockNumberToHashKey()`
+  a.blockNumberToHashKey.data
+
+when false:
+  proc toAccountsKey*(a: NodeKey): ByteArray33 =
+    a.ByteArray32.snapSyncAccountKey.data
+
+  proc toStorageSlotsKey*(a: NodeKey): ByteArray33 =
+    a.ByteArray32.snapSyncStorageSlotKey.data
+else:
+  proc toAccountsKey*(a: NodeKey): ByteArray32 =
+    a.ByteArray32
+
+  proc toStorageSlotsKey*(a: NodeKey): ByteArray32 =
+    a.ByteArray32
 
 proc toStateRootKey*(a: NodeKey): ByteArray33 =
   a.ByteArray32.snapSyncStateRootKey.data

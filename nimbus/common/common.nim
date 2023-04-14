@@ -72,10 +72,15 @@ type
 
     syncReqNewHead: SyncReqNewHeadCB
 
-    pow: PowRef ##\
+    startOfHistory: Hash256
+      ## This setting is needed for resuming blockwise syncying after
+      ## installing a snapshot pivot. The default value for this field is
+      ## `GENESIS_PARENT_HASH` to start at the very beginning.
+
+    pow: PowRef
       ## Wrapper around `hashimotoLight()` and lookup cache
 
-    poa: Clique ##\
+    poa: Clique
       ## For non-PoA networks this descriptor is ignored.
 
     pos: CasperRef
@@ -153,6 +158,9 @@ proc init(com      : CommonRef,
   # Always initialise the PoW epoch cache even though it migh no be used
   com.pow = PowRef.new
   com.pos = CasperRef.new
+
+  # By default, history begins at genesis.
+  com.startOfHistory = GENESIS_PARENT_HASH
 
 proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
   var td: DifficultyInt
@@ -348,15 +356,20 @@ proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
-proc poa*(com: CommonRef): Clique =
+
+func startOfHistory*(com: CommonRef): Hash256 =
+  ## Getter
+  com.startOfHistory
+
+func poa*(com: CommonRef): Clique =
   ## Getter
   com.poa
 
-proc pow*(com: CommonRef): PowRef =
+func pow*(com: CommonRef): PowRef =
   ## Getter
   com.pow
 
-proc pos*(com: CommonRef): CasperRef =
+func pos*(com: CommonRef): CasperRef =
   ## Getter
   com.pos
 
@@ -440,6 +453,10 @@ proc `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
 
 proc `syncHighest=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.highest = number
+
+proc `startOfHistory=`*(com: CommonRef, val: Hash256) =
+  ## Setter
+  com.startOfHistory = val
 
 proc setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
   ## useful for testing

@@ -12,7 +12,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sequtils],
+  std/sequtils,
   chronos,
   eth/[common, p2p],
   stew/interval_set,

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/[common, p2p],
+  eth/p2p,
   chronicles,
   chronos,
   stew/[interval_set, sorted_set],
@@ -89,9 +89,9 @@ proc runStop(buddy: FullBuddyRef) =
   tracerFrameBuddy("runStop", buddy):
     worker.stop(buddy)
 
-proc runPool(buddy: FullBuddyRef; last: bool): bool =
+proc runPool(buddy: FullBuddyRef; last: bool; laps: int): bool =
   tracerFrameBuddy("runPool", buddy):
-    result = worker.runPool(buddy, last)
+    result = worker.runPool(buddy, last, laps)
 
 proc runSingle(buddy: FullBuddyRef) {.async.} =
   tracerFrameBuddy("runSingle", buddy):

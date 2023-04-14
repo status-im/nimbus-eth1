@@ -11,10 +11,9 @@
 {.push raises:[].}
 
 import
-  std/[options],
   chronicles,
   chronos,
-  eth/[common, p2p],
+  eth/p2p,
   ".."/[protocol, sync_desc],
   ../misc/[best_pivot, block_queue, sync_ctrl],
   "."/[ticker, worker_desc]
@@ -367,16 +366,17 @@ proc runSingle*(buddy: FullBuddyRef) {.async.} =
   await sleepAsync napping
 
 
-proc runPool*(buddy: FullBuddyRef; last: bool): bool =
+proc runPool*(buddy: FullBuddyRef; last: bool; laps: int): bool =
   ## Once started, the function `runPool()` is called for all worker peers in
   ## sequence as the body of an iteration as long as the function returns
   ## `false`. There will be no other worker peer functions activated
   ## simultaneously.
   ##
   ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
-  ## `true` (default is `false`.) It is the responsibility of the `runPool()`
-  ## instance to reset the flag `buddy.ctx.poolMode`, typically at the first
-  ## peer instance.
+  ## `true` (default is `false`.) It will be automatically reset before the
+  ## the loop starts. Re-setting it again results in repeating the loop. The
+  ## argument `lap` (starting with `0`) indicated the currend lap of the
+  ## repeated loops.
   ##
   ## The argument `last` is set `true` if the last entry is reached.
   ##
@@ -384,10 +384,7 @@ proc runPool*(buddy: FullBuddyRef; last: bool): bool =
   ##
   # Mind the gap, fill in if necessary (function is peer independent)
   buddy.only.bQueue.blockQueueGrout()
-
-  # Stop after running once regardless of peer
-  buddy.ctx.poolMode = false
-  true
+  true # Stop after running once regardless of peer
 
 proc runMulti*(buddy: FullBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set

@@ -68,10 +68,9 @@ import
   std/sets,
   chronicles,
   chronos,
-  eth/[common, p2p],
+  eth/p2p,
   stew/[interval_set, keyed_queue],
-  stint,
-  ../../../sync_desc,
+  "../../.."/[sync_desc, types],
   "../.."/[constants, range_desc, worker_desc],
   ../com/[com_error, get_storage_ranges],
   ../db/[hexary_error, snapdb_storage_slots],
@@ -95,7 +94,7 @@ proc fetchCtx(
     env: SnapPivotRef;
       ): string =
   "{" &
-    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "nQuFull=" & $env.fetchStorageFull.len & "," &
     "nQuPart=" & $env.fetchStoragePart.len & "," &
@@ -118,7 +117,7 @@ proc fetchStorageSlotsImpl(
     ctx = buddy.ctx
     peer = buddy.peer
     stateRoot = env.stateHeader.stateRoot
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    pivot = env.stateHeader.blockNumber.toStr # logging in `getStorageRanges()`
 
   # Get storages slots data from the network
   var stoRange = block:

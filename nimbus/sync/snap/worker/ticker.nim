@@ -9,6 +9,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, strformat, strutils],
   chronos,
@@ -16,9 +18,8 @@ import
   eth/[common, p2p],
   stint,
   ../../../utils/prettify,
-  ../../misc/timer_helper
-
-{.push raises: [].}
+  ../../misc/timer_helper,
+  ../../types
 
 logScope:
   topics = "snap-tick"
@@ -55,6 +56,7 @@ type
 
   TickerFullStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
+    pivotBlock*: Option[BlockNumber]
     topPersistent*: BlockNumber
     nextUnprocessed*: Option[BlockNumber]
     nextStaged*: Option[BlockNumber]
@@ -128,12 +130,6 @@ proc pc99(val: float): string =
   elif 0.0 < val and val <= 0.01: "1%"
   else: val.toPC(0)
 
-proc pp(n: BlockNumber): string =
-  "#" & $n
-
-proc pp(n: Option[BlockNumber]): string =
-  if n.isNone: "n/a" else: n.get.pp
-
 # ------------------------------------------------------------------------------
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
@@ -155,9 +151,9 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
     var
       nAcc, nSto: string
       pv = "n/a"
-      bc = "n/a"
       nStoQue = "n/a"
     let
+      bc = data.beaconBlock.toStr
       recoveryDone = t.snap.lastRecov
       accCov = data.accountsFill[0].pc99 &
          "(" & data.accountsFill[1].pc99 & ")" &
@@ -173,11 +169,10 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
     t.visited = now
     t.snap.lastRecov = t.snap.recovery
 
+    if data.pivotBlock.isSome:
+      pv = data.pivotBlock.toStr & "/" & $data.nQueues
+
     noFmtError("runLogTicker"):
-      if data.pivotBlock.isSome:
-        pv = &"#{data.pivotBlock.get}/{data.nQueues}"
-      if data.beaconBlock.isSome:
-        bc = &"#{data.beaconBlock.get}"
       nAcc = (&"{(data.nAccounts[0]+0.5).int64}" &
               &"({(data.nAccounts[1]+0.5).int64})")
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
@@ -205,13 +200,14 @@ proc fullTicker(t: TickerRef) {.gcsafe.} =
   if data != t.full.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
-      persistent = data.topPersistent.pp
-      staged = data.nextStaged.pp
-      unprocessed = data.nextUnprocessed.pp
+      persistent = data.topPersistent.toStr
+      staged = data.nextStaged.toStr
+      unprocessed = data.nextUnprocessed.toStr
       queued = data.nStagedQueue
       reOrg = if data.reOrg: "t" else: "f"
+      pv = data.pivotBlock.toStr
 
-      buddies = t.nBuddies
+      nInst = t.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
@@ -221,10 +217,10 @@ proc fullTicker(t: TickerRef) {.gcsafe.} =
     t.visited = now
 
     if data.suspended:
-      info "Sync statistics (suspended)", up, buddies,
+      info "Full sync statistics (suspended)", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
     else:
-      info "Sync statistics", up, buddies,
+      info "Full sync statistics", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
 
 # ------------------------------------------------------------------------------
@@ -255,36 +251,40 @@ proc initImpl(t: TickerRef; cb: TickerFullStatsUpdater) =
 # Public constructor and start/stop functions
 # ------------------------------------------------------------------------------
 
-proc init*(t: TickerRef; cb: TickerSnapStatsUpdater) =
-  ## Re-initialise ticket
-  t.visited.reset
-  if t.fullMode:
-    t.prettyPrint(t) # print final state for full sync
-  t.initImpl(cb)
-
-proc init*(t: TickerRef; cb: TickerFullStatsUpdater) =
-  ## Re-initialise ticket
-  t.visited.reset
-  if not t.fullMode:
-    t.prettyPrint(t) # print final state for snap sync
-  t.initImpl(cb)
-
 proc init*(T: type TickerRef; cb: TickerSnapStatsUpdater): T =
   ## Constructor
   new result
   result.initImpl(cb)
 
+proc init*(t: TickerRef; cb: TickerSnapStatsUpdater) =
+  ## Re-initialise ticket
+  if not t.isNil:
+    t.visited.reset
+    if t.fullMode:
+      t.prettyPrint(t) # print final state for full sync
+    t.initImpl(cb)
+
+proc init*(t: TickerRef; cb: TickerFullStatsUpdater) =
+  ## Re-initialise ticket
+  if not t.isNil:
+    t.visited.reset
+    if not t.fullMode:
+      t.prettyPrint(t) # print final state for snap sync
+    t.initImpl(cb)
+
 proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
-  #debug "Started ticker"
-  t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay), runLogTicker, t)
-  if t.started == Moment.default:
-    t.started = Moment.now()
+  if not t.isNil:
+    #debug "Started ticker"
+    t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay),runLogTicker,t)
+    if t.started == Moment.default:
+      t.started = Moment.now()
 
 proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally
-  t.logTicker = nil
-  #debug "Stopped ticker"
+  if not t.isNil:
+    t.logTicker = nil
+    #debug "Stopped ticker"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -292,37 +292,41 @@ proc stop*(t: TickerRef) =
 
 proc startBuddy*(t: TickerRef) =
   ## Increment buddies counter and start ticker unless running.
-  if t.nBuddies <= 0:
-    t.nBuddies = 1
-    if not t.fullMode:
-      if not t.snap.recovery:
-        t.start()
-  else:
-    t.nBuddies.inc
+  if not t.isNil:
+    if t.nBuddies <= 0:
+      t.nBuddies = 1
+      if not t.fullMode:
+        if not t.snap.recovery:
+          t.start()
+    else:
+      t.nBuddies.inc
 
 proc startRecovery*(t: TickerRef) =
   ## Ditto for recovery mode
-  if not t.fullMode:
-    if not t.snap.recovery:
-      t.snap.recovery = true
-      if t.nBuddies <= 0:
-        t.start()
+  if not t.isNil:
+    if not t.fullMode:
+      if not t.snap.recovery:
+        t.snap.recovery = true
+        if t.nBuddies <= 0:
+          t.start()
 
 proc stopBuddy*(t: TickerRef) =
   ## Decrement buddies counter and stop ticker if there are no more registered
   ## buddies.
-  t.nBuddies.dec
-  if t.nBuddies <= 0:
-    if not t.fullMode:
-      if not t.snap.recovery:
-        t.stop()
+  if not t.isNil:
+    t.nBuddies.dec
+    if t.nBuddies <= 0:
+      if not t.fullMode:
+        if not t.snap.recovery:
+          t.stop()
 
 proc stopRecovery*(t: TickerRef) =
   ## Ditto for recovery mode
-  if not t.fullMode:
-    if t.snap.recovery:
-      t.snap.recovery = false
-      t.stop()
+  if not t.isNil:
+    if not t.fullMode:
+      if t.snap.recovery:
+        t.snap.recovery = false
+        t.stop()
 
 # ------------------------------------------------------------------------------
 # End

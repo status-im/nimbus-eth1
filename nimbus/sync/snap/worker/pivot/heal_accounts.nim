@@ -85,7 +85,7 @@ proc healingCtx(
       ): string =
   let ctx = buddy.ctx
   "{" &
-    "piv=" & "#" & $env.stateHeader.blockNumber & "," &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & $env.fetchAccounts.processed & "/" &
@@ -156,7 +156,7 @@ proc getNodesFromNetwork(
   let
     peer {.used.} = buddy.peer
     rootHash = env.stateHeader.stateRoot
-    pivot = "#" & $env.stateHeader.blockNumber # for logging
+    pivot = env.stateHeader.blockNumber.toStr # for logging in `getTrieNodes()`
 
   # Initalise for fetching nodes from the network via `getTrieNodes()`
   var
