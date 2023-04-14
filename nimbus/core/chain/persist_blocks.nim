@@ -116,7 +116,8 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
           return ValidationResult.Error
 
     if NoPersistHeader notin flags:
-      discard c.db.persistHeaderToDb(header, c.com.consensus == ConsensusType.POS)
+      discard c.db.persistHeaderToDb(
+        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
 
     if NoSaveTxs notin flags:
       discard c.db.persistTransactions(header.blockNumber, body.transactions)
@@ -141,7 +142,7 @@ proc insertBlockWithoutSetHead*(c: ChainRef, header: BlockHeader,
   result = c.persistBlocksImpl(
     [header], [body], {NoPersistHeader, NoSaveReceipts})
   if result == ValidationResult.OK:
-    c.db.persistHeaderToDbWithoutSetHead(header)
+    c.db.persistHeaderToDbWithoutSetHead(header, c.com.startOfHistory)
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): ValidationResult
                                 {.gcsafe, raises: [CatchableError].} =
