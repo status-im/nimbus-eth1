@@ -114,7 +114,7 @@ proc test_dbTimingUndumpBlocks*(
   ## Store persistent blocks from dump into chain DB
   let chain = com.newChain
 
-  for w in filePath.undumpNextGroup:
+  for w in filePath.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
       doAssert w[0][0] == com.db.getBlockHeader(0.u256)
