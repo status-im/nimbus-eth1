@@ -13,12 +13,14 @@ import
   eth/p2p,
   eth/p2p/rlpx,
   eth/p2p/private/p2p_types,
-  ../../../sync/protocol,
-  ../../../sync/protocol/eth66 as proto_eth66,
+  ../../../sync/protocol,  
   ../../../db/[db_chain, distinct_tries, incomplete_db, storage_types],
   ../data_sources
 
-from ../../../sync/protocol/eth66 import getNodeData
+when defined(legacy_eth66_enabled):
+  import 
+    ../../../sync/protocol/eth66 as proto_eth66
+  from ../../../sync/protocol/eth66 import getNodeData
 
 from ../../../rpc/rpc_utils import toHash
 from web3 import Web3, BlockHash, BlockObject, FixedBytes, Address, ProofResponse, StorageProof, newWeb3, fromJson, fromHex, eth_getBlockByHash, eth_getBlockByNumber, eth_getCode, eth_getProof, blockId, `%`

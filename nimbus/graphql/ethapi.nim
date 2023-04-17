@@ -74,7 +74,7 @@ when (NimMajor, NimMinor, NimPatch) >= (1, 6, 0):
   {.push hint[XCannotRaiseY]: off.}
 else:
   {.push hint[XDeclaredButNotUsed]: off.}
-  
+
 proc toHash(n: Node): Hash256 =
   result.data = hexToByteArray[32](n.stringVal)
 
@@ -305,7 +305,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResul
       ok(respNull())
   except CatchableError as e:
     err("can't get transaction by index '$1': $2" % [$index, e.msg])
-  except Exception as em:
+  except RlpError as em:
     err("can't get transaction by index '$1': $2" % [$index, em.msg])
 
 proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
@@ -319,20 +319,28 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, em.msg])
 
 proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddress): RespResult =
-  let db = getStateDB(ctx.com, header)
-  when false:
-    # EIP 1767 unclear about non existent account
-    # but hive test case demand something
-    if not db.accountExists(address):
-      return ok(respNull())
-  let acc = db.getAccount(address)
-  ok(accountNode(ctx, acc, address, db))
+  try:
+    let db = getStateDB(ctx.com, header)
+    when false:
+      # EIP 1767 unclear about non existent account
+      # but hive test case demand something
+      if not db.accountExists(address):
+        return ok(respNull())
+    let acc = db.getAccount(address)
+    ok(accountNode(ctx, acc, address, db))
+  except RlpError as ex:
+    err(ex.msg)
 
 proc parseU64(node: Node): uint64 =
   for c in node.intVal:
     result = result * 10 + uint64(c.int - '0'.int)
 
-{.pragma: apiPragma, cdecl, gcsafe, raises: [Defect, CatchableError], locks:0.}
+when (NimMajor, NimMinor) < (1, 6):
+  {.pragma: apiRaises, raises: [Defect, CatchableError].}
+else:
+  {.pragma: apiRaises, raises: [].}
+
+{.pragma: apiPragma, cdecl, gcsafe, apiRaises, locks:0.}
 {.push hint[XDeclaredButNotUsed]: off.}
 
 proc validateHex(x: Node, minLen = 0): NodeResult =
@@ -499,15 +507,23 @@ proc accountTxCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 proc accountCode(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let acc = AccountNode(parent)
-  let code = acc.db.getCode(acc.address)
-  resp(code)
+  try:
+    let code = acc.db.getCode(acc.address)
+    resp(code)
+  except RlpError as ex:
+    err(ex.msg)
 
 proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let acc = AccountNode(parent)
-  let slot = parse(params[0].val.stringVal, UInt256, radix = 16)
-  let (val, _) = acc.db.getStorage(acc.address, slot)
-  byte32Node(val)
+  try:
+    let slot = parse(params[0].val.stringVal, UInt256, radix = 16)
+    let (val, _) = acc.db.getStorage(acc.address, slot)
+    byte32Node(val)
+  except RlpError as ex:
+    err(ex.msg)
+  except ValueError as ex:
+    err(ex.msg)
 
 const accountProcs = {
   # Note: Need to define it as ResolverProc else a proc with noSideEffect is
@@ -899,8 +915,11 @@ proc blockTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.ap
 proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
-  let index = parseU64(params[0].val)
-  getTxAt(ctx, h.header, index.int)
+  try:
+    let index = parseU64(params[0].val)
+    getTxAt(ctx, h.header, index.int)
+  except ValueError as ex:
+    err(ex.msg)
 
 proc blockLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -910,8 +929,11 @@ proc blockLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
-  let address = hexToByteArray[20](params[0].val.stringVal)
-  ctx.accountNode(h.header, address)
+  try:
+    let address = hexToByteArray[20](params[0].val.stringVal)
+    ctx.accountNode(h.header, address)
+  except ValueError as ex:
+    err(ex.msg)
 
 const
   fFrom     = 0
@@ -1122,13 +1144,16 @@ proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): BlockNumber =
 
 proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let address = hexToByteArray[20](params[0].val.stringVal)
-  let blockNumber = pickBlockNumber(ctx, params[1].val)
-  let hres = getBlockByNumber(ctx, blockNumber)
-  if hres.isErr:
-    return hres
-  let h = HeaderNode(hres.get())
-  accountNode(ctx, h.header, address)
+  try:
+    let address = hexToByteArray[20](params[0].val.stringVal)
+    let blockNumber = pickBlockNumber(ctx, params[1].val)
+    let hres = getBlockByNumber(ctx, blockNumber)
+    if hres.isErr:
+      return hres
+    let h = HeaderNode(hres.get())
+    accountNode(ctx, h.header, address)
+  except ValueError as ex:
+    err(ex.msg)
 
 proc queryBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -1151,7 +1176,8 @@ proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   let toNumber = pickBlockNumber(ctx, to)
 
   if fromNumber > toNumber:
-    return err("from($1) is bigger than to($2)" % [fromNumber.toString, toNumber.toString])
+    return err("from(" & fromNumber.toString &
+      ") is bigger than to(" & toNumber.toString & ")")
 
   # TODO: what is the maximum number here?
   if toNumber - fromNumber > 32.toBlockNumber:
@@ -1176,8 +1202,11 @@ proc queryPending(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
 
 proc queryTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let hash = toHash(params[0].val)
-  getTxByHash(ctx, hash)
+  try:
+    let hash = toHash(params[0].val)
+    getTxByHash(ctx, hash)
+  except ValueError as ex:
+    err(ex.msg)
 
 proc queryLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -1257,7 +1286,7 @@ type
     names: array[QcNames, Name]
 
 proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl,
-            gcsafe, raises: [Defect, CatchableError].} =
+            gcsafe, apiRaises.} =
   let qc = EthQueryComplexity(qc)
   if field.parentType.sym.name == qc.names[qcType] and
      field.field.name.name == qc.names[qcFields]:
