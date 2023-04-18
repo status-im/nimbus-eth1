@@ -76,10 +76,6 @@ const
   trEthSendNewBlockHashes* =
     ">> " & prettyEthProtoName & " Sending NewBlockHashes"
 
-# Kludge, should be fixed in `eth/common/eth_types_rlp`
-proc append(w: var RlpWriter, b: BlockBody) =
-  w.ethAppend b
-
 p2pProtocol eth66(version = ethVersion,
                   rlpxName = "eth",
                   peerState = EthPeerState,

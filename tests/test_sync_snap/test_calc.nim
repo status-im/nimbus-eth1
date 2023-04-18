@@ -33,11 +33,6 @@ var
 # Private helpers for `test_calcAccountsListSizes()`
 # ------------------------------------------------------------------------------
 
-# Kludge, should be fixed in `eth/common/eth_types_rlp`
-proc append(w: var RlpWriter, b: BlockBody) =
-  ## helper for ` test_calcBlockBodyTranscode()`
-  w.ethAppend b
-
 proc `==`(a,b: ChainId): bool {.borrow.}
   ## helper for ` test_calcBlockBodyTranscode()`
 
@@ -188,7 +183,6 @@ proc test_calcTrieNodeTranscode*() =
 proc test_calcBlockBodyTranscode*() =
   ## RLP encode/decode a list of `BlockBody` objects. Note that tere is/was a
   ## problem in `eth/common/eth_types_rlp.append()` for `BlockBody` encoding.
-  ## This has been fixed temporarily via `protocol/eth/eth_types.ethAppend()`.
   let blkSeq = @[
     BlockBody(
       transactions: @[
