@@ -32,6 +32,8 @@ import
   ./content_db,
   ./version, ./logging
 
+chronicles.formatIt(IoErrorCode): $it
+
 proc initBeaconLightClient(
       network: LightClientNetwork, networkData: NetworkInitData,
       trustedBlockRoot: Option[Eth2Digest]): LightClient =
@@ -106,7 +108,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   let pathExists = createPath(config.dataDir.string)
   if pathExists.isErr():
     fatal "Failed to create data directory", dataDir = config.dataDir,
-      error = $pathExists.error
+      error = pathExists.error
     quit 1
 
   let
