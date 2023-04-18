@@ -14,6 +14,7 @@ import
   json_rpc/rpcproxy,
   nimcrypto/hash,
   stew/byteutils,
+  ./logging,
   ./network/wire/portal_protocol_config
 
 proc defaultDataDir*(): string =
@@ -56,10 +57,16 @@ type
 
   PortalConf* = object
     logLevel* {.
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      desc: "Sets the log level"
-      name: "log-level" .}: LogLevel
+      desc: "Sets the log level for process and topics (e.g. \"DEBUG; TRACE:discv5,portal_wire; REQUIRED:none; DISABLED:none\")"
+      defaultValue: "INFO"
+      name: "log-level" .}: string
+
+    logStdout* {.
+      hidden
+      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+      defaultValueDesc: "auto"
+      defaultValue: StdoutLogKind.Auto
+      name: "log-format" .}: StdoutLogKind
 
     udpPort* {.
       defaultValue: 9009
@@ -281,3 +288,7 @@ proc parseCmdArg*(T: type ClientConfig, p: string): T
 
 proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]
+
+chronicles.formatIt(InputDir): $it
+chronicles.formatIt(OutDir): $it
+chronicles.formatIt(InputFile): $it

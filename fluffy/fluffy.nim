@@ -29,7 +29,8 @@ import
   ],
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
-  ./content_db
+  ./content_db,
+  ./version, ./logging
 
 proc initBeaconLightClient(
       network: LightClientNetwork, networkData: NetworkInitData,
@@ -96,11 +97,16 @@ proc initBeaconLightClient(
   lc
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
+  setupLogging(config.logLevel, config.logStdout)
+
+  notice "Launching Fluffy",
+    version = fullVersionStr, cmdParams = commandLineParams()
+
   # Make sure dataDir exists
   let pathExists = createPath(config.dataDir.string)
   if pathExists.isErr():
     fatal "Failed to create data directory", dataDir = config.dataDir,
-      error = pathExists.error
+      error = $pathExists.error
     quit 1
 
   let
@@ -269,8 +275,6 @@ when isMainModule:
   {.pop.}
   let config = PortalConf.load()
   {.push raises: [].}
-
-  setLogLevel(config.logLevel)
 
   case config.cmd
   of PortalCmd.noCommand:
