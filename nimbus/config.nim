@@ -658,7 +658,7 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
       error "Unknown protocol", name=item
       quit QuitFailure
   if noneOk and 0 < result.len:
-    error "Setting none contradicts wire protocols", names=result
+    error "Setting none contradicts wire protocols", names = $result
     quit QuitFailure
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =

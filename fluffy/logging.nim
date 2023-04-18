@@ -14,7 +14,7 @@
 
 import
   std/[strutils, tables, terminal, typetraits],
-  pkg/chronicles, pkg/chronicles/helpers,
+  pkg/chronicles, pkg/chronicles/helpers, chronicles/topics_registry,
   pkg/stew/results
 
 export results
