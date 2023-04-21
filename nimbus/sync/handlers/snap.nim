@@ -24,22 +24,37 @@ import
   ../protocol,
   ../protocol/snap/snap_types
 
+import
+  std/[hashes, options, tables],
+  ../snap/worker/db/[hexary_debug, snapdb_debug]
+
 logScope:
   topics = "snap-wire"
 
 type
+  DebugStateRef = ref object   # <--- will go away (debugging)
+    nStripped: int             # <--- will go away (debugging)
+    gaps: NodeTagRangeSet      # <--- will go away (debugging)
+    nBatchMin: int             # <--- will go away (debugging)
+    nStripOff: int             # <--- will go away (debugging)
+    stripOffMax: int           # <--- will go away (debugging)
+    slotsOk: bool              # <--- will go away (debugging)
+
   SnapWireRef* = ref object of SnapWireBase
     chain: ChainRef
     elaFetchMax: chronos.Duration
     dataSizeMax: int
     peerPool: PeerPool
 
+    dbgTab: TableRef[NodeKey,DebugStateRef] # <--- will go away (debugging)
+    dbgSlotsStripped: int                   # <--- will go away (debugging)
+
   SlotsSpecs = object
     slotFn: HexaryGetFn                 # For accessing storage slots
     stoRoot: NodeKey                    # Storage root
 
 const
-  extraTraceMessages = false # or true
+  extraTraceMessages = false or true
     ## Enabled additional logging noise
 
   estimatedNodeSize = hexaryRangeRlpNodesListSizeMax(1)
@@ -57,6 +72,24 @@ const
 
   defaultDataSizeMax = fetchRequestBytesLimit
     ## Truncate maximum data size
+
+  samAccHash = Hash256
+   .fromHex("15848580460fe989f91c1d3ff44f03945f6378961a2fbc5829ab4cbbbc1a375c")
+   #.default
+
+  defaultAccountBatchSizeMin = 30
+  defaultAccountStripOff = 2
+  defaultAccountMaxStripOff = 10
+
+  defaultSlotsBatchSizeMin = 50
+  defaultSlotsStripOff = 2
+  defaultSlotsMaxStripOff = 10
+
+  yPartPaths = @[
+    # @[0x00u8, 0x53u8, 0x9du8],
+    # @[0x00u8, 0x53u8, 0x9eu8],
+    # @[0x00u8, 0x53u8, 0x9fu8],
+    EmptyBlob]
 
 # ------------------------------------------------------------------------------
 # Private functions: helpers
@@ -121,6 +154,134 @@ proc to(
     slotData: rl.data)
 
 # ------------------------------------------------------------------------------
+# Debugging
+# ------------------------------------------------------------------------------
+
+proc gapSpecs(
+    ctx: SnapWireRef;                   # Handler descriptor
+    rootKey: NodeKey;                   # State root
+    slotsOk: bool;
+      ): DebugStateRef
+      {.discardable,gcsafe, raises: [KeyError].} =
+  if not ctx.dbgTab.isNil:
+    if ctx.dbgTab.hasKey(rootKey):
+      return ctx.dbgTab[rootkey]
+    if slotsOk:
+      result = DebugStateRef(
+        gaps:        NodeTagRangeSet.init(),
+        nBatchMin:   defaultSlotsBatchSizeMin,
+        stripOffMax: defaultSlotsMaxStripOff - ctx.dbgSlotsStripped,
+        nStripOff:   defaultSlotsStripOff,
+        slotsOk:     true)
+    else:
+      result = DebugStateRef(
+        gaps:        NodeTagRangeSet.init(),
+        nBatchMin:   defaultAccountBatchSizeMin,
+        stripOffMax: defaultAccountMaxStripOff,
+        nStripOff:   defaultAccountStripOff,
+        slotsOk:     false)
+    ctx.dbgTab[rootkey] = result
+
+proc mindTheGap(
+    ctx: SnapWireRef;                   # Handler descriptor
+    rootKey: NodeKey;                   # State root
+    iv: NodeTagRange;
+    slotsOk = false;
+      ): Result[NodeTagRange,void]
+      {.gcsafe, raises: [KeyError].} =
+  ## Chop off registered ranges from argument interval `iv`
+  let p = ctx.gapSpecs(rootKey, slotsOk)
+  if not p.isNil:
+    let
+      nGaps = p.gaps.chunks
+      nStripped = p.nStripped
+      nStripOff = p.nStripOff
+    if 0 < p.gaps.covered(iv.minPt,iv.minPt):
+      trace logTxt "mindTheGap, left gap => reject", slotsOk, nGaps,
+        nStripped, nStripOff, rootKey
+      return err()
+
+    let rc = p.gaps.ge iv.minPt
+    if rc.isOk and rc.value.minPt < iv.maxPt:
+      trace logTxt "mindTheGap, right end gap => chop", slotsOk, nGaps,
+        nStripped, nStripOff, rootKey
+      return ok(NodeTagRange.new(iv.minPt, rc.value.minPt - 1.u256))
+
+    trace logTxt "mindTheGap, unrestricted", slotsOk, nGaps, nStripped
+
+  ok(iv)
+
+proc chopTail(
+    ctx: SnapWireRef;                   # Handler descriptor
+    rootKey: NodeKey;                   # State root
+    getFn: HexaryGetFn;                 # Database abstraction
+    rng: RangeProof;
+    p: DebugStateRef;
+      ): RangeProof
+      {.gcsafe, raises: [CatchableError].} =
+  ## Strip off tail from a proof result
+  if not ctx.dbgTab.isNil and ctx.dbgTab.hasKey(rootKey):
+    let p = ctx.dbgTab[rootKey]
+    if p.nStripped < p.stripOffMax and
+       p.nBatchMin <= rng.leafs.len and
+       p.nStripOff < rng.leafs.len:
+
+      p.nStripped += p.nStripOff
+      if p.slotsOk:
+        ctx.dbgSlotsStripped.inc p.nStripOff
+
+      let
+        left = rng.leafs[^(p.nStripOff+1)].key.to(NodeTag)+1.u256
+        right = rng.leafs[^1].key.to(NodeTag)
+      discard p.gaps.merge(left,right)
+
+      var chopped = rng
+      # chopped.leafsLast = false # <-- produces error
+      chopped.leafs.setLen(rng.leafs.len - p.nStripOff)
+
+      trace logTxt "chopTail", slotsOk=p.slotsOk, nStripOff=p.nStripOff,
+        nOrigTail=rng.leafs.len, nModifiedTail=chopped.leafs.len,
+        nGaps=p.gaps.chunks, nStripped=p.nStripped, nBatchMin=p.nBatchMin,
+        rootKey
+
+      return getFn.hexaryRangeLeafsProof(rootKey, chopped)
+
+    elif p.gaps.chunks == 0:
+      ctx.dbgTab.del(rootKey)
+
+  rng
+
+
+proc dumpDb(
+    ctx: SnapWireRef;                   # Handler descriptor
+    getFn: HexaryGetFn;                 # Database abstraction
+    rootKey: NodeKey;
+    info: string;
+    limit = 1000;
+      ): HexaryTreeDbRef
+      {.discardable, gcsafe, raises: [CatchableError].} =
+  result = HexaryTreeDbRef.init()
+  var (nLeafs, nNodes) = (-1,-1)
+  let rc = result.fromPersistent(rootKey, getFn, limit)
+  if rc.isOk:
+    nLeafs = rc.value
+    nNodes = result.tab.len
+  else:
+    let dbg = HexaryTreeDbRef.init()
+    let rx = dbg.fromPersistent(rootKey, getFn, limit + 100000)
+    if rx.isOk:
+      nLeafs = rx.value
+      nNodes = dbg.tab.len
+    result = HexaryTreeDbRef.init() # override
+    let hlf = limit div 2
+    discard result.fromPersistent(rootKey, getFn, hlf)
+    discard result.fromPersistent(rootKey, getFn, limit - hlf, reverse=true)
+
+  result.assignPrettyKeys(rootKey)
+  debug logTxt "dumpDb", info, nLeafs, nNodes, rootKey,
+    dump=result.pp(rootKey, "|")
+
+# ------------------------------------------------------------------------------
 # Private functions: fetch leaf range
 # ------------------------------------------------------------------------------
 
@@ -164,6 +325,10 @@ iterator doTrieNodeSpecs(
   for w in pGroups:
     # Special case: fetch account node
     if w.slotPaths.len == 0:
+      # -------------------------------------------------
+      # when extraTraceMessages:
+      #   trace logTxt "doTrieNodeSpecs", rootKey, accPath=w.accPath.toHex
+      # -------------------------------------------------
       yield (rootKey, accGetFn, w.accPath, 0)
       continue
 
@@ -223,9 +388,21 @@ proc fetchLeafRange(
     iv: NodeTagRange;                   # Proofed range of leaf paths
     replySizeMax: int;                  # Updated size counter for the raw list
     stopAt: Moment;                     # Implies timeout
+    dbg = HexaryTreeDbRef(nil);
+    lossy = DebugStateRef(nil);
+    slotsOk = false;
       ): Result[RangeProof,HexaryError]
       {.gcsafe, raises: [CatchableError].} =
   ## Generic leaf fetcher
+  # ---------------------------------------
+  let (iv, isChopped) = block:                  # <--- will go away (debugging)
+    let rc = ctx.mindTheGap(rootKey,iv,slotsOk) # <--- will go away (debugging)
+    if rc.isErr:                                # <--- will go away (debugging)
+      return err(HexaryError(0))                # <--- will go away (debugging)
+    let jv = rc.value                           # <--- will go away (debugging)
+    (jv, jv.maxPt != iv.maxPt)                  # <--- will go away (debugging)
+  # ---------------------------------------
+
   let
     sizeMax = replySizeMax - estimatedProofSize
     now = Moment.now()
@@ -238,7 +415,13 @@ proc fetchLeafRange(
 
   let sizeOnWire = rc.value.leafsSize + rc.value.proofSize
   if sizeOnWire <= replySizeMax:
+    # ---------------------------------------
+    if not isChopped:                           # <--- will go away
+      return ok(ctx.chopTail(                   # <--- will go away
+        rootKey, getFn, rc.value, lossy))       # <--- will go away
+    # ---------------------------------------
     return rc
+
 
   # Estimate the overhead size on wire needed for a single leaf tail item
   const leafExtraSize = (sizeof RangeLeaf()) - (sizeof newSeq[Blob](0))
@@ -311,6 +494,8 @@ proc init*(
     elaFetchMax: defaultElaFetchMax,
     dataSizeMax: defaultDataSizeMax,
     peerPool:    peerPool)
+
+  ctx.dbgTab = newTable[NodeKey,DebugStateRef]() # <--- will go away (debugging)
 
   #ctx.setupPeerObserver()
   ctx
@@ -419,13 +604,16 @@ method getStorageRanges*(
     let
       sizeLeft = sizeMax - dataAllocated
       rangeProof = block:
-        let rc = ctx.fetchLeafRange(sp.slotFn, sp.stoRoot, iv, sizeLeft, stopAt)
+        let rc = ctx.fetchLeafRange(
+          sp.slotFn, sp.stoRoot, iv, sizeLeft, stopAt, slotsOk=true)
         if rc.isErr:
           when extraTraceMessages:
             trace logTxt "getStorageRanges: failed", iv, sizeMax, sizeLeft,
-              accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot, error=rc.error
+              accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot,
+              nDbgSlotStripped=ctx.dbgSlotsStripped, error=rc.error
           return # extraction failed
         rc.value
+
 
     # Process data slots for this account
     dataAllocated += rangeProof.leafsSize
@@ -433,7 +621,8 @@ method getStorageRanges*(
     when extraTraceMessages:
       trace logTxt "getStorageRanges: data slots", iv, sizeMax, dataAllocated,
         nAccounts=accounts.len, accKey=accHash.to(NodeKey), stoRoot=sp.stoRoot,
-        nSlots=rangeProof.leafs.len, nProof=rangeProof.proof.len
+        nSlots=rangeProof.leafs.len, nProof=rangeProof.proof.len,
+        nDbgSlotStripped=ctx.dbgSlotsStripped
 
     slotLists.add rangeProof.leafs.mapIt(it.to(SnapStorage))
     if 0 < rangeProof.proof.len:
@@ -537,7 +726,16 @@ method getTrieNodes*(
       let steps = partPath.hexPrefixDecode[1].hexaryPath(stateKey, getFn)
       if 0 < steps.path.len and
          steps.tail.len == 0 and steps.path[^1].nibble < 0:
-        steps.path[^1].node.convertTo(Blob)
+        let data = steps.path[^1].node.convertTo(Blob)
+        # ----------------------------------------------
+        when extraTraceMessages:
+          for w in yPartPaths:
+            if partPath == w:
+              logPartPath.add partPath
+              break
+        doAssert steps.path[^1].key == data.digestTo(NodeKey).to(Blob)
+        # ----------------------------------------------
+        data
       else:
         EmptyBlob
 
@@ -552,6 +750,24 @@ method getTrieNodes*(
     trace logTxt "getTrieNodes: done", sizeMax, dataAllocated,
       nGroups=pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0),
       nPaths=pathGroups.len, nResult=result.len, timeExceeded
+
+  # ----------------------------------------------
+  when extraTraceMessages:
+    if 0 < logPartPath.len:
+      let
+        dbg = HexaryTreeDbRef.init()
+        getFn = ctx.getAccountFn
+      dbg.assignPrettyKeys(rootKey)
+      for partPath in logPartPath:
+        let
+          steps = partPath.hexPrefixDecode[1].hexaryPath(rootKey, getFn)
+          fKey = block:
+            if steps.path.len == 0 or steps.path[^1].node.kind != Branch: "ø"
+            else: steps.path[^1].node.bLink[15].toHex
+        trace logTxt "getTrieNodes: dump", partPath=partPath.toHex,
+          steps=steps.path[^1].key.toHex, fKey, steps=steps.pp(dbg,"|"),
+          keys=steps.path.mapIt(it.key.toHex).join("|")
+  # ----------------------------------------------
 
 # ------------------------------------------------------------------------------
 # End
