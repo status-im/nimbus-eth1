@@ -81,9 +81,12 @@ proc installPortalApiHandlers*(
       raise newException(ValueError, "Record not found in DHT lookup.")
 
   rpcServer.rpc("portal_" & network & "Ping") do(
-      enr: Record) -> tuple[enrSeq: uint64, dataRadius: UInt256]:
-    # TODO: Not fully according to spec:
-    # - Missing optional dataRadius parameter
+      enr: Record, dataRadius: Option[UInt256]) -> tuple[
+        enrSeq: uint64,
+        dataRadius: UInt256]:
+    # TODO: Optional appears to be broken, when the parameter is missing it
+    # fails. Providing null does work.
+    # TODO: The dataRadius value is ignored.
     let
       node = toNodeWithAddress(enr)
       pong = await p.ping(node)
