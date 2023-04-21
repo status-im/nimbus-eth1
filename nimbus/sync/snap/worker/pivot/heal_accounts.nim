@@ -254,7 +254,7 @@ proc registerAccountLeaf(
     discard buddy.ctx.pool.coveredAccounts.merge iv
 
     # Update storage slots batch
-    if acc.storageRoot != emptyRlpHash:
+    if acc.storageRoot != EMPTY_ROOT_HASH:
       env.storageQueueAppendFull(acc.storageRoot, accKey)
 
     # Update contract codes batch
