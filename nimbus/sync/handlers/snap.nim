@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strutils],
+  std/sequtils,
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles],

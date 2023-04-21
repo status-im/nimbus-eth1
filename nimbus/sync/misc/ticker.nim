@@ -305,6 +305,7 @@ proc stopBuddy*(t: TickerRef) =
   if not t.isNil:
     t.nBuddies.dec
     if t.nBuddies <= 0 and not t.fullMode and not t.snap.recovery:
+      t.nBuddies = 0
       t.stopImpl()
       when extraTraceMessages:
         debug logTxt "stop (buddy)", fullMode=t.fullMode, nBuddies=t.nBuddies
