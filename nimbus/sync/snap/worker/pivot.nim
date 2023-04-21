@@ -18,7 +18,7 @@ import
   stew/[interval_set, keyed_queue, sorted_set],
   "../.."/[sync_desc, types],
   ".."/[constants, range_desc, worker_desc],
-  ./db/[hexary_error, snapdb_accounts, snapdb_pivot],
+  ./db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
   ./pivot/[heal_accounts, heal_storage_slots,
            range_fetch_accounts, range_fetch_storage_slots,
            storage_queue_helper],
@@ -150,7 +150,7 @@ proc tickerStats*(
 
   result = proc: TickerSnapStats =
     var
-      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum: float
+      aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, cSum, cSqSum: float
       count = 0
     for kvp in ctx.pool.pivotTable.nextPairs:
 
@@ -169,6 +169,11 @@ proc tickerStats*(
         let sLen = kvp.data.nSlotLists.float
         sSum += sLen
         sSqSum += sLen * sLen
+
+        # Lists of missing contracts
+        let cLen = kvp.data.nContracts.float
+        cSum += cLen
+        cSqSum += cLen * cLen
     let
       env = ctx.pool.pivotTable.lastValue.get(otherwise = nil)
       accCoverage = (ctx.pool.coveredAccounts.fullFactor +
@@ -178,23 +183,27 @@ proc tickerStats*(
       beaconBlock = none(BlockNumber)
       pivotBlock = none(BlockNumber)
       stoQuLen = none(int)
+      ctraQuLen = none(int)
       procChunks = 0
     if not env.isNil:
       pivotBlock = some(env.stateHeader.blockNumber)
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
+      ctraQuLen = some(env.fetchContracts.len)
     if 0 < ctx.pool.beaconHeader.blockNumber:
       beaconBlock = some(ctx.pool.beaconHeader.blockNumber)
 
     TickerSnapStats(
-      beaconBlock:   beaconBlock,
-      pivotBlock:    pivotBlock,
-      nQueues:       ctx.pool.pivotTable.len,
-      nAccounts:     meanStdDev(aSum, aSqSum, count),
-      nSlotLists:    meanStdDev(sSum, sSqSum, count),
-      accountsFill:  (accFill[0], accFill[1], accCoverage),
-      nAccountStats: procChunks,
-      nStorageQueue: stoQuLen)
+      beaconBlock:    beaconBlock,
+      pivotBlock:     pivotBlock,
+      nQueues:        ctx.pool.pivotTable.len,
+      nAccounts:      meanStdDev(aSum, aSqSum, count),
+      nSlotLists:     meanStdDev(sSum, sSqSum, count),
+      nContracts:     meanStdDev(cSum, cSqSum, count),
+      accountsFill:   (accFill[0], accFill[1], accCoverage),
+      nAccountStats:  procChunks,
+      nStorageQueue:  stoQuLen,
+      nContractQueue: ctraQuLen)
 
 # ------------------------------------------------------------------------------
 # Public functions: particular pivot
@@ -203,7 +212,9 @@ proc tickerStats*(
 proc pivotCompleteOk*(env: SnapPivotRef): bool =
   ## Returns `true` iff the pivot covers a complete set of accounts ans
   ## storage slots.
-  env.fetchAccounts.processed.isFull and env.storageQueueTotal() == 0
+  env.fetchAccounts.processed.isFull and
+    env.storageQueueTotal() == 0 and
+    env.fetchContracts.len == 0
 
 
 proc pivotMothball*(env: SnapPivotRef) =
@@ -242,9 +253,8 @@ proc execSnapSyncAction*(
     return # no need to do anything
 
   block:
-    # Clean up storage slots queue first it it becomes too large
-    let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-    if storageSlotsQuPrioThresh < nStoQu:
+    # Clean up storage slots queue and contracts first it becomes too large
+    if storageSlotsQuPrioThresh < env.storageQueueAvail():
       await buddy.rangeFetchStorageSlots(env)
       if buddy.ctrl.stopped or env.archived:
         return
@@ -256,8 +266,8 @@ proc execSnapSyncAction*(
     # Update 100% accounting
     ctx.pivotAccountsCoverage100PcRollOver()
 
-    # Run at least one round fetching storage slosts even if the `archived`
-    # flag is set in order to keep the batch queue small.
+    # Run at least one round fetching storage slosts and contracts even if
+    # the `archived` flag is set in order to keep the batch queue small.
     if buddy.ctrl.running:
       await buddy.rangeFetchStorageSlots(env)
     else:
@@ -276,7 +286,7 @@ proc execSnapSyncAction*(
       if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
         return
 
-  # Some additional storage slots might have been popped up
+  # Some additional storage slots and contracts might have been popped up
   if rangeFetchOk:
     await buddy.rangeFetchStorageSlots(env)
     if env.archived:
@@ -300,18 +310,18 @@ proc saveCheckpoint*(
   if env.savedFullPivotOk:
     return ok(0) # no need to do anything
 
-  let
-    fa = env.fetchAccounts
-    nStoQu = env.storageQueueTotal()
-
+  let fa = env.fetchAccounts
   if fa.processed.isEmpty:
     return err(NoAccountsYet)
 
-  if accountsSaveProcessedChunksMax < fa.processed.chunks:
-    return err(TooManyProcessedChunks)
+  if saveAccountsProcessedChunksMax < fa.processed.chunks:
+    return err(TooManyChunksInAccountsQueue)
 
-  if accountsSaveStorageSlotsMax < nStoQu:
-    return err(TooManySlotAccounts)
+  if saveStorageSlotsMax < env.storageQueueTotal():
+    return err(TooManyQueuedStorageSlots)
+
+  if saveContactsMax < env.fetchContracts.len:
+    return err(TooManyQueuedContracts)
 
   result = ctx.pool.snapDb.pivotSaveDB SnapDbPivotRegistry(
     header:       env.stateHeader,
@@ -321,7 +331,8 @@ proc saveCheckpoint*(
                     .mapIt((it.minPt,it.maxPt)),
     slotAccounts: (toSeq(env.fetchStorageFull.nextKeys) &
                    toSeq(env.fetchStoragePart.nextKeys)).mapIt(it.to(NodeKey)) &
-                   toSeq(env.parkedStorage.items))
+                   toSeq(env.parkedStorage.items),
+    ctraAccounts: (toSeq(env.fetchContracts.nextValues)))
 
   if result.isOk and env.pivotCompleteOk():
     env.savedFullPivotOk = true
@@ -367,6 +378,20 @@ proc pivotRecoverFromCheckpoint*(
       elif rc.value.storageRoot != emptyRlpHash:
         env.storageQueueAppendFull(rc.value.storageRoot, w)
 
+  # Handle contracts
+  for w in recov.state.ctraAccounts:
+    let pt = NodeTagRange.new(w.to(NodeTag),w.to(NodeTag)) # => `pt.len == 1`
+
+    if 0 < env.fetchAccounts.processed.covered(pt):
+      # Ignoring contracts that have accounts to be downloaded, anyway
+      let rc = ctx.pool.snapDb.getAccountsData(stateRoot, w)
+      if rc.isErr:
+        # Oops, how did that account get lost?
+        discard env.fetchAccounts.processed.reduce pt
+        env.fetchAccounts.unprocessed.merge pt
+      elif rc.value.codeHash != emptyRlpHash:
+        env.fetchContracts[rc.value.codeHash] = w
+
   # Handle mothballed pivots for swapping in (see `pivotMothball()`)
   if topLevel:
     env.savedFullPivotOk = env.pivotCompleteOk()
@@ -375,7 +400,7 @@ proc pivotRecoverFromCheckpoint*(
         pivot=env.stateHeader.blockNumber.toStr,
         savedFullPivotOk=env.savedFullPivotOk,
         processed=env.fetchAccounts.processed.fullPC3,
-        nStoQuTotal=env.storageQueueTotal()
+        nStoQ=env.storageQueueTotal()
   else:
     for kvp in env.fetchStorageFull.nextPairs:
       let rc = env.storageAccounts.insert(kvp.data.accKey.to(NodeTag))
@@ -454,6 +479,7 @@ proc pivotVerifyComplete*(
     inspectAccountsTrie = false;    # Check for dangling links
     walkAccountsDB = true;          # Walk accounts db
     inspectSlotsTries = true;       # Check dangling links (if `walkAccountsDB`)
+    verifyContracts = true;         # Verify that code hashes are in database
       ): Future[bool]
       {.async,discardable.} =
   ## Check the database whether the pivot is complete -- not advidsed on a
@@ -461,6 +487,7 @@ proc pivotVerifyComplete*(
   let
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     accFn = ctx.pool.snapDb.getAccountFn
+    ctraFn = ctx.pool.snapDb.getContractsFn
 
   # Verify consistency of accounts trie database. This should not be needed
   # if `walkAccountsDB` is set. In case that there is a dangling link that would
@@ -496,13 +523,15 @@ proc pivotVerifyComplete*(
     var
       nAccounts = 0
       nStorages = 0
+      nContracts = 0
       nRetryTotal = 0
       nodeTag = low(NodeTag)
     while true:
       if (nAccounts mod inspectSuspendAfter) == 0 and 0 < nAccounts:
         when pivotVerifyExtraBlurb:
           trace logTxt "accounts db walk ..",
-            nAccounts, nStorages, nRetryTotal, inspectSlotsTries
+            nAccounts, nStorages, nContracts, nRetryTotal,
+            inspectSlotsTries, verifyContracts
         await sleepAsync inspectExtraNap
 
       # Find next account key => `nodeTag`
@@ -511,8 +540,8 @@ proc pivotVerifyComplete*(
         if rc.error == NearbyBeyondRange:
           break # No more accounts
         error logTxt "accounts db problem", nodeTag,
-          nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
-          error=rc.error
+          nAccounts, nStorages, nContracts, nRetryTotal,
+          inspectSlotsTries, verifyContracts, error=rc.error
         return false
       nodeTag = rc.value.getPartialPath.convertTo(NodeKey).to(NodeTag)
       nAccounts.inc
@@ -523,8 +552,8 @@ proc pivotVerifyComplete*(
         accData = rc.value.leafData.decode(Account)
       except RlpError as e:
         error logTxt "account data problem", nodeTag,
-          nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
-          name=($e.name), msg=(e.msg)
+          nAccounts, nStorages, nContracts, nRetryTotal,
+          inspectSlotsTries, verifyContracts, name=($e.name), msg=(e.msg)
         return false
 
       # Check for storage slots for this account
@@ -543,8 +572,8 @@ proc pivotVerifyComplete*(
           while stats.dangling.len == 0 and not stats.resumeCtx.isNil:
             when pivotVerifyExtraBlurb:
               trace logTxt "storage slots inspect ..", nodeTag,
-                nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
-                nVisited, nRetryCount
+                nAccounts, nStorages, nContracts, nRetryTotal,
+                inspectSlotsTries, verifyContracts, nVisited, nRetryCount
             await sleepAsync inspectExtraNap
             nRetryCount.inc
             nRetryTotal.inc
@@ -556,13 +585,25 @@ proc pivotVerifyComplete*(
 
           if stats.dangling.len != 0:
             error logTxt "storage slots trie has dangling link", nodeTag,
-              nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
-              nVisited, nRetryCount
+              nAccounts, nStorages, nContracts, nRetryTotal,
+              inspectSlotsTries, nVisited, nRetryCount
             return false
           if nVisited == 0:
             error logTxt "storage slots trie is empty", nodeTag,
-              nAccounts, nStorages, nRetryTotal, inspectSlotsTries,
-              nVisited, nRetryCount
+              nAccounts, nStorages, nContracts, nRetryTotal,
+              inspectSlotsTries, verifyContracts, nVisited, nRetryCount
+            return false
+
+      # Check for contract codes for this account
+      if accData.codeHash != emptyRlpHash:
+        nContracts.inc
+        if verifyContracts:
+          let codeKey = accData.codeHash.to(NodeKey)
+          if codeKey.to(Blob).ctraFn.len == 0:
+            error logTxt "Cintract code missing", nodeTag,
+              codeKey=codeKey.to(NodeTag),
+              nAccounts, nStorages, nContracts, nRetryTotal,
+              inspectSlotsTries, verifyContracts
             return false
 
       # Set up next node key for looping
@@ -572,7 +613,7 @@ proc pivotVerifyComplete*(
       # End while
 
     trace logTxt "accounts db walk ok",
-      nAccounts, nStorages, nRetryTotal, inspectSlotsTries
+      nAccounts, nStorages, nContracts, nRetryTotal, inspectSlotsTries
     # End `if walkAccountsDB`
 
   return true

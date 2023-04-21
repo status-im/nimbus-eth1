@@ -25,7 +25,8 @@ type
     dangling*: seq[Blob]          ## Dangling nodes in accounts trie
     processed*: seq[
       (NodeTag,NodeTag)]          ## Processed acoount ranges
-    slotAccounts*: seq[NodeKey]   ## List of accounts with storage slots
+    slotAccounts*: seq[NodeKey]   ## List of accounts with missing storage slots
+    ctraAccounts*: seq[NodeKey]   ## List of accounts with missing contracts
 
 const
   extraTraceMessages {.used.} = false or true

@@ -51,7 +51,9 @@ type
     accountsFill*: (float,float,float) ## Mean, standard deviation, merged total
     nAccountStats*: int                ## #chunks
     nSlotLists*: (float,float)         ## Mean and standard deviation
+    nContracts*: (float,float)         ## Mean and standard deviation
     nStorageQueue*: Option[int]
+    nContractQueue*: Option[int]
     nQueues*: int
 
   TickerFullStats* = object
@@ -78,6 +80,9 @@ type
       full: FullDescDetails
 
 const
+  extraTraceMessages = false # or true
+    ## Enabled additional logging noise
+
   tickerStartDelay = chronos.milliseconds(100)
   tickerLogInterval = chronos.seconds(1)
   tickerLogSuppressMax = chronos.seconds(100)
@@ -86,53 +91,21 @@ const
 # Private functions: pretty printing
 # ------------------------------------------------------------------------------
 
-# proc ppMs*(elapsed: times.Duration): string
-#     {.gcsafe, raises: [Defect, ValueError]} =
-#   result = $elapsed.inMilliseconds
-#   let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
-#   if ns != 0:
-#     # to rounded deca milli seconds
-#     let dm = (ns + 5_000i64) div 10_000i64
-#     result &= &".{dm:02}"
-#   result &= "ms"
-#
-# proc ppSecs*(elapsed: times.Duration): string
-#     {.gcsafe, raises: [Defect, ValueError]} =
-#   result = $elapsed.inSeconds
-#   let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
-#   if ns != 0:
-#     # round up
-#     let ds = (ns + 5_000_000i64) div 10_000_000i64
-#     result &= &".{ds:02}"
-#   result &= "s"
-#
-# proc ppMins*(elapsed: times.Duration): string
-#     {.gcsafe, raises: [Defect, ValueError]} =
-#   result = $elapsed.inMinutes
-#   let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
-#   if ns != 0:
-#     # round up
-#     let dm = (ns + 500_000_000i64) div 1_000_000_000i64
-#     result &= &":{dm:02}"
-#   result &= "m"
-#
-# proc pp(d: times.Duration): string
-#     {.gcsafe, raises: [Defect, ValueError]} =
-#   if 40 < d.inSeconds:
-#     d.ppMins
-#   elif 200 < d.inMilliseconds:
-#     d.ppSecs
-#   else:
-#     d.ppMs
-
 proc pc99(val: float): string =
   if 0.99 <= val and val < 1.0: "99%"
   elif 0.0 < val and val <= 0.01: "1%"
   else: val.toPC(0)
 
+proc toStr(a: Option[int]): string =
+  if a.isNone: "n/a"
+  else: $a.unsafeGet
+
 # ------------------------------------------------------------------------------
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Ticker " & info
 
 template noFmtError(info: static[string]; code: untyped) =
   try:
@@ -149,10 +122,11 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
      t.snap.recovery != t.snap.lastRecov or
      tickerLogSuppressMax < (now - t.visited):
     var
-      nAcc, nSto: string
+      nAcc, nSto, nCon: string
       pv = "n/a"
-      nStoQue = "n/a"
     let
+      nStoQ = data.nStorageQueue.toStr
+      nConQ = data.nContractQueue.toStr
       bc = data.beaconBlock.toStr
       recoveryDone = t.snap.lastRecov
       accCov = data.accountsFill[0].pc99 &
@@ -177,19 +151,18 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
               &"({(data.nAccounts[1]+0.5).int64})")
       nSto = (&"{(data.nSlotLists[0]+0.5).int64}" &
               &"({(data.nSlotLists[1]+0.5).int64})")
-
-    if data.nStorageQueue.isSome:
-      nStoQue = $data.nStorageQueue.unsafeGet
+      nCon = (&"{(data.nContracts[0]+0.5).int64}" &
+              &"({(data.nContracts[1]+0.5).int64})")
 
     if t.snap.recovery:
       info "Snap sync statistics (recovery)",
-        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     elif recoveryDone:
       info "Snap sync statistics (recovery done)",
-        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     else:
       info "Snap sync statistics",
-        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQue, mem
+        up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
 
 
 proc fullTicker(t: TickerRef) {.gcsafe.} =
@@ -234,7 +207,10 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(t: TickerRef; at: Moment) =
-  if not t.logTicker.isNil:
+  if t.logTicker.isNil:
+    when extraTraceMessages:
+      debug logTxt "was stopped", fullMode=t.fullMode, nBuddies=t.nBuddies
+  else:
     t.logTicker = safeSetTimer(at, runLogTicker, t)
 
 proc initImpl(t: TickerRef; cb: TickerSnapStatsUpdater) =
@@ -246,6 +222,15 @@ proc initImpl(t: TickerRef; cb: TickerFullStatsUpdater) =
   t.fullMode = true
   t.prettyPrint = fullTicker
   t.full = FullDescDetails(fullCb: cb)
+
+proc startImpl(t: TickerRef) =
+  t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay),runLogTicker,t)
+  if t.started == Moment.default:
+    t.started = Moment.now()
+
+proc stopImpl(t: TickerRef) =
+  ## Stop ticker unconditionally
+  t.logTicker = nil
 
 # ------------------------------------------------------------------------------
 # Public constructor and start/stop functions
@@ -275,16 +260,16 @@ proc init*(t: TickerRef; cb: TickerFullStatsUpdater) =
 proc start*(t: TickerRef) =
   ## Re/start ticker unconditionally
   if not t.isNil:
-    #debug "Started ticker"
-    t.logTicker = safeSetTimer(Moment.fromNow(tickerStartDelay),runLogTicker,t)
-    if t.started == Moment.default:
-      t.started = Moment.now()
+    when extraTraceMessages:
+      debug logTxt "start", fullMode=t.fullMode, nBuddies=t.nBuddies
+    t.startImpl()
 
 proc stop*(t: TickerRef) =
   ## Stop ticker unconditionally
   if not t.isNil:
-    t.logTicker = nil
-    #debug "Stopped ticker"
+    t.stopImpl()
+    when extraTraceMessages:
+      debug logTxt "stop", fullMode=t.fullMode, nBuddies=t.nBuddies
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -295,38 +280,39 @@ proc startBuddy*(t: TickerRef) =
   if not t.isNil:
     if t.nBuddies <= 0:
       t.nBuddies = 1
-      if not t.fullMode:
-        if not t.snap.recovery:
-          t.start()
+      if not t.fullMode and not t.snap.recovery:
+        t.startImpl()
+        when extraTraceMessages:
+          debug logTxt "start buddy", fullMode=t.fullMode, nBuddies=t.nBuddies
     else:
       t.nBuddies.inc
 
 proc startRecovery*(t: TickerRef) =
   ## Ditto for recovery mode
-  if not t.isNil:
-    if not t.fullMode:
-      if not t.snap.recovery:
-        t.snap.recovery = true
-        if t.nBuddies <= 0:
-          t.start()
+  if not t.isNil and not t.fullMode and not t.snap.recovery:
+    t.snap.recovery = true
+    if t.nBuddies <= 0:
+      t.startImpl()
+      when extraTraceMessages:
+        debug logTxt "start recovery", fullMode=t.fullMode, nBuddies=t.nBuddies
 
 proc stopBuddy*(t: TickerRef) =
   ## Decrement buddies counter and stop ticker if there are no more registered
   ## buddies.
   if not t.isNil:
     t.nBuddies.dec
-    if t.nBuddies <= 0:
-      if not t.fullMode:
-        if not t.snap.recovery:
-          t.stop()
+    if t.nBuddies <= 0 and not t.fullMode and not t.snap.recovery:
+      t.stopImpl()
+      when extraTraceMessages:
+        debug logTxt "stop (buddy)", fullMode=t.fullMode, nBuddies=t.nBuddies
 
 proc stopRecovery*(t: TickerRef) =
   ## Ditto for recovery mode
-  if not t.isNil:
-    if not t.fullMode:
-      if t.snap.recovery:
-        t.snap.recovery = false
-        t.stop()
+  if not t.isNil and not t.fullMode and t.snap.recovery:
+    t.snap.recovery = false
+    t.stopImpl()
+    when extraTraceMessages:
+      debug logTxt "stop (recovery)", fullMode=t.fullMode, nBuddies=t.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

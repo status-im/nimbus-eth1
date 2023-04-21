@@ -210,8 +210,12 @@ proc reducePartial(
 # ------------------------------------------------------------------------------
 
 proc storageQueueTotal*(env: SnapPivotRef): int =
-  ## Total number of entries on the storage queues
+  ## Total number of entries on the storage queues, including parked ones.
   env.fetchStorageFull.len + env.fetchStoragePart.len + env.parkedStorage.len
+
+proc storageQueueAvail*(env: SnapPivotRef): int =
+  ## Number of available entries on the storage queues
+  env.fetchStorageFull.len + env.fetchStoragePart.len
 
 # ------------------------------------------------------------------------------
 # Public functions, append queue items

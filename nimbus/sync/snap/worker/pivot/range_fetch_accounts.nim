@@ -81,8 +81,10 @@ proc fetchCtx(
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
-    "nStoQu=" & $env.storageQueueTotal() & "," &
-    "nSlotLists=" & $env.nSlotLists & "}"
+    "nStoQ=" & $env.storageQueueTotal() & "," &
+    "nSlotLists=" & $env.nSlotLists & "," &
+    "nConQ=" & $env.fetchContracts.len & "," &
+    "nCon=" & $env.nContracts & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -135,6 +137,7 @@ proc accountsRangefetchImpl(
         when extraTraceMessages:
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
             reqLen=iv, error=rc.error
+        discard
       return
     rc.value
 
@@ -232,8 +235,7 @@ proc rangeFetchAccounts*(
       nFetchAccounts.inc
 
       # Clean up storage slots queue first it it becomes too large
-      let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-      if storageSlotsQuPrioThresh < nStoQu:
+      if storageSlotsQuPrioThresh < env.storageQueueAvail():
         break
 
   trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env), nFetchAccounts

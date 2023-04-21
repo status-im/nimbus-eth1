@@ -88,7 +88,7 @@ proc healingCtx(
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
-    "nStoQu=" & $env.storageQueueTotal() & "," &
+    "nStoQ=" & $env.storageQueueTotal() & "," &
     "nQuPart=" & $env.fetchStoragePart.len & "," &
     "nParked=" & $env.parkedStorage.len & "," &
     "nSlotLists=" & $env.nSlotLists & "}"
@@ -102,7 +102,7 @@ proc healingCtx(
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
     "processed=" & $kvp.data.slots.processed & "," &
-    "nStoQu=" & $env.storageQueueTotal() & "," &
+    "nStoQ=" & $env.storageQueueTotal() & "," &
     "nQuPart=" & $env.fetchStoragePart.len & "," &
     "nParked=" & $env.parkedStorage.len & "," &
     "nSlotLists=" & $env.nSlotLists & "}"

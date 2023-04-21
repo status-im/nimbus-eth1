@@ -67,19 +67,27 @@ const
 
   # --------------
 
-  accountsSaveProcessedChunksMax* = 1000
+  fetchRequestContractsMax* = 1024
+    ## Maximal number of contract codes fetch with a single request message.
+
+  # --------------
+
+  saveAccountsProcessedChunksMax* = 1000
     ## Recovery data are stored if the processed ranges list contains no more
     ## than this many range *chunks*.
     ##
     ## If the range set is too much fragmented, no data will be saved and
     ## restart has to perform from scratch or an earlier checkpoint.
 
-  accountsSaveStorageSlotsMax* = 20_000
+  saveStorageSlotsMax* = 20_000
     ## Recovery data are stored if the oustanding storage slots to process do
     ## not amount to more than this many entries.
     ##
     ## If there are too many dangling nodes, no data will be saved and restart
     ## has to perform from scratch or an earlier checkpoint.
+
+  saveContactsMax* = 10_000
+    ## Similar to `saveStorageSlotsMax`
 
   # --------------
 
@@ -105,7 +113,12 @@ const
 
   # --------------
 
-  healAccountsCoverageTrigger* = 1.01
+  contractsQuPrioThresh* = 2_000
+    ## Similar to `storageSlotsQuPrioThresh`
+
+  # --------------
+
+  healAccountsCoverageTrigger* = 0.65 # 1.01 <--- will go away (debugging)
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see
@@ -183,7 +196,8 @@ const
     ## Set 0 to disable.
 
 static:
-  doAssert storageSlotsQuPrioThresh < accountsSaveStorageSlotsMax
+  doAssert storageSlotsQuPrioThresh < saveStorageSlotsMax
+  doAssert contractsQuPrioThresh < saveContactsMax
   doAssert 0 <= storageSlotsFetchFailedFullMax
   doAssert 0 <= storageSlotsFetchFailedPartialMax
 
