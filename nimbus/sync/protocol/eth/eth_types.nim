@@ -46,16 +46,6 @@ const
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
 
-
-# Kludge, should be fixed in `eth/common/eth_types_rlp.append()`
-proc ethAppend*(w: var RlpWriter, b: BlockBody) =
-  w.startList 2 + b.withdrawals.isSome.ord # <--- this line was missing
-  w.append(b.transactions)
-  w.append(b.uncles)
-  if b.withdrawals.isSome:
-    w.append(b.withdrawals.unsafeGet)
-
-
 proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
 
