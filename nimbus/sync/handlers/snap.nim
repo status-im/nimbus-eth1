@@ -14,12 +14,13 @@ import
   std/[sequtils, strutils],
   chronicles,
   chronos,
-  eth/[common, p2p, trie/nibbles, trie/trie_defs],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set],
   ../../db/db_chain,
   ../../core/chain,
   ../snap/[constants, range_desc],
-  ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths, hexary_range],
+  ../snap/worker/db/[hexary_desc, hexary_error, hexary_paths,
+                     snapdb_persistent, hexary_range],
   ../protocol,
   ../protocol/snap/snap_types
 
@@ -73,6 +74,9 @@ proc getAccountFn(
     ctx: SnapWireRef;
       ): HexaryGetFn
       {.gcsafe.} =
+  # The snap sync implementation provides a function `persistentAccountGetFn()`
+  # similar to this one. But it is not safe to use it at the moment as the
+  # storage table might (or might not) differ.
   let db = ctx.chain.com.db.db
   return proc(key: openArray[byte]): Blob =
     db.get(key)
@@ -82,9 +86,19 @@ proc getStoSlotFn(
     accKey: NodeKey;
       ): HexaryGetFn
       {.gcsafe.} =
+  # The snap sync implementation provides a function
+  # `persistentStorageSlotsGetFn()` similar to this one. But it is not safe to
+  # use it at the moment as the storage table might (or might not) differ.
   let db = ctx.chain.com.db.db
   return proc(key: openArray[byte]): Blob =
     db.get(key)
+
+proc getCodeFn(
+    ctx: SnapWireRef;
+      ): HexaryGetFn
+      {.gcsafe.} =
+  # It is save to borrow this function from the snap sync implementation.
+  ctx.chain.com.db.db.persistentContractsGetFn
 
 # ----------------------------------
 
@@ -128,7 +142,7 @@ proc getSlotsSpecs(
 
   # Ignore empty storage list
   let stoRoot = rlp.decode(accData,Account).storageRoot
-  if stoRoot == emptyRlpHash:
+  if stoRoot == EMPTY_ROOT_HASH:
     when extraTraceMessages:
       trace logTxt "getSlotsSpecs: no slots", accKey
     return err()
@@ -447,8 +461,41 @@ method getByteCodes*(
     nodes: openArray[Hash256];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.gcsafe.} =
-  notImplemented("getByteCodes")
+      {.gcsafe, raises: [CatchableError].} =
+  ## Fetch contract codes from  the database
+  let
+    sizeMax = min(replySizeMax, ctx.dataSizeMax.uint64).int
+    pfxMax = (hexaryRangeRlpSize sizeMax) - sizeMax # RLP list/blob pfx max
+    effSizeMax = sizeMax - pfxMax
+    stopAt = Moment.now() + ctx.elaFetchMax
+    getFn = ctx.getCodeFn
+
+  var
+    dataAllocated = 0
+    timeExceeded = false
+
+  when extraTraceMessages:
+    trace logTxt "getByteCodes", sizeMax, nNodes=nodes.len
+
+  for w in nodes:
+    let data = w.data.toSeq.getFn
+    if 0 < data.len:
+      let effDataLen = hexaryRangeRlpSize data.len
+      if effSizeMax - effDataLen < dataAllocated:
+        break
+      dataAllocated += effDataLen
+      result.add data
+    else:
+      when extraTraceMessages:
+        trace logTxt "getByteCodes: empty record", sizeMax, nNodes=nodes.len,
+           key=w
+    if stopAt <= Moment.now():
+      timeExceeded = true
+      break
+
+  when extraTraceMessages:
+    trace logTxt "getByteCodes: done", sizeMax, dataAllocated,
+      nNodes=nodes.len, nResult=result.len, timeExceeded
 
 
 method getTrieNodes*(
@@ -502,11 +549,9 @@ method getTrieNodes*(
     result &= node
 
   when extraTraceMessages:
-    let
-      nGroups {.used.} = pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0)
-      nPaths {.used.} = pathGroups.len
-    trace logTxt "getTrieNodes: done", sizeMax, dataAllocated, nGroups, nPaths,
-      nResult=result.len, timeExceeded
+    trace logTxt "getTrieNodes: done", sizeMax, dataAllocated,
+      nGroups=pathGroups.mapIt(max(1,it.slotPaths.len)).foldl(a+b,0),
+      nPaths=pathGroups.len, nResult=result.len, timeExceeded
 
 # ------------------------------------------------------------------------------
 # End

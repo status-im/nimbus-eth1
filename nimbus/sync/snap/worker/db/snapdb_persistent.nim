@@ -15,6 +15,7 @@ import
   chronicles,
   eth/[common, trie/db],
   ../../../../db/kvstore_rocksdb,
+  ../../../types,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 
@@ -26,9 +27,13 @@ type
     {.gcsafe, raises:[].}
       ## The `get()` function for the accounts trie
 
+  ContractsGetFn* = proc(key: openArray[byte]): Blob
+    {.gcsafe, raises:[].}
+      ## The `get()` function for the contracts table
+
   StorageSlotsGetFn* = proc(acc: NodeKey; key: openArray[byte]): Blob
     {.gcsafe, raises: [].}
-      ## The `get()` function for the storage trie depends on the current
+      ## The `get()` function for the storage tries depends on the current
       ## account
 
   StateRootRegistry* = object
@@ -50,6 +55,17 @@ type
     ##
     key*: NodeKey  ## Top reference for base entry, back reference otherwise
     data*: Blob    ## Some data
+
+const
+  extraTraceMessages = false # or true
+    ## Enable additional logging noise
+
+# ------------------------------------------------------------------------------
+# Private helpers, logging
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Persistent db " & info
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -83,6 +99,13 @@ proc persistentAccountsGetFn*(db: TrieDatabaseRef): AccountsGetFn =
     if nodeKey.init(key):
       return db.get(nodeKey.toAccountsKey.toOpenArray)
 
+proc persistentContractsGetFn*(db: TrieDatabaseRef): ContractsGetFn =
+  ## Returns a `get()` function for retrieving contracts data
+  return proc(key: openArray[byte]): Blob =
+    var nodeKey: NodeKey
+    if nodeKey.init(key):
+      return db.get(nodeKey.toContractHashKey.toOpenArray)
+
 proc persistentStorageSlotsGetFn*(db: TrieDatabaseRef): StorageSlotsGetFn =
   ## Returns a `get()` function for retrieving storage slots data
   return proc(accKey: NodeKey; key: openArray[byte]): Blob =
@@ -114,10 +137,13 @@ proc persistentBlockHeaderPut*(
   ## Store a single header. This function is intended to finalise snap sync
   ## with storing a universal pivot header not unlike genesis.
   let hashKey = hdr.blockHash
-  db.TrieDatabaseRef.put( # see `nimbus/db/db_chain.db()`
-    hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
-  db.TrieDatabaseRef.put(
-    hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
+  # see `nimbus/db/db_chain.db()`
+  db.put(hashKey.toBlockHeaderKey.toOpenArray, rlp.encode(hdr))
+  db.put(hdr.blockNumber.toBlockNumberKey.toOpenArray, rlp.encode(hashKey))
+  when extraTraceMessages:
+    trace logTxt "stored block header", hashKey,
+      blockNumber=hdr.blockNumber.toStr,
+      dbVerify=(0 < db.get(hashKey.toBlockHeaderKey.toOpenArray).len)
 
 proc persistentAccountsPut*(
     db: HexaryTreeDbRef;
@@ -130,7 +156,8 @@ proc persistentAccountsPut*(
   for (key,value) in db.tab.pairs:
     if not key.isNodeKey:
       let error = UnresolvedRepairNode
-      trace "Unresolved node in repair table", error
+      when extraTraceMessages:
+        trace logTxt "unresolved node in repair table", error
       return err(error)
     base.put(key.toAccountsKey.toOpenArray, value.convertTo(Blob))
   ok()
@@ -146,7 +173,8 @@ proc persistentStorageSlotsPut*(
   for (key,value) in db.tab.pairs:
     if not key.isNodeKey:
       let error = UnresolvedRepairNode
-      trace "Unresolved node in repair table", error
+      when extraTraceMessages:
+        trace logTxt "unresolved node in repair table", error
       return err(error)
     base.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
@@ -203,8 +231,9 @@ proc persistentAccountsPut*(
   defer: bulker.destroy()
   if not bulker.begin(RockyBulkCache):
     let error = CannotOpenRocksDbBulkSession
-    trace "Rocky hexary session initiation failed",
-      error, info=bulker.lastError()
+    when extraTraceMessages:
+      trace logTxt "rocksdb session initiation failed",
+        error, info=bulker.lastError()
     return err(error)
 
   #let keyList = toSeq(db.tab.keys)
@@ -228,14 +257,16 @@ proc persistentAccountsPut*(
       data = db.tab[nodeKey.to(RepairKey)].convertTo(Blob)
     if not bulker.add(nodeKey.toAccountsKey.toOpenArray, data):
       let error = AddBulkItemFailed
-      trace "Rocky hexary bulk load failure",
-        n, len=db.tab.len, error, info=bulker.lastError()
+      when extraTraceMessages:
+        trace logTxt "rocksdb bulk stash failure",
+          n, len=db.tab.len, error, info=bulker.lastError()
       return err(error)
 
   if bulker.finish().isErr:
     let error = CommitBulkItemsFailed
-    trace "Rocky hexary commit failure",
-      len=db.tab.len, error, info=bulker.lastError()
+    when extraTraceMessages:
+      trace logTxt "rocksdb commit failure",
+        len=db.tab.len, error, info=bulker.lastError()
     return err(error)
   ok()
 
@@ -252,8 +283,9 @@ proc persistentStorageSlotsPut*(
   defer: bulker.destroy()
   if not bulker.begin(RockyBulkCache):
     let error = CannotOpenRocksDbBulkSession
-    trace "Rocky hexary session initiation failed",
-      error, info=bulker.lastError()
+    when extraTraceMessages:
+      trace logTxt "rocksdb session initiation failed",
+        error, info=bulker.lastError()
     return err(error)
 
   #let keyList = toSeq(db.tab.keys)
@@ -277,14 +309,16 @@ proc persistentStorageSlotsPut*(
       data = db.tab[nodeKey.to(RepairKey)].convertTo(Blob)
     if not bulker.add(nodeKey.toStorageSlotsKey.toOpenArray, data):
       let error = AddBulkItemFailed
-      trace "Rocky hexary bulk load failure",
-        n, len=db.tab.len, error, info=bulker.lastError()
+      when extraTraceMessages:
+        trace logTxt "rocksdb bulk stash failure",
+          n, len=db.tab.len, error, info=bulker.lastError()
       return err(error)
 
   if bulker.finish().isErr:
     let error = CommitBulkItemsFailed
-    trace "Rocky hexary commit failure",
-      len=db.tab.len, error, info=bulker.lastError()
+    when extraTraceMessages:
+      trace logTxt "rocksdb commit failure",
+        len=db.tab.len, error, info=bulker.lastError()
     return err(error)
   ok()
 

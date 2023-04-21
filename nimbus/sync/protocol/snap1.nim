@@ -175,7 +175,7 @@ p2pProtocol snap1(version = snapVersion,
       else:
         trace trSnapSendReplying & "ByteCodes (0x05)", peer, nCodes
         
-      await response.send(@[])
+      await response.send(codes)
 
     # User message 0x05: ByteCodes.
     proc byteCodes(
