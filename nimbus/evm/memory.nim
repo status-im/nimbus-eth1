@@ -7,6 +7,7 @@
 
 import
   sequtils,
+  std/typetraits,
   chronicles, eth/common/eth_types,
   ../utils/functors/[identity, futures, possible_futures],
   ../errors, ./validation,
