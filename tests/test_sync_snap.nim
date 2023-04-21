@@ -28,12 +28,12 @@ import
   ./test_sync_snap/[
     snap_test_xx,
     test_accounts, test_calc, test_helpers, test_node_range, test_inspect,
-    test_pivot, test_storage, test_types]
+    test_pivot, test_storage, test_syncdb, test_types]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
-  repoDir = [".", "tests"/"replay", "tests"/"test_sync_snap",
-             "nimbus-eth1-blobs"/"replay"]
+  repoDir = [".", "tests", "nimbus-eth1-blobs"]
+  subDir = ["replay", "test_sync_snap", "replay"/"snap"]
 
   # Reference file for finding the database directory
   sampleDirRefFile = "sample0.txt.gz"
@@ -53,6 +53,14 @@ type
     baseDir: string # for cleanup
     subDir: string  # for cleanup
     cdb: array[nTestDbInstances,ChainDb]
+
+  SnapRunDesc = object
+    id: int
+    info: string
+    file: string
+    chn: ChainRef
+    select: ChainRef
+    rocky: RocksStoreRef
 
 when defined(linux):
   # The `detectOs(Ubuntu)` directive is not Windows compatible, causes an
@@ -75,18 +83,26 @@ var
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc findFilePath(file: string;
-                  baseDir, repoDir: openArray[string]): Result[string,void] =
+proc findFilePath(
+     file: string;
+     baseDir: openArray[string] = baseDir;
+     repoDir: openArray[string] = repoDir;
+     subDir: openArray[string] = subDir;
+       ): Result[string,void] =
   for dir in baseDir:
-    for repo in repoDir:
-      let path = dir / repo / file
-      if path.fileExists:
-        return ok(path)
+    if dir.dirExists:
+      for repo in repoDir:
+        if (dir / repo).dirExists:
+          for sub in subDir:
+            if (dir / repo / sub).dirExists:
+              let path = dir / repo / sub / file
+              if path.fileExists:
+                return ok(path)
   echo "*** File not found \"", file, "\"."
   err()
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
-  sampleDir.findFilePath(baseDir,repoDir).value.splitFile.dir
+  sampleDir.findFilePath.value.splitFile.dir
 
 proc setTraceLevel {.used.} =
   discard
@@ -104,7 +120,7 @@ proc setErrorLevel {.used.} =
 
 proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
-  let file = sample.file.findFilePath(baseDir,repoDir).value
+  let file = sample.file.findFilePath.value
   var root: Hash256
   for w in file.undumpNextAccount:
     let n = w.seenAccounts - 1
@@ -120,7 +136,7 @@ proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
 
 proc to(sample: AccountsSample; T: type seq[UndumpStorages]): T =
   ## Convert test data into usable in-memory format
-  let file = sample.file.findFilePath(baseDir,repoDir).value
+  let file = sample.file.findFilePath.value
   var root: Hash256
   for w in file.undumpNextStorages:
     let n = w.seenAccounts - 1 # storages selector based on accounts
@@ -188,22 +204,6 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
-
-proc miscRunner(noisy = true) =
-  suite "SyncSnap: Verify setup, constants, limits":
-
-    test "RLP accounts list sizes":
-      test_calcAccountsListSizes()
-
-    test "RLP proofs list sizes":
-      test_calcProofsListSizes()
-
-    test "RLP en/decode GetTrieNodes arguments list":
-      test_calcTrieNodeTranscode()
-
-    test "RLP en/decode BockBody arguments list":
-      test_calcBlockBodyTranscode()
-
 
 proc accountsRunner(noisy = true;  persistent = true; sample = accSample) =
   let
@@ -370,6 +370,89 @@ proc inspectionRunner(
         skip()
 
 # ------------------------------------------------------------------------------
+# Other test Runners
+# ------------------------------------------------------------------------------
+
+proc miscRunner(noisy = true) =
+  suite "SyncSnap: Verify setup, constants, limits":
+
+    test "RLP accounts list sizes":
+      test_calcAccountsListSizes()
+
+    test "RLP proofs list sizes":
+      test_calcProofsListSizes()
+
+    test "RLP en/decode GetTrieNodes arguments list":
+      test_calcTrieNodeTranscode()
+
+    test "RLP en/decode BockBody arguments list":
+      test_calcBlockBodyTranscode()
+
+
+proc snapRunner(noisy = true; specs: SnapSyncSpecs) =
+  let
+    tailInfo = specs.tailBlocks.splitPath.tail.replace(".txt.gz","")
+    tailPath = specs.tailBlocks.findFilePath.value
+    allFile = "mainnet332160.txt.gz".findFilePath.value
+
+    pivot = specs.pivotBlock
+    updateSize = specs.nItems
+
+    tmpDir = getTmpDir()
+    db = tmpDir.testDbs(specs.name, instances=1, true)
+
+  defer:
+    db.flushDbs()
+
+  var dsc = SnapRunDesc(
+    info: specs.snapDump.splitPath.tail.replace(".txt.gz",""),
+    file: specs.snapDump.findFilePath.value,
+    rocky: db.cdb[0].rocksStoreRef,
+    chn: CommonRef.new(
+      db.cdb[0].trieDB,
+      networkId = specs.network,
+      pruneTrie = true,
+      params = specs.network.networkParams).newChain)
+
+  dsc.chn.com.initializeEmptyDB()
+
+  suite &"SyncSnap: verify \"{dsc.info}\" snapshot against full sync":
+
+    #test "Import block chain":
+    #  if dsc.rocky.isNil:
+    #    skip()
+    #  else:
+    #    noisy.showElapsed("import block chain"):
+    #      check dsc.chn.test_syncdbImportChainBlocks(allFile, pivot) == pivot
+    #    noisy.showElapsed("dump db"):
+    #      dsc[1].rocky.dumpAllDb()
+
+    test "Import snapshot dump":
+      if dsc.rocky.isNil:
+        skip()
+      else:
+        noisy.showElapsed(&"undump \"{dsc.info}\""):
+          let
+            (a,b,c) = dsc.chn.test_syncdbImportSnapshot(dsc.file, noisy=noisy)
+            aSum = a[0] + a[1]
+            bSum = b.foldl(a + b)
+            cSum = c.foldl(a + b)
+          noisy.say "***", "[", dsc.info, "]",
+            " undumped ", aSum + bSum + cSum, " snapshot records",
+            " (key32=", aSum, ",",
+            " key33=", bSum, ",",
+            " other=", cSum, ")" #, " b=",b.pp, " c=", c.pp
+        when false: # or true:
+          noisy.showElapsed(&"dump db \"{dsc.info}\""):
+            dsc.rocky.dumpAllDb()
+
+      test &"Append block chain from \"{tailInfo}\"":
+        if dsc.rocky.isNil:
+          skip()
+        else:
+          dsc.chn.test_syncdbAppendBlocks(tailPath,pivot,updateSize,noisy)
+
+# ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
@@ -389,6 +472,13 @@ when isMainModule:
   # Test constants, calculations etc.
   when true: # and false:
     noisy.miscRunner()
+
+  # Test database dnapdhot handling. The test samples ate too big for
+  # `nimbus-eth1` so they are available on `nimbus-eth1-blobs.`
+  when true: # or false
+    import ./test_sync_snap/snap_syncdb_xx
+    for n,sam in snapSyncdbList:
+      false.snapRunner(sam)
 
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:

@@ -40,6 +40,9 @@ template isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
 proc lastTwo*(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
+proc isOK*(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
+
 # ------------------------------------------------------------------------------
 # Public type conversions
 # ------------------------------------------------------------------------------
