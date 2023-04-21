@@ -25,4 +25,12 @@ type
     file*: string   ## name of capture file
     numBlocks*: int ## Number of blocks to load
 
+  SnapSyncSpecs* = object
+    name*: string
+    network*: NetworkId
+    snapDump*: string
+    tailBlocks*: string
+    pivotBlock*: uint64
+    nItems*: int
+
 # End

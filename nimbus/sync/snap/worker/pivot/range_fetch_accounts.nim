@@ -81,8 +81,10 @@ proc fetchCtx(
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
-    "nStoQu=" & $env.storageQueueTotal() & "," &
-    "nSlotLists=" & $env.nSlotLists & "}"
+    "nStoQ=" & $env.storageQueueTotal() & "," &
+    "nSlotLists=" & $env.nSlotLists & "," &
+    "nConQ=" & $env.fetchContracts.len & "," &
+    "nCon=" & $env.nContracts & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -135,6 +137,7 @@ proc accountsRangefetchImpl(
         when extraTraceMessages:
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
             reqLen=iv, error=rc.error
+        discard
       return
     rc.value
 
@@ -190,6 +193,10 @@ proc accountsRangefetchImpl(
   # Register accounts with storage slots on the storage TODO list.
   env.storageQueueAppend dd.withStorage
 
+  # Register accounts with contracts to fetch on the TODO list
+  for w in dd.withContract:
+    env.fetchContracts[w.codeHash] = w.accKey
+
   # Swap in from other pivots unless mothballed, already
   var nSwapInLaps = 0
   if not env.archived:
@@ -203,7 +210,8 @@ proc accountsRangefetchImpl(
   when extraTraceMessages:
     trace logTxt "request done", peer, ctx=buddy.fetchCtx(env), gotAccounts,
       gotStorage, nSwapInLaps, covered, processed=fa.processed,
-      nProcessedChunks=fa.processed.chunks.uint.toSI
+      nProcessedChunks=fa.processed.chunks.uint.toSI,
+      nContracts=dd.withContract.len
 
   return true
 
@@ -231,10 +239,14 @@ proc rangeFetchAccounts*(
 
       nFetchAccounts.inc
 
-      # Clean up storage slots queue first it it becomes too large
-      let nStoQu = env.fetchStorageFull.len + env.fetchStoragePart.len
-      if storageSlotsQuPrioThresh < nStoQu:
+      # Clean up storage slots or contracts queues now if they become too large
+      if storageSlotsQuPrioThresh < env.storageQueueAvail() or
+         contractsQuPrioThresh < env.fetchContracts.len:
         break
+
+      when extraTraceMessages:
+        trace logTxt "looping", peer=buddy.peer, ctx=buddy.fetchCtx(env),
+          nFetchAccounts, isFull=fa.processed.isFull()
 
   trace logTxt "done", peer=buddy.peer, ctx=buddy.fetchCtx(env), nFetchAccounts
 

@@ -321,7 +321,7 @@ proc testnetChainRunner(noisy = true;
       discard
 
     test &"Processing {sSpcs.fancyName} blocks":
-      for w in cFilePath.mapIt(it.string).undumpNextGroup:
+      for w in cFilePath.mapIt(it.string).undumpBlocks:
         let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
 
         # Install & verify Genesis

@@ -43,7 +43,7 @@ import
   chronicles,
   chronos,
   eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
-  stew/[byteutils, interval_set],
+  stew/[byteutils, interval_set, keyed_queue],
   ../../../../utils/prettify,
   "../../.."/[sync_desc, protocol, types],
   "../.."/[constants, range_desc, worker_desc],
@@ -254,8 +254,12 @@ proc registerAccountLeaf(
     discard buddy.ctx.pool.coveredAccounts.merge iv
 
     # Update storage slots batch
-    if acc.storageRoot != emptyRlpHash:
+    if acc.storageRoot != EMPTY_ROOT_HASH:
       env.storageQueueAppendFull(acc.storageRoot, accKey)
+
+    # Update contract codes batch
+    if acc.codeHash != EMPTY_CODE_HASH:
+      env.fetchContracts[acc.codeHash] = accKey
 
   #when extraTraceMessages:
   #  trace logTxt "registered single account", peer, ctx=buddy.healingCtx(env),

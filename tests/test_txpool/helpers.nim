@@ -55,7 +55,7 @@ export
   tx_tabs.reassign,
   tx_tabs.reject,
   tx_tabs.verify,
-  undumpNextGroup
+  undumpBlocks
 
 const
   # pretty printing

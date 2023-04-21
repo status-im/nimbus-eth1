@@ -9,8 +9,15 @@
 # distributed except according to those terms.
 
 import
-  ../../nimbus/common/chain_config,
-  ./test_types
+  eth/common,
+  ../../nimbus/common/chain_config
+
+type
+  CaptureSpecs* = object
+    name*: string   ## sample name, also used as sub-directory for db separation
+    network*: NetworkId
+    file*: string   ## name of capture file
+    numBlocks*: int ## Number of blocks to load
 
 const
   bulkTest0* = CaptureSpecs(
