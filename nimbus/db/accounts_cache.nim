@@ -319,7 +319,7 @@ proc asyncPersistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool)
   for slot, valueCell in acc.overlayStorage:
     let slotAsKey = createTrieKeyFromSlot slot
 
-    let value = await valueCell
+    let value = await valueCell.toFuture
     if value > 0:
       let encodedValue = rlp.encode(value)
       storageTrie.putSlotBytes(slotAsKey, encodedValue)
@@ -338,7 +338,7 @@ proc asyncPersistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool)
     # if we preserve cache, move the overlayStorage
     # to originalStorage, related to EIP2200, EIP1283
     for slot, valueCell in acc.overlayStorage:
-      let value = read(valueCell)
+      let value = unsafeGetAlreadyAvailableValue(valueCell)
       if value > 0:
         acc.originalStorage[slot] = value
       else:
@@ -710,7 +710,7 @@ func update(wd: var WitnessData, acc: RefAccount) =
       wd.storageKeys.incl k
 
   for k, cell in acc.overlayStorage:
-    let v = read(cell)  # FIXME-Adam: should be resolved by now, I think? wait, maybe not?
+    let v = unsafeGetAlreadyAvailableValue(cell)  # FIXME-Adam: should be resolved by now, I think? wait, maybe not?
     if v.isZero and k notin wd.storageKeys:
       continue
     if v.isZero and k in wd.storageKeys:

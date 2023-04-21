@@ -70,7 +70,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
       topics[i].bytes = c.stack.popTopic()
 
     c.host.emitLog(c.msg.contractAddress,
-      c.memory.read(memPos, len),
+      c.memory.readConcreteBytes(memPos, len),
       topics[0].addr, topicCount)
   else:
     var log: Log

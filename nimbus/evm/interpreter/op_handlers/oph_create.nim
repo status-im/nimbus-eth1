@@ -49,7 +49,7 @@ when evmc_enabled:
     c.chainTo(msg):
       c.gasMeter.returnGas(c.res.gas_left)
       if c.res.status_code == EVMC_SUCCESS:
-        c.stack.top(c.res.create_address)
+        c.stack.replaceTopElement(pureStackElement(stackValueFrom(c.res.create_address)))
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
         c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))

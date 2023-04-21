@@ -99,4 +99,4 @@ proc newMemory*(size: Natural): Memory =
 when defined(evmc_enabled):
   proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
     if memory.len == 0 or startPos >= memory.len: return
-    result = distinctBase(memory.byteCells[startPos]).addr
+    result = distinctBase(distinctBase(memory.byteCells[startPos])).addr

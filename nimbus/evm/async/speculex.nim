@@ -1,9 +1,9 @@
 import
   chronos,
-  ../../utils/functors/possible_futures
+  ../../utils/functors/[identity, possible_futures]
 
-# We could make this configurable in some way.
-const shouldUseSpeculativeExecution* = true
+# FIXME-Adam: I have no idea whether speculative execution even makes sense in the context of EVMC.
+const shouldUseSpeculativeExecution* = defined(evm_speculative_execution) and not defined(evmc_enabled)
 
 
 # For now let's keep it possible to switch back at compile-time to

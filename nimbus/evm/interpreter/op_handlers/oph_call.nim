@@ -157,13 +157,13 @@ when evmc_enabled:
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
       if actualOutputSize > 0:
-        c.memory.write(p.memOutPos,
+        c.memory.writeConcreteBytes(p.memOutPos,
           c.returnData.toOpenArray(0, actualOutputSize - 1))
 
       c.gasMeter.returnGas(c.res.gas_left)
 
       if c.res.status_code == EVMC_SUCCESS:
-        c.stack.top(1)
+        c.stack.replaceTopElement(pureStackElement(stackValueFrom(1)))
 
       if not c.res.release.isNil:
         c.res.release(c.res)
