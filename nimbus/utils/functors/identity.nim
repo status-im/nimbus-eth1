@@ -48,7 +48,7 @@ proc combineAndApply*[A, B, C, R](iA: Identity[A], iB: Identity[B], iC: Identity
 proc combineAndApply*[A, B, C, D, R](iA: Identity[A], iB: Identity[B], iC: Identity[C], iD: Identity[D], f: (proc(a: A, b: B, c: C, d: D): R {.gcsafe.})): Identity[R] =
   pureIdentity(f(valueOf(iA), valueOf(iB), valueOf(iC), valueOf(iD)))
 
-# AARDVARK: ugh, need to just implement all of this once
+# FIXME-Adam: ugh, need to just implement all of this once
 proc combineAndApply*[A, B, R](idents: (Identity[A], Identity[B]), f: (proc(a: A, b: B): R {.gcsafe.})): Identity[R] =
   let (iA, iB) = idents
   combineAndApply(iA, iB, f)

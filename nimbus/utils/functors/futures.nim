@@ -51,7 +51,7 @@ proc combineAndApply*[A, B, C, R](fA: Future[A], fB: Future[B], fC: Future[C], f
 proc combineAndApply*[A, B, C, D, R](fA: Future[A], fB: Future[B], fC: Future[C], fD: Future[D], f: (proc(a: A, b: B, c: C, d: D): R {.gcsafe.})): Future[R] {.async.} =
   return f(await fA, await fB, await fC, await fD)
 
-# AARDVARK: ugh, need to just implement all of this once
+# FIXME-Adam: ugh, need to just implement all of this once
 proc combineAndApply*[A, B, R](futs: (Future[A], Future[B]), f: (proc(a: A, b: B): R {.gcsafe.})): Future[R] =
   let (fA, fB) = futs
   combineAndApply(fA, fB, f)
