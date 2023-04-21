@@ -125,7 +125,7 @@ proc fullSyncSetup(ctx: SnapCtxRef) =
   ctx.pool.ticker.init(cb = ctx.tickerUpdater())
 
 proc fullSyncRelease(ctx: SnapCtxRef) =
-  discard
+  ctx.pool.ticker.stop()
 
 
 proc fullSyncStart(buddy: SnapBuddyRef): bool =
@@ -174,6 +174,9 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
       trace "Soft full sync restart done", peer=buddy.peer, last, laps,
         pivot=env.stateHeader.blockNumber.toStr,
         mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
+
+      # Kick off ticker (was stopped by snap `release()` method)
+      ctx.pool.ticker.start()
 
       # Store pivot as parent hash in database
       ctx.pool.snapDb.kvDb.persistentBlockHeaderPut env.stateHeader

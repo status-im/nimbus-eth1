@@ -14,13 +14,13 @@ import
   std/[math, sets, sequtils],
   chronicles,
   chronos,
-  eth/[p2p, trie/trie_defs],
+  eth/p2p, # trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
   "../.."/[sync_desc, types],
   ".."/[constants, range_desc, worker_desc],
   ./db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
-  ./pivot/[heal_accounts, heal_storage_slots,
-           range_fetch_accounts, range_fetch_storage_slots,
+  ./pivot/[heal_accounts, heal_storage_slots, range_fetch_accounts,
+           range_fetch_contracts, range_fetch_storage_slots,
            storage_queue_helper],
   ./ticker
 
@@ -258,6 +258,10 @@ proc execSnapSyncAction*(
       await buddy.rangeFetchStorageSlots(env)
       if buddy.ctrl.stopped or env.archived:
         return
+    if contractsQuPrioThresh < env.fetchContracts.len:
+      await buddy.rangeFetchContracts(env)
+      if buddy.ctrl.stopped or env.archived:
+        return
 
   var rangeFetchOk = true
   if not env.fetchAccounts.processed.isFull:
@@ -270,6 +274,7 @@ proc execSnapSyncAction*(
     # the `archived` flag is set in order to keep the batch queue small.
     if buddy.ctrl.running:
       await buddy.rangeFetchStorageSlots(env)
+      await buddy.rangeFetchContracts(env)
     else:
       rangeFetchOk = false
     if env.archived or (buddy.ctrl.zombie and buddy.only.errors.peerDegraded):
@@ -289,6 +294,7 @@ proc execSnapSyncAction*(
   # Some additional storage slots and contracts might have been popped up
   if rangeFetchOk:
     await buddy.rangeFetchStorageSlots(env)
+    await buddy.rangeFetchContracts(env)
     if env.archived:
       return
 
@@ -375,7 +381,7 @@ proc pivotRecoverFromCheckpoint*(
         # Oops, how did that account get lost?
         discard env.fetchAccounts.processed.reduce pt
         env.fetchAccounts.unprocessed.merge pt
-      elif rc.value.storageRoot != emptyRlpHash:
+      elif rc.value.storageRoot != EMPTY_ROOT_HASH:
         env.storageQueueAppendFull(rc.value.storageRoot, w)
 
   # Handle contracts
@@ -389,7 +395,7 @@ proc pivotRecoverFromCheckpoint*(
         # Oops, how did that account get lost?
         discard env.fetchAccounts.processed.reduce pt
         env.fetchAccounts.unprocessed.merge pt
-      elif rc.value.codeHash != emptyRlpHash:
+      elif rc.value.codeHash != EMPTY_CODE_HASH:
         env.fetchContracts[rc.value.codeHash] = w
 
   # Handle mothballed pivots for swapping in (see `pivotMothball()`)
@@ -427,7 +433,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
       pivotHeader = rc.value.stateHeader
 
   # Check whether the pivot needs to be updated
-  if pivotHeader.blockNumber + pivotBlockDistanceMin < beaconHeader.blockNumber:
+  if pivotHeader.blockNumber+pivotBlockDistanceMin <= beaconHeader.blockNumber:
     # If the entry before the previous entry is unused, then run a pool mode
     # based session (which should enable a pivot table purge).
     block:
@@ -557,7 +563,7 @@ proc pivotVerifyComplete*(
         return false
 
       # Check for storage slots for this account
-      if accData.storageRoot != emptyRlpHash:
+      if accData.storageRoot != EMPTY_ROOT_HASH:
         nStorages.inc
         if inspectSlotsTries:
           let
@@ -595,12 +601,12 @@ proc pivotVerifyComplete*(
             return false
 
       # Check for contract codes for this account
-      if accData.codeHash != emptyRlpHash:
+      if accData.codeHash != EMPTY_CODE_HASH:
         nContracts.inc
         if verifyContracts:
           let codeKey = accData.codeHash.to(NodeKey)
           if codeKey.to(Blob).ctraFn.len == 0:
-            error logTxt "Cintract code missing", nodeTag,
+            error logTxt "Contract code missing", nodeTag,
               codeKey=codeKey.to(NodeTag),
               nAccounts, nStorages, nContracts, nRetryTotal,
               inspectSlotsTries, verifyContracts
