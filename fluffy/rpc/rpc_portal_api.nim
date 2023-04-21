@@ -81,10 +81,9 @@ proc installPortalApiHandlers*(
       raise newException(ValueError, "Record not found in DHT lookup.")
 
   rpcServer.rpc("portal_" & network & "Ping") do(
-      enr: Record) -> tuple[enrSeq: uint64, customPayload: string]:
+      enr: Record) -> tuple[enrSeq: uint64, dataRadius: UInt256]:
     # TODO: Not fully according to spec:
-    # - missing optional dataRadius
-    # - customPayload instead of dataRadius returned
+    # - Missing optional dataRadius parameter
     let
       node = toNodeWithAddress(enr)
       pong = await p.ping(node)
@@ -92,8 +91,18 @@ proc installPortalApiHandlers*(
     if pong.isErr():
       raise newException(ValueError, $pong.error)
     else:
-      let p = pong.get()
-      return (p.enrSeq, p.customPayload.asSeq().toHex())
+      let
+        p = pong.get()
+        # Note: the SSZ.decode cannot fail here as it has already been verified
+        # in the ping call.
+        decodedPayload =
+          try: SSZ.decode(p.customPayload.asSeq(), CustomPayload)
+          except MalformedSszError, SszSizeMismatchError:
+            raiseAssert("Already verified")
+      return (
+        p.enrSeq,
+        decodedPayload.dataRadius
+      )
 
   rpcServer.rpc("portal_" & network & "FindNodes") do(
       enr: Record, distances: seq[uint16]) -> seq[Record]:
