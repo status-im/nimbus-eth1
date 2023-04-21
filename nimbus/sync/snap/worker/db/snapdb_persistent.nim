@@ -68,6 +68,13 @@ template logTxt(info: static[string]): static[string] =
   "Persistent db " & info
 
 # ------------------------------------------------------------------------------
+# Private helpers, logging
+# ------------------------------------------------------------------------------
+
+template logTxt(info: static[string]): static[string] =
+  "Persistent db " & info
+
+# ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
@@ -178,6 +185,20 @@ proc persistentStorageSlotsPut*(
       return err(error)
     base.put(key.toStorageSlotsKey.toOpenArray, value.convertTo(Blob))
   ok()
+
+proc persistentContractPut*(
+    data: seq[(NodeKey,Blob)];
+    base: TrieDatabaseRef;
+      ): Result[void,HexaryError]
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+  ## SST based bulk load on `rocksdb`.
+  let dbTx = base.beginTransaction
+  defer: dbTx.commit
+
+  for (key,val) in data:
+    base.put(key.toContracthashKey.toOpenArray,val)
+  ok()
+
 
 proc persistentStateRootPut*(
     db: TrieDatabaseRef;
@@ -322,6 +343,55 @@ proc persistentStorageSlotsPut*(
     return err(error)
   ok()
 
+
+proc persistentContractPut*(
+    data: seq[(NodeKey,Blob)];
+    rocky: RocksStoreRef
+      ): Result[void,HexaryError]
+      {.gcsafe, raises: [OSError,IOError,KeyError].} =
+  ## SST based bulk load on `rocksdb`.
+  if rocky.isNil:
+    return err(NoRocksDbBackend)
+  let bulker = RockyBulkLoadRef.init(rocky)
+  defer: bulker.destroy()
+  if not bulker.begin(RockyBulkCache):
+    let error = CannotOpenRocksDbBulkSession
+    when extraTraceMessages:
+      trace logTxt "rocksdb session initiation failed",
+        error, info=bulker.lastError()
+    return err(error)
+
+  var
+    lookup: Table[NodeKey,Blob]
+    keyList = newSeq[NodeTag](data.len)
+    inx = 0
+  for (key,val) in data:
+    if not lookup.hasKey key:
+      lookup[key] = val
+      keyList[inx] = key.to(NodeTag)
+      inx.inc
+  if lookup.len < inx:
+    keyList.setLen(inx)
+  keyList.sort(cmp)
+
+  for n,nodeTag in keyList:
+    let
+      nodeKey = nodeTag.to(NodeKey)
+      data = lookup[nodeKey]
+    if not bulker.add(nodeKey.toContracthashKey.toOpenArray, data):
+      let error = AddBulkItemFailed
+      when extraTraceMessages:
+        trace logTxt "rocksdb bulk load failure",
+          n, dataLen=data.len, error, info=bulker.lastError()
+      return err(error)
+
+  if bulker.finish().isErr:
+    let error = CommitBulkItemsFailed
+    when extraTraceMessages:
+      trace logTxt "rocksdb commit failure",
+        dataLen=data.len, error, info=bulker.lastError()
+    return err(error)
+  ok()
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
