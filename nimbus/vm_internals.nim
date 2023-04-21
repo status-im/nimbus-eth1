@@ -18,8 +18,9 @@ export
   vmm.extend,
   vmm.len,
   vmm.newMemory,
-  vmm.read,
-  vmm.write
+  vmm.bytes,
+  vmm.readConcreteBytes,
+  vmm.writeConcreteBytes
 
 when defined(evmc_enabled):
   export
@@ -124,12 +125,11 @@ export
   hStk.len,
   hStk.newStack,
   hStk.peek,
-  hStk.peekInt,
   hStk.popAddress,
   hStk.popInt,
   hStk.popTopic,
   hStk.push,
   hStk.swap,
-  hStk.top
+  hStk.values
 
 # End

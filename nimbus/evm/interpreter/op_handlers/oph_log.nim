@@ -78,9 +78,10 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
     for i in 0 ..< topicCount:
       log.topics.add(c.stack.popTopic())
 
-    log.data = c.memory.read(memPos, len)
-    log.address = c.msg.contractAddress
-    c.addLogEntry(log)
+    c.readMemory(memPos, len) do (memBytes: seq[byte]):
+      log.data = memBytes
+      log.address = c.msg.contractAddress
+      c.addLogEntry(log)
 
 const
   inxRange = toSeq(0 .. 4)
