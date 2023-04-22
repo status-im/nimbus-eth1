@@ -7,23 +7,81 @@
 
 import
   sequtils,
+  std/typetraits,
   chronicles, eth/common/eth_types,
+  ../utils/functors/[identity, futures, possible_futures],
   ../errors, ./validation,
-  ./interpreter/utils/utils_numeric
-
-type
-  Memory* = ref object
-    bytes*:  seq[byte]
+  ./interpreter/utils/utils_numeric,
+  ./async/speculex
 
 logScope:
   topics = "vm memory"
 
+# FIXME-Adam: this is obviously horribly inefficient; I can try doing
+# something more clever (some sort of binary search tree?) later.
+
+type
+  ByteCell* = SpeculativeExecutionCell[byte]
+  BytesCell* = SpeculativeExecutionCell[seq[byte]]
+
+proc readCells*(byteCells: var seq[ByteCell], startPos: Natural, size: Natural): seq[ByteCell] =
+  byteCells[startPos ..< (startPos + size)]
+
+proc writeCells*(byteCells: var seq[ByteCell], startPos: Natural, newCells: openArray[ByteCell]) =
+  let size = newCells.len
+  if size == 0:
+    return
+  validateLte(startPos + size, byteCells.len)
+  if byteCells.len < startPos + size:
+    byteCells = byteCells.concat(repeat(pureCell(0.byte), byteCells.len - (startPos + size))) # TODO: better logarithmic scaling?
+
+  for z, c in newCells:
+    byteCells[z + startPos] = c
+
+
+type
+  Memory* = ref object
+    byteCells*:  seq[ByteCell]
+
 proc newMemory*: Memory =
   new(result)
-  result.bytes = @[]
+  result.byteCells = @[]
 
 proc len*(memory: Memory): int =
-  result = memory.bytes.len
+  result = memory.byteCells.len
+
+proc readBytes*(memory: Memory, startPos: Natural, size: Natural): BytesCell {.raises: [CatchableError].} =
+  traverse(readCells(memory.byteCells, startPos, size))
+
+proc writeBytes*(memory: Memory, startPos: Natural, size: Natural, newBytesF: BytesCell) =
+  var newCells: seq[ByteCell]
+  for i in 0..(size-1):
+    newCells.add(newBytesF.map(proc(newBytes: seq[byte]): byte = newBytes[i]))
+  writeCells(memory.byteCells, startPos, newCells)
+
+proc readAllBytes*(memory: Memory): BytesCell =
+  readBytes(memory, 0, len(memory))
+
+proc futureBytes*(memory: Memory, startPos: Natural, size: Natural): Future[seq[byte]] =
+  toFuture(readBytes(memory, startPos, size))
+
+proc readConcreteBytes*(memory: Memory, startPos: Natural, size: Natural): seq[byte] =
+  waitForValueOf(readBytes(memory, startPos, size))
+
+proc writeConcreteBytes*(memory: Memory, startPos: Natural, value: openArray[byte]) =
+  writeBytes(memory, startPos, value.len, pureCell(@value))
+
+when shouldUseSpeculativeExecution:
+  proc writeFutureBytes*(memory: Memory, startPos: Natural, size: Natural, newBytesFut: Future[seq[byte]]) =
+    writeBytes(memory, startPos, size, newBytesFut)
+
+# FIXME-removeSynchronousInterface: the callers should be fixed so that they don't need this
+proc waitForBytes*(memory: Memory): seq[byte] =
+  waitForValueOf(readAllBytes(memory))
+
+# FIXME-removeSynchronousInterface: the tests call it "bytes", I dunno how many call sites there are
+proc bytes*(memory: Memory): seq[byte] =
+  waitForBytes(memory)
 
 proc extend*(memory: var Memory; startPos: Natural; size: Natural) =
   if size == 0:
@@ -32,28 +90,13 @@ proc extend*(memory: var Memory; startPos: Natural; size: Natural) =
   if newSize <= len(memory):
     return
   var sizeToExtend = newSize - len(memory)
-  memory.bytes = memory.bytes.concat(repeat(0.byte, sizeToExtend))
+  memory.byteCells = memory.byteCells.concat(repeat(pureCell(0.byte), sizeToExtend))
 
 proc newMemory*(size: Natural): Memory =
   result = newMemory()
   result.extend(0, size)
 
-proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
-  # TODO: use an openArray[byte]
-  result = memory.bytes[startPos ..< (startPos + size)]
-
 when defined(evmc_enabled):
   proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
-    if memory.bytes.len == 0 or startPos >= memory.bytes.len: return
-    result = memory.bytes[startPos].addr
-
-proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
-  let size = value.len
-  if size == 0:
-    return
-  validateLte(startPos + size, memory.len)
-  if memory.len < startPos + size:
-    memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPos + size))) # TODO: better logarithmic scaling?
-
-  for z, b in value:
-    memory.bytes[z + startPos] = b
+    if memory.len == 0 or startPos >= memory.len: return
+    result = distinctBase(distinctBase(memory.byteCells[startPos])).addr

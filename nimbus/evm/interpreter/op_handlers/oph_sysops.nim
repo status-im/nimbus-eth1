@@ -42,30 +42,34 @@ when not defined(evmc_enabled):
 const
   returnOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf3, Halt execution returning output data.
-    let (startPos, size) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    let (startPos, size) = cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
+    cpt.gasMeter.consumeGas(
+      cpt.gasCosts[Return].m_handler(cpt.memory.len, pos, len),
       reason = "RETURN")
-    k.cpt.memory.extend(pos, len)
-    k.cpt.output = k.cpt.memory.read(pos, len)
+    cpt.memory.extend(pos, len)
+    cpt.readMemory(pos, len) do (memBytes: seq[byte]):
+      cpt.output = memBytes
 
 
   revertOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
-    let (startPos, size) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    let (startPos, size) = cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[Revert].m_handler(k.cpt.memory.len, pos, len),
+    cpt.gasMeter.consumeGas(
+      cpt.gasCosts[Revert].m_handler(cpt.memory.len, pos, len),
       reason = "REVERT")
 
-    k.cpt.memory.extend(pos, len)
-    k.cpt.output = k.cpt.memory.read(pos, len)
-    # setError(msg, false) will signal cheap revert
-    k.cpt.setError("REVERT opcode executed", false)
+    cpt.memory.extend(pos, len)
+    cpt.readMemory(pos, len) do (memBytes: seq[byte]):
+      cpt.output = memBytes
+      # setError(msg, false) will signal cheap revert
+      cpt.setError("REVERT opcode executed", false)
 
 
   invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) =
