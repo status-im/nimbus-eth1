@@ -54,6 +54,8 @@ import
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
 
+chronicles.formatIt(IoErrorCode): $it
+
 proc defaultDataDir*(): string =
   let dataDir = when defined(windows):
     "AppData" / "Roaming" / "EthData"

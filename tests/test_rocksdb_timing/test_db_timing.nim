@@ -21,12 +21,42 @@ import
   ../../nimbus/sync/snap/range_desc,
   ../../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../../nimbus/utils/prettify,
-  ../replay/[pp, undump_blocks],
-  ./test_helpers
+  ../replay/[pp, undump_blocks]
+  #./test_helpers
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc to*(b: openArray[byte]; T: type ByteArray32): T =
+  ## Convert to other representation (or exception)
+  if b.len == 32:
+    (addr result[0]).copyMem(unsafeAddr b[0], 32)
+  else:
+    doAssert b.len == 32
+
+proc to*(b: openArray[byte]; T: type ByteArray33): T =
+  ## Convert to other representation (or exception)
+  if b.len == 33:
+    (addr result[0]).copyMem(unsafeAddr b[0], 33)
+  else:
+    doAssert b.len == 33
+
+proc to*(b: ByteArray32|ByteArray33; T: type Blob): T =
+  b.toSeq
+
+proc to*(b: openArray[byte]; T: type NodeTag): T =
+  ## Convert from serialised equivalent
+  UInt256.fromBytesBE(b).T
+
+proc to*(w: (byte, NodeTag); T: type Blob): T =
+  let (b,t) = w
+  @[b] & toSeq(t.UInt256.toBytesBE)
+
+proc to*(t: NodeTag; T: type Blob): T =
+  toSeq(t.UInt256.toBytesBE)
+
+# ----------------
 
 proc thisRecord(r: rocksdb_iterator_t): (Blob,Blob) =
   var kLen, vLen:  csize_t
@@ -45,6 +75,32 @@ proc meanStdDev(sum, sqSum: float; length: int): (float,float) =
     result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
 # ------------------------------------------------------------------------------
+# Public functions, pretty printing
+# ------------------------------------------------------------------------------
+
+proc pp*(d: Duration): string =
+  if 40 < d.inSeconds:
+    d.ppMins
+  elif 200 < d.inMilliseconds:
+    d.ppSecs
+  elif 200 < d.inMicroseconds:
+    d.ppMs
+  else:
+    d.ppUs
+
+proc ppKvPc*(w: openArray[(string,int)]): string =
+  w.mapIt(&"{it[0]}={it[1]}%").join(", ")
+
+proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+  if noisy:
+    if args.len == 0:
+      echo "*** ", pfx
+    elif 0 < pfx.len and pfx[^1] != ' ':
+      echo pfx, " ", args.toSeq.join
+    else:
+      echo pfx, args.toSeq.join
+
+# ------------------------------------------------------------------------------
 # Public test function: setup
 # ------------------------------------------------------------------------------
 
@@ -58,7 +114,7 @@ proc test_dbTimingUndumpBlocks*(
   ## Store persistent blocks from dump into chain DB
   let chain = com.newChain
 
-  for w in filePath.undumpNextGroup:
+  for w in filePath.undumpBlocks:
     let (fromBlock, toBlock) = (w[0][0].blockNumber, w[0][^1].blockNumber)
     if fromBlock == 0.u256:
       doAssert w[0][0] == com.db.getBlockHeader(0.u256)
@@ -69,7 +125,7 @@ proc test_dbTimingUndumpBlocks*(
     check chain.persistBlocks(w[0], w[1]) == ValidationResult.OK
     if numBlocks.toBlockNumber <= w[0][^1].blockNumber:
       break
-  
+
 proc test_dbTimingRockySetup*(
     noisy: bool;
     t32: var Table[ByteArray32,Blob],
@@ -117,7 +173,7 @@ proc test_dbTimingRockySetup*(
     &"size={t32.len} valLen={(mean32+0.5).int}({(stdv32+0.5).int})",
     ", key 33 table: ",
     &"size={t33.len} valLen={(mean33+0.5).int}({(stdv33+0.5).int})"
-      
+
 # ------------------------------------------------------------------------------
 # Public test function: timing
 # ------------------------------------------------------------------------------

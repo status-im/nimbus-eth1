@@ -24,42 +24,72 @@ template say(args: varargs[untyped]) =
   # echo args
   discard
 
+proc startAt(
+    h: openArray[BlockHeader];
+    b: openArray[BlockBody];
+    start: uint64;
+      ): (seq[BlockHeader],seq[BlockBody]) =
+  ## Filter out blocks with smaller `blockNumber`
+  if start.toBlockNumber <= h[0].blockNumber:
+    return (h.toSeq,b.toSeq)
+  if start.toBlockNumber <= h[^1].blockNumber:
+    # There are at least two headers, find the least acceptable one
+    var n = 1
+    while h[n].blockNumber < start.toBlockNumber:
+      n.inc
+    return (h[n ..< h.len], b[n ..< b.len])
+
+proc stopAfter(
+    h: openArray[BlockHeader];
+    b: openArray[BlockBody];
+    last: uint64;
+      ): (seq[BlockHeader],seq[BlockBody]) =
+  ## Filter out blocks with larger `blockNumber`
+  if h[^1].blockNumber <= last.toBlockNumber:
+    return (h.toSeq,b.toSeq)
+  if h[0].blockNumber <= last.toBlockNumber:
+    # There are at least two headers, find the last acceptable one
+    var n = 1
+    while h[n].blockNumber <= last.toBlockNumber:
+      n.inc
+    return (h[0 ..< n], b[0 ..< n])
+
 # ------------------------------------------------------------------------------
 # Public capture
 # ------------------------------------------------------------------------------
 
-proc dumpGroupBegin*(headers: openArray[BlockHeader]): string =
+proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
   & "transaction #{headers[0].blockNumber} {headers.len}"
 
-proc dumpGroupBlock*(header: BlockHeader; body: BlockBody): string =
+proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
   &"block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
 
-proc dumpGroupEnd*: string =
+proc dumpBlocksEnd*: string =
   "commit"
 
 
-proc dumpGroupEndNl*: string =
-  dumpGroupEnd() & "\n\n"
+proc dumpBlocksEndNl*: string =
+  dumpBlocksEnd() & "\n\n"
 
-proc dumpGroupBlockNl*(header: BlockHeader; body: BlockBody): string =
-  dumpGroupBlock(header, body) & "\n"
+proc dumpBlocksListNl*(header: BlockHeader; body: BlockBody): string =
+  dumpBlocksList(header, body) & "\n"
 
-proc dumpGroupBeginNl*(db: ChainDBRef;
+proc dumpBlocksBeginNl*(db: ChainDBRef;
                        headers: openArray[BlockHeader]): string =
   if headers[0].blockNumber == 1.u256:
     let
       h0 = db.getBlockHeader(0.u256)
       b0 = db.getBlockBody(h0.blockHash)
     result = "" &
-      dumpGroupBegin(@[h0]) & "\n" &
-      dumpGroupBlockNl(h0,b0) &
-      dumpGroupEndNl()
+      dumpBlocksBegin(@[h0]) & "\n" &
+      dumpBlocksListNl(h0,b0) &
+      dumpBlocksEndNl()
 
-  result &= dumpGroupBegin(headers) & "\n"
+  result &= dumpBlocksBegin(headers) & "\n"
 
 
-proc dumpGroupNl*(db: ChainDBRef; headers: openArray[BlockHeader];
-                  bodies: openArray[BlockBody]): string =
+proc dumpBlocksNl*(db: ChainDBRef; headers: openArray[BlockHeader];
+                   bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:
   ## ::
@@ -73,17 +103,17 @@ proc dumpGroupNl*(db: ChainDBRef; headers: openArray[BlockHeader];
   ##   if dumpStream.isNil:
   ##     doAssert dumpStream.open("./dump-stream.out", fmWrite)
   ##
-  db.dumpGroupBeginNl(headers) &
+  db.dumpBlocksBeginNl(headers) &
     toSeq(countup(0, headers.len-1))
-      .mapIt(dumpGroupBlockNl(headers[it], bodies[it]))
+      .mapIt(dumpBlocksListNl(headers[it], bodies[it]))
       .join &
-    dumpGroupEndNl()
+    dumpBlocksEndNl()
 
 # ------------------------------------------------------------------------------
 # Public undump
 # ------------------------------------------------------------------------------
 
-iterator undumpNextGroup*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
+iterator undumpBlocks*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
   var
     headerQ: seq[BlockHeader]
     bodyQ: seq[BlockBody]
@@ -143,10 +173,26 @@ iterator undumpNextGroup*(gzFile: string): (seq[BlockHeader],seq[BlockBody]) =
     echo &"*** Ignoring line({lno}): {line}."
     waitFor = "transaction"
 
-iterator undumpNextGroup*(gzs: seq[string]): (seq[BlockHeader],seq[BlockBody])=
+iterator undumpBlocks*(gzs: seq[string]): (seq[BlockHeader],seq[BlockBody])=
+  ## Variant of `undumpBlocks()`
   for f in gzs:
-    for w in f.undumpNextGroup:
+    for w in f.undumpBlocks:
       yield w
+
+iterator undumpBlocks*(
+        gzFile: string;                          # Data dump file
+        least: uint64;                           # First block to extract
+        stopAfter = high(uint64);                # Last block to extract
+          ): (seq[BlockHeader],seq[BlockBody]) =
+  ## Variant of `undumpBlocks()`
+  for (seqHdr,seqBdy) in gzFile.undumpBlocks:
+    let (h,b) = startAt(seqHdr, seqBdy, least)
+    if h.len == 0:
+      continue
+    let w = stopAfter(h, b, stopAfter)
+    if w[0].len == 0:
+      break
+    yield w
 
 # ------------------------------------------------------------------------------
 # End

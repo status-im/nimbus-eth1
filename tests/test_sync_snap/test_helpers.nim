@@ -40,39 +40,15 @@ template isImportOk*(rc: Result[SnapAccountsGaps,HexaryError]): bool =
 proc lastTwo*(a: openArray[string]): seq[string] =
   if 1 < a.len: @[a[^2],a[^1]] else: a.toSeq
 
+proc isOK*(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
+
 # ------------------------------------------------------------------------------
 # Public type conversions
 # ------------------------------------------------------------------------------
 
-proc to*(b: openArray[byte]; T: type ByteArray32): T =
-  ## Convert to other representation (or exception)
-  if b.len == 32:
-    (addr result[0]).copyMem(unsafeAddr b[0], 32)
-  else:
-    doAssert b.len == 32
-
-proc to*(b: openArray[byte]; T: type ByteArray33): T =
-  ## Convert to other representation (or exception)
-  if b.len == 33:
-    (addr result[0]).copyMem(unsafeAddr b[0], 33)
-  else:
-    doAssert b.len == 33
-
-proc to*(b: ByteArray32|ByteArray33; T: type Blob): T =
-  b.toSeq
-
-proc to*(b: openArray[byte]; T: type NodeTag): T =
-  ## Convert from serialised equivalent
-  UInt256.fromBytesBE(b).T
-
-proc to*(w: (byte, NodeTag); T: type Blob): T =
-  let (b,t) = w
-  @[b] & toSeq(t.UInt256.toBytesBE)
-
 proc to*(t: NodeTag; T: type Blob): T =
   toSeq(t.UInt256.toBytesBE)
-
-# ----------
 
 proc convertTo*(key: RepairKey; T: type NodeKey): T =
   ## Might be lossy, check before use (if at all, unless debugging)
@@ -87,19 +63,6 @@ proc pp*(rc: Result[Account,HexaryError]): string =
 
 proc pp*(a: NodeKey; collapse = true): string =
   a.to(Hash256).pp(collapse)
-
-proc pp*(d: Duration): string =
-  if 40 < d.inSeconds:
-    d.ppMins
-  elif 200 < d.inMilliseconds:
-    d.ppSecs
-  elif 200 < d.inMicroseconds:
-    d.ppMs
-  else:
-    d.ppUs
-
-proc ppKvPc*(w: openArray[(string,int)]): string =
-  w.mapIt(&"{it[0]}={it[1]}%").join(", ")
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
   if noisy:

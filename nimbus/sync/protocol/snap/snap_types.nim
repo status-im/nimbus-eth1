@@ -207,7 +207,7 @@ method getByteCodes*(
     nodes: openArray[Hash256];
     replySizeMax: uint64;
       ): seq[Blob]
-      {.base.} =
+      {.base, raises: [CatchableError].} =
   notImplemented("getByteCodes")
 
 method getTrieNodes*(

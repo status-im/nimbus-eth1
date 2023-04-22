@@ -24,8 +24,9 @@ type
     TrieLoopAlert
     TrieIsEmpty
     TrieIsLockedForPerusal
-    TooManyProcessedChunks
-    TooManySlotAccounts
+    TooManyChunksInAccountsQueue
+    TooManyQueuedStorageSlots
+    TooManyQueuedContracts
     NoAccountsYet
 
     # debug

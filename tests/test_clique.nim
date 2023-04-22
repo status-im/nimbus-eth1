@@ -162,7 +162,7 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
 
   suite &"Replay Goerli chain from {fileInfo} capture":
 
-    for w in filePath.undumpNextGroup:
+    for w in filePath.undumpBlocks:
 
       if w[0][0].blockNumber == 0.u256:
         # Verify Genesis
@@ -248,7 +248,7 @@ proc runGoerliBaybySteps(noisy = true;
 
   suite &"Replay Goerli chain from {fileInfo} capture, single blockwise":
 
-    for w in filePath.undumpNextGroup:
+    for w in filePath.undumpBlocks:
       if stoppedOk:
         break
       if w[0][0].blockNumber == 0.u256:

@@ -29,7 +29,8 @@ logScope:
 type
   GetAccountRange* = object
     data*: PackedAccountRange             ## Re-packed reply data
-    withStorage*: seq[AccountSlotsHeader] ## Accounts with non-idle storage root
+    withStorage*: seq[AccountSlotsHeader] ## Accounts with storage root
+    withContract*: seq[AccountCodeHeader]  ## Accounts with contacts
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -70,28 +71,37 @@ proc getAccountRange*(
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetAccountRange", peer, pivot, accRange=iv
 
-  var dd = block:
+  let snAccRange = block:
     let rc = await buddy.getAccountRangeReq(stateRoot, iv, pivot)
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
       trace trSnapRecvTimeoutWaiting & "for AccountRange", peer, pivot
       return err(ComResponseTimeout)
-    let snAccRange = rc.value.get
-    GetAccountRange(
-      data:        PackedAccountRange(
-        proof:     snAccRange.proof.nodes,
-        accounts:  snAccRange.accounts
-          # Re-pack accounts data
-          .mapIt(PackedAccount(
-            accKey:  it.accHash.to(NodeKey),
-            accBlob: it.accBody.encode))),
-      withStorage: snAccRange.accounts
-        # Collect accounts with non-empty storage
-        .filterIt(it.accBody.storageRoot != emptyRlpHash).mapIt(
-          AccountSlotsHeader(
-            accKey:      it.accHash.to(NodeKey),
-            storageRoot: it.accBody.storageRoot)))
+    rc.value.get
+
+  var dd = GetAccountRange(
+    data: PackedAccountRange(
+      proof:    snAccRange.proof.nodes,
+      accounts: snAccRange.accounts
+        # Re-pack accounts data
+        .mapIt(PackedAccount(
+          accKey:  it.accHash.to(NodeKey),
+          accBlob: it.accBody.encode))))
+
+  # Collect accounts with non-empty storage or contract code
+  for w in snAccRange.accounts:
+    if w.accBody.storageRoot != EMPTY_ROOT_HASH:
+      # Collect accounts with non-empty storage
+      dd.withStorage.add AccountSlotsHeader(
+        accKey:      w.accHash.to(NodeKey),
+        storageRoot: w.accBody.storageRoot)
+    if w.accBody.codeHash != EMPTY_CODE_HASH:
+      # Collect accounts with contract data
+      dd.withContract.add AccountCodeHeader(
+        accKey:      w.accHash.to(NodeKey),
+        codeHash:    w.accBody.codeHash)
+
   let
     nAccounts = dd.data.accounts.len
     nProof = dd.data.proof.len

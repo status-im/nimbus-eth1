@@ -27,6 +27,10 @@ if defined(windows):
     # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
     switch("passL", "-Wl,--large-address-aware")
 
+  # Colors are disabled for Windows, see issue:
+  # https://github.com/status-im/nim-chronicles/issues/130
+  switch("define", "chronicles_colors=off")
+
   # Avoid some rare stack corruption while using exceptions with a SEH-enabled
   # toolchain: https://github.com/status-im/nimbus-eth2/issues/3121
   switch("define", "nimRawSetjmp")

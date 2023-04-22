@@ -28,7 +28,7 @@ type
     ## Sorted pair of `(account,state-root)` entries
 
   SnapSlotsQueue* = KeyedQueue[Hash256,SnapSlotsQueueItemRef]
-    ## Handles list of storage slots data for fetch indexed by storage root.
+    ## Handles list of storage slots data to fetch, indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
     ## there is only a partial list of slots to fetch, the queue entry is
@@ -39,7 +39,10 @@ type
     ## where the optional `subRange` interval has been replaced by an interval
     ## range + healing support.
     accKey*: NodeKey                   ## Owner account
-    slots*: SnapRangeBatchRef          ## slots to fetch, nil => all slots
+    slots*: SnapRangeBatchRef          ## Clots to fetch, nil => all slots
+
+  SnapCtraQueue* = KeyedQueue[Hash256,NodeKey]
+    ## Handles hash key list of contract data to fetch with accounts associated
 
   SnapTodoRanges* = array[2,NodeTagRangeSet]
     ## Pair of sets of ``unprocessed`` node ranges that need to be fetched and
@@ -60,6 +63,9 @@ type
     # Accounts download coverage
     fetchAccounts*: SnapRangeBatchRef  ## Set of accounts ranges to fetch
 
+    # Contract code queue
+    fetchContracts*: SnapCtraQueue     ## Contacts to fetch & store
+
     # Storage slots download
     fetchStorageFull*: SnapSlotsQueue  ## Fetch storage trie for these accounts
     fetchStoragePart*: SnapSlotsQueue  ## Partial storage trie to com[plete
@@ -68,6 +74,7 @@ type
     # Info
     nAccounts*: uint64                 ## Imported # of accounts
     nSlotLists*: uint64                ## Imported # of account storage tries
+    nContracts*: uint64                ## Imported # of contract code sets
 
     # Checkponting
     savedFullPivotOk*: bool            ## This fully completed pivot was saved

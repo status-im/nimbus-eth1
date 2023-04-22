@@ -291,7 +291,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 
     test &"Import from {fileInfo}":
       # Import minimum amount of blocks, then collect transactions
-      for chain in filePath.undumpNextGroup:
+      for chain in filePath.undumpBlocks:
         let leadBlkNum = chain[0][0].blockNumber
         topNumber = chain[0][^1].blockNumber
 

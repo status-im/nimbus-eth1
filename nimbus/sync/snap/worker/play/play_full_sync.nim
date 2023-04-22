@@ -29,6 +29,9 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
+template logTxt(info: static[string]): static[string] =
+  "Full worker " & info
+
 template ignoreException(info: static[string]; code: untyped) =
   try:
     code
@@ -76,7 +79,7 @@ proc processStaged(buddy: SnapBuddyRef): bool =
       bq.blockQueueAccept(wi)
       return true
   except CatchableError as e:
-    error "Storing persistent blocks failed", peer, range=($wi.blocks),
+    error logTxt "storing persistent blocks failed", peer, range=($wi.blocks),
       name=($e.name), msg=(e.msg)
 
   # Something went wrong. Recycle work item (needs to be re-fetched, anyway)
@@ -93,7 +96,7 @@ proc processStaged(buddy: SnapBuddyRef): bool =
       buddy.ctrl.zombie = true
       return false
   except CatchableError as e:
-    error "Failed to access parent blocks", peer,
+    error logTxt "failed to access parent blocks", peer,
       blockNumber=wi.headers[0].blockNumber.toStr, name=($e.name), msg=e.msg
 
   # Parent block header problem, so we might be in the middle of a re-org.
@@ -104,10 +107,12 @@ proc processStaged(buddy: SnapBuddyRef): bool =
   if wi.topHash.isNone:
     # Assuming that currently staged entries are on the wrong branch
     bq.blockQueueRecycleStaged()
-    notice "Starting chain re-org backtrack work item", peer, range=($wi.blocks)
+    notice logTxt "starting chain re-org backtrack work item", peer,
+      range=($wi.blocks)
   else:
     # Leave that block range in the staged list
-    trace "Resuming chain re-org backtrack work item", peer, range=($wi.blocks)
+    trace logTxt "resuming chain re-org backtrack work item", peer,
+      range=($wi.blocks)
     discard
 
   return false
@@ -125,7 +130,7 @@ proc fullSyncSetup(ctx: SnapCtxRef) =
   ctx.pool.ticker.init(cb = ctx.tickerUpdater())
 
 proc fullSyncRelease(ctx: SnapCtxRef) =
-  discard
+  ctx.pool.ticker.stop()
 
 
 proc fullSyncStart(buddy: SnapBuddyRef): bool =
@@ -171,9 +176,12 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
         # Start() method failed => wait for another peer
         buddy.ctrl.stopped = true
     if last:
-      trace "Soft full sync restart done", peer=buddy.peer, last, laps,
+      trace logTxt "soft restart done", peer=buddy.peer, last, laps,
         pivot=env.stateHeader.blockNumber.toStr,
         mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
+
+      # Kick off ticker (was stopped by snap `release()` method)
+      ctx.pool.ticker.start()
 
       # Store pivot as parent hash in database
       ctx.pool.snapDb.kvDb.persistentBlockHeaderPut env.stateHeader
@@ -181,7 +189,7 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
       # Instead of genesis.
       ctx.chain.com.startOfHistory = env.stateHeader.blockHash
 
-      # Reset so that this actuin would not be triggered, again
+      # Reset so that this action would not be triggered, again
       ctx.pool.fullPivot = nil
     return false # do stop magically when looping over peers is exhausted
 
@@ -202,13 +210,13 @@ proc fullSyncSingle(buddy: SnapBuddyRef) {.async.} =
     bq.bestNumber = some(pv.pivotHeader.value.blockNumber)
     buddy.ctrl.multiOk = true
     when extraTraceMessages:
-      trace "Full sync pivot accepted", peer=buddy.peer,
+      trace logTxt "pivot accepted", peer=buddy.peer,
         minNumber=bNum.toStr, bestNumber=bq.bestNumber.unsafeGet.toStr
     return
 
   if buddy.ctrl.stopped:
     when extraTraceMessages:
-      trace "Full sync single mode stopped", peer=buddy.peer
+      trace logTxt "single mode stopped", peer=buddy.peer
     return # done with this buddy
 
   # Without waiting, this function repeats every 50ms (as set with the constant
@@ -229,12 +237,12 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
       # Mind the gap: Turn on pool mode if there are too may staged items.
       ctx.poolMode = true
     else:
-      trace "Full sync error", peer=buddy.peer, error=rc.error
+      trace logTxt "error", peer=buddy.peer, error=rc.error
       return
 
   # Update persistent database
   while buddy.processStaged() and not buddy.ctrl.stopped:
-    trace "Full sync multi processed", peer=buddy.peer
+    trace logTxt "multi processed", peer=buddy.peer
     # Allow thread switch as `persistBlocks()` might be slow
     await sleepAsync(10.milliseconds)
 

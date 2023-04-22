@@ -29,7 +29,10 @@ import
   ],
   ./network/wire/[portal_stream, portal_protocol_config],
   ./eth_data/history_data_ssz_e2s,
-  ./content_db
+  ./content_db,
+  ./version, ./logging
+
+chronicles.formatIt(IoErrorCode): $it
 
 proc initBeaconLightClient(
       network: LightClientNetwork, networkData: NetworkInitData,
@@ -96,6 +99,11 @@ proc initBeaconLightClient(
   lc
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
+  setupLogging(config.logLevel, config.logStdout)
+
+  notice "Launching Fluffy",
+    version = fullVersionStr, cmdParams = commandLineParams()
+
   # Make sure dataDir exists
   let pathExists = createPath(config.dataDir.string)
   if pathExists.isErr():
@@ -269,8 +277,6 @@ when isMainModule:
   {.pop.}
   let config = PortalConf.load()
   {.push raises: [].}
-
-  setLogLevel(config.logLevel)
 
   case config.cmd
   of PortalCmd.noCommand:

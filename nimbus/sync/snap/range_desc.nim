@@ -66,6 +66,11 @@ type
     accKey*: NodeKey
     accBlob*: Blob
 
+  AccountCodeHeader* = object
+    ## Contract code header
+    accKey*: NodeKey                ## Owner account
+    codeHash*: Hash256              ## Contarct code hash
+
   AccountSlotsHeader* = object
     ## Storage root header
     accKey*: NodeKey                ## Owner account, maybe unnecessary

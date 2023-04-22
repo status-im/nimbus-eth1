@@ -10,15 +10,15 @@
 
 ## Note: this module is currently unused
 
+{.push raises: [Defect].}
+
 import
-  std/[options, sequtils],
+  std/[hashes, options, sequtils],
   chronos,
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
-  "../.."/[range_desc, worker_desc],
+  "../.."/[constants, range_desc, worker_desc],
   ./com_error
-
-{.push raises: [Defect].}
 
 logScope:
   topics = "snap-fetch"
@@ -29,7 +29,8 @@ type
 
   GetByteCodes* = object
     leftOver*: seq[NodeKey]
-    kvPairs*: seq[(Nodekey,Blob)]
+    extra*: seq[(NodeKey,Blob)]
+    kvPairs*: seq[(NodeKey,Blob)]
 
 const
   emptyBlob = seq[byte].default
@@ -46,7 +47,7 @@ proc getByteCodesReq(
   let
     peer = buddy.peer
   try:
-    let reply = await peer.getByteCodes(keys, snapRequestBytesLimit)
+    let reply = await peer.getByteCodes(keys, fetchRequestBytesLimit)
     return ok(reply)
 
   except CatchableError as e:
@@ -73,12 +74,10 @@ proc getByteCodes*(
     return err(ComEmptyRequestArguments)
 
   if trSnapTracePacketsOk:
-    trace trSnapSendSending & "GetByteCodes", peer,
-      nkeys, bytesLimit=snapRequestBytesLimit
+    trace trSnapSendSending & "GetByteCodes", peer, nkeys
 
   let byteCodes = block:
-    let rc = await buddy.getByteCodesReq(
-      keys.mapIt(Hash256(data: it.ByteArray32)))
+    let rc = await buddy.getByteCodesReq keys.mapIt(it.to(Hash256))
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
@@ -109,18 +108,22 @@ proc getByteCodes*(
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
-  var dd: GetByteCodes
+  var
+    dd: GetByteCodes
+    req = keys.toHashSet
 
   for n in 0 ..< nCodes:
-    if byteCodes[n].len == 0:
-      dd.leftOver.add keys[n]
+    let key = byteCodes[n].keccakHash.to(NodeKey)
+    if key in req:
+      dd.kvPairs.add (key, byteCodes[n])
+      req.excl key
     else:
-      dd.kvPairs.add (keys[n], byteCodes[n])
+      dd.extra.add (key, byteCodes[n])
 
-  dd.leftOver.add keys[byteCodes.len+1 ..< nKeys]
+  dd.leftOver = req.toSeq
 
   trace trSnapRecvReceived & "ByteCodes", peer,
-    nKeys, nCodes, nLeftOver=dd.leftOver.len
+    nKeys, nCodes, nLeftOver=dd.leftOver.len, nExtra=dd.extra.len
 
   return ok(dd)
 

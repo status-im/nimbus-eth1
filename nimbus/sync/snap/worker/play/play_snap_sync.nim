@@ -283,7 +283,7 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 
   when extraTraceMessages:
     trace "Multi sync runner", peer, pivot, nAccounts=env.nAccounts,
-      processed=fa.processed.fullPC3, nStoQu=env.storageQueueTotal(),
+      processed=fa.processed.fullPC3, nStoQ=env.storageQueueTotal(),
       nSlotLists=env.nSlotLists
 
   # This one is the syncing work horse which downloads the database
@@ -307,12 +307,12 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   if rc.isOk:
     when extraTraceMessages:
       trace logTxt "saved checkpoint", peer, pivot, nAccounts,
-        processed, nStoQu=env.storageQueueTotal(),  nSlotLists,
+        processed, nStoQ=env.storageQueueTotal(),  nSlotLists,
         blobSize=rc.value
     return
 
   error logTxt "failed to save checkpoint", peer, pivot, nAccounts,
-    processed, nStoQu=env.storageQueueTotal(), nSlotLists,
+    processed, nStoQ=env.storageQueueTotal(), nSlotLists,
     error=rc.error
 
   # Check whether this pivot is fully downloaded

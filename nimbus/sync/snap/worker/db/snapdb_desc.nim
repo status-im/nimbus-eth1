@@ -143,6 +143,10 @@ proc rockDb*(ps: SnapDbBaseRef): RocksStoreRef =
   ## Getter, low level access to underlying persistent rock DB interface
   ps.base.rocky
 
+proc rockDb*(pv: SnapDbRef): RocksStoreRef =
+  ## Getter  variant
+  pv.rocky
+
 proc kvDb*(ps: SnapDbBaseRef): TrieDatabaseRef =
   ## Getter, low level access to underlying persistent key-value DB
   ps.base.db
@@ -162,6 +166,9 @@ proc toBlockNumberKey*(a: BlockNumber): ByteArray33 =
   static:
     doAssert 32 == sizeof BlockNumber # needed in `blockNumberToHashKey()`
   a.blockNumberToHashKey.data
+
+proc toContractHashKey*(a: NodeKey): ByteArray33 =
+  a.to(Hash256).contractHashKey.data
 
 when false:
   proc toAccountsKey*(a: NodeKey): ByteArray33 =
