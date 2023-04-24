@@ -70,9 +70,9 @@ template tracerFrameBuddy(f: static[string]; b: SnapBuddyRef; code: untyped) =
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
-proc runSetup(ctx: SnapCtxRef; ticker: bool): bool =
+proc runSetup(ctx: SnapCtxRef): bool =
   tracerFrameCtx("runSetup", ctx):
-    result = worker.setup(ctx,ticker)
+    result = worker.setup(ctx)
 
 proc runRelease(ctx: SnapCtxRef) =
   tracerFrameCtx("runRelease", ctx):
@@ -117,9 +117,10 @@ proc init*(
     exCtrlFile = none(string);
       ): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, enableTicker, exCtrlFile)
+  result.initSync(ethNode, chain, maxPeers, exCtrlFile)
   result.ctx.chain = chain # explicitely override
   result.ctx.pool.rng = rng
+  result.ctx.pool.enableTicker = enableTicker
   result.ctx.pool.dbBackend = dbBackend
   # Required to have been initialised via `addEthHandlerCapability()`
   doAssert not result.ctx.ethWireCtx.isNil

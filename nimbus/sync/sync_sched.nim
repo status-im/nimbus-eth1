@@ -13,7 +13,7 @@
 ##
 ## Virtual method/interface functions to be provided as `mixin`:
 ##
-## *runSetup(ctx: CtxRef[S]; tickerOK: bool): bool*
+## *runSetup(ctx: CtxRef[S]): bool*
 ##   Global set up. This function will be called before any worker peer is
 ##   started. If that function returns `false`, no worker peers will be run.
 ##
@@ -112,7 +112,6 @@ type
     ctx*: CtxRef[S]             ## Shared data
     pool: PeerPool              ## For starting the system
     buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
-    tickerOk: bool              ## Ticker logger
     daemonRunning: bool         ## Run global background job
     singleRunLock: bool         ## Some single mode runner is activated
     monitorLock: bool           ## Monitor mode is activated
@@ -350,7 +349,6 @@ proc initSync*[S,W](
     node: EthereumNode;
     chain: ChainRef,
     slots: int;
-    noisy = false;
     exCtrlFile = none(string);
       ) =
   ## Constructor
@@ -363,14 +361,13 @@ proc initSync*[S,W](
     exCtrlFile: exCtrlFile,
     chain: chain)
   dsc.pool = node.peerPool
-  dsc.tickerOk = noisy
   dsc.buddies.init(dsc.ctx.buddiesMax)
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
   ## Set up `PeerObserver` handlers and start syncing.
   mixin runSetup
   # Initialise sub-systems
-  if dsc.ctx.runSetup(dsc.tickerOk):
+  if dsc.ctx.runSetup():
     var po = PeerObserver(
       onPeerConnected:
         proc(p: Peer) {.gcsafe.} =

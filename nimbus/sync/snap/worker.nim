@@ -39,10 +39,10 @@ template ignoreException(info: static[string]; code: untyped) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setupTicker(ctx: SnapCtxRef; tickerOK: bool) =
+proc setupTicker(ctx: SnapCtxRef) =
   let blindTicker: TickerSnapStatsUpdater = proc: TickerSnapStats =
     discard
-  if tickerOK:
+  if ctx.pool.enableTicker:
     ctx.pool.ticker = TickerRef.init(blindTicker)
 
 proc releaseTicker(ctx: SnapCtxRef) =
@@ -62,19 +62,19 @@ proc setupSnapDb(ctx: SnapCtxRef) =
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc setup*(ctx: SnapCtxRef; tickerOK: bool): bool =
+proc setup*(ctx: SnapCtxRef): bool =
   ## Global set up
   ctx.passSetup()               # Set up sync sub-mode specs.
   ctx.setupSnapDb()             # Set database backend, subject to change
-  ctx.setupTicker(tickerOK)     # Start log/status ticker (if any)
-
-  ignoreException("setup"):
-    ctx.passActor.setup(ctx)
+  ctx.setupTicker()             # Start log/status ticker (if any)
 
   # Experimental, also used for debugging
   if ctx.exCtrlFile.isSome:
     warn "Snap sync accepts pivot block number or hash",
       syncCtrlFile=ctx.exCtrlFile.get
+
+  ignoreException("setup"):
+    ctx.passActor.setup(ctx)
   true
 
 proc release*(ctx: SnapCtxRef) =

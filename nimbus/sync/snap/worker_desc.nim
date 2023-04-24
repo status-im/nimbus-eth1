@@ -121,7 +121,8 @@ type
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
 
     # Info
-    ticker*: TickerRef                 ## Ticker, logger
+    enableTicker*: bool                ## Advisary, extra level of gossip
+    ticker*: TickerRef                 ## Ticker, logger descriptor
 
     # Snap/full mode muliplexing
     syncMode*: SnapSyncSpecs           ## Sync mode methods & data
