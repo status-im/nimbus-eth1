@@ -14,8 +14,7 @@ import
   eth/p2p,
   chronos,
   ../sync_desc,
-  ../misc/[best_pivot, block_queue],
-  ./ticker
+  ../misc/[best_pivot, block_queue, ticker]
 
 type
   PivotState* = enum
@@ -38,6 +37,8 @@ type
     pivotStamp*: Moment             ## `PivotState` driven timing control
     bCtx*: BlockQueueCtxRef         ## Global block queue descriptor
     suspendAt*: BlockNumber         ## Suspend if persistent head is larger
+
+    enableTicker*: bool             ## Advisary, extra level of gossip
     ticker*: TickerRef              ## Logger ticker
 
   FullBuddyRef* = BuddyRef[FullCtxData,FullBuddyData]

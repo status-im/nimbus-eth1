@@ -16,12 +16,14 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
-  ../misc/[best_pivot, block_queue],
+  ../misc/[best_pivot, block_queue, ticker],
   ../sync_desc,
-  ./worker/com/com_error,
+  ./worker/get/get_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
-  ./worker/ticker,
   ./range_desc
+
+export
+  sync_desc # worker desc prototype
 
 type
   SnapAccountsList* = SortedSet[NodeTag,Hash256]
@@ -93,24 +95,24 @@ type
 
   SnapBuddyData* = object
     ## Per-worker local descriptor data extension
-    errors*: ComErrorStatsRef          ## For error handling
+    errors*: GetErrorStatsRef          ## For error handling
 
     # Full sync continuation parameters
     bPivot*: BestPivotWorkerRef        ## Local pivot worker descriptor
     bQueue*: BlockQueueWorkerRef       ## Block queue worker
 
-  SnapSyncModeType* = enum
+  SnapSyncPassType* = enum
     ## Current sync mode, after a snapshot has been downloaded, the system
     ## proceeds with full sync.
     SnapSyncMode = 0                   ## Start mode
     FullSyncMode
 
-  SnapSyncSpecs* = object
+  SnapSyncPass* = object
     ## Full specs for all sync modes. This table must be held in the main
     ## descriptor and initialised at run time. The table values are opaque
     ## and will be specified in the worker module(s).
-    active*: SnapSyncModeType
-    tab*: array[SnapSyncModeType,RootRef]
+    active*: SnapSyncPassType
+    tab*: array[SnapSyncPassType,RootRef]
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -118,21 +120,23 @@ type
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
 
-    # Pivot table
+    # Info
+    enableTicker*: bool                ## Advisary, extra level of gossip
+    ticker*: TickerRef                 ## Ticker, logger descriptor
+
+    # Snap/full mode muliplexing
+    syncMode*: SnapSyncPass            ## Sync mode methods & data
+
+    # Snap sync parameters, pivot table
     pivotTable*: SnapPivotTable        ## Per state root environment
+    completePivot*: SnapPivotRef       ## Start full sync from here
     beaconHeader*: BlockHeader         ## Running on beacon chain
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
 
-    # Info
-    ticker*: TickerRef                 ## Ticker, logger
-
-    # Snap/full mode muliplexing
-    syncMode*: SnapSyncSpecs           ## Sync mode methods & data
-    fullPivot*: SnapPivotRef           ## Start full sync from here
-
     # Full sync continuation parameters
+    fullHeader*: Option[BlockHeader]   ## Start full sync from here
     bPivot*: BestPivotCtxRef           ## Global pivot descriptor
     bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
 

@@ -14,16 +14,23 @@ import
   chronicles,
   chronos,
   eth/p2p,
-  ../../../misc/[best_pivot, block_queue],
-  "../../.."/[protocol, sync_desc, types],
+  stew/keyed_queue,
+  ../../../misc/[best_pivot, block_queue, ticker],
+  ../../../protocol,
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
-  ".."/[pivot, ticker],
-  play_desc
+  ../get/get_error,
+  ./pass_desc
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
+
+  dumpDatabaseOnRollOver = true # or false # <--- will go away (debugging only)
+    ## Dump database before switching to full sync (debugging, testing)
+
+when dumpDatabaseOnRollOver:
+  import ../../../../../tests/replay/undump_kvp
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -122,8 +129,8 @@ proc processStaged(buddy: SnapBuddyRef): bool =
 # ------------------------------------------------------------------------------
 
 proc fullSyncSetup(ctx: SnapCtxRef) =
-  let blockNum = if ctx.pool.fullPivot.isNil: ctx.pool.pivotTable.topNumber
-                 else: ctx.pool.fullPivot.stateHeader.blockNumber
+  let blockNum = if ctx.pool.fullHeader.isNone: 0.toBlockNumber
+                 else: ctx.pool.fullHeader.unsafeGet.blockNumber
 
   ctx.pool.bCtx = BlockQueueCtxRef.init(blockNum + 1)
   ctx.pool.bPivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
@@ -148,6 +155,7 @@ proc fullSyncStart(buddy: SnapBuddyRef): bool =
 
     ctx.pool.ticker.startBuddy()
     buddy.ctrl.multiOk = false # confirm default mode for soft restart
+    buddy.only.errors = GetErrorStatsRef()
     return true
 
 proc fullSyncStop(buddy: SnapBuddyRef) =
@@ -163,34 +171,39 @@ proc fullSyncDaemon(ctx: SnapCtxRef) {.async.} =
 
 
 proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
-  let
-    ctx = buddy.ctx
-    env = ctx.pool.fullPivot
+  let ctx = buddy.ctx
 
   # Take over soft restart after switch to full sync mode.
   # This process needs to be applied to all buddy peers.
-  if not env.isNil:
+  if ctx.pool.fullHeader.isSome:
     # Soft start all peers on the second lap.
     ignoreException("fullSyncPool"):
-      if not ctx.playMethod.start(buddy):
+      if not buddy.fullSyncStart():
         # Start() method failed => wait for another peer
         buddy.ctrl.stopped = true
     if last:
+      let stateHeader = ctx.pool.fullHeader.unsafeGet
       trace logTxt "soft restart done", peer=buddy.peer, last, laps,
-        pivot=env.stateHeader.blockNumber.toStr,
+        pivot=stateHeader.blockNumber.toStr,
         mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
 
       # Kick off ticker (was stopped by snap `release()` method)
       ctx.pool.ticker.start()
 
       # Store pivot as parent hash in database
-      ctx.pool.snapDb.kvDb.persistentBlockHeaderPut env.stateHeader
+      ctx.pool.snapDb.kvDb.persistentBlockHeaderPut stateHeader
 
       # Instead of genesis.
-      ctx.chain.com.startOfHistory = env.stateHeader.blockHash
+      ctx.chain.com.startOfHistory = stateHeader.blockHash
+
+      when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
+        # Dump database ...                  <--- will go away (debugging only)
+        let nRecords =                     # <--- will go away (debugging only)
+          ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
+        trace logTxt "dumped block chain database", nRecords
 
       # Reset so that this action would not be triggered, again
-      ctx.pool.fullPivot = nil
+      ctx.pool.fullHeader = none(BlockHeader)
     return false # do stop magically when looping over peers is exhausted
 
   # Mind the gap, fill in if necessary (function is peer independent)
@@ -250,9 +263,9 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playFullSyncSpecs*: PlaySyncSpecs =
+proc passFull*: auto =
   ## Return full sync handler environment
-  PlaySyncSpecs(
+  PassActorRef(
     setup:   fullSyncSetup,
     release: fullSyncRelease,
     start:   fullSyncStart,

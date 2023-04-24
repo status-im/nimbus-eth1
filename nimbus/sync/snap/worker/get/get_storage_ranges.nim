@@ -18,10 +18,10 @@ import
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 type
   # SnapStorage* = object
@@ -37,7 +37,7 @@ type
     data*: AccountStorageRange
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -71,8 +71,9 @@ proc getStorageRangesReq(
     return ok(reply)
 
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
-      name=($e.name), error=(e.msg)
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
+        name=($e.name), error=(e.msg)
     return err()
 
 # ------------------------------------------------------------------------------
@@ -84,7 +85,7 @@ proc getStorageRanges*(
     stateRoot: Hash256;                ## Current DB base (`pivot` for logging)
     accounts: seq[AccountSlotsHeader]; ## List of per-account storage slots
     pivot: string;                     ## For logging, instead of `stateRoot`
-      ): Future[Result[GetStorageRanges,ComError]]
+      ): Future[Result[GetStorageRanges,GetError]]
       {.async.} =
   ## Fetch data using the `snap/1` protocol, returns the range covered.
   ##
@@ -94,7 +95,7 @@ proc getStorageRanges*(
   ## are ignored for later accounts list items.)
   var nAccounts = accounts.len
   if nAccounts == 0:
-    return err(ComEmptyAccountsArguments)
+    return err(GetEmptyAccountsArguments)
 
   let
     peer {.used.} = buddy.peer
@@ -112,16 +113,18 @@ proc getStorageRanges*(
       let rc = await buddy.getStorageRangesReq(stateRoot,
         accounts.mapIt(it.accKey.to(Hash256)), iv, pivot)
       if rc.isErr:
-        return err(ComNetworkProblem)
+        return err(GetNetworkProblem)
       if rc.value.isNone:
-        trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
-          nAccounts
-        return err(ComResponseTimeout)
+        when trSnapTracePacketsOk:
+          trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
+            nAccounts
+        return err(GetResponseTimeout)
       if nAccounts < rc.value.get.slotLists.len:
         # Ooops, makes no sense
-        trace trSnapRecvReceived & "too many slot lists", peer, pivot,
-          nAccounts, nReceived=rc.value.get.slotLists.len
-        return err(ComTooManyStorageSlots)
+        when trSnapTracePacketsOk:
+          trace trSnapRecvReceived & "too many slot lists", peer, pivot,
+            nAccounts, nReceived=rc.value.get.slotLists.len
+        return err(GetTooManyStorageSlots)
       rc.value.get
 
     nSlotLists = snStoRanges.slotLists.len
@@ -136,9 +139,10 @@ proc getStorageRanges*(
     #   for any requested account hash, it must return an empty reply. It is
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
-    trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
-      nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
-    return err(ComNoStorageForAccounts)
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
+        nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
+    return err(GetNoStorageForAccounts)
 
   # Assemble return structure for given peer response
   var dd = GetStorageRanges(

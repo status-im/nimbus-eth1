@@ -15,19 +15,28 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[handlers/eth, protocol, sync_desc, types],
-  ".."/[pivot, ticker],
-  ../pivot/storage_queue_helper,
+  "../../.."/[handlers/eth, misc/ticker, protocol],
+  "../.."/[range_desc, worker_desc],
   ../db/[hexary_desc, snapdb_pivot],
-  "../.."/[range_desc, update_beacon_header, worker_desc],
-  play_desc
+  ../get/get_error,
+  ./pass_desc,
+  ./pass_snap/helper/[beacon_header, storage_queue],
+  ./pass_snap/pivot
 
 logScope:
   topics = "snap-play"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
+
+  extraScrutinyDoubleCheckCompleteness = 1_000_000
+    ## Double check database whether it is complete (debugging, testing). This
+    ## action is slow and intended for debugging and testing use, only. The
+    ## numeric value limits the action to the maximal number of account in the
+    ## database.
+    ##
+    ## Set to `0` to disable.
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -136,12 +145,14 @@ proc snapSyncCompleteOk(
   ## debugging, only and should not be used on a large database as it uses
   ## quite a bit of computation ressources.
   if env.pivotCompleteOk():
-    if env.nAccounts <= 1_000_000: # Larger sizes might be infeasible
-      if not await env.pivotVerifyComplete(ctx):
-        error logTxt "inconsistent state, pivot incomplete",
-          pivot = env.stateHeader.blockNumber.toStr
-        return false
-    ctx.pool.fullPivot = env
+    when 0 < extraScrutinyDoubleCheckCompleteness:
+      # Larger sizes might be infeasible
+      if env.nAccounts <= extraScrutinyDoubleCheckCompleteness:
+        if not await env.pivotVerifyComplete(ctx):
+          error logTxt "inconsistent state, pivot incomplete",
+            pivot=env.stateHeader.blockNumber.toStr, nAccounts=env.nAccounts
+          return false
+    ctx.pool.completePivot = env
     ctx.poolMode = true # Fast sync mode must be synchronized among all peers
     return true
 
@@ -172,6 +183,7 @@ proc snapSyncStart(buddy: SnapBuddyRef): bool =
      peer.state(protocol.eth).initialized:
     ctx.pool.ticker.startBuddy()
     buddy.ctrl.multiOk = false # confirm default mode for soft restart
+    buddy.only.errors = GetErrorStatsRef()
     return true
 
 proc snapSyncStop(buddy: SnapBuddyRef) =
@@ -186,14 +198,14 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   ##
   let
     ctx = buddy.ctx
-    env = ctx.pool.fullPivot
+    env = ctx.pool.completePivot
 
   # Check whether the snapshot is complete. If so, switch to full sync mode.
   # This process needs to be applied to all buddy peers.
   if not env.isNil:
     ignoreException("snapSyncPool"):
       # Stop all peers
-      ctx.playMethod.stop(buddy)
+      buddy.snapSyncStop()
       # After the last buddy peer was stopped switch to full sync mode
       # and repeat that loop over buddy peers for re-starting them.
       if last:
@@ -201,10 +213,12 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
           trace logTxt "switch to full sync", peer=buddy.peer, last, laps,
             pivot=env.stateHeader.blockNumber.toStr,
             mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
-        ctx.playMethod.release(ctx)
+        ctx.snapSyncRelease()
         ctx.pool.syncMode.active = FullSyncMode
-        ctx.playMethod.setup(ctx)
-        ctx.poolMode = true # repeat looping over peers
+        ctx.passActor.setup(ctx)
+        ctx.poolMode = true                         # repeat looping over peers
+        ctx.pool.fullHeader = some(env.stateHeader) # Full sync start here
+
     return false # do stop magically when looping over peers is exhausted
 
   # Clean up empty pivot slots (never the top one.) This needs to be run on
@@ -239,7 +253,7 @@ proc snapSyncSingle(buddy: SnapBuddyRef) {.async.} =
   ## * `buddy.ctrl.poolMode` is `false`
   ##
   # External beacon header updater
-  await buddy.updateBeaconHeaderFromFile()
+  await buddy.beaconHeaderUpdateFromFile()
 
   # Dedicate some process cycles to the recovery process (if any)
   if not buddy.ctx.pool.recovery.isNil:
@@ -322,9 +336,9 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playSnapSyncSpecs*: PlaySyncSpecs =
+proc passSnap*: auto =
   ## Return snap sync handler environment
-  PlaySyncSpecs(
+  PassActorRef(
     setup:   snapSyncSetup,
     release: snapSyncRelease,
     start:   snapSyncStart,

@@ -15,7 +15,6 @@ import
   chronicles,
   eth/[common, trie/db],
   ../../../../db/kvstore_rocksdb,
-  ../../../types,
   ../../range_desc,
   "."/[hexary_desc, hexary_error, rocky_bulk_load, snapdb_desc]
 

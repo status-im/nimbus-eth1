@@ -16,23 +16,21 @@ import
   chronos,
   eth/p2p, # trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
-  "../.."/[sync_desc, types],
-  ".."/[constants, range_desc, worker_desc],
-  ./db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
-  ./pivot/[heal_accounts, heal_storage_slots, range_fetch_accounts,
-           range_fetch_contracts, range_fetch_storage_slots,
-           storage_queue_helper],
-  ./ticker
+  "../../../.."/[misc/ticker, sync_desc, types],
+  "../../.."/[constants, range_desc, worker_desc],
+  ../../db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
+  ./helper/storage_queue,
+  "."/[heal_accounts, heal_storage_slots, range_fetch_accounts,
+       range_fetch_contracts, range_fetch_storage_slots]
 
 logScope:
   topics = "snap-pivot"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
-
 
 # ------------------------------------------------------------------------------
 # Private helpers, logging
@@ -101,7 +99,6 @@ proc beforeTopMostlyClean*(pivotTable: var SnapPivotTable) =
   if rc.isOk:
     rc.value.pivotMothball
 
-
 proc topNumber*(pivotTable: var SnapPivotTable): BlockNumber =
   ## Return the block number of the top pivot entry, or zero if there is none.
   let rc = pivotTable.lastValue
@@ -148,7 +145,7 @@ proc tickerStats*(
       if rSq < sqSumAv:
         result[1] = sqrt(sqSum / length.float - result[0] * result[0])
 
-  result = proc: TickerSnapStats =
+  result = proc: auto =
     var
       aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, cSum, cSqSum: float
       count = 0
@@ -471,8 +468,8 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
 # ------------------------------------------------------------------------------
 
 import
-  db/[hexary_desc, hexary_inspect, hexary_nearby, hexary_paths,
-      snapdb_storage_slots]
+  ../../db/[hexary_desc, hexary_inspect, hexary_nearby, hexary_paths,
+            snapdb_storage_slots]
 
 const
   pivotVerifyExtraBlurb = false # or true

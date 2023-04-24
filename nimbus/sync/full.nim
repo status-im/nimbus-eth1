@@ -69,9 +69,9 @@ template tracerFrameBuddy(f: static[string]; b: FullBuddyRef; code: untyped) =
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
-proc runSetup(ctx: FullCtxRef; ticker: bool): bool =
+proc runSetup(ctx: FullCtxRef): bool =
   tracerFrameCtx("runSetup", ctx):
-    result = worker.setup(ctx,ticker)
+    result = worker.setup(ctx)
 
 proc runRelease(ctx: FullCtxRef) =
   tracerFrameCtx("runRelease", ctx):
@@ -115,9 +115,9 @@ proc init*(
     exCtrlFile = none(string);
       ): T =
   new result
-  result.initSync(ethNode, chain, maxPeers, enableTicker, exCtrlFile)
+  result.initSync(ethNode, chain, maxPeers, exCtrlFile)
   result.ctx.pool.rng = rng
-
+  result.ctx.pool.enableTicker = enableTicker
 
 proc start*(ctx: FullSyncRef) =
   doAssert ctx.startSync()

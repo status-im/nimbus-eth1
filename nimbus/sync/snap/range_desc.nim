@@ -20,6 +20,9 @@ import
   ../protocol,
   ../types
 
+export
+  types
+
 type
   ByteArray32* = array[32,byte]
     ## Used for 32 byte database keys

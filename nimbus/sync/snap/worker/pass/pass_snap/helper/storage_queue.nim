@@ -15,9 +15,8 @@ import
   chronicles,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
-  ../../../sync_desc,
-  "../.."/[constants, range_desc, worker_desc],
-  ../db/[hexary_inspect, snapdb_storage_slots]
+  "../../../.."/[constants, range_desc, worker_desc],
+  ../../../db/[hexary_inspect, snapdb_storage_slots]
 
 logScope:
   topics = "snap-slots"

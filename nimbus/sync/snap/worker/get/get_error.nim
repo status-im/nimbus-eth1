@@ -8,15 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   chronos,
   ../../../sync_desc,
   ../../constants
 
-{.push raises: [].}
-
 type
-  ComErrorStatsRef* = ref object
+  GetErrorStatsRef* = ref object
     ## particular error counters so connections will not be cut immediately
     ## after a particular error.
     peerDegraded*: bool
@@ -24,40 +24,40 @@ type
     nNoData*: uint
     nNetwork*: uint
 
-  ComError* = enum
-    ComNothingSerious
-    ComAccountsMaxTooLarge
-    ComAccountsMinTooSmall
-    ComEmptyAccountsArguments
-    ComEmptyPartialRange
-    ComEmptyRequestArguments
-    ComNetworkProblem
-    ComNoAccountsForStateRoot
-    ComNoByteCodesAvailable
-    ComNoHeaderAvailable
-    ComNoStorageForAccounts
-    ComNoTrieNodesAvailable
-    ComResponseTimeout
-    ComTooManyByteCodes
-    ComTooManyHeaders
-    ComTooManyStorageSlots
-    ComTooManyTrieNodes
+  GetError* = enum
+    GetNothingSerious
+    GetAccountsMaxTooLarge
+    GetAccountsMinTooSmall
+    GetEmptyAccountsArguments
+    GetEmptyPartialRange
+    GetEmptyRequestArguments
+    GetNetworkProblem
+    GetNoAccountsForStateRoot
+    GetNoByteCodesAvailable
+    GetNoHeaderAvailable
+    GetNoStorageForAccounts
+    GetNoTrieNodesAvailable
+    GetResponseTimeout
+    GetTooManyByteCodes
+    GetTooManyHeaders
+    GetTooManyStorageSlots
+    GetTooManyTrieNodes
 
 
-proc resetComError*(stats: ComErrorStatsRef) =
+proc getErrorReset*(stats: GetErrorStatsRef) =
   ## Reset error counts after successful network operation
   stats[].reset
 
-proc stopAfterSeriousComError*(
+proc getErrorStopAfterSeriousOne*(
     ctrl: BuddyCtrlRef;
-    error: ComError;
-    stats: ComErrorStatsRef;
+    error: GetError;
+    stats: GetErrorStatsRef;
       ): Future[bool]
       {.async.} =
   ## Error handling after data protocol failed. Returns `true` if the current
   ## worker should be terminated as *zombie*.
   case error:
-  of ComResponseTimeout:
+  of GetResponseTimeout:
     stats.nTimeouts.inc
     if comErrorsTimeoutMax < stats.nTimeouts:
       # Mark this peer dead, i.e. avoid fetching from this peer for a while
@@ -69,7 +69,7 @@ proc stopAfterSeriousComError*(
       # Otherwise try again some time later.
       await sleepAsync(comErrorsTimeoutSleepMSecs.milliseconds)
 
-  of ComNetworkProblem:
+  of GetNetworkProblem:
     stats.nNetwork.inc
     if comErrorsNetworkMax < stats.nNetwork:
       ctrl.zombie = true
@@ -80,11 +80,11 @@ proc stopAfterSeriousComError*(
       # Otherwise try again some time later.
       await sleepAsync(comErrorsNetworkSleepMSecs.milliseconds)
 
-  of ComNoAccountsForStateRoot,
-     ComNoByteCodesAvailable,
-     ComNoStorageForAccounts,
-     ComNoHeaderAvailable,
-     ComNoTrieNodesAvailable:
+  of GetNoAccountsForStateRoot,
+     GetNoByteCodesAvailable,
+     GetNoStorageForAccounts,
+     GetNoHeaderAvailable,
+     GetNoTrieNodesAvailable:
     stats.nNoData.inc
     if comErrorsNoDataMax < stats.nNoData:
       # Mark this peer dead, i.e. avoid fetching from this peer for a while
@@ -95,20 +95,20 @@ proc stopAfterSeriousComError*(
       # Otherwise try again some time later.
       await sleepAsync(comErrorsNoDataSleepMSecs.milliseconds)
 
-  of ComAccountsMinTooSmall,
-     ComAccountsMaxTooLarge,
-     ComTooManyByteCodes,
-     ComTooManyHeaders,
-     ComTooManyStorageSlots,
-     ComTooManyTrieNodes:
+  of GetAccountsMinTooSmall,
+     GetAccountsMaxTooLarge,
+     GetTooManyByteCodes,
+     GetTooManyHeaders,
+     GetTooManyStorageSlots,
+     GetTooManyTrieNodes:
     # Mark this peer dead, i.e. avoid fetching from this peer for a while
     ctrl.zombie = true
     return true
 
-  of ComEmptyAccountsArguments,
-     ComEmptyRequestArguments,
-     ComEmptyPartialRange,
-     ComNothingSerious:
+  of GetEmptyAccountsArguments,
+     GetEmptyRequestArguments,
+     GetEmptyPartialRange,
+     GetError(0):
     discard
 
 # End
