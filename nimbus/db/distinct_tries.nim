@@ -27,10 +27,10 @@ proc isPruning*  (trie: AccountsTrie | StorageTrie): bool            = distinctB
 
 
 template initAccountsTrie*(db: DB, rootHash: KeccakHash, isPruning = true): AccountsTrie =
-  AccountsTrie(initSecureHexaryTrie(db, rootHash, isPruning))
+  AccountsTrie(initSecureHexaryTrie(db, rootHash, isPruning, true))
 
 template initAccountsTrie*(db: DB, isPruning = true): AccountsTrie =
-  AccountsTrie(initSecureHexaryTrie(db, isPruning))
+  AccountsTrie(initSecureHexaryTrie(db, isPruning, true))
 
 proc getAccountBytes*(trie: AccountsTrie, address: EthAddress): seq[byte] =
   SecureHexaryTrie(trie).get(address)
@@ -47,10 +47,10 @@ proc delAccountBytes*(trie: var AccountsTrie, address: EthAddress) =
 
 
 template initStorageTrie*(db: DB, rootHash: KeccakHash, isPruning = true): StorageTrie =
-  StorageTrie(initSecureHexaryTrie(db, rootHash, isPruning))
+  StorageTrie(initSecureHexaryTrie(db, rootHash, isPruning, true))
 
 template initStorageTrie*(db: DB, isPruning = true): StorageTrie =
-  StorageTrie(initSecureHexaryTrie(db, isPruning))
+  StorageTrie(initSecureHexaryTrie(db, isPruning, true))
 
 template createTrieKeyFromSlot*(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
