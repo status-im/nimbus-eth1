@@ -4,7 +4,6 @@ import
   stint,
   eth/common,
   eth/trie/db,
-  ../../sync/protocol,
   ../../db/db_chain
 
 type
@@ -13,7 +12,8 @@ type
     ifNecessaryGetCode*:        proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
     ifNecessaryGetAccount*:     proc(db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, newStateRootForSanityChecking: Hash256): Future[void] {.gcsafe.}
     ifNecessaryGetBlockHeaderByNumber*: proc(chainDB: ChainDBRef, blockNumber: BlockNumber): Future[void] {.gcsafe.}
-    fetchNodes*: proc(stateRoot: Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.gcsafe.}
+    # FIXME-Adam: Later.
+    #fetchNodes*: proc(stateRoot: Hash256, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.gcsafe.}
     fetchBlockHeaderWithHash*: proc(h: Hash256): Future[BlockHeader] {.gcsafe.}
     fetchBlockHeaderWithNumber*: proc(n: BlockNumber): Future[BlockHeader] {.gcsafe.}
     fetchBlockHeaderAndBodyWithHash*: proc(h: Hash256): Future[(BlockHeader, BlockBody)] {.gcsafe.}

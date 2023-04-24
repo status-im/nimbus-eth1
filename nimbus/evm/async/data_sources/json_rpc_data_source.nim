@@ -501,9 +501,10 @@ proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: b
       await ifNecessaryGetBlockHeaderByNumber(client, chainDB, blockNumber, justChecking)
     ),
 
-    fetchNodes: (proc(stateRoot: Hash256, paths: seq[SnapTriePaths], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
-      return await fetchNodes(peerPool, stateRoot, paths, nodeHashes)
-    ),
+    # FIXME-Adam: This will be needed later, but for now let's just get the basic methods in place.
+    #fetchNodes: (proc(stateRoot: Hash256, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
+    #  return await fetchNodes(peerPool, stateRoot, paths, nodeHashes)
+    #),
     
     fetchBlockHeaderWithHash: (proc(h: Hash256): Future[BlockHeader] {.async.} =
       return await fetchBlockHeaderWithHash(client, h)

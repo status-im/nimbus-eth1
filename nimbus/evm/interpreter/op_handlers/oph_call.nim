@@ -157,13 +157,13 @@ when evmc_enabled:
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
       if actualOutputSize > 0:
-        c.memory.writeConcreteBytes(p.memOutPos,
+        c.memory.write(p.memOutPos,
           c.returnData.toOpenArray(0, actualOutputSize - 1))
 
       c.gasMeter.returnGas(c.res.gas_left)
 
       if c.res.status_code == EVMC_SUCCESS:
-        c.stack.replaceTopElement(pureStackElement(stackValueFrom(1)))
+        c.stack.top(1)
 
       if not c.res.release.isNil:
         c.res.release(c.res)
@@ -183,12 +183,12 @@ else:
 
       if child.isSuccess:
         c.merge(child)
-        c.stack.replaceTopElement(pureStackElement(stackValueFrom(1)))
+        c.stack.top(1)
 
       c.returnData = child.output
       let actualOutputSize = min(memLen, child.output.len)
       if actualOutputSize > 0:
-        c.memory.writeConcreteBytes(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+        c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -267,20 +267,19 @@ const
           )
           c.execSubCall(msg, p)
         else:
-          cpt.readMemory(p.memInPos, p.memInLen) do (memBytes: seq[byte]):
-            cpt.execSubCall(
-              memPos = p.memOutPos,
-              memLen = p.memOutLen,
-              childMsg = Message(
-                kind:            evmcCall,
-                depth:           cpt.msg.depth + 1,
-                gas:             childGasLimit,
-                sender:          p.sender,
-                contractAddress: p.contractAddress,
-                codeAddress:     p.codeAddress,
-                value:           p.value,
-                data:            memBytes,
-                flags:           p.flags))
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
@@ -355,20 +354,19 @@ const
           )
           c.execSubCall(msg, p)
         else:
-          cpt.readMemory(p.memInPos, p.memInLen) do (memBytes: seq[byte]):
-            cpt.execSubCall(
-              memPos = p.memOutPos,
-              memLen = p.memOutLen,
-              childMsg = Message(
-                kind:            evmcCallCode,
-                depth:           cpt.msg.depth + 1,
-                gas:             childGasLimit,
-                sender:          p.sender,
-                contractAddress: p.contractAddress,
-                codeAddress:     p.codeAddress,
-                value:           p.value,
-                data:            memBytes,
-                flags:           p.flags))
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCallCode,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
@@ -432,20 +430,19 @@ const
           )
           c.execSubCall(msg, p)
         else:
-          cpt.readMemory(p.memInPos, p.memInLen) do (memBytes: seq[byte]):
-            cpt.execSubCall(
-              memPos = p.memOutPos,
-              memLen = p.memOutLen,
-              childMsg = Message(
-                kind:            evmcDelegateCall,
-                depth:           cpt.msg.depth + 1,
-                gas:             childGasLimit,
-                sender:          p.sender,
-                contractAddress: p.contractAddress,
-                codeAddress:     p.codeAddress,
-                value:           p.value,
-                data:            memBytes,
-                flags:           p.flags))
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcDelegateCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
   # ---------------------
 
@@ -514,20 +511,19 @@ const
           )
           c.execSubCall(msg, p)
         else:
-          cpt.readMemory(p.memInPos, p.memInLen) do (memBytes: seq[byte]):
-            cpt.execSubCall(
-              memPos = p.memOutPos,
-              memLen = p.memOutLen,
-              childMsg = Message(
-                kind:            evmcCall,
-                depth:           cpt.msg.depth + 1,
-                gas:             childGasLimit,
-                sender:          p.sender,
-                contractAddress: p.contractAddress,
-                codeAddress:     p.codeAddress,
-                value:           p.value,
-                data:            memBytes,
-                flags:           p.flags))
+          cpt.execSubCall(
+            memPos = p.memOutPos,
+            memLen = p.memOutLen,
+            childMsg = Message(
+              kind:            evmcCall,
+              depth:           cpt.msg.depth + 1,
+              gas:             childGasLimit,
+              sender:          p.sender,
+              contractAddress: p.contractAddress,
+              codeAddress:     p.codeAddress,
+              value:           p.value,
+              data:            cpt.memory.read(p.memInPos, p.memInLen),
+              flags:           p.flags))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

@@ -78,6 +78,7 @@ proc txPriorityFee(ttx: TypedTransaction): UInt256 =
   except RlpError:
     doAssert(false, "found TypedTransaction that RLP failed to decode")
 
+# AARDVARK: make sure I have the right units (wei/gwei)
 proc sumOfBlockPriorityFees(payload: ExecutionPayloadV1OrV2): UInt256 =
   payload.transactions.foldl(a + txPriorityFee(b), UInt256.zero)
 
