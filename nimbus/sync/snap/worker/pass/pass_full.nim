@@ -14,11 +14,11 @@ import
   chronicles,
   chronos,
   eth/p2p,
-  ../../../misc/[best_pivot, block_queue],
+  ../../../misc/[best_pivot, block_queue, ticker],
   "../../.."/[protocol, sync_desc, types],
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
-  ".."/[pivot, ticker],
+  ".."/pivot,
   pass_desc
 
 const

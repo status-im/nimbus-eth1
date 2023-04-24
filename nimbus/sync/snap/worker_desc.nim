@@ -16,11 +16,10 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
-  ../misc/[best_pivot, block_queue],
+  ../misc/[best_pivot, block_queue, ticker],
   ../sync_desc,
   ./worker/com/com_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
-  ./worker/ticker,
   ./range_desc
 
 type

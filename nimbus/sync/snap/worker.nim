@@ -16,8 +16,9 @@ import
   eth/p2p,
   stew/[interval_set, keyed_queue],
   "../.."/[common, db/select_backend],
+  ../misc/ticker,
   ../sync_desc,
-  ./worker/[pass, ticker],
+  ./worker/pass,
   ./worker/com/com_error,
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
@@ -40,7 +41,7 @@ template ignoreException(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc setupTicker(ctx: SnapCtxRef; tickerOK: bool) =
-  let blindTicker = proc: TickerSnapStats =
+  let blindTicker: TickerSnapStatsUpdater = proc: TickerSnapStats =
     discard
   if tickerOK:
     ctx.pool.ticker = TickerRef.init(blindTicker)

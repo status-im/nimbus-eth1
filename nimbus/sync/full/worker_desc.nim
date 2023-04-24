@@ -14,8 +14,7 @@ import
   eth/p2p,
   chronos,
   ../sync_desc,
-  ../misc/[best_pivot, block_queue],
-  ./ticker
+  ../misc/[best_pivot, block_queue, ticker]
 
 type
   PivotState* = enum
