@@ -8,19 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Sync mode pass multiplexer
+## ==========================
+##
+## Pass state diagram:
+## ::
+##    <init> -> <snap-sync> -> <full-sync> ---+
+##                                 ^          |
+##                                 |          |
+##                                 +----------+
+##
 {.push raises: [].}
 
 import
   chronicles,
   chronos,
-  eth/p2p,
-  stew/[interval_set, keyed_queue],
-  "../.."/[common, db/select_backend],
-  ../misc/ticker,
+  ./range_desc,
   ./worker/pass,
-  ./worker/get/get_error,
-  ./worker/db/snapdb_desc,
-  "."/[range_desc, worker_desc]
+  ./worker_desc
 
 logScope:
   topics = "snap-worker"
@@ -36,43 +41,12 @@ template ignoreException(info: static[string]; code: untyped) =
     error "Exception at " & info & ":", name=($e.name), msg=(e.msg)
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc setupTicker(ctx: SnapCtxRef) =
-  let blindTicker: TickerSnapStatsUpdater = proc: TickerSnapStats =
-    discard
-  if ctx.pool.enableTicker:
-    ctx.pool.ticker = TickerRef.init(blindTicker)
-
-proc releaseTicker(ctx: SnapCtxRef) =
-  ## Helper for `release()`
-  ctx.pool.ticker.stop()
-  ctx.pool.ticker = nil
-
-# --------------
-
-proc setupSnapDb(ctx: SnapCtxRef) =
-  ## Helper for `setup()`: Initialise snap sync database layer
-  ctx.pool.snapDb =
-    if ctx.pool.dbBackend.isNil: SnapDbRef.init(ctx.chain.db.db)
-    else: SnapDbRef.init(ctx.pool.dbBackend)
-
-# ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
 proc setup*(ctx: SnapCtxRef): bool =
   ## Global set up
-  ctx.passSetup()               # Set up sync sub-mode specs.
-  ctx.setupSnapDb()             # Set database backend, subject to change
-  ctx.setupTicker()             # Start log/status ticker (if any)
-
-  # Experimental, also used for debugging
-  if ctx.exCtrlFile.isSome:
-    warn "Snap sync accepts pivot block number or hash",
-      syncCtrlFile=ctx.exCtrlFile.get
-
+  ctx.passInitSetup()
   ignoreException("setup"):
     ctx.passActor.setup(ctx)
   true
@@ -81,17 +55,12 @@ proc release*(ctx: SnapCtxRef) =
   ## Global clean up
   ignoreException("release"):
     ctx.passActor.release(ctx)
-
-  ctx.releaseTicker()           # Stop log/status ticker (if any)
-  ctx.passRelease()             # Shut down sync methods
-
+  ctx.passInitRelease()
 
 proc start*(buddy: SnapBuddyRef): bool =
   ## Initialise worker peer
   ignoreException("start"):
-    if  buddy.ctx.passActor.start(buddy):
-      buddy.only.errors = GetErrorStatsRef()
-      return true
+    result = buddy.ctx.passActor.start(buddy)
 
 proc stop*(buddy: SnapBuddyRef) =
   ## Clean up this peer

@@ -16,11 +16,12 @@ import
   eth/p2p,
   stew/[interval_set, keyed_queue],
   "../../.."/[handlers/eth, misc/ticker, protocol],
-  ../db/[hexary_desc, snapdb_pivot],
   "../.."/[range_desc, worker_desc],
+  ../db/[hexary_desc, snapdb_pivot],
+  ../get/get_error,
+  ./pass_desc,
   ./pass_snap/helper/[beacon_header, storage_queue],
-  ./pass_snap/pivot,
-  ./pass_desc
+  ./pass_snap/pivot
 
 logScope:
   topics = "snap-play"
@@ -182,6 +183,7 @@ proc snapSyncStart(buddy: SnapBuddyRef): bool =
      peer.state(protocol.eth).initialized:
     ctx.pool.ticker.startBuddy()
     buddy.ctrl.multiOk = false # confirm default mode for soft restart
+    buddy.only.errors = GetErrorStatsRef()
     return true
 
 proc snapSyncStop(buddy: SnapBuddyRef) =

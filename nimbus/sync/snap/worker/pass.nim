@@ -8,19 +8,11 @@
 {.push raises: [].}
 
 import
-  ../worker_desc,
-  ./pass/[pass_desc, pass_full, pass_snap]
+  ./pass/[pass_desc, pass_init]
 
 export
   PassActorRef,
-  passActor
-
-proc passSetup*(ctx: SnapCtxRef) =
-  ## Set up sync mode specs table. This cannot be done at compile time.
-  ctx.pool.syncMode.tab[SnapSyncMode] = passSnap()
-  ctx.pool.syncMode.tab[FullSyncMode] = passFull()
-
-proc passRelease*(ctx: SnapCtxRef) =
-  discard
+  passActor,
+  pass_init
 
 # End

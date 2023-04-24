@@ -19,7 +19,8 @@ import
   ../../../protocol,
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
-  pass_desc
+  ../get/get_error,
+  ./pass_desc
 
 const
   extraTraceMessages = false # or true
@@ -154,6 +155,7 @@ proc fullSyncStart(buddy: SnapBuddyRef): bool =
 
     ctx.pool.ticker.startBuddy()
     buddy.ctrl.multiOk = false # confirm default mode for soft restart
+    buddy.only.errors = GetErrorStatsRef()
     return true
 
 proc fullSyncStop(buddy: SnapBuddyRef) =

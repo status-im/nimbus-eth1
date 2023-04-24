@@ -101,18 +101,18 @@ type
     bPivot*: BestPivotWorkerRef        ## Local pivot worker descriptor
     bQueue*: BlockQueueWorkerRef       ## Block queue worker
 
-  SnapSyncModeType* = enum
+  SnapSyncPassType* = enum
     ## Current sync mode, after a snapshot has been downloaded, the system
     ## proceeds with full sync.
     SnapSyncMode = 0                   ## Start mode
     FullSyncMode
 
-  SnapSyncSpecs* = object
+  SnapSyncPass* = object
     ## Full specs for all sync modes. This table must be held in the main
     ## descriptor and initialised at run time. The table values are opaque
     ## and will be specified in the worker module(s).
-    active*: SnapSyncModeType
-    tab*: array[SnapSyncModeType,RootRef]
+    active*: SnapSyncPassType
+    tab*: array[SnapSyncPassType,RootRef]
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -125,7 +125,7 @@ type
     ticker*: TickerRef                 ## Ticker, logger descriptor
 
     # Snap/full mode muliplexing
-    syncMode*: SnapSyncSpecs           ## Sync mode methods & data
+    syncMode*: SnapSyncPass            ## Sync mode methods & data
 
     # Snap sync parameters, pivot table
     pivotTable*: SnapPivotTable        ## Per state root environment
