@@ -17,14 +17,14 @@ import
   ../../../../db/[select_backend, storage_types],
   ../../../protocol,
   ../../range_desc,
-  "."/[hexary_debug, hexary_desc, hexary_error, hexary_import, hexary_nearby,
-       hexary_paths, rocky_bulk_load]
+  "."/[hexary_desc, hexary_error, hexary_import, hexary_nearby, hexary_paths,
+       rocky_bulk_load]
 
 logScope:
   topics = "snap-db"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
 
   RockyBulkCache* = "accounts.sst"
     ## Name of temporary file to accomodate SST records for `rocksdb`
@@ -41,6 +41,9 @@ type
     xDb: HexaryTreeDbRef             ## Hexary database, memory based
     base: SnapDbRef                  ## Back reference to common parameters
     root*: NodeKey                   ## Session DB root node key
+
+when extraTraceMessages:
+  import hexary_debug
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
@@ -221,7 +224,7 @@ proc mergeProofs*(
 
   for n,rlpRec in proof:
     let report = xDb.hexaryImport(rlpRec.to(Blob), nodes, refs)
-    if report.error != NothingSerious:
+    if report.error != HexaryError(0):
       let error = report.error
       trace "mergeProofs()", peer, item=n, proofs=proof.len, error
       return err(error)

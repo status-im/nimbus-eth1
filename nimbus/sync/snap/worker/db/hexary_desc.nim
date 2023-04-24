@@ -154,7 +154,7 @@ type
     slot*: Option[int]              ## May refer to indexed argument slots
     kind*: Option[NodeKind]         ## Node type (if any)
     dangling*: seq[NodeSpecs]       ## Missing inner sub-tries
-    error*: HexaryError             ## Error code, or `NothingSerious`
+    error*: HexaryError             ## Error code, or `HexaryError(0)`
 
 static:
   # Not that there is no doubt about this ...

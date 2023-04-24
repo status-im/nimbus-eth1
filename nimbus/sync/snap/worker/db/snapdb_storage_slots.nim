@@ -30,7 +30,7 @@ type
     accKey: NodeKey             ## Accounts address hash (curr.unused)
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -338,7 +338,7 @@ proc importRawStorageSlotsNodes*(
   ##
   ## Additional node items might be reported if the node type is in the
   ## argument set `reportNodes`. These reported items will have no error
-  ## code set (i.e. `NothingSerious`.)
+  ## code set (i.e. `HexaryError(0)`.)
   ##
   let
     peer = ps.peer
@@ -353,7 +353,7 @@ proc importRawStorageSlotsNodes*(
       if 0 < node.data.len: # otherwise ignore empty placeholder
         slot = some(n)
         var rep = db.hexaryImport(node)
-        if rep.error != NothingSerious:
+        if rep.error != HexaryError(0):
           rep.slot = slot
           result.add rep
           nErrors.inc

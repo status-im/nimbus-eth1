@@ -54,8 +54,9 @@ proc getTrieNodesReq(
 
   except CatchableError as e:
     let error {.used.} = e.msg
-    trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
-      error
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
+        error
     return err()
 
 
@@ -129,13 +130,15 @@ proc getTrieNodes*(
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nGroups
+      when trSnapTracePacketsOk:
+        trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nGroups
       return err(ComResponseTimeout)
     let blobs = rc.value.get.nodes
     if nTotal < blobs.len:
       # Ooops, makes no sense
-      trace trSnapRecvError & "too many TrieNodes", peer, pivot,
-        nGroups, nExpected=nTotal, nReceived=blobs.len
+      when trSnapTracePacketsOk:
+        trace trSnapRecvError & "too many TrieNodes", peer, pivot,
+          nGroups, nExpected=nTotal, nReceived=blobs.len
       return err(ComTooManyTrieNodes)
     blobs
 
@@ -155,7 +158,8 @@ proc getTrieNodes*(
     #   nodes.
     # * The responding node is allowed to return less data than requested
     #   (serving QoS limits), but the node must return at least one trie node.
-    trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nGroups, nNodes
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nGroups, nNodes
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
@@ -173,8 +177,9 @@ proc getTrieNodes*(
     if trieNodes.len <= inx:
       break
 
-  trace trSnapRecvReceived & "TrieNodes", peer, pivot,
-    nGroups, nNodes, nLeftOver=dd.leftOver.len
+  when trSnapTracePacketsOk:
+    trace trSnapRecvReceived & "TrieNodes", peer, pivot,
+      nGroups, nNodes, nLeftOver=dd.leftOver.len
 
   return ok(dd)
 

@@ -8,12 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Note: this module is currently unused
-
 {.push raises: [Defect].}
 
 import
-  std/[hashes, options, sequtils],
+  std/[options, sequtils],
   chronos,
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
@@ -32,9 +30,6 @@ type
     extra*: seq[(NodeKey,Blob)]
     kvPairs*: seq[(NodeKey,Blob)]
 
-const
-  emptyBlob = seq[byte].default
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -51,8 +46,9 @@ proc getByteCodesReq(
     return ok(reply)
 
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetByteCodes reply", peer,
-      error=e.msg
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetByteCodes reply", peer,
+        error=e.msg
     return err()
 
 # ------------------------------------------------------------------------------
@@ -81,7 +77,9 @@ proc getByteCodes*(
     if rc.isErr:
       return err(ComNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for reply to GetByteCodes", peer, nKeys
+      when trSnapTracePacketsOk:
+        trace trSnapRecvTimeoutWaiting & "for reply to GetByteCodes", peer,
+          nKeys
       return err(ComResponseTimeout)
     let blobs = rc.value.get.codes
     if nKeys < blobs.len:
@@ -104,7 +102,8 @@ proc getByteCodes*(
     #   an empty response.
     # * If a bytecode is unavailable, the node must skip that slot and proceed
     #   to the next one. The node must not return nil or other placeholders.
-    trace trSnapRecvReceived & "empty ByteCodes", peer, nKeys, nCodes
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "empty ByteCodes", peer, nKeys, nCodes
     return err(ComNoByteCodesAvailable)
 
   # Assemble return value
@@ -122,8 +121,9 @@ proc getByteCodes*(
 
   dd.leftOver = req.toSeq
 
-  trace trSnapRecvReceived & "ByteCodes", peer,
-    nKeys, nCodes, nLeftOver=dd.leftOver.len, nExtra=dd.extra.len
+  when trSnapTracePacketsOk:
+    trace trSnapRecvReceived & "ByteCodes", peer,
+      nKeys, nCodes, nLeftOver=dd.leftOver.len, nExtra=dd.extra.len
 
   return ok(dd)
 

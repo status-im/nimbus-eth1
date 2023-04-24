@@ -103,7 +103,7 @@ proc existsInTrie(
     error = ExceptionError
 
   when extraTraceMessages:
-    if error != NothingSerious:
+    if error != HexaryError(0):
       trace logTxt "other trie check node failed", node, error
 
   false

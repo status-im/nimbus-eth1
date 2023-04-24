@@ -37,7 +37,7 @@ type
     data*: AccountStorageRange
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -71,8 +71,9 @@ proc getStorageRangesReq(
     return ok(reply)
 
   except CatchableError as e:
-    trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
-      name=($e.name), error=(e.msg)
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetStorageRanges reply", peer, pivot,
+        name=($e.name), error=(e.msg)
     return err()
 
 # ------------------------------------------------------------------------------
@@ -114,13 +115,15 @@ proc getStorageRanges*(
       if rc.isErr:
         return err(ComNetworkProblem)
       if rc.value.isNone:
-        trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
-          nAccounts
+        when trSnapTracePacketsOk:
+          trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
+            nAccounts
         return err(ComResponseTimeout)
       if nAccounts < rc.value.get.slotLists.len:
         # Ooops, makes no sense
-        trace trSnapRecvReceived & "too many slot lists", peer, pivot,
-          nAccounts, nReceived=rc.value.get.slotLists.len
+        when trSnapTracePacketsOk:
+          trace trSnapRecvReceived & "too many slot lists", peer, pivot,
+            nAccounts, nReceived=rc.value.get.slotLists.len
         return err(ComTooManyStorageSlots)
       rc.value.get
 
@@ -136,8 +139,9 @@ proc getStorageRanges*(
     #   for any requested account hash, it must return an empty reply. It is
     #   the responsibility of the caller to query an state not older than 128
     #   blocks; and the caller is expected to only ever query existing accounts.
-    trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
-      nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
+        nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
     return err(ComNoStorageForAccounts)
 
   # Assemble return structure for given peer response

@@ -22,7 +22,6 @@ import
   ../../nimbus/sync/snap/worker/db/[hexary_desc, rocky_bulk_load],
   ../../nimbus/utils/prettify,
   ../replay/[pp, undump_blocks]
-  #./test_helpers
 
 # ------------------------------------------------------------------------------
 # Private helpers
