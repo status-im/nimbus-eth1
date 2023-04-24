@@ -61,7 +61,6 @@
 ## In general, if  an error occurs, the entry that caused the error is moved
 ## or re-stored onto the queue of partial requests `env.fetchStoragePart`.
 ##
-
 {.push raises: [].}
 
 import
@@ -70,11 +69,10 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[sync_desc, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_storage_ranges],
-  ../db/[hexary_error, snapdb_storage_slots],
-  ./storage_queue_helper
+  "../../.."/[constants, range_desc, worker_desc],
+  ../../com/[com_error, get_storage_ranges],
+  ../../db/[hexary_error, snapdb_storage_slots],
+  ./helper/storage_queue
 
 logScope:
   topics = "snap-slot"

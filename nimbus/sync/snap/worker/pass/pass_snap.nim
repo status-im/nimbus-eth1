@@ -15,11 +15,10 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[handlers/eth, misc/ticker, protocol, sync_desc, types],
-  ".."/pivot,
-  ../pivot/storage_queue_helper,
+  "../../.."/[handlers/eth, misc/ticker, protocol],
   ../db/[hexary_desc, snapdb_pivot],
   "../.."/[range_desc, update_beacon_header, worker_desc],
+  ./pass_snap/[pivot, helper/storage_queue],
   pass_desc
 
 logScope:
@@ -151,7 +150,7 @@ proc snapSyncCompleteOk(
           error logTxt "inconsistent state, pivot incomplete",
             pivot=env.stateHeader.blockNumber.toStr, nAccounts=env.nAccounts
           return false
-    ctx.pool.fullPivot = env
+    ctx.pool.completePivot = env
     ctx.poolMode = true # Fast sync mode must be synchronized among all peers
     return true
 
@@ -196,7 +195,7 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   ##
   let
     ctx = buddy.ctx
-    env = ctx.pool.fullPivot
+    env = ctx.pool.completePivot
 
   # Check whether the snapshot is complete. If so, switch to full sync mode.
   # This process needs to be applied to all buddy peers.
@@ -214,7 +213,9 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
         ctx.snapSyncRelease()
         ctx.pool.syncMode.active = FullSyncMode
         ctx.passActor.setup(ctx)
-        ctx.poolMode = true # repeat looping over peers
+        ctx.poolMode = true                         # repeat looping over peers
+        ctx.pool.fullHeader = some(env.stateHeader) # Full sync start here
+
     return false # do stop magically when looping over peers is exhausted
 
   # Clean up empty pivot slots (never the top one.) This needs to be run on

@@ -34,18 +34,17 @@
 ##
 ## * Rinse and repeat.
 ##
+{.push raises: [].}
+
 import
   std/[math, sequtils],
   chronicles,
   eth/[common, p2p],
   stew/[byteutils, interval_set, keyed_queue, sorted_set],
-  ../../../../utils/prettify,
-  ../../../types,
-  "../.."/[range_desc, worker_desc],
-  ../db/[hexary_desc, hexary_envelope, hexary_error,
-         hexary_paths, snapdb_accounts]
-
-{.push raises: [].}
+  ../../../../../../utils/prettify,
+  "../../../.."/[range_desc, worker_desc],
+  ../../../db/[hexary_desc, hexary_envelope, hexary_error,
+               hexary_paths, snapdb_accounts]
 
 logScope:
   topics = "snap-swapin"

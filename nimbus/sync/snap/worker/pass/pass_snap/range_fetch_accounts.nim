@@ -48,11 +48,11 @@ import
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
-  "../../.."/[sync_desc, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_account_range],
-  ../db/[hexary_envelope, snapdb_accounts],
-  "."/[storage_queue_helper, swap_in]
+  "../../../.."/[sync_desc, types],
+  "../../.."/[constants, range_desc, worker_desc],
+  ../../com/[com_error, get_account_range],
+  ../../db/[hexary_envelope, snapdb_accounts],
+  ./helper/[storage_queue, swap_in]
 
 logScope:
   topics = "snap-acc"

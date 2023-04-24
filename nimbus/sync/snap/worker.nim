@@ -17,7 +17,6 @@ import
   stew/[interval_set, keyed_queue],
   "../.."/[common, db/select_backend],
   ../misc/ticker,
-  ../sync_desc,
   ./worker/pass,
   ./worker/com/com_error,
   ./worker/db/snapdb_desc,
@@ -89,17 +88,15 @@ proc release*(ctx: SnapCtxRef) =
 
 proc start*(buddy: SnapBuddyRef): bool =
   ## Initialise worker peer
-  let ctx = buddy.ctx
   ignoreException("start"):
-    if ctx.passActor.start(buddy):
+    if  buddy.ctx.passActor.start(buddy):
       buddy.only.errors = ComErrorStatsRef()
       return true
 
 proc stop*(buddy: SnapBuddyRef) =
   ## Clean up this peer
-  let ctx = buddy.ctx
   ignoreException("stop"):
-    ctx.passActor.stop(buddy)
+    buddy.ctx.passActor.stop(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions, sync handler multiplexers

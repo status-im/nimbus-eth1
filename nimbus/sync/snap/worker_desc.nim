@@ -22,6 +22,9 @@ import
   ./worker/db/[snapdb_desc, snapdb_pivot],
   ./range_desc
 
+export
+  sync_desc # worker desc prototype
+
 type
   SnapAccountsList* = SortedSet[NodeTag,Hash256]
     ## Sorted pair of `(account,state-root)` entries
@@ -117,21 +120,22 @@ type
     dbBackend*: ChainDB                ## Low level DB driver access (if any)
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
 
-    # Pivot table
-    pivotTable*: SnapPivotTable        ## Per state root environment
-    beaconHeader*: BlockHeader         ## Running on beacon chain
-    coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
-    covAccTimesFull*: uint             ## # of 100% coverages
-    recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
-
     # Info
     ticker*: TickerRef                 ## Ticker, logger
 
     # Snap/full mode muliplexing
     syncMode*: SnapSyncSpecs           ## Sync mode methods & data
-    fullPivot*: SnapPivotRef           ## Start full sync from here
+
+    # Snap sync parameters, pivot table
+    pivotTable*: SnapPivotTable        ## Per state root environment
+    completePivot*: SnapPivotRef       ## Start full sync from here
+    beaconHeader*: BlockHeader         ## Running on beacon chain
+    coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
+    covAccTimesFull*: uint             ## # of 100% coverages
+    recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
 
     # Full sync continuation parameters
+    fullHeader*: Option[BlockHeader]   ## Start full sync from here
     bPivot*: BestPivotCtxRef           ## Global pivot descriptor
     bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
 

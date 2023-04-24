@@ -21,10 +21,9 @@ import
   chronos,
   eth/[common, p2p],
   stew/keyed_queue,
-  "../../.."/[sync_desc, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_byte_codes],
-  ../db/snapdb_contracts
+  "../../.."/[constants, range_desc, worker_desc],
+  ../../com/[com_error, get_byte_codes],
+  ../../db/snapdb_contracts
 
 logScope:
   topics = "snap-con"
@@ -33,7 +32,7 @@ type
   SnapCtraKVP = KeyedQueuePair[Hash256,NodeKey]
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------

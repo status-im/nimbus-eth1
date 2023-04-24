@@ -8,21 +8,23 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Heal accounts DB
-## ================
+## Heal storage slots DB
+## =====================
 ##
-## This module is a variation of the `swap-in` module in the sense that it
-## searches for missing nodes in the database (which means that nodes which
-## link to missing ones must exist), and then fetches the nodes from the
-## network.
+## This module works similar to `heal_accounts` applied to each per-account
+## storage slots hexary trie. These per-account trie work items  are stored in
+## the queue `env.fetchStoragePart`.
 ##
-## Algorithm
-## ---------
+## There is another such queue `env.fetchStorageFull` which is not used here.
 ##
-## * Run `swapInAccounts()` so that inheritable sub-tries are imported from
-##   previous pivots.
+## In order to be able to checkpoint the current list of storage accounts (by
+## a parallel running process), unfinished storage accounts are temporarily
+## held in the set `env.parkedStorage`.
 ##
-## * Find dangling nodes in the current account trie via `findMissingNodes()`.
+## Algorithm applied to each entry of `env.fetchStoragePart`
+## --------------------------------------------------------
+##
+## * Find dangling nodes in the current slot trie  via `findMissingNodes()`.
 ##
 ## * Install that nodes from the network.
 ##
@@ -32,7 +34,7 @@
 ## ----------
 ##
 ## A worst case scenario of a portentally failing `findMissingNodes()` call
-## must be solved by fetching and storing more accounts and running this
+## must be solved by fetching and storing more storage slots and running this
 ## healing algorithm again.
 ##
 
@@ -42,18 +44,18 @@ import
   std/[math, sequtils, sets, tables],
   chronicles,
   chronos,
-  eth/[common, p2p, trie/nibbles, trie/trie_defs, rlp],
+  eth/[common, p2p, trie/nibbles],
   stew/[byteutils, interval_set, keyed_queue],
-  ../../../../utils/prettify,
-  "../../.."/[sync_desc, protocol, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_trie_nodes],
-  ../db/[hexary_desc, hexary_envelope, hexary_error, hexary_nearby,
-         hexary_paths, hexary_range, snapdb_accounts],
-  "."/[find_missing_nodes, storage_queue_helper, swap_in]
+  ../../../../../utils/prettify,
+  ../../../../protocol,
+  "../../.."/[constants, range_desc, worker_desc],
+  ../../com/[com_error, get_trie_nodes],
+  ../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_range,
+            snapdb_storage_slots],
+  ./helper/[missing_nodes, storage_queue]
 
 logScope:
-  topics = "snap-acc"
+  topics = "snap-slot"
 
 const
   extraTraceMessages = false # or true
@@ -64,7 +66,7 @@ const
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Accounts heal " & info
+  "Storage slots heal " & info
 
 proc `$`(node: NodeSpecs): string =
   node.partialPath.toHex
@@ -82,14 +84,28 @@ proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
 proc healingCtx(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
-      ): string =
-  let ctx = buddy.ctx
+      ): string {.used.} =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
     "ctl=" & $buddy.ctrl.state & "," &
-    "nAccounts=" & $env.nAccounts & "," &
-    ("covered=" & $env.fetchAccounts.processed & "/" &
-                  $ctx.pool.coveredAccounts ) & "}"
+    "nStoQ=" & $env.storageQueueTotal() & "," &
+    "nQuPart=" & $env.fetchStoragePart.len & "," &
+    "nParked=" & $env.parkedStorage.len & "," &
+    "nSlotLists=" & $env.nSlotLists & "}"
+
+proc healingCtx(
+    buddy: SnapBuddyRef;
+    kvp: StoQuSlotsKVP;
+    env: SnapPivotRef;
+      ): string =
+  "{" &
+    "piv=" & env.stateHeader.blockNumber.toStr & "," &
+    "ctl=" & $buddy.ctrl.state & "," &
+    "processed=" & $kvp.data.slots.processed & "," &
+    "nStoQ=" & $env.storageQueueTotal() & "," &
+    "nQuPart=" & $env.fetchStoragePart.len & "," &
+    "nParked=" & $env.parkedStorage.len & "," &
+    "nSlotLists=" & $env.nSlotLists & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -107,34 +123,31 @@ template discardRlpError(info: static[string]; code: untyped) =
 
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
+    kvp: StoQuSlotsKVP;
     env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ## Find some missing glue nodes in accounts database.
+  ## Find some missing glue nodes in storage slots database.
   let
     ctx = buddy.ctx
     peer {.used.} = buddy.peer
-    rootKey = env.stateHeader.stateRoot.to(NodeKey)
-    getFn = ctx.pool.snapDb.getAccountFn
-    fa {.used.} = env.fetchAccounts
+    slots = kvp.data.slots
+    rootKey = kvp.key.to(NodeKey)
+    getFn = ctx.pool.snapDb.getStorageSlotsFn(kvp.data.accKey)
 
-  # Import from earlier run
-  if ctx.swapInAccounts(env) != 0:
-    discard ctx.swapInAccounts(env)
-
-  if not fa.processed.isFull:
-    let mlv = await fa.findMissingNodes(
+  if not slots.processed.isFull:
+    let mlv = await slots.missingNodesFind(
       rootKey, getFn,
-      healAccountsInspectionPlanBLevel,
-      healAccountsInspectionPlanBRetryMax,
-      healAccountsInspectionPlanBRetryNapMSecs)
+      healStorageSlotsInspectionPlanBLevel,
+      healStorageSlotsInspectionPlanBRetryMax,
+      healStorageSlotsInspectionPlanBRetryNapMSecs,
+      forcePlanBOk = true)
 
     # Clean up empty account ranges found while looking for nodes
     if not mlv.emptyGaps.isNil:
       for w in mlv.emptyGaps.increasing:
-        discard env.fetchAccounts.processed.merge w
-        env.fetchAccounts.unprocessed.reduce w
-        discard buddy.ctx.pool.coveredAccounts.merge w
+        discard slots.processed.merge w
+        slots.unprocessed.reduce w
 
     when extraTraceMessages:
       trace logTxt "missing nodes", peer,
@@ -148,38 +161,39 @@ proc getNodesFromNetwork(
     buddy: SnapBuddyRef;
     missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
     ignore: HashSet[Blob];              # Except for these partial paths listed
-    env: SnapPivotRef;
+    kvp: StoQuSlotsKVP;                 # Storage slots context
+    env: SnapPivotRef;                  # For logging
       ): Future[seq[NodeSpecs]]
       {.async.} =
-  ## Extract from `nodes.missing` the next batch of nodes that need
+  ##  Extract from `missing` the next batch of nodes that need
   ## to be merged it into the database
   let
     peer {.used.} = buddy.peer
+    accPath = kvp.data.accKey.to(Blob)
     rootHash = env.stateHeader.stateRoot
     pivot = env.stateHeader.blockNumber.toStr # for logging in `getTrieNodes()`
 
   # Initalise for fetching nodes from the network via `getTrieNodes()`
   var
-    nodeKey: Table[Blob,NodeKey] # Temporary `path -> key` mapping
-    pathList: seq[SnapTriePaths] # Function argument for `getTrieNodes()`
+    nodeKey: Table[Blob,NodeKey]          # Temporary `path -> key` mapping
+    req = SnapTriePaths(accPath: accPath) # Argument for `getTrieNodes()`
 
   # There is no point in fetching too many nodes as it will be rejected. So
   # rest of the `missingNodes` list is ignored to be picked up later.
   for w in missingNodes:
     if w.partialPath notin ignore and not nodeKey.hasKey(w.partialPath):
-      pathList.add SnapTriePaths(accPath: w.partialPath)
+      req.slotPaths.add w.partialPath
       nodeKey[w.partialPath] = w.nodeKey
-      if fetchRequestTrieNodesMax <= pathList.len:
+      if fetchRequestTrieNodesMax <= req.slotPaths.len:
         break
 
-  if 0 < pathList.len:
+  if 0 < req.slotPaths.len:
     # Fetch nodes from the network.
-    let rc = await buddy.getTrieNodes(rootHash, pathList, pivot)
+    let rc = await buddy.getTrieNodes(rootHash, @[req], pivot)
     if rc.isOk:
       # Reset error counts for detecting repeated timeouts, network errors, etc.
       buddy.only.errors.resetComError()
 
-      # Forget about unfetched missing nodes, will be picked up later
       return rc.value.nodes.mapIt(NodeSpecs(
         partialPath: it.partialPath,
         nodeKey:     nodeKey[it.partialPath],
@@ -190,20 +204,21 @@ proc getNodesFromNetwork(
       error = rc.error
       ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
     when extraTraceMessages:
-      trace logTxt "reply error", peer, ctx=buddy.healingCtx(env),
-         error, stop=ok
+      trace logTxt "reply error", peer, ctx=buddy.healingCtx(kvp,env),
+        error, stop=ok
 
   return @[]
 
 
-proc kvAccountLeaf(
+proc kvStoSlotsLeaf(
     buddy: SnapBuddyRef;
-    node: NodeSpecs;
-    env: SnapPivotRef;
-      ): (bool,NodeKey,Account) =
+    node: NodeSpecs;                    # Node data fetched from network
+    kvp: StoQuSlotsKVP;                 # For logging
+    env: SnapPivotRef;                  # For logging
+      ): (bool,NodeKey) =
   ## Re-read leaf node from persistent database (if any)
   var nNibbles = -1
-  discardRlpError("kvAccountLeaf"):
+  discardRlpError("kvStorageSlotsLeaf"):
     let
       nodeRlp = rlpFromBytes node.data
       prefix = (hexPrefixDecode node.partialPath)[1]
@@ -212,21 +227,17 @@ proc kvAccountLeaf(
 
     nNibbles = nibbles.len
     if nNibbles == 64:
-      let
-        data = nodeRlp.listElem(1).toBytes
-        nodeKey = nibbles.getBytes.convertTo(NodeKey)
-        accData = rlp.decode(data,Account)
-      return (true, nodeKey, accData)
+      return (true, nibbles.getBytes.convertTo(NodeKey))
 
   when extraTraceMessages:
     trace logTxt "non-leaf node path or corrupt data", peer=buddy.peer,
-      ctx=buddy.healingCtx(env), nNibbles
+      ctx=buddy.healingCtx(kvp,env), nNibbles
 
 
-proc registerAccountLeaf(
+proc registerStoSlotsLeaf(
     buddy: SnapBuddyRef;
-    accKey: NodeKey;
-    acc: Account;
+    slotKey: NodeKey;
+    kvp: StoQuSlotsKVP;
     env: SnapPivotRef;
       ) =
   ## Process single account node as would be done with an interval by
@@ -234,85 +245,73 @@ proc registerAccountLeaf(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    rootKey = env.stateHeader.stateRoot.to(NodeKey)
-    getFn = ctx.pool.snapDb.getAccountFn
-    pt = accKey.to(NodeTag)
+    rootKey = kvp.key.to(NodeKey)
+    getSlotFn = ctx.pool.snapDb.getStorageSlotsFn kvp.data.accKey
+    pt = slotKey.to(NodeTag)
 
   # Extend interval [pt,pt] if possible
   var iv: NodeTagRange
   try:
-    iv = getFn.hexaryRangeInflate(rootKey, pt)
+    iv = getSlotFn.hexaryRangeInflate(rootKey, pt)
   except CatchableError as e:
-    error logTxt "inflating interval oops", peer, ctx=buddy.healingCtx(env),
-      accKey, name=($e.name), msg=e.msg
+    error logTxt "inflating interval oops", peer, ctx=buddy.healingCtx(kvp,env),
+      accKey=kvp.data.accKey, slotKey, name=($e.name), msg=e.msg
     iv = NodeTagRange.new(pt,pt)
 
   # Register isolated leaf node
-  if 0 < env.fetchAccounts.processed.merge iv:
-    env.nAccounts.inc
-    env.fetchAccounts.unprocessed.reduce iv
-    discard buddy.ctx.pool.coveredAccounts.merge iv
+  if 0 < kvp.data.slots.processed.merge iv:
+    kvp.data.slots.unprocessed.reduce iv
 
-    # Update storage slots batch
-    if acc.storageRoot != EMPTY_ROOT_HASH:
-      env.storageQueueAppendFull(acc.storageRoot, accKey)
-
-    # Update contract codes batch
-    if acc.codeHash != EMPTY_CODE_HASH:
-      env.fetchContracts[acc.codeHash] = accKey
-
-  #when extraTraceMessages:
-  #  trace logTxt "registered single account", peer, ctx=buddy.healingCtx(env),
-  #    leftSlack=(iv.minPt < pt), rightSlack=(pt < iv.maxPt)
+  when extraTraceMessages:
+    trace logTxt "registered single slot", peer, ctx=buddy.healingCtx(env),
+      leftSlack=(iv.minPt < pt), rightSlack=(pt < iv.maxPt)
 
 # ------------------------------------------------------------------------------
-# Private functions: do the healing for one round
+# Private functions: do the healing for one work item (sub-trie)
 # ------------------------------------------------------------------------------
 
-proc accountsHealingImpl(
+proc stoSlotsHealingImpl(
     buddy: SnapBuddyRef;
-    ignore: HashSet[Blob];
+    ignore: HashSet[Blob];           # Except for these partial paths listed
+    kvp: StoQuSlotsKVP;
     env: SnapPivotRef;
       ): Future[(int,HashSet[Blob])]
       {.async.} =
-  ## Fetching and merging missing account trie database nodes. It returns the
-  ## number of nodes fetched from the network, and -1 upon error.
+  ## Returns `true` is the sub-trie is complete (probably inherited), and
+  ## `false` if there are nodes left to be completed.
   let
     ctx = buddy.ctx
     db = ctx.pool.snapDb
     peer = buddy.peer
+    missing = await buddy.compileMissingNodesList(kvp, env)
 
-  # Import from earlier runs (if any)
-  while ctx.swapInAccounts(env) != 0:
-    discard
-
-  # Update for changes since last visit
-  let missingNodes = await buddy.compileMissingNodesList(env)
-  if missingNodes.len == 0:
-    # Nothing to do
-    trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(env)
+  if missing.len == 0:
+    trace logTxt "nothing to do", peer, ctx=buddy.healingCtx(kvp,env)
     return (0,EmptyBlobSet) # nothing to do
 
   # Get next batch of nodes that need to be merged it into the database
-  let fetchedNodes = await buddy.getNodesFromNetwork(missingNodes, ignore, env)
+  let fetchedNodes = await buddy.getNodesFromNetwork(missing, ignore, kvp, env)
   if fetchedNodes.len == 0:
+    when extraTraceMessages:
+      trace logTxt "node set unavailable", nMissing=missing.len
     return (0,EmptyBlobSet)
 
   # Store nodes onto disk
   let
     nFetchedNodes = fetchedNodes.len
-    report = db.importRawAccountsNodes(peer, fetchedNodes)
+    report = db.importRawStorageSlotsNodes(peer, kvp.data.accKey, fetchedNodes)
 
   if 0 < report.len and report[^1].slot.isNone:
     # Storage error, just run the next lap (not much else that can be done)
-    error logTxt "databse error", peer, ctx=buddy.healingCtx(env),
+    error logTxt "database error", peer, ctx=buddy.healingCtx(kvp,env),
       nFetchedNodes, error=report[^1].error
     return (-1,EmptyBlobSet)
 
-  # Filter out error and leaf nodes
+  # Filter out leaf nodes
   var
     nLeafNodes = 0 # for logging
     rejected: HashSet[Blob]
+  trace logTxt "importRawStorageSlotsNodes", nReport=report.len #########
   for w in report:
     if w.slot.isSome: # non-indexed entries appear typically at the end, though
       let inx = w.slot.unsafeGet
@@ -324,15 +323,15 @@ proc accountsHealingImpl(
 
       elif w.kind.unsafeGet == Leaf:
         # Leaf node has been stored, double check
-        let (isLeaf, key, acc) = buddy.kvAccountLeaf(fetchedNodes[inx], env)
+        let (isLeaf, key) = buddy.kvStoSlotsLeaf(fetchedNodes[inx], kvp, env)
         if isLeaf:
           # Update `unprocessed` registry, collect storage roots (if any)
-          buddy.registerAccountLeaf(key, acc, env)
+          buddy.registerStoSlotsLeaf(key, kvp, env)
           nLeafNodes.inc
 
   when extraTraceMessages:
-    trace logTxt "merged into database", peer, ctx=buddy.healingCtx(env),
-      nFetchedNodes, nLeafNodes, nRejected=rejected.len
+    trace logTxt "merged into database", peer, ctx=buddy.healingCtx(kvp,env),
+      nLeafNodes
 
   return (nFetchedNodes - rejected.len, rejected)
 
@@ -340,32 +339,50 @@ proc accountsHealingImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc healAccounts*(
+proc healStorageSlots*(
     buddy: SnapBuddyRef;
     env: SnapPivotRef;
       ) {.async.} =
-  ## Fetching and merging missing account trie database nodes.
+  ## Fetching and merging missing slorage slots trie database nodes.
   trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)
 
-  let
-    fa = env.fetchAccounts
   var
     nNodesFetched = 0
     nFetchLoop = 0
     ignore: HashSet[Blob]
+    visited: HashSet[NodeKey]
 
-  while not fa.processed.isFull() and
-        buddy.ctrl.running and
+  while buddy.ctrl.running and
+        visited.len <= healStorageSlotsBatchMax and
+        ignore.len <= healStorageSlotsFailedMax and
         not env.archived:
-    let (nNodes, rejected) = await buddy.accountsHealingImpl(ignore, env)
-    if nNodes <= 0:
-      break
-    ignore = ignore + rejected
-    nNodesFetched.inc(nNodes)
+    # Pull out the next request list from the queue
+    let kvp = block:
+      let rc = env.storageQueueUnlinkPartialItem visited
+      if rc.isErr:
+        when extraTraceMessages:
+          trace logTxt "queue exhausted", peer=buddy.peer,
+            ctx=buddy.healingCtx(env), nIgnore=ignore.len, nVisited=visited.len
+        break
+      rc.value
+
     nFetchLoop.inc
 
+    # Process request range for healing
+    let (nNodes, rejected) = await buddy.stoSlotsHealingImpl(ignore, kvp, env)
+    if kvp.data.slots.processed.isFull:
+      env.nSlotLists.inc
+      env.parkedStorage.excl kvp.data.accKey
+    else:
+      # Re-queue again, to be re-processed in another cycle
+      visited.incl kvp.data.accKey
+      env.storageQueueAppend kvp
+
+    ignore = ignore + rejected
+    nNodesFetched.inc(nNodes)
+
   trace logTxt "done", peer=buddy.peer, ctx=buddy.healingCtx(env),
-    nNodesFetched, nFetchLoop, nIgnore=ignore.len
+    nNodesFetched, nFetchLoop, nIgnore=ignore.len, nVisited=visited.len
 
 # ------------------------------------------------------------------------------
 # End

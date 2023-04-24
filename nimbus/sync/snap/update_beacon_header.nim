@@ -14,7 +14,6 @@ import
   chronicles,
   chronos,
   eth/[common, p2p],
-  ../sync_desc,
   ../misc/sync_ctrl,
   ./worker_desc,
   ./worker/com/[com_error, get_block_header]

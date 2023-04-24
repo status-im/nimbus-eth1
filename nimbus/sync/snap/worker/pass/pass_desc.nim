@@ -9,7 +9,6 @@
 
 import
   chronos,
-  ../../../sync_desc,
   ../../worker_desc
 
 type

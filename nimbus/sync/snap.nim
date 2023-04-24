@@ -17,7 +17,7 @@ import
   ../db/select_backend,
   ../core/chain,
   ./snap/[worker, worker_desc],
-  "."/[protocol, sync_desc, sync_sched]
+  "."/[protocol, sync_sched]
 
 logScope:
   topics = "snap-sync"
