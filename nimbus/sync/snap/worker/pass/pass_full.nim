@@ -19,11 +19,17 @@ import
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
   ".."/[pivot, ticker],
-  play_desc
+  pass_desc
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
+
+  dumpDatabaseOnRollOver = true # or false # <--- will go away (debugging only)
+    ## Dump database before switching to full sync (debugging, testing)
+
+when dumpDatabaseOnRollOver:
+  import ../../../../../tests/replay/undump_kvp
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -172,7 +178,7 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   if not env.isNil:
     # Soft start all peers on the second lap.
     ignoreException("fullSyncPool"):
-      if not ctx.playMethod.start(buddy):
+      if not buddy.fullSyncStart():
         # Start() method failed => wait for another peer
         buddy.ctrl.stopped = true
     if last:
@@ -188,6 +194,12 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
 
       # Instead of genesis.
       ctx.chain.com.startOfHistory = env.stateHeader.blockHash
+
+      when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
+        # Dump database ...                  <--- will go away (debugging only)
+        let nRecords =                     # <--- will go away (debugging only)
+          ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
+        trace logTxt "dumped block chain database", nRecords
 
       # Reset so that this action would not be triggered, again
       ctx.pool.fullPivot = nil
@@ -250,9 +262,9 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playFullSyncSpecs*: PlaySyncSpecs =
+proc passFull*: auto =
   ## Return full sync handler environment
-  PlaySyncSpecs(
+  PassActorRef(
     setup:   fullSyncSetup,
     release: fullSyncRelease,
     start:   fullSyncStart,

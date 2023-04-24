@@ -118,7 +118,7 @@ const
 
   # --------------
 
-  healAccountsCoverageTrigger* = 0.65 # 1.01 <--- will go away (debugging)
+  healAccountsCoverageTrigger* = 1.01
     ## Apply accounts healing if the global snap download coverage factor
     ## exceeds this setting. The global coverage factor is derived by merging
     ## all account ranges retrieved for all pivot state roots (see

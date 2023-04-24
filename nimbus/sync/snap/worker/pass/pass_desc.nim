@@ -13,50 +13,50 @@ import
   ../../worker_desc
 
 type
-  PlayVoidFutureCtxFn* = proc(
+  PassVoidFutureCtxFn* = proc(
     ctx: SnapCtxRef): Future[void]
       {.gcsafe, raises: [CatchableError].}
 
-  PlayVoidCtxFn* = proc(
+  PassVoidCtxFn* = proc(
     ctx: SnapCtxRef)
       {.gcsafe, raises: [CatchableError].}
 
 
-  PlayVoidFutureBuddyFn* = proc(
+  PassVoidFutureBuddyFn* = proc(
     buddy: SnapBuddyRef): Future[void]
       {.gcsafe, raises: [CatchableError].}
 
-  PlayBoolBuddyBoolIntFn* = proc(
+  PassBoolBuddyBoolIntFn* = proc(
     buddy: SnapBuddyRef; last: bool; laps: int): bool
       {.gcsafe, raises: [CatchableError].}
 
-  PlayBoolBuddyFn* = proc(
+  PassBoolBuddyFn* = proc(
     buddy: SnapBuddyRef): bool
       {.gcsafe, raises: [CatchableError].}
 
-  PlayVoidBuddyFn* = proc(
+  PassVoidBuddyFn* = proc(
     buddy: SnapBuddyRef)
       {.gcsafe, raises: [CatchableError].}
 
 
-  PlaySyncSpecs* = ref object of RootRef
+  PassActorRef* = ref object of RootRef
     ## Holds sync mode specs & methods for a particular sync state
-    setup*: PlayVoidCtxFn
-    release*: PlayVoidCtxFn
-    start*: PlayBoolBuddyFn
-    stop*: PlayVoidBuddyFn
-    pool*: PlayBoolBuddyBoolIntFn
-    daemon*: PlayVoidFutureCtxFn
-    single*: PlayVoidFutureBuddyFn
-    multi*: PlayVoidFutureBuddyFn
+    setup*: PassVoidCtxFn
+    release*: PassVoidCtxFn
+    start*: PassBoolBuddyFn
+    stop*: PassVoidBuddyFn
+    pool*: PassBoolBuddyBoolIntFn
+    daemon*: PassVoidFutureCtxFn
+    single*: PassVoidFutureBuddyFn
+    multi*: PassVoidFutureBuddyFn
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playMethod*(ctx: SnapCtxRef): PlaySyncSpecs =
+proc passActor*(ctx: SnapCtxRef): PassActorRef =
   ## Getter
-  ctx.pool.syncMode.tab[ctx.pool.syncMode.active].PlaySyncSpecs
+  ctx.pool.syncMode.tab[ctx.pool.syncMode.active].PassActorRef
 
 # ------------------------------------------------------------------------------
 # End

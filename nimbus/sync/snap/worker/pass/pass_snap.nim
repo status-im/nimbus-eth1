@@ -20,14 +20,22 @@ import
   ../pivot/storage_queue_helper,
   ../db/[hexary_desc, snapdb_pivot],
   "../.."/[range_desc, update_beacon_header, worker_desc],
-  play_desc
+  pass_desc
 
 logScope:
   topics = "snap-play"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
+
+  extraScrutinyDoubleCheckCompleteness = 1_000_000
+    ## Double check database whether it is complete (debugging, testing). This
+    ## action is slow and intended for debugging and testing use, only. The
+    ## numeric value limits the action to the maximal number of account in the
+    ## database.
+    ##
+    ## Set to `0` to disable.
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -136,11 +144,13 @@ proc snapSyncCompleteOk(
   ## debugging, only and should not be used on a large database as it uses
   ## quite a bit of computation ressources.
   if env.pivotCompleteOk():
-    if env.nAccounts <= 1_000_000: # Larger sizes might be infeasible
-      if not await env.pivotVerifyComplete(ctx):
-        error logTxt "inconsistent state, pivot incomplete",
-          pivot = env.stateHeader.blockNumber.toStr
-        return false
+    when 0 < extraScrutinyDoubleCheckCompleteness:
+      # Larger sizes might be infeasible
+      if env.nAccounts <= extraScrutinyDoubleCheckCompleteness:
+        if not await env.pivotVerifyComplete(ctx):
+          error logTxt "inconsistent state, pivot incomplete",
+            pivot=env.stateHeader.blockNumber.toStr, nAccounts=env.nAccounts
+          return false
     ctx.pool.fullPivot = env
     ctx.poolMode = true # Fast sync mode must be synchronized among all peers
     return true
@@ -193,7 +203,7 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   if not env.isNil:
     ignoreException("snapSyncPool"):
       # Stop all peers
-      ctx.playMethod.stop(buddy)
+      buddy.snapSyncStop()
       # After the last buddy peer was stopped switch to full sync mode
       # and repeat that loop over buddy peers for re-starting them.
       if last:
@@ -201,9 +211,9 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
           trace logTxt "switch to full sync", peer=buddy.peer, last, laps,
             pivot=env.stateHeader.blockNumber.toStr,
             mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
-        ctx.playMethod.release(ctx)
+        ctx.snapSyncRelease()
         ctx.pool.syncMode.active = FullSyncMode
-        ctx.playMethod.setup(ctx)
+        ctx.passActor.setup(ctx)
         ctx.poolMode = true # repeat looping over peers
     return false # do stop magically when looping over peers is exhausted
 
@@ -322,9 +332,9 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc playSnapSyncSpecs*: PlaySyncSpecs =
+proc passSnap*: auto =
   ## Return snap sync handler environment
-  PlaySyncSpecs(
+  PassActorRef(
     setup:   snapSyncSetup,
     release: snapSyncRelease,
     start:   snapSyncStart,

@@ -9,18 +9,18 @@
 
 import
   ../worker_desc,
-  ./play/[play_desc, play_full_sync, play_snap_sync]
+  ./pass/[pass_desc, pass_full, pass_snap]
 
 export
-  PlaySyncSpecs,
-  playMethod
+  PassActorRef,
+  passActor
 
-proc playSetup*(ctx: SnapCtxRef) =
+proc passSetup*(ctx: SnapCtxRef) =
   ## Set up sync mode specs table. This cannot be done at compile time.
-  ctx.pool.syncMode.tab[SnapSyncMode] = playSnapSyncSpecs()
-  ctx.pool.syncMode.tab[FullSyncMode] = playFullSyncSpecs()
+  ctx.pool.syncMode.tab[SnapSyncMode] = passSnap()
+  ctx.pool.syncMode.tab[FullSyncMode] = passFull()
 
-proc playRelease*(ctx: SnapCtxRef) =
+proc passRelease*(ctx: SnapCtxRef) =
   discard
 
 # End
