@@ -125,18 +125,16 @@ const
 
   mloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x51, Load word from memory
-    let cpt = k.cpt
-    let (memStartPos) = cpt.stack.popInt(1)
+    let (memStartPos) = k.cpt.stack.popInt(1)
 
     let memPos = memStartPos.cleanMemRef
-    cpt.gasMeter.consumeGas(
-      cpt.gasCosts[Mload].m_handler(cpt.memory.len, memPos, 32),
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
       reason = "MLOAD: GasVeryLow + memory expansion")
 
-    cpt.memory.extend(memPos, 32)
-    # FIXME-speculex: this could be made speculative
-    cpt.readMemory(memPos, 32) do (memBytes: seq[byte]):
-      cpt.stack.push(memBytes)
+    k.cpt.memory.extend(memPos, 32)
+    k.cpt.stack.push:
+      k.cpt.memory.read(memPos, 32)
 
 
   mstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -149,7 +147,7 @@ const
       reason = "MSTORE: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 32)
-    k.cpt.memory.writeConcreteBytes(memPos, @(value.toByteArrayBE))
+    k.cpt.memory.write(memPos, value.toByteArrayBE)
 
 
   mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx) =
@@ -162,7 +160,7 @@ const
       reason = "MSTORE8: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 1)
-    k.cpt.memory.writeConcreteBytes(memPos, @[value.toByteArrayBE[31]])
+    k.cpt.memory.write(memPos, [value.toByteArrayBE[31]])
 
   # -------
 

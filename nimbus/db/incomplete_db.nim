@@ -30,13 +30,13 @@ proc ifNodesExistGetStorageBytesWithinAccount*(storageTrie: StorageTrie, slotAsK
 
 
 proc populateDbWithNodes*(db: TrieDatabaseRef, nodes: seq[seq[byte]]) =
-  error("AARDVARK: populateDbWithNodes received nodes, about to populate", nodes)   # AARDVARK not an error, I just want it to stand out
+  error("GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG AARDVARK: populateDbWithNodes received nodes, about to populate", nodes)   # AARDVARK not an error, I just want it to stand out
   for nodeBytes in nodes:
     let nodeHash = keccakHash(nodeBytes)
     info("AARDVARK: populateDbWithNodes about to add node", nodeHash, nodeBytes)
     db.put(nodeHash.data, nodeBytes)
 
-# FIXME-Adam: just make the callers call populateDbWithNodes directly?
+# AARDVARK: just make the callers call populateDbWithNodes directly?
 proc populateDbWithBranch*(db: TrieDatabaseRef, branch: seq[seq[byte]]) =
   for nodeBytes in branch:
     let nodeHash = keccakHash(nodeBytes)

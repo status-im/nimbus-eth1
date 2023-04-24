@@ -117,7 +117,7 @@ proc procBlkPreamble(vmState: BaseVMState;
 
 proc procBlkEpilogue(vmState: BaseVMState;
                      header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [RlpError, CatchableError].} =
+    {.gcsafe, raises: [RlpError].} =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:

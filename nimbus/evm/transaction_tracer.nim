@@ -12,7 +12,6 @@ import
   std/[json, strutils, sets, hashes],
   chronicles, eth/common, stint,
   nimcrypto/utils,
-  ../utils/functors/possible_futures,
   ./types, ./memory, ./stack, ../db/accounts_cache,
   ./interpreter/op_codes
 
@@ -107,12 +106,11 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op):
 
   # log memory
   if TracerFlags.DisableMemory notin tracer.flags:
-    let bytes = c.memory.waitForBytes  # FIXME-Adam: it's either this or make the tracer async; ugh.
     let mem = newJArray()
     const chunkLen = 32
     let numChunks = c.memory.len div chunkLen
     for i in 0 ..< numChunks:
-      let memHex = bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+      let memHex = c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
       if TracerFlags.GethCompatibility in tracer.flags:
         mem.add(%("0x" & memHex.toLowerAscii))
       else:
@@ -147,7 +145,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
     if c.msg.depth < tracer.storageKeys.len:
       var stateDB = c.vmState.stateDB
       for key in tracer.storage(c.msg.depth):
-        let value = waitForValueOf(stateDB.getStorageCell(c.msg.contractAddress, key)) # FIXME-Adam: again, I don't like the waitFor
+        let value = stateDB.getStorage(c.msg.contractAddress, key)
         if TracerFlags.GethCompatibility in tracer.flags:
           storage["0x" & key.dumpHex.stripLeadingZeros] =
             %("0x" & value.dumpHex.stripLeadingZeros)

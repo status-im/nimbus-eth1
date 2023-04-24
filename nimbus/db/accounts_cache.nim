@@ -1,11 +1,8 @@
 import
   std/[tables, hashes, sets],
-  chronos,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
-  ../utils/functors/possible_futures,
+  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils/utils, storage_types,
   ../../stateless/multi_keys,
-  ../evm/async/speculex,
   ./distinct_tries,
   ./access_list as ac_access_list
 
@@ -24,14 +21,12 @@ type
 
   AccountFlags = set[AccountFlag]
 
-  StorageCell* = SpeculativeExecutionCell[UInt256]
-
   RefAccount = ref object
     account: Account
     flags: AccountFlags
     code: seq[byte]
     originalStorage: TableRef[UInt256, UInt256]
-    overlayStorage: Table[UInt256, StorageCell]
+    overlayStorage: Table[UInt256, UInt256]
 
   WitnessData* = object
     storageKeys*: HashSet[UInt256]
@@ -266,15 +261,11 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
 
   acc.originalStorage[slot] = result
 
-proc storageCell(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): StorageCell =
-  acc.overlayStorage.withValue(slot, cell) do:
-    return cell[]
-  do:
-    return pureCell(acc.originalStorageValue(slot, db))
-
-# FIXME-removeSynchronousInterface: we use this down below, but I don't think that's okay anymore.
 proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
-  waitForValueOf(storageCell(acc, slot, db))
+  acc.overlayStorage.withValue(slot, val) do:
+    return val[]
+  do:
+    result = acc.originalStorageValue(slot, db)
 
 proc kill(acc: RefAccount) =
   acc.flags.excl Alive
@@ -305,7 +296,7 @@ proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
     else:
       db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
-proc asyncPersistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool): Future[void] {.async.} =
+proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
@@ -316,10 +307,9 @@ proc asyncPersistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool)
 
   var storageTrie = getStorageTrie(db, acc)
 
-  for slot, valueCell in acc.overlayStorage:
+  for slot, value in acc.overlayStorage:
     let slotAsKey = createTrieKeyFromSlot slot
 
-    let value = await valueCell.toFuture
     if value > 0:
       let encodedValue = rlp.encode(value)
       storageTrie.putSlotBytes(slotAsKey, encodedValue)
@@ -337,8 +327,7 @@ proc asyncPersistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool)
   if not clearCache:
     # if we preserve cache, move the overlayStorage
     # to originalStorage, related to EIP2200, EIP1283
-    for slot, valueCell in acc.overlayStorage:
-      let value = unsafeGetAlreadyAvailableValue(valueCell)
+    for slot, value in acc.overlayStorage:
       if value > 0:
         acc.originalStorage[slot] = value
       else:
@@ -401,15 +390,11 @@ proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256)
     return
   acc.originalStorageValue(slot, ac.db)
 
-proc getStorageCell*(ac: AccountsCache, address: EthAddress, slot: UInt256): StorageCell =
+proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return pureCell(UInt256.zero)
-  return acc.storageCell(slot, ac.db)
-
-# FIXME-removeSynchronousInterface
-proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 =
-  waitForValueOf(getStorageCell(ac, address, slot))
+    return
+  acc.storageValue(slot, ac.db)
 
 proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address, false)
@@ -475,20 +460,14 @@ proc setCode*(ac: AccountsCache, address: EthAddress, code: seq[byte]) =
     acc.code = code
     acc.flags.incl CodeChanged
 
-proc setStorageCell*(ac: AccountsCache, address: EthAddress, slot: UInt256, cell: StorageCell) =
+proc setStorage*(ac: AccountsCache, address: EthAddress, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
-  # FIXME-removeSynchronousInterface: ugh, this seems like a problem (that we need the values to be able to check whether they're equal)
   let oldValue = acc.storageValue(slot, ac.db)
-  let value = waitForValueOf(cell)
   if oldValue != value:
     var acc = ac.makeDirty(address)
-    acc.overlayStorage[slot] = cell
+    acc.overlayStorage[slot] = value
     acc.flags.incl StorageChanged
-
-# FIXME-removeSynchronousInterface
-proc setStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256, value: UInt256) =
-  setStorageCell(ac, address, slot, pureCell(value))
 
 proc clearStorage*(ac: AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
@@ -549,52 +528,9 @@ proc clearEmptyAccounts(ac: AccountsCache) =
     ac.deleteEmptyAccount(ripemdAddr)
     ac.ripemdSpecial = false
 
-
-type MissingNodesError* = ref object of Defect
-  paths*: seq[seq[seq[byte]]]
-  nodeHashes*: seq[Hash256]
-
-# FIXME-Adam: Move this elsewhere.
-# Also, I imagine there's a more efficient way to do this.
-proc padRight[V](s: seq[V], n: int, v: V): seq[V] =
-  for sv in s:
-    result.add(sv)
-  while result.len < n:
-    result.add(v)
-
-proc padRightWithZeroes(s: NibblesSeq, n: int): NibblesSeq =
-  initNibbleRange(padRight(s.getBytes, (n + 1) div 2, byte(0)))
-
-# FIXME-Adam: Why can I never find the conversion function I need?
-func toHash*(value: seq[byte]): Hash256 =
-  doAssert(value.len == 32)
-  var byteArray: array[32, byte]
-  for i, b in value:
-    byteArray[i] = b
-  result.data = byteArray
-
-func encodePath(path: NibblesSeq): seq[byte] =
-  if path.len == 64:
-    path.getBytes
-  else:
-    hexPrefixEncode(path)
-
-proc createMissingNodesErrorForAccount(missingAccountPath: NibblesSeq, nodeHash: Hash256): MissingNodesError =
-  MissingNodesError(
-    paths: @[@[encodePath(padRightWithZeroes(missingAccountPath, 64))]],
-    nodeHashes: @[nodeHash]
-  )
-
-proc createMissingNodesErrorForSlot(address: EthAddress, missingSlotPath: NibblesSeq, nodeHash: Hash256): MissingNodesError =
-  MissingNodesError(
-    paths: @[@[@(address.keccakHash.data), encodePath(padRightWithZeroes(missingSlotPath, 64))]],
-    nodeHashes: @[nodeHash]
-  )
-
-
-proc asyncPersist*(ac: AccountsCache,
-                   clearEmptyAccount: bool = false,
-                   clearCache: bool = true): Future[void] {.async.} =
+proc persist*(ac: AccountsCache,
+              clearEmptyAccount: bool = false,
+              clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   var cleanAccounts = initHashSet[EthAddress]()
@@ -613,19 +549,10 @@ proc asyncPersist*(ac: AccountsCache,
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        #
-        # Also, see the comment on repeatedlyTryToPersist in
-        # process_transaction.nim.
-        try:
-          await acc.asyncPersistStorage(ac.db, clearCache)
-        except MissingNodeError as e:
-          raise createMissingNodesErrorForSlot(address, e.path, toHash(e.nodeHashBytes))
+        acc.persistStorage(ac.db, clearCache)
       ac.trie.putAccountBytes address, rlp.encode(acc.account)
     of Remove:
-      try:
-        ac.trie.delAccountBytes address
-      except MissingNodeError as e:
-        raise createMissingNodesErrorForAccount(e.path, toHash(e.nodeHashBytes))
+      ac.trie.delAccountBytes address
       if not clearCache:
         cleanAccounts.incl address
     of DoNothing:
@@ -648,12 +575,6 @@ proc asyncPersist*(ac: AccountsCache,
   ac.savePoint.accessList.clear()
 
   ac.isDirty = false
-
-# FIXME-removeSynchronousInterface
-proc persist*(ac: AccountsCache,
-              clearEmptyAccount: bool = false,
-              clearCache: bool = true) =
-  waitFor(asyncPersist(ac, clearEmptyAccount, clearCache))
 
 iterator addresses*(ac: AccountsCache): EthAddress =
   # make sure all savepoint already committed
@@ -709,8 +630,7 @@ func update(wd: var WitnessData, acc: RefAccount) =
       if v.isZero: continue
       wd.storageKeys.incl k
 
-  for k, cell in acc.overlayStorage:
-    let v = unsafeGetAlreadyAvailableValue(cell)  # FIXME-Adam: should be resolved by now, I think? wait, maybe not?
+  for k, v in acc.overlayStorage:
     if v.isZero and k notin wd.storageKeys:
       continue
     if v.isZero and k in wd.storageKeys:
