@@ -18,10 +18,10 @@ import
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 type
   # SnapStorage* = object
@@ -85,7 +85,7 @@ proc getStorageRanges*(
     stateRoot: Hash256;                ## Current DB base (`pivot` for logging)
     accounts: seq[AccountSlotsHeader]; ## List of per-account storage slots
     pivot: string;                     ## For logging, instead of `stateRoot`
-      ): Future[Result[GetStorageRanges,ComError]]
+      ): Future[Result[GetStorageRanges,GetError]]
       {.async.} =
   ## Fetch data using the `snap/1` protocol, returns the range covered.
   ##
@@ -95,7 +95,7 @@ proc getStorageRanges*(
   ## are ignored for later accounts list items.)
   var nAccounts = accounts.len
   if nAccounts == 0:
-    return err(ComEmptyAccountsArguments)
+    return err(GetEmptyAccountsArguments)
 
   let
     peer {.used.} = buddy.peer
@@ -113,18 +113,18 @@ proc getStorageRanges*(
       let rc = await buddy.getStorageRangesReq(stateRoot,
         accounts.mapIt(it.accKey.to(Hash256)), iv, pivot)
       if rc.isErr:
-        return err(ComNetworkProblem)
+        return err(GetNetworkProblem)
       if rc.value.isNone:
         when trSnapTracePacketsOk:
           trace trSnapRecvTimeoutWaiting & "for StorageRanges", peer, pivot,
             nAccounts
-        return err(ComResponseTimeout)
+        return err(GetResponseTimeout)
       if nAccounts < rc.value.get.slotLists.len:
         # Ooops, makes no sense
         when trSnapTracePacketsOk:
           trace trSnapRecvReceived & "too many slot lists", peer, pivot,
             nAccounts, nReceived=rc.value.get.slotLists.len
-        return err(ComTooManyStorageSlots)
+        return err(GetTooManyStorageSlots)
       rc.value.get
 
     nSlotLists = snStoRanges.slotLists.len
@@ -142,7 +142,7 @@ proc getStorageRanges*(
     when trSnapTracePacketsOk:
       trace trSnapRecvReceived & "empty StorageRanges", peer, pivot,
         nAccounts, nSlotLists, nProof, firstAccount=accounts[0].accKey
-    return err(ComNoStorageForAccounts)
+    return err(GetNoStorageForAccounts)
 
   # Assemble return structure for given peer response
   var dd = GetStorageRanges(

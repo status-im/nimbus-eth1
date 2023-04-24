@@ -70,7 +70,7 @@ import
   eth/p2p,
   stew/[interval_set, keyed_queue],
   "../../.."/[constants, range_desc, worker_desc],
-  ../../com/[com_error, get_storage_ranges],
+  ../../get/[get_error, get_storage_ranges],
   ../../db/[hexary_error, snapdb_storage_slots],
   ./helper/storage_queue
 
@@ -121,14 +121,15 @@ proc fetchStorageSlotsImpl(
   var stoRange = block:
     let rc = await buddy.getStorageRanges(stateRoot, req, pivot)
     if rc.isErr:
-      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+      if await buddy.ctrl.getErrorStopAfterSeriousOne(
+          rc.error, buddy.only.errors):
         trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
           nReq=req.len, error=rc.error
       return err() # all of `req` failed
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
-  buddy.only.errors.resetComError()
+  buddy.only.errors.getErrorReset()
 
   var
     nSlotLists = stoRange.data.storages.len

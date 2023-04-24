@@ -16,10 +16,10 @@ import
   stew/byteutils,
   "../../.."/[protocol, protocol/trace_config, types],
   ../../worker_desc,
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -28,7 +28,7 @@ logScope:
 proc getBlockHeader*(
     buddy: SnapBuddyRef;
     num: BlockNumber;
-      ): Future[Result[BlockHeader,ComError]]
+      ): Future[Result[BlockHeader,GetError]]
       {.async.} =
   ## Get single block header
   let
@@ -52,7 +52,7 @@ proc getBlockHeader*(
     when trSnapTracePacketsOk:
       trace trSnapRecvError & "waiting for GetByteCodes reply", peer,
         error=e.msg
-    return err(ComNetworkProblem)
+    return err(GetNetworkProblem)
 
   var hdrRespLen = 0
   if hdrResp.isSome:
@@ -60,7 +60,7 @@ proc getBlockHeader*(
   if hdrRespLen == 0:
     when trSnapTracePacketsOk:
       trace trEthRecvReceivedBlockHeaders, peer, reqLen, respose="n/a"
-    return err(ComNoHeaderAvailable)
+    return err(GetNoHeaderAvailable)
 
   if hdrRespLen == 1:
     let
@@ -72,13 +72,13 @@ proc getBlockHeader*(
 
   when trSnapTracePacketsOk:
     trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
-  return err(ComTooManyHeaders)
+  return err(GetTooManyHeaders)
 
 
 proc getBlockHeader*(
     buddy: SnapBuddyRef;
     hash: Hash256;
-      ): Future[Result[BlockHeader,ComError]]
+      ): Future[Result[BlockHeader,GetError]]
       {.async.} =
   ## Get single block header
   let
@@ -103,7 +103,7 @@ proc getBlockHeader*(
     when trSnapTracePacketsOk:
       trace trSnapRecvError & "waiting for GetByteCodes reply", peer,
         error=e.msg
-    return err(ComNetworkProblem)
+    return err(GetNetworkProblem)
 
   var hdrRespLen = 0
   if hdrResp.isSome:
@@ -111,7 +111,7 @@ proc getBlockHeader*(
   if hdrRespLen == 0:
     when trSnapTracePacketsOk:
       trace trEthRecvReceivedBlockHeaders, peer, reqLen, respose="n/a"
-    return err(ComNoHeaderAvailable)
+    return err(GetNoHeaderAvailable)
 
   if hdrRespLen == 1:
     let
@@ -123,7 +123,7 @@ proc getBlockHeader*(
 
   when trSnapTracePacketsOk:
     trace trEthRecvReceivedBlockHeaders, peer, reqLen, hdrRespLen
-  return err(ComTooManyHeaders)
+  return err(GetTooManyHeaders)
 
 # ------------------------------------------------------------------------------
 # End

@@ -22,7 +22,7 @@ import
   eth/[common, p2p],
   stew/keyed_queue,
   "../../.."/[constants, range_desc, worker_desc],
-  ../../com/[com_error, get_byte_codes],
+  ../../get/[get_error, get_byte_codes],
   ../../db/snapdb_contracts
 
 logScope:
@@ -134,7 +134,8 @@ proc rangeFetchContractsImpl(
     if rc.isErr:
       # Restore batch queue
       env.putUnprocessed parking
-      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+      if await buddy.ctrl.getErrorStopAfterSeriousOne(
+          rc.error, buddy.only.errors):
         error logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
           nHashKeys=hashKeys.len, error=rc.error
         discard

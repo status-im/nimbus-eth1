@@ -50,7 +50,7 @@ import
   stew/[interval_set, keyed_queue],
   "../../../.."/[sync_desc, types],
   "../../.."/[constants, range_desc, worker_desc],
-  ../../com/[com_error, get_account_range],
+  ../../get/[get_error, get_account_range],
   ../../db/[hexary_envelope, snapdb_accounts],
   ./helper/[storage_queue, swap_in]
 
@@ -133,7 +133,8 @@ proc accountsRangefetchImpl(
       rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
       fa.unprocessed.mergeSplit iv # fail => interval back to pool
-      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+      if await buddy.ctrl.getErrorStopAfterSeriousOne(
+          rc.error, buddy.only.errors):
         when extraTraceMessages:
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
             reqLen=iv, error=rc.error
@@ -142,7 +143,7 @@ proc accountsRangefetchImpl(
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
-  buddy.only.errors.resetComError()
+  buddy.only.errors.getErrorReset()
 
   let
     gotAccounts = dd.data.accounts.len # comprises `gotStorage`

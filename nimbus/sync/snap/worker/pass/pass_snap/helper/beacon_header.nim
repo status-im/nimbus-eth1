@@ -16,7 +16,7 @@ import
   eth/[common, p2p],
   ../../../../../misc/sync_ctrl,
   ../../../../worker_desc,
-  ../../../com/[com_error, get_block_header]
+  ../../../get/[get_error, get_block_header]
 
 logScope:
   topics = "snap-ctrl"
@@ -64,7 +64,7 @@ proc beaconHeaderUpdateFromFile*(
     peer = buddy.peer
 
   var
-    rc = Result[BlockHeader,ComError].err(ComError(0))
+    rc = Result[BlockHeader,GetError].err(GetError(0))
     isHash = hashOrNum.isHash # so that the value can be logged
 
   # Parse value dump and fetch a header from the peer (if any)

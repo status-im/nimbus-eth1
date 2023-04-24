@@ -18,7 +18,7 @@ import
   ../../db/select_backend,
   ../misc/[best_pivot, block_queue, ticker],
   ../sync_desc,
-  ./worker/com/com_error,
+  ./worker/get/get_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
   ./range_desc
 
@@ -95,7 +95,7 @@ type
 
   SnapBuddyData* = object
     ## Per-worker local descriptor data extension
-    errors*: ComErrorStatsRef          ## For error handling
+    errors*: GetErrorStatsRef          ## For error handling
 
     # Full sync continuation parameters
     bPivot*: BestPivotWorkerRef        ## Local pivot worker descriptor

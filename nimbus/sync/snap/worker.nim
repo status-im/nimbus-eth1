@@ -18,7 +18,7 @@ import
   "../.."/[common, db/select_backend],
   ../misc/ticker,
   ./worker/pass,
-  ./worker/com/com_error,
+  ./worker/get/get_error,
   ./worker/db/snapdb_desc,
   "."/[range_desc, worker_desc]
 
@@ -90,7 +90,7 @@ proc start*(buddy: SnapBuddyRef): bool =
   ## Initialise worker peer
   ignoreException("start"):
     if  buddy.ctx.passActor.start(buddy):
-      buddy.only.errors = ComErrorStatsRef()
+      buddy.only.errors = GetErrorStatsRef()
       return true
 
 proc stop*(buddy: SnapBuddyRef) =

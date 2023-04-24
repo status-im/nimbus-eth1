@@ -47,7 +47,7 @@ import
   ../../../../../utils/prettify,
   ../../../../protocol,
   "../../.."/[constants, range_desc, worker_desc],
-  ../../com/[com_error, get_trie_nodes],
+  ../../get/[get_error, get_trie_nodes],
   ../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_nearby,
             hexary_paths, hexary_range, snapdb_accounts],
   ./helper/[missing_nodes, storage_queue, swap_in]
@@ -177,7 +177,7 @@ proc getNodesFromNetwork(
     let rc = await buddy.getTrieNodes(rootHash, pathList, pivot)
     if rc.isOk:
       # Reset error counts for detecting repeated timeouts, network errors, etc.
-      buddy.only.errors.resetComError()
+      buddy.only.errors.getErrorReset()
 
       # Forget about unfetched missing nodes, will be picked up later
       return rc.value.nodes.mapIt(NodeSpecs(
@@ -188,7 +188,8 @@ proc getNodesFromNetwork(
     # Process error ...
     let
       error = rc.error
-      ok = await buddy.ctrl.stopAfterSeriousComError(error, buddy.only.errors)
+      ok = await buddy.ctrl.getErrorStopAfterSeriousOne(
+        error, buddy.only.errors)
     when extraTraceMessages:
       trace logTxt "reply error", peer, ctx=buddy.healingCtx(env),
          error, stop=ok

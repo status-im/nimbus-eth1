@@ -16,10 +16,10 @@ import
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 type
   # SnapByteCodes* = object
@@ -58,7 +58,7 @@ proc getByteCodesReq(
 proc getByteCodes*(
     buddy: SnapBuddyRef;
     keys: seq[NodeKey],
-      ): Future[Result[GetByteCodes,ComError]]
+      ): Future[Result[GetByteCodes,GetError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the byte codes requested
   ## (if any.)
@@ -67,7 +67,7 @@ proc getByteCodes*(
     nKeys = keys.len
 
   if nKeys == 0:
-    return err(ComEmptyRequestArguments)
+    return err(GetEmptyRequestArguments)
 
   if trSnapTracePacketsOk:
     trace trSnapSendSending & "GetByteCodes", peer, nkeys
@@ -75,16 +75,16 @@ proc getByteCodes*(
   let byteCodes = block:
     let rc = await buddy.getByteCodesReq keys.mapIt(it.to(Hash256))
     if rc.isErr:
-      return err(ComNetworkProblem)
+      return err(GetNetworkProblem)
     if rc.value.isNone:
       when trSnapTracePacketsOk:
         trace trSnapRecvTimeoutWaiting & "for reply to GetByteCodes", peer,
           nKeys
-      return err(ComResponseTimeout)
+      return err(GetResponseTimeout)
     let blobs = rc.value.get.codes
     if nKeys < blobs.len:
       # Ooops, makes no sense
-      return err(ComTooManyByteCodes)
+      return err(GetTooManyByteCodes)
     blobs
 
   let
@@ -104,7 +104,7 @@ proc getByteCodes*(
     #   to the next one. The node must not return nil or other placeholders.
     when trSnapTracePacketsOk:
       trace trSnapRecvReceived & "empty ByteCodes", peer, nKeys, nCodes
-    return err(ComNoByteCodesAvailable)
+    return err(GetNoByteCodesAvailable)
 
   # Assemble return value
   var
