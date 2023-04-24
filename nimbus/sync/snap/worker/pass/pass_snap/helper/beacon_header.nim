@@ -14,9 +14,9 @@ import
   chronicles,
   chronos,
   eth/[common, p2p],
-  ../misc/sync_ctrl,
-  ./worker_desc,
-  ./worker/com/[com_error, get_block_header]
+  ../../../../../misc/sync_ctrl,
+  ../../../../worker_desc,
+  ../../../com/[com_error, get_block_header]
 
 logScope:
   topics = "snap-ctrl"
@@ -25,7 +25,7 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateBeaconHeaderbuBlockNumber*(
+proc beaconHeaderUpdatebuBlockNumber*(
     buddy: SnapBuddyRef;             # Worker peer
     num: BlockNumber;                # Block number to sync against
       ) {.async.} =
@@ -44,7 +44,7 @@ proc updateBeaconHeaderbuBlockNumber*(
       ctx.pool.beaconHeader = rc.value
 
 
-proc updateBeaconHeaderFromFile*(
+proc beaconHeaderUpdateFromFile*(
     buddy: SnapBuddyRef;             # Worker peer
       ) {.async.} =
   ## This function updates the beacon header cache by import from the file name

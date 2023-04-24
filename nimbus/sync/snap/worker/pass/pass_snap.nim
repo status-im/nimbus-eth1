@@ -17,9 +17,10 @@ import
   stew/[interval_set, keyed_queue],
   "../../.."/[handlers/eth, misc/ticker, protocol],
   ../db/[hexary_desc, snapdb_pivot],
-  "../.."/[range_desc, update_beacon_header, worker_desc],
-  ./pass_snap/[pivot, helper/storage_queue],
-  pass_desc
+  "../.."/[range_desc, worker_desc],
+  ./pass_snap/helper/[beacon_header, storage_queue],
+  ./pass_snap/pivot,
+  ./pass_desc
 
 logScope:
   topics = "snap-play"
@@ -250,7 +251,7 @@ proc snapSyncSingle(buddy: SnapBuddyRef) {.async.} =
   ## * `buddy.ctrl.poolMode` is `false`
   ##
   # External beacon header updater
-  await buddy.updateBeaconHeaderFromFile()
+  await buddy.beaconHeaderUpdateFromFile()
 
   # Dedicate some process cycles to the recovery process (if any)
   if not buddy.ctx.pool.recovery.isNil:
