@@ -17,11 +17,12 @@ import
   eth/p2p, # trie/trie_defs],
   stew/[interval_set, keyed_queue, sorted_set],
   "../../../.."/[misc/ticker, sync_desc, types],
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
-  ./helper/storage_queue,
+  ./helper/[accounts_coverage, storage_queue],
   "."/[heal_accounts, heal_storage_slots, range_fetch_accounts,
-       range_fetch_contracts, range_fetch_storage_slots]
+       range_fetch_contracts, range_fetch_storage_slots],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-pivot"
@@ -55,11 +56,11 @@ proc accountsHealingOk(
       ): bool =
   ## Returns `true` if accounts healing is enabled for this pivot.
   not env.fetchAccounts.processed.isEmpty and
-    healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage()
+    healAccountsCoverageTrigger <= ctx.accountsCoverage()
 
 
 proc init(
-    T: type SnapRangeBatchRef;      # Collection of sets of account ranges
+    T: type RangeBatchRef;  # Collection of sets of account ranges
     ctx: SnapCtxRef;                # Some global context
       ): T =
   ## Account ranges constructor
@@ -68,11 +69,11 @@ proc init(
   result.processed = NodeTagRangeSet.init()
 
   # Update coverage level roll over
-  ctx.pivotAccountsCoverage100PcRollOver()
+  ctx.accountsCoverage100PcRollOver()
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]` range
   # sets. Deprioritise already processed ranges by moving it to the second set.
-  for iv in ctx.pool.coveredAccounts.increasing:
+  for iv in ctx.pool.pass.coveredAccounts.increasing:
     discard result.unprocessed[0].reduce iv
     discard result.unprocessed[1].merge iv
 
@@ -84,14 +85,14 @@ proc init(
   ## Pivot constructor.
   result = T(
     stateHeader:   header,
-    fetchAccounts: SnapRangeBatchRef.init(ctx))
+    fetchAccounts: RangeBatchRef.init(ctx))
   result.storageAccounts.init()
 
 # ------------------------------------------------------------------------------
 # Public functions: pivot table related
 # ------------------------------------------------------------------------------
 
-proc beforeTopMostlyClean*(pivotTable: var SnapPivotTable) =
+proc beforeTopMostlyClean*(pivotTable: var PivotTable) =
   ## Clean up pivot queues of the entry before the top one. The queues are
   ## the pivot data that need most of the memory. This cleaned pivot is not
   ## usable any more after cleaning but might be useful as historic record.
@@ -99,7 +100,7 @@ proc beforeTopMostlyClean*(pivotTable: var SnapPivotTable) =
   if rc.isOk:
     rc.value.pivotMothball
 
-proc topNumber*(pivotTable: var SnapPivotTable): BlockNumber =
+proc topNumber*(pivotTable: var PivotTable): BlockNumber =
   ## Return the block number of the top pivot entry, or zero if there is none.
   let rc = pivotTable.lastValue
   if rc.isOk:
@@ -107,9 +108,9 @@ proc topNumber*(pivotTable: var SnapPivotTable): BlockNumber =
 
 
 proc reverseUpdate*(
-    pivotTable: var SnapPivotTable; # Pivot table
-    header: BlockHeader;            # Header to generate new pivot from
-    ctx: SnapCtxRef;                # Some global context
+    pivotTable: var PivotTable;         # Pivot table
+    header: BlockHeader;                # Header to generate new pivot from
+    ctx: SnapCtxRef;                    # Some global context
       ) =
   ## Activate environment for earlier state root implied by `header` argument.
   ##
@@ -130,8 +131,8 @@ proc reverseUpdate*(
 
 
 proc tickerStats*(
-    pivotTable: var SnapPivotTable; # Pivot table
-    ctx: SnapCtxRef;                # Some global context
+    pivotTable: var PivotTable;         # Pivot table
+    ctx: SnapCtxRef;                    # Some global context
       ): TickerSnapStatsUpdater =
   ## This function returns a function of type `TickerStatsUpdater` that prints
   ## out pivot table statitics. The returned fuction is supposed to drive
@@ -149,7 +150,7 @@ proc tickerStats*(
     var
       aSum, aSqSum, uSum, uSqSum, sSum, sSqSum, cSum, cSqSum: float
       count = 0
-    for kvp in ctx.pool.pivotTable.nextPairs:
+    for kvp in ctx.pool.pass.pivotTable.nextPairs:
 
       # Accounts mean & variance
       let aLen = kvp.data.nAccounts.float
@@ -172,9 +173,9 @@ proc tickerStats*(
         cSum += cLen
         cSqSum += cLen * cLen
     let
-      env = ctx.pool.pivotTable.lastValue.get(otherwise = nil)
-      accCoverage = (ctx.pool.coveredAccounts.fullFactor +
-                     ctx.pool.covAccTimesFull.float)
+      env = ctx.pool.pass.pivotTable.lastValue.get(otherwise = nil)
+      accCoverage = (ctx.pool.pass.coveredAccounts.fullFactor +
+                     ctx.pool.pass.covAccTimesFull.float)
       accFill = meanStdDev(uSum, uSqSum, count)
     var
       beaconBlock = none(BlockNumber)
@@ -187,13 +188,13 @@ proc tickerStats*(
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
       ctraQuLen = some(env.fetchContracts.len)
-    if 0 < ctx.pool.beaconHeader.blockNumber:
-      beaconBlock = some(ctx.pool.beaconHeader.blockNumber)
+    if 0 < ctx.pool.pass.beaconHeader.blockNumber:
+      beaconBlock = some(ctx.pool.pass.beaconHeader.blockNumber)
 
     TickerSnapStats(
       beaconBlock:    beaconBlock,
       pivotBlock:     pivotBlock,
-      nQueues:        ctx.pool.pivotTable.len,
+      nQueues:        ctx.pool.pass.pivotTable.len,
       nAccounts:      meanStdDev(aSum, aSqSum, count),
       nSlotLists:     meanStdDev(sSum, sSqSum, count),
       nContracts:     meanStdDev(cSum, cSqSum, count),
@@ -223,7 +224,7 @@ proc pivotMothball*(env: SnapPivotRef) =
   # Simplify storage slots queues by resolving partial slots into full list
   for kvp in env.fetchStoragePart.nextPairs:
     discard env.fetchStorageFull.append(
-      kvp.key, SnapSlotsQueueItemRef(acckey: kvp.data.accKey))
+      kvp.key, SlotsQueueItemRef(acckey: kvp.data.accKey))
   env.fetchStoragePart.clear()
 
   # Provide index into `fetchStorageFull`
@@ -265,7 +266,7 @@ proc execSnapSyncAction*(
     await buddy.rangeFetchAccounts(env)
 
     # Update 100% accounting
-    ctx.pivotAccountsCoverage100PcRollOver()
+    ctx.accountsCoverage100PcRollOver()
 
     # Run at least one round fetching storage slosts and contracts even if
     # the `archived` flag is set in order to keep the batch queue small.
@@ -304,7 +305,7 @@ proc execSnapSyncAction*(
 
 
 proc saveCheckpoint*(
-    env: SnapPivotRef;              # Current pivot environment
+    env: SnapPivotRef;          # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): Result[int,HexaryError] =
   ## Save current sync admin data. On success, the size of the data record
@@ -351,7 +352,7 @@ proc pivotRecoverFromCheckpoint*(
   ## `processed`, `unprocessed`, and the `fetchStorageFull` lists are
   ## initialised.
   ##
-  let recov = ctx.pool.recovery
+  let recov = ctx.pool.pass.recovery
   if recov.isNil:
     return
 
@@ -363,8 +364,8 @@ proc pivotRecoverFromCheckpoint*(
     if topLevel:
       env.fetchAccounts.unprocessed.reduce NodeTagRange.new(minPt, maxPt)
     discard env.fetchAccounts.processed.merge(minPt, maxPt)
-    discard ctx.pool.coveredAccounts.merge(minPt, maxPt)
-    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
+    discard ctx.pool.pass.coveredAccounts.merge(minPt, maxPt)
+    ctx.accountsCoverage100PcRollOver() # update coverage level roll over
 
   # Handle storage slots
   let stateRoot = recov.state.header.stateRoot
@@ -420,12 +421,12 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   ## it will not proceed to the next scheduler task.
   let
     ctx = buddy.ctx
-    beaconHeader = ctx.pool.beaconHeader
+    beaconHeader = ctx.pool.pass.beaconHeader
   var
     pivotHeader: BlockHeader
 
   block:
-    let rc = ctx.pool.pivotTable.lastValue
+    let rc = ctx.pool.pass.pivotTable.lastValue
     if rc.isOk:
       pivotHeader = rc.value.stateHeader
 
@@ -434,7 +435,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
     # If the entry before the previous entry is unused, then run a pool mode
     # based session (which should enable a pivot table purge).
     block:
-      let rc = ctx.pool.pivotTable.beforeLast
+      let rc = ctx.pool.pass.pivotTable.beforeLast
       if rc.isOk and rc.value.data.fetchAccounts.processed.isEmpty:
         ctx.poolMode = true
 
@@ -443,7 +444,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
         pivot=pivotHeader.blockNumber.toStr,
         beacon=beaconHeader.blockNumber.toStr, poolMode=ctx.poolMode
 
-    discard ctx.pool.pivotTable.lruAppend(
+    discard ctx.pool.pass.pivotTable.lruAppend(
       beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
       pivotTableLruEntriesMax)
 
@@ -458,10 +459,10 @@ proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe.} =
-    if ctx.pool.beaconHeader.blockNumber < h.blockNumber:
+    if ctx.pool.pass.beaconHeader.blockNumber < h.blockNumber:
       # when extraTraceMessages:
       #   trace logTxt "external beacon info update", header=h.blockNumber.toStr
-      ctx.pool.beaconHeader = h
+      ctx.pool.pass.beaconHeader = h
 
 # ------------------------------------------------------------------------------
 # Public function, debugging

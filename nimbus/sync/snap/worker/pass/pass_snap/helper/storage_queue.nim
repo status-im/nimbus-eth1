@@ -13,21 +13,22 @@
 import
   std/sets,
   chronicles,
-  eth/[common, p2p],
+  eth/common,
   stew/[interval_set, keyed_queue],
-  "../../../.."/[constants, range_desc, worker_desc],
-  ../../../db/[hexary_inspect, snapdb_storage_slots]
+  "../../../.."/[constants, range_desc],
+  ../../../db/[hexary_inspect, snapdb_storage_slots],
+  ../snap_pass_desc
 
 logScope:
   topics = "snap-slots"
 
 type
-  StoQuSlotsKVP* = KeyedQueuePair[Hash256,SnapSlotsQueueItemRef]
+  StoQuSlotsKVP* = KeyedQueuePair[Hash256,SlotsQueueItemRef]
     ## Key-value return code from `SnapSlotsQueue` handler
 
   StoQuPartialSlotsQueue = object
     ## Return type for `getOrMakePartial()`
-    stoQu: SnapSlotsQueueItemRef
+    stoQu: SlotsQueueItemRef
     isCompleted: bool
 
 const
@@ -44,7 +45,7 @@ template logTxt(info: static[string]): static[string] =
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
 
-proc `$`(tr: SnapTodoRanges): string =
+proc `$`(tr: UnprocessedRanges): string =
   tr.fullPC3
 
 template noExceptionOops(info: static[string]; code: untyped) =
@@ -79,8 +80,8 @@ proc updatePartial(
       else:
         # New entry
         let
-          stoSlo = SnapRangeBatchRef(processed: NodeTagRangeSet.init())
-          stoItem = SnapSlotsQueueItemRef(accKey: accKey, slots: stoSlo)
+          stoSlo = RangeBatchRef(processed: NodeTagRangeSet.init())
+          stoItem = SlotsQueueItemRef(accKey: accKey, slots: stoSlo)
         discard env.fetchStoragePart.append(stoRoot, stoItem)
         stoSlo.unprocessed.init(clear = true)
 
@@ -141,8 +142,8 @@ proc appendPartial(
       else:
         # Restore missing range
         let
-          stoSlo = SnapRangeBatchRef(processed: NodeTagRangeSet.init())
-          stoItem = SnapSlotsQueueItemRef(accKey: accKey, slots: stoSlo)
+          stoSlo = RangeBatchRef(processed: NodeTagRangeSet.init())
+          stoItem = SlotsQueueItemRef(accKey: accKey, slots: stoSlo)
         discard env.fetchStoragePart.append(stoRoot, stoItem)
         stoSlo.unprocessed.init(clear = true)
         discard stoSlo.processed.merge FullNodeTagRange
@@ -231,7 +232,7 @@ proc storageQueueAppendFull*(
   ## a new entry was added.
   let
     notPart = env.fetchStoragePart.delete(stoRoot).isErr
-    stoItem = SnapSlotsQueueItemRef(accKey: accKey)
+    stoItem = SlotsQueueItemRef(accKey: accKey)
   env.parkedStorage.excl accKey             # Un-park (if any)
   env.fetchStorageFull.append(stoRoot, stoItem) and notPart
 

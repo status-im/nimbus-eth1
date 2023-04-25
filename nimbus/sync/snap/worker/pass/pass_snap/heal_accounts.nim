@@ -46,11 +46,12 @@ import
   stew/[byteutils, interval_set, keyed_queue],
   ../../../../../utils/prettify,
   ../../../../protocol,
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_trie_nodes],
   ../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_nearby,
             hexary_paths, hexary_range, snapdb_accounts],
-  ./helper/[missing_nodes, storage_queue, swap_in]
+  ./helper/[missing_nodes, storage_queue, swap_in],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-acc"
@@ -89,7 +90,7 @@ proc healingCtx(
     "ctl=" & $buddy.ctrl.state & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & $env.fetchAccounts.processed & "/" &
-                  $ctx.pool.coveredAccounts ) & "}"
+                  $ctx.pool.pass.coveredAccounts ) & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -134,7 +135,7 @@ proc compileMissingNodesList(
       for w in mlv.emptyGaps.increasing:
         discard env.fetchAccounts.processed.merge w
         env.fetchAccounts.unprocessed.reduce w
-        discard buddy.ctx.pool.coveredAccounts.merge w
+        discard buddy.ctx.pool.pass.coveredAccounts.merge w
 
     when extraTraceMessages:
       trace logTxt "missing nodes", peer,
@@ -252,7 +253,7 @@ proc registerAccountLeaf(
   if 0 < env.fetchAccounts.processed.merge iv:
     env.nAccounts.inc
     env.fetchAccounts.unprocessed.reduce iv
-    discard buddy.ctx.pool.coveredAccounts.merge iv
+    discard buddy.ctx.pool.pass.coveredAccounts.merge iv
 
     # Update storage slots batch
     if acc.storageRoot != EMPTY_ROOT_HASH:

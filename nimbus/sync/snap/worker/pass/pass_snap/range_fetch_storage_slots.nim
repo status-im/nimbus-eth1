@@ -69,10 +69,11 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_storage_ranges],
   ../../db/[hexary_error, snapdb_storage_slots],
-  ./helper/storage_queue
+  ./helper/storage_queue,
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-slot"

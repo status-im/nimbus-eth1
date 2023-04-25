@@ -21,9 +21,10 @@ import
   chronos,
   eth/[common, p2p],
   stew/keyed_queue,
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_byte_codes],
-  ../../db/snapdb_contracts
+  ../../db/snapdb_contracts,
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-con"

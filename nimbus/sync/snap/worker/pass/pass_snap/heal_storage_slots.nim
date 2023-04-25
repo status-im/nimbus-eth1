@@ -48,11 +48,12 @@ import
   stew/[byteutils, interval_set, keyed_queue],
   ../../../../../utils/prettify,
   ../../../../protocol,
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_trie_nodes],
   ../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_range,
             snapdb_storage_slots],
-  ./helper/[missing_nodes, storage_queue]
+  ./helper/[missing_nodes, storage_queue],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-slot"
