@@ -136,7 +136,8 @@ type
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
 
     # Full sync continuation parameters
-    fullHeader*: Option[BlockHeader]   ## Start full sync from here
+    fullHeader*: Option[BlockHeader]   ## Pivot hand over
+    startNumber*: Option[BlockNumber]  ## Start full sync from here
     bPivot*: BestPivotCtxRef           ## Global pivot descriptor
     bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
 
