@@ -21,7 +21,7 @@ import
   ../get/get_error,
   ./pass_desc,
   ./pass_snap/helper/[beacon_header, storage_queue],
-  ./pass_snap/pivot
+  ./pass_snap/[pivot, snap_pass_desc]
 
 logScope:
   topics = "snap-play"
@@ -77,18 +77,21 @@ proc detectSnapSyncRecovery(ctx: SnapCtxRef) =
   ## Helper for `setup()`: Initiate snap sync recovery (if any)
   let rc = ctx.pool.snapDb.pivotRecoverDB()
   if rc.isOk:
-    ctx.pool.recovery = SnapRecoveryRef(state: rc.value)
+    let snap = ctx.pool.pass
+    snap.recovery = SnapPassRecoveryRef(state: rc.value)
     ctx.daemon = true
 
     # Set up early initial pivot
-    ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
+    snap.pivotTable.reverseUpdate(snap.recovery.state.header, ctx)
     trace logTxt "recovery started",
-      checkpoint=(ctx.pool.pivotTable.topNumber.toStr & "(0)")
+      checkpoint=(snap.pivotTable.topNumber.toStr & "(0)")
     if not ctx.pool.ticker.isNil:
       ctx.pool.ticker.startRecovery()
 
 proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
-  let recov = ctx.pool.recovery
+  let
+    snap = ctx.pool.pass
+    recov = snap.recovery
   if recov.isNil:
     return false
 
@@ -96,7 +99,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     checkpoint = recov.state.header.blockNumber.toStr & "(" & $recov.level & ")"
     topLevel = recov.level == 0
     env = block:
-      let rc = ctx.pool.pivotTable.eq recov.state.header.stateRoot
+      let rc = snap.pivotTable.eq recov.state.header.stateRoot
       if rc.isErr:
         error logTxt "recovery pivot context gone", checkpoint, topLevel
         return false
@@ -125,19 +128,19 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     return false
 
   # Set up next level pivot checkpoint
-  ctx.pool.recovery = SnapRecoveryRef(
+  snap.recovery = SnapPassRecoveryRef(
     state: rc.value,
     level: recov.level + 1)
 
   # Push onto pivot table and continue recovery (i.e. do not stop it yet)
-  ctx.pool.pivotTable.reverseUpdate(ctx.pool.recovery.state.header, ctx)
+  snap.pivotTable.reverseUpdate(snap.recovery.state.header, ctx)
 
   return true # continue recovery
 
 # --------------
 
 proc snapSyncCompleteOk(
-    env: SnapPivotRef;              # Current pivot environment
+    env: SnapPassPivotRef;          # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): Future[bool]
       {.async.} =
@@ -152,7 +155,7 @@ proc snapSyncCompleteOk(
           error logTxt "inconsistent state, pivot incomplete",
             pivot=env.stateHeader.blockNumber.toStr, nAccounts=env.nAccounts
           return false
-    ctx.pool.completePivot = env
+    ctx.pool.pass.completePivot = env
     ctx.poolMode = true # Fast sync mode must be synchronized among all peers
     return true
 
@@ -161,9 +164,12 @@ proc snapSyncCompleteOk(
 # ------------------------------------------------------------------------------
 
 proc snapSyncSetup(ctx: SnapCtxRef) =
+  # Set up snap sync descriptor
+  ctx.pool.pass = SnapPassCtxRef()
+
   # For snap sync book keeping
-  ctx.pool.coveredAccounts = NodeTagRangeSet.init()
-  ctx.pool.ticker.init(cb = ctx.pool.pivotTable.tickerStats(ctx))
+  ctx.pool.pass.coveredAccounts = NodeTagRangeSet.init()
+  ctx.pool.ticker.init(cb = ctx.pool.pass.pivotTable.tickerStats(ctx))
 
   ctx.enableRpcMagic()          # Allow external pivot update via RPC
   ctx.disableWireServices()     # Stop unwanted public services
@@ -198,7 +204,8 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   ##
   let
     ctx = buddy.ctx
-    env = ctx.pool.completePivot
+    snap = ctx.pool.pass
+    env = snap.completePivot
 
   # Check whether the snapshot is complete. If so, switch to full sync mode.
   # This process needs to be applied to all buddy peers.
@@ -224,22 +231,22 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   # Clean up empty pivot slots (never the top one.) This needs to be run on
   # a single peer only. So the loop can stop immediately (returning `true`)
   # after this job is done.
-  var rc = ctx.pool.pivotTable.beforeLast
+  var rc = snap.pivotTable.beforeLast
   while rc.isOK:
     let (key, env) = (rc.value.key, rc.value.data)
     if env.fetchAccounts.processed.isEmpty:
-      ctx.pool.pivotTable.del key
-    rc = ctx.pool.pivotTable.prev(key)
+      snap.pivotTable.del key
+    rc = snap.pivotTable.prev(key)
   true # Stop ok
 
 
 proc snapSyncDaemon(ctx: SnapCtxRef) {.async.} =
   ## Enabled while `ctx.daemon` is `true`
   ##
-  if not ctx.pool.recovery.isNil:
+  if not ctx.pool.pass.recovery.isNil:
     if not await ctx.recoveryStepContinue():
       # Done, stop recovery
-      ctx.pool.recovery = nil
+      ctx.pool.pass.recovery = nil
       ctx.daemon = false
 
       # Update logging
@@ -256,7 +263,7 @@ proc snapSyncSingle(buddy: SnapBuddyRef) {.async.} =
   await buddy.beaconHeaderUpdateFromFile()
 
   # Dedicate some process cycles to the recovery process (if any)
-  if not buddy.ctx.pool.recovery.isNil:
+  if not buddy.ctx.pool.pass.recovery.isNil:
     when extraTraceMessages:
       trace "Throttling single mode in favour of recovery", peer=buddy.peer
     await sleepAsync 900.milliseconds
@@ -275,7 +282,7 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
 
     # Fetch latest state root environment
     env = block:
-      let rc = ctx.pool.pivotTable.lastValue
+      let rc = ctx.pool.pass.pivotTable.lastValue
       if rc.isErr:
         buddy.ctrl.multiOk = false
         return # nothing to do
@@ -288,7 +295,7 @@ proc snapSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   # If this is a new snap sync pivot, the previous one can be cleaned up and
   # archived. There is no point in keeping some older space consuming state
   # data any longer.
-  ctx.pool.pivotTable.beforeTopMostlyClean()
+  ctx.pool.pass.pivotTable.beforeTopMostlyClean()
 
   let
     peer = buddy.peer

@@ -49,10 +49,11 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
   "../../../.."/[sync_desc, types],
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_account_range],
   ../../db/[hexary_envelope, snapdb_accounts],
-  ./helper/[accounts_coverage, storage_queue, swap_in]
+  ./helper/[accounts_coverage, storage_queue, swap_in],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-acc"
@@ -76,7 +77,7 @@ proc `$`(iv: NodeTagRange): string =
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): string {.used.} =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -92,7 +93,7 @@ proc fetchCtx(
 
 proc getUnprocessed(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Result[NodeTagRange,void] =
   ## Fetch an interval from one of the account range lists.
   let accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
@@ -105,7 +106,7 @@ proc getUnprocessed(
 
 proc accountsRangefetchImpl(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Future[bool]
       {.async.} =
   ## Fetch accounts and store them in the database. Returns true while more
@@ -188,7 +189,7 @@ proc accountsRangefetchImpl(
     fa.unprocessed.reduce w
     # Register consumed intervals on the accumulators over all state roots.
     discard fa.processed.merge w
-    discard ctx.pool.coveredAccounts.merge w
+    discard ctx.pool.pass.coveredAccounts.merge w
     ctx.accountsCoverage100PcRollOver() # update coverage level roll over
 
   # Register accounts with storage slots on the storage TODO list.
@@ -222,7 +223,7 @@ proc accountsRangefetchImpl(
 
 proc rangeFetchAccounts*(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ) {.async.} =
   ## Fetch accounts and store them in the database.
   trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)

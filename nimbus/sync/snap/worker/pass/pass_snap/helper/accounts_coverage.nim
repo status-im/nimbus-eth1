@@ -13,7 +13,8 @@
 
 import
   stew/interval_set,
-  "../../../.."/[range_desc, worker_desc]
+  "../../../.."/range_desc,
+  ../snap_pass_desc
 
 # ------------------------------------------------------------------------------
 # Public helpers: coverage
@@ -21,15 +22,16 @@ import
 
 proc accountsCoverage*(ctx: SnapCtxRef): float =
   ## Returns the accounts coverage factor
-  ctx.pool.coveredAccounts.fullFactor + ctx.pool.covAccTimesFull.float
+  ctx.pool.pass.coveredAccounts.fullFactor + ctx.pool.pass.covAccTimesFull.float
 
 proc accountsCoverage100PcRollOver*(ctx: SnapCtxRef) =
   ## Roll over `coveredAccounts` registry when it reaches 100%.
-  if ctx.pool.coveredAccounts.isFull:
+  let snap = ctx.pool.pass
+  if snap.coveredAccounts.isFull:
     # All of accounts hashes are covered by completed range fetch processes
     # for all pivot environments. So reset covering and record full-ness level.
-    ctx.pool.covAccTimesFull.inc
-    ctx.pool.coveredAccounts.clear()
+    snap.covAccTimesFull.inc
+    snap.coveredAccounts.clear()
 
 # ------------------------------------------------------------------------------
 # End

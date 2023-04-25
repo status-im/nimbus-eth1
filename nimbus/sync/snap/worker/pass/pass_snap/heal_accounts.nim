@@ -46,11 +46,12 @@ import
   stew/[byteutils, interval_set, keyed_queue],
   ../../../../../utils/prettify,
   ../../../../protocol,
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_trie_nodes],
   ../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_nearby,
             hexary_paths, hexary_range, snapdb_accounts],
-  ./helper/[missing_nodes, storage_queue, swap_in]
+  ./helper/[missing_nodes, storage_queue, swap_in],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-acc"
@@ -81,7 +82,7 @@ proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
 
 proc healingCtx(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): string =
   let ctx = buddy.ctx
   "{" &
@@ -89,7 +90,7 @@ proc healingCtx(
     "ctl=" & $buddy.ctrl.state & "," &
     "nAccounts=" & $env.nAccounts & "," &
     ("covered=" & $env.fetchAccounts.processed & "/" &
-                  $ctx.pool.coveredAccounts ) & "}"
+                  $ctx.pool.pass.coveredAccounts ) & "}"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -107,7 +108,7 @@ template discardRlpError(info: static[string]; code: untyped) =
 
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ## Find some missing glue nodes in accounts database.
@@ -134,7 +135,7 @@ proc compileMissingNodesList(
       for w in mlv.emptyGaps.increasing:
         discard env.fetchAccounts.processed.merge w
         env.fetchAccounts.unprocessed.reduce w
-        discard buddy.ctx.pool.coveredAccounts.merge w
+        discard buddy.ctx.pool.pass.coveredAccounts.merge w
 
     when extraTraceMessages:
       trace logTxt "missing nodes", peer,
@@ -148,7 +149,7 @@ proc getNodesFromNetwork(
     buddy: SnapBuddyRef;
     missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
     ignore: HashSet[Blob];              # Except for these partial paths listed
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ## Extract from `nodes.missing` the next batch of nodes that need
@@ -200,7 +201,7 @@ proc getNodesFromNetwork(
 proc kvAccountLeaf(
     buddy: SnapBuddyRef;
     node: NodeSpecs;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): (bool,NodeKey,Account) =
   ## Re-read leaf node from persistent database (if any)
   var nNibbles = -1
@@ -228,7 +229,7 @@ proc registerAccountLeaf(
     buddy: SnapBuddyRef;
     accKey: NodeKey;
     acc: Account;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ) =
   ## Process single account node as would be done with an interval by
   ## the `storeAccounts()` function
@@ -252,7 +253,7 @@ proc registerAccountLeaf(
   if 0 < env.fetchAccounts.processed.merge iv:
     env.nAccounts.inc
     env.fetchAccounts.unprocessed.reduce iv
-    discard buddy.ctx.pool.coveredAccounts.merge iv
+    discard buddy.ctx.pool.pass.coveredAccounts.merge iv
 
     # Update storage slots batch
     if acc.storageRoot != EMPTY_ROOT_HASH:
@@ -273,7 +274,7 @@ proc registerAccountLeaf(
 proc accountsHealingImpl(
     buddy: SnapBuddyRef;
     ignore: HashSet[Blob];
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Future[(int,HashSet[Blob])]
       {.async.} =
   ## Fetching and merging missing account trie database nodes. It returns the
@@ -343,7 +344,7 @@ proc accountsHealingImpl(
 
 proc healAccounts*(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)

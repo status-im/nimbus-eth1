@@ -21,9 +21,10 @@ import
   chronos,
   eth/[common, p2p],
   stew/keyed_queue,
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_byte_codes],
-  ../../db/snapdb_contracts
+  ../../db/snapdb_contracts,
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-con"
@@ -44,7 +45,7 @@ template logTxt(info: static[string]): static[string] =
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): string {.used.} =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -66,7 +67,7 @@ template noKeyErrorOops(info: static[string]; code: untyped) =
 
 proc getUnprocessed(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
     ign: HashSet[NodeKey];
       ): (seq[NodeKey],Table[Hash256,NodeKey]) =
   ## Fetch contracy hashes from the batch queue. Full entries will be removed
@@ -82,7 +83,7 @@ proc getUnprocessed(
 
 
 proc putUnprocessed(
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
     tab: Table[Hash256,NodeKey];
       ) =
   ## Push back some items
@@ -95,7 +96,7 @@ proc putUnprocessed(
       discard env.fetchContracts.append(key,val)
 
 proc putUnprocessed(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                      # Current pivot environment
     select: seq[NodeKey];                   # List of codeHash keys to re-queue
     value: Table[Hash256,NodeKey];          # Value for codeHash keys
       ): HashSet[NodeKey]  =
@@ -113,7 +114,7 @@ proc putUnprocessed(
 
 proc rangeFetchContractsImpl(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
     ign: HashSet[NodeKey];
       ): Future[(HashSet[NodeKey],bool)]
       {.async.} =
@@ -164,7 +165,7 @@ proc rangeFetchContractsImpl(
 
 proc rangeFetchContracts*(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ) {.async.} =
   ## Fetch contract codes and store them in the database.
   trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)

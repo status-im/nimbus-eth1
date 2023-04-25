@@ -69,10 +69,11 @@ import
   chronos,
   eth/p2p,
   stew/[interval_set, keyed_queue],
-  "../../.."/[constants, range_desc, worker_desc],
+  "../../.."/[constants, range_desc],
   ../../get/[get_error, get_storage_ranges],
   ../../db/[hexary_error, snapdb_storage_slots],
-  ./helper/storage_queue
+  ./helper/storage_queue,
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-slot"
@@ -89,7 +90,7 @@ template logTxt(info: static[string]): static[string] =
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): string =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -106,7 +107,7 @@ proc fetchCtx(
 proc fetchStorageSlotsImpl(
     buddy: SnapBuddyRef;
     req: seq[AccountSlotsHeader];
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ): Future[Result[HashSet[NodeKey],void]]
       {.async.} =
   ## Fetch account storage slots and store them in the database, returns
@@ -195,7 +196,7 @@ proc fetchStorageSlotsImpl(
 
 proc rangeFetchStorageSlots*(
     buddy: SnapBuddyRef;
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
       ) {.async.} =
   ## Fetch some account storage slots and store them in the database. If left
   ## anlone (e.t. no patallel activated processes) this function tries to fetch

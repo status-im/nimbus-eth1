@@ -63,9 +63,10 @@ import
   chronos,
   eth/common,
   stew/interval_set,
-  "../../../.."/[constants, range_desc, worker_desc],
+  "../../../.."/[constants, range_desc],
   ../../../db/[hexary_desc, hexary_envelope, hexary_error, hexary_inspect,
-               hexary_nearby]
+               hexary_nearby],
+  ../snap_pass_desc
 
 logScope:
   topics = "snap-find"
@@ -107,7 +108,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc missingNodesFind*(
-    ranges: SnapRangeBatchRef;
+    ranges: SnapPassRangeBatchRef;
     rootKey: NodeKey;
     getFn: HexaryGetFn;
     planBLevelMax: uint8;

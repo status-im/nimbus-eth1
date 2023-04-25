@@ -13,21 +13,22 @@
 import
   std/sets,
   chronicles,
-  eth/[common, p2p],
+  eth/common, # p2p],
   stew/[interval_set, keyed_queue],
-  "../../../.."/[constants, range_desc, worker_desc],
-  ../../../db/[hexary_inspect, snapdb_storage_slots]
+  "../../../.."/[constants, range_desc],
+  ../../../db/[hexary_inspect, snapdb_storage_slots],
+  ../snap_pass_desc
 
 logScope:
   topics = "snap-slots"
 
 type
-  StoQuSlotsKVP* = KeyedQueuePair[Hash256,SnapSlotsQueueItemRef]
+  StoQuSlotsKVP* = KeyedQueuePair[Hash256,SnapPassSlotsQItemRef]
     ## Key-value return code from `SnapSlotsQueue` handler
 
   StoQuPartialSlotsQueue = object
     ## Return type for `getOrMakePartial()`
-    stoQu: SnapSlotsQueueItemRef
+    stoQu: SnapPassSlotsQItemRef
     isCompleted: bool
 
 const
@@ -44,7 +45,7 @@ template logTxt(info: static[string]): static[string] =
 proc `$`(rs: NodeTagRangeSet): string =
   rs.fullPC3
 
-proc `$`(tr: SnapTodoRanges): string =
+proc `$`(tr: SnapPassTodoRanges): string =
   tr.fullPC3
 
 template noExceptionOops(info: static[string]; code: untyped) =
@@ -59,7 +60,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc updatePartial(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     req: AccountSlotsChanged;               # Left over account data
       ): bool =                             # List entry was added
   ## Update the range of account argument `req` to the partial slot ranges
@@ -79,8 +80,8 @@ proc updatePartial(
       else:
         # New entry
         let
-          stoSlo = SnapRangeBatchRef(processed: NodeTagRangeSet.init())
-          stoItem = SnapSlotsQueueItemRef(accKey: accKey, slots: stoSlo)
+          stoSlo = SnapPassRangeBatchRef(processed: NodeTagRangeSet.init())
+          stoItem = SnapPassSlotsQItemRef(accKey: accKey, slots: stoSlo)
         discard env.fetchStoragePart.append(stoRoot, stoItem)
         stoSlo.unprocessed.init(clear = true)
 
@@ -120,7 +121,7 @@ proc updatePartial(
 
 
 proc appendPartial(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
     splitMerge: bool;                       # Bisect or straight merge
       ): bool =                             # List entry was added
@@ -141,8 +142,8 @@ proc appendPartial(
       else:
         # Restore missing range
         let
-          stoSlo = SnapRangeBatchRef(processed: NodeTagRangeSet.init())
-          stoItem = SnapSlotsQueueItemRef(accKey: accKey, slots: stoSlo)
+          stoSlo = SnapPassRangeBatchRef(processed: NodeTagRangeSet.init())
+          stoItem = SnapPassSlotsQItemRef(accKey: accKey, slots: stoSlo)
         discard env.fetchStoragePart.append(stoRoot, stoItem)
         stoSlo.unprocessed.init(clear = true)
         discard stoSlo.processed.merge FullNodeTagRange
@@ -163,7 +164,7 @@ proc appendPartial(
 
 
 proc reducePartial(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
       ): bool =                             # List entry was removed
   ## Reduce range from partial ranges list.
@@ -208,11 +209,11 @@ proc reducePartial(
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc storageQueueTotal*(env: SnapPivotRef): int =
+proc storageQueueTotal*(env: SnapPassPivotRef): int =
   ## Total number of entries on the storage queues, including parked ones.
   env.fetchStorageFull.len + env.fetchStoragePart.len + env.parkedStorage.len
 
-proc storageQueueAvail*(env: SnapPivotRef): int =
+proc storageQueueAvail*(env: SnapPassPivotRef): int =
   ## Number of available entries on the storage queues
   env.fetchStorageFull.len + env.fetchStoragePart.len
 
@@ -221,7 +222,7 @@ proc storageQueueAvail*(env: SnapPivotRef): int =
 # ------------------------------------------------------------------------------
 
 proc storageQueueAppendFull*(
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
     stoRoot: Hash256;
     accKey: NodeKey;
       ): bool
@@ -231,12 +232,12 @@ proc storageQueueAppendFull*(
   ## a new entry was added.
   let
     notPart = env.fetchStoragePart.delete(stoRoot).isErr
-    stoItem = SnapSlotsQueueItemRef(accKey: accKey)
+    stoItem = SnapPassSlotsQItemRef(accKey: accKey)
   env.parkedStorage.excl accKey             # Un-park (if any)
   env.fetchStorageFull.append(stoRoot, stoItem) and notPart
 
 proc storageQueueAppendFull*(
-    env: SnapPivotRef;
+    env: SnapPassPivotRef;
     acc: AccountSlotsHeader;
       ): bool
       {.discardable.} =
@@ -244,7 +245,7 @@ proc storageQueueAppendFull*(
   env.storageQueueAppendFull(acc.storageRoot, acc.accKey)
 
 proc storageQueueAppendPartialSplit*(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
       ): bool
       {.discardable.} =
@@ -258,7 +259,7 @@ proc storageQueueAppendPartialSplit*(
   env.appendPartial(acc, splitMerge=true)
 
 proc storageQueueAppendPartialSplit*(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     req: openArray[AccountSlotsHeader];     # List of entries to push back
       ) =
   ## Variant of `storageQueueAppendPartialSplit()`
@@ -266,7 +267,7 @@ proc storageQueueAppendPartialSplit*(
     discard env.appendPartial(w, splitMerge=true)
 
 proc storageQueueAppend*(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     req: openArray[AccountSlotsHeader];     # List of entries to push back
       ) =
   ## Append a job list of ranges. This undoes the effect of either function
@@ -279,7 +280,7 @@ proc storageQueueAppend*(
       discard env.appendPartial(w, splitMerge=false)
 
 proc storageQueueAppend*(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     kvp: StoQuSlotsKVP;                     # List of entries to push back
       ) =
   ## Insert back a full administrative queue record. This function is typically
@@ -323,7 +324,7 @@ proc storageQueueAppend*(
 # ------------------------------------------------------------------------------
 
 proc storageQueueUpdate*(
-    env: SnapPivotRef;                      # Current pivot environment
+    env: SnapPassPivotRef;                  # Current pivot environment
     req: openArray[AccountSlotsChanged];    # List of entries to push back
     ignore: HashSet[NodeKey];               # Ignore accounts with these keys
       ): (int,int) =                        # Added, removed
@@ -365,7 +366,7 @@ proc storageQueueUpdate*(
 
 proc storageQueueFetchFull*(
     ctx: SnapCtxRef;                   # Global context
-    env: SnapPivotRef;                 # Current pivot environment
+    env: SnapPassPivotRef;             # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): seq[AccountSlotsHeader] =
   ## Fetch a list of at most `fetchRequestStorageSlotsMax` full work items
@@ -428,7 +429,7 @@ proc storageQueueFetchFull*(
 
 proc storageQueueFetchPartial*(
     ctx: SnapCtxRef;                   # Global context (unused here)
-    env: SnapPivotRef;                 # Current pivot environment
+    env: SnapPassPivotRef;             # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): seq[AccountSlotsHeader] =     # At most one item
   ## Get work item from the batch queue. This will typically return the full
@@ -473,7 +474,7 @@ proc storageQueueFetchPartial*(
     # End for()
 
 proc storageQueueUnlinkPartialItem*(
-    env: SnapPivotRef;                 # Current pivot environment
+    env: SnapPassPivotRef;             # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): Result[StoQuSlotsKVP,void] =
   ## Fetch an item from the partial list. This item will be removed from the
