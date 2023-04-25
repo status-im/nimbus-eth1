@@ -49,7 +49,7 @@
 ##   the loop starts. Re-setting it again results in repeating the loop. The
 ##   argument `laps` (starting with `0`) indicated the currend lap of the
 ##   repeated loops. To avoid continous looping, the number of `laps` is
-##   limited (see `exexPoolModeMax`, below.)
+##   limited (see `execPoolModeMax`, below.)
 ##
 ##   The argument `last` is set `true` if the last entry of the current loop
 ##   has been reached.

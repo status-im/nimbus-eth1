@@ -129,10 +129,7 @@ proc processStaged(buddy: SnapBuddyRef): bool =
 # ------------------------------------------------------------------------------
 
 proc fullSyncSetup(ctx: SnapCtxRef) =
-  let blockNum = if ctx.pool.fullHeader.isNone: 0.toBlockNumber
-                 else: ctx.pool.fullHeader.unsafeGet.blockNumber
-
-  ctx.pool.bCtx = BlockQueueCtxRef.init(blockNum + 1)
+  ctx.pool.bCtx = BlockQueueCtxRef.init()
   ctx.pool.bPivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
   ctx.pool.ticker.init(cb = ctx.tickerUpdater())
 
@@ -173,38 +170,43 @@ proc fullSyncDaemon(ctx: SnapCtxRef) {.async.} =
 proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   let ctx = buddy.ctx
 
-  # Take over soft restart after switch to full sync mode.
-  # This process needs to be applied to all buddy peers.
+  # There is a soft re-setup after switch over to full sync mode if a pivot
+  # block header is available initialised from outside, i.e. snap sync swich.
   if ctx.pool.fullHeader.isSome:
-    # Soft start all peers on the second lap.
-    ignoreException("fullSyncPool"):
-      if not buddy.fullSyncStart():
-        # Start() method failed => wait for another peer
-        buddy.ctrl.stopped = true
+    let stateHeader = ctx.pool.fullHeader.unsafeGet
+
+    # Reinialise block queue descriptor relative to current pivot
+    ctx.pool.startNumber = some(stateHeader.blockNumber)
+    ctx.pool.bCtx = BlockQueueCtxRef.init(stateHeader.blockNumber + 1)
+
+    # Kick off ticker (was stopped by snap `release()` method)
+    ctx.pool.ticker.start()
+
+    # Store pivot as parent hash in database
+    ctx.pool.snapDb.kvDb.persistentBlockHeaderPut stateHeader
+
+    # Instead of genesis.
+    ctx.chain.com.startOfHistory = stateHeader.blockHash
+
+    when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
+      # Dump database ...                  <--- will go away (debugging only)
+      let nRecords =                     # <--- will go away (debugging only)
+        ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
+      trace logTxt "dumped block chain database", nRecords
+
+    # Reset so that this action would not be triggered, again
+    ctx.pool.fullHeader = none(BlockHeader)
+
+  # Soft re-start buddy peers if on the second lap.
+  if 0 < laps and ctx.pool.startNumber.isSome:
+    if not buddy.fullSyncStart():
+      # Start() method failed => wait for another peer
+      buddy.ctrl.stopped = true
     if last:
-      let stateHeader = ctx.pool.fullHeader.unsafeGet
       trace logTxt "soft restart done", peer=buddy.peer, last, laps,
-        pivot=stateHeader.blockNumber.toStr,
+        pivot=ctx.pool.startNumber.toStr,
         mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
-
-      # Kick off ticker (was stopped by snap `release()` method)
-      ctx.pool.ticker.start()
-
-      # Store pivot as parent hash in database
-      ctx.pool.snapDb.kvDb.persistentBlockHeaderPut stateHeader
-
-      # Instead of genesis.
-      ctx.chain.com.startOfHistory = stateHeader.blockHash
-
-      when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
-        # Dump database ...                  <--- will go away (debugging only)
-        let nRecords =                     # <--- will go away (debugging only)
-          ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
-        trace logTxt "dumped block chain database", nRecords
-
-      # Reset so that this action would not be triggered, again
-      ctx.pool.fullHeader = none(BlockHeader)
-    return false # do stop magically when looping over peers is exhausted
+    return false # does stop magically when looping over peers is exhausted
 
   # Mind the gap, fill in if necessary (function is peer independent)
   buddy.only.bQueue.blockQueueGrout()
