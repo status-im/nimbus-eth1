@@ -21,36 +21,36 @@ export
   worker_desc # base descriptor
 
 type
-  SnapPassAccList* = SortedSet[NodeTag,Hash256]
+  AccountsList* = SortedSet[NodeTag,Hash256]
     ## Sorted pair of `(account,state-root)` entries
 
-  SnapPassSlotsQ* = KeyedQueue[Hash256,SnapPassSlotsQItemRef]
+  SlotsQueue* = KeyedQueue[Hash256,SlotsQueueItemRef]
     ## Handles list of storage slots data to fetch, indexed by storage root.
     ##
     ## Typically, storage data requests cover the full storage slots trie. If
     ## there is only a partial list of slots to fetch, the queue entry is
     ## stored left-most for easy access.
 
-  SnapPassSlotsQItemRef* = ref object
+  SlotsQueueItemRef* = ref object
     ## Storage slots request data. This entry is similar to `AccountSlotsHeader`
     ## where the optional `subRange` interval has been replaced by an interval
     ## range + healing support.
     accKey*: NodeKey                   ## Owner account
-    slots*: SnapPassRangeBatchRef      ## Clots to fetch, nil => all slots
+    slots*: RangeBatchRef              ## Clots to fetch, nil => all slots
 
-  SnapPassCtraQ* = KeyedQueue[Hash256,NodeKey]
+  ContractsQueue* = KeyedQueue[Hash256,NodeKey]
     ## Handles hash key list of contract data to fetch with accounts associated
 
-  SnapPassTodoRanges* = array[2,NodeTagRangeSet]
+  UnprocessedRanges* = array[2,NodeTagRangeSet]
     ## Pair of sets of ``unprocessed`` node ranges that need to be fetched and
     ## integrated. The ranges in the first set must be handled with priority.
     ##
     ## This data structure is used for coordinating peers that run quasi
     ## parallel.
 
-  SnapPassRangeBatchRef* = ref object
+  RangeBatchRef* = ref object
     ## `NodeTag` ranges to fetch, healing support
-    unprocessed*: SnapPassTodoRanges   ## Range of slots to be fetched
+    unprocessed*: UnprocessedRanges   ## Range of slots to be fetched
     processed*: NodeTagRangeSet        ## Node ranges definitely processed
 
   SnapPivotRef* = ref object
@@ -58,14 +58,14 @@ type
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
     # Accounts download coverage
-    fetchAccounts*: SnapPassRangeBatchRef  ## Set of accounts ranges to fetch
+    fetchAccounts*: RangeBatchRef      ## Set of accounts ranges to fetch
 
     # Contract code queue
-    fetchContracts*: SnapPassCtraQ     ## Contacts to fetch & store
+    fetchContracts*: ContractsQueue    ## Contacts to fetch & store
 
     # Storage slots download
-    fetchStorageFull*: SnapPassSlotsQ  ## Fetch storage trie for these accounts
-    fetchStoragePart*: SnapPassSlotsQ  ## Partial storage trie to com[plete
+    fetchStorageFull*: SlotsQueue      ## Fetch storage trie for these accounts
+    fetchStoragePart*: SlotsQueue      ## Partial storage trie to com[plete
     parkedStorage*: HashSet[NodeKey]   ## Storage batch items in use
 
     # Info
@@ -77,25 +77,25 @@ type
     savedFullPivotOk*: bool            ## This fully completed pivot was saved
 
     # Mothballing, ready to be swapped into newer pivot record
-    storageAccounts*: SnapPassAccList  ## Accounts with missing storage slots
+    storageAccounts*: AccountsList     ## Accounts with missing storage slots
     archived*: bool                    ## Not latest pivot, anymore
 
-  SnapPassPivotTable* = KeyedQueue[Hash256,SnapPivotRef]
+  PivotTable* = KeyedQueue[Hash256,SnapPivotRef]
     ## LRU table, indexed by state root
 
-  SnapPassRecoveryRef* = ref object
+  RecoveryRef* = ref object
     ## Recovery context
     state*: SnapDbPivotRegistry        ## Saved recovery context state
     level*: int                        ## top level is zero
 
   SnapPassCtxRef* = ref object of RootRef
     ## Global context extension, snap sync parameters, pivot table
-    pivotTable*: SnapPassPivotTable    ## Per state root environment
-    completePivot*: SnapPivotRef   ## Start full sync from here
+    pivotTable*: PivotTable            ## Per state root environment
+    completedPivot*: SnapPivotRef      ## Start full sync from here
     beaconHeader*: BlockHeader         ## Running on beacon chain
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
-    recovery*: SnapPassRecoveryRef     ## Current recovery checkpoint/context
+    recovery*: RecoveryRef             ## Current recovery checkpoint/context
 
 # ------------------------------------------------------------------------------
 # Public getter/setter
@@ -113,7 +113,7 @@ proc `pass=`*(pool: var SnapCtxData; val: SnapPassCtxRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hash*(a: SnapPassSlotsQItemRef): Hash =
+proc hash*(a: SlotsQueueItemRef): Hash =
   ## Table/KeyedQueue mixin
   cast[pointer](a).hash
 
@@ -122,10 +122,10 @@ proc hash*(a: Hash256): Hash =
   a.data.hash
 
 # ------------------------------------------------------------------------------
-# Public helpers: SnapPassTodoRanges
+# Public helpers: UnprocessedRanges
 # ------------------------------------------------------------------------------
 
-proc init*(q: var SnapPassTodoRanges; clear = false) =
+proc init*(q: var UnprocessedRanges; clear = false) =
   ## Populate node range sets with maximal range in the first range set. This
   ## kind of pair or interval sets is managed as follows:
   ## * As long as possible, fetch and merge back intervals on the first set.
@@ -138,18 +138,18 @@ proc init*(q: var SnapPassTodoRanges; clear = false) =
   if not clear:
     discard q[0].merge FullNodeTagRange
 
-proc clear*(q: var SnapPassTodoRanges) =
+proc clear*(q: var UnprocessedRanges) =
   ## Reset argument range sets empty.
   q[0].clear()
   q[1].clear()
 
 
-proc merge*(q: var SnapPassTodoRanges; iv: NodeTagRange) =
+proc merge*(q: var UnprocessedRanges; iv: NodeTagRange) =
   ## Unconditionally merge the node range into the account ranges list.
   discard q[0].merge(iv)
   discard q[1].reduce(iv)
 
-proc mergeSplit*(q: var SnapPassTodoRanges; iv: NodeTagRange) =
+proc mergeSplit*(q: var UnprocessedRanges; iv: NodeTagRange) =
   ## Ditto w/priorities partially reversed
   if iv.len == 1:
     discard q[0].reduce iv
@@ -166,13 +166,13 @@ proc mergeSplit*(q: var SnapPassTodoRanges; iv: NodeTagRange) =
     discard q[1].reduce iv2
 
 
-proc reduce*(q: var SnapPassTodoRanges; iv: NodeTagRange) =
+proc reduce*(q: var UnprocessedRanges; iv: NodeTagRange) =
   ## Unconditionally remove the node range from the account ranges list
   discard q[0].reduce(iv)
   discard q[1].reduce(iv)
 
 
-iterator ivItems*(q: var SnapPassTodoRanges): NodeTagRange =
+iterator ivItems*(q: var UnprocessedRanges): NodeTagRange =
   ## Iterator over all list entries
   for ivSet in q:
     for iv in ivSet.increasing:
@@ -180,7 +180,7 @@ iterator ivItems*(q: var SnapPassTodoRanges): NodeTagRange =
 
 
 proc fetch*(
-    q: var SnapPassTodoRanges;
+    q: var UnprocessedRanges;
     maxLen = 0.u256;
       ): Result[NodeTagRange,void] =
   ## Fetch interval from node ranges with maximal size `maxLen`, where
@@ -212,7 +212,7 @@ proc fetch*(
 
 # -----------------
 
-proc verify*(q: var SnapPassTodoRanges): bool =
+proc verify*(q: var UnprocessedRanges): bool =
   ## Verify consistency, i.e. that the two sets of ranges have no overlap.
   if q[0].chunks == 0 or q[1].chunks == 0:
     # At least one set is empty

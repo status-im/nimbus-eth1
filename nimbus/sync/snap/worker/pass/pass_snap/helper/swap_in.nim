@@ -189,7 +189,7 @@ proc otherProcessedRanges(
 
 proc swapIn(
     processed: NodeTagRangeSet;          # Covered node ranges to be updated
-    unprocessed: var SnapPassTodoRanges; # Uncovered node ranges to be updated
+    unprocessed: var UnprocessedRanges;  # Uncovered node ranges to be updated
     otherPivots: seq[SwapInPivot];       # Other pivots list (read only)
     rootKey: NodeKey;                    # Start node into target hexary trie
     getFn: HexaryGetFn;                  # Abstract database access
@@ -309,7 +309,7 @@ proc swapInAccounts*(
             if others[n].pivot.fetchStorageFull.hasKey(stRoot):
               let accKey = others[n].pivot.fetchStorageFull[stRoot].accKey
               discard env.fetchStorageFull.append(
-                stRoot, SnapPassSlotsQItemRef(acckey: accKey))
+                stRoot, SlotsQueueItemRef(acckey: accKey))
               nSlotAccounts.inc
 
             rc = others[n].pivot.storageAccounts.gt(rc.value.key)

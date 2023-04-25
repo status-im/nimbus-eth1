@@ -78,7 +78,7 @@ proc detectSnapSyncRecovery(ctx: SnapCtxRef) =
   let rc = ctx.pool.snapDb.pivotRecoverDB()
   if rc.isOk:
     let snap = ctx.pool.pass
-    snap.recovery = SnapPassRecoveryRef(state: rc.value)
+    snap.recovery = RecoveryRef(state: rc.value)
     ctx.daemon = true
 
     # Set up early initial pivot
@@ -128,7 +128,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
     return false
 
   # Set up next level pivot checkpoint
-  snap.recovery = SnapPassRecoveryRef(
+  snap.recovery = RecoveryRef(
     state: rc.value,
     level: recov.level + 1)
 
@@ -155,7 +155,7 @@ proc snapSyncCompleteOk(
           error logTxt "inconsistent state, pivot incomplete",
             pivot=env.stateHeader.blockNumber.toStr, nAccounts=env.nAccounts
           return false
-    ctx.pool.pass.completePivot = env
+    ctx.pool.pass.completedPivot = env
     ctx.poolMode = true # Fast sync mode must be synchronized among all peers
     return true
 
@@ -205,7 +205,7 @@ proc snapSyncPool(buddy: SnapBuddyRef, last: bool, laps: int): bool =
   let
     ctx = buddy.ctx
     snap = ctx.pool.pass
-    env = snap.completePivot
+    env = snap.completedPivot
 
   # Check whether the snapshot is complete. If so, switch to full sync mode.
   # This process needs to be applied to all buddy peers.

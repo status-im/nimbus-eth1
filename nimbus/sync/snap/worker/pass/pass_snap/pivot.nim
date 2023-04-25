@@ -60,7 +60,7 @@ proc accountsHealingOk(
 
 
 proc init(
-    T: type SnapPassRangeBatchRef;  # Collection of sets of account ranges
+    T: type RangeBatchRef;  # Collection of sets of account ranges
     ctx: SnapCtxRef;                # Some global context
       ): T =
   ## Account ranges constructor
@@ -85,14 +85,14 @@ proc init(
   ## Pivot constructor.
   result = T(
     stateHeader:   header,
-    fetchAccounts: SnapPassRangeBatchRef.init(ctx))
+    fetchAccounts: RangeBatchRef.init(ctx))
   result.storageAccounts.init()
 
 # ------------------------------------------------------------------------------
 # Public functions: pivot table related
 # ------------------------------------------------------------------------------
 
-proc beforeTopMostlyClean*(pivotTable: var SnapPassPivotTable) =
+proc beforeTopMostlyClean*(pivotTable: var PivotTable) =
   ## Clean up pivot queues of the entry before the top one. The queues are
   ## the pivot data that need most of the memory. This cleaned pivot is not
   ## usable any more after cleaning but might be useful as historic record.
@@ -100,7 +100,7 @@ proc beforeTopMostlyClean*(pivotTable: var SnapPassPivotTable) =
   if rc.isOk:
     rc.value.pivotMothball
 
-proc topNumber*(pivotTable: var SnapPassPivotTable): BlockNumber =
+proc topNumber*(pivotTable: var PivotTable): BlockNumber =
   ## Return the block number of the top pivot entry, or zero if there is none.
   let rc = pivotTable.lastValue
   if rc.isOk:
@@ -108,7 +108,7 @@ proc topNumber*(pivotTable: var SnapPassPivotTable): BlockNumber =
 
 
 proc reverseUpdate*(
-    pivotTable: var SnapPassPivotTable; # Pivot table
+    pivotTable: var PivotTable;         # Pivot table
     header: BlockHeader;                # Header to generate new pivot from
     ctx: SnapCtxRef;                    # Some global context
       ) =
@@ -131,7 +131,7 @@ proc reverseUpdate*(
 
 
 proc tickerStats*(
-    pivotTable: var SnapPassPivotTable; # Pivot table
+    pivotTable: var PivotTable;         # Pivot table
     ctx: SnapCtxRef;                    # Some global context
       ): TickerSnapStatsUpdater =
   ## This function returns a function of type `TickerStatsUpdater` that prints
@@ -224,7 +224,7 @@ proc pivotMothball*(env: SnapPivotRef) =
   # Simplify storage slots queues by resolving partial slots into full list
   for kvp in env.fetchStoragePart.nextPairs:
     discard env.fetchStorageFull.append(
-      kvp.key, SnapPassSlotsQItemRef(acckey: kvp.data.accKey))
+      kvp.key, SlotsQueueItemRef(acckey: kvp.data.accKey))
   env.fetchStoragePart.clear()
 
   # Provide index into `fetchStorageFull`

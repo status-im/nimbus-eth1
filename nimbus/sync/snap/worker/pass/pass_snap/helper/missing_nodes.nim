@@ -108,7 +108,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc missingNodesFind*(
-    ranges: SnapPassRangeBatchRef;
+    ranges: RangeBatchRef;
     rootKey: NodeKey;
     getFn: HexaryGetFn;
     planBLevelMax: uint8;
