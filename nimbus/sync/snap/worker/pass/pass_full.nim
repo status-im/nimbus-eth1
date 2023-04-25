@@ -22,6 +22,18 @@ import
   ../get/get_error,
   ./pass_desc
 
+type
+  FullPassCtxRef = ref object of RootRef
+    ## Pass local descriptor extension for full sync process
+    startNumber*: Option[BlockNumber]  ## History starts here (used for logging)
+    pivot*: BestPivotCtxRef            ## Global pivot descriptor
+    bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
+
+  FullPassBuddyRef = ref object of RootRef
+    ## Pass local descriptor extension for full sync process
+    pivot*: BestPivotWorkerRef         ## Local pivot worker descriptor
+    queue*: BlockQueueWorkerRef        ## Block queue worker
+
 const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
@@ -45,31 +57,53 @@ template ignoreException(info: static[string]; code: untyped) =
   except CatchableError as e:
     error "Exception at " & info & ":", name=($e.name), msg=(e.msg)
 
+# ------------------------------------------------------------------------------
+# Private getter/setter
+# ------------------------------------------------------------------------------
+
+proc pass(pool: SnapCtxData): auto =
+  ## Getter, pass local descriptor
+  pool.full.FullPassCtxRef
+
+proc pass(only: SnapBuddyData): auto =
+  ## Getter, pass local descriptor
+  only.full.FullPassBuddyRef
+
+proc `pass=`(pool: var SnapCtxData; val: FullPassCtxRef) =
+  ## Setter, pass local descriptor
+  pool.full = val
+
+proc `pass=`(only: var SnapBuddyData; val: FullPassBuddyRef) =
+  ## Getter, pass local descriptor
+  only.full = val
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
 proc tickerUpdater(ctx: SnapCtxRef): TickerFullStatsUpdater =
   result = proc: TickerFullStats =
     var stats: BlockQueueStats
-    ctx.pool.bCtx.blockQueueStats(stats)
+    ctx.pool.pass.bCtx.blockQueueStats(stats)
 
     TickerFullStats(
+      pivotBlock:      ctx.pool.pass.startNumber,
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
       reOrg:           stats.reOrg)
 
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
 
 proc processStaged(buddy: SnapBuddyRef): bool =
   ## Fetch a work item from the `staged` queue an process it to be
   ## stored on the persistent block chain.
   let
-    ctx {.used.} = buddy.ctx
+    ctx = buddy.ctx
     peer = buddy.peer
     chainDb = buddy.ctx.chain.db
     chain = buddy.ctx.chain
-    bq = buddy.only.bQueue
+    bq = buddy.only.pass.queue
 
     # Get a work item, a list of headers + bodies
     wi = block:
@@ -129,12 +163,17 @@ proc processStaged(buddy: SnapBuddyRef): bool =
 # ------------------------------------------------------------------------------
 
 proc fullSyncSetup(ctx: SnapCtxRef) =
-  ctx.pool.bCtx = BlockQueueCtxRef.init()
-  ctx.pool.bPivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
+  # Set up descriptor
+  ctx.pool.pass = FullPassCtxRef()
+  ctx.pool.pass.bCtx = BlockQueueCtxRef.init()
+  ctx.pool.pass.pivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
+
+  # Update ticker
   ctx.pool.ticker.init(cb = ctx.tickerUpdater())
 
 proc fullSyncRelease(ctx: SnapCtxRef) =
   ctx.pool.ticker.stop()
+  ctx.pool.pass = nil
 
 
 proc fullSyncStart(buddy: SnapBuddyRef): bool =
@@ -142,13 +181,12 @@ proc fullSyncStart(buddy: SnapBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
 
-  if peer.supports(protocol.eth) and
-     peer.state(protocol.eth).initialized:
+  if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
+    let p = ctx.pool.pass
 
-    buddy.only.bQueue = BlockQueueWorkerRef.init(
-      ctx.pool.bCtx, buddy.ctrl, peer)
-    buddy.only.bPivot = BestPivotWorkerRef.init(
-      ctx.pool.bPivot, buddy.ctrl, buddy.peer)
+    buddy.only.pass = FullPassBuddyRef()
+    buddy.only.pass.queue = BlockQueueWorkerRef.init(p.bCtx, buddy.ctrl, peer)
+    buddy.only.pass.pivot = BestPivotWorkerRef.init(p.pivot, buddy.ctrl, peer)
 
     ctx.pool.ticker.startBuddy()
     buddy.ctrl.multiOk = false # confirm default mode for soft restart
@@ -156,7 +194,7 @@ proc fullSyncStart(buddy: SnapBuddyRef): bool =
     return true
 
 proc fullSyncStop(buddy: SnapBuddyRef) =
-  buddy.only.bPivot.clear()
+  buddy.only.pass.pivot.clear()
   buddy.ctx.pool.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -176,8 +214,8 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
     let stateHeader = ctx.pool.fullHeader.unsafeGet
 
     # Reinialise block queue descriptor relative to current pivot
-    ctx.pool.startNumber = some(stateHeader.blockNumber)
-    ctx.pool.bCtx = BlockQueueCtxRef.init(stateHeader.blockNumber + 1)
+    ctx.pool.pass.startNumber = some(stateHeader.blockNumber)
+    ctx.pool.pass.bCtx = BlockQueueCtxRef.init(stateHeader.blockNumber + 1)
 
     # Kick off ticker (was stopped by snap `release()` method)
     ctx.pool.ticker.start()
@@ -198,25 +236,25 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
     ctx.pool.fullHeader = none(BlockHeader)
 
   # Soft re-start buddy peers if on the second lap.
-  if 0 < laps and ctx.pool.startNumber.isSome:
+  if 0 < laps and ctx.pool.pass.startNumber.isSome:
     if not buddy.fullSyncStart():
       # Start() method failed => wait for another peer
       buddy.ctrl.stopped = true
     if last:
       trace logTxt "soft restart done", peer=buddy.peer, last, laps,
-        pivot=ctx.pool.startNumber.toStr,
+        pivot=ctx.pool.pass.startNumber.toStr,
         mode=ctx.pool.syncMode.active, state= buddy.ctrl.state
     return false # does stop magically when looping over peers is exhausted
 
   # Mind the gap, fill in if necessary (function is peer independent)
-  buddy.only.bQueue.blockQueueGrout()
+  buddy.only.pass.queue.blockQueueGrout()
   true # Stop after running once regardless of peer
 
 
 proc fullSyncSingle(buddy: SnapBuddyRef) {.async.} =
   let
-    pv = buddy.only.bPivot
-    bq = buddy.only.bQueue
+    pv = buddy.only.pass.pivot
+    bq = buddy.only.pass.queue
     bNum = bq.bestNumber.get(otherwise = bq.topAccepted + 1)
 
   # Negotiate in order to derive the pivot header from this `peer`.
@@ -243,7 +281,7 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   ## Full sync processing
   let
     ctx = buddy.ctx
-    bq = buddy.only.bQueue
+    bq = buddy.only.pass.queue
 
   # Fetch work item
   let rc = await bq.blockQueueWorker()

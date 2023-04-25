@@ -16,7 +16,7 @@ import
   eth/[common, p2p],
   stew/[interval_set, keyed_queue, sorted_set],
   ../../db/select_backend,
-  ../misc/[best_pivot, block_queue, ticker],
+  ../misc/ticker,
   ../sync_desc,
   ./worker/get/get_error,
   ./worker/db/[snapdb_desc, snapdb_pivot],
@@ -96,10 +96,7 @@ type
   SnapBuddyData* = object
     ## Per-worker local descriptor data extension
     errors*: GetErrorStatsRef          ## For error handling
-
-    # Full sync continuation parameters
-    bPivot*: BestPivotWorkerRef        ## Local pivot worker descriptor
-    bQueue*: BlockQueueWorkerRef       ## Block queue worker
+    full*: RootRef                     ## Peer local full sync descriptor
 
   SnapSyncPassType* = enum
     ## Current sync mode, after a snapshot has been downloaded, the system
@@ -136,10 +133,8 @@ type
     recovery*: SnapRecoveryRef         ## Current recovery checkpoint/context
 
     # Full sync continuation parameters
-    fullHeader*: Option[BlockHeader]   ## Pivot hand over
-    startNumber*: Option[BlockNumber]  ## Start full sync from here
-    bPivot*: BestPivotCtxRef           ## Global pivot descriptor
-    bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
+    fullHeader*: Option[BlockHeader]   ## Start full sync from here
+    full*: RootRef                     ## Global full sync descriptor
 
   SnapBuddyRef* = BuddyRef[SnapCtxData,SnapBuddyData]
     ## Extended worker peer descriptor
