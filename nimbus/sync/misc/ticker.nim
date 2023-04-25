@@ -155,13 +155,13 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
               &"({(data.nContracts[1]+0.5).int64})")
 
     if t.snap.recovery:
-      info "Snap sync statistics (recovery)",
+      info "Snap sync ticker (recovery)",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     elif recoveryDone:
-      info "Snap sync statistics (recovery done)",
+      info "Snap sync ticker (recovery done)",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     else:
-      info "Snap sync statistics",
+      info "Snap sync ticker",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
 
 
@@ -190,10 +190,10 @@ proc fullTicker(t: TickerRef) {.gcsafe.} =
     t.visited = now
 
     if data.suspended:
-      info "Full sync statistics (suspended)", up, nInst, pv,
+      info "Full sync ticker (suspended)", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
     else:
-      info "Full sync statistics", up, nInst, pv,
+      info "Full sync ticker", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
 
 # ------------------------------------------------------------------------------
