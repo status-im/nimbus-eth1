@@ -292,14 +292,8 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     maxWorkers {.used.} = dsc.ctx.buddiesMax
     nPeers {.used.} = dsc.pool.len
     nWorkers = dsc.buddies.len
-
-  trace "onPeerConnected (2)", peer, nPeers, nWorkers, maxWorkers
-  let
     zombie = dsc.buddies.eq peer.key
-
-  trace "onPeerConnected (3)", peer
   if zombie.isOk:
-    trace "onPeerConnected (4)", peer
     let
       now = Moment.now()
       ttz = zombie.value.zombified + zombieTimeToLinger
@@ -311,8 +305,6 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     dsc.buddies.del peer.key
     trace "Zombie peer timeout, ready for requeing", peer,
       nPeers, nWorkers, maxWorkers
-
-  trace "onPeerConnected (5)", peer
 
   # Initialise worker for this peer
   let buddy = RunnerBuddyRef[S,W](

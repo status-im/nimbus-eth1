@@ -188,8 +188,8 @@ proc tickerStats*(
       procChunks = env.fetchAccounts.processed.chunks
       stoQuLen = some(env.storageQueueTotal())
       ctraQuLen = some(env.fetchContracts.len)
-    if 0 < ctx.pool.pass.beaconHeader.blockNumber:
-      beaconBlock = some(ctx.pool.pass.beaconHeader.blockNumber)
+    if 0 < ctx.pool.beaconHeader.blockNumber:
+      beaconBlock = some(ctx.pool.beaconHeader.blockNumber)
 
     TickerSnapStats(
       beaconBlock:    beaconBlock,
@@ -421,7 +421,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   ## it will not proceed to the next scheduler task.
   let
     ctx = buddy.ctx
-    beaconHeader = ctx.pool.pass.beaconHeader
+    beaconHeader = ctx.pool.beaconHeader
   var
     pivotHeader: BlockHeader
 
@@ -453,16 +453,6 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
   # Not ready yet?
   if pivotHeader.blockNumber == 0:
     buddy.ctrl.stopped = true
-
-
-proc pivotUpdateBeaconHeaderCB*(ctx: SnapCtxRef): SyncReqNewHeadCB =
-  ## Update beacon header. This function is intended as a call back function
-  ## for the RPC module.
-  result = proc(h: BlockHeader) {.gcsafe.} =
-    if ctx.pool.pass.beaconHeader.blockNumber < h.blockNumber:
-      # when extraTraceMessages:
-      #   trace logTxt "external beacon info update", header=h.blockNumber.toStr
-      ctx.pool.pass.beaconHeader = h
 
 # ------------------------------------------------------------------------------
 # Public function, debugging

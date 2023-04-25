@@ -15,7 +15,7 @@ import
   chronos,
   eth/p2p,
   stew/keyed_queue,
-  ../../../misc/[best_pivot, block_queue, ticker],
+  ../../../misc/[best_pivot, block_queue, sync_ctrl, ticker],
   ../../../protocol,
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
@@ -25,14 +25,15 @@ import
 type
   FullPassCtxRef = ref object of RootRef
     ## Pass local descriptor extension for full sync process
-    startNumber*: Option[BlockNumber]  ## History starts here (used for logging)
-    pivot*: BestPivotCtxRef            ## Global pivot descriptor
-    bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
+    startNumber: Option[BlockNumber]  ## History starts here (used for logging)
+    pivot: BestPivotCtxRef            ## Global pivot descriptor
+    bCtx: BlockQueueCtxRef            ## Global block queue descriptor
+    suspendAt: BlockNumber            ## Suspend if persistent head is larger
 
   FullPassBuddyRef = ref object of RootRef
     ## Pass local descriptor extension for full sync process
-    pivot*: BestPivotWorkerRef         ## Local pivot worker descriptor
-    queue*: BlockQueueWorkerRef        ## Block queue worker
+    pivot: BestPivotWorkerRef         ## Local pivot worker descriptor
+    queue: BlockQueueWorkerRef        ## Block queue worker
 
 const
   extraTraceMessages = false # or true
@@ -83,8 +84,12 @@ proc `pass=`(only: var SnapBuddyData; val: FullPassBuddyRef) =
 
 proc tickerUpdater(ctx: SnapCtxRef): TickerFullStatsUpdater =
   result = proc: TickerFullStats =
+    let full = ctx.pool.pass
+
     var stats: BlockQueueStats
-    ctx.pool.pass.bCtx.blockQueueStats(stats)
+    full.bCtx.blockQueueStats(stats)
+
+    let suspended = 0 < full.suspendAt and full.suspendAt <= stats.topAccepted
 
     TickerFullStats(
       pivotBlock:      ctx.pool.pass.startNumber,
@@ -92,6 +97,7 @@ proc tickerUpdater(ctx: SnapCtxRef): TickerFullStatsUpdater =
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
+      suspended:       suspended,
       reOrg:           stats.reOrg)
 
 
@@ -158,6 +164,27 @@ proc processStaged(buddy: SnapBuddyRef): bool =
 
   return false
 
+proc suspendDownload(buddy: SnapBuddyRef): bool =
+  ## Check whether downloading should be suspended
+  let
+    ctx = buddy.ctx
+    full = ctx.pool.pass
+
+  # Update from RPC magic
+  if full.suspendAt < ctx.pool.beaconHeader.blockNumber:
+    full.suspendAt = ctx.pool.beaconHeader.blockNumber
+
+  # Optionaly, some external update request
+  if ctx.exCtrlFile.isSome:
+    # Needs to be read as second line (index 1)
+    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile(1)
+    if rc.isOk and full.suspendAt < rc.value:
+      full.suspendAt = rc.value
+
+  # Return `true` if download should be suspended
+  if 0 < full.suspendAt:
+    return full.suspendAt <= buddy.only.pass.queue.topAccepted
+
 # ------------------------------------------------------------------------------
 # Private functions, full sync admin handlers
 # ------------------------------------------------------------------------------
@@ -166,6 +193,8 @@ proc fullSyncSetup(ctx: SnapCtxRef) =
   # Set up descriptor
   ctx.pool.pass = FullPassCtxRef()
   ctx.pool.pass.bCtx = BlockQueueCtxRef.init()
+
+  # Init peer pivots in relaxed mode (not waiting for agreeing peers)
   ctx.pool.pass.pivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
 
   # Update ticker
@@ -282,6 +311,11 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   let
     ctx = buddy.ctx
     bq = buddy.only.pass.queue
+
+  if buddy.suspendDownload:
+    # Sleep for a while, then leave
+    await sleepAsync(10.seconds)
+    return
 
   # Fetch work item
   let rc = await bq.blockQueueWorker()

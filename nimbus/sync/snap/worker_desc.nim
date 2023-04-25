@@ -26,6 +26,7 @@ type
     ## Peer-worker local descriptor data extension
     errors*: GetErrorStatsRef          ## For error handling
     full*: RootRef                     ## Peer local full sync descriptor
+    # snap*: RootRef                   ## Peer local snap sync descriptor
 
   SnapSyncPassType* = enum
     ## Current sync mode, after a snapshot has been downloaded, the system
@@ -47,6 +48,7 @@ type
     snapDb*: SnapDbRef                 ## Accounts snapshot DB
 
     # Info
+    beaconHeader*: BlockHeader         ## Running on beacon chain
     enableTicker*: bool                ## Advisary, extra level of gossip
     ticker*: TickerRef                 ## Ticker, logger descriptor
 
