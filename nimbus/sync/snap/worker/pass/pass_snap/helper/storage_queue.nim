@@ -60,7 +60,7 @@ template noExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc updatePartial(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     req: AccountSlotsChanged;               # Left over account data
       ): bool =                             # List entry was added
   ## Update the range of account argument `req` to the partial slot ranges
@@ -121,7 +121,7 @@ proc updatePartial(
 
 
 proc appendPartial(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
     splitMerge: bool;                       # Bisect or straight merge
       ): bool =                             # List entry was added
@@ -164,7 +164,7 @@ proc appendPartial(
 
 
 proc reducePartial(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
       ): bool =                             # List entry was removed
   ## Reduce range from partial ranges list.
@@ -209,11 +209,11 @@ proc reducePartial(
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc storageQueueTotal*(env: SnapPassPivotRef): int =
+proc storageQueueTotal*(env: SnapPivotRef): int =
   ## Total number of entries on the storage queues, including parked ones.
   env.fetchStorageFull.len + env.fetchStoragePart.len + env.parkedStorage.len
 
-proc storageQueueAvail*(env: SnapPassPivotRef): int =
+proc storageQueueAvail*(env: SnapPivotRef): int =
   ## Number of available entries on the storage queues
   env.fetchStorageFull.len + env.fetchStoragePart.len
 
@@ -222,7 +222,7 @@ proc storageQueueAvail*(env: SnapPassPivotRef): int =
 # ------------------------------------------------------------------------------
 
 proc storageQueueAppendFull*(
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
     stoRoot: Hash256;
     accKey: NodeKey;
       ): bool
@@ -237,7 +237,7 @@ proc storageQueueAppendFull*(
   env.fetchStorageFull.append(stoRoot, stoItem) and notPart
 
 proc storageQueueAppendFull*(
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
     acc: AccountSlotsHeader;
       ): bool
       {.discardable.} =
@@ -245,7 +245,7 @@ proc storageQueueAppendFull*(
   env.storageQueueAppendFull(acc.storageRoot, acc.accKey)
 
 proc storageQueueAppendPartialSplit*(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     acc: AccountSlotsHeader;                # Left over account data
       ): bool
       {.discardable.} =
@@ -259,7 +259,7 @@ proc storageQueueAppendPartialSplit*(
   env.appendPartial(acc, splitMerge=true)
 
 proc storageQueueAppendPartialSplit*(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     req: openArray[AccountSlotsHeader];     # List of entries to push back
       ) =
   ## Variant of `storageQueueAppendPartialSplit()`
@@ -267,7 +267,7 @@ proc storageQueueAppendPartialSplit*(
     discard env.appendPartial(w, splitMerge=true)
 
 proc storageQueueAppend*(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     req: openArray[AccountSlotsHeader];     # List of entries to push back
       ) =
   ## Append a job list of ranges. This undoes the effect of either function
@@ -280,7 +280,7 @@ proc storageQueueAppend*(
       discard env.appendPartial(w, splitMerge=false)
 
 proc storageQueueAppend*(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     kvp: StoQuSlotsKVP;                     # List of entries to push back
       ) =
   ## Insert back a full administrative queue record. This function is typically
@@ -324,7 +324,7 @@ proc storageQueueAppend*(
 # ------------------------------------------------------------------------------
 
 proc storageQueueUpdate*(
-    env: SnapPassPivotRef;                  # Current pivot environment
+    env: SnapPivotRef;                      # Current pivot environment
     req: openArray[AccountSlotsChanged];    # List of entries to push back
     ignore: HashSet[NodeKey];               # Ignore accounts with these keys
       ): (int,int) =                        # Added, removed
@@ -366,7 +366,7 @@ proc storageQueueUpdate*(
 
 proc storageQueueFetchFull*(
     ctx: SnapCtxRef;                   # Global context
-    env: SnapPassPivotRef;             # Current pivot environment
+    env: SnapPivotRef;                 # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): seq[AccountSlotsHeader] =
   ## Fetch a list of at most `fetchRequestStorageSlotsMax` full work items
@@ -429,7 +429,7 @@ proc storageQueueFetchFull*(
 
 proc storageQueueFetchPartial*(
     ctx: SnapCtxRef;                   # Global context (unused here)
-    env: SnapPassPivotRef;             # Current pivot environment
+    env: SnapPivotRef;                 # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): seq[AccountSlotsHeader] =     # At most one item
   ## Get work item from the batch queue. This will typically return the full
@@ -474,7 +474,7 @@ proc storageQueueFetchPartial*(
     # End for()
 
 proc storageQueueUnlinkPartialItem*(
-    env: SnapPassPivotRef;             # Current pivot environment
+    env: SnapPivotRef;                 # Current pivot environment
     ignore: HashSet[NodeKey];          # Ignore accounts with these keys
       ): Result[StoQuSlotsKVP,void] =
   ## Fetch an item from the partial list. This item will be removed from the

@@ -82,7 +82,7 @@ proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
 
 proc healingCtx(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): string =
   let ctx = buddy.ctx
   "{" &
@@ -108,7 +108,7 @@ template discardRlpError(info: static[string]; code: untyped) =
 
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ## Find some missing glue nodes in accounts database.
@@ -149,7 +149,7 @@ proc getNodesFromNetwork(
     buddy: SnapBuddyRef;
     missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
     ignore: HashSet[Blob];              # Except for these partial paths listed
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ## Extract from `nodes.missing` the next batch of nodes that need
@@ -201,7 +201,7 @@ proc getNodesFromNetwork(
 proc kvAccountLeaf(
     buddy: SnapBuddyRef;
     node: NodeSpecs;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): (bool,NodeKey,Account) =
   ## Re-read leaf node from persistent database (if any)
   var nNibbles = -1
@@ -229,7 +229,7 @@ proc registerAccountLeaf(
     buddy: SnapBuddyRef;
     accKey: NodeKey;
     acc: Account;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) =
   ## Process single account node as would be done with an interval by
   ## the `storeAccounts()` function
@@ -274,7 +274,7 @@ proc registerAccountLeaf(
 proc accountsHealingImpl(
     buddy: SnapBuddyRef;
     ignore: HashSet[Blob];
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[(int,HashSet[Blob])]
       {.async.} =
   ## Fetching and merging missing account trie database nodes. It returns the
@@ -344,7 +344,7 @@ proc accountsHealingImpl(
 
 proc healAccounts*(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) {.async.} =
   ## Fetching and merging missing account trie database nodes.
   trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)

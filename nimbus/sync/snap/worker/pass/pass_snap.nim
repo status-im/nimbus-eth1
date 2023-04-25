@@ -140,7 +140,7 @@ proc recoveryStepContinue(ctx: SnapCtxRef): Future[bool] {.async.} =
 # --------------
 
 proc snapSyncCompleteOk(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): Future[bool]
       {.async.} =

@@ -84,7 +84,7 @@ proc toPC(w: openArray[NodeSpecs]; n: static[int] = 3): string =
 
 proc healingCtx(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): string {.used.} =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -97,7 +97,7 @@ proc healingCtx(
 proc healingCtx(
     buddy: SnapBuddyRef;
     kvp: StoQuSlotsKVP;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): string =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -125,7 +125,7 @@ template discardRlpError(info: static[string]; code: untyped) =
 proc compileMissingNodesList(
     buddy: SnapBuddyRef;
     kvp: StoQuSlotsKVP;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ## Find some missing glue nodes in storage slots database.
@@ -163,7 +163,7 @@ proc getNodesFromNetwork(
     missingNodes: seq[NodeSpecs];       # Nodes to fetch from the network
     ignore: HashSet[Blob];              # Except for these partial paths listed
     kvp: StoQuSlotsKVP;                 # Storage slots context
-    env: SnapPassPivotRef;                  # For logging
+    env: SnapPivotRef;                  # For logging
       ): Future[seq[NodeSpecs]]
       {.async.} =
   ##  Extract from `missing` the next batch of nodes that need
@@ -216,7 +216,7 @@ proc kvStoSlotsLeaf(
     buddy: SnapBuddyRef;
     node: NodeSpecs;                    # Node data fetched from network
     kvp: StoQuSlotsKVP;                 # For logging
-    env: SnapPassPivotRef;                  # For logging
+    env: SnapPivotRef;                  # For logging
       ): (bool,NodeKey) =
   ## Re-read leaf node from persistent database (if any)
   var nNibbles = -1
@@ -240,7 +240,7 @@ proc registerStoSlotsLeaf(
     buddy: SnapBuddyRef;
     slotKey: NodeKey;
     kvp: StoQuSlotsKVP;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) =
   ## Process single account node as would be done with an interval by
   ## the `storeAccounts()` function
@@ -276,7 +276,7 @@ proc stoSlotsHealingImpl(
     buddy: SnapBuddyRef;
     ignore: HashSet[Blob];           # Except for these partial paths listed
     kvp: StoQuSlotsKVP;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[(int,HashSet[Blob])]
       {.async.} =
   ## Returns `true` is the sub-trie is complete (probably inherited), and
@@ -343,7 +343,7 @@ proc stoSlotsHealingImpl(
 
 proc healStorageSlots*(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) {.async.} =
   ## Fetching and merging missing slorage slots trie database nodes.
   trace logTxt "started", peer=buddy.peer, ctx=buddy.healingCtx(env)

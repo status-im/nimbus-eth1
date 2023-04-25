@@ -52,10 +52,10 @@ logScope:
 
 type
   SwapInPivot = object
-    ## Subset of `SnapPassPivotRef` with relevant parts, only
+    ## Subset of `SnapPivotRef` with relevant parts, only
     rootKey: NodeKey             ## Storage slots & accounts
     processed: NodeTagRangeSet   ## Storage slots & accounts
-    pivot: SnapPassPivotRef      ## Accounts only
+    pivot: SnapPivotRef          ## Accounts only
 
 const
   extraTraceMessages = false # or true
@@ -248,7 +248,7 @@ proc swapIn(
 
 proc swapInAccounts*(
     ctx: SnapCtxRef;                   # Global context
-    env: SnapPassPivotRef;             # Current pivot environment
+    env: SnapPivotRef;                 # Current pivot environment
     loopMax = 100;                     # Prevent from looping too often
       ): int =
   ## Variant of `swapIn()` for the particular case of accounts database pivots.

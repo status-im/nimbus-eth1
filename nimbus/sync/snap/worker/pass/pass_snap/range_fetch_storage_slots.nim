@@ -90,7 +90,7 @@ template logTxt(info: static[string]): static[string] =
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): string =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -107,7 +107,7 @@ proc fetchCtx(
 proc fetchStorageSlotsImpl(
     buddy: SnapBuddyRef;
     req: seq[AccountSlotsHeader];
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[Result[HashSet[NodeKey],void]]
       {.async.} =
   ## Fetch account storage slots and store them in the database, returns
@@ -196,7 +196,7 @@ proc fetchStorageSlotsImpl(
 
 proc rangeFetchStorageSlots*(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) {.async.} =
   ## Fetch some account storage slots and store them in the database. If left
   ## anlone (e.t. no patallel activated processes) this function tries to fetch

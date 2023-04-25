@@ -31,7 +31,7 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-proc pivotMothball*(env: SnapPassPivotRef) {.gcsafe.}
+proc pivotMothball*(env: SnapPivotRef) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers, logging
@@ -51,7 +51,7 @@ template ignExceptionOops(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 proc accountsHealingOk(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): bool =
   ## Returns `true` if accounts healing is enabled for this pivot.
@@ -78,7 +78,7 @@ proc init(
     discard result.unprocessed[1].merge iv
 
 proc init(
-    T: type SnapPassPivotRef;       # Privot descriptor type
+    T: type SnapPivotRef;           # Privot descriptor type
     ctx: SnapCtxRef;                # Some global context
     header: BlockHeader;            # Header to generate new pivot from
       ): T =
@@ -119,7 +119,7 @@ proc reverseUpdate*(
   ##
   # Append per-state root environment to LRU queue
   discard pivotTable.prepend(
-    header.stateRoot, SnapPassPivotRef.init(ctx, header))
+    header.stateRoot, SnapPivotRef.init(ctx, header))
 
   # Make sure that the LRU table does not grow too big.
   if max(3, ctx.buddiesMax) < pivotTable.len:
@@ -207,7 +207,7 @@ proc tickerStats*(
 # Public functions: particular pivot
 # ------------------------------------------------------------------------------
 
-proc pivotCompleteOk*(env: SnapPassPivotRef): bool =
+proc pivotCompleteOk*(env: SnapPivotRef): bool =
   ## Returns `true` iff the pivot covers a complete set of accounts ans
   ## storage slots.
   env.fetchAccounts.processed.isFull and
@@ -215,7 +215,7 @@ proc pivotCompleteOk*(env: SnapPassPivotRef): bool =
     env.fetchContracts.len == 0
 
 
-proc pivotMothball*(env: SnapPassPivotRef) =
+proc pivotMothball*(env: SnapPivotRef) =
   ## Clean up most of this argument `env` pivot record and mark it `archived`.
   ## Note that archived pivots will be checked for swapping in already known
   ## accounts and storage slots.
@@ -240,7 +240,7 @@ proc pivotMothball*(env: SnapPassPivotRef) =
 
 
 proc execSnapSyncAction*(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;              # Current pivot environment
     buddy: SnapBuddyRef;            # Worker peer
       ) {.async.} =
   ## Execute a synchronisation run.
@@ -305,7 +305,7 @@ proc execSnapSyncAction*(
 
 
 proc saveCheckpoint*(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;          # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
       ): Result[int,HexaryError] =
   ## Save current sync admin data. On success, the size of the data record
@@ -343,7 +343,7 @@ proc saveCheckpoint*(
 
 
 proc pivotRecoverFromCheckpoint*(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Global context (containing save state)
     topLevel: bool;                 # Full data set on top level only
       ) =
@@ -445,7 +445,7 @@ proc pivotApprovePeer*(buddy: SnapBuddyRef) {.async.} =
         beacon=beaconHeader.blockNumber.toStr, poolMode=ctx.poolMode
 
     discard ctx.pool.pass.pivotTable.lruAppend(
-      beaconHeader.stateRoot, SnapPassPivotRef.init(ctx, beaconHeader),
+      beaconHeader.stateRoot, SnapPivotRef.init(ctx, beaconHeader),
       pivotTableLruEntriesMax)
 
     pivotHeader = beaconHeader
@@ -478,7 +478,7 @@ const
   inspectExtraNap = 100.milliseconds
 
 proc pivotVerifyComplete*(
-    env: SnapPassPivotRef;          # Current pivot environment
+    env: SnapPivotRef;              # Current pivot environment
     ctx: SnapCtxRef;                # Some global context
     inspectAccountsTrie = false;    # Check for dangling links
     walkAccountsDB = true;          # Walk accounts db

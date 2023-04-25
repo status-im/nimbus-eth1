@@ -77,7 +77,7 @@ proc `$`(iv: NodeTagRange): string =
 
 proc fetchCtx(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): string {.used.} =
   "{" &
     "piv=" & env.stateHeader.blockNumber.toStr & "," &
@@ -93,7 +93,7 @@ proc fetchCtx(
 
 proc getUnprocessed(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Result[NodeTagRange,void] =
   ## Fetch an interval from one of the account range lists.
   let accountRangeMax = high(UInt256) div buddy.ctx.buddiesMax.u256
@@ -106,7 +106,7 @@ proc getUnprocessed(
 
 proc accountsRangefetchImpl(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ): Future[bool]
       {.async.} =
   ## Fetch accounts and store them in the database. Returns true while more
@@ -223,7 +223,7 @@ proc accountsRangefetchImpl(
 
 proc rangeFetchAccounts*(
     buddy: SnapBuddyRef;
-    env: SnapPassPivotRef;
+    env: SnapPivotRef;
       ) {.async.} =
   ## Fetch accounts and store them in the database.
   trace logTxt "start", peer=buddy.peer, ctx=buddy.fetchCtx(env)

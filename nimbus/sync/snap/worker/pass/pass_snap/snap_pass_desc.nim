@@ -53,7 +53,7 @@ type
     unprocessed*: SnapPassTodoRanges   ## Range of slots to be fetched
     processed*: NodeTagRangeSet        ## Node ranges definitely processed
 
-  SnapPassPivotRef* = ref object
+  SnapPivotRef* = ref object
     ## Per-state root cache for particular snap data environment
     stateHeader*: BlockHeader          ## Pivot state, containg state root
 
@@ -80,7 +80,7 @@ type
     storageAccounts*: SnapPassAccList  ## Accounts with missing storage slots
     archived*: bool                    ## Not latest pivot, anymore
 
-  SnapPassPivotTable* = KeyedQueue[Hash256,SnapPassPivotRef]
+  SnapPassPivotTable* = KeyedQueue[Hash256,SnapPivotRef]
     ## LRU table, indexed by state root
 
   SnapPassRecoveryRef* = ref object
@@ -91,7 +91,7 @@ type
   SnapPassCtxRef* = ref object of RootRef
     ## Global context extension, snap sync parameters, pivot table
     pivotTable*: SnapPassPivotTable    ## Per state root environment
-    completePivot*: SnapPassPivotRef   ## Start full sync from here
+    completePivot*: SnapPivotRef   ## Start full sync from here
     beaconHeader*: BlockHeader         ## Running on beacon chain
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
