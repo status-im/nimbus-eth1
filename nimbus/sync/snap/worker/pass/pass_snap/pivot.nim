@@ -19,7 +19,7 @@ import
   "../../../.."/[misc/ticker, sync_desc, types],
   "../../.."/[constants, range_desc, worker_desc],
   ../../db/[hexary_error, snapdb_accounts, snapdb_contracts, snapdb_pivot],
-  ./helper/storage_queue,
+  ./helper/[accounts_coverage, storage_queue],
   "."/[heal_accounts, heal_storage_slots, range_fetch_accounts,
        range_fetch_contracts, range_fetch_storage_slots]
 
@@ -55,7 +55,7 @@ proc accountsHealingOk(
       ): bool =
   ## Returns `true` if accounts healing is enabled for this pivot.
   not env.fetchAccounts.processed.isEmpty and
-    healAccountsCoverageTrigger <= ctx.pivotAccountsCoverage()
+    healAccountsCoverageTrigger <= ctx.accountsCoverage()
 
 
 proc init(
@@ -68,7 +68,7 @@ proc init(
   result.processed = NodeTagRangeSet.init()
 
   # Update coverage level roll over
-  ctx.pivotAccountsCoverage100PcRollOver()
+  ctx.accountsCoverage100PcRollOver()
 
   # Initialise accounts range fetch batch, the pair of `fetchAccounts[]` range
   # sets. Deprioritise already processed ranges by moving it to the second set.
@@ -265,7 +265,7 @@ proc execSnapSyncAction*(
     await buddy.rangeFetchAccounts(env)
 
     # Update 100% accounting
-    ctx.pivotAccountsCoverage100PcRollOver()
+    ctx.accountsCoverage100PcRollOver()
 
     # Run at least one round fetching storage slosts and contracts even if
     # the `archived` flag is set in order to keep the batch queue small.
@@ -364,7 +364,7 @@ proc pivotRecoverFromCheckpoint*(
       env.fetchAccounts.unprocessed.reduce NodeTagRange.new(minPt, maxPt)
     discard env.fetchAccounts.processed.merge(minPt, maxPt)
     discard ctx.pool.coveredAccounts.merge(minPt, maxPt)
-    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
+    ctx.accountsCoverage100PcRollOver() # update coverage level roll over
 
   # Handle storage slots
   let stateRoot = recov.state.header.stateRoot

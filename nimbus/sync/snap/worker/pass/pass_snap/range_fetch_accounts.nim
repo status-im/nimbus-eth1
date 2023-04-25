@@ -52,7 +52,7 @@ import
   "../../.."/[constants, range_desc, worker_desc],
   ../../get/[get_error, get_account_range],
   ../../db/[hexary_envelope, snapdb_accounts],
-  ./helper/[storage_queue, swap_in]
+  ./helper/[accounts_coverage, storage_queue, swap_in]
 
 logScope:
   topics = "snap-acc"
@@ -189,7 +189,7 @@ proc accountsRangefetchImpl(
     # Register consumed intervals on the accumulators over all state roots.
     discard fa.processed.merge w
     discard ctx.pool.coveredAccounts.merge w
-    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
+    ctx.accountsCoverage100PcRollOver() # update coverage level roll over
 
   # Register accounts with storage slots on the storage TODO list.
   env.storageQueueAppend dd.withStorage

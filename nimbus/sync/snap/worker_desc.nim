@@ -155,22 +155,6 @@ proc hash*(a: Hash256): Hash =
   a.data.hash
 
 # ------------------------------------------------------------------------------
-# Public helpers: coverage
-# ------------------------------------------------------------------------------
-
-proc pivotAccountsCoverage*(ctx: SnapCtxRef): float =
-  ## Returns the accounts coverage factor
-  ctx.pool.coveredAccounts.fullFactor + ctx.pool.covAccTimesFull.float
-
-proc pivotAccountsCoverage100PcRollOver*(ctx: SnapCtxRef) =
-  ## Roll over `coveredAccounts` registry when it reaches 100%.
-  if ctx.pool.coveredAccounts.isFull:
-    # All of accounts hashes are covered by completed range fetch processes
-    # for all pivot environments. So reset covering and record full-ness level.
-    ctx.pool.covAccTimesFull.inc
-    ctx.pool.coveredAccounts.clear()
-
-# ------------------------------------------------------------------------------
 # Public helpers: SnapTodoRanges
 # ------------------------------------------------------------------------------
 
