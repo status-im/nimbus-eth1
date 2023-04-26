@@ -15,7 +15,7 @@ import
   chronos,
   eth/p2p,
   stew/keyed_queue,
-  ../../../misc/[best_pivot, block_queue, ticker],
+  ../../../misc/[best_pivot, block_queue, sync_ctrl, ticker],
   ../../../protocol,
   "../.."/[range_desc, worker_desc],
   ../db/[snapdb_desc, snapdb_persistent],
@@ -25,23 +25,24 @@ import
 type
   FullPassCtxRef = ref object of RootRef
     ## Pass local descriptor extension for full sync process
-    startNumber*: Option[BlockNumber]  ## History starts here (used for logging)
-    pivot*: BestPivotCtxRef            ## Global pivot descriptor
-    bCtx*: BlockQueueCtxRef            ## Global block queue descriptor
+    startNumber: Option[BlockNumber]  ## History starts here (used for logging)
+    pivot: BestPivotCtxRef            ## Global pivot descriptor
+    bCtx: BlockQueueCtxRef            ## Global block queue descriptor
+    suspendAt: BlockNumber            ## Suspend if persistent head is larger
 
   FullPassBuddyRef = ref object of RootRef
     ## Pass local descriptor extension for full sync process
-    pivot*: BestPivotWorkerRef         ## Local pivot worker descriptor
-    queue*: BlockQueueWorkerRef        ## Block queue worker
+    pivot: BestPivotWorkerRef         ## Local pivot worker descriptor
+    queue: BlockQueueWorkerRef        ## Block queue worker
 
 const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  dumpDatabaseOnRollOver = true # or false # <--- will go away (debugging only)
+  dumpDatabaseOnRollOver = false # or true # <--- will go away (debugging only)
     ## Dump database before switching to full sync (debugging, testing)
 
-when dumpDatabaseOnRollOver:
+when dumpDatabaseOnRollOver:               # <--- will go away (debugging only)
   import ../../../../../tests/replay/undump_kvp
 
 # ------------------------------------------------------------------------------
@@ -81,10 +82,23 @@ proc `pass=`(only: var SnapBuddyData; val: FullPassBuddyRef) =
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc resumeAtNumber(ctx: SnapCtxRef): BlockNumber =
+  ## Resume full sync (if any)
+  ignoreException("resumeAtNumber"):
+    const nBackBlocks = maxHeadersFetch div 2
+    let bestNumber = ctx.chain.db.getCanonicalHead().blockNumber
+    if nBackBlocks < bestNumber:
+      return bestNumber - nBackBlocks
+
+
 proc tickerUpdater(ctx: SnapCtxRef): TickerFullStatsUpdater =
   result = proc: TickerFullStats =
+    let full = ctx.pool.pass
+
     var stats: BlockQueueStats
-    ctx.pool.pass.bCtx.blockQueueStats(stats)
+    full.bCtx.blockQueueStats(stats)
+
+    let suspended = 0 < full.suspendAt and full.suspendAt <= stats.topAccepted
 
     TickerFullStats(
       pivotBlock:      ctx.pool.pass.startNumber,
@@ -92,6 +106,7 @@ proc tickerUpdater(ctx: SnapCtxRef): TickerFullStatsUpdater =
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
       nStagedQueue:    stats.nStagedQueue,
+      suspended:       suspended,
       reOrg:           stats.reOrg)
 
 
@@ -158,15 +173,46 @@ proc processStaged(buddy: SnapBuddyRef): bool =
 
   return false
 
+proc suspendDownload(buddy: SnapBuddyRef): bool =
+  ## Check whether downloading should be suspended
+  let
+    ctx = buddy.ctx
+    full = ctx.pool.pass
+
+  # Update from RPC magic
+  if full.suspendAt < ctx.pool.beaconHeader.blockNumber:
+    full.suspendAt = ctx.pool.beaconHeader.blockNumber
+
+  # Optionaly, some external update request
+  if ctx.exCtrlFile.isSome:
+    # Needs to be read as second line (index 1)
+    let rc = ctx.exCtrlFile.syncCtrlBlockNumberFromFile(1)
+    if rc.isOk and full.suspendAt < rc.value:
+      full.suspendAt = rc.value
+
+  # Return `true` if download should be suspended
+  if 0 < full.suspendAt:
+    return full.suspendAt <= buddy.only.pass.queue.topAccepted
+
 # ------------------------------------------------------------------------------
 # Private functions, full sync admin handlers
 # ------------------------------------------------------------------------------
 
 proc fullSyncSetup(ctx: SnapCtxRef) =
   # Set up descriptor
-  ctx.pool.pass = FullPassCtxRef()
-  ctx.pool.pass.bCtx = BlockQueueCtxRef.init()
-  ctx.pool.pass.pivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
+  let full = FullPassCtxRef()
+  ctx.pool.pass = full
+
+  # Initialise full sync, resume from previous download (if any)
+  let blockNumber = ctx.resumeAtNumber()
+  if 0 < blockNumber:
+    full.startNumber = some(blockNumber)
+    full.bCtx = BlockQueueCtxRef.init(blockNumber + 1)
+  else:
+    full.bCtx = BlockQueueCtxRef.init()
+
+  # Initialise peer pivots in relaxed mode (not waiting for agreeing peers)
+  full.pivot = BestPivotCtxRef.init(rng=ctx.pool.rng, minPeers=0)
 
   # Update ticker
   ctx.pool.ticker.init(cb = ctx.tickerUpdater())
@@ -211,26 +257,31 @@ proc fullSyncPool(buddy: SnapBuddyRef, last: bool; laps: int): bool =
   # There is a soft re-setup after switch over to full sync mode if a pivot
   # block header is available initialised from outside, i.e. snap sync swich.
   if ctx.pool.fullHeader.isSome:
-    let stateHeader = ctx.pool.fullHeader.unsafeGet
+    let
+      stateHeader = ctx.pool.fullHeader.unsafeGet
+      initFullSync = ctx.pool.pass.startNumber.isNone
 
-    # Reinialise block queue descriptor relative to current pivot
+    # Re-assign start number for logging (instead of genesis)
     ctx.pool.pass.startNumber = some(stateHeader.blockNumber)
-    ctx.pool.pass.bCtx = BlockQueueCtxRef.init(stateHeader.blockNumber + 1)
+
+    if initFullSync:
+      # Reinitialise block queue descriptor relative to current pivot
+      ctx.pool.pass.bCtx = BlockQueueCtxRef.init(stateHeader.blockNumber + 1)
+
+      # Store pivot as parent hash in database
+      ctx.pool.snapDb.kvDb.persistentBlockHeaderPut stateHeader
+
+      # Instead of genesis.
+      ctx.chain.com.startOfHistory = stateHeader.blockHash
+
+      when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
+        # Dump database ...                  <--- will go away (debugging only)
+        let nRecords =                     # <--- will go away (debugging only)
+          ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
+        trace logTxt "dumped block chain database", nRecords
 
     # Kick off ticker (was stopped by snap `release()` method)
     ctx.pool.ticker.start()
-
-    # Store pivot as parent hash in database
-    ctx.pool.snapDb.kvDb.persistentBlockHeaderPut stateHeader
-
-    # Instead of genesis.
-    ctx.chain.com.startOfHistory = stateHeader.blockHash
-
-    when dumpDatabaseOnRollOver:         # <--- will go away (debugging only)
-      # Dump database ...                  <--- will go away (debugging only)
-      let nRecords =                     # <--- will go away (debugging only)
-        ctx.pool.snapDb.rockDb.dumpAllDb # <--- will go away (debugging only)
-      trace logTxt "dumped block chain database", nRecords
 
     # Reset so that this action would not be triggered, again
     ctx.pool.fullHeader = none(BlockHeader)
@@ -282,6 +333,11 @@ proc fullSyncMulti(buddy: SnapBuddyRef): Future[void] {.async.} =
   let
     ctx = buddy.ctx
     bq = buddy.only.pass.queue
+
+  if buddy.suspendDownload:
+    # Sleep for a while, then leave
+    await sleepAsync(10.seconds)
+    return
 
   # Fetch work item
   let rc = await bq.blockQueueWorker()

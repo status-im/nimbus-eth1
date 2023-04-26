@@ -22,6 +22,17 @@ logScope:
   topics = "snap-init"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc updateBeaconHeaderCB(ctx: SnapCtxRef): SyncReqNewHeadCB =
+  ## Update beacon header. This function is intended as a call back function
+  ## for the RPC module.
+  result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
+    if ctx.pool.beaconHeader.blockNumber < h.blockNumber:
+      ctx.pool.beaconHeader = h
+
+# ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
@@ -33,6 +44,16 @@ proc setupPass(ctx: SnapCtxRef) =
 
 proc releasePass(ctx: SnapCtxRef) =
   discard
+
+# --------------
+
+proc enableRpcMagic(ctx: SnapCtxRef) =
+  ## Helper for `setup()`: Enable external pivot update via RPC
+  ctx.chain.com.syncReqNewHead = ctx.updateBeaconHeaderCB
+
+proc disableRpcMagic(ctx: SnapCtxRef) =
+  ## Helper for `release()`
+  ctx.chain.com.syncReqNewHead = nil
 
 # --------------
 
@@ -64,6 +85,7 @@ proc passInitSetup*(ctx: SnapCtxRef) =
   ctx.setupPass()               # Set up sync sub-mode specs.
   ctx.setupSnapDb()             # Set database backend, subject to change
   ctx.setupTicker()             # Start log/status ticker (if any)
+  ctx.enableRpcMagic()          # Allow external pivot update via RPC
 
   # Experimental, also used for debugging
   if ctx.exCtrlFile.isSome:
@@ -72,6 +94,7 @@ proc passInitSetup*(ctx: SnapCtxRef) =
 
 proc passInitRelease*(ctx: SnapCtxRef) =
   ## Global clean up
+  ctx.disableRpcMagic()         # Disable external pivot update via RPC
   ctx.releaseTicker()           # Stop log/status ticker (if any)
   ctx.releasePass()             # Shut down sync methods
 

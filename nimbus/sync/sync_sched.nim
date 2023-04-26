@@ -88,13 +88,12 @@
 ## * stew/[interval_set, sorted_set],
 ## * "."/[sync_desc, sync_sched, protocol]
 ##
-
 {.push raises: [].}
 
 import
   std/hashes,
   chronos,
-  eth/[p2p, p2p/peer_pool, p2p/private/p2p_types],
+  eth/[keys, p2p, p2p/peer_pool],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
 
@@ -105,7 +104,7 @@ static:
 type
   ActiveBuddies[S,W] = ##\
     ## List of active workers, using `Hash(Peer)` rather than `Peer`
-    KeyedQueue[Hash,RunnerBuddyRef[S,W]]
+    KeyedQueue[ENode,RunnerBuddyRef[S,W]]
 
   RunnerSyncRef*[S,W] = ref object
     ## Module descriptor
@@ -122,8 +121,12 @@ type
     ## Per worker peer descriptor
     dsc: RunnerSyncRef[S,W]     ## Scheduler descriptor
     worker: BuddyRef[S,W]       ## Worker peer data
+    zombified: Moment           ## When it became undead (if any)
 
 const
+  zombieTimeToLinger = 20.seconds
+    ## Maximum time a zombie is kept on the database.
+
   execLoopTimeElapsedMin = 50.milliseconds
     ## Minimum elapsed time an exec loop needs for a single lap. If it is
     ## faster, asynchroneous sleep seconds are added. in order to avoid
@@ -143,9 +146,18 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hash(peer: Peer): Hash =
-  ## Needed for `buddies` table key comparison
-  peer.remote.id.hash
+proc hash*(key: ENode): Hash =
+  ## Mixin, needed for `buddies` table key comparison. Needs to be a public
+  ## function technically although it should be seen logically as a private
+  ## one.
+  var h: Hash = 0
+  h = h !& hashes.hash(key.pubkey.toRaw)
+  h = h !& hashes.hash(key.address)
+  !$h
+
+proc key(peer: Peer): ENode =
+  ## Map to key for below table methods.
+  peer.remote.node
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -230,7 +242,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       else:
         # Rotate connection table so the most used entry is at the top/right
         # end. So zombies will end up leftish.
-        discard dsc.buddies.lruFetch(peer.hash)
+        discard dsc.buddies.lruFetch peer.key
 
         # Multi mode
         if worker.ctrl.multiOk:
@@ -280,9 +292,19 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     maxWorkers {.used.} = dsc.ctx.buddiesMax
     nPeers {.used.} = dsc.pool.len
     nWorkers = dsc.buddies.len
-  if dsc.buddies.hasKey(peer.hash):
-    trace "Reconnecting zombie peer ignored", peer, nPeers, nWorkers, maxWorkers
-    return
+    zombie = dsc.buddies.eq peer.key
+  if zombie.isOk:
+    let
+      now = Moment.now()
+      ttz = zombie.value.zombified + zombieTimeToLinger
+    if ttz < Moment.now():
+      trace "Reconnecting zombie peer ignored", peer,
+        nPeers, nWorkers, maxWorkers, canRequeue=(now-ttz)
+      return
+    # Zombie can be removed from the database
+    dsc.buddies.del peer.key
+    trace "Zombie peer timeout, ready for requeing", peer,
+      nPeers, nWorkers, maxWorkers
 
   # Initialise worker for this peer
   let buddy = RunnerBuddyRef[S,W](
@@ -313,7 +335,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       leastPeer.worker.runStop()
 
   # Add peer entry
-  discard dsc.buddies.lruAppend(peer.hash, buddy, dsc.ctx.buddiesMax)
+  discard dsc.buddies.lruAppend(peer.key, buddy, dsc.ctx.buddiesMax)
 
   trace "Running peer worker", peer, nPeers,
     nWorkers=dsc.buddies.len, maxWorkers
@@ -326,17 +348,22 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     nPeers = dsc.pool.len
     maxWorkers = dsc.ctx.buddiesMax
     nWorkers = dsc.buddies.len
-    rc = dsc.buddies.eq(peer.hash)
+    rc = dsc.buddies.eq peer.key
   if rc.isErr:
     debug "Disconnected, unregistered peer", peer, nPeers, nWorkers, maxWorkers
     return
   if rc.value.worker.ctrl.zombie:
     # Don't disconnect, leave them fall out of the LRU cache. The effect is,
-    # that reconnecting might be blocked, for a while.
+    # that reconnecting might be blocked, for a while. For few peers cases,
+    # the start of zombification is registered so that a zombie can eventually
+    # be let die and buried.
+    rc.value.worker = nil
+    rc.value.dsc = nil
+    rc.value.zombified = Moment.now()
     trace "Disconnected, zombie", peer, nPeers, nWorkers, maxWorkers
   else:
     rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
-    dsc.buddies.del(peer.hash)
+    dsc.buddies.del peer.key
     trace "Disconnected buddy", peer, nPeers,
       nWorkers=dsc.buddies.len, maxWorkers
 

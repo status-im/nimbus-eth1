@@ -63,16 +63,6 @@ proc enableWireServices(ctx: SnapCtxRef) =
 
 # --------------
 
-proc enableRpcMagic(ctx: SnapCtxRef) =
-  ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.chain.com.syncReqNewHead = ctx.pivotUpdateBeaconHeaderCB
-
-proc disableRpcMagic(ctx: SnapCtxRef) =
-  ## Helper for `release()`
-  ctx.chain.com.syncReqNewHead = nil
-
-# --------------
-
 proc detectSnapSyncRecovery(ctx: SnapCtxRef) =
   ## Helper for `setup()`: Initiate snap sync recovery (if any)
   let rc = ctx.pool.snapDb.pivotRecoverDB()
@@ -171,12 +161,10 @@ proc snapSyncSetup(ctx: SnapCtxRef) =
   ctx.pool.pass.coveredAccounts = NodeTagRangeSet.init()
   ctx.pool.ticker.init(cb = ctx.pool.pass.pivotTable.tickerStats(ctx))
 
-  ctx.enableRpcMagic()          # Allow external pivot update via RPC
   ctx.disableWireServices()     # Stop unwanted public services
   ctx.detectSnapSyncRecovery()  # Check for recovery mode
 
 proc snapSyncRelease(ctx: SnapCtxRef) =
-  ctx.disableRpcMagic()         # Disable external pivot update via RPC
   ctx.enableWireServices()      # re-enable public services
   ctx.pool.ticker.stop()
 

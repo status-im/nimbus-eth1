@@ -92,7 +92,6 @@ type
     ## Global context extension, snap sync parameters, pivot table
     pivotTable*: PivotTable            ## Per state root environment
     completedPivot*: SnapPivotRef      ## Start full sync from here
-    beaconHeader*: BlockHeader         ## Running on beacon chain
     coveredAccounts*: NodeTagRangeSet  ## Derived from all available accounts
     covAccTimesFull*: uint             ## # of 100% coverages
     recovery*: RecoveryRef             ## Current recovery checkpoint/context

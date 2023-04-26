@@ -35,14 +35,13 @@ proc beaconHeaderUpdatebuBlockNumber*(
   ## This function is typically used for testing and debugging.
   let
     ctx = buddy.ctx
-    snap = ctx.pool.pass
     peer = buddy.peer
 
   trace "fetch beacon header", peer, num
-  if snap.beaconHeader.blockNumber < num:
+  if ctx.pool.beaconHeader.blockNumber < num:
     let rc = await buddy.getBlockHeader(num)
     if rc.isOk:
-      snap.beaconHeader = rc.value
+      ctx.pool.beaconHeader = rc.value
 
 
 proc beaconHeaderUpdateFromFile*(
@@ -62,7 +61,6 @@ proc beaconHeaderUpdateFromFile*(
         return
       rc.value
 
-    snap = ctx.pool.pass
     peer = buddy.peer
 
   var
@@ -74,20 +72,20 @@ proc beaconHeaderUpdateFromFile*(
     if isHash:
       let hash = hashOrNum.hash
       trace "External beacon info", peer, hash
-      if hash != snap.beaconHeader.hash:
+      if hash != ctx.pool.beaconHeader.hash:
         rc = await buddy.getBlockHeader(hash)
     else:
       let num = hashOrNum.number
       trace "External beacon info", peer, num
-      if snap.beaconHeader.blockNumber < num:
+      if ctx.pool.beaconHeader.blockNumber < num:
         rc = await buddy.getBlockHeader(num)
   except CatchableError as e:
     trace "Exception while parsing beacon info", peer, isHash,
       name=($e.name), msg=(e.msg)
 
   if rc.isOk:
-    if snap.beaconHeader.blockNumber < rc.value.blockNumber:
-      snap.beaconHeader = rc.value
+    if ctx.pool.beaconHeader.blockNumber < rc.value.blockNumber:
+      ctx.pool.beaconHeader = rc.value
 
 # ------------------------------------------------------------------------------
 # End
