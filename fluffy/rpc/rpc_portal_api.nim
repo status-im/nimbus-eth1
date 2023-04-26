@@ -16,6 +16,11 @@ import
 
 export rpcserver
 
+type
+  FindNodeInfo = object
+    total: uint8
+    enrs: seq[Record]
+
 # Portal Network JSON-RPC impelentation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
@@ -108,14 +113,17 @@ proc installPortalApiHandlers*(
       )
 
   rpcServer.rpc("portal_" & network & "FindNodes") do(
-      enr: Record, distances: seq[uint16]) -> seq[Record]:
+      enr: Record, distances: seq[uint16]) -> FindNodeInfo:
     let
       node = toNodeWithAddress(enr)
       nodes = await p.findNodes(node, distances)
     if nodes.isErr():
       raise newException(ValueError, $nodes.error)
     else:
-      return nodes.get().map(proc(n: Node): Record = n.record)
+      return FindNodeInfo(
+        total: 9,
+        enrs: nodes.get().map(proc(n: Node): Record = n.record)
+      )
 
   # TODO: This returns null values for the `none`s. Not sure what it should be
   # according to spec, no k:v pair at all?
