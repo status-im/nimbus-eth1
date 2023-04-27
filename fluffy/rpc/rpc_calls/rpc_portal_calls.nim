@@ -9,13 +9,7 @@ proc portal_stateLookupEnr(nodeId: NodeId): Record
 proc portal_statePing(enr: Record): tuple[
   enrSeq: uint64, customPayload: string]
 proc portal_stateFindNodes(enr: Record): seq[Record]
-proc portal_stateFindContent(enr: Record, contentKey: string): tuple[
-  connectionId: Option[string],
-  content: Option[string],
-  enrs: Option[seq[Record]]]
-proc portal_stateFindContentFull(enr: Record, contentKey: string): tuple[
-  content: Option[string],
-  enrs: Option[seq[Record]]]
+proc portal_stateFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_stateOffer(
   enr: Record, contentKey: string, contentValue: string): string
 proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
@@ -35,13 +29,7 @@ proc portal_historyLookupEnr(nodeId: NodeId): Record
 proc portal_historyPing(enr: Record): tuple[
   enrSeq: uint64, customPayload: string]
 proc portal_historyFindNodes(enr: Record): seq[Record]
-proc portal_historyFindContent(enr: Record, contentKey: string): tuple[
-  connectionId: Option[string],
-  content: Option[string],
-  enrs: Option[seq[Record]]]
-proc portal_historyFindContentFull(enr: Record, contentKey: string): tuple[
-  content: Option[string],
-  enrs: Option[seq[Record]]]
+proc portal_historyFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_historyOffer(
   enr: Record, contentKey: string, contentValue: string): string
 proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
@@ -61,13 +49,7 @@ proc portal_beaconLightClientLookupEnr(nodeId: NodeId): Record
 proc portal_beaconLightClientPing(enr: Record): tuple[
   enrSeq: uint64, customPayload: string]
 proc portal_beaconLightClientFindNodes(enr: Record): seq[Record]
-proc portal_beaconLightClientFindContent(enr: Record, contentKey: string): tuple[
-  connectionId: Option[string],
-  content: Option[string],
-  enrs: Option[seq[Record]]]
-proc portal_beaconLightClientFindContentFull(enr: Record, contentKey: string): tuple[
-  content: Option[string],
-  enrs: Option[seq[Record]]]
+proc portal_beaconLightClientFindContent(enr: Record, contentKey: string): JsonNode
 proc portal_beaconLightClientOffer(
   enr: Record, contentKey: string, contentValue: string): string
 proc portal_beaconLightClientRecursiveFindNodes(nodeId: NodeId): seq[Record]

@@ -182,6 +182,7 @@ type
     case kind*: FoundContentKind
     of Content:
       content*: seq[byte]
+      utpTransfer*: bool
     of Nodes:
       nodes*: seq[Node]
 
@@ -651,7 +652,8 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
           debug "Socket read fully",
             socketKey = socket.socketKey
           socket.destroy()
-          return ok(FoundContent(src: dst, kind: Content, content: content))
+          return ok(FoundContent(
+            src: dst, kind: Content, content: content, utpTransfer: true))
         else :
           debug "Socket read time-out",
             socketKey = socket.socketKey
@@ -667,7 +669,9 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
         socket.close()
         raise exc
     of contentType:
-      return ok(FoundContent(src: dst, kind: Content, content: m.content.asSeq()))
+      return ok(FoundContent(
+        src: dst,
+        kind: Content, content: m.content.asSeq(), utpTransfer: false))
     of enrsType:
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
