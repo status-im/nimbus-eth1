@@ -87,11 +87,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     else:
       raise newException(ValueError, "Record not in local routing table.")
 
-  rpcServer.rpc("discv5_lookupEnr") do(
-      nodeId: NodeId) -> Record:
-    # TODO: Not according to spec, missing optional enrSeq
-    # Can add `enrSeq: Option[uint64]` as parameter but Option appears to be
-    # not implemented as an option parameter in nim-json-rpc?
+  rpcServer.rpc("discv5_lookupEnr") do(nodeId: NodeId) -> Record:
     let lookup = await d.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record
