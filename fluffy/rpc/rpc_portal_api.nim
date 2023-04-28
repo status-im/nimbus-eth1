@@ -111,36 +111,10 @@ proc installPortalApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "FindContent") do(
       enr: Record, contentKey: string) -> JsonNode:
-    let
-      node = toNodeWithAddress(enr)
-      res = await p.findContentImpl(
-        node, ByteList.init(hexToSeqByte(contentKey)))
+    type ContentInfo = object
+      content: string
+      utpTransfer: bool
 
-    if res.isErr():
-      raise newException(ValueError, $res.error)
-
-    var rpcRes = newJObject()
-    let contentMessage = res.get()
-    case contentMessage.contentMessageType:
-    of connectionIdType:
-      rpcRes["connectionId"] = %contentMessage.connectionId.to0xHex()
-    of contentType:
-      rpcRes["content"] = %contentMessage.content.asSeq().to0xHex()
-    of enrsType:
-      let records = recordsFromBytes(contentMessage.enrs)
-      if records.isErr():
-        raise newException(ValueError, $records.error)
-      else:
-        let nodes = verifyNodesRecords(
-          records.get(), node, enrsResultLimit).map(
-            proc(n: Node): Record = n.record)
-        rpcRes["enrs"] = %nodes
-
-    return rpcRes
-
-  rpcServer.rpc("portal_" & network & "FindContentFull") do(
-      enr: Record, contentKey: string) -> JsonNode:
-    # Note: unspecified RPC, but useful as we can get content from uTP also
     let
       node = toNodeWithAddress(enr)
       foundContentResult = await p.findContent(
@@ -149,15 +123,17 @@ proc installPortalApiHandlers*(
     if foundContentResult.isErr():
       raise newException(ValueError, $foundContentResult.error)
     else:
-      var rpcRes = newJObject()
       let foundContent = foundContentResult.get()
       case foundContent.kind:
       of Content:
-        rpcRes["content"] = %foundContent.content.to0xHex()
+        return %ContentInfo(
+          content: foundContent.content.to0xHex(),
+          utpTransfer: foundContent.utpTransfer
+        )
       of Nodes:
+        var rpcRes = newJObject()
         rpcRes["enrs"] = %foundContent.nodes.map(proc(n: Node): Record = n.record)
-
-      return rpcRes
+        return rpcRes
 
   rpcServer.rpc("portal_" & network & "Offer") do(
       enr: Record, contentKey: string, contentValue: string) -> string:
