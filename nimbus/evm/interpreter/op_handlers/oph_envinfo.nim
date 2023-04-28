@@ -49,14 +49,14 @@ proc writePaddedResult(mem: var Memory,
   let sourceBytes =
     data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
 
-  mem.write(memPos, sourceBytes)
+  mem.writeConcreteBytes(memPos, sourceBytes)
 
   # Don't duplicate zero-padding of mem.extend
   let paddingOffset = min(memPos + sourceBytes.len, mem.len)
   let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
   if numPaddingBytes > 0:
     # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
+    mem.writeConcreteBytes(paddingOffset, repeat(paddingValue, numPaddingBytes))
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

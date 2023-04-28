@@ -54,18 +54,18 @@ proc stateDBMain*() =
 
     test "clone storage":
       var x = RefAccount(
-        overlayStorage: initTable[UInt256, UInt256](),
+        overlayStorage: initTable[UInt256, StorageCell](),
         originalStorage: newTable[UInt256, UInt256]()
       )
 
-      x.overlayStorage[10.u256] = 11.u256
-      x.overlayStorage[11.u256] = 12.u256
+      x.overlayStorage[10.u256] = pureCell(11.u256)
+      x.overlayStorage[11.u256] = pureCell(12.u256)
 
       x.originalStorage[10.u256] = 11.u256
       x.originalStorage[11.u256] = 12.u256
 
       var y = x.clone(cloneStorage = true)
-      y.overlayStorage[12.u256] = 13.u256
+      y.overlayStorage[12.u256] = pureCell(13.u256)
       y.originalStorage[12.u256] = 13.u256
 
       check 12.u256 notin x.overlayStorage
