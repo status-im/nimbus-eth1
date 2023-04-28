@@ -34,252 +34,274 @@ import
 const
   addOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x01, Addition
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs + rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs + rhs
 
   mulOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x02, Multiplication
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs * rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs * rhs
 
   subOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x03, Substraction
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs - rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs - rhs
 
   divideOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x04, Division
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      if rhs == 0:
-        # EVM special casing of div by 0
-        zero(UInt256)
-      else:
-        lhs div rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        if rhs == 0:
+          # EVM special casing of div by 0
+          zero(UInt256)
+        else:
+          lhs div rhs
 
 
   sdivOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x05, Signed division
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-
-    var r: UInt256
-    if rhs != 0:
-      var a = lhs
-      var b = rhs
-      var signA, signB: bool
-      extractSign(a, signA)
-      extractSign(b, signB)
-      r = a div b
-      setSign(r, signA xor signB)
-    k.cpt.stack.push(r)
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      var r: UInt256
+      if rhs != 0:
+        var a = lhs
+        var b = rhs
+        var signA, signB: bool
+        extractSign(a, signA)
+        extractSign(b, signB)
+        r = a div b
+        setSign(r, signA xor signB)
+      cpt.stack.push(r)
 
 
   moduloOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x06, Modulo
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      if rhs == 0:
-        zero(UInt256)
-      else:
-        lhs mod rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        if rhs == 0:
+          zero(UInt256)
+        else:
+          lhs mod rhs
 
 
   smodOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x07, Signed modulo
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-
-    var r: UInt256
-    if rhs != 0:
-      var sign: bool
-      var v = lhs
-      var m = rhs
-      extractSign(m, sign)
-      extractSign(v, sign)
-      r = v mod m
-      setSign(r, sign)
-    k.cpt.stack.push(r)
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      var r: UInt256
+      if rhs != 0:
+        var sign: bool
+        var v = lhs
+        var m = rhs
+        extractSign(m, sign)
+        extractSign(v, sign)
+        r = v mod m
+        setSign(r, sign)
+      cpt.stack.push(r)
 
 
   addmodOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x08, Modulo addition
     ## Intermediate computations do not roll over at 2^256
-    let (lhs, rhs, modulus) = k.cpt.stack.popInt(3)
-
-    k.cpt.stack.push:
-      if modulus == 0:
-        zero(UInt256)
-      else:
-        addmod(lhs, rhs, modulus)
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs, modulus: UInt256):
+      cpt.stack.push:
+        if modulus == 0:
+          zero(UInt256)
+        else:
+          addmod(lhs, rhs, modulus)
 
 
   mulmodOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x09, Modulo multiplication
     ## Intermediate computations do not roll over at 2^256
-    let (lhs, rhs, modulus) = k.cpt.stack.popInt(3)
-
-    k.cpt.stack.push:
-      if modulus == 0:
-        zero(UInt256)
-      else:
-        mulmod(lhs, rhs, modulus)
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs, modulus: UInt256):
+      cpt.stack.push:
+        if modulus == 0:
+          zero(UInt256)
+        else:
+          mulmod(lhs, rhs, modulus)
 
 
   expOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x0A, Exponentiation
-    let (base, exponent) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    cpt.popStackValues do (base, exponent: UInt256):
 
-    k.cpt.gasMeter.consumeGas(
-      k.cpt.gasCosts[Exp].d_handler(exponent),
-      reason = "EXP: exponent bytes")
+      cpt.gasMeter.consumeGas(
+        cpt.gasCosts[Exp].d_handler(exponent),
+        reason = "EXP: exponent bytes")
 
-    k.cpt.stack.push:
-      if not base.isZero:
-        base.pow(exponent)
-      elif exponent.isZero:
-        # https://github.com/ethereum/yellowpaper/issues/257
-        # https://github.com/ethereum/tests/pull/460
-        # https://github.com/ewasm/evm2wasm/issues/137
-        1.u256
-      else:
-        zero(UInt256)
+      cpt.stack.push:
+        if not base.isZero:
+          base.pow(exponent)
+        elif exponent.isZero:
+          # https://github.com/ethereum/yellowpaper/issues/257
+          # https://github.com/ethereum/tests/pull/460
+          # https://github.com/ewasm/evm2wasm/issues/137
+          1.u256
+        else:
+          zero(UInt256)
 
 
   signExtendOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x0B, Sign extend
     ## Extend length of two’s complement signed integer.
-    let (bits, value) = k.cpt.stack.popInt(2)
+    let cpt = k.cpt
+    cpt.popStackValues do (bits, value: UInt256):
 
-    var res: UInt256
-    if bits <= 31.u256:
-      let
-        one = 1.u256
-        testBit = bits.truncate(int) * 8 + 7
-        bitPos = one shl testBit
-        mask = bitPos - one
-      if not isZero(value and bitPos):
-        res = value or (not mask)
+      var res: UInt256
+      if bits <= 31.u256:
+        let
+          one = 1.u256
+          testBit = bits.truncate(int) * 8 + 7
+          bitPos = one shl testBit
+          mask = bitPos - one
+        if not isZero(value and bitPos):
+          res = value or (not mask)
+        else:
+          res = value and mask
       else:
-        res = value and mask
-    else:
-      res = value
-    k.cpt.stack.push:
-      res
+        res = value
+      cpt.stack.push:
+        res
 
 
   ltOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x10, Less-than comparison
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      (lhs < rhs).uint.u256
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        (lhs < rhs).uint.u256
 
   gtOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x11, Greater-than comparison
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      (lhs > rhs).uint.u256
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        (lhs > rhs).uint.u256
 
   sltOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x12, Signed less-than comparison
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
 
   sgtOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x14, Signed greater-than comparison
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
 
   eqOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x14, Signed greater-than comparison
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      (lhs == rhs).uint.u256
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        (lhs == rhs).uint.u256
 
   isZeroOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x15, Check if zero
-    let (value) = k.cpt.stack.popInt(1)
-    k.cpt.stack.push:
-      value.isZero.uint.u256
+    let cpt = k.cpt
+    cpt.popStackValue do (value: UInt256):
+      cpt.stack.push:
+        value.isZero.uint.u256
 
   andOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x16, Bitwise AND
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs and rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs and rhs
 
   orOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x17, Bitwise OR
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs or rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs or rhs
 
   xorOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x18, Bitwise XOR
-    let (lhs, rhs) = k.cpt.stack.popInt(2)
-    k.cpt.stack.push:
-      lhs xor rhs
+    let cpt = k.cpt
+    cpt.popStackValues do (lhs, rhs: UInt256):
+      cpt.stack.push:
+        lhs xor rhs
 
   notOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x19, Check if zero
-    let (value) = k.cpt.stack.popInt(1)
-    k.cpt.stack.push:
-      value.not
+    let cpt = k.cpt
+    cpt.popStackValue do (value: UInt256):
+      cpt.stack.push:
+        value.not
 
   byteOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0x20, Retrieve single byte from word.
-    let (position, value) = k.cpt.stack.popInt(2)    
-    k.cpt.stack.push:
-      if position >= 32.u256:
-        zero(UInt256)
-      else:
-        let pos = position.truncate(int)
-        when system.cpuEndian == bigEndian:
-          cast[array[32, byte]](value)[pos].u256
+    let cpt = k.cpt
+    cpt.popStackValues do (position, value: UInt256):
+      cpt.stack.push:
+        if position >= 32.u256:
+          zero(UInt256)
         else:
-          cast[array[32, byte]](value)[31 - pos].u256
+          let pos = position.truncate(int)
+          when system.cpuEndian == bigEndian:
+            cast[array[32, byte]](value)[pos].u256
+          else:
+            cast[array[32, byte]](value)[31 - pos].u256
 
   # Constantinople's new opcodes
 
   shlOp: Vm2OpFn = proc(k: var Vm2Ctx) =
-    let (shift, num) = k.cpt.stack.popInt(2)
-    let shiftLen = shift.safeInt
-    if shiftLen >= 256:
-      k.cpt.stack.push:
-        0
-    else:
-      k.cpt.stack.push:
-        num shl shiftLen
+    let cpt = k.cpt
+    cpt.popStackValues do (shift, num: UInt256):
+      let shiftLen = shift.safeInt
+      if shiftLen >= 256:
+        cpt.stack.push:
+          0
+      else:
+        cpt.stack.push:
+          num shl shiftLen
 
   shrOp: Vm2OpFn = proc(k: var Vm2Ctx) =
-    let (shift, num) = k.cpt.stack.popInt(2)
-    let shiftLen = shift.safeInt
-    if shiftLen >= 256:
-      k.cpt.stack.push:
-        0
-    else:
-      # uint version of `shr`
-      k.cpt.stack.push:
-        num shr shiftLen
+    let cpt = k.cpt
+    cpt.popStackValues do (shift, num: UInt256):
+      let shiftLen = shift.safeInt
+      if shiftLen >= 256:
+        cpt.stack.push:
+          0
+      else:
+        # uint version of `shr`
+        cpt.stack.push:
+          num shr shiftLen
 
   sarOp: Vm2OpFn = proc(k: var Vm2Ctx) =
-    let shiftLen = k.cpt.stack.popInt().safeInt
-    let num = cast[Int256](k.cpt.stack.popInt())
-    if shiftLen >= 256:
-      if num.isNegative:
-        k.cpt.stack.push:
-          cast[UInt256]((-1).i256)
+    let cpt = k.cpt
+    cpt.popStackValues do (shift, numUncasted: UInt256):
+      let shiftLen = shift.safeInt
+      let num = cast[Int256](numUncasted)
+      if shiftLen >= 256:
+        if num.isNegative:
+          cpt.stack.push:
+            cast[UInt256]((-1).i256)
+        else:
+          cpt.stack.push:
+            0
       else:
-       k.cpt.stack. push:
-          0
-    else:
-      # int version of `shr` then force the result
-      # into uint256
-      k.cpt.stack.push:
-        cast[UInt256](num shr shiftLen)
+        # int version of `shr` then force the result
+        # into uint256
+        cpt.stack.push:
+          cast[UInt256](num shr shiftLen)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

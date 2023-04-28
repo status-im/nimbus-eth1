@@ -194,6 +194,11 @@ proc replaceTopElement*(stack: Stack, newTopElem: StackElement) {.inline.} =
 # FIXME-Adam: These need to be removed, because calling waitFor is obviously
 # not what we want. I'm only leaving them here for now to keep the compiler
 # happy until we switch over to the new way.
+#
+# See oph_arithmetic.nim for examples of what to do instead. (Basically
+# call cpt.popStackValues.) I haven't finished propagating that change
+# through the rest of the code base. (At least not in this branch. I
+# did it once, but then the bits rotted.)
 proc popInt*(stack: var Stack): UInt256 =
   let elem = stack.popElement
   waitFor(elem.futureInt())
