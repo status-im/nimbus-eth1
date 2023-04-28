@@ -100,7 +100,7 @@ func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
     gasUsed: int64(distinctBase(o.gasUsed)),
     timestamp: initTime(int64(distinctBase(o.timestamp)), 0),
     extraData: distinctBase(o.extraData),
-    #mixDigest: o.mixHash.toHash, # AARDVARK what's this?
+    #mixDigest: o.mixHash.toHash, # FIXME what's this?
     nonce: nonce,
     fee: o.baseFeePerGas,
     withdrawalsRoot: o.withdrawalsRoot.map(toHash),
@@ -159,10 +159,10 @@ proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): F
 ]#
 
 proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
-  doAssert(false, "AARDVARK not implemented")
+  doAssert(false, "FIXME not implemented")
 
 proc fetchBlockHeaderAndBodyWithNumber*(rpcClient: RpcClient, n: BlockNumber): Future[(BlockHeader, BlockBody)] {.async.} =
-  doAssert(false, "AARDVARK not implemented")
+  doAssert(false, "FIXME not implemented")
 
 func mdigestFromFixedBytes*(arg: FixedBytes[32]): MDigest[256] =
   MDigest[256](data: distinctBase(arg))
@@ -216,40 +216,40 @@ const maxNumberOfPeersToAttempt = 3
 proc fetchUsingGetTrieNodes(peer: Peer, stateRoot: Hash256, paths: seq[SnapTriePaths]): Future[seq[seq[byte]]] {.async.} =
   let r = await peer.getTrieNodes(stateRoot, paths, bytesLimit)
   if r.isNone:
-    raise newException(CatchableError, "AARDVARK: received None in GetTrieNodes response")
+    raise newException(CatchableError, "FIXME: received None in GetTrieNodes response")
   else:
     return r.get.nodes
 
 proc fetchUsingGetNodeData(peer: Peer, nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
   #[
-  let r: Option[seq[seq[byte]]] = none[seq[seq[byte]]]() # AARDVARK await peer.getNodeData(nodeHashes)
+  let r: Option[seq[seq[byte]]] = none[seq[seq[byte]]]() # FIXME await peer.getNodeData(nodeHashes)
   if r.isNone:
-    raise newException(CatchableError, "AARDVARK: received None in GetNodeData response")
+    raise newException(CatchableError, "FIXME: received None in GetNodeData response")
   else:
     echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA fetchUsingGetNodeData received nodes: " & $(r.get.data)
     return r.get.data
   ]#
-  # AARDVARK whatever
+  # FIXME whatever
   return @[]
 
 proc findPeersAndMakeSomeCalls[R](peerPool: PeerPool, protocolName: string, protocolType: typedesc, initiateAttempt: (proc(p: Peer): Future[R] {.gcsafe.})): Future[seq[Future[R]]] {.async.} =
   var attempts: seq[Future[R]]
   while true:
-    #info("AARDVARK: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
+    #info("FIXME: findPeersAndMakeSomeCalls about to loop through the peer pool", count=peerPool.connectedNodes.len)
     for nodeOfSomeSort, peer in peerPool.connectedNodes:
       if peer.supports(protocolType):
-        info("AARDVARK: findPeersAndMakeSomeCalls calling peer", protocolName, peer)
+        info("FIXME: findPeersAndMakeSomeCalls calling peer", protocolName, peer)
         attempts.add(initiateAttempt(peer))
         if attempts.len >= maxNumberOfPeersToAttempt:
           break
       #else:
-      #  info("AARDVARK: peer does not support protocol", protocolName, peer)
+      #  info("FIXME: peer does not support protocol", protocolName, peer)
     if attempts.len == 0:
-      warn("AARDVARK: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
+      warn("FIXME: findPeersAndMakeSomeCalls did not find any peers; waiting and trying again", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len)
       await sleepAsync(5000)
     else:
       if attempts.len < maxNumberOfPeersToAttempt:
-        warn("AARDVARK: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)
+        warn("FIXME: findPeersAndMakeSomeCalls did not find enough peers, but found some", protocolName, totalPeerPoolSize=peerPool.connectedNodes.len, found=attempts.len)
       break
   return attempts
 
@@ -266,7 +266,7 @@ proc fetchNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths
   #let attempts = await findPeersAndMakeSomeAttemptsToCallGetNodeData(peerPool, stateRoot, nodeHashes)
   let completedAttempt = await one(attempts)
   let nodes: seq[seq[byte]] = completedAttempt.read
-  info("AARDVARK: fetchNodes received nodes", nodes)
+  info("FIXME: fetchNodes received nodes", nodes)
   return nodes
 
 
