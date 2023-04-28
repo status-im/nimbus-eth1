@@ -12,17 +12,17 @@
 {.push raises: [].}
 
 import
-  std/[options, strformat, strutils],
+  std/[strformat, strutils],
   chronos,
   chronicles,
   eth/[common, p2p],
   stint,
-  ../../../utils/prettify,
-  ../../misc/timer_helper,
-  ../../types
+  ../../utils/prettify,
+  ../types,
+  ./timer_helper
 
 logScope:
-  topics = "snap-tick"
+  topics = "tick"
 
 type
   TickerSnapStatsUpdater* = proc: TickerSnapStats {.gcsafe, raises: [].}
@@ -155,13 +155,13 @@ proc snapTicker(t: TickerRef) {.gcsafe.} =
               &"({(data.nContracts[1]+0.5).int64})")
 
     if t.snap.recovery:
-      info "Snap sync statistics (recovery)",
+      info "Snap sync ticker (recovery)",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     elif recoveryDone:
-      info "Snap sync statistics (recovery done)",
+      info "Snap sync ticker (recovery done)",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
     else:
-      info "Snap sync statistics",
+      info "Snap sync ticker",
         up, nInst, bc, pv, nAcc, accCov, nSto, nStoQ, nCon, nConQ, mem
 
 
@@ -190,10 +190,10 @@ proc fullTicker(t: TickerRef) {.gcsafe.} =
     t.visited = now
 
     if data.suspended:
-      info "Full sync statistics (suspended)", up, nInst, pv,
+      info "Full sync ticker (suspended)", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
     else:
-      info "Full sync statistics", up, nInst, pv,
+      info "Full sync ticker", up, nInst, pv,
         persistent, unprocessed, staged, queued, reOrg, mem
 
 # ------------------------------------------------------------------------------
@@ -236,7 +236,10 @@ proc stopImpl(t: TickerRef) =
 # Public constructor and start/stop functions
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TickerRef; cb: TickerSnapStatsUpdater): T =
+proc init*(
+    T: type TickerRef;
+    cb: TickerSnapStatsUpdater|TickerFullStatsUpdater;
+      ): T =
   ## Constructor
   new result
   result.initImpl(cb)
@@ -280,7 +283,7 @@ proc startBuddy*(t: TickerRef) =
   if not t.isNil:
     if t.nBuddies <= 0:
       t.nBuddies = 1
-      if not t.fullMode and not t.snap.recovery:
+      if t.fullMode or not t.snap.recovery:
         t.startImpl()
         when extraTraceMessages:
           debug logTxt "start buddy", fullMode=t.fullMode, nBuddies=t.nBuddies

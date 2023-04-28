@@ -1,5 +1,5 @@
-Snap sync test & debugging scenario
-===================================
+Test & debugging scenario with nimbus-eth1 client/server
+========================================================
 
 
 Start snap/1 server
@@ -40,7 +40,12 @@ Start snap/1 client
 
   # Tell nimbus to use this pivot block number. This number must be smaller
   # than the 2000000 written into the file full-limit.txt above.
-  echo 600000 > snap/snap-update.txt.
+  echo 600000 > snap/snap-update.txt
+
+  # Tell nimbus to stop somewhere after 1000000 blocks have been downloaded
+  # with full sync follow up after snap sync has completed (2nd line of
+  # external setuip file.)
+  echo 1000000 >> snap/snap-update.txt
 
   # Tell nimbus to use this hard coded peer enode.
   echo enode://192d7e7a302bd4ff27f48d7852621e0d3cb863a6dd67dd44e0314a25a3aa866837f0d2460b4444dc66e7b7a2cd56a2de1c31b2a2ba4e23549bf3ba3b0c4f2eb5@127.0.0.1:30319 > snap/full-servers.txt

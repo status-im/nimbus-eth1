@@ -59,29 +59,6 @@ proc commitOrRollbackDependingOnGasUsed(vmState: BaseVMState, accTx: SavePoint,
     vmState.gasPool += tx.gasLimit - gasBurned
     return ok(gasBurned)
 
-# For stateless mode with on-demand fetching, we need to do
-# this, because it's possible for deletion to result in a
-# branch node with only one child, which then needs to be
-# transformed into an extension node or leaf node (or
-# grafted onto one), but we don't actually have that node
-# yet so we have to fetch it and then retry.
-proc repeatedlyTryToPersist(vmState: BaseVMState, fork: EVMFork): Future[void] {.async.} =
-  #info("repeatedlyTryToPersist about to get started")
-  var i = 0
-  while i < 100:
-    #info("repeatedlyTryToPersist making an attempt to persist", i)
-    try:
-      await vmState.stateDB.asyncPersist(
-        clearEmptyAccount = fork >= FkSpurious,
-        clearCache = false)
-      return
-    except MissingNodesError as e:
-      #warn("repeatedlyTryToPersist found missing paths", missingPaths=e.paths, missingNodeHashes=e.nodeHashes)
-      await fetchAndPopulateNodes(vmState, e.paths, e.nodeHashes)
-      i += 1
-  error("repeatedlyTryToPersist failed after 100 tries")
-  raise newException(CatchableError, "repeatedlyTryToPersist failed after 100 tries")
-
 proc asyncProcessTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
@@ -135,7 +112,9 @@ proc asyncProcessTransactionImpl(
 
   if vmState.generateWitness:
     vmState.stateDB.collectWitnessData()
-  await repeatedlyTryToPersist(vmState, fork)
+  vmState.stateDB.persist(
+    clearEmptyAccount = fork >= FkSpurious,
+    clearCache = false)
 
   return res
 

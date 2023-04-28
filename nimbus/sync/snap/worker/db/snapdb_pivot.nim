@@ -8,13 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.push raises: [].}
+
 import
   eth/[common, rlp],
   stew/results,
   ../../range_desc,
   "."/[hexary_error, snapdb_desc, snapdb_persistent]
-
-{.push raises: [].}
 
 type
   SnapDbPivotRegistry* = object
@@ -27,9 +27,6 @@ type
       (NodeTag,NodeTag)]          ## Processed acoount ranges
     slotAccounts*: seq[NodeKey]   ## List of accounts with missing storage slots
     ctraAccounts*: seq[NodeKey]   ## List of accounts with missing contracts
-
-const
-  extraTraceMessages {.used.} = false or true
 
 # ------------------------------------------------------------------------------
 # Private helpers

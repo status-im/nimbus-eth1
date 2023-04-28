@@ -34,18 +34,18 @@
 ##
 ## * Rinse and repeat.
 ##
+{.push raises: [].}
+
 import
   std/[math, sequtils],
   chronicles,
-  eth/[common, p2p],
+  eth/common,
   stew/[byteutils, interval_set, keyed_queue, sorted_set],
-  ../../../../utils/prettify,
-  ../../../types,
-  "../.."/[range_desc, worker_desc],
-  ../db/[hexary_desc, hexary_envelope, hexary_error,
-         hexary_paths, snapdb_accounts]
-
-{.push raises: [].}
+  ../../../../../../utils/prettify,
+  "../../../.."/range_desc,
+  ../../../db/[hexary_desc, hexary_envelope, hexary_error,
+               hexary_paths, snapdb_accounts],
+  ../snap_pass_desc
 
 logScope:
   topics = "snap-swapin"
@@ -103,7 +103,7 @@ proc existsInTrie(
     error = ExceptionError
 
   when extraTraceMessages:
-    if error != NothingSerious:
+    if error != HexaryError(0):
       trace logTxt "other trie check node failed", node, error
 
   false
@@ -188,12 +188,12 @@ proc otherProcessedRanges(
 # ------------------------------------------------------------------------------
 
 proc swapIn(
-    processed: NodeTagRangeSet;      # Covered node ranges to be updated
-    unprocessed: var SnapTodoRanges; # Uncovered node ranges to be updated
-    otherPivots: seq[SwapInPivot];   # Other pivots list (read only)
-    rootKey: NodeKey;                # Start node into target hexary trie
-    getFn: HexaryGetFn;              # Abstract database access
-    loopMax: int;                    # Prevent from looping too often
+    processed: NodeTagRangeSet;          # Covered node ranges to be updated
+    unprocessed: var UnprocessedRanges;  # Uncovered node ranges to be updated
+    otherPivots: seq[SwapInPivot];       # Other pivots list (read only)
+    rootKey: NodeKey;                    # Start node into target hexary trie
+    getFn: HexaryGetFn;                  # Abstract database access
+    loopMax: int;                        # Prevent from looping too often
       ): (seq[NodeTagRangeSet],int) =
   ## Collect processed already ranges from argument `otherPivots` and merge them
   ## it onto the argument sets `processed` and `unprocessed`. For each entry
@@ -261,7 +261,7 @@ proc swapInAccounts*(
     rootKey = env.stateHeader.stateRoot.to(NodeKey)
     getFn = ctx.pool.snapDb.getAccountFn
 
-    others = toSeq(ctx.pool.pivotTable.nextPairs)
+    others = toSeq(ctx.pool.pass.pivotTable.nextPairs)
 
                 # Swap in from mothballed pivots different from the current one
                 .filterIt(it.data.archived and it.key.to(NodeKey) != rootKey)
@@ -309,7 +309,7 @@ proc swapInAccounts*(
             if others[n].pivot.fetchStorageFull.hasKey(stRoot):
               let accKey = others[n].pivot.fetchStorageFull[stRoot].accKey
               discard env.fetchStorageFull.append(
-                stRoot, SnapSlotsQueueItemRef(acckey: accKey))
+                stRoot, SlotsQueueItemRef(acckey: accKey))
               nSlotAccounts.inc
 
             rc = others[n].pivot.storageAccounts.gt(rc.value.key)

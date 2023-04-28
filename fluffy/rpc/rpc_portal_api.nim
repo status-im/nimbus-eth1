@@ -71,9 +71,6 @@ proc installPortalApiHandlers*(
       raise newException(ValueError, "Record not in local routing table.")
 
   rpcServer.rpc("portal_" & network & "LookupEnr") do(nodeId: NodeId) -> Record:
-    # TODO: Not fully according to spec, missing optional enrSeq
-    # Can add `enrSeq: Option[uint64]` as parameter but Option appears to be
-    # not implemented as an optional parameter in nim-json-rpc?
     let lookup = await p.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record
@@ -82,8 +79,6 @@ proc installPortalApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "Ping") do(
       enr: Record) -> tuple[enrSeq: uint64, dataRadius: UInt256]:
-    # TODO: Not fully according to spec:
-    # - Missing optional dataRadius parameter
     let
       node = toNodeWithAddress(enr)
       pong = await p.ping(node)
@@ -114,50 +109,12 @@ proc installPortalApiHandlers*(
     else:
       return nodes.get().map(proc(n: Node): Record = n.record)
 
-  # TODO: This returns null values for the `none`s. Not sure what it should be
-  # according to spec, no k:v pair at all?
   rpcServer.rpc("portal_" & network & "FindContent") do(
-      enr: Record, contentKey: string) -> tuple[
-        connectionId: Option[string],
-        content: Option[string],
-        enrs: Option[seq[Record]]]:
-    let
-      node = toNodeWithAddress(enr)
-      res = await p.findContentImpl(
-        node, ByteList.init(hexToSeqByte(contentKey)))
+      enr: Record, contentKey: string) -> JsonNode:
+    type ContentInfo = object
+      content: string
+      utpTransfer: bool
 
-    if res.isErr():
-      raise newException(ValueError, $res.error)
-
-    let contentMessage = res.get()
-    case contentMessage.contentMessageType:
-    of connectionIdType:
-      return (
-        some("0x" & contentMessage.connectionId.toHex()),
-        none(string),
-        none(seq[Record]))
-    of contentType:
-      return (
-        none(string),
-        some("0x" & contentMessage.content.asSeq().toHex()),
-        none(seq[Record]))
-    of enrsType:
-      let records = recordsFromBytes(contentMessage.enrs)
-      if records.isErr():
-        raise newException(ValueError, $records.error)
-      else:
-        return (
-          none(string),
-          none(string),
-          # Note: Could also pass not verified nodes
-          some(verifyNodesRecords(
-            records.get(), node, enrsResultLimit).map(
-              proc(n: Node): Record = n.record)))
-
-  rpcServer.rpc("portal_" & network & "FindContentFull") do(
-      enr: Record, contentKey: string) -> tuple[
-        content: Option[string], enrs: Option[seq[Record]]]:
-    # Note: unspecified RPC, but useful as we can get content from uTP also
     let
       node = toNodeWithAddress(enr)
       foundContentResult = await p.findContent(
@@ -169,13 +126,14 @@ proc installPortalApiHandlers*(
       let foundContent = foundContentResult.get()
       case foundContent.kind:
       of Content:
-        return (
-          some("0x" & foundContent.content.toHex()),
-          none(seq[Record]))
+        return %ContentInfo(
+          content: foundContent.content.to0xHex(),
+          utpTransfer: foundContent.utpTransfer
+        )
       of Nodes:
-        return (
-          none(string),
-          some(foundContent.nodes.map(proc(n: Node): Record = n.record)))
+        var rpcRes = newJObject()
+        rpcRes["enrs"] = %foundContent.nodes.map(proc(n: Node): Record = n.record)
+        return rpcRes
 
   rpcServer.rpc("portal_" & network & "Offer") do(
       enr: Record, contentKey: string, contentValue: string) -> string:
@@ -187,7 +145,7 @@ proc installPortalApiHandlers*(
       res = await p.offer(node, @[contentInfo])
 
     if res.isOk():
-      return "0x" & SSZ.encode(res.get()).toHex()
+      return SSZ.encode(res.get()).to0xHex()
     else:
       raise newException(ValueError, $res.error)
 
@@ -206,7 +164,7 @@ proc installPortalApiHandlers*(
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
         return "0x"
 
-    return "0x" & contentResult.content.toHex()
+    return contentResult.content.to0xHex()
 
   rpcServer.rpc("portal_" & network & "Store") do(
       contentKey: string, contentValue: string) -> bool:
@@ -226,11 +184,10 @@ proc installPortalApiHandlers*(
       contentId = p.toContentId(key).valueOr:
         raise newException(ValueError, "Invalid content key")
 
-    let contentResult = p.dbGet(key, contentId)
-    if contentResult.isOk():
-      return "0x" & contentResult.get().toHex()
-    else:
-      return "0x"
+      contentResult = p.dbGet(key, contentId).valueOr:
+        return "0x"
+
+    return contentResult.to0xHex()
 
   rpcServer.rpc("portal_" & network & "Gossip") do(
       contentKey: string, contentValue: string) -> int:

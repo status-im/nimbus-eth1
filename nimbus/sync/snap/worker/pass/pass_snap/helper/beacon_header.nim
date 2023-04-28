@@ -14,10 +14,9 @@ import
   chronicles,
   chronos,
   eth/[common, p2p],
-  ../sync_desc,
-  ../misc/sync_ctrl,
-  ./worker_desc,
-  ./worker/com/[com_error, get_block_header]
+  ../../../../../misc/sync_ctrl,
+  ../../../get/[get_error, get_block_header],
+  ../snap_pass_desc
 
 logScope:
   topics = "snap-ctrl"
@@ -26,7 +25,7 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateBeaconHeaderbuBlockNumber*(
+proc beaconHeaderUpdatebuBlockNumber*(
     buddy: SnapBuddyRef;             # Worker peer
     num: BlockNumber;                # Block number to sync against
       ) {.async.} =
@@ -45,7 +44,7 @@ proc updateBeaconHeaderbuBlockNumber*(
       ctx.pool.beaconHeader = rc.value
 
 
-proc updateBeaconHeaderFromFile*(
+proc beaconHeaderUpdateFromFile*(
     buddy: SnapBuddyRef;             # Worker peer
       ) {.async.} =
   ## This function updates the beacon header cache by import from the file name
@@ -65,7 +64,7 @@ proc updateBeaconHeaderFromFile*(
     peer = buddy.peer
 
   var
-    rc = Result[BlockHeader,ComError].err(ComError(0))
+    rc = Result[BlockHeader,GetError].err(GetError(0))
     isHash = hashOrNum.isHash # so that the value can be logged
 
   # Parse value dump and fetch a header from the peer (if any)

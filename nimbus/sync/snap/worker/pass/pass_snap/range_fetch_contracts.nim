@@ -12,8 +12,7 @@
 ## ================================
 ##
 ## Pretty straight forward
-
-
+##
 {.push raises: [].}
 
 import
@@ -22,10 +21,10 @@ import
   chronos,
   eth/[common, p2p],
   stew/keyed_queue,
-  "../../.."/[sync_desc, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_byte_codes],
-  ../db/snapdb_contracts
+  "../../.."/[constants, range_desc],
+  ../../get/[get_error, get_byte_codes],
+  ../../db/snapdb_contracts,
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-con"
@@ -34,7 +33,7 @@ type
   SnapCtraKVP = KeyedQueuePair[Hash256,NodeKey]
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -136,7 +135,8 @@ proc rangeFetchContractsImpl(
     if rc.isErr:
       # Restore batch queue
       env.putUnprocessed parking
-      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+      if await buddy.ctrl.getErrorStopAfterSeriousOne(
+          rc.error, buddy.only.errors):
         error logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
           nHashKeys=hashKeys.len, error=rc.error
         discard

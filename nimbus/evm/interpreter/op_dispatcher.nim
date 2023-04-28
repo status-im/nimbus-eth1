@@ -39,8 +39,8 @@ template handleStopDirective(k: var Vm2Ctx) =
   #trace "op: Stop"
   if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
     # we only trace `REAL STOP` and ignore `FAKE STOP`
-    k.cpt.opIndex = k.cpt.traceOpCodeStarted(Op.Stop)
-    k.cpt.traceOpCodeEnded(Op.Stop, k.cpt.opIndex)
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)
+    k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
 
 
 template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
@@ -85,7 +85,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       let asFork = quote do: EVMFork(`fork`)
 
       let branchStmt = block:
-        if op == Op.Stop:
+        if op == Stop:
           quote do:
             handleStopDirective(`k`)
         elif BaseGasCosts[op].kind == GckFixed:
@@ -100,7 +100,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     # Wrap innner case/switch into outer case/switch
     let branchStmt = block:
       case op
-      of Op.Stop, Return, Revert, SelfDestruct:
+      of Stop, Return, Revert, SelfDestruct:
         quote do:
           `forkCaseSubExpr`
           break
@@ -137,7 +137,7 @@ macro genOptimisedDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx): untyped =
 
 
 template genLowMemDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx) =
-  if op == Op.Stop:
+  if op == Stop:
     handleStopDirective(k)
     break
 

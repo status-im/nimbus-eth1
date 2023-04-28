@@ -48,11 +48,12 @@ import
   chronos,
   eth/[common, p2p],
   stew/[interval_set, keyed_queue],
-  "../../.."/[sync_desc, types],
-  "../.."/[constants, range_desc, worker_desc],
-  ../com/[com_error, get_account_range],
-  ../db/[hexary_envelope, snapdb_accounts],
-  "."/[storage_queue_helper, swap_in]
+  "../../../.."/[sync_desc, types],
+  "../../.."/[constants, range_desc],
+  ../../get/[get_error, get_account_range],
+  ../../db/[hexary_envelope, snapdb_accounts],
+  ./helper/[accounts_coverage, storage_queue, swap_in],
+  ./snap_pass_desc
 
 logScope:
   topics = "snap-acc"
@@ -133,7 +134,8 @@ proc accountsRangefetchImpl(
       rc = await buddy.getAccountRange(stateRoot, iv, pivot)
     if rc.isErr:
       fa.unprocessed.mergeSplit iv # fail => interval back to pool
-      if await buddy.ctrl.stopAfterSeriousComError(rc.error, buddy.only.errors):
+      if await buddy.ctrl.getErrorStopAfterSeriousOne(
+          rc.error, buddy.only.errors):
         when extraTraceMessages:
           trace logTxt "fetch error", peer, ctx=buddy.fetchCtx(env),
             reqLen=iv, error=rc.error
@@ -142,7 +144,7 @@ proc accountsRangefetchImpl(
     rc.value
 
   # Reset error counts for detecting repeated timeouts, network errors, etc.
-  buddy.only.errors.resetComError()
+  buddy.only.errors.getErrorReset()
 
   let
     gotAccounts = dd.data.accounts.len # comprises `gotStorage`
@@ -187,8 +189,8 @@ proc accountsRangefetchImpl(
     fa.unprocessed.reduce w
     # Register consumed intervals on the accumulators over all state roots.
     discard fa.processed.merge w
-    discard ctx.pool.coveredAccounts.merge w
-    ctx.pivotAccountsCoverage100PcRollOver() # update coverage level roll over
+    discard ctx.pool.pass.coveredAccounts.merge w
+    ctx.accountsCoverage100PcRollOver() # update coverage level roll over
 
   # Register accounts with storage slots on the storage TODO list.
   env.storageQueueAppend dd.withStorage

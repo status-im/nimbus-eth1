@@ -22,25 +22,31 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getDataLine(name: string): string {.gcsafe, raises: [IOError].} =
+proc getDataLine(
+    name: string;
+    lineNum: int;
+      ): string {.gcsafe, raises: [IOError].} =
   if name.fileExists:
     let file = name.open
     defer: file.close
-    return (file.readAll.splitLines)[0].strip
+    let linesRead = file.readAll.splitLines
+    if lineNum < linesRead.len:
+      return linesRead[lineNum].strip
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc syncCtrlBlockNumberFromFile*(
-    fileName: Option[string];
+    fileName: Option[string];               # Optional file name
+    lineNum = 0;                            # Read line from file
       ): Result[BlockNumber,void] =
   ## Returns a block number from the file name argument `fileName`. The first
   ## line of the file is parsed as a decimal encoded block number.
   if fileName.isSome:
     let file = fileName.get
     try:
-      let data = file.getDataLine
+      let data = file.getDataLine(lineNum)
       if 0 < data.len:
         let num = parse(data,UInt256)
         return ok(num.toBlockNumber)
@@ -52,7 +58,8 @@ proc syncCtrlBlockNumberFromFile*(
   err()
 
 proc syncCtrlHashOrBlockNumFromFile*(
-    fileName: Option[string];
+    fileName: Option[string];               # Optional file name
+    lineNum = 0;                            # Read line from file
       ): Result[HashOrNum,void] =
   ## Returns a block number or a hash from the file name argument `fileName`.
   ## A block number is decimal encoded and a hash is expexted to be a 66 hex
@@ -62,7 +69,7 @@ proc syncCtrlHashOrBlockNumFromFile*(
 
     # Parse value dump and fetch a header from the peer (if any)
     try:
-      let data = file.getDataLine
+      let data = file.getDataLine(lineNum)
       if 0 < data.len:
         if 66 == data.len:
           let hash = HashOrNum(

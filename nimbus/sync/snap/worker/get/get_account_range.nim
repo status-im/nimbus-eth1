@@ -17,20 +17,23 @@
 import
   std/sequtils,
   chronos,
-  eth/[common, p2p, trie/trie_defs],
+  eth/[common, p2p],
   stew/interval_set,
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 type
   GetAccountRange* = object
     data*: PackedAccountRange             ## Re-packed reply data
     withStorage*: seq[AccountSlotsHeader] ## Accounts with storage root
     withContract*: seq[AccountCodeHeader]  ## Accounts with contacts
+
+const
+  extraTraceMessages = false # or true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -50,9 +53,9 @@ proc getAccountRangeReq(
       fetchRequestBytesLimit)
     return ok(reply)
   except CatchableError as e:
-    let error {.used.} = e.msg
-    trace trSnapRecvError & "waiting for GetAccountRange reply", peer, pivot,
-      error
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetAccountRange reply", peer, pivot,
+        error=(e.msg)
     return err()
 
 # ------------------------------------------------------------------------------
@@ -64,7 +67,7 @@ proc getAccountRange*(
     stateRoot: Hash256;         ## Current DB base (see `pivot` for logging)
     iv: NodeTagRange;           ## Range to be fetched
     pivot: string;              ## For logging, instead of `stateRoot`
-      ): Future[Result[GetAccountRange,ComError]] {.async.} =
+      ): Future[Result[GetAccountRange,GetError]] {.async.} =
   ## Fetch data using the `snap#` protocol, returns the range covered.
   let
     peer {.used.} = buddy.peer
@@ -74,10 +77,11 @@ proc getAccountRange*(
   let snAccRange = block:
     let rc = await buddy.getAccountRangeReq(stateRoot, iv, pivot)
     if rc.isErr:
-      return err(ComNetworkProblem)
+      return err(GetNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for AccountRange", peer, pivot
-      return err(ComResponseTimeout)
+      when trSnapTracePacketsOk:
+        trace trSnapRecvTimeoutWaiting & "for AccountRange", peer, pivot
+      return err(GetResponseTimeout)
     rc.value.get
 
   var dd = GetAccountRange(
@@ -119,13 +123,16 @@ proc getAccountRange*(
     #   any) account after limitHash must be provided.
     if nProof == 0:
       # Maybe try another peer
-      trace trSnapRecvReceived & "empty AccountRange", peer, pivot,
-        nAccounts, nProof, accRange="n/a", reqRange=iv
-      return err(ComNoAccountsForStateRoot)
+      when trSnapTracePacketsOk:
+        trace trSnapRecvReceived & "empty AccountRange", peer, pivot,
+          nAccounts, nProof, accRange="n/a", reqRange=iv
+      return err(GetNoAccountsForStateRoot)
 
     # So there is no data and a proof.
-    trace trSnapRecvReceived & "terminal AccountRange", peer, pivot, nAccounts,
-      nProof, accRange=NodeTagRange.new(iv.minPt, high(NodeTag)), reqRange=iv
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "terminal AccountRange", peer, pivot,
+        nAccounts, nProof, accRange=NodeTagRange.new(iv.minPt, high(NodeTag)),
+        reqRange=iv
     return ok(dd)
 
   let (accMinPt, accMaxPt) = (
@@ -134,10 +141,11 @@ proc getAccountRange*(
 
   if accMinPt < iv.minPt:
     # Not allowed
-    trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
-      pivot, nAccounts, nProof, accRange=NodeTagRange.new(accMinPt, accMaxPt),
-      reqRange=iv
-    return err(ComAccountsMinTooSmall)
+    when trSnapTracePacketsOk:
+      trace trSnapRecvProtocolViolation & "min too small in AccountRange", peer,
+        pivot, nAccounts, nProof, accRange=NodeTagRange.new(accMinPt, accMaxPt),
+        reqRange=iv
+    return err(GetAccountsMinTooSmall)
 
   if iv.maxPt < accMaxPt:
     # github.com/ethereum/devp2p/blob/master/caps/snap.md#getaccountrange-0x00:
@@ -151,13 +159,16 @@ proc getAccountRange*(
       # limit (seen with Geth/v1.10.18-unstable-4b309c70-20220517.)
       if iv.maxPt < dd.data.accounts[^2].accKey.to(NodeTag):
         # The second largest should not excceed the top one requested.
-        trace trSnapRecvProtocolViolation & "AccountRange top exceeded", peer,
-          pivot, nAccounts, nProof,
-          accRange=NodeTagRange.new(iv.minPt, accMaxPt), reqRange=iv
-        return err(ComAccountsMaxTooLarge)
+        when extraTraceMessages:
+          when trSnapTracePacketsOk:
+            trace trSnapRecvProtocolViolation & "AccountRange top exceeded",
+              peer, pivot, nAccounts, nProof,
+              accRange=NodeTagRange.new(iv.minPt, accMaxPt), reqRange=iv
+        return err(GetAccountsMaxTooLarge)
 
-  trace trSnapRecvReceived & "AccountRange", peer, pivot, nAccounts, nProof,
-    accRange=NodeTagRange.new(accMinPt, accMaxPt), reqRange=iv
+  when trSnapTracePacketsOk:
+    trace trSnapRecvReceived & "AccountRange", peer, pivot, nAccounts, nProof,
+      accRange=NodeTagRange.new(accMinPt, accMaxPt), reqRange=iv
 
   return ok(dd)
 

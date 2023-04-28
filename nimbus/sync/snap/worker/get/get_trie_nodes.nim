@@ -16,10 +16,10 @@ import
   eth/[common, p2p],
   "../../.."/[protocol, protocol/trace_config],
   "../.."/[constants, range_desc, worker_desc],
-  ./com_error
+  ./get_error
 
 logScope:
-  topics = "snap-fetch"
+  topics = "snap-get"
 
 type
   # SnapTrieNodes = object
@@ -54,8 +54,9 @@ proc getTrieNodesReq(
 
   except CatchableError as e:
     let error {.used.} = e.msg
-    trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
-      error
+    when trSnapTracePacketsOk:
+      trace trSnapRecvError & "waiting for GetByteCodes reply", peer, pivot,
+        error
     return err()
 
 
@@ -108,7 +109,7 @@ proc getTrieNodes*(
     stateRoot: Hash256;         # Current DB base (see `pivot` for logging)
     paths: seq[SnapTriePaths];  # Nodes to fetch
     pivot: string;              # For logging, instead of `stateRoot`
-      ): Future[Result[GetTrieNodes,ComError]]
+      ): Future[Result[GetTrieNodes,GetError]]
       {.async.} =
   ## Fetch data using the `snap#` protocol, returns the trie nodes requested
   ## (if any.)
@@ -117,7 +118,7 @@ proc getTrieNodes*(
     nGroups = paths.len
 
   if nGroups == 0:
-    return err(ComEmptyRequestArguments)
+    return err(GetEmptyRequestArguments)
 
   let nTotal = paths.mapIt(max(1,it.slotPaths.len)).foldl(a+b, 0)
 
@@ -127,16 +128,18 @@ proc getTrieNodes*(
   let trieNodes = block:
     let rc = await buddy.getTrieNodesReq(stateRoot, paths, pivot)
     if rc.isErr:
-      return err(ComNetworkProblem)
+      return err(GetNetworkProblem)
     if rc.value.isNone:
-      trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nGroups
-      return err(ComResponseTimeout)
+      when trSnapTracePacketsOk:
+        trace trSnapRecvTimeoutWaiting & "for TrieNodes", peer, pivot, nGroups
+      return err(GetResponseTimeout)
     let blobs = rc.value.get.nodes
     if nTotal < blobs.len:
       # Ooops, makes no sense
-      trace trSnapRecvError & "too many TrieNodes", peer, pivot,
-        nGroups, nExpected=nTotal, nReceived=blobs.len
-      return err(ComTooManyTrieNodes)
+      when trSnapTracePacketsOk:
+        trace trSnapRecvError & "too many TrieNodes", peer, pivot,
+          nGroups, nExpected=nTotal, nReceived=blobs.len
+      return err(GetTooManyTrieNodes)
     blobs
 
   let
@@ -155,8 +158,9 @@ proc getTrieNodes*(
     #   nodes.
     # * The responding node is allowed to return less data than requested
     #   (serving QoS limits), but the node must return at least one trie node.
-    trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nGroups, nNodes
-    return err(ComNoByteCodesAvailable)
+    when trSnapTracePacketsOk:
+      trace trSnapRecvReceived & "empty TrieNodes", peer, pivot, nGroups, nNodes
+    return err(GetNoByteCodesAvailable)
 
   # Assemble return value
   var
@@ -173,8 +177,9 @@ proc getTrieNodes*(
     if trieNodes.len <= inx:
       break
 
-  trace trSnapRecvReceived & "TrieNodes", peer, pivot,
-    nGroups, nNodes, nLeftOver=dd.leftOver.len
+  when trSnapTracePacketsOk:
+    trace trSnapRecvReceived & "TrieNodes", peer, pivot,
+      nGroups, nNodes, nLeftOver=dd.leftOver.len
 
   return ok(dd)
 

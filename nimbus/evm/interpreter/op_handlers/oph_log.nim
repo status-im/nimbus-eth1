@@ -70,7 +70,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
       topics[i].bytes = c.stack.popTopic()
 
     c.host.emitLog(c.msg.contractAddress,
-      c.memory.readConcreteBytes(memPos, len),
+      c.memory.read(memPos, len),
       topics[0].addr, topicCount)
   else:
     var log: Log
@@ -78,10 +78,9 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
     for i in 0 ..< topicCount:
       log.topics.add(c.stack.popTopic())
 
-    c.readMemory(memPos, len) do (memBytes: seq[byte]):
-      log.data = memBytes
-      log.address = c.msg.contractAddress
-      c.addLogEntry(log)
+    log.data = c.memory.read(memPos, len)
+    log.address = c.msg.contractAddress
+    c.addLogEntry(log)
 
 const
   inxRange = toSeq(0 .. 4)

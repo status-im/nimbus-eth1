@@ -15,8 +15,8 @@ import
   chronos,
   eth/p2p,
   ".."/[protocol, sync_desc],
-  ../misc/[best_pivot, block_queue, sync_ctrl],
-  "."/[ticker, worker_desc]
+  ../misc/[best_pivot, block_queue, sync_ctrl, ticker],
+  ./worker_desc
 
 logScope:
   topics = "full-buddy"
@@ -66,15 +66,15 @@ proc topUsedNumber(
   ok(top)
 
 
-proc tickerUpdater(ctx: FullCtxRef): TickerStatsUpdater =
-  result = proc: TickerStats =
+proc tickerUpdater(ctx: FullCtxRef): TickerFullStatsUpdater =
+  result = proc: auto =
     var stats: BlockQueueStats
     ctx.pool.bCtx.blockQueueStats(stats)
 
     let suspended =
       0 < ctx.pool.suspendAt and ctx.pool.suspendAt < stats.topAccepted
 
-    TickerStats(
+    TickerFullStats(
       topPersistent:   stats.topAccepted,
       nextStaged:      stats.nextStaged,
       nextUnprocessed: stats.nextUnprocessed,
@@ -159,7 +159,7 @@ proc suspendDownload(buddy: FullBuddyRef): bool =
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
+proc setup*(ctx: FullCtxRef): bool =
   ## Global set up
   ctx.pool.pivot = BestPivotCtxRef.init(ctx.pool.rng)
   let rc = ctx.topUsedNumber(backBlocks = 0)
@@ -167,7 +167,7 @@ proc setup*(ctx: FullCtxRef; tickerOK: bool): bool =
     ctx.pool.bCtx = BlockQueueCtxRef.init()
     return false
   ctx.pool.bCtx = BlockQueueCtxRef.init(rc.value + 1)
-  if tickerOK:
+  if ctx.pool.enableTicker:
     ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
   else:
     debug "Ticker is disabled"
