@@ -1,0 +1,220 @@
+# Nimbus - Types, data structures and shared utilities used in network sync
+#
+# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or
+# distributed except according to those terms.
+
+## Re-invented implementation for Patricia Merkle Trie
+
+import
+  std/[os, sets, strformat, strutils, tables],
+  eth/[common, p2p],
+  rocksdb,
+  stew/byteutils,
+  unittest2,
+  ../nimbus/db/select_backend,
+  ../nimbus/db/aristo/[aristo_desc],
+  ../nimbus/core/chain,
+  ../nimbus/sync/types,
+  ../nimbus/sync/snap/range_desc,
+  ../nimbus/sync/snap/worker/db/[
+    hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
+  ./replay/[pp, undump_accounts],
+  ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
+  ./test_aristo/[test_helpers, test_transcoder]
+
+const
+  baseDir = [".", "..", ".."/"..", $DirSep]
+  repoDir = [".", "tests", "nimbus-eth1-blobs"]
+  subDir = ["replay", "test_sync_snap", "replay"/"snap"]
+
+  # Reference file for finding the database directory
+  sampleDirRefFile = "sample0.txt.gz"
+
+  # Standard test samples
+  accSample = snapTest0
+
+  # Number of database slots available
+  nTestDbInstances = 9
+
+  # Dormant (may be set if persistent database causes problems)
+  disablePersistentDB = false
+
+type
+  TestDbs = object
+    ## Provide enough spare empty databases
+    persistent: bool
+    dbDir: string
+    baseDir: string # for cleanup
+    subDir: string  # for cleanup
+    cdb: array[nTestDbInstances,ChainDb]
+
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
+
+proc findFilePath(
+     file: string;
+     baseDir: openArray[string] = baseDir;
+     repoDir: openArray[string] = repoDir;
+     subDir: openArray[string] = subDir;
+       ): Result[string,void] =
+  for dir in baseDir:
+    if dir.dirExists:
+      for repo in repoDir:
+        if (dir / repo).dirExists:
+          for sub in subDir:
+            if (dir / repo / sub).dirExists:
+              let path = dir / repo / sub / file
+              if path.fileExists:
+                return ok(path)
+  echo "*** File not found \"", file, "\"."
+  err()
+
+proc getTmpDir(sampleDir = sampleDirRefFile): string =
+  sampleDir.findFilePath.value.splitFile.dir
+
+proc setTraceLevel {.used.} =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.TRACE)
+
+proc setErrorLevel {.used.} =
+  discard
+  when defined(chronicles_runtime_filtering) and loggingEnabled:
+    setLogLevel(LogLevel.ERROR)
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
+  ## Convert test data into usable in-memory format
+  let file = sample.file.findFilePath.value
+  var root: Hash256
+  for w in file.undumpNextAccount:
+    let n = w.seenAccounts - 1
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
+
+proc flushDbDir(s: string; subDir = "") =
+  if s != "":
+    let baseDir = s / "tmp"
+    for n in 0 ..< nTestDbInstances:
+      let instDir = if subDir == "": baseDir / $n else: baseDir / subDir / $n
+      if (instDir / "nimbus" / "data").dirExists:
+        # Typically under Windows: there might be stale file locks.
+        try: instDir.removeDir except CatchableError: discard
+    try: (baseDir / subDir).removeDir except CatchableError: discard
+    block dontClearUnlessEmpty:
+      for w in baseDir.walkDir:
+        break dontClearUnlessEmpty
+      try: baseDir.removeDir except CatchableError: discard
+
+
+proc flushDbs(db: TestDbs) =
+  if db.persistent:
+    for n in 0 ..< nTestDbInstances:
+      if db.cdb[n].rocksStoreRef.isNil:
+        break
+      db.cdb[n].rocksStoreRef.store.db.rocksdb_close
+    db.baseDir.flushDbDir(db.subDir)
+
+proc testDbs(
+    workDir: string;
+    subDir: string;
+    instances: int;
+    persistent: bool;
+      ): TestDbs =
+  if disablePersistentDB or workDir == "" or not persistent:
+    result.persistent = false
+    result.dbDir = "*notused*"
+  else:
+    result.persistent = true
+    result.baseDir = workDir
+    result.subDir = subDir
+    if subDir != "":
+      result.dbDir = workDir / "tmp" / subDir
+    else:
+      result.dbDir = workDir / "tmp"
+  if result.persistent:
+    workDir.flushDbDir(subDir)
+    for n in 0 ..< min(result.cdb.len, instances):
+      result.cdb[n] = (result.dbDir / $n).newChainDB
+
+proc snapDbRef(cdb: ChainDb; pers: bool): SnapDbRef =
+  if pers: SnapDbRef.init(cdb) else: SnapDbRef.init(newMemoryDB())
+
+proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
+  SnapDbAccountsRef.init(cdb.snapDbRef(pers), root, Peer())
+
+# ------------------------------------------------------------------------------
+# Test Runners: accounts and accounts storages
+# ------------------------------------------------------------------------------
+
+proc trancodeRunner(noisy  = true; sample = accSample) =
+  let
+    accLst = sample.to(seq[UndumpAccounts])
+    root = accLst[0].root
+    tmpDir = getTmpDir()
+    db = tmpDir.testDbs(sample.name & "-accounts", instances=2, persistent=true)
+    info = if db.persistent: &"persistent db on \"{db.baseDir}\""
+           else: "in-memory db"
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+
+  defer:
+    db.flushDbs
+
+  suite &"Aristo: transcoding {fileInfo} accounts and proofs for {info}":
+
+    # New common descriptor for this sub-group of tests
+    let
+      desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
+      hexaDb = desc.hexaDb
+      getFn = desc.getAccountFn
+      dbg = if noisy: hexaDb else: nil
+
+    # Borrowed from `test_sync_snap/test_accounts.nim`
+    test &"Importing {accLst.len} list items to persistent database":
+      if db.persistent:
+        accLst.test_accountsImport(desc, true)
+      else:
+        skip()
+
+    test "Trancoding database records RLP, NodeRef, DbRecord":
+      noisy.showElapsed("test_transcoder()"):
+        noisy.test_transcoderAccounts db.cdb[0].rocksStoreRef
+
+# ------------------------------------------------------------------------------
+# Main function(s)
+# ------------------------------------------------------------------------------
+
+proc aristoMain*(noisy = defined(debug)) =
+  noisy.trancodeRunner()
+
+when isMainModule:
+  const
+    noisy = defined(debug) or true
+
+  # Borrowed from `test_sync_snap.nim`
+  when true: # and false:
+    for n,sam in snapTestList:
+      noisy.trancodeRunner(sam)
+    for n,sam in snapTestStorageList:
+      noisy.trancodeRunner(sam)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------
