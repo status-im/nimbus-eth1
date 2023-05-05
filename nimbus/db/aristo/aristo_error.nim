@@ -22,7 +22,7 @@ type
     RlpRlpException
     RlpOtherException
 
-    # Db record decoder, `toRlpRecord()`
+    # Db record decoder, `fromDbRecord()`
     DbrUnknown
     DbrTooShort
     DbrOffsOutOfRange
@@ -33,6 +33,10 @@ type
     DbrExtGarbled
     DbrExtGotLeafPrefix
     DbrLeafGotExtPrefix
+
+    # Db admin data decoder, `fromAristoDb()`
+    ADbGarbledSize
+    ADbWrongType
 
 # End
 

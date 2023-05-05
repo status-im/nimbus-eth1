@@ -99,13 +99,11 @@ type
 
   AristoDbRef* = ref object
     ## Hexary trie plus helper structures
-    topVtx*: VertexID              ## Top node vertex ID
-    topKey*: NodeTag               ## Key derived from top node `Merkle` hash
     tab*: Table[VertexID,NodeRef]  ## Vertex table making up trie
-    refGen*: VertexID              ## Unique tmp key generator
+    refGen*: seq[VertexID]         ## Unique key generator
 
     # Debugging data below, might go away in future
-    xMap*: Table[NodeKey,VertexID] ## Key -> Vertex ID mapping
+    xMap*: Table[NodeKey,VertexID] ## Mapper for pretty printing
 
 static:
   # Not that there is no doubt about this ...
@@ -115,9 +113,33 @@ static:
 # Public constructor (or similar)
 # ------------------------------------------------------------------------------
 
-proc newVtxID*(db: AristoDbRef): VertexID =
-  db.refGen.uint64.inc
-  db.refGen
+proc new*(T: type VertexID; db: AristoDbRef): T =
+  ## Create a new `VertexID`. Reusable *ID*s are kept in a list where the top
+  ## entry *ID0* has the property that any other *ID* larger *ID0* is also not
+  ## not used on the databse.
+  if db.refGen.len == 0:
+    db.refGen = @[2u64.VertexID]
+    return 1u64.VertexID
+  result = db.refGen[^1]
+  if db.refGen.len == 1:
+    db.refGen = @[(result.uint64 + 1).VertexID]
+  else:
+    db.refGen.setLen(db.refGen.len-1)
+
+proc peek*(T: type VertexID; db: AristoDbRef): T =
+  ## Like `new()` without consuming this *ID*. It will return the *ID* that
+  ## would be returned by the `new()` function.
+  if db.refGen.len == 0: 1u64 else: db.refGen[^1]
+
+proc dispose*(db: AristoDbRef; vtxID: VertexID) =
+  ## Recycle the argument `vtxID` which is useful after deleting entries from
+  ## the vertex table to prevent the `VertexID` type key values small.
+  if db.refGen.len == 0:
+    db.refGen = @[vtxID]
+  else:
+    let topID = db.refGen[^1]
+    db.refGen[^1] = vtxID
+    db.refGen.add topID
 
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model

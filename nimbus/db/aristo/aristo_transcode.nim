@@ -51,6 +51,10 @@ const
   EmptyBlob = seq[byte].default
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
+  AristoExtRecordPrefix = @[128u8, 0u8, 0u8, 44u8] # 0x80'00'00'2C
+
+  AristoDbAdminPrefix = @[64u8, 0u8, 0u8, 4u8]     # 0x40'00'00'04
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -241,8 +245,7 @@ proc toDbRecord*(node: NodeRef): Blob =
         keys &= node.bKey[n].ByteArray32.toSeq
     result = (20 + refs.len).uint32.toBytesBE.toSeq & access & refs & keys
   of Extension:
-    const extPrefix = @[128u8, 0u8, 0u8, 44u8] # 0x80'00'00'2C
-    result = extPrefix &
+    result = AristoExtRecordPrefix &
       node.eVtx.uint64.toBytesBE.toSeq &
       node.eKey.ByteArray32.toSeq &
       node.ePfx.hexPrefixEncode(isleaf = false)
@@ -253,6 +256,22 @@ proc toDbRecord*(node: NodeRef): Blob =
       node.lPfx.hexPrefixEncode(isleaf = true)
   of Dummy:
     discard
+
+proc toAristoDb*(db: AristoDbRef): Blob =
+  ## This function serialises some maintenance data for the `AristoDbRef`.
+  ## At the moment, this contains the `VertexID` recycliing table, only.
+  ##
+  ## This data recoed is supposed to be stored as the table value with
+  ## vertex ID zero for persistent tables.
+  ## ::
+  ##   Admin:
+  ##     offset(4)      -- 2 * 2^30 + 4
+  ##     uint64, ...    -- list of IDs
+  ##
+  result = AristoDbAdminPrefix
+  for w in db.refGen:
+    result &= w.uint64.toBytesBE.toSeq
+
 
 proc fromDbRecord*(record: Blob): NodeRef =
   ## De-serialise a data record encoded with `toDbRecord()`.
@@ -319,6 +338,21 @@ proc fromDbRecord*(record: Blob): NodeRef =
     discard
 
   aristoError(DbrUnknown)
+
+proc fromAristoDb*(data: Blob): Result[AristoDbRef,AristoError] =
+  ## De-serialise the data record encoded with `toAristoDb()`.
+  if data.len == 0:
+    return ok(AristoDbRef())
+  if (data.len mod 8) != 4:
+    return err(ADbGarbledSize)
+  if data[0..3] != AristoDbAdminPrefix:
+    return err(ADbWrongType)
+
+  var db = AristoDbRef()
+  for n in 0 ..< (data.len div 8):
+    let w = n * 8 + 4
+    db.refGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+  ok(db)
 
 # ------------------------------------------------------------------------------
 # End

@@ -85,8 +85,8 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
   if not key.isZero and not db.isNil:
     if db.xMap.len == 0:
-      db.xMap[EMPTY_ROOT_KEY] = db.newVtxID
-      db.xMap[EMPTY_CODE_KEY] = db.newVtxID
+      db.xMap[EMPTY_ROOT_KEY] = VertexID.new db
+      db.xMap[EMPTY_CODE_KEY] = VertexID.new db
     if db.xMap.hasKey(key):
       try:
         return db.xMap[key]
@@ -94,7 +94,7 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
         discard
       return
 
-    result = db.newVtxID
+    result = VertexID.new db
     db.xMap[key] = result
 
 
