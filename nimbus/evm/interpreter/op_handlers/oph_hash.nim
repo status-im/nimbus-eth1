@@ -51,7 +51,7 @@ const
       k.cpt.stack.push(EMPTY_SHA3)
     else:
       k.cpt.stack.push:
-        keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
+        keccakHash k.cpt.memory.waitForBytes.toOpenArray(pos, endRange)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

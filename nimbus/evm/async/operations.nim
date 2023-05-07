@@ -1,12 +1,14 @@
 import
   chronicles,
   chronos,
+  sequtils,
   stint,
   eth/common/eth_types,
   ../../common,
   ../../db/distinct_tries,
   ../../db/accounts_cache,
-  #../../db/incomplete_db,
+  ../../db/incomplete_db,
+  ../../sync/protocol,
   ../types,
   ./data_sources
 
@@ -27,15 +29,19 @@ proc ifNecessaryGetSlot*(vmState: BaseVMState, address: EthAddress, slot: UInt25
 proc ifNecessaryGetBlockHeaderByNumber*(vmState: BaseVMState, blockNumber: BlockNumber): Future[void] {.async.} =
   await vmState.asyncFactory.ifNecessaryGetBlockHeaderByNumber(vmState.com.db, blockNumber)
 
-#[
-FIXME-Adam: This is for later.
-proc fetchAndPopulateNodes*(vmState: BaseVMState, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[void] {.async.} =
+proc snapTriePathFromByteSeqs(byteSeqs: seq[seq[byte]]): SnapTriePaths =
+  SnapTriePaths(
+    accPath: byteSeqs[0],
+    slotPaths: byteSeqs[1 ..< byteSeqs.len]
+  )
+
+proc fetchAndPopulateNodes*(vmState: BaseVMState, pathByteSeqs: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[void] {.async.} =
   if vmState.asyncFactory.maybeDataSource.isSome:
     # let stateRoot = vmState.stateDB.rawTrie.rootHash # FIXME-Adam: this might not be right, huh? the peer might expect the parent block's final stateRoot, not this weirdo intermediate one
     let stateRoot = vmState.parent.stateRoot
+    let paths = pathByteSeqs.map(snapTriePathFromByteSeqs)
     let nodes = await vmState.asyncFactory.maybeDataSource.get.fetchNodes(stateRoot, paths, nodeHashes)
     populateDbWithNodes(vmState.stateDB.rawDb, nodes)
-]#
 
 
 # Sometimes it's convenient to be able to do multiple at once.

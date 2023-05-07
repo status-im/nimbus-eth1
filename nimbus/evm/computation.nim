@@ -9,7 +9,9 @@
 # according to those terms.
 
 import
+  std/sequtils,
   ".."/[db/accounts_cache, constants],
+  ".."/utils/functors/[identity, futures, possible_futures],
   "."/[code_stream, memory, message, stack, state],
   "."/[transaction_tracer, types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
@@ -20,7 +22,8 @@ import
   sets
 
 export
-  common
+  common,
+  chronos
 
 {.push raises: [].}
 
@@ -315,9 +318,110 @@ template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
 # Register an async operation to be performed before the continuation is called.
 template asyncChainTo*(c: Computation, asyncOperation: Future[void], after: untyped) =
   c.pendingAsyncOperation = asyncOperation
-  c.continuation = proc() =
+  c.continuation = proc() {.raises: [CatchableError].} =
     c.continuation = nil
     after
+
+# FIXME-Adam: can I do some type magic to handle tuples of any length? In practice,
+# I think we only ever need 4, though. So this is livable for now.
+# Oh, actually 7. Fine, I really need to make a macro or something for this.
+proc popStackValue*(cpt: Computation, body: (proc(v: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let elem = cpt.stack.popElement()
+  cpt.asyncChainTo(discardFutureValue(futureStackValue(elem))):
+    let v = unsafeGetAlreadyAvailableValue(elem)
+    body(v)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB) = cpt.stack.popElements(2)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    body(vA, vB)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB, vC: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB, elemC) = cpt.stack.popElements(3)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB), futureStackValue(elemC)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    let vC = unsafeGetAlreadyAvailableValue(elemC)
+    body(vA, vB, vC)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB, vC, vD: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB, elemC, elemD) = cpt.stack.popElements(4)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB), futureStackValue(elemC), futureStackValue(elemD)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    let vC = unsafeGetAlreadyAvailableValue(elemC)
+    let vD = unsafeGetAlreadyAvailableValue(elemD)
+    body(vA, vB, vC, vD)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB, vC, vD, vE: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB, elemC, elemD, elemE) = cpt.stack.popElements(5)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB), futureStackValue(elemC), futureStackValue(elemD), futureStackValue(elemE)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    let vC = unsafeGetAlreadyAvailableValue(elemC)
+    let vD = unsafeGetAlreadyAvailableValue(elemD)
+    let vE = unsafeGetAlreadyAvailableValue(elemE)
+    body(vA, vB, vC, vD, vE)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB, vC, vD, vE, vF: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB, elemC, elemD, elemE, elemF) = cpt.stack.popElements(6)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB), futureStackValue(elemC), futureStackValue(elemD), futureStackValue(elemE), futureStackValue(elemF)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    let vC = unsafeGetAlreadyAvailableValue(elemC)
+    let vD = unsafeGetAlreadyAvailableValue(elemD)
+    let vE = unsafeGetAlreadyAvailableValue(elemE)
+    let vF = unsafeGetAlreadyAvailableValue(elemF)
+    body(vA, vB, vC, vD, vE, vF)
+
+proc popStackValues*(cpt: Computation, body: (proc(vA, vB, vC, vD, vE, vF, vG: UInt256): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let (elemA, elemB, elemC, elemD, elemE, elemF, elemG) = cpt.stack.popElements(7)
+  cpt.asyncChainTo(discardFutureValue(combine(futureStackValue(elemA), futureStackValue(elemB), futureStackValue(elemC), futureStackValue(elemD), futureStackValue(elemE), futureStackValue(elemF), futureStackValue(elemG)))):
+    let vA = unsafeGetAlreadyAvailableValue(elemA)
+    let vB = unsafeGetAlreadyAvailableValue(elemB)
+    let vC = unsafeGetAlreadyAvailableValue(elemC)
+    let vD = unsafeGetAlreadyAvailableValue(elemD)
+    let vE = unsafeGetAlreadyAvailableValue(elemE)
+    let vF = unsafeGetAlreadyAvailableValue(elemF)
+    let vG = unsafeGetAlreadyAvailableValue(elemG)
+    body(vA, vB, vC, vD, vE, vF, vG)
+    
+# Here's my attempt at doing the type magic. It seems to almost compile, except for the
+# vals argument being a genTupleType.
+#proc popStackValues*(cpt: Computation, tupleLen: static[int], body: (proc(vals: genTupleType(tupleLen, UInt256)): void {.gcsafe.})) =
+#  let elems = cpt.stack.popElements(tupleLen)
+#  var futs: genTupleType(2, Future[UInt256])
+#  for e, f in fields(elems, futs):
+#    f = futureStackValue(e)
+#  cpt.asyncChainTo(discardFutureValue(combine(futs))):
+#    var vals: genTupleType(2, UInt256)
+#    for e, v in fields(elems, vals):
+#      v = unsafeGetAlreadyAvailableValue(e)
+#    body(vals)
+
+proc popStackValues*(cpt: Computation, numItems: int, body: (proc(vals: seq[UInt256]): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let elems = cpt.stack.popSeqOfElements(numItems)
+  cpt.asyncChainTo(discardFutureValue(traverse(elems.map(futureStackValue)))):
+    let vals = elems.map(unsafeGetAlreadyAvailableValue)
+    body(vals)
+
+proc popStackAddress*(cpt: Computation, body: (proc(a: EthAddress): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let elem = cpt.stack.popElement()
+  cpt.asyncChainTo(discardFutureValue(futureStackValue(elem))):
+    let a = addressFromStackValue(unsafeGetAlreadyAvailableValue(elem))
+    body(a)
+
+proc readMemory*(cpt: Computation, startPos: Natural, size: Natural, body: (proc(bytes: seq[byte]): void {.gcsafe, raises: [CatchableError].})) {.raises: [CatchableError]} =
+  let futBytes = cpt.memory.futureBytes(startPos, size)
+  cpt.asyncChainTo(discardFutureValue(futBytes)):
+    let bytes: seq[byte] = unsafeGetAlreadyAvailableValue(futBytes)
+    body(bytes)
+
+#FIXME-Adam: unused?
+#proc writeMemory*(cpt: Computation, first: int, last: int, newBytesFut: Future[seq[byte]], body: (proc(): void {.gcsafe.})) =
+#  cpt.memory.writeFutureBytes(first, last - first + 1, newBytesFut)
 
 proc merge*(c, child: Computation) =
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)

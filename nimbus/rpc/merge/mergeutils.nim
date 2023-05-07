@@ -93,7 +93,7 @@ proc toWithdrawal*(w: WithdrawalV1): Withdrawal =
     index: uint64(w.index),
     validatorIndex: uint64(w.validatorIndex),
     address: distinctBase(w.address),
-    amount: uint64(w.amount) # AARDVARK: is this wei or gwei or what?
+    amount: uint64(w.amount)
   )
 
 proc toWithdrawalV1*(w: Withdrawal): WithdrawalV1 =
@@ -101,7 +101,7 @@ proc toWithdrawalV1*(w: Withdrawal): WithdrawalV1 =
     index: Quantity(w.index),
     validatorIndex: Quantity(w.validatorIndex),
     address: Address(w.address),
-    amount: Quantity(w.amount) # AARDVARK: is this wei or gwei or what?
+    amount: Quantity(w.amount)
   )
 
 proc toTypedTransaction*(tx: Transaction): TypedTransaction =

@@ -138,6 +138,10 @@ ifneq ($(ENABLE_EVMC), 0)
   T8N_PARAMS := -d:chronicles_enabled=off
 endif
 
+ifneq ($(ENABLE_SPECULATIVE_EXECUTION), 0)
+  NIM_PARAMS += -d:evm_speculative_execution
+endif
+
 # disabled by default, enable with ENABLE_VMLOWMEM=1
 ifneq ($(if $(ENABLE_VMLOWMEM),$(ENABLE_VMLOWMEM),0),0)
   NIM_PARAMS += -d:lowmem:1
