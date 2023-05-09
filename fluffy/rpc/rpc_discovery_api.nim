@@ -30,10 +30,9 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer|RpcProxy,
     return d.routingTable.getNodeInfo()
 
   rpcServer.rpc("discv5_updateNodeInfo") do(
-      kvPairs: seq[(string, string)]) -> NodeInfo:
-    # TODO: Not according to spec, as spec parameters are weird.
-    # It is currently as in
-    # https://ddht.readthedocs.io/en/latest/jsonrpc.html#discv5-updatenodeinfo
+      kvPairs: seq[tuple[key: string, value: string]]) -> NodeInfo:
+    # TODO: Not according to spec, as spec only allows socket address.
+    # portal-specs PR has been created with suggested change as is here.
     let enrFields = kvPairs.map(
       proc(n: (string, string)): (string, seq[byte]) {.raises: [ValueError].} =
         (n[0], hexToSeqByte(n[1]))
