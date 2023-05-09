@@ -26,7 +26,7 @@ import
     hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_helpers, test_transcoder]
+  ./test_aristo/[test_transcoder]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -164,7 +164,7 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc trancodeRunner(noisy  = true; sample = accSample) =
+proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
   let
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
@@ -195,7 +195,7 @@ proc trancodeRunner(noisy  = true; sample = accSample) =
 
     test "Trancoding database records RLP, NodeRef, DbRecord":
       noisy.showElapsed("test_transcoder()"):
-        noisy.test_transcoderAccounts db.cdb[0].rocksStoreRef
+        noisy.test_transcoderAccounts(db.cdb[0].rocksStoreRef, stopAfter)
 
 # ------------------------------------------------------------------------------
 # Main function(s)

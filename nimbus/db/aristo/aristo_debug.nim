@@ -14,7 +14,7 @@ import
   eth/[common, trie/nibbles],
   stew/byteutils,
   ../../sync/snap/range_desc,
-  "."/[aristo_desc, aristo_error]
+  "."/aristo_desc
 
 const
   EMPTY_ROOT_KEY = EMPTY_ROOT_HASH.to(NodeKey)
@@ -24,16 +24,19 @@ const
 # Ptivate functions
 # ------------------------------------------------------------------------------
 
-proc keyVtxUpdate(db: AristoDbRef, key: NodeKey, vtx: VertexID): string =
-  if not key.isZero and not db.isNil:
-    if db.xMap.hasKey(key):
-      try:
-        if db.xMap[key] == vtx: return
-      except:
-        discard
-      return "(!)"
-    if not vtx.isZero:
-      db.xMap[key] = vtx
+proc keyVidUpdate(db: AristoDbRef, key: NodeKey, vid: VertexID): string =
+  if not key.isZero and
+     not vid.isZero and
+     not db.isNil:
+    db.pAmk.withValue(key, vidRef):
+      if vidRef[] != vid:
+        result = "(!)"
+      return
+    db.xMap.withValue(key, vidRef):
+      if vidRef[] == vid:
+        result = "(!)"
+      return
+    db.xMap[key] = vid
 
 proc squeeze(s: string; hex = false; ignLen = false): string =
   ## For long strings print `begin..end` only
@@ -50,24 +53,24 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
       result &= "..(" & $s.len & ")"
     result &= ".." & s[s.len-16 ..< s.len]
 
-proc ppReason(a: AristoError): string =
-  if a.ord == 0: "" else: "!" & $a
+proc ppVid(vid: VertexID): string =
+  if vid.isZero: "ø" else: "$" & $vid
 
-proc ppVtx(vrt: VertexID): string =
-  if vrt.isZero: "ø" else: $vrt
-
-proc ppKey(a: NodeKey, db = AristoDbRef(nil)): string =
-  if a.isZero:
+proc ppKey(key: NodeKey, db = AristoDbRef(nil)): string =
+  if key.isZero:
     return "ø"
+  if key == EMPTY_ROOT_KEY:
+    return "£r"
+  if key == EMPTY_CODE_KEY:
+    return "£c"
 
-  let tag = if a == EMPTY_ROOT_KEY or a == EMPTY_CODE_KEY: "(!)" else: ""
-  if not db.isNil and db.xMap.hasKey a:
-    try:
-      return "£" & $db.xMap[a] & tag
-    except:
-      discard
+  if not db.isNil:
+    db.pAmk.withValue(key, pRef):
+      return "£" & $pRef[]
+    db.xMap.withValue(key, xRef):
+      return "£" & $xRef[]
 
-  "%" & ($a).squeeze(hex=true,ignLen=true) & tag
+  "%" & ($key).squeeze(hex=true,ignLen=true)
 
 proc ppRootKey(a: NodeKey, db = AristoDbRef(nil)): string =
   if a != EMPTY_ROOT_KEY:
@@ -83,16 +86,13 @@ proc ppCodeKey(a: NodeKey, db = AristoDbRef(nil)): string =
 
 proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
-  if not key.isZero and not db.isNil:
-    if db.xMap.len == 0:
-      db.xMap[EMPTY_ROOT_KEY] = VertexID.new db
-      db.xMap[EMPTY_CODE_KEY] = VertexID.new db
-    if db.xMap.hasKey(key):
-      try:
-        return db.xMap[key]
-      except:
-        discard
-      return
+  if not key.isZero and
+     key != EMPTY_ROOT_KEY and
+     key != EMPTY_CODE_KEY and
+     not db.isNil:
+
+    db.xMap.withValue(key, vidPtr):
+      return vidPtr[]
 
     result = VertexID.new db
     db.xMap[key] = result
@@ -102,7 +102,7 @@ proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
   if p.isNil:
     result = "n/a"
   else:
-    case p.kind:
+    case p.pType:
     of BlobData:
       result &= p.blob.toHex.squeeze(hex=true)
     of AccountData:
@@ -112,32 +112,54 @@ proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
       result &= p.account.storageRoot.to(NodeKey).ppRootKey(db) & ","
       result &= p.account.codeHash.to(NodeKey).ppCodeKey(db) & ")"
 
-proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
   if nd.isNil:
     result = "n/a"
   else:
-    result = ["(", "L(", "X(", "B("][nd.kind.ord]
-    case nd.kind:
-    of Dummy:
-      result &= nd.reason.ppReason
+    result = ["l(", "x(", "b("][nd.vType.ord]
+    case nd.vType:
     of Leaf:
       result &= $nd.lPfx & "," & nd.lData.pp(db)
     of Extension:
-      result &= $nd.ePfx & "," & nd.eVtx.ppVtx & "," & nd.eKey.ppKey
+      result &= $nd.ePfx & "," & nd.eVtx.ppVid
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.bKey[n].isZero:
-          result &= nd.bVtx[n].ppVtx
-        result &= db.keyVtxUpdate(nd.bKey[n], nd.bVtx[n]) & ","
-      result[^1] = ']'
-      result &= ",["
-      for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.bKey[n].isZero:
-          result &= nd.bKey[n].ppKey(db)
+        if not nd.bVtx[n].isZero:
+          result &= nd.bVtx[n].ppVid
         result &= ","
       result[^1] = ']'
     result &= ")"
+
+proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
+  if nd.isNil:
+    result = "n/a"
+  elif nd.isError:
+    result = "(!" & $nd.error
+  else:
+    result = ["L(", "X(", "B("][nd.vType.ord]
+    case nd.vType:
+    of Leaf:
+      result &= $nd.lPfx & "," & nd.lData.pp(db)
+
+    of Extension:
+      result &= $nd.ePfx & "," & nd.eVtx.ppVid & "," & nd.key[0].ppKey
+
+    of Branch:
+      result &= "["
+      for n in 0..15:
+        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
+          result &= nd.bVtx[n].ppVid
+        result &= db.keyVidUpdate(nd.key[n], nd.bVtx[n]) & ","
+      result[^1] = ']'
+
+      result &= ",["
+      for n in 0..15:
+        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
+          result &= nd.key[n].ppKey(db)
+        result &= ","
+      result[^1] = ']'
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # End

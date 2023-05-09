@@ -23,20 +23,28 @@ type
     RlpOtherException
 
     # Db record decoder, `fromDbRecord()`
+    DbrNilArgument
     DbrUnknown
     DbrTooShort
-    DbrOffsOutOfRange
     DbrBranchTooShort
-    DbrBranchOffsTooSmall
+    DbrBranchSizeGarbled
     DbrBranchInxOutOfRange
     DbrExtTooShort
-    DbrExtGarbled
+    DbrExtSizeGarbled
     DbrExtGotLeafPrefix
+    DbrLeafSizeGarbled
     DbrLeafGotExtPrefix
 
     # Db admin data decoder, `fromAristoDb()`
     ADbGarbledSize
     ADbWrongType
+
+    # Db record encoder, `toDbRecord()`
+    VtxExPathOverflow
+    VtxLeafPathOverflow
+
+    # Converter `asNode()`
+    CacheMissingNodekeys
 
 # End
 

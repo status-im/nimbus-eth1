@@ -16,13 +16,19 @@ import
   stew/byteutils,
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_debug, aristo_transcode],
+  ../../nimbus/db/aristo/[
+    aristo_desc, aristo_cache, aristo_debug, aristo_error, aristo_transcode],
   ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+proc getOrEmpty(rc: Result[Blob,AristoError]; noisy = true): Blob =
+  if rc.isOk:
+    return rc.value
+  noisy.say "***", "error=", rc.error
 
 # ------------------------------------------------------------------------------
 # Public test function
@@ -38,6 +44,8 @@ proc test_transcoderAccounts*(
     adb = AristoDbRef()
     count = -1
   for (n, key,value) in rocky.walkAllDb():
+    if stopAfter < n:
+      break
     count = n
 
     # RLP <-> NIM object mapping
@@ -50,23 +58,27 @@ proc test_transcoderAccounts*(
         noisy.say "***", "count=", count, " value=", value.rlpFromBytes.inspect
         noisy.say "***", "count=", count, " blob0=", blob0.rlpFromBytes.inspect
 
-    # Provide DbRecord with dummy links and expanded payload
-    var node = node0
-    case node.kind:
-    of aristo_desc.Dummy:
-      discard
-    of aristo_desc.Leaf:
-      let account = node.lData.blob.decode(Account)
-      node.lData = PayloadRef(kind: AccountData, account: account)
-      discard adb.keyToVtxID node.lData.account.storageRoot.to(NodeKey)
-      discard adb.keyToVtxID node.lData.account.codeHash.to(NodeKey)
-    of aristo_desc.Extension:
-      # key -> vtx mapping for pretty printer
-      node.eVtx = adb.keyToVtxID node.eKey
-    of aristo_desc.Branch:
-      for n in 0..15:
-        # key[n] -> vtx[n] mapping for pretty printer
-        node.bVtx[n] = adb.keyToVtxID node.bKey[n]
+    # Provide DbRecord with dummy links and expanded payload. Registering the
+    # node as vertex and re-converting it does the job
+    var node = node0.updated(adb)
+    if node.isError:
+      check node.error == AristoError(0)
+    else:
+      case node.vType:
+      of aristo_desc.Leaf:
+        let account = node.lData.blob.decode(Account)
+        node.lData = PayloadRef(pType: AccountData, account: account)
+        discard adb.keyToVtxID node.lData.account.storageRoot.to(NodeKey)
+        discard adb.keyToVtxID node.lData.account.codeHash.to(NodeKey)
+      of aristo_desc.Extension:
+        # key <-> vtx correspondence
+        check node.key[0] == node0.key[0]
+        check not node.eVtx.isZero
+      of aristo_desc.Branch:
+        for n in 0..15:
+          # key[n] <-> vtx[n] correspondence
+          check node.key[n] == node0.key[n]
+          check node.key[n].isZero == node.bVtx[n].isZero
 
     # This NIM object must match to the same RLP encoded byte stream
     block:
@@ -78,21 +90,24 @@ proc test_transcoderAccounts*(
         noisy.say "***", "count=", count, " blob1=", blob1.rlpFromBytes.inspect
 
     # NIM object <-> DbRecord mapping
-    let dbr = node.toDbRecord
-    var node1 = dbr.fromDbRecord
+    let dbr = node.blobify.getOrEmpty(noisy)
+    var node1 = dbr.deblobify.asNode(adb)
+    if node1.isError:
+      check node1.error == AristoError(0)
 
     block:
-      # `fromDbRecord()` will always decode to `BlobData` type payload
-      if node1.kind == aristo_desc.Leaf:
+      # `deblobify()` will always decode to `BlobData` type payload
+      if node1.vType == aristo_desc.Leaf:
         let account = node1.lData.blob.decode(Account)
-        node1.lData = PayloadRef(kind: AccountData, account: account)
+        node1.lData = PayloadRef(pType: AccountData, account: account)
+
       if node != node1:
         check node == node1
         noisy.say "***", "count=", count, " node=", node.pp(adb)
         noisy.say "***", "count=", count, " node1=", node1.pp(adb)
 
     # Serialise back with expanded `AccountData` type payload (if any)
-    let dbr1 = node1.toDbRecord
+    let dbr1 = node1.blobify.getOrEmpty(noisy)
     block:
       if dbr != dbr1:
         check dbr == dbr1
@@ -100,7 +115,7 @@ proc test_transcoderAccounts*(
         noisy.say "***", "count=", count, " dbr1=", dbr1.toHex
 
     # Serialise back as is
-    let dbr2 = dbr.fromDbRecord.toDbRecord
+    let dbr2 = dbr.deblobify.asNode(adb).blobify.getOrEmpty(noisy)
     block:
       if dbr != dbr2:
         check dbr == dbr2

@@ -11,62 +11,32 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[bitops, sequtils],
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/snap/range_desc,
   "."/[aristo_desc, aristo_error]
 
-# Example of a compacted Merkle Patrica Trie encoded for a key-value table
-# from http://archive.is/TinyK
-#
-#   lookup data:
-#     "do":    "verb"
-#     "dog":   "puppy"
-#     "dodge": "coin"
-#     "horse": "stallion"
-#
-#   trie DB:
-#     root: [16 A]
-#     A:    [* * * * B * * * [20+"orse" "stallion"] * * * * * * *  *]
-#     B:    [00+"o" D]
-#     D:    [* * * * * * E * * * * * * * * *  "verb"]
-#     E:    [17 [* * * * * * [35 "coin"] * * * * * * * * * "puppy"]]
-#
-#     with first nibble of two-column rows:
-#       hex bits | node type  length
-#       ---------+------------------
-#        0  0000 | extension   even
-#        1  0001 | extension   odd
-#        2  0010 | leaf        even
-#        3  0011 | leaf        odd
-#
-#    and key path:
-#        "do":     6 4 6 f
-#        "dog":    6 4 6 f 6 7
-#        "dodge":  6 4 6 f 6 7 6 5
-#        "horse":  6 8 6 f 7 2 7 3 6 5
-
 const
   EmptyBlob = seq[byte].default
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
-
-  AristoExtRecordPrefix = @[128u8, 0u8, 0u8, 44u8] # 0x80'00'00'2C
-
-  AristoDbAdminPrefix = @[64u8, 0u8, 0u8, 4u8]     # 0x40'00'00'04
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc aristoError(error: AristoError): NodeRef =
-  NodeRef(kind: Dummy, reason: error)
+  ## Allows returning de
+  NodeRef(vType: Leaf, error: error)
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
 
-proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError]} =
+proc read*(
+    rlp: var Rlp;
+    T: type NodeRef;
+      ): T {.gcsafe, raises: [RlpError]} =
   ## Mixin for RLP writer, see `fromRlpRecord()` for an encoder with detailed
   ## error return code (if needed.) This reader is a jazzed up version which
   ## reports some particular errors in the `Dummy` type node.
@@ -106,26 +76,25 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError]} =
     let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
     if isLeaf:
       return NodeRef(
-        kind:   Leaf,
-        lPfx:   pathSegment,
-        lData:  PayloadRef(
-          kind: BlobData,
-          blob: blobs[1]))
+        vType:   Leaf,
+        lPfx:    pathSegment,
+        lData:   PayloadRef(
+          pType: BlobData,
+          blob:  blobs[1]))
     else:
-      var key: NodeKey
-      if not key.init(blobs[1]):
+      var node = NodeRef(
+        vType: Extension,
+        ePfx:  pathSegment)
+      if not node.key[0].init(blobs[1]):
         return aristoError(RlpExtPathEncoding)
-      return NodeRef(
-        kind: Extension,
-        ePfx: pathSegment,
-        eKey: key)
+      return node
   of 17:
     for n in [0,1]:
       if not links[n].init(blobs[n]):
         return aristoError(RlpBranchLinkExpected)
     return NodeRef(
-      kind: Branch,
-      bKey: links)
+      vType: Branch,
+      key:   links)
   else:
     discard
 
@@ -141,218 +110,204 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     else:
       writer.append key.to(Hash256)
 
-  case node.kind:
-  of Branch:
-    writer.startList(17)
-    for n in 0 ..< 16:
-      writer.addNodeKey node.bKey[n]
-    writer.append(EmptyBlob)
-  of Extension:
-    writer.startList(2)
-    writer.append node.ePfx.hexPrefixEncode(isleaf = false)
-    writer.addNodeKey node.eKey
-  of Leaf:
-    writer.startList(2)
-    writer.append node.lPfx.hexPrefixEncode(isleaf = true)
-    writer.append node.lData.convertTo(Blob)
-    #case node.lData.kind:
-    #of BlobData:
-    #  writer.append node.lData.blob
-    #of AccountData:
-    #  writer.append node.lData.account.encode
-  of Dummy:
+  if node.isError:
     writer.startList(0)
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc fromRlpRecord*(data: Blob): NodeRef =
-  ## Convert an RLP encoded hexary node to a `NodeRef`.
-  if data.len == 0:
-    return aristoError(RlpNonEmptyBlobExpected)
-  try:
-    var w = data.rlpFromBytes
-    return w.read(NodeRef)
-  except RlpError:
-    return aristoError(RlpRlpException)
-  except CatchableError:
-    discard
-  aristoError(RlpOtherException)
-
-proc toRlpRecord*(node: NodeRef): Blob =
-  ## Encode a node as an RLP encoded byte stream. This function is a shorcut
-  ## for `node.encode()`
-  node.encode()
+  else:
+    case node.vType:
+    of Branch:
+      writer.startList(17)
+      for n in 0..15:
+        writer.addNodeKey node.key[n]
+      writer.append EmptyBlob
+    of Extension:
+      writer.startList(2)
+      writer.append node.ePfx.hexPrefixEncode(isleaf = false)
+      writer.addNodeKey node.key[0]
+    of Leaf:
+      writer.startList(2)
+      writer.append node.lPfx.hexPrefixEncode(isleaf = true)
+      writer.append node.lData.convertTo(Blob)
 
 # ------------------------------------------------------------------------------
 # Public db record transcoders
 # ------------------------------------------------------------------------------
 
-proc toDbRecord*(node: NodeRef): Blob =
+proc blobify*(node: VertexRef; data: var Blob): AristoError =
   ## This function serialises the node argument to a database record. Contrary
   ## to RLP based serialisation, these records aim to align on fixed byte
   ## boundaries.
   ## ::
   ##   Branch:
-  ##     offset(4)      -- offset of NodeKey list (and zero leading bit)
-  ##     access(16)     -- index offsets byte array
   ##     uint64, ...    -- list of up to 16 child nodes lookup keys
-  ##     NodeKey, ...   -- list of up to 16 hash keys of child nodes
+  ##     uint16         -- index bitmap
+  ##     0x00           -- marker(2) + unused(2)
   ##
   ##   Extension:
-  ##     offset(4)      -- extension marker: 2 * 2^30 + 44 (offset of path Blob)
   ##     uint64         -- child node lookup key
-  ##     NodeKey        -- hash key of child node
   ##     Blob           -- hex encoded partial path (at least one byte)
+  ##     0x80           -- marker(2) + unused(2)
   ##
   ##   Leaf:
-  ##     offset(4)      -- leaf marker: 3 * 2^30 + 8 + <leaf-data-length>
   ##     Blob           -- opaque leaf data payload (might be zero length)
   ##     Blob           -- hex encoded partial path (at least one byte)
+  ##     0xc0           -- marker(2) + partialPathLen(6)
   ##
-  ## For a branch record, the bytes of the `access(16)` array indicate the
-  ## position of the Patricia Trie node reference and the hash keys. So the
-  ## particular byte with index `n` has
+  ## For a branch record, the bytes of the `access` array indicate the position
+  ## of the Patricia Trie node reference. So the `vertexID` with index `n` has
   ## ::
-  ##   W = value (ranging 0..16) of byte with index n
-  ##   if 0 < W:
-  ##     lookup key = 12 + W * 8
-  ##     child hash = offset(4) - 32 + W * 32
-  ##   else:
-  ##     no such entry
+  ##   8 * n * ((access shr (n * 4)) and 15)
   ##
-  ## For a branch record the `offset(4)` is 36 at minimum as there are at
-  ## least two children by design. So the minimum size of a branch node is
-  ## 100 bytes and the maximum size is 640 bytes, 512 bytes of which is
-  ## occupied by the list of hashes.
-  ##
-  ## For a leaf record, the maximal data payload size is 2^30-5 due to the
-  ## fact that the first two bits of the offset value are used as marker.
-  ##
-  case node.kind:
+  case node.vType:
   of Branch:
     var
-      top = 0.byte
-      access = newSeq[byte](16)
+      top = 0u64
+      access = 0u16
       refs: Blob
       keys: Blob
-    for n in 0 .. 15:
+    for n in 0..15:
       if not node.bVtx[n].isZero:
-        top.inc
-        access[n] = top
+        access = access or (1u16 shl n)
         refs &= node.bVtx[n].uint64.toBytesBE.toSeq
-        keys &= node.bKey[n].ByteArray32.toSeq
-    result = (20 + refs.len).uint32.toBytesBE.toSeq & access & refs & keys
+    data = refs & access.toBytesBE.toSeq & @[0u8]
   of Extension:
-    result = AristoExtRecordPrefix &
-      node.eVtx.uint64.toBytesBE.toSeq &
-      node.eKey.ByteArray32.toSeq &
-      node.ePfx.hexPrefixEncode(isleaf = false)
+    let
+      pSegm = node.ePfx.hexPrefixEncode(isleaf = false)
+      psLen = pSegm.len.byte
+    if psLen == 0 or 33 < pslen:
+      return VtxExPathOverflow
+    data = node.eVtx.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
   of Leaf:
-    let data = node.lData.convertTo(Blob)
-    result = (0xC0000004 + data.len).uint32.toBytesBE.toSeq &
-      data &
-      node.lPfx.hexPrefixEncode(isleaf = true)
-  of Dummy:
-    discard
+    let
+      pSegm = node.lPfx.hexPrefixEncode(isleaf = true)
+      psLen = pSegm.len.byte
+    if psLen == 0 or 33 < psLen:
+      return VtxLeafPathOverflow
+    data = node.lData.convertTo(Blob) & pSegm & @[0xC0u8 or psLen]
 
-proc toAristoDb*(db: AristoDbRef): Blob =
-  ## This function serialises some maintenance data for the `AristoDbRef`.
-  ## At the moment, this contains the `VertexID` recycliing table, only.
+proc blobify*(node: VertexRef): Result[Blob, AristoError] =
+  ## Variant of `blobify()`
+  var
+    data: Blob
+    info = node.blobify data
+  if info != AristoError(0):
+    return err(info)
+  ok(data)
+
+
+proc blobify*(db: AristoDbRef; data: var Blob) =
+  ## This function serialises some maintenance data for the `AristoDb`
+  ## descriptor. At the moment, this contains the recycliing table for the
+  ## `VertexID` values, only.
   ##
-  ## This data recoed is supposed to be stored as the table value with
-  ## vertex ID zero for persistent tables.
+  ## This data recoed is supposed to be stored as the table value with the
+  ## zero key for persistent tables.
   ## ::
   ##   Admin:
-  ##     offset(4)      -- 2 * 2^30 + 4
   ##     uint64, ...    -- list of IDs
+  ##     0x40
   ##
-  result = AristoDbAdminPrefix
+  data.setLen(0)
   for w in db.refGen:
-    result &= w.uint64.toBytesBE.toSeq
+    data &= w.uint64.toBytesBE.toSeq
+  data.add 0x40u8
+
+proc blobify*(db: AristoDbRef): Blob =
+  ## Variant of `toDescRecord()`
+  db.blobify result
 
 
-proc fromDbRecord*(record: Blob): NodeRef =
-  ## De-serialise a data record encoded with `toDbRecord()`.
-  if record.len < 5:
-    return aristoError(DbrTooShort)
-  let
-    offset = (uint32.fromBytesBE(record[0..3]) and 0x3fffffff).int
-  if record.len <= offset:
-    return aristoError(DbrOffsOutOfRange)
+proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
+  ## De-serialise a data record encoded with `blobify()`. The second
+  ## argument `vtx` can be `nil`.
+  if record.len < 3:                                  # minimum `Leaf` record
+    return DbrTooShort
 
-  case record[0] shr 6:
+  case record[^1] shr 6:
   of 0: # `Branch` node
-    if record.len < 100:
-      return aristoError(DbrBranchTooShort)
-    if offset < 36:
-      return aristoError(DbrBranchOffsTooSmall)
-    var
-      node = NodeRef(kind: Branch)
+    if record.len < 19:                               # at least two edges
+      return DbrBranchTooShort
+    if (record.len mod 8) != 3:
+      return DbrBranchSizeGarbled
     let
-      maxInx = (record.len - offset) div 32
-      off32 = offset - 32
-    for n in 0 .. 15:
-      let inx = record[4 + n].int
-      if 0 < inx:
-        if maxInx < inx:
-          # There is no much advantage doing this for the largest value
-          # of `inx` only as this check is inexpensive.
-          return aristoError(DbrBranchInxOutOfRange)
-        block:
-          let w = 12 + (inx shl 3)      # times 8
-          node.bVtx[n] = (uint64.fromBytesBE record[w ..< w + 8]).VertexID
-        block:
-          let w = off32 + (inx shl 5)   # times 32
-          (addr node.bKey[n].ByteArray32[0]).copyMem(unsafeAddr record[w], 32)
-      # End `for`
-    return node
+      maxOffset = record.len - 11
+      aInx = record.len - 3
+      aIny = record.len - 2
+    var
+      offs = 0
+      access = uint16.fromBytesBE record[aInx..aIny]  # bitmap
+      vtxList: array[16,VertexID]
+    while access != 0:
+      if maxOffset < offs:
+        return DbrBranchInxOutOfRange
+      let n = access.firstSetBit - 1
+      access.clearBit n
+      vtxList[n] = (uint64.fromBytesBE record[offs ..< offs+8]).VertexID
+      offs += 8
+      # End `while`
+    vtx = VertexRef(
+      vType: Branch,
+      bVtx:  vtxList)
 
   of 2: # `Extension` node
-    if record.len < 45:
-      return aristoError(DbrExtTooShort)
-    if offset != 44:
-      return aristoError(DbrExtGarbled)
-    let (isLeaf, pathSegment) = hexPrefixDecode record[44 ..< record.len]
+    let
+      sLen = record[^1].int and 0x3f                  # length of path segment
+      rlen = record.len - 1                           # `vertexID` + path segm
+    if record.len < 10:
+      return DbrExtTooShort
+    if 8 + sLen != rlen:                              # => slen is at least 1
+      return DbrExtSizeGarbled
+    let (isLeaf, pathSegment) = hexPrefixDecode record[8 ..< rLen]
     if isLeaf:
-      return aristoError(DbrExtGotLeafPrefix)
-    var node = NodeRef(
-      kind: Extension,
-      eVtx: (uint64.fromBytesBE record[4 ..< 12]).VertexID,
-      ePfx: pathSegment)
-    (addr node.eKey.ByteArray32[0]).copyMem(unsafeAddr record[12], 32)
-    return node
+      return DbrExtGotLeafPrefix
+    vtx = VertexRef(
+      vType: Extension,
+      eVtx:  (uint64.fromBytesBE record[0 ..< 8]).VertexID,
+      ePfx:  pathSegment)
 
   of 3: # `Leaf` node
-    let (isLeaf, pathSegment) = hexPrefixDecode record[offset ..< record.len]
+    let
+      sLen = record[^1].int and 0x3f                  # length of path segment
+      rlen = record.len - 1                           # payload + path segment
+      pLen = rLen - sLen                              # payload length
+    if rlen < sLen:
+      return DbrLeafSizeGarbled
+    let (isLeaf, pathSegment) = hexPrefixDecode record[pLen ..< rLen]
     if not isLeaf:
-      return aristoError(DbrLeafGotExtPrefix)
-    return NodeRef(
-      kind:   Leaf,
-      lPfx:   pathSegment,
-      lData:  PayloadRef(
-        kind: BlobData,
-        blob: record[4 ..< offset]))
+      return DbrLeafGotExtPrefix
+    vtx = VertexRef(
+      vType:   Leaf,
+      lPfx:    pathSegment,
+      lData:   PayloadRef(
+        pType: BlobData,
+        blob:  record[0 ..< plen]))
   else:
-    discard
+    return DbrUnknown
 
-  aristoError(DbrUnknown)
+proc deblobify*(record: Blob): Result[VertexRef,AristoError] =
+  ## Variant of `fromDbRecord()`
+  var vtx: VertexRef
+  let info = record.deblobify vtx
+  if info != AristoError(0):
+    return err(info)
+  ok(vtx)
 
-proc fromAristoDb*(data: Blob): Result[AristoDbRef,AristoError] =
-  ## De-serialise the data record encoded with `toAristoDb()`.
+
+proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
+  ## De-serialise the data record encoded with `blobify()`. The second
+  ## argument `db` can be `nil` in which case a new `AristoDbRef` type
+  ## descriptor will be created.
+  if db.isNil:
+    db = AristoDbRef()
   if data.len == 0:
-    return ok(AristoDbRef())
-  if (data.len mod 8) != 4:
-    return err(ADbGarbledSize)
-  if data[0..3] != AristoDbAdminPrefix:
-    return err(ADbWrongType)
-
-  var db = AristoDbRef()
-  for n in 0 ..< (data.len div 8):
-    let w = n * 8 + 4
-    db.refGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
-  ok(db)
+    db.refGen = @[1.VertexID]
+  else:
+    if (data.len mod 8) != 1:
+      return ADbGarbledSize
+    if data[0..3] != @[0u8]:
+      return ADbWrongType
+    for n in 0 ..< (data.len div 8):
+      let w = n * 8 + 4
+      db.refGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
 
 # ------------------------------------------------------------------------------
 # End

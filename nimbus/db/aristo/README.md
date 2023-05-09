@@ -153,7 +153,7 @@ A graph for the example *(1)* would look like
 
 while example *(2)* has
 
-              (root)
+              (root)                                                     (6)
                 |
                 w
                 |
@@ -169,8 +169,34 @@ while example *(2)* has
 The labels on the edges indicate the downward target of an edge while the
 round brackets enclose separated *Merkle hash* information.
 
+This last example (6) can be completely split into structural tree and Merkel
+hash mapping.
+
+         structural trie              hash map                           (7)
+         ---------------              --------
+                |                  (root) -> w
+                w                     (a) -> x
+                |                     (b) -> y
+         +-------------+              (c) -> z
+         |   branch2   |
+         +-------------+
+            /   |   \
+           x    y    z
+          /     |     \
+       leaf-a leaf-b leaf-c
+
+
 4. *Patricia Trie* node serialisation with *Merkle hash* labelled edges
 -----------------------------------------------------------------------
+The data structure for the *Aristo Trie* forllows example *(7)* by keeping
+structural information separate from the Merkle hash labels. As for teminology,
+
+* an *Aristo Trie* is a pair *(structural trie, hash map)* where
+* the *structural trie* realises a haxary *Patricia Trie* containing the payload
+  values in the leaf records
+* the *hash map* contains the hash information so that this trie operates as a
+  *Merkle Patricia Tree*.
+
 In order to accommodate for the additional structural elements, a non RLP-based
 data layout is used for the *Branch*, *Extension*, and *Leaf* containers used
 in the key-value table that implements the *Patricia Trie*. It is now called
@@ -181,89 +207,84 @@ and implemented as 64 bit values, stored *Big Endian* in the serialisation.
 
 ### Branch record serialisation
 
-        0 +--+--+--+--+
-          |           |                               -- marker(2) + offset(30)
-        4 +--+--+--+--+--+--+--+--+--+- ..-+--+
-          |  |  |  |  |  |  |  |  |  |     |  |       -- access, 16 bytes array
-       20 +--+--+--+--+--+--+--+--+--+- ..-+--+
-          |                          |                -- first vertexID
-       28 +--+--+--+--+--+--+--+--+--+
-          ...                                         -- more vertexIDs
-        X +--+--+--+--+--+--+--+--+--+--+--+- ..-+--+
-          |                                         | -- first Merkle hash
-     32+X +--+--+--+--+--+--+--+--+--+--+--+- ..-+--+
-          ...                                         -- more Merkle hashes
-     where
-        the two bits of marker(2) are reset to 00
-        X = offset(30)
+        0 +--+--+--+--+--+--+--+--+--+
+          |                          |       -- first vertexID
+        8 +--+--+--+--+--+--+--+--+--+
+          ...                                -- more vertexIDs
+		  +--+--+
+		  |     |                            -- access(16) bitmap
+          +--+--+
+          || |                               -- marker(2) + unused(6)
+          +--+
 
-Now, for a given index *n* between *0..15*, if the byte at position *4+n* is
-zero then both the *n*-th structural *vertexID* and the *Merkle* hash are
-absent. Otherwise one calculates
+	    where
+		  marker(2) is the double bit array 00
 
-     with W = value of byte 4+n (the n-th entry in the 16 byte access array)
-     the n-th vertexID is at position 12 + W * 8
-     the n-th Merkle hash is at position X - 32 + W * 32
+For a given index *n* between *0..15*, if the bit at position *n* of the it
+vector *access(16)* is reset to zero, then there is no *n*-th structural
+*vertexID*. Otherwise one calculates
+
+        the n-th vertexID is at position Vn * 8
+        for Vn the number of non-zero bits in the range 0..(n-1) of access(16)
+
+Note that data are stored *Big Endian*, so the bits *0..7* of *access* are
+stored in the right byte of the serialised bitmap.
 
 ### Extension record serialisation
 
-        0 +--+--+--+--+
-          |           |                               -- 0x8000002c
-        4 +--+--+--+--+--+--+--+--+--+
-          |                          |                -- vertexID
-       12 +--+--+--+--+--+--+--+--+--+--+--+- ..-+--+
-          |                                         | -- Merkle hash
-       44 +--+--+--+--+--+--+--+--+--+--+--+- ..-+--+
-          |  | ...                                    -- path segment
+        0 +--+--+--+--+--+--+--+--+--+
+          |                          |       -- vertexID
+        8 +--+--+--+--+--+--+--+--+--+
+          |  | ...                           -- path segment
+          +--+
+          || |                               -- marker(2) + pathSegmentLen(6)
           +--+
 
-The value *0x8000002c* is modelled as *marker(2) + offset(30)* where the two
-bits of the *marker(2)* is binary *10* and the decimal value of *offset(30)*
-is *44*.
+	    where
+		  marker(2) is the double bit array 10
 
 The path segment of the *Extension* record is compact encoded. So it has at
 least one byte. The first byte *P0* has bit 5 reset, i.e. *P0 and 0x20* is
 zero (bit 4 is set if the right nibble is the first part of the path.)
 
+Note that the *pathSegmentLen(6)* is redunant as it is determined by the length
+of the extension record (as *recordLen - 9*.)
+
 ### Leaf record serialisation
 
-        0 +--+--+--+--+
-          |           |                               -- marker(2) + offset(30)
-        4 +--+--+--+--+
-          ...                                         -- payload (may be empty)
-        X +--+
-          |  | ...                                    -- path segment
+        0 +-- ..
+          ...                                -- payload (may be empty)
           +--+
-     where
-        the two bits of marker(2) are set to 11
-        X = offset(30)
+          |  | ...                           -- path segment
+          +--+
+          || |                               -- marker(2) + pathSegmentLen(6)
+          +--+
+
+	    where
+		  marker(2) is the double bit array 11
 
 A *Leaf* record path segment is compact encoded. So it has at least one byte.
 The first byte *P0* has bit 5 set, i.e. *P0 and 0x20* is non-zero (bit 4 is
 also set if the right nibble is the first part of the path.)
 
-5. Node representation in NIM
-------------------------------
+### Descriptor record serialisation
 
-      type
-        PayloadRef* = ref object
-          case kind*: PayloadType
-          of BlobData:                 # Opaque data value reference
-            blob*: Blob
-          of AccountData:              # Expanded accounting data
-            account*: Account
+        0 +-- ..
+          ...                                -- recycled vertexIDs
+          +--+--+--+--+--+--+--+--+--+
+          |                          |       -- unused head vertexID
+          +--+--+--+--+--+--+--+--+--+
+          || |                               -- marker(2) + unused(6)
+          +--+
 
-        NodeRef* = ref object
-          case kind*: NodeType
-          of Dummy:
-            reason*: AristoError       # Empty record, used for error signalling
-          of Leaf:
-            lPfx*: NibblesSeq          # Portion of path segment
-            lData*: PayloadRef         # Reference to data payload
-          of Extension:
-            ePfx*: NibblesSeq          # Portion of path segment
-            eVtx*: VertexID            # Reference to data payload
-            eKey*: NodeKey             # Hash value (if any) or temporary key
-          of Branch:
-            bVtx*: array[16,VertexID]  # Edge list with vertex IDs
-            bKey*: array[16,NodeKey]   # Merkle hashes
+	    where
+		  marker(2) is the double bit array 01
+
+Currently, the descriptor record only contains data for producing unique
+vectorID values that can be used as structural keys. If this descriptor is
+missing, the value `(0x40000000,0x01)` is assumed. The last vertexID in the
+descriptor list has the property that that all values greater or equal than
+this value can be used as vertexID.
+
+The vertexIDs in the descriptor record must all be non-zero and record itself
+should be allocated in the structural table associated with the zero key.

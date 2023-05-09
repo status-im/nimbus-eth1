@@ -17,15 +17,16 @@
 {.push raises: [].}
 
 import
+  std/tables,
   eth/[common, trie/nibbles],
+  stew/results,
   ../../sync/snap/range_desc,
   ./aristo_error
 
 type
   VertexID* = distinct uint64      ## Tip of edge towards child, also table key
 
-  NodeType* = enum                 ## Type of Patricia Trie node
-    Dummy
+  VertexType* = enum               ## Type of Patricia Trie node
     Leaf
     Extension
     Branch
@@ -35,46 +36,34 @@ type
     AccountData
 
   PayloadRef* = ref object
-    case kind*: PayloadType
+    case pType*: PayloadType
     of BlobData:
       blob*: Blob                  ## Opaque data value reference
     of AccountData:
       account*: Account            ## Expanded accounting data
 
-  NodeRef* = ref object
+  VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
-    case kind*: NodeType
-    of Dummy:
-      reason*: AristoError         ## Empty record, can be used error signalling
+    case vType*: VertexType
     of Leaf:
       lPfx*: NibblesSeq            ## Portion of path segment
       lData*: PayloadRef           ## Reference to data payload
     of Extension:
       ePfx*: NibblesSeq            ## Portion of path segment
       eVtx*: VertexID              ## Edge to vertex with ID `eVtx`
-      eKey*: NodeKey               ## Hash value (if any) or temporary key
     of Branch:
       bVtx*: array[16,VertexID]    ## Edge list with vertex IDs
-      bKey*: array[16,NodeKey]     ## Merkle hashes
-      #
-      # Paraphrased comment from Andri's `stateless/readme.md` file in chapter
-      # `Deviation from yellow paper`, (also found here
-      #      github.com/status-im/nimbus-eth1
-      #         /tree/master/stateless#deviation-from-yellow-paper)
-      # [..] In the Yellow Paper, the 17th elem of the branch node can contain
-      # a value. But it is always empty in a real Ethereum state trie. The
-      # block witness spec also ignores this 17th elem when encoding or
-      # decoding a branch node. This can happen because in a Ethereum secure
-      # hexary trie, every keys have uniform length of 32 bytes or 64 nibbles.
-      # With the absence of the 17th element, a branch node will never contain
-      # a leaf value.
-      #
-      # => data value omitted as it will not be used
+
+  NodeRef* = ref object of VertexRef
+    ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
+    ## with a structural `VertexRef` type object.
+    error*: AristoError            ## Can be used for error signalling
+    key*: array[16,NodeKey]        ## Merkle hash(es) for Branch & Extension vtx
 
   PathStep* = object
     ## For constructing a tree traversal path
-    key*: NodeKey                  ## Node label
-    node*: NodeRef                 ## Referes to data record
+    # key*: NodeKey                ## Node label ??
+    node*: VertexRef               ## Referes to data record
     nibble*: int8                  ## Branch node selector (if any)
     depth*: int                    ## May indicate path length (typically 64)
 
@@ -87,7 +76,7 @@ type
     ## Temporarily stashed leaf data (as for an account.) Proper records
     ## have non-empty payload. Records with empty payload are administrative
     ## items, e.g. lower boundary records.
-    pathTag*: NodeTag              ## Patricia Trie key path
+    pathTag*: NodeTag              ## `Patricia Trie` key path
     nodeVtx*: VertexID             ## Table lookup vertex ID (if any)
     payload*: PayloadRef           ## Reference to data payload
 
@@ -97,20 +86,22 @@ type
       ## function can be seen as the persistent alternative to ``tab[]` on
       ## a `HexaryTreeDbRef` descriptor.
 
-  AristoDbRef* = ref object
+  AristoDbRef* = ref object of RootObj
     ## Hexary trie plus helper structures
-    tab*: Table[VertexID,NodeRef]  ## Vertex table making up trie
+    sTab*: Table[VertexID,NodeRef] ## Structural vertex table making up a trie
+    kMap*: Table[VertexID,NodeKey] ## Merkle hash key mapping
+    pAmk*: Table[NodeKey,VertexID] ## Reverse mapper for data import
     refGen*: seq[VertexID]         ## Unique key generator
 
     # Debugging data below, might go away in future
-    xMap*: Table[NodeKey,VertexID] ## Mapper for pretty printing
+    xMap*: Table[NodeKey,VertexID] ## Mapper for pretty printing, extends `pAmk`
 
 static:
   # Not that there is no doubt about this ...
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
 
 # ------------------------------------------------------------------------------
-# Public constructor (or similar)
+# Public functions for `VertexID` management
 # ------------------------------------------------------------------------------
 
 proc new*(T: type VertexID; db: AristoDbRef): T =
@@ -118,8 +109,8 @@ proc new*(T: type VertexID; db: AristoDbRef): T =
   ## entry *ID0* has the property that any other *ID* larger *ID0* is also not
   ## not used on the databse.
   if db.refGen.len == 0:
-    db.refGen = @[2u64.VertexID]
-    return 1u64.VertexID
+    db.refGen = @[2.VertexID]
+    return 1.VertexID
   result = db.refGen[^1]
   if db.refGen.len == 1:
     db.refGen = @[(result.uint64 + 1).VertexID]
@@ -131,7 +122,8 @@ proc peek*(T: type VertexID; db: AristoDbRef): T =
   ## would be returned by the `new()` function.
   if db.refGen.len == 0: 1u64 else: db.refGen[^1]
 
-proc dispose*(db: AristoDbRef; vtxID: VertexID) =
+
+proc dispose*(db: var AristoDbRef; vtxID: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
   if db.refGen.len == 0:
@@ -154,15 +146,15 @@ proc `$`*(a: VertexID): string = $a.uint64
 # ------------------------------------------------------------------------------
 
 proc `==`*(a, b: PayloadRef): bool =
-  ## Beware, potentially deep comparison
+  ## Beware, potential deep comparison
   if a.isNil:
     return b.isNil
   if b.isNil:
     return false
   if unsafeAddr(a) != unsafeAddr(b):
-    if a.kind != b.kind:
+    if a.pType != b.pType:
       return false
-    case a.kind:
+    case a.pType:
     of BlobData:
       if a.blob != b.blob:
         return false
@@ -171,29 +163,42 @@ proc `==`*(a, b: PayloadRef): bool =
         return false
   true
 
-proc `==`*(a, b: NodeRef): bool =
-  ## Beware, potentially deep comparison
+proc `==`*(a, b: VertexRef): bool =
+  ## Beware, potential deep comparison
   if a.isNil:
     return b.isNil
   if b.isNil:
     return false
-  if unsafeAddr(a) != unsafeAddr(b):
-    if a.kind != b.kind:
+  if unsafeAddr(a[]) != unsafeAddr(b[]):
+    if a.vType != b.vType:
       return false
-    case a.kind:
-    of Dummy:
-      if a.reason != b.reason:
-        return false
+    case a.vType:
     of Leaf:
       if a.lPfx != b.lPfx or a.lData != b.lData:
         return false
     of Extension:
-      if a.ePfx != b.ePfx or a.eVtx != b.eVtx or a.eKey != b.eKey:
+      if a.ePfx != b.ePfx or a.eVtx != b.eVtx:
         return false
     of Branch:
-      for n in 0 .. 15:
-        if a.bVtx[n] != b.bVtx[n] or a.bKey[n] != b.bKey[n]:
+      for n in 0..15:
+        if a.bVtx[n] != b.bVtx[n]:
           return false
+  true
+
+proc `==`*(a, b: NodeRef): bool =
+  ## Beware, potential deep comparison
+  if a.VertexRef != b.VertexRef:
+    return false
+  case a.vType:
+  of Extension:
+    if a.key[0] != b.key[0]:
+      return false
+  of Branch:
+    for n in 0..15:
+      if a.bVtx[n] != 0.VertexID and a.key[n] != b.key[n]:
+        return false
+  else:
+    discard
   true
 
 # ------------------------------------------------------------------------------
@@ -203,9 +208,12 @@ proc `==`*(a, b: NodeRef): bool =
 proc isZero*[T: NodeKey|VertexID](a: T): bool =
   a == typeof(a).default
 
+proc isError*(a: NodeRef): bool =
+  a.error != AristoError(0)
+
 proc convertTo*(payload: PayloadRef; T: type Blob): T =
   ## Probably lossy conversion as the storage type `kind` gets missing
-  case payload.kind:
+  case payload.pType:
   of BlobData:
     result = payload.blob
   of AccountData:
