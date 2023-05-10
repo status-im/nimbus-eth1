@@ -121,18 +121,18 @@ const
 
 type
   ToContentIdHandler* =
-    proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [Defect], gcsafe.}
+    proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
 
   DbGetHandler* =
     proc(
       contentKey: ByteList,
-      contentId: ContentId): results.Opt[seq[byte]] {.raises: [Defect], gcsafe.}
+      contentId: ContentId): results.Opt[seq[byte]] {.raises: [], gcsafe.}
 
   DbStoreHandler* =
     proc(
       contentKey: ByteList,
       contentId: ContentId,
-      content: seq[byte]) {.raises: [Defect], gcsafe.}
+      content: seq[byte]) {.raises: [], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 

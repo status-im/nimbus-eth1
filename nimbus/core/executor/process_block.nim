@@ -40,7 +40,7 @@ func gwei(n: uint64): UInt256 =
 proc processTransactions*(vmState: BaseVMState;
                           header: BlockHeader;
                           transactions: seq[Transaction]): Result[void, string]
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    {.gcsafe, raises: [CatchableError].} =
   vmState.receipts = newSeq[Receipt](transactions.len)
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in transactions:

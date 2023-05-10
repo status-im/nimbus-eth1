@@ -1,6 +1,6 @@
 # Nimbus - Rapidly converge on and track the canonical chain head of each peer
 #
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -70,7 +70,7 @@ import
   ".."/[protocol, sync_desc, types],
   ../snap/worker_desc
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "snap-pivot"

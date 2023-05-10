@@ -270,13 +270,13 @@ proc init*(
     return true
 
 proc statelessInit*(
-      vmState:      BaseVMState;
-      parent:       BlockHeader;     ## parent header, account sync position
-      header:       BlockHeader;     ## header with tx environment data fields
-      com:          CommonRef;       ## block chain config
-      asyncFactory: AsyncOperationFactory;
-      tracerFlags:  set[TracerFlags] = {}): bool
-    {.gcsafe, raises: [Defect,CatchableError].} =
+    vmState:      BaseVMState;
+    parent:       BlockHeader;     ## parent header, account sync position
+    header:       BlockHeader;     ## header with tx environment data fields
+    com:          CommonRef;       ## block chain config
+    asyncFactory: AsyncOperationFactory;
+    tracerFlags:  set[TracerFlags] = {}): bool
+    {.gcsafe, raises: [CatchableError].} =
   var tracer: TransactionTracer
   tracer.initTracer(tracerFlags)
   vmState.init(

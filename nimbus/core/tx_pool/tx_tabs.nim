@@ -471,7 +471,7 @@ iterator incNonce*(nonceList: TxStatusNonceRef;
 
 iterator decNonce*(nonceList: TxSenderNonceRef;
                    nonceFrom = AccountNonce.high): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe, raises: [KeyError].} =
   ## Similar to `incNonce()` but visiting items in reverse order.
   var rc = nonceList.le(nonceFrom)
   while rc.isOk:

@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [CatchableError].} =
   ## Change/update the status of the transaction item.
   if status != item.status:
     discard xp.txDB.reassign(item, status)

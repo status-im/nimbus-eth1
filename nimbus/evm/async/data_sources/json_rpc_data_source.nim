@@ -13,12 +13,12 @@ import
   eth/p2p,
   eth/p2p/rlpx,
   eth/p2p/private/p2p_types,
-  ../../../sync/protocol,  
+  ../../../sync/protocol,
   ../../../db/[db_chain, distinct_tries, incomplete_db, storage_types],
   ../data_sources
 
 when defined(legacy_eth66_enabled):
-  import 
+  import
     ../../../sync/protocol/eth66 as proto_eth66
   from ../../../sync/protocol/eth66 import getNodeData
 
@@ -40,10 +40,10 @@ var durationSpentDoingFetches*: times.Duration
 var fetchCounter*: int
 
 
-func toHash*(s: string): Hash256 {.raises: [Defect, ValueError].} =
+func toHash*(s: string): Hash256 {.raises: [ValueError].} =
   hexToPaddedByteArray[32](s).toHash
 
-func toHash*(h: BlockHash): Hash256 {.raises: [Defect, ValueError].} =
+func toHash*(h: BlockHash): Hash256 {.raises: [ValueError].} =
   distinctBase(h).toHash
 
 func toWeb3BlockHash*(h: Hash256): BlockHash =
@@ -132,7 +132,7 @@ proc parseBlockBodyAndFetchUncles(rpcClient: RpcClient, r: JsonNode): Future[Blo
     let uncleHeader = await fetchBlockHeaderWithHash(rpcClient, uncleHash)
     body.uncles.add(uncleHeader)
   return body
-  
+
 proc fetchBlockHeaderAndBodyWithHash*(rpcClient: RpcClient, h: Hash256): Future[(BlockHeader, BlockBody)] {.async.} =
   let t0 = now()
   let r = request("eth_getBlockByHash", %[%h.prefixHex, %true], some(rpcClient))
@@ -183,7 +183,7 @@ proc fetchAccountAndSlots*(rpcClient: RpcClient, address: EthAddress, slots: seq
   debug "About to call eth_getProof", address=address, slots=slots, blockNumber=blockNumber
   let proofResponse: ProofResponse = await rpcClient.eth_getProof(a, slots, bid)
   debug "Received response to eth_getProof", proofResponse=proofResponse
-  
+
   let acc = Account(
     nonce: distinctBase(proofResponse.nonce),
     balance: proofResponse.balance,
@@ -204,11 +204,6 @@ proc fetchCode*(client: RpcClient, blockNumber: BlockNumber, address: EthAddress
   durationSpentDoingFetches += now() - t0
   fetchCounter += 1
   return fetchedCode
-
-
-
-
-
 
 const bytesLimit = 2 * 1024 * 1024
 const maxNumberOfPeersToAttempt = 3
@@ -268,12 +263,6 @@ proc fetchNodes(peerPool: PeerPool, stateRoot: Hash256, paths: seq[SnapTriePaths
   let nodes: seq[seq[byte]] = completedAttempt.read
   info("AARDVARK: fetchNodes received nodes", nodes)
   return nodes
-
-
-
-
-
-
 
 proc verifyFetchedAccount(stateRoot: Hash256, address: EthAddress, acc: Account, accProof: seq[seq[byte]]): Result[void, string] =
   let accKey = toSeq(keccakHash(address).data)
@@ -347,7 +336,7 @@ proc assertThatWeHaveStoredAccount(trie: AccountsTrie, address: EthAddress, fetc
     doAssert false, "account didn't come out the same"
   doAssert(trie.hasAllNodesForAccount(address), "Can I check the account this way, too?")
 
-  
+
 proc verifyFetchedSlot(accountStorageRoot: Hash256, slot: UInt256, fetchedVal: UInt256, storageMptNodes: seq[seq[byte]]): Result[void, string] =
   if storageMptNodes.len == 0:
     # I think an empty storage proof is okay; I see lots of these
@@ -395,7 +384,6 @@ proc raiseExceptionIfError[V, E](whatAreWeVerifying: V, r: Result[void, E]) =
   if r.isErr:
     error("async code failed to verify", whatAreWeVerifying=whatAreWeVerifying, err=r.error)
     raise newException(CatchableError, "async code failed to verify: " & $(whatAreWeVerifying) & ", error is: " & $(r.error))
-  
 
 const shouldDoUnnecessarySanityChecks = true
 
@@ -455,7 +443,7 @@ proc ifNecessaryGetAccountAndSlots*(client: RpcClient, db: TrieDatabaseRef, bloc
 proc ifNecessaryGetCode*(client: RpcClient, db: TrieDatabaseRef, blockNumber: BlockNumber, stateRoot: Hash256, address: EthAddress, justChecking: bool, newStateRootForSanityChecking: Hash256): Future[void] {.async.} =
   await ifNecessaryGetAccountAndSlots(client, db, blockNumber, stateRoot, address, @[], false, false, newStateRootForSanityChecking)  # to make sure we've got the codeHash
   let trie = initAccountsTrie(db, stateRoot, false)  # important for sanity checks
-  
+
   let acc = ifNodesExistGetAccount(trie, address).get
   let desiredCodeHash = acc.codeHash
 
@@ -481,10 +469,6 @@ proc ifNecessaryGetBlockHeaderByNumber*(client: RpcClient, chainDB: ChainDBRef, 
       if shouldDoUnnecessarySanityChecks:
         assertThatWeHaveStoredBlockHeader(chainDB, blockNumber, fetchedHeader)
 
-
-
-
-
 # Used in asynchronous on-demand-data-fetching mode.
 proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: bool): AsyncDataSource =
   AsyncDataSource(
@@ -505,7 +489,7 @@ proc realAsyncDataSource*(peerPool: PeerPool, client: RpcClient, justChecking: b
     #fetchNodes: (proc(stateRoot: Hash256, paths: seq[seq[seq[byte]]], nodeHashes: seq[Hash256]): Future[seq[seq[byte]]] {.async.} =
     #  return await fetchNodes(peerPool, stateRoot, paths, nodeHashes)
     #),
-    
+
     fetchBlockHeaderWithHash: (proc(h: Hash256): Future[BlockHeader] {.async.} =
       return await fetchBlockHeaderWithHash(client, h)
     ),

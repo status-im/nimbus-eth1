@@ -8,7 +8,7 @@ import
   ".."/[utils, chain_config],
   ../p2p/chain
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 logScope:
   topics = "skeleton"
@@ -99,7 +99,7 @@ template blockHeight(sk: SkeletonRef): untyped =
   sk.chainDB.currentBlock
 
 # Reads the SkeletonProgress from db
-proc readSyncProgress(sk: SkeletonRef) {.raises: [Defect, RlpError].} =
+proc readSyncProgress(sk: SkeletonRef) {.raises: [RlpError].} =
   let rawProgress = sk.get(skeletonProgressKey())
   if rawProgress.len == 0: return
   sk.subchains = rlp.decode(rawProgress, SkeletonProgress)
@@ -113,7 +113,7 @@ proc writeSyncProgress(sk: SkeletonRef) =
   let encodedProgress = rlp.encode(sk.subchains)
   sk.put(skeletonProgressKey(), encodedProgress)
 
-proc open*(sk: SkeletonRef){.raises: [Defect, RlpError].}  =
+proc open*(sk: SkeletonRef){.raises: [RlpError].}  =
   sk.readSyncProgress()
   sk.started = getTime()
 
@@ -121,7 +121,7 @@ proc open*(sk: SkeletonRef){.raises: [Defect, RlpError].}  =
 proc getHeader*(sk: SkeletonRef,
                number: BlockNumber,
                output: var BlockHeader,
-               onlySkeleton: bool = false): bool {.raises: [Defect, RlpError].} =
+               onlySkeleton: bool = false): bool {.raises: [RlpError].} =
   let rawHeader = sk.get(skeletonBlockKey(number))
   if rawHeader.len != 0:
     output = rlp.decode(rawHeader, BlockHeader)
@@ -134,7 +134,7 @@ proc getHeader*(sk: SkeletonRef,
 # Gets a skeleton block from the db by hash
 proc getHeaderByHash*(sk: SkeletonRef,
                       hash: Hash256,
-                      output: var BlockHeader): bool {.raises: [Defect, RlpError].} =
+                      output: var BlockHeader): bool {.raises: [RlpError].} =
   let rawNumber = sk.get(skeletonBlockHashToNumberKey(hash))
   if rawNumber.len == 0:
     return false
@@ -164,9 +164,9 @@ proc putBlock(sk: SkeletonRef, header: BlockHeader, txs: openArray[Transaction])
   )
   sk.put(skeletonTransactionKey(header.blockNumber), rlp.encode(txs))
 
-proc getTxs(sk: SkeletonRef, number: BlockNumber,
-            output: var seq[Transaction]){.raises: [
-              Defect, CatchableError].} =
+proc getTxs(
+    sk: SkeletonRef, number: BlockNumber,
+    output: var seq[Transaction]) {.raises: [CatchableError].} =
   let rawTxs = sk.get(skeletonTransactionKey(number))
   if rawTxs.len > 0:
     output = rlp.decode(rawTxs, seq[Transaction])
@@ -179,7 +179,7 @@ proc bounds*(sk: SkeletonRef): SkeletonSubchain =
   sk.subchains[0]
 
 # Returns true if the skeleton chain is linked to canonical
-proc isLinked*(sk: SkeletonRef): bool {.raises: [Defect, CatchableError].} =
+proc isLinked*(sk: SkeletonRef): bool {.raises: [CatchableError].} =
   if sk.subchains.len == 0: return false
   let sc = sk.bounds()
 
@@ -195,7 +195,7 @@ proc isLinked*(sk: SkeletonRef): bool {.raises: [Defect, CatchableError].} =
   else:
     raise newException(ErrHeaderNotFound, "isLinked: No header with number=" & $number)
 
-proc trySubChainsMerge(sk: SkeletonRef): bool {.raises: [Defect, RlpError].} =
+proc trySubChainsMerge(sk: SkeletonRef): bool {.raises: RlpError].} =
   var
     merged = false
     edited = false
@@ -249,7 +249,7 @@ proc trySubChainsMerge(sk: SkeletonRef): bool {.raises: [Defect, RlpError].} =
   if edited: sk.writeSyncProgress()
   return merged
 
-proc backStep(sk: SkeletonRef) {.raises: [Defect, RlpError].}=
+proc backStep(sk: SkeletonRef) {.raises: [RlpError].}=
   if sk.skeletonFillCanonicalBackStep <= 0:
     return
 
@@ -285,9 +285,10 @@ proc backStep(sk: SkeletonRef) {.raises: [Defect, RlpError].}=
 # to reconstruct the sync state than to mutate it.
 #
 # @returns true if the chain was reorged
-proc processNewHead(sk: SkeletonRef,
-                    head: BlockHeader,
-                    force = false): bool {.raises: [Defect, RlpError].}  =
+proc processNewHead(
+    sk: SkeletonRef,
+    head: BlockHeader,
+    force = false): bool {.raises: [RlpError].} =
   # If the header cannot be inserted without interruption, return an error for
   # the outer loop to tear down the skeleton sync and restart it
   let number = head.blockNumber
@@ -339,7 +340,7 @@ proc processNewHead(sk: SkeletonRef,
   return false
 
 # Inserts skeleton blocks into canonical chain and runs execution.
-proc fillCanonicalChain*(sk: SkeletonRef) {.raises: [Defect, CatchableError].} =
+proc fillCanonicalChain*(sk: SkeletonRef) {.raises: [CatchableError].} =
   if sk.filling: return
   sk.filling = true
 
@@ -396,8 +397,9 @@ proc fillCanonicalChain*(sk: SkeletonRef) {.raises: [Defect, CatchableError].} =
 
 # Announce and integrate a new head.
 # throws if the new head causes a reorg.
-proc setHead*(sk: SkeletonRef, head: BlockHeader,
-              force = false) {.raises: [Defect, CatchableError].} =
+proc setHead*(
+    sk: SkeletonRef, head: BlockHeader,
+    force = false) {.raises: [CatchableError].} =
   debug "New skeleton head announced",
     number=head.blockNumber,
     hash=short(head.blockHash),
@@ -417,8 +419,8 @@ proc setHead*(sk: SkeletonRef, head: BlockHeader,
 
 # Attempts to get the skeleton sync into a consistent state wrt any
 # past state on disk and the newly requested head to sync to.
-proc initSync*(sk: SkeletonRef, head: BlockHeader) {.raises: [
-                Defect, CatchableError].} =
+proc initSync*(
+    sk: SkeletonRef, head: BlockHeader) {.raises: [CatchableError].} =
   let number = head.blockNumber
 
   if sk.subchains.len == 0:
@@ -488,8 +490,9 @@ proc initSync*(sk: SkeletonRef, head: BlockHeader) {.raises: [
 
 # Writes skeleton blocks to the db by number
 # @returns number of blocks saved
-proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]): int {.raises: [
-                Defect, CatchableError].}=
+proc putBlocks*(
+    sk: SkeletonRef, headers: openArray[BlockHeader]):
+    int {.raises: [CatchableError].} =
   var merged = false
 
   if headers.len > 0:

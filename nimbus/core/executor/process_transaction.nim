@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,9 +34,11 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
   if FkLondon <= fork:
     result = header.baseFee
 
-proc commitOrRollbackDependingOnGasUsed(vmState: BaseVMState, accTx: SavePoint,
-        header: BlockHeader, tx: Transaction,
-        gasBurned: GasInt, priorityFee: GasInt): Result[GasInt, void] {.raises: [Defect, RlpError].} =
+proc commitOrRollbackDependingOnGasUsed(
+    vmState: BaseVMState, accTx: SavePoint,
+    header: BlockHeader, tx: Transaction,
+    gasBurned: GasInt, priorityFee: GasInt):
+    Result[GasInt, void] {.raises: [RlpError].} =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block

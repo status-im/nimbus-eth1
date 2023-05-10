@@ -186,10 +186,10 @@ proc runKeyedQueueRlp(noisy = true) =
 
     block:
       proc append(rw: var RlpWriter; lru: LruCache)
-            {.inline, raises: [Defect,KeyError].} =
+            {.inline, raises: [KeyError].} =
         rw.append((lru.size,lru.q))
       proc read(rlp: var Rlp; Q: type LruCache): Q
-            {.inline, raises: [Defect,KeyError,RlpError].} =
+            {.inline, raises: [KeyError, RlpError].} =
         (result.size, result.q) = rlp.read((type result.size, type result.q))
 
       test "Rlp serialise & load, append":

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,8 +15,8 @@ import
 
 # Use `safeSetTimer` consistently, with a `ref T` argument if including one.
 type
-  SafeCallbackFunc*[T] = proc (objectRef: ref T) {.gcsafe, raises: [Defect].}
-  SafeCallbackFuncVoid* = proc () {.gcsafe, raises: [Defect].}
+  SafeCallbackFunc*[T] = proc (objectRef: ref T) {.gcsafe, raises: [].}
+  SafeCallbackFuncVoid* = proc () {.gcsafe, raises: [].}
 
 proc safeSetTimer*[T](at: Moment, cb: SafeCallbackFunc[T],
                       objectRef: ref T = nil): TimerCallback =

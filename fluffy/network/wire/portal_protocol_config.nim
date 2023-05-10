@@ -54,7 +54,7 @@ proc init*(
   )
 
 proc parseCmdArg*(T: type RadiusConfig, p: string): T
-    {.raises: [Defect, ConfigurationError].} =
+    {.raises: [ConfigurationError].} =
   if p.startsWith("dynamic") and len(p) == 7:
     RadiusConfig(kind: Dynamic)
   elif p.startsWith("static:"):

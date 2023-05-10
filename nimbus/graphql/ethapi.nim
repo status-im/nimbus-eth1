@@ -335,10 +335,7 @@ proc parseU64(node: Node): uint64 =
   for c in node.intVal:
     result = result * 10 + uint64(c.int - '0'.int)
 
-when (NimMajor, NimMinor) < (1, 6):
-  {.pragma: apiRaises, raises: [Defect, CatchableError].}
-else:
-  {.pragma: apiRaises, raises: [].}
+{.pragma: apiRaises, raises: [].}
 
 {.pragma: apiPragma, cdecl, gcsafe, apiRaises, locks:0.}
 {.push hint[XDeclaredButNotUsed]: off.}
