@@ -14,7 +14,8 @@ import
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, eth/[common, keys], chronicles,
   nimcrypto/[ripemd, sha2, utils], bncurve/[fields, groups],
-  ../common/evmforks
+  ../common/evmforks,
+  ./modexp
 
 type
   PrecompileAddresses* = enum
@@ -162,47 +163,6 @@ proc identity*(computation: Computation) =
   computation.output = computation.msg.data
   #trace "Identity precompile", output = computation.output.toHex
 
-proc modExpInternal(computation: Computation, baseLen, expLen, modLen: int, T: type StUint) =
-  template data: untyped {.dirty.} =
-    computation.msg.data
-
-  let
-    base = data.rangeToPadded[:T](96, 95 + baseLen, baseLen)
-    exp = data.rangeToPadded[:T](96 + baseLen, 95 + baseLen + expLen, expLen)
-    modulo = data.rangeToPadded[:T](96 + baseLen + expLen, 95 + baseLen + expLen + modLen, modLen)
-
-  # TODO: specs mentions that we should return in "M" format
-  #       i.e. if Base and exp are uint512 and Modulo an uint256
-  #       we should return a 256-bit big-endian byte array
-
-  # Force static evaluation
-  func zero(): array[T.bits div 8, byte] {.compileTime.} = discard
-  func one(): array[T.bits div 8, byte] {.compileTime.} =
-    when cpuEndian == bigEndian:
-      result[0] = 1
-    else:
-      result[^1] = 1
-
-  # Start with EVM special cases
-  let output = if modulo <= 1:
-                  # If m == 0: EVM returns 0.
-                  # If m == 1: we can shortcut that to 0 as well
-                  zero()
-              elif exp.isZero():
-                  # If 0^0: EVM returns 1
-                  # For all x != 0, x^0 == 1 as well
-                  one()
-              else:
-                  powmod(base, exp, modulo).toByteArrayBE
-
-  # maximum output len is the same as modLen
-  # if it less than modLen, it will be zero padded at left
-  if output.len >= modLen:
-    computation.output = @(output[^modLen..^1])
-  else:
-    computation.output = newSeq[byte](modLen)
-    computation.output[^output.len..^1] = output[0..^1]
-
 proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork): GasInt =
   template data: untyped {.dirty.} =
     c.msg.data
@@ -247,8 +207,6 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork):
   let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
-  # let gasFee = gasCalc(mulComplexity, GasQuadDivisor)
-
   if gasFee > high(GasInt).u256:
     raise newException(OutOfGas, "modExp gas overflow")
 
@@ -282,21 +240,28 @@ proc modExp*(c: Computation, fork: EVMFork = FkByzantium) =
     c.output = @[]
     return
 
-  let maxBytes = max(baseLen, max(expLen, modLen))
-  if maxBytes <= 32:
-    c.modExpInternal(baseLen, expLen, modLen, UInt256)
-  elif maxBytes <= 64:
-    c.modExpInternal(baseLen, expLen, modLen, StUint[512])
-  elif maxBytes <= 128:
-    c.modExpInternal(baseLen, expLen, modLen, StUint[1024])
-  elif maxBytes <= 256:
-    c.modExpInternal(baseLen, expLen, modLen, StUint[2048])
-  elif maxBytes <= 512:
-    c.modExpInternal(baseLen, expLen, modLen, StUint[4096])
-  elif maxBytes <= 1024:
-    c.modExpInternal(baseLen, expLen, modLen, StUint[8192])
+  const maxSize = int32.high.u256
+  if baseL > maxSize or expL > maxSize or modL > maxSize:
+    raise newException(EVMError, "The Nimbus VM doesn't support oversized modExp operand")
+
+  # TODO:
+  # add EVM special case:
+  # - modulo <= 1: return zero
+  # - exp == zero: return one
+
+  let output = modExp(
+    data.rangeToPadded(96, baseLen),
+    data.rangeToPadded(96 + baseLen, expLen),
+    data.rangeToPadded(96 + baseLen + expLen, modLen)
+  )
+
+  # maximum output len is the same as modLen
+  # if it less than modLen, it will be zero padded at left
+  if output.len >= modLen:
+    c.output = @(output[^modLen..^1])
   else:
-    raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
+    c.output = newSeq[byte](modLen)
+    c.output[^output.len..^1] = output[0..^1]
 
 proc bn256ecAdd*(computation: Computation, fork: EVMFork = FkByzantium) =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul

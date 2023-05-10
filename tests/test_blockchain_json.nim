@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, os, tables, strutils, options],
+  std/[json, os, tables, strutils, options, times],
   unittest2,
   eth/rlp, eth/trie/trie_defs, eth/common/eth_types_rlp,
   stew/byteutils,
@@ -421,6 +421,8 @@ proc blockchainJsonMain*(debugMode = false) =
 when isMainModule:
   var message: string
 
+  let start = getTime()
+
   ## Processing command line arguments
   if test_config.processArguments(message) != test_config.Success:
     echo message
@@ -431,6 +433,8 @@ when isMainModule:
       quit(QuitSuccess)
 
   blockchainJsonMain(true)
+  let elpd = getTime() - start
+  echo "TIME: ", elpd
 
 # lastBlockHash -> every fixture has it, hash of a block header
 # genesisRLP -> NOT every fixture has it, rlp bytes of genesis block header

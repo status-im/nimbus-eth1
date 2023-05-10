@@ -217,3 +217,8 @@
 	url = https://github.com/status-im/portal-spec-tests.git
 	ignore = untracked
 	branch = master
+[submodule "vendor/libtommath"]
+	path = vendor/libtommath
+	url = https://github.com/libtom/libtommath
+	ignore = untracked
+	branch = develop

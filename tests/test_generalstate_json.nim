@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, os, sets, options],
+  std/[strutils, tables, json, os, sets, options, times],
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
@@ -192,6 +192,8 @@ proc generalStateJsonMain*(debugMode = false) =
 when isMainModule:
   var message: string
 
+  let start = getTime()
+
   ## Processing command line arguments
   if processArguments(message) != Success:
     echo message
@@ -202,3 +204,5 @@ when isMainModule:
       quit(QuitSuccess)
 
   generalStateJsonMain(true)
+  let elpd = getTime() - start
+  echo "TIME: ", elpd

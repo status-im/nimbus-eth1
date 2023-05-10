@@ -78,6 +78,16 @@ proc rangeToPadded*[T: StUint](x: openArray[byte], first, last, size: int): T =
     allowPadding = true
   )
 
+proc rangeToPadded*(x: openArray[byte], first, size: int): seq[byte] =
+  let last = first + size - 1
+  let lo = max(0, first)
+  let hi = min(min(x.high, last), (lo+size)-1)
+
+  result = newSeq[byte](size)
+  if not(lo <= hi):
+    return # 0
+  result[0..hi-lo] = x.toOpenArray(lo, hi)
+
 # calculates the memory size required for a step
 func calcMemSize*(offset, length: int): int {.inline.} =
   if length.isZero: return 0
