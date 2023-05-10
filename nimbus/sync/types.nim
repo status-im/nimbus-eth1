@@ -69,7 +69,7 @@ proc to*(bh: BlockHash; T: type HashOrNum): T =
 # ------------------------------------------------------------------------------
 
 proc read*(rlp: var Rlp, T: type BlockHash): T
-    {.gcsafe, raises: [Defect,RlpError]} =
+    {.gcsafe, raises: [RlpError]} =
   ## RLP mixin reader
   rlp.read(Hash256).T
 

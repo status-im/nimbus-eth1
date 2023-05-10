@@ -230,7 +230,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
-    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [Defect].}
+    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [].}
     logMetrics = proc(udata: pointer) =
       {.gcsafe.}:
         let registry = defaultRegistry

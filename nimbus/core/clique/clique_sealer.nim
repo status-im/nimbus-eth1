@@ -18,7 +18,7 @@
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ##
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 import
   std/[sequtils, times],

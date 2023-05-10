@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -193,7 +193,7 @@ proc append*(rw: var RlpWriter; data: EcRecover)
   rw.append((data.size,data.q))
 
 proc read*(rlp: var Rlp; Q: type EcRecover): Q
-    {.raises: [Defect,KeyError].} =
+    {.raises: [KeyError].} =
   ## Generic support for `rlp.decode()` for loading the cache from a
   ## serialised data stream.
   (result.size, result.q) = rlp.read((type result.size, type result.q))

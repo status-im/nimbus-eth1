@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -15,15 +15,16 @@ import
 proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =
   rng.generateBytes(length).toHex()
 
-# Before running the suit, there need to be two instances of utp_test_app running
-# under provided ports (9042, 9041).
+# Before running the test suite, there need to be two instances of the
+# utp_test_app running under provided ports (9042, 9041).
 # Those could be launched locally by running either
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
 # ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
 # or
-# 1. running in docker dir: docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
-# 2. running in docker dir: SCENARIO="scenario name and params " docker-compose up
-procSuite "Utp integration tests":
+# running from docker dir:
+# 1. docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
+# 2. SCENARIO="scenario name and params " docker-compose up
+procSuite "uTP integration tests":
   let rng = newRng()
   let clientContainerAddress = "127.0.0.1"
   let clientContainerPort = Port(9042)
@@ -32,11 +33,12 @@ procSuite "Utp integration tests":
   let serverContainerPort = Port(9041)
 
   type
-    FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [Defect].}
+    FutureCallback[A] = proc (): Future[A] {.gcsafe, raises: [].}
   # combinator which repeatedly calls passed closure until returned future is
   # successfull
   # TODO: currently works only for non void types
-  proc repeatTillSuccess[A](f: FutureCallback[A], maxTries: int = 20): Future[A] {.async.} =
+  proc repeatTillSuccess[A](
+      f: FutureCallback[A], maxTries: int = 20): Future[A] {.async.} =
     var i = 0
     while true:
       try:
@@ -58,13 +60,15 @@ procSuite "Utp integration tests":
     clientId: NodeId,
     clientConnectionId: uint16): Option[Skey] =
     let conns: seq[SKey] =
-      connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and key.nodeId == clientId)
+      connections.filter((key:Skey) => key.id == (clientConnectionId + 1) and
+        key.nodeId == clientId)
     if len(conns) == 0:
       none[Skey]()
     else:
       some[Skey](conns[0])
 
-  proc setupTest(): Future[(RpcHttpClient, NodeInfo, RpcHttpClient, NodeInfo)] {.async.} =
+  proc setupTest():
+      Future[(RpcHttpClient, NodeInfo, RpcHttpClient, NodeInfo)] {.async.} =
     let client = newRpcHttpClient()
     let server = newRpcHttpClient()
 
@@ -85,9 +89,12 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
-      maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
+      clientConnectionKey = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() =>
+        server.utp_get_connections())
+      maybeServerConnectionKey = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey.id)
 
     check:
       maybeServerConnectionKey.isSome()
@@ -104,15 +111,18 @@ procSuite "Utp integration tests":
       readData == bytesToWrite
 
   asyncTest "Transfer 100k bytes of data over utp stream from server to client":
-    # In classic uTP this would not be possible, as when uTP works over udp
-    # client needs to transfer first, but when working over discv5 it should be possible
-    # to transfer data from server to client from the start
+    # In classic uTP this would not be possible, as when uTP works over UDP the
+    # client needs to transfer first, but when working over discv5 it should be
+    # possible to transfer data from server to client from the start.
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 100000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
-      maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
+      clientConnectionKey = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() =>
+        server.utp_get_connections())
+      maybeServerConnectionKey = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey.id)
 
     check:
       maybeServerConnectionKey.isSome()
@@ -132,9 +142,12 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
     let
-      clientConnectionKey = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
-      maybeServerConnectionKey = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey.id)
+      clientConnectionKey = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() =>
+        server.utp_get_connections())
+      maybeServerConnectionKey = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey.id)
 
     check:
       maybeServerConnectionKey.isSome()
@@ -162,14 +175,21 @@ procSuite "Utp integration tests":
     let (client, clientInfo, server, serverInfo) = await setupTest()
     let numOfBytes = 10000
     let
-      clientConnectionKey1 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      clientConnectionKey2 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      clientConnectionKey3 = await repeatTillSuccess(() => client.utp_connect(serverInfo.enr))
-      serverConnections = await repeatTillSuccess(() => server.utp_get_connections())
+      clientConnectionKey1 = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      clientConnectionKey2 = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      clientConnectionKey3 = await repeatTillSuccess(() =>
+        client.utp_connect(serverInfo.enr))
+      serverConnections = await repeatTillSuccess(() =>
+        server.utp_get_connections())
 
-      maybeServerConnectionKey1 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey1.id)
-      maybeServerConnectionKey2 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey2.id)
-      maybeServerConnectionKey3 = serverConnections.findServerConnection(clientInfo.nodeId, clientConnectionKey3.id)
+      maybeServerConnectionKey1 = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey1.id)
+      maybeServerConnectionKey2 = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey2.id)
+      maybeServerConnectionKey3 = serverConnections.findServerConnection(
+        clientInfo.nodeId, clientConnectionKey3.id)
 
     check:
       maybeServerConnectionKey1.isSome()

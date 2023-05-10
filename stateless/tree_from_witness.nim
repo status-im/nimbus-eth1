@@ -194,7 +194,7 @@ proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey
 
 proc buildTree*(t: var TreeBuilder): KeccakHash
-  {.raises: [ContractCodeError, Defect, IOError, ParsingError, Exception].} =
+    {.raises: [ContractCodeError, IOError, ParsingError, Exception].} =
   let version = t.safeReadByte().int
   if version != BlockWitnessVersion.int:
     raise newException(ParsingError, "Wrong block witness version")
@@ -214,8 +214,9 @@ proc buildTree*(t: var TreeBuilder): KeccakHash
 
 # after the block witness spec mention how to split the big tree into
 # chunks, modify this buildForest into chunked witness tree builder
-proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
-  {.raises: [ContractCodeError, Defect, IOError, ParsingError, Exception].} =
+proc buildForest*(
+    t: var TreeBuilder): seq[KeccakHash]
+    {.raises: [ContractCodeError, IOError, ParsingError, Exception].} =
   let version = t.safeReadByte().int
   if version != BlockWitnessVersion.int:
     raise newException(ParsingError, "Wrong block witness version")

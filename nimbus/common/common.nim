@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2023 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -90,7 +90,9 @@ type
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc hardForkTransition*(com: CommonRef, forkDeterminer: ForkDeterminationInfo) {.gcsafe, raises: [CatchableError].}
+proc hardForkTransition*(
+  com: CommonRef, forkDeterminer: ForkDeterminationInfo)
+  {.gcsafe, raises: [CatchableError].}
 
 func cliquePeriod*(com: CommonRef): int
 
@@ -245,11 +247,13 @@ proc clone*(com: CommonRef): CommonRef =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func toHardFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
+func toHardFork*(
+    com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
-proc hardForkTransition(com: CommonRef, forkDeterminer: ForkDeterminationInfo)
-      {.gcsafe, raises: [Defect, CatchableError].} =
+proc hardForkTransition(
+    com: CommonRef, forkDeterminer: ForkDeterminationInfo)
+    {.gcsafe, raises: [CatchableError].} =
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
   ## at that time, TD is no longer needed to find a fork
@@ -259,23 +263,28 @@ proc hardForkTransition(com: CommonRef, forkDeterminer: ForkDeterminationInfo)
   com.currentFork = fork
   com.consensusTransition(fork)
 
-proc hardForkTransition*(com: CommonRef,
-                         number: BlockNumber,
-                         td: Option[DifficultyInt],
-                         time: Option[EthTime])
-      {.gcsafe, raises: [Defect, CatchableError].} =
-  com.hardForkTransition(ForkDeterminationInfo(blockNumber: number, time: time, td: td))
+proc hardForkTransition*(
+    com: CommonRef,
+    number: BlockNumber,
+    td: Option[DifficultyInt],
+    time: Option[EthTime])
+    {.gcsafe, raises: [CatchableError].} =
+  com.hardForkTransition(ForkDeterminationInfo(
+    blockNumber: number, time: time, td: td))
 
-proc hardForkTransition*(com: CommonRef,
-                         parentHash: Hash256,
-                         number: BlockNumber,
-                         time: Option[EthTime])
-      {.gcsafe, raises: [Defect, CatchableError].} =
+proc hardForkTransition*(
+    com: CommonRef,
+    parentHash: Hash256,
+    number: BlockNumber,
+    time: Option[EthTime])
+    {.gcsafe, raises: [CatchableError].} =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
-proc hardForkTransition*(com: CommonRef, header: BlockHeader)
-                        {.gcsafe, raises: [Defect, CatchableError].} =
-  com.hardForkTransition(header.parentHash, header.blockNumber, some(header.timestamp))
+proc hardForkTransition*(
+    com: CommonRef, header: BlockHeader)
+    {.gcsafe, raises: [CatchableError].} =
+  com.hardForkTransition(
+    header.parentHash, header.blockNumber, some(header.timestamp))
 
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork

@@ -205,7 +205,7 @@ type
 
 proc writeHeaderRecord*(
     writer: var JsonWriter, header: BlockHeader)
-    {.raises: [IOError, Defect].} =
+    {.raises: [IOError].} =
   let
     dataRecord = HeaderRecord(
       header: rlp.encode(header).to0xHex(),
@@ -218,7 +218,7 @@ proc writeHeaderRecord*(
 proc writeBlockRecord*(
     writer: var JsonWriter,
     header: BlockHeader, body: BlockBody, receipts: seq[Receipt])
-    {.raises: [IOError, Defect].} =
+    {.raises: [IOError].} =
   let
     dataRecord = BlockRecord(
       header: rlp.encode(header).to0xHex(),

@@ -232,14 +232,14 @@ type
       discard
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
 
 func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type enr.Record, p: string): T
-    {.raises: [Defect, ConfigurationError].} =
+    {.raises: [ConfigurationError].} =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
@@ -247,7 +247,7 @@ proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type Node, p: string): T
-    {.raises: [Defect, ConfigurationError].} =
+    {.raises: [ConfigurationError].} =
   var record: enr.Record
   if not fromURI(record, p):
     raise newException(ConfigurationError, "Invalid ENR")
@@ -265,7 +265,7 @@ proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type PrivateKey, p: string): T
-    {.raises: [Defect, ConfigurationError].} =
+    {.raises: [ConfigurationError].} =
   try:
     result = PrivateKey.fromHex(p).tryGet()
   except CatchableError:
@@ -275,7 +275,7 @@ proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type ClientConfig, p: string): T
-      {.raises: [Defect, ConfigurationError].} =
+      {.raises: [ConfigurationError].} =
   let uri = parseUri(p)
   if (uri.scheme == "http" or uri.scheme == "https"):
     getHttpClientConfig(p)
