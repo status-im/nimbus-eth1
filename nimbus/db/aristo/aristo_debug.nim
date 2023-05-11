@@ -130,12 +130,12 @@ proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
     of Leaf:
       result &= $nd.lPfx & "," & nd.lData.pp(db)
     of Extension:
-      result &= $nd.ePfx & "," & nd.eVtx.ppVid
+      result &= $nd.ePfx & "," & nd.eVid.ppVid
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVtx[n].isZero:
-          result &= nd.bVtx[n].ppVid
+        if not nd.bVid[n].isZero:
+          result &= nd.bVid[n].ppVid
         result &= ","
       result[^1] = ']'
     result &= ")"
@@ -152,19 +152,19 @@ proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
       result &= $nd.lPfx & "," & nd.lData.pp(db)
 
     of Extension:
-      result &= $nd.ePfx & "," & nd.eVtx.ppVid & "," & nd.key[0].ppKey
+      result &= $nd.ePfx & "," & nd.eVid.ppVid & "," & nd.key[0].ppKey
 
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
-          result &= nd.bVtx[n].ppVid
-        result &= db.keyVidUpdate(nd.key[n], nd.bVtx[n]) & ","
+        if not nd.bVid[n].isZero or not nd.key[n].isZero:
+          result &= nd.bVid[n].ppVid
+        result &= db.keyVidUpdate(nd.key[n], nd.bVid[n]) & ","
       result[^1] = ']'
 
       result &= ",["
       for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
+        if not nd.bVid[n].isZero or not nd.key[n].isZero:
           result &= nd.key[n].ppKey(db)
         result &= ","
       result[^1] = ']'

@@ -119,12 +119,12 @@ proc test_transcodeAccounts*(
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
-        check not node.eVtx.isZero
+        check not node.eVid.isZero
       of aristo_desc.Branch:
         for n in 0..15:
           # key[n] <-> vtx[n] correspondence
           check node.key[n] == node0.key[n]
-          check node.key[n].isZero == node.bVtx[n].isZero
+          check node.key[n].isZero == node.bVid[n].isZero
 
     # This NIM object must match to the same RLP encoded byte stream
     block:

@@ -165,9 +165,9 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       refs: Blob
       keys: Blob
     for n in 0..15:
-      if not node.bVtx[n].isZero:
+      if not node.bVid[n].isZero:
         access = access or (1u16 shl n)
-        refs &= node.bVtx[n].uint64.toBytesBE.toSeq
+        refs &= node.bVid[n].uint64.toBytesBE.toSeq
     data = refs & access.toBytesBE.toSeq & @[0u8]
   of Extension:
     let
@@ -175,7 +175,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < pslen:
       return VtxExPathOverflow
-    data = node.eVtx.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
+    data = node.eVid.uint64.toBytesBE.toSeq & pSegm & @[0x80u8 or psLen]
   of Leaf:
     let
       pSegm = node.lPfx.hexPrefixEncode(isleaf = true)
@@ -246,7 +246,7 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
       # End `while`
     vtx = VertexRef(
       vType: Branch,
-      bVtx:  vtxList)
+      bVid:  vtxList)
 
   of 2: # `Extension` node
     let
@@ -261,7 +261,7 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
       return DbrExtGotLeafPrefix
     vtx = VertexRef(
       vType: Extension,
-      eVtx:  (uint64.fromBytesBE record[0 ..< 8]).VertexID,
+      eVid:  (uint64.fromBytesBE record[0 ..< 8]).VertexID,
       ePfx:  pathSegment)
 
   of 3: # `Leaf` node

@@ -211,14 +211,14 @@ and implemented as 64 bit values, stored *Big Endian* in the serialisation.
           |                          |       -- first vertexID
         8 +--+--+--+--+--+--+--+--+--+
           ...                                -- more vertexIDs
-		  +--+--+
-		  |     |                            -- access(16) bitmap
+          +--+--+
+          |     |                            -- access(16) bitmap
           +--+--+
           || |                               -- marker(2) + unused(6)
           +--+
 
-	    where
-		  marker(2) is the double bit array 00
+        where
+          marker(2) is the double bit array 00
 
 For a given index *n* between *0..15*, if the bit at position *n* of the it
 vector *access(16)* is reset to zero, then there is no *n*-th structural
@@ -240,8 +240,8 @@ stored in the right byte of the serialised bitmap.
           || |                               -- marker(2) + pathSegmentLen(6)
           +--+
 
-	    where
-		  marker(2) is the double bit array 10
+        where
+          marker(2) is the double bit array 10
 
 The path segment of the *Extension* record is compact encoded. So it has at
 least one byte. The first byte *P0* has bit 5 reset, i.e. *P0 and 0x20* is
@@ -260,8 +260,8 @@ of the extension record (as *recordLen - 9*.)
           || |                               -- marker(2) + pathSegmentLen(6)
           +--+
 
-	    where
-		  marker(2) is the double bit array 11
+        where
+          marker(2) is the double bit array 11
 
 A *Leaf* record path segment is compact encoded. So it has at least one byte.
 The first byte *P0* has bit 5 set, i.e. *P0 and 0x20* is non-zero (bit 4 is
@@ -277,8 +277,8 @@ also set if the right nibble is the first part of the path.)
           || |                               -- marker(2) + unused(6)
           +--+
 
-	    where
-		  marker(2) is the double bit array 01
+        where
+          marker(2) is the double bit array 01
 
 Currently, the descriptor record only contains data for producing unique
 vectorID values that can be used as structural keys. If this descriptor is

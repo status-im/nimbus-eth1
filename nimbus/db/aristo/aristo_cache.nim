@@ -39,22 +39,22 @@ proc convertPartially(
     nd = NodeRef(
       vType: Extension,
       ePfx:  vtx.ePfx,
-      eVtx:  vtx.eVtx)
-    db.kMap.withValue(vtx.eVtx, keyPtr):
+      eVid:  vtx.eVid)
+    db.kMap.withValue(vtx.eVid, keyPtr):
       nd.key[0] = keyPtr[]
       return
-    result.add vtx.eVtx
+    result.add vtx.eVid
   of Branch:
     nd = NodeRef(
       vType: Branch,
-      bVtx:  vtx.bVtx)
+      bVid:  vtx.bVid)
     for n in 0..15:
-      if vtx.bVtx[n].isZero:
+      if vtx.bVid[n].isZero:
         continue
-      db.kMap.withValue(vtx.bVtx[n], kPtr):
+      db.kMap.withValue(vtx.bVid[n], kPtr):
         nd.key[n] = kPtr[]
         continue
-      result.add vtx.bVtx[n]
+      result.add vtx.bVid[n]
 
 proc convertPartiallyOk(
     db: AristoDbRef;
@@ -73,18 +73,18 @@ proc convertPartiallyOk(
     nd = NodeRef(
       vType: Extension,
       ePfx:  vtx.ePfx,
-      eVtx:  vtx.eVtx)
-    db.kMap.withValue(vtx.eVtx, keyPtr):
+      eVid:  vtx.eVid)
+    db.kMap.withValue(vtx.eVid, keyPtr):
       nd.key[0] = keyPtr[]
       result = true
   of Branch:
     nd = NodeRef(
       vType: Branch,
-      bVtx:  vtx.bVtx)
+      bVid:  vtx.bVid)
     result = true
     for n in 0..15:
-      if not vtx.bVtx[n].isZero:
-        db.kMap.withValue(vtx.bVtx[n], kPtr):
+      if not vtx.bVid[n].isZero:
+        db.kMap.withValue(vtx.bVid[n], kPtr):
           nd.key[n] = kPtr[]
           continue
         return false
@@ -145,7 +145,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
         vType:  Extension,
         ePfx:   nd.ePfx)
       if not nd.key[0].isZero:
-        result.eVtx = db.cachedVID nd.key[0]
+        result.eVid = db.cachedVID nd.key[0]
         result.key[0] = nd.key[0]
     of Branch:
       result = NodeRef(
@@ -153,7 +153,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
         key:   nd.key)
       for n in 0..15:
         if not nd.key[n].isZero:
-          result.bVtx[n] = db.cachedVID nd.key[n]
+          result.bVid[n] = db.cachedVID nd.key[n]
 
 proc asNode*(vtx: VertexRef; db: AristoDbRef): NodeRef =
   ## Return a `NodeRef` object by augmenting missing `Merkel` hashes (aka

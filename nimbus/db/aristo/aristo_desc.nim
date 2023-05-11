@@ -50,9 +50,9 @@ type
       lData*: PayloadRef           ## Reference to data payload
     of Extension:
       ePfx*: NibblesSeq            ## Portion of path segment
-      eVtx*: VertexID              ## Edge to vertex with ID `eVtx`
+      eVid*: VertexID              ## Edge to vertex with ID `eVid`
     of Branch:
-      bVtx*: array[16,VertexID]    ## Edge list with vertex IDs
+      bVid*: array[16,VertexID]    ## Edge list with vertex IDs
 
   NodeRef* = ref object of VertexRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -77,7 +77,7 @@ type
     ## have non-empty payload. Records with empty payload are administrative
     ## items, e.g. lower boundary records.
     pathTag*: NodeTag              ## `Patricia Trie` key path
-    nodeVtx*: VertexID             ## Table lookup vertex ID (if any)
+    nodeVid*: VertexID             ## Table lookup vertex ID (if any)
     payload*: PayloadRef           ## Reference to data payload
 
   GetFn* = proc(key: openArray[byte]): Blob
@@ -184,11 +184,11 @@ proc `==`*(a, b: VertexRef): bool =
       if a.lPfx != b.lPfx or a.lData != b.lData:
         return false
     of Extension:
-      if a.ePfx != b.ePfx or a.eVtx != b.eVtx:
+      if a.ePfx != b.ePfx or a.eVid != b.eVid:
         return false
     of Branch:
       for n in 0..15:
-        if a.bVtx[n] != b.bVtx[n]:
+        if a.bVid[n] != b.bVid[n]:
           return false
   true
 
@@ -202,7 +202,7 @@ proc `==`*(a, b: NodeRef): bool =
       return false
   of Branch:
     for n in 0..15:
-      if a.bVtx[n] != 0.VertexID and a.key[n] != b.key[n]:
+      if a.bVid[n] != 0.VertexID and a.key[n] != b.key[n]:
         return false
   else:
     discard
