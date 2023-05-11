@@ -7,9 +7,15 @@
 
 #
 # Example of how the beacon state historical_roots field could be provided with
-# a Merkle proof that can be verified against the right state root.
+# a Merkle proof that can be verified against the right beacon state root.
 # These historical_roots with their proof could for example be provided over the
 # network and verified on the receivers end.
+#
+# Note:
+# Since Capella the historical_roots field is frozen. Thus providing the
+# historical_roots with a Proof against the latest state seems a bit silly.
+# One idea could be to embed it into the client just as is done for the
+# execution header accumulator.
 #
 
 {.push raises: [].}

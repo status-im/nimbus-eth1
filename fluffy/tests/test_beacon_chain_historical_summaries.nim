@@ -12,37 +12,38 @@
 import
   unittest2,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/datatypes/capella,
   # Test helpers
   beacon_chain/../tests/testblockutil,
   beacon_chain/../tests/mocking/mock_genesis,
   beacon_chain/../tests/consensus_spec/fixtures_utils,
 
-  ../network/history/experimental/beacon_chain_historical_roots
+  ../network/history/experimental/beacon_chain_historical_summaries
 
-suite "Beacon Chain Historical Roots":
+suite "Beacon Chain Historical Summaries":
   let
-    cfg = genesisTestRuntimeConfig(ConsensusFork.Bellatrix)
+    cfg = genesisTestRuntimeConfig(ConsensusFork.Capella)
     state = newClone(initGenesisState(cfg = cfg))
   var cache = StateCache()
 
-  var blocks: seq[bellatrix.SignedBeaconBlock]
+  var blocks: seq[capella.SignedBeaconBlock]
   # Note:
   # Adding 8192 blocks. First block is genesis block and not one of these.
-  # Then one extra block is needed to get the historical roots, block
+  # Then one extra block is needed to get the historical summaries, block
   # roots and state roots processed.
   # index i = 0 is second block.
   # index i = 8190 is 8192th block and last one that is part of the first
   # historical root
   for i in 0..<SLOTS_PER_HISTORICAL_ROOT:
-    blocks.add(addTestBlock(state[], cache, cfg = cfg).bellatrixData)
+    blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
 
-  test "Historical Roots Proof":
-    let historical_roots = getStateField(state[], historical_roots)
-
-    let res = buildProof(state[])
-    check res.isOk()
-    let proof = res.get()
-
+  test "Historical Summaries Proof":
     withState(state[]):
-      check verifyProof(historical_roots, proof, forkyState.root)
+      when consensusFork >= ConsensusFork.Capella:
+        let historical_summaries = forkyState.data.historical_summaries
+        let res = buildProof(state[])
+        check res.isOk()
+        let proof = res.get()
+
+        withState(state[]):
+          check verifyProof(historical_summaries, proof, forkyState.root)
