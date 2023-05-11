@@ -12,6 +12,7 @@ import ../test_macro
 cliBuilder:
   import  ./test_code_stream,
           ./test_accounts_cache,
+          ./test_aristo,
           ./test_custom_network,
           ./test_sync_snap,
           ./test_rocksdb_timing,
