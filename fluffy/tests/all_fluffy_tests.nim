@@ -17,4 +17,5 @@ import
   ./test_content_db,
   ./test_discovery_rpc,
   ./test_beacon_chain_block_proof,
-  ./test_beacon_chain_historical_roots
+  ./test_beacon_chain_historical_roots,
+  ./test_beacon_chain_historical_summaries
