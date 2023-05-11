@@ -91,7 +91,7 @@ type
     sTab*: Table[VertexID,NodeRef] ## Structural vertex table making up a trie
     kMap*: Table[VertexID,NodeKey] ## Merkle hash key mapping
     pAmk*: Table[NodeKey,VertexID] ## Reverse mapper for data import
-    refGen*: seq[VertexID]         ## Unique key generator
+    vidGen*: seq[VertexID]         ## Unique vertex ID generator
 
     # Debugging data below, might go away in future
     xMap*: Table[NodeKey,VertexID] ## Mapper for pretty printing, extends `pAmk`
@@ -101,45 +101,52 @@ static:
   doAssert NodeKey.default.ByteArray32.initNibbleRange.len == 64
 
 # ------------------------------------------------------------------------------
+# Public helpers: `VertexID` scalar data model
+# ------------------------------------------------------------------------------
+
+proc `<`*(a, b: VertexID): bool {.borrow.}
+proc `==`*(a, b: VertexID): bool {.borrow.}
+proc cmp*(a, b: VertexID): int {.borrow.}
+proc `$`*(a: VertexID): string = $a.uint64
+
+# ------------------------------------------------------------------------------
 # Public functions for `VertexID` management
 # ------------------------------------------------------------------------------
 
 proc new*(T: type VertexID; db: AristoDbRef): T =
   ## Create a new `VertexID`. Reusable *ID*s are kept in a list where the top
   ## entry *ID0* has the property that any other *ID* larger *ID0* is also not
-  ## not used on the databse.
-  if db.refGen.len == 0:
-    db.refGen = @[2.VertexID]
-    return 1.VertexID
-  result = db.refGen[^1]
-  if db.refGen.len == 1:
-    db.refGen = @[(result.uint64 + 1).VertexID]
+  ## not used on the database.
+  case db.vidGen.len:
+  of 0:
+    db.vidGen = @[2.VertexID]
+    result = 1.VertexID
+  of 1:
+    result = db.vidGen[^1]
+    db.vidGen = @[(result.uint64 + 1).VertexID]
   else:
-    db.refGen.setLen(db.refGen.len-1)
+    result = db.vidGen[^2]
+    db.vidGen[^2] = db.vidGen[^1]
+    db.vidGen.setLen(db.vidGen.len-1)
 
 proc peek*(T: type VertexID; db: AristoDbRef): T =
   ## Like `new()` without consuming this *ID*. It will return the *ID* that
   ## would be returned by the `new()` function.
-  if db.refGen.len == 0: 1u64 else: db.refGen[^1]
+  if db.vidGen.len == 0: 1u64 else: db.vidGen[^1]
 
 
-proc dispose*(db: var AristoDbRef; vtxID: VertexID) =
+proc dispose*(db: AristoDbRef; vtxID: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
-  if db.refGen.len == 0:
-    db.refGen = @[vtxID]
+  if db.vidGen.len == 0:
+    db.vidGen = @[vtxID]
   else:
-    let topID = db.refGen[^1]
-    db.refGen[^1] = vtxID
-    db.refGen.add topID
-
-# ------------------------------------------------------------------------------
-# Public helpers: `VertexID` scalar data model
-# ------------------------------------------------------------------------------
-
-proc `==`*(a, b: VertexID): bool {.borrow.}
-proc cmp*(a, b: VertexID): int {.borrow.}
-proc `$`*(a: VertexID): string = $a.uint64
+    let topID = db.vidGen[^1]
+    # No need to store smaller numbers: all numberts larger than `topID`
+    # are free numbers
+    if vtxID < topID:
+      db.vidGen[^1] = vtxID
+      db.vidGen.add topID
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`

@@ -207,7 +207,7 @@ proc blobify*(db: AristoDbRef; data: var Blob) =
   ##     0x40
   ##
   data.setLen(0)
-  for w in db.refGen:
+  for w in db.vidGen:
     data &= w.uint64.toBytesBE.toSeq
   data.add 0x40u8
 
@@ -283,14 +283,6 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
   else:
     return DbrUnknown
 
-proc deblobify*(record: Blob): Result[VertexRef,AristoError] =
-  ## Variant of `fromDbRecord()`
-  var vtx: VertexRef
-  let info = record.deblobify vtx
-  if info != AristoError(0):
-    return err(info)
-  ok(vtx)
-
 
 proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
   ## De-serialise the data record encoded with `blobify()`. The second
@@ -299,15 +291,31 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
   if db.isNil:
     db = AristoDbRef()
   if data.len == 0:
-    db.refGen = @[1.VertexID]
+    db.vidGen = @[1.VertexID]
   else:
     if (data.len mod 8) != 1:
       return ADbGarbledSize
-    if data[0..3] != @[0u8]:
+    if data[^1] shr 6 != 1:
       return ADbWrongType
     for n in 0 ..< (data.len div 8):
-      let w = n * 8 + 4
-      db.refGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+      let w = n * 8
+      db.vidGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+
+
+proc deblobify*[W: VertexRef|AristoDbRef](
+    record: Blob;
+    T: type W;
+      ): Result[T,AristoError] =
+  ## Variant of `deblobify()` for either `VertexRef` or `AristoDbRef`
+  var obj: T # isNil, will be auto-initialised
+  let info = record.deblobify obj
+  if info != AristoError(0):
+    return err(info)
+  ok(obj)
+
+proc deblobify*(record: Blob): Result[VertexRef,AristoError] =
+  ## Default variant of `deblobify()` for `VertexRef`.
+  record.deblobify VertexRef
 
 # ------------------------------------------------------------------------------
 # End

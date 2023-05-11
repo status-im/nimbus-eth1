@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/[sequtils, strutils],
   eth/[common, trie/nibbles],
   stew/byteutils,
   ../../sync/snap/range_desc,
@@ -53,8 +54,14 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
       result &= "..(" & $s.len & ")"
     result &= ".." & s[s.len-16 ..< s.len]
 
+proc stripZeros(a: string): string =
+  for n in 0 ..< a.len:
+    if a[n] != '0':
+      return a[n .. ^1]
+  return a
+
 proc ppVid(vid: VertexID): string =
-  if vid.isZero: "ø" else: "$" & $vid
+  if vid.isZero: "ø" else: "$" & vid.uint64.toHex.stripZeros
 
 proc ppKey(key: NodeKey, db = AristoDbRef(nil)): string =
   if key.isZero:
@@ -97,6 +104,8 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
     result = VertexID.new db
     db.xMap[key] = result
 
+proc pp*(vid: openArray[VertexID]): string =
+  "[" & vid.mapIt(it.ppVid).join(",") & "]"
 
 proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
   if p.isNil:

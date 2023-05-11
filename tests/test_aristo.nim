@@ -9,24 +9,22 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-## Re-invented implementation for Patricia Merkle Trie
+## Re-invented implementation for Merkle Patricia Tree named as Aristo Trie
 
 import
-  std/[os, sets, strformat, strutils, tables],
+  std/[os, strformat, strutils],
+  chronicles,
   eth/[common, p2p],
   rocksdb,
-  stew/byteutils,
   unittest2,
   ../nimbus/db/select_backend,
   ../nimbus/db/aristo/[aristo_desc],
   ../nimbus/core/chain,
-  ../nimbus/sync/types,
-  ../nimbus/sync/snap/range_desc,
   ../nimbus/sync/snap/worker/db/[
     hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_transcoder]
+  ./test_aristo/[test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -179,6 +177,9 @@ proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
 
   suite &"Aristo: transcoding {fileInfo} accounts and proofs for {info}":
 
+    test &"Trancoding VertexID recyling lists (seed={accLst.len})":
+      noisy.test_transcodeVidRecycleLists(accLst.len)
+
     # New common descriptor for this sub-group of tests
     let
       desc = db.cdb[0].snapDbAccountsRef(root, db.persistent)
@@ -193,9 +194,9 @@ proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
       else:
         skip()
 
-    test "Trancoding database records RLP, NodeRef, DbRecord":
+    test "Trancoding database records: RLP, NodeRef, Blob, VertexRef":
       noisy.showElapsed("test_transcoder()"):
-        noisy.test_transcoderAccounts(db.cdb[0].rocksStoreRef, stopAfter)
+        noisy.test_transcodeAccounts(db.cdb[0].rocksStoreRef, stopAfter)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
