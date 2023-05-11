@@ -112,18 +112,17 @@ proc postState(db: AccountsCache, alloc: var GenesisAlloc) =
       acc.storage[k] = v
     alloc[accAddr] = acc
 
-proc genAddress(vmState: BaseVMState, tx: Transaction, sender: EthAddress): EthAddress =
+proc genAddress(tx: Transaction, sender: EthAddress): EthAddress =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
-proc toTxReceipt(vmState: BaseVMState,
-                 rec: Receipt,
+proc toTxReceipt(rec: Receipt,
                  tx: Transaction,
                  sender: EthAddress,
                  txIndex: int,
                  gasUsed: GasInt): TxReceipt =
 
-  let contractAddress = genAddress(vmState, tx, sender)
+  let contractAddress = genAddress(tx, sender)
   TxReceipt(
     txType: tx.txType,
     root: if rec.isHash: rec.hash else: Hash256(),
@@ -237,8 +236,7 @@ proc exec(ctx: var TransContext,
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
-      vmState, rec,
-      tx, sender, txIndex, gasUsed
+      rec, tx, sender, txIndex, gasUsed
     )
     includedTx.add tx
 
