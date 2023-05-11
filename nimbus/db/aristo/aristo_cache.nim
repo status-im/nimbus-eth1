@@ -15,7 +15,7 @@ import
   eth/common,
   stew/results,
   ../../sync/snap/range_desc,
-  "."/[aristo_desc, aristo_error, aristo_transcode]
+  "."/[aristo_desc, aristo_error, aristo_transcode, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -93,7 +93,7 @@ proc cachedVID(db: AristoDbRef; nodeKey: NodeKey): VertexID =
   ## Get vertex ID from reverse cache
   db.pAmk.withValue(nodeKey, vidPtr):
     return vidPtr[]
-  result = VertexID.new(db)
+  result = db.vidFetch()
   db.pAmk[nodeKey] = result
   db.kMap[result] = nodeKey
 

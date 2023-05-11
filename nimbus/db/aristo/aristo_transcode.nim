@@ -15,11 +15,7 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/snap/range_desc,
-  "."/[aristo_desc, aristo_error]
-
-const
-  EmptyBlob = seq[byte].default
-    ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
+  "."/[aristo_constants, aristo_desc, aristo_error]
 
 # ------------------------------------------------------------------------------
 # Private functions

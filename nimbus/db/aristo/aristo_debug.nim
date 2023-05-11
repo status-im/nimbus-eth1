@@ -15,11 +15,7 @@ import
   eth/[common, trie/nibbles],
   stew/byteutils,
   ../../sync/snap/range_desc,
-  "."/aristo_desc
-
-const
-  EMPTY_ROOT_KEY = EMPTY_ROOT_HASH.to(NodeKey)
-  EMPTY_CODE_KEY = EMPTY_CODE_HASH.to(NodeKey)
+  "."/[aristo_constants, aristo_desc, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Ptivate functions
@@ -101,7 +97,7 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
     db.xMap.withValue(key, vidPtr):
       return vidPtr[]
 
-    result = VertexID.new db
+    result = db.vidFetch()
     db.xMap[key] = result
 
 proc pp*(vid: openArray[VertexID]): string =
