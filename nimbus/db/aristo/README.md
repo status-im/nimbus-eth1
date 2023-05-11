@@ -272,7 +272,7 @@ also set if the right nibble is the first part of the path.)
         0 +-- ..
           ...                                -- recycled vertexIDs
           +--+--+--+--+--+--+--+--+--+
-          |                          |       -- unused head vertexID
+          |                          |       -- bottom of unused vertexIDs
           +--+--+--+--+--+--+--+--+--+
           || |                               -- marker(2) + unused(6)
           +--+
