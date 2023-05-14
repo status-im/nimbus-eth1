@@ -16,7 +16,7 @@
 {.push raises: [].}
 
 import
-  ./aristo_new/[aristo_memory],
+  ./aristo_init/[aristo_memory],
   ./aristo_desc
 
 # ------------------------------------------------------------------------------
@@ -29,7 +29,13 @@ proc init*(T: type AristoDbRef): T =
 
 proc init*(T: type AristoDbRef; db: T): T =
   ## Cascaded constructor, a new layer is pushed and returned.
-  T(cascaded: true, stack: db, level: 1 + (if db.cascaded: db.level else: 0))
+  result = T(cascaded: true, stack: db)
+  if db.cascaded:
+    result.level = db.level + 1
+    result.base = db.base
+  else:
+    result.level = 1
+    result.base = db
 
 # ------------------------------------------------------------------------------
 # End

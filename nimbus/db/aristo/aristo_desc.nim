@@ -118,6 +118,7 @@ type
     of true:
       level*: int                    ## Positive number of stack layers
       stack*: AristoDbRef            ## Down the chain, not `nil`
+      base*: AristoDbRef             ## Backend level descriptor
     else:
       vidGen*: seq[VertexID]         ## Unique vertex ID generator
       backend*: AristoBackendRef     ## backend database (maybe `nil`)
