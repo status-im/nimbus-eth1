@@ -15,11 +15,7 @@ import
   eth/[common, trie/nibbles],
   stew/byteutils,
   ../../sync/snap/range_desc,
-  "."/aristo_desc
-
-const
-  EMPTY_ROOT_KEY = EMPTY_ROOT_HASH.to(NodeKey)
-  EMPTY_CODE_KEY = EMPTY_CODE_HASH.to(NodeKey)
+  "."/[aristo_constants, aristo_desc, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Ptivate functions
@@ -101,7 +97,7 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
     db.xMap.withValue(key, vidPtr):
       return vidPtr[]
 
-    result = VertexID.new db
+    result = db.vidFetch()
     db.xMap[key] = result
 
 proc pp*(vid: openArray[VertexID]): string =
@@ -130,12 +126,12 @@ proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
     of Leaf:
       result &= $nd.lPfx & "," & nd.lData.pp(db)
     of Extension:
-      result &= $nd.ePfx & "," & nd.eVtx.ppVid
+      result &= $nd.ePfx & "," & nd.eVid.ppVid
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVtx[n].isZero:
-          result &= nd.bVtx[n].ppVid
+        if not nd.bVid[n].isZero:
+          result &= nd.bVid[n].ppVid
         result &= ","
       result[^1] = ']'
     result &= ")"
@@ -152,19 +148,19 @@ proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
       result &= $nd.lPfx & "," & nd.lData.pp(db)
 
     of Extension:
-      result &= $nd.ePfx & "," & nd.eVtx.ppVid & "," & nd.key[0].ppKey
+      result &= $nd.ePfx & "," & nd.eVid.ppVid & "," & nd.key[0].ppKey
 
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
-          result &= nd.bVtx[n].ppVid
-        result &= db.keyVidUpdate(nd.key[n], nd.bVtx[n]) & ","
+        if not nd.bVid[n].isZero or not nd.key[n].isZero:
+          result &= nd.bVid[n].ppVid
+        result &= db.keyVidUpdate(nd.key[n], nd.bVid[n]) & ","
       result[^1] = ']'
 
       result &= ",["
       for n in 0..15:
-        if not nd.bVtx[n].isZero or not nd.key[n].isZero:
+        if not nd.bVid[n].isZero or not nd.key[n].isZero:
           result &= nd.key[n].ppKey(db)
         result &= ","
       result[^1] = ']'

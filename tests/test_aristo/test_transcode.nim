@@ -17,7 +17,8 @@ import
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_cache, aristo_debug, aristo_error, aristo_transcode],
+    aristo_desc, aristo_cache, aristo_debug, aristo_error, aristo_transcode,
+    aristo_vid],
   ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
@@ -119,12 +120,12 @@ proc test_transcodeAccounts*(
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]
-        check not node.eVtx.isZero
+        check not node.eVid.isZero
       of aristo_desc.Branch:
         for n in 0..15:
           # key[n] <-> vtx[n] correspondence
           check node.key[n] == node0.key[n]
-          check node.key[n].isZero == node.bVtx[n].isZero
+          check node.key[n].isZero == node.bVid[n].isZero
 
     # This NIM object must match to the same RLP encoded byte stream
     block:
@@ -179,7 +180,7 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   # Add some randum numbers
   block:
     let first = td.vidRand()
-    db.dispose first
+    db.vidDispose first
 
     var
       expectedVids = 1
@@ -189,7 +190,7 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
       count.inc
       let vid = td.vidRand()
       expectedVids += (vid < first).ord
-      db.dispose vid
+      db.vidDispose vid
 
     check db.vidGen.len == expectedVids
     noisy.say "***", "vids=", db.vidGen.len, " discarded=", count-expectedVids
@@ -210,20 +211,20 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   # Make sure that recycled numbers are fetched first
   let topVid = db.vidGen[^1]
   while 1 < db.vidGen.len:
-    let w = VertexID.new(db)
+    let w = db.vidFetch()
     check w < topVid
   check db.vidGen.len == 1 and db.vidGen[0] == topVid
 
   # Get some consecutive vertex IDs
   for n in 0 .. 5:
-    let w = VertexID.new(db)
+    let w = db.vidFetch()
     check w == topVid + n
     check db.vidGen.len == 1
 
   # Repeat last test after clearing the cache
   db.vidGen.setLen(0)
   for n in 0 .. 5:
-    let w = VertexID.new(db)
+    let w = db.vidFetch()
     check w == 1.VertexID + n
     check db.vidGen.len == 1
 
