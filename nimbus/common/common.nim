@@ -71,6 +71,13 @@ type
     consensusType: ConsensusType
 
     syncReqNewHead: SyncReqNewHeadCB
+      ## Call back function for the sync processor. This function stages
+      ## the arguent header to a private aerea for subsequent processing.
+
+    syncReqRelaxV2: bool
+      ## Allow processing of certain RPC/V2 messages type while syncing (i.e.
+      ## `syncReqNewHead` is set.) although `shanghaiTime` is unavailable
+      ## or has not reached, yet.
 
     startOfHistory: Hash256
       ## This setting is needed for resuming blockwise syncying after
@@ -450,6 +457,9 @@ func syncCurrent*(com: CommonRef): BlockNumber =
 func syncHighest*(com: CommonRef): BlockNumber =
   com.syncProgress.highest
 
+func syncReqRelaxV2*(com: CommonRef): bool =
+  com.syncReqRelaxV2
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -480,7 +490,20 @@ proc setFork*(com: CommonRef, fork: HardFork): Hardfork =
   com.consensusTransition(fork)
 
 proc `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
+  ## Activate or reset a call back handler for syncing. When resetting (by
+  ## passing `cb` as `nil`), the `syncReqRelaxV2` value is also reset.
   com.syncReqNewHead = cb
+  if cb.isNil:
+    com.syncReqRelaxV2 = false
+
+proc `syncReqRelaxV2=`*(com: CommonRef; val: bool) =
+  ## Allow processing of certain RPC/V2 messages type while syncing (i.e.
+  ## `syncReqNewHead` is set.) although `shanghaiTime` is unavailable
+  ## or has not reached, yet.
+  ##
+  ## This setter is effective only while `syncReqNewHead` is activated.
+  if not com.syncReqNewHead.isNil:
+    com.syncReqRelaxV2 = val
 
 # ------------------------------------------------------------------------------
 # End

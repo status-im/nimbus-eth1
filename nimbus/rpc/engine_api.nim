@@ -98,10 +98,16 @@ proc handle_newPayload(sealingEngine: SealingEngineRef, api: EngineApiRef, com: 
 
   if com.isShanghaiOrLater(fromUnix(payload.timestamp.unsafeQuantityToInt64)):
     when not(payload is ExecutionPayloadV2):
-      raise invalidParams("if timestamp is Shanghai or later, payload must be ExecutionPayloadV2")
+      raise invalidParams("if timestamp is Shanghai or later, " &
+        "payload must be ExecutionPayloadV2")
   else:
     when not(payload is ExecutionPayloadV1):
-      raise invalidParams("if timestamp is earlier than Shanghai, payload must be ExecutionPayloadV1")
+      if com.syncReqRelaxV2:
+        trace "Relaxed mode, treating payload as V1"
+        discard
+      else:
+        raise invalidParams("if timestamp is earlier than Shanghai, " &
+          "payload must be ExecutionPayloadV1")
   
   var header = toBlockHeader(payload)
   let blockHash = payload.blockHash.asEthHash
@@ -489,7 +495,7 @@ proc setupEngineAPI*(
   # cannot use `params` as param name. see https:#github.com/status-im/nim-json-rpc/issues/128
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
     return handle_newPayload(sealingEngine, api, com, maybeAsyncDataSource, payload)
-  
+
   server.rpc("engine_newPayloadV2") do(payload: ExecutionPayloadV1OrV2) -> PayloadStatusV1:
     let p = payload.toExecutionPayloadV1OrExecutionPayloadV2
     if p.isOk:
