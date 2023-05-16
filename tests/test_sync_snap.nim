@@ -42,7 +42,7 @@ const
   accSample = snapTest0
   storSample = snapTest4
 
-  # # Number of database slots available
+  # Number of database slots available
   nTestDbInstances = 9
 
 type
@@ -473,7 +473,7 @@ when isMainModule:
   when true: # and false:
     noisy.miscRunner()
 
-  # Test database dnapdhot handling. The test samples ate too big for
+  # Test database snapshot handling. The test samples ate too big for
   # `nimbus-eth1` so they are available on `nimbus-eth1-blobs.`
   when true: # or false
     import ./test_sync_snap/snap_syncdb_xx

@@ -50,6 +50,7 @@ proc releasePass(ctx: SnapCtxRef) =
 proc enableRpcMagic(ctx: SnapCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
   ctx.chain.com.syncReqNewHead = ctx.updateBeaconHeaderCB
+  ctx.chain.com.syncReqRelaxV2 = true
 
 proc disableRpcMagic(ctx: SnapCtxRef) =
   ## Helper for `release()`

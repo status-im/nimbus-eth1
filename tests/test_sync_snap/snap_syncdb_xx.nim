@@ -17,12 +17,20 @@ const
   snapSyncdb0* = SnapSyncSpecs(
     name:       "main-snap",
     network:    MainNet,
+    snapDump:   "mainnet=64.txt.gz",
+    tailBlocks: "mainnet332160.txt.gz",
+    pivotBlock: 64u64,
+    nItems:     100)
+
+  snapSyncdb1* = SnapSyncSpecs(
+    name:       "main-snap",
+    network:    MainNet,
     snapDump:   "mainnet=128.txt.gz",
     tailBlocks: "mainnet332160.txt.gz",
     pivotBlock: 128u64,
     nItems:     500)
 
-  snapSyncdb1* = SnapSyncSpecs(
+  snapSyncdb2* = SnapSyncSpecs(
     name:       "main-snap",
     network:    MainNet,
     snapDump:   "mainnet=500.txt.gz",
@@ -30,7 +38,7 @@ const
     pivotBlock: 500u64,
     nItems:     500)
 
-  snapSyncdb2* = SnapSyncSpecs(
+  snapSyncdb3* = SnapSyncSpecs(
     name:       "main-snap",
     network:    MainNet,
     snapDump:   "mainnet=1000.txt.gz",
@@ -38,7 +46,7 @@ const
     pivotBlock: 1000u64,
     nItems:     500)
 
-  snapSyncdb3* = SnapSyncSpecs(
+  snapSyncdb4* = SnapSyncSpecs(
     name:       "main-snap",
     network:    MainNet,
     snapDump:   "mainnet=300000.txt.gz",
@@ -47,6 +55,6 @@ const
     nItems:     500)
 
   snapSyncdbList* = [
-    snapSyncdb0, snapSyncdb1, snapSyncdb2, snapSyncdb3]
+    snapSyncdb0, snapSyncdb1, snapSyncdb2, snapSyncdb3, snapSyncdb4]
 
 # End

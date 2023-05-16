@@ -291,7 +291,6 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   let
     maxWorkers {.used.} = dsc.ctx.buddiesMax
     nPeers {.used.} = dsc.pool.len
-    nWorkers = dsc.buddies.len
     zombie = dsc.buddies.eq peer.key
   if zombie.isOk:
     let
@@ -299,12 +298,12 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ttz = zombie.value.zombified + zombieTimeToLinger
     if ttz < Moment.now():
       trace "Reconnecting zombie peer ignored", peer,
-        nPeers, nWorkers, maxWorkers, canRequeue=(now-ttz)
+        nPeers, nWorkers=dsc.buddies.len, maxWorkers, canRequeue=(now-ttz)
       return
     # Zombie can be removed from the database
     dsc.buddies.del peer.key
     trace "Zombie peer timeout, ready for requeing", peer,
-      nPeers, nWorkers, maxWorkers
+      nPeers, nWorkers=dsc.buddies.len, maxWorkers
 
   # Initialise worker for this peer
   let buddy = RunnerBuddyRef[S,W](
@@ -314,25 +313,31 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ctrl: BuddyCtrlRef(),
       peer: peer))
   if not buddy.worker.runStart():
-    trace "Ignoring useless peer", peer, nPeers, nWorkers, maxWorkers
+    trace "Ignoring useless peer", peer, nPeers,
+      nWorkers=dsc.buddies.len, maxWorkers
     buddy.worker.ctrl.zombie = true
     return
 
   # Check for table overflow. An overflow might happen if there are zombies
   # in the table (though preventing them from re-connecting for a while.)
-  if dsc.ctx.buddiesMax <= nWorkers:
-    let leastPeer = dsc.buddies.shift.value.data
-    if leastPeer.worker.ctrl.zombie:
+  if dsc.ctx.buddiesMax <= dsc.buddies.len:
+    let
+      leastVal = dsc.buddies.shift.value # unqueue first/least item
+      oldest = leastVal.data.worker
+    if oldest.isNil:
       trace "Dequeuing zombie peer",
-        oldest=leastPeer.worker, nPeers, nWorkers=dsc.buddies.len, maxWorkers
+        # Fake `Peer` pretty print for `oldest`
+        oldest=("Node[" & $leastVal.key.address & "]"),
+        since=leastVal.data.zombified, nPeers, nWorkers=dsc.buddies.len,
+        maxWorkers
       discard
     else:
       # This could happen if there are idle entries in the table, i.e.
       # somehow hanging runners.
-      trace "Peer table full! Dequeuing least used entry",
-        oldest=leastPeer.worker, nPeers, nWorkers=dsc.buddies.len, maxWorkers
-      leastPeer.worker.ctrl.zombie = true
-      leastPeer.worker.runStop()
+      trace "Peer table full! Dequeuing least used entry", oldest,
+        nPeers, nWorkers=dsc.buddies.len, maxWorkers
+      oldest.ctrl.zombie = true
+      oldest.runStop()
 
   # Add peer entry
   discard dsc.buddies.lruAppend(peer.key, buddy, dsc.ctx.buddiesMax)
@@ -351,8 +356,12 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     rc = dsc.buddies.eq peer.key
   if rc.isErr:
     debug "Disconnected, unregistered peer", peer, nPeers, nWorkers, maxWorkers
-    return
-  if rc.value.worker.ctrl.zombie:
+    discard
+  elif rc.value.worker.isNil:
+    # Re-visiting zombie
+    trace "Ignore zombie", peer, nPeers, nWorkers, maxWorkers
+    discard
+  elif rc.value.worker.ctrl.zombie:
     # Don't disconnect, leave them fall out of the LRU cache. The effect is,
     # that reconnecting might be blocked, for a while. For few peers cases,
     # the start of zombification is registered so that a zombie can eventually
