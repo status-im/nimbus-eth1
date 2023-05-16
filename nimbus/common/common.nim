@@ -92,7 +92,7 @@ type
 
 proc hardForkTransition*(
   com: CommonRef, forkDeterminer: ForkDeterminationInfo)
-  {.gcsafe, raises: [CatchableError].}
+  {.gcsafe, raises: [].}
 
 func cliquePeriod*(com: CommonRef): int
 
@@ -253,7 +253,7 @@ func toHardFork*(
 
 proc hardForkTransition(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   ## When consensus type already transitioned to POS,
   ## the storage can choose not to store TD anymore,
   ## at that time, TD is no longer needed to find a fork
@@ -268,7 +268,7 @@ proc hardForkTransition*(
     number: BlockNumber,
     td: Option[DifficultyInt],
     time: Option[EthTime])
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   com.hardForkTransition(ForkDeterminationInfo(
     blockNumber: number, time: time, td: td))
 
@@ -277,12 +277,12 @@ proc hardForkTransition*(
     parentHash: Hash256,
     number: BlockNumber,
     time: Option[EthTime])
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
 proc hardForkTransition*(
     com: CommonRef, header: BlockHeader)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   com.hardForkTransition(
     header.parentHash, header.blockNumber, some(header.timestamp))
 
@@ -357,7 +357,7 @@ proc initializeEmptyDb*(com: CommonRef)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [].} =
   ## Used by RPC to update the beacon head for snap sync
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)

@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
+  eth/common/eth_types, stint, options, stew/ptrops,
   chronos,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],

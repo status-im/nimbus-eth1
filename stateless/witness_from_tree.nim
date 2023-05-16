@@ -89,10 +89,10 @@ proc writeUVarint(wb: var WitnessBuilder, x: UInt256)
     # we don't truncate to byte here, int will be faster
     var b = value.truncate(int) and 0x7F # low order 7 bits of value
     value = value shr 7
-    if value != 0:         # more bytes to come
+    if value.isZero.not:         # more bytes to come
       b = b or 0x80        # set high order bit of b
     wb.writeByte(b)
-    if value == 0: break
+    if value.isZero: break
 
 proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true)
     {.gcsafe, raises: [IOError].} =

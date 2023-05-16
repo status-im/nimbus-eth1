@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[math, macros],
+  std/[macros],
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, eth/[common, keys], chronicles,

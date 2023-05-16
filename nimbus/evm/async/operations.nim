@@ -1,5 +1,4 @@
 import
-  chronicles,
   chronos,
   stint,
   eth/common/eth_types,

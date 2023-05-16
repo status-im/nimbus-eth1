@@ -54,7 +54,7 @@ const
     ## 0x04, Division
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
-      if rhs == 0:
+      if rhs.isZero:
         # EVM special casing of div by 0
         zero(UInt256)
       else:
@@ -66,7 +66,7 @@ const
     let (lhs, rhs) = k.cpt.stack.popInt(2)
 
     var r: UInt256
-    if rhs != 0:
+    if rhs.isZero.not:
       var a = lhs
       var b = rhs
       var signA, signB: bool
@@ -81,7 +81,7 @@ const
     ## 0x06, Modulo
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
-      if rhs == 0:
+      if rhs.isZero:
         zero(UInt256)
       else:
         lhs mod rhs
@@ -92,7 +92,7 @@ const
     let (lhs, rhs) = k.cpt.stack.popInt(2)
 
     var r: UInt256
-    if rhs != 0:
+    if rhs.isZero.not:
       var sign: bool
       var v = lhs
       var m = rhs
@@ -109,7 +109,7 @@ const
     let (lhs, rhs, modulus) = k.cpt.stack.popInt(3)
 
     k.cpt.stack.push:
-      if modulus == 0:
+      if modulus.isZero:
         zero(UInt256)
       else:
         addmod(lhs, rhs, modulus)
@@ -121,7 +121,7 @@ const
     let (lhs, rhs, modulus) = k.cpt.stack.popInt(3)
 
     k.cpt.stack.push:
-      if modulus == 0:
+      if modulus.isZero:
         zero(UInt256)
       else:
         mulmod(lhs, rhs, modulus)

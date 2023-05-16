@@ -7,7 +7,7 @@ const
   vendorPath  = currentSourcePath.rsplit({DirSep, AltSep}, 3)[0] & "/vendor"
   srcPath = vendorPath & "/libtommath"
 
-{.passc: "-IMP_32BIT"}
+{.passc: "-DMP_32BIT"}
 {.compile: srcPath & "/mp_radix_size.c"}
 {.compile: srcPath & "/mp_to_radix.c"}
 {.compile: srcPath & "/mp_init_u64.c"}
@@ -124,9 +124,9 @@ type
 const
   MP_OKAY = 0.mp_err
 
-  MP_LT = -1
-  MP_EQ = 0
-  MP_GT = 1
+  MP_LT* = -1
+  MP_EQ* = 0
+  MP_GT* = 1
 
 template getPtr(z: untyped): untyped =
   when (NimMajor, NimMinor) > (1,6):
@@ -158,9 +158,9 @@ proc mp_to_ubin(a: mp_int, buf: ptr byte, maxlen: csize_t, written: var csize_t)
 # Y = G**X (mod P)
 proc mp_exptmod(G, X, P, Y: mp_int): mp_err {.mp_abi.}
 
-proc mp_get_i32(a: mp_int): int32 {.mp_abi.}
-proc mp_get_u32(a: mp_int): uint32 =
-  cast[uint32](mp_get_i32(a))
+#proc mp_get_i32(a: mp_int): int32 {.mp_abi.}
+#proc mp_get_u32(a: mp_int): uint32 =
+#  cast[uint32](mp_get_i32(a))
 
 # proc mp_init_u64(a: mp_int, b: uint64): mp_err {.mp_abi.}
 # proc mp_set_u64(a: mp_int, b: uint64) {.mp_abi.}

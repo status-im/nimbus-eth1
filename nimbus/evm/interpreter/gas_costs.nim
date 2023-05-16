@@ -327,13 +327,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           SSTORE_RESET_GAS = FeeSchedule[GasSreset]
 
       const
-        NoopGas     = SLOAD_GAS # if the value doesn't change.
-        DirtyGas    = SLOAD_GAS # if a dirty value is changed.
-        InitGas     = FeeSchedule[GasSset]  # from clean zero to non-zero
-        InitRefund  = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
-        CleanGas    = SSTORE_RESET_GAS # from clean non-zero to something else
-        CleanRefund = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
-        ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
+        NoopGas     {.used.} = SLOAD_GAS # if the value doesn't change.
+        DirtyGas    {.used.} = SLOAD_GAS # if a dirty value is changed.
+        InitGas     {.used.} = FeeSchedule[GasSset]  # from clean zero to non-zero
+        InitRefund  {.used.} = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
+        CleanGas    {.used.} = SSTORE_RESET_GAS # from clean non-zero to something else
+        CleanRefund {.used.} = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
+        ClearRefund {.used.} = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
       when fork < FkConstantinople or fork == FkPetersburg:
         let isStorageEmpty = gasParams.s_currentValue.isZero

@@ -38,7 +38,7 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState, accTx: SavePoint,
     header: BlockHeader, tx: Transaction,
     gasBurned: GasInt, priorityFee: GasInt):
-    Result[GasInt, void] {.raises: [RlpError].} =
+    Result[GasInt, void] {.raises: [].} =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
