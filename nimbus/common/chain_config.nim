@@ -269,7 +269,7 @@ proc validateChainConfig*(conf: ChainConfig): bool =
     # If it was optional and not set, then ignore it
     if cur.time.isSome:
       lastTimeBasedFork = cur
-  
+
   if conf.clique.period.isSome or
      conf.clique.epoch.isSome:
     conf.consensusType = ConsensusType.POA
@@ -360,7 +360,8 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         some(12_965_000.toBlockNumber), # 2021-08-05 12:33:42 UTC
       arrowGlacierBlock:   some(13_773_000.toBlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    some(15_050_000.toBlockNumber), # 2022-06-30 10:54:04 UTC
-      terminalTotalDifficulty: some(mainNetTTD)
+      terminalTotalDifficulty: some(mainNetTTD),
+      shanghaiTime:        some(1681338455.fromUnix)
     )
   of RopstenNet:
     ChainConfig(
@@ -421,6 +422,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         some(4_460_644.toBlockNumber),  # 2021-03-18 05:29:51 UTC
       londonBlock:         some(5_062_605.toBlockNumber),  # 2021-07-01 03:19:39 UTC
       terminalTotalDifficulty: some(10790000.u256),
+      shanghaiTime:        some(1678832736.fromUnix)
     )
   of SepoliaNet:
     ChainConfig(
@@ -439,6 +441,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    some(0.toBlockNumber),
       berlinBlock:         some(0.toBlockNumber),
       londonBlock:         some(0.toBlockNumber),
+      shanghaiTime:        some(1677557088.fromUnix)
     )
   else:
     ChainConfig()
