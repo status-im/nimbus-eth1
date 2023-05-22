@@ -66,6 +66,7 @@ type
     limits: TxChainGasLimits ## Gas limits for packer and next header
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
     prepHeader: BlockHeader  ## Prepared Header from Consensus Engine
+    withdrawals: seq[Withdrawal]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -90,7 +91,7 @@ proc prepareHeader(dh: TxChainRef; parent: BlockHeader)
   of ConsensusType.POS:
     dh.com.pos.prepare(dh.prepHeader)
 
-proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [].} =
+proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [RlpError].} =
   case dh.com.consensus
   of ConsensusType.POW:
     # do nothing, tx pool was designed with POW in mind
@@ -201,6 +202,9 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     # nonce:     BlockNonce # mining free vaiable
     fee:         dh.txEnv.vmState.fee)
 
+  if dh.com.forkGTE(Shanghai):
+    result.withdrawalsRoot = some(calcWithdrawalsRoot(dh.withdrawals))
+
   dh.prepareForSeal(result)
 
 proc clearAccounts*(dh: TxChainRef)
@@ -280,6 +284,10 @@ proc vmState*(dh: TxChainRef): BaseVMState =
   ## Getter, `BaseVmState` descriptor based on the current insertion point.
   dh.txEnv.vmState
 
+proc withdrawals*(dh: TxChainRef): seq[Withdrawal] =
+  ## Getter, `BaseVmState` descriptor based on the current insertion point.
+  result = system.move(dh.withdrawals)
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -341,6 +349,9 @@ proc `stateRoot=`*(dh: TxChainRef; val: Hash256) =
 proc `txRoot=`*(dh: TxChainRef; val: Hash256) =
   ## Setter
   dh.txEnv.txRoot = val
+
+proc `withdrawals=`*(dh: TxChainRef, val: sink seq[Withdrawal]) =
+  dh.withdrawals = system.move(val)
 
 # ------------------------------------------------------------------------------
 # End
