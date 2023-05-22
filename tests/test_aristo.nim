@@ -24,7 +24,7 @@ import
     hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_transcode]
+  ./test_aristo/[test_merge, test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -176,6 +176,16 @@ proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
     db.flushDbs
 
   suite &"Aristo: transcoding {fileInfo} accounts and proofs for {info}":
+
+    # --- Merging ---
+
+    test &"Merge {accLst.len} account lists to database":
+      noisy.test_mergeAccounts accLst.mapIt(it.data)
+
+    test &"Merge {accLst.len} proof & account lists to database":
+      noisy.test_mergeProofsAndAccounts accLst
+
+    # --- Transcoding ---
 
     test &"Trancoding VertexID recyling lists (seed={accLst.len})":
       noisy.test_transcodeVidRecycleLists(accLst.len)

@@ -46,5 +46,35 @@ type
     # Converter `asNode()`
     CacheMissingNodekeys
 
-# End
+    # Get function `getVtxCascaded()`
+    GetVtxNotFound
+    GetTagNotFound
 
+    # Path function hikeUp()`
+    PathRootMissing
+    PathLeafTooEarly
+    PathBranchTailEmpty
+    PathBranchBlindEdge
+    PathExtTailEmpty
+    PathExtTailMismatch
+
+    # Memory backend
+    MemBeVtxNotFound
+    MemBeKeyNotFound
+
+    # Path/nibble/key conversions in `aisto_path.nim`
+    PathExpected64Nibbles
+    PathExpectedLeaf
+
+    # Merge leaf `merge()`
+    MergeBrLinkLeafGarbled
+    MergeBrLinkVtxPfxTooShort
+    MergeBranchGarbledNibble
+    MergeBranchGarbledTail
+    MergeBranchRootExpected
+    MergeLeafGarbledHike
+    MergeRootBranchLinkBusy
+
+    MergeNodeKeyZero
+
+# End

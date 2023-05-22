@@ -110,6 +110,7 @@ type
   AristoDbObj = object
     ## Hexary trie plus helper structures
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table making up a trie
+    lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
     sDel*: HashSet[VertexID]         ## Deleted vertices
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
@@ -216,6 +217,23 @@ proc convertTo*(payload: PayloadRef; T: type Blob): T =
     result = payload.blob
   of AccountData:
     result = rlp.encode payload.account
+
+proc to*(node: NodeRef; T: type VertexRef): T =
+  ## Extract a copy of the `VertexRef` part from a `NodeRef`. For a leaf
+  ## type, the `lData` payload reference will be a shallow copy, i.e. only
+  ## the reference pointer is copied.
+  case node.vType:
+  of Leaf:
+    T(vType: Leaf,
+      lPfx:  node.lPfx,
+      lData: node.lData)
+  of Extension:
+    T(vType: Extension,
+      ePfx:  node.ePfx,
+      eVid:  node.eVid)
+  of Branch:
+    T(vType: Branch,
+      bVid:  node.bVid)
 
 # ------------------------------------------------------------------------------
 # End
