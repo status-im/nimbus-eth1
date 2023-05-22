@@ -5,7 +5,7 @@ import
   ../nimbus/core/pow/difficulty,
   ../nimbus/constants,
   ../nimbus/common/common,
-  test_helpers
+  ./test_helpers
 
 type
   Tester = object
@@ -17,6 +17,9 @@ type
     currentDifficulty: Uint256
 
   Tests = Table[string, Tester]
+
+const
+  inputPath = "tests" / "fixtures" / "eth_tests" / "DifficultyTests"
 
 proc hexOrInt64(data: JsonNode, key: string, hex: static[bool]): int64 =
   when hex:
@@ -30,59 +33,85 @@ proc hexOrInt256(data: JsonNode, key: string, hex: static[bool]): Uint256 =
   else:
     parse(data[key].getStr, Uint256)
 
-proc parseTests(name: string, hex: static[bool]): Tests =
-  let fileName = "tests" / "fixtures" / "DifficultyTests" / "difficulty" & name & ".json"
-  let fixtures = parseJSON(readFile(fileName))
+proc parseHash(data: string): Hash256 =
+  case data
+  of "0x00": result = EMPTY_UNCLE_HASH
+  of "0x01": result.data[0] = 1.byte
+  else:
+    doAssert(false, "invalid uncle hash")
 
+proc parseTests(testData: JSonNode): Tests =
+  const hex = true
   result = initTable[string, Tester]()
   var t: Tester
-  for title, data in fixtures:
+  for title, data in testData:
     t.parentTimestamp = hexOrInt64(data, "parentTimestamp", hex)
     t.parentDifficulty = hexOrInt256(data, "parentDifficulty", hex)
     let pu = data.fields.getOrDefault("parentUncles")
     if pu.isNil:
       t.parentUncles = EMPTY_UNCLE_HASH
     else:
-      hexToByteArray(pu.getStr, t.parentUncles.data)
+      t.parentUncles = parseHash(pu.getStr)
     t.currentTimestamp = hexOrInt64(data, "currentTimestamp", hex)
     t.currentBlockNumber = hexOrInt256(data, "currentBlockNumber", hex)
     t.currentDifficulty = hexOrInt256(data, "currentDifficulty", hex)
     result[title] = t
 
-template runTests(name: string, hex: bool, calculator: typed) =
-  let testTitle = if name == "": "Difficulty" else: name
-  test testTitle:
-    let data = parseTests(name, hex)
-    for title, t in data:
-      var p = BlockHeader(
-        difficulty: t.parentDifficulty,
-        timestamp: times.fromUnix(t.parentTimestamp),
-        blockNumber: t.currentBlockNumber - 1,
-        ommersHash: t.parentUncles)
+proc calculator(revision: string, timestamp: EthTime, header: BlockHeader): DifficultyInt =
+  case revision
+  of "Homestead": result = calcDifficultyHomestead(timestamp, header)
+  of "GrayGlacier": result = calcDifficultyGrayGlacier(timestamp, header)
+  of "Frontier": result = calcDifficultyFrontier(timestamp, header)
+  of "Berlin": result = calcDifficultyMuirGlacier(timestamp, header)
+  of "Constantinople": result = calcDifficultyConstantinople(timestamp, header)
+  of "Byzantium": result = calcDifficultyByzantium(timestamp, header)
+  of "ArrowGlacier": result = calcDifficultyArrowGlacier(timestamp, header)
+  else:
+    doAssert(false, "unknown revision: " & revision)
 
-      let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
+  var fixture: JsonNode
+  for _, child in fixtures:
+    fixture = child
+    break
+
+  for revision, child in fixture:
+    if revision == "_info":
+      continue
+
+    let tests = parseTests(child)
+
+    for title, t in tests:
+      let p = BlockHeader(
+        difficulty : t.parentDifficulty,
+        timestamp  : times.fromUnix(t.parentTimestamp),
+        blockNumber: t.currentBlockNumber - 1,
+        ommersHash : t.parentUncles
+      )
+
+      let timestamp = times.fromUnix(t.currentTimeStamp)
+
+      let diff = calculator(revision, timestamp, p)
       check diff == t.currentDifficulty
 
+template runTest() =
+  var filenames: seq[string] = @[]
+  for filename in walkDirRec(inputPath):
+    if not filename.endsWith(".json"):
+      continue
+    filenames.add filename
+
+  doAssert(filenames.len > 0)
+
+  for fname in filenames:
+    let filename = fname
+    test fname.subStr(inputPath.len + 1):
+      let fixtures = parseJson(readFile(filename))
+      testFixture(fixtures, testStatusIMPL)
+
 proc difficultyMain*() =
-  let mainnetCom = CommonRef.new(nil, chainConfigForNetwork(MainNet))
-  func calcDifficultyMainNet(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-    mainnetCom.calcDifficulty(timeStamp, parent)
-
-  let ropstenCom = CommonRef.new(nil, chainConfigForNetwork(RopstenNet))
-  func calcDifficultyRopsten(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-    ropstenCom.calcDifficulty(timeStamp, parent)
-
   suite "DifficultyTest":
-    runTests("EIP2384_random_to20M", true, calcDifficultyMuirGlacier)
-    runTests("EIP2384_random", true, calcDifficultyMuirGlacier)
-    runTests("EIP2384", true, calcDifficultyMuirGlacier)
-    runTests("Byzantium", true, calcDifficultyByzantium)
-    runTests("Constantinople", true, calcDifficultyConstantinople)
-    runTests("Homestead", true, calcDifficultyHomestead)
-    runTests("MainNetwork", true, calcDifficultyMainNet)
-    runTests("Frontier", true, calcDifficultyFrontier)
-    runTests("", false, calcDifficultyMainNet)
-    runTests("Ropsten", true, calcDifficultyRopsten)
+    runTest()
 
 when isMainModule:
   difficultyMain()
