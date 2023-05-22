@@ -361,7 +361,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   some(13_773_000.toBlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    some(15_050_000.toBlockNumber), # 2022-06-30 10:54:04 UTC
       terminalTotalDifficulty: some(mainNetTTD),
-      shanghaiTime:        some(1681338455.fromUnix)
+      shanghaiTime:        some(1_681_338_455.fromUnix)
     )
   of RopstenNet:
     ChainConfig(
@@ -422,7 +422,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       berlinBlock:         some(4_460_644.toBlockNumber),  # 2021-03-18 05:29:51 UTC
       londonBlock:         some(5_062_605.toBlockNumber),  # 2021-07-01 03:19:39 UTC
       terminalTotalDifficulty: some(10790000.u256),
-      shanghaiTime:        some(1678832736.fromUnix)
+      shanghaiTime:        some(1_678_832_736.fromUnix)
     )
   of SepoliaNet:
     ChainConfig(
@@ -441,7 +441,7 @@ proc chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    some(0.toBlockNumber),
       berlinBlock:         some(0.toBlockNumber),
       londonBlock:         some(0.toBlockNumber),
-      shanghaiTime:        some(1677557088.fromUnix)
+      shanghaiTime:        some(1_677_557_088.fromUnix)
     )
   else:
     ChainConfig()
