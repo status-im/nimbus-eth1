@@ -33,6 +33,10 @@ import
 from web3/ethtypes as web3types import nil, TypedTransaction, WithdrawalV1, ExecutionPayloadV1OrV2, toExecutionPayloadV1OrV2, toExecutionPayloadV1
 from web3/engine_api_types import PayloadAttributesV1, ExecutionPayloadV1, PayloadAttributesV2, ExecutionPayloadV2
 
+export
+  # generateExecutionPayload caller will need this
+  casper
+
 type
   EngineState* = enum
     EngineStopped,
@@ -142,6 +146,17 @@ template unsafeQuantityToInt64(q: web3types.Quantity): int64 =
 proc toTypedTransaction(tx: Transaction): TypedTransaction =
   web3types.TypedTransaction(rlp.encode(tx))
 
+func toWithdrawal(x: WithdrawalV1): Withdrawal =
+  result.index = x.index.uint64
+  result.validatorIndex = x.validatorIndex.uint64
+  result.address = x.address.EthAddress
+  result.amount = x.amount.uint64
+
+func toWithdrawals(list: openArray[WithdrawalV1]): seq[Withdrawal] =
+  result = newSeqOfCap[Withdrawal](list.len)
+  for x in list:
+    result.add toWithdrawal(x)
+
 proc generateExecutionPayload*(engine: SealingEngineRef,
                                payloadAttrs: PayloadAttributesV1 | PayloadAttributesV2): Result[ExecutionPayloadV1OrV2, string] =
   let
@@ -152,6 +167,11 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   pos.prevRandao   = Hash256(data: distinctBase payloadAttrs.prevRandao)
   pos.timestamp    = fromUnix(payloadAttrs.timestamp.unsafeQuantityToInt64)
   pos.feeRecipient = EthAddress payloadAttrs.suggestedFeeRecipient
+
+  when payloadAttrs is PayloadAttributesV2:
+    engine.txPool.withdrawals = payloadAttrs.withdrawals.toWithdrawals
+  else:
+    engine.txPool.withdrawals = @[]
 
   if headBlock.blockHash != engine.txPool.head.blockHash:
     # reorg

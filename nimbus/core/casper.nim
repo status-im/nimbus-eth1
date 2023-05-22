@@ -11,9 +11,9 @@ import
 
 type
   CasperRef* = ref object
-    feeRecipient* : EthAddress
-    timestamp*    : EthTime
-    prevRandao*   : Hash256
+    feeRecipient : EthAddress
+    timestamp    : EthTime
+    prevRandao   : Hash256
 
 proc prepare*(ctx: CasperRef, header: var BlockHeader) =
   header.coinbase   = ctx.feeRecipient
@@ -21,7 +21,7 @@ proc prepare*(ctx: CasperRef, header: var BlockHeader) =
   header.prevRandao = ctx.prevRandao
   header.difficulty = DifficultyInt.zero
 
-proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) =
+proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[RlpError].} =
   header.nonce      = default(BlockNonce)
   header.extraData  = @[] # TODO: probably this should be configurable by user?
   # this repetition, assigning prevRandao is because how txpool works
