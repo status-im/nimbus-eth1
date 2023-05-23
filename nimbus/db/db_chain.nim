@@ -244,6 +244,24 @@ proc getUncles*(db: ChainDBRef, ommersHash: Hash256): seq[BlockHeader] =
     if encodedUncles.len != 0:
       result = rlp.decode(encodedUncles, seq[BlockHeader])
 
+proc persistWithdrawals*(db: ChainDBRef, withdrawals: openArray[Withdrawal]): Hash256 =
+  var trie = initHexaryTrie(db.db)
+  for idx, wd in withdrawals:
+    let  encodedWd = rlp.encode(wd)
+    trie.put(rlp.encode(idx), encodedWd)
+  trie.rootHash
+
+iterator getWithdrawalsData*(db: ChainDBRef, withdrawalsRoot: Hash256): seq[byte] =
+  var wddb = initHexaryTrie(db.db, withdrawalsRoot)
+  var idx = 0
+  while true:
+    let wdKey = rlp.encode(idx)
+    if wdKey in wddb:
+      yield wddb.get(wdKey)
+    else:
+      break
+    inc idx
+
 proc getBlockBody*(db: ChainDBRef, header: BlockHeader, output: var BlockBody): bool =
   result = true
   output.transactions = @[]
@@ -257,6 +275,12 @@ proc getBlockBody*(db: ChainDBRef, header: BlockHeader, output: var BlockBody): 
       output.uncles = rlp.decode(encodedUncles, seq[BlockHeader])
     else:
       result = false
+
+  if header.withdrawalsRoot.isSome:
+    var withdrawals: seq[Withdrawal]
+    for encodedWd in db.getWithdrawalsData(header.withdrawalsRoot.get):
+      withdrawals.add(rlp.decode(encodedWd, Withdrawal))
+    output.withdrawals = some(withdrawals)
 
 proc getBlockBody*(db: ChainDBRef, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader

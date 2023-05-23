@@ -11,7 +11,7 @@
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
   ../nimbus/[config, vm_state, vm_types],
-  ../nimbus/core/[chain, clique, executor],
+  ../nimbus/core/[chain, clique, executor, casper],
   ../nimbus/core/[tx_pool, tx_pool/tx_item],
   ../nimbus/common/common,
   ../nimbus/core/clique/clique_sealer,
@@ -637,6 +637,9 @@ proc runTxPackerTests(noisy = true) =
           noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
 
         test &"Clear and re-pack bucket":
+          # prepare for POS transition in txpool
+          xq.chain.com.pos.timestamp = getTime()
+
           let
             items0 = xq.toItems(txItemPacked)
             saveState0 = foldl(@[0.GasInt] & items0.mapIt(it.tx.gasLimit), a+b)
@@ -812,7 +815,7 @@ proc runTxPackerTests(noisy = true) =
 
         let
           poa = bcCom.poa
-          bdy = BlockBody(transactions: blk.txs)
+          bdy = BlockBody(transactions: blk.txs, withdrawals: blk.withdrawals)
           hdr = block:
             var rc = blk.header
             rc.gasLimit = blk.header.gasLimit
@@ -830,15 +833,11 @@ proc runTxPackerTests(noisy = true) =
         xq.chain.clearAccounts
         check xq.chain.vmState.processBlock(poa, hdr, bdy).isOK
 
-        #debugEcho "VMSTATE 1: ", debugAccounts(xq.chain.vmState)
-
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
         let vmstate2 = BaseVMState.new(hdr, bcCom)
         check vmstate2.processBlock(poa, hdr, bdy).isOK
-
-        #debugEcho "VMSTATE 2: ", debugAccounts(vmstate2)
 
         # This should not have changed
         check canonicalHead == xq.chain.com.db.getCanonicalHead
@@ -846,20 +845,32 @@ proc runTxPackerTests(noisy = true) =
         # Using the high-level library function, re-append the block while
         # turning off header verification.
         let c = bcCom.newChain(extraValidation = false)
+
         check c.persistBlocks(@[hdr], @[bdy]).isOK
 
-        # The canonical head will be set to hdr if it scores high enough
-        # (see implementation of db_chain.persistHeaderToDb()).
-        let
-          canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
-          headerScore = xq.chain.com.db.getScore(hdr.blockHash)
-
-        if canonScore < headerScore:
-          # Note that the updated canonical head is equivalent to hdr but not
-          # necessarily binary equal.
+        if bcCom.consensus == ConsensusType.POS:
+          # PoS consensus will force the new blockheader as head
+          # even though the difficulty or the blocknumber is lower than
+          # previous canonical head
           check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
+          
+          # Is the withdrawals persisted and loaded properly?
+          var blockBody: BlockBody
+          check xq.chain.com.db.getBlockBody(hdr, blockBody)
+          check bdy == blockBody
         else:
-          check canonicalHead == xq.chain.com.db.getCanonicalHead
+          # The canonical head will be set to hdr if it scores high enough
+          # (see implementation of db_chain.persistHeaderToDb()).
+          let
+            canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
+            headerScore = xq.chain.com.db.getScore(hdr.blockHash)
+
+          if canonScore < headerScore:
+            # Note that the updated canonical head is equivalent to hdr but not
+            # necessarily binary equal.
+            check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
+          else:
+            check canonicalHead == xq.chain.com.db.getCanonicalHead
 
 # ------------------------------------------------------------------------------
 # Main function(s)
