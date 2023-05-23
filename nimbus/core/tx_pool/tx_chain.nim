@@ -20,7 +20,7 @@ import
   ../../utils/utils,
   ../../vm_state,
   ../../vm_types,
-  ../clique/clique_sealer,
+  ../clique/[clique_sealer, clique_desc, clique_cfg],
   ../pow/difficulty,
   ../executor,
   ../casper,
@@ -66,17 +66,17 @@ type
     limits: TxChainGasLimits ## Gas limits for packer and next header
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
     prepHeader: BlockHeader  ## Prepared Header from Consensus Engine
-    withdrawals: seq[Withdrawal]
+    withdrawals: seq[Withdrawal] ## EIP-4895
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-proc prepareHeader(dh: TxChainRef; parent: BlockHeader)
+proc prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
      {.gcsafe, raises: [CatchableError].} =
 
   case dh.com.consensus
   of ConsensusType.POW:
-    dh.prepHeader.timestamp  = getTime().utc.toTime
+    dh.prepHeader.timestamp  = timestamp
     dh.prepHeader.difficulty = dh.com.calcDifficulty(
       dh.prepHeader.timestamp, parent)
     dh.prepHeader.coinbase   = dh.miner
@@ -101,14 +101,29 @@ proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [
   of ConsensusType.POS:
     dh.com.pos.prepareForSeal(header)
 
+proc getTimestamp(dh: TxChainRef, parent: BlockHeader): EthTime =
+  case dh.com.consensus
+  of ConsensusType.POW:
+    getTime().utc.toTime
+  of ConsensusType.POA:
+    let timestamp = parent.timestamp + dh.com.poa.cfg.period
+    if timestamp < getTime():
+      getTime()
+    else:
+      timestamp
+  of ConsensusType.POS:
+    dh.com.pos.timestamp
+
 proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; fee: Option[UInt256])
   {.gcsafe,raises: [CatchableError].} =
   dh.txEnv.reset
 
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
-  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1, some(parent.timestamp.adjustForNextBlock))
-  dh.prepareHeader(parent)
+
+  let timestamp = dh.getTimestamp(parent)
+  dh.com.hardForkTransition(parent.blockHash, parent.blockNumber+1, some(timestamp))
+  dh.prepareHeader(parent, timestamp)
 
   # we don't consider PoS difficulty here
   # because that is handled in vmState

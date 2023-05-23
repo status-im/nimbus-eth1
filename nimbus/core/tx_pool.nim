@@ -623,7 +623,7 @@ proc ethBlock*(xp: TxPoolRef): EthBlock
     result.txs.add toSeq(nonceList.incNonce).mapIt(it.tx)
 
   let com = xp.chain.com
-  if com.consensus == ConsensusType.POS:
+  if com.forkGTE(Shanghai):
     result.withdrawals = some(xp.chain.withdrawals)
 
 proc gasCumulative*(xp: TxPoolRef): GasInt =

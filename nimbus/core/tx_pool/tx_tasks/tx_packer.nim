@@ -166,7 +166,6 @@ proc vmExecInit(xp: TxPoolRef): TxPackerStateRef
     tr: newMemoryDB().initHexaryTrie,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient))
 
-
 proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
     {.gcsafe,raises: [CatchableError].}  =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
@@ -268,7 +267,6 @@ proc packerVmExec*(xp: TxPoolRef) {.gcsafe,raises: [CatchableError].} =
 
       block account:
         for item in nonceList.incNonce:
-
           let rc = pst.vmExecGrabItem(item)
           if rc.isErr:
             break loop    # stop

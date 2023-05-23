@@ -31,6 +31,7 @@ type
     NoPersistHeader
     NoSaveTxs
     NoSaveReceipts
+    NoSaveWithdrawals
 
   PersistBlockFlags = set[PersistBlockFlag]
 
@@ -124,6 +125,9 @@ proc persistBlocksImpl(c: ChainRef; headers: openArray[BlockHeader];
 
     if NoSaveReceipts notin flags:
       discard c.db.persistReceipts(vmState.receipts)
+
+    if NoSaveWithdrawals notin flags and body.withdrawals.isSome:
+      discard c.db.persistWithdrawals(body.withdrawals.get)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
