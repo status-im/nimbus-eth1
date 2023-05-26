@@ -12,7 +12,6 @@ import
   ./test_state_distance,
   ./test_state_network,
   ./test_accumulator,
-  ./test_history_validation,
   ./test_history_network,
   ./test_content_db,
   ./test_discovery_rpc,

@@ -15,6 +15,9 @@ import
   ssz_serialization,
   ../../common/common_types
 
+from beacon_chain/spec/datatypes/capella import Withdrawal
+from beacon_chain/spec/presets/mainnet import MAX_WITHDRAWALS_PER_PAYLOAD
+
 export ssz_serialization, common_types, hash, results
 
 ## Types and calls for history network content keys
@@ -117,6 +120,8 @@ const
   MAX_RECEIPT_LENGTH* = 2^27  # ~= 134 million
   MAX_HEADER_LENGTH = 2^13  # = 8192
   MAX_ENCODED_UNCLES_LENGTH* = MAX_HEADER_LENGTH * 2^4  # = 2**17 ~= 131k
+  MAX_WITHDRAWAL_LENGTH = 64
+  MAX_WITHDRAWALS_COUNT = MAX_WITHDRAWALS_PER_PAYLOAD
 
 type
   ## Types for content
@@ -126,12 +131,23 @@ type
   Transactions* = List[TransactionByteList, MAX_TRANSACTION_COUNT]
   Uncles* = List[byte, MAX_ENCODED_UNCLES_LENGTH] # RLP data
 
-  BlockBodySSZ* = object
+  WithdrawalByteList* = List[byte, MAX_WITHDRAWAL_LENGTH] # RLP data
+  Withdrawals* = List[WithdrawalByteList, MAX_WITHDRAWALS_COUNT]
+
+  # Pre-shanghai block body
+  # Post-merge this block body is required to have an empty list for uncles
+  PortalBlockBodyLegacy* = object
     transactions*: Transactions
     uncles*: Uncles
 
+  # Post-shanghai block body, added withdrawals
+  PortalBlockBodyShanghai* = object
+    transactions*: Transactions
+    uncles*: Uncles
+    withdrawals*: Withdrawals
+
   ReceiptByteList* = List[byte, MAX_RECEIPT_LENGTH] # RLP data
-  ReceiptsSSZ* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
+  PortalReceipts* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
 
   AccumulatorProof* = array[15, Digest]
 

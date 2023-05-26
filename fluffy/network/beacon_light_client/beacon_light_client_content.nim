@@ -97,12 +97,6 @@ func toContentId*(contentKey: ByteList): ContentId =
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
 
-func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
-  try:
-    ok(SSZ.decode(input, T))
-  except SszError as e:
-    err(e.msg)
-
 # Yes, this API is odd as you pass a SomeForkedLightClientObject yet still have
 # to also pass the ForkDigest. This is because we can't just select the right
 # digest through the LightClientDataFork here as LightClientDataFork and

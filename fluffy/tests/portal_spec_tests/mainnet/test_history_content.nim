@@ -134,7 +134,7 @@ suite "History Content Encodings":
         SSZ.encode(blockHeaderWithProof) == contentValueEncoded
         encode(contentKey.get()).asSeq() == contentKeyEncoded
 
-  test "Block Body Encoding/Decoding and Verification":
+  test "PortalBlockBody (Legacy) Encoding/Decoding and Verification":
     const
       dataFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/bodies/14764013.json"
@@ -171,7 +171,7 @@ suite "History Content Encodings":
 
       # Decode (SSZ + RLP decode step) and validate block body
       let contentValue = validateBlockBodyBytes(
-        contentValueEncoded, header.txRoot, header.ommersHash)
+        contentValueEncoded, header)
       check contentValue.isOk()
 
       # Encode content and content key
@@ -179,6 +179,35 @@ suite "History Content Encodings":
         encode(contentValue.get()) == contentValueEncoded
         encode(contentKey.get()).asSeq() == contentKeyEncoded
 
+  test "PortalBlockBody (Shanghai) Encoding/Decoding":
+    # TODO: We don't have the header (without proof) ready here so cannot do
+    # full validation for now. Add this header and then we can do like above.
+    const
+      dataFile =
+        "./vendor/portal-spec-tests/tests/mainnet/history/bodies/17139055.json"
+
+    let res = readJsonType(dataFile, JsonPortalContentTable)
+    check res.isOk()
+    let content = res.get()
+
+    for k, v in content:
+      let
+        contentKeyEncoded = v.content_key.hexToSeqByte()
+        contentValueEncoded = v.content_value.hexToSeqByte()
+
+      # Decode content key
+      let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+      check contentKey.isOk()
+
+      # Decode (SSZ + RLP decode step) and validate block body
+      let contentValue = decodeBlockBodyBytes(
+        contentValueEncoded)
+      check contentValue.isOk()
+
+      # Encode content and content key
+      check:
+        encode(contentValue.get()) == contentValueEncoded
+        encode(contentKey.get()).asSeq() == contentKeyEncoded
 
   test "Receipts Encoding/Decoding and Verification":
     const

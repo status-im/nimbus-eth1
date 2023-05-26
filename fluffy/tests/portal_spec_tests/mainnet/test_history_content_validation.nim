@@ -13,9 +13,9 @@ import
   unittest2, stint,
   stew/[byteutils, results],
   eth/[common/eth_types, rlp],
-  ../common/common_types,
-  ../eth_data/history_data_json_store,
-  ../network/history/history_network
+  ../../../common/common_types,
+  ../../../eth_data/history_data_json_store,
+  ../../../network/history/history_network
 
 const
   dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
@@ -43,7 +43,7 @@ suite "History Network Content Validation":
     blockHeader = decodeRlp(blockHeaderBytes, BlockHeader).expect(
       "Valid header should decode")
     blockBody = validateBlockBodyBytes(
-      blockBodyBytes, blockHeader.txRoot, blockHeader.ommersHash).expect(
+      blockBodyBytes, blockHeader).expect(
         "Should be Valid decoded block body")
     receipts = validateReceiptsBytes(
       receiptsBytes, blockHeader.receiptRoot).expect(
@@ -68,13 +68,13 @@ suite "History Network Content Validation":
 
   test "Valid Block Body":
     check validateBlockBodyBytes(
-      blockBodyBytes, blockHeader.txRoot, blockHeader.ommersHash).isOk()
+      blockBodyBytes, blockHeader).isOk()
 
   test "Malformed Block Body":
     let malformedBytes = blockBodyBytes[10..blockBodyBytes.high]
 
     check validateBlockBodyBytes(
-      malformedBytes, blockHeader.txRoot, blockHeader.ommersHash).isErr()
+      malformedBytes, blockHeader).isErr()
 
   test "Invalid Block Body - Modified Transaction List":
     var modifiedBody = blockBody
@@ -88,7 +88,7 @@ suite "History Network Content Validation":
     let modifiedBodyBytes = encode(modifiedBody)
 
     check validateBlockBodyBytes(
-      modifiedBodyBytes, blockHeader.txRoot, blockHeader.ommersHash).isErr()
+      modifiedBodyBytes, blockHeader).isErr()
 
   test "Invalid Block Body - Modified Uncles List":
     var modifiedBody = blockBody
@@ -98,7 +98,7 @@ suite "History Network Content Validation":
     let modifiedBodyBytes = encode(modifiedBody)
 
     check validateBlockBodyBytes(
-      modifiedBodyBytes, blockHeader.txRoot, blockHeader.ommersHash).isErr()
+      modifiedBodyBytes, blockHeader).isErr()
 
   test "Valid Receipts":
     check validateReceiptsBytes(receiptsBytes, blockHeader.receiptRoot).isOk()

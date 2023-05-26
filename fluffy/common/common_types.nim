@@ -8,8 +8,9 @@
 {.push raises: [].}
 
 import
-  ssz_serialization/types,
-  stew/byteutils, nimcrypto/hash
+  ssz_serialization,
+  eth/rlp,
+  stew/[byteutils, results], nimcrypto/hash
 
 export hash
 
@@ -23,3 +24,21 @@ type
 
 func `$`*(x: ByteList): string =
   x.asSeq.toHex()
+
+func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(rlp.decode(input, T))
+  except RlpError as e:
+    err(e.msg)
+
+func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(SSZ.decode(input, T))
+  except SszError as e:
+    err(e.msg)
+
+func decodeSszOrRaise*(input: openArray[byte], T: type): T =
+  try:
+    SSZ.decode(input, T)
+  except SszError as e:
+    raiseAssert(e.msg)
