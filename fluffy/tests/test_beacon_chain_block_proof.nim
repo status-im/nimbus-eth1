@@ -80,7 +80,7 @@ suite "Beacon Chain Block Proofs":
       let
         beaconBlock = blocks[i].message
         historicalRootsIndex = getHistoricalRootsIndex(beaconBlock.slot)
-        blockRootIndex = getBlockRootsIndex(beaconBlock.slot, historicalRootsIndex)
+        blockRootIndex = getBlockRootsIndex(beaconBlock.slot)
 
       let res = buildProof(batch, blockRootIndex)
       check res.isOk()
