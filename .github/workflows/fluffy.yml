@@ -249,6 +249,7 @@ jobs:
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy
           build/fluffy.exe --help
+          find . -type d -name ".git" -exec rm -rf {} +
           rm -rf nimcache
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           rm -rf nimcache
