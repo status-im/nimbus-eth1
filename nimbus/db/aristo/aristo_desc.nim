@@ -111,17 +111,18 @@ type
     ## Hexary trie plus helper structures
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table making up a trie
     lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
-    sDel*: HashSet[VertexID]         ## Deleted vertices
+    lRoot*: VertexID                 ## Root vertex for `lTab[]`
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
+    pPrf*: HashSet[VertexID]         ## Locked vertices (from proof vertices)
+    vGen*: seq[VertexID]             ## Unique vertex ID generator
 
     case cascaded*: bool             ## Cascaded delta databases, tx layer
     of true:
       level*: int                    ## Positive number of stack layers
       stack*: AristoDbRef            ## Down the chain, not `nil`
-      base*: AristoDbRef             ## Backend level descriptor
+      base*: AristoDbRef             ## Backend level descriptor, maybe unneeded
     else:
-      vidGen*: seq[VertexID]         ## Unique vertex ID generator
       backend*: AristoBackendRef     ## backend database (maybe `nil`)
 
     # Debugging data below, might go away in future

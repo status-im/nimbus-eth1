@@ -17,7 +17,7 @@ import
   std/tables,
   stew/results,
   ../../../sync/snap/range_desc,
-  ".."/[aristo_desc, aristo_error]
+  ".."/[aristo_constants, aristo_desc, aristo_error]
 
 type
   MemBackendRef = ref object
@@ -31,15 +31,17 @@ type
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
-      db.sTab.withValue(vid, vtxPtr):
-        return ok vtxPtr[]
+      let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
+      if vtx != VertexRef(nil):
+        return ok vtx
       err(MemBeVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(vid: VertexID): Result[NodeKey,AristoError] =
-      db.kMap.withValue(vid, keyPtr):
-        return ok keyPtr[]
+      let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+      if key != EMPTY_ROOT_KEY:
+        return ok key
       err(MemBeKeyNotFound)
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =

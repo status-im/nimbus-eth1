@@ -203,7 +203,7 @@ proc blobify*(db: AristoDbRef; data: var Blob) =
   ##     0x40
   ##
   data.setLen(0)
-  for w in db.vidGen:
+  for w in db.vGen:
     data &= w.uint64.toBytesBE.toSeq
   data.add 0x40u8
 
@@ -287,7 +287,7 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
   if db.isNil:
     db = AristoDbRef()
   if data.len == 0:
-    db.vidGen = @[1.VertexID]
+    db.vGen = @[1.VertexID]
   else:
     if (data.len mod 8) != 1:
       return ADbGarbledSize
@@ -295,7 +295,7 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
       return ADbWrongType
     for n in 0 ..< (data.len div 8):
       let w = n * 8
-      db.vidGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+      db.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
 
 
 proc deblobify*[W: VertexRef|AristoDbRef](

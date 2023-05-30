@@ -192,8 +192,8 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
       expectedVids += (vid < first).ord
       db.vidDispose vid
 
-    check db.vidGen.len == expectedVids
-    noisy.say "***", "vids=", db.vidGen.len, " discarded=", count-expectedVids
+    check db.vGen.len == expectedVids
+    noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
 
   # Serialise/deserialise
   block:
@@ -206,27 +206,27 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
         check rc.isOk
       rc.get(otherwise = AristoDbRef())
 
-    check db.vidGen == db1.vidGen
+    check db.vGen == db1.vGen
 
   # Make sure that recycled numbers are fetched first
-  let topVid = db.vidGen[^1]
-  while 1 < db.vidGen.len:
+  let topVid = db.vGen[^1]
+  while 1 < db.vGen.len:
     let w = db.vidFetch()
     check w < topVid
-  check db.vidGen.len == 1 and db.vidGen[0] == topVid
+  check db.vGen.len == 1 and db.vGen[0] == topVid
 
   # Get some consecutive vertex IDs
   for n in 0 .. 5:
     let w = db.vidFetch()
     check w == topVid + n
-    check db.vidGen.len == 1
+    check db.vGen.len == 1
 
   # Repeat last test after clearing the cache
-  db.vidGen.setLen(0)
+  db.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
     check w == 1.VertexID + n
-    check db.vidGen.len == 1
+    check db.vGen.len == 1
 
 # ------------------------------------------------------------------------------
 # End
