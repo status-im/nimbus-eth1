@@ -28,11 +28,10 @@ proc len*(memory: Memory): int =
 proc extend*(memory: var Memory; startPos: Natural; size: Natural) =
   if size == 0:
     return
-  var newSize = ceil32(startPos + size)
+  let newSize = ceil32(startPos + size)
   if newSize <= len(memory):
     return
-  var sizeToExtend = newSize - len(memory)
-  memory.bytes = memory.bytes.concat(repeat(0.byte, sizeToExtend))
+  memory.bytes.setLen(newSize)
 
 proc newMemory*(size: Natural): Memory =
   result = newMemory()
@@ -51,9 +50,6 @@ proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   let size = value.len
   if size == 0:
     return
-  validateLte(startPos + size, memory.len)
-  if memory.len < startPos + size:
-    memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPos + size))) # TODO: better logarithmic scaling?
-
+  validateLte(startPos + size, memory.len)  
   for z, b in value:
     memory.bytes[z + startPos] = b

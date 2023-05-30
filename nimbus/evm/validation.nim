@@ -34,6 +34,11 @@ proc validateLt*(value: UInt256 | int, maximum: int, title: string = "Value") =
     raise newException(ValidationError,
       &"{title} {value} is not less than {maximum}")
 
+proc validateLte*(value: int, maximum: int, title: string = "Value") =
+  if value > maximum:
+    raise newException(ValidationError,
+      &"{title} {value} is not less or equal to {maximum}")
+
 proc validateStackItem*(value: string) =
   if value.len > 32:
     raise newException(ValidationError,
