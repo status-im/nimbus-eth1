@@ -13,8 +13,7 @@
 import
   eth/[common, trie/nibbles],
   stew/results,
-  ../../sync/snap/range_desc,
-  "."/[aristo_constants, aristo_error]
+  "."/[aristo_constants, aristo_desc, aristo_error]
 
 # Info snippet (just a reminder to keep somewhere)
 #

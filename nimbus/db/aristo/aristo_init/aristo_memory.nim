@@ -16,7 +16,6 @@
 import
   std/tables,
   stew/results,
-  ../../../sync/snap/range_desc,
   ".."/[aristo_constants, aristo_desc, aristo_error]
 
 type

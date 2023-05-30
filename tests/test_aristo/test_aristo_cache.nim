@@ -16,7 +16,6 @@ import
   std/tables,
   eth/common,
   stew/results,
-  ../../nimbus/sync/snap/range_desc,
   ../../nimbus/db/aristo/[
     aristo_constants, aristo_desc, aristo_error, aristo_transcode, aristo_vid]
 
@@ -154,7 +153,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
       result = NodeRef(
         vType:  Extension,
         ePfx:   nd.ePfx)
-      if not nd.key[0].isZero:
+      if not nd.key[0].isEmpty:
         result.eVid = db.cachedVID nd.key[0]
         result.key[0] = nd.key[0]
     of Branch:
@@ -162,7 +161,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
         vType: Branch,
         key:   nd.key)
       for n in 0..15:
-        if not nd.key[n].isZero:
+        if not nd.key[n].isEmpty:
           result.bVid[n] = db.cachedVID nd.key[n]
 
 proc asNode*(vtx: VertexRef; db: AristoDbRef): NodeRef =

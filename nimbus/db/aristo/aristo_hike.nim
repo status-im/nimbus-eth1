@@ -12,7 +12,6 @@
 
 import
   eth/[common, trie/nibbles],
-  ../../sync/snap/range_desc,
   "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_path]
 
 type

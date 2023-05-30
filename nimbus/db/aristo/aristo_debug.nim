@@ -14,7 +14,6 @@ import
   std/[algorithm, sequtils, sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/byteutils,
-  ../../sync/snap/range_desc,
   "."/[aristo_constants, aristo_desc, aristo_error, aristo_hike, aristo_vid]
 
 # ------------------------------------------------------------------------------
@@ -25,7 +24,7 @@ proc toPfx(indent: int): string =
   "\n" & " ".repeat(indent)
 
 proc keyVidUpdate(db: AristoDbRef, key: NodeKey, vid: VertexID): string =
-  if not key.isZero and
+  if not key.isEmpty and
      not vid.isZero and
      not db.isNil:
     block:
@@ -68,7 +67,6 @@ proc ppVid(vid: VertexID): string =
 
 proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
   if not db.isNil and
-     not key.isZero and
      key != EMPTY_ROOT_KEY and
      key != EMPTY_CODE_KEY:
     block:
@@ -81,8 +79,8 @@ proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
         return vid.uint64
 
 proc ppKey(key: NodeKey, db: AristoDbRef): string =
-  if key.isZero:
-    return "ø"
+  if key == NodeKey.default:
+    return "£ø"
   if key == EMPTY_ROOT_KEY:
     return "£r"
   if key == EMPTY_CODE_KEY:
@@ -210,21 +208,23 @@ proc ppXMap*(
     let
       pfx = indent.toPfx
     var
-      i = 0
-      r = cache[i]
+      (i, r) = (0, cache[0])
     result &= cache[i][0].ppNtry
     for n in 1 ..< cache.len:
       let w = cache[n]
       r[0].inc
       r[1].inc
-      if w != r or w[2]:
+      if r != w or w[2]:
         if i+1 != n:
-          result &= ".. "
-        result &= cache[n-1][0].ppNtry & pfx & " " & cache[n][0].ppNtry
-        i = n
-        r = w
+          result &= ".. " & cache[n-1][0].ppNtry
+        result &= pfx & " " & cache[n][0].ppNtry
+        (i, r) = (n, w)
     if i < cache.len - 1:
-      result &= ".. " & cache[^1][0].ppNtry
+      if i+1 != cache.len - 1:
+        result &= ".. "
+      else:
+        result &= pfx & " "
+      result &= cache[^1][0].ppNtry
     result[^1] = '}'
   else:
     result &= "}"
@@ -235,10 +235,9 @@ proc ppXMap*(
 
 proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
-  if not key.isZero and
+  if not db.isNil and
      key != EMPTY_ROOT_KEY and
-     key != EMPTY_CODE_KEY and
-     not db.isNil:
+     key != EMPTY_CODE_KEY:
     let vid = db.xMap.getOrDefault(key, VertexID(0))
     if vid != VertexID(0):
       result = vid
@@ -283,14 +282,14 @@ proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
     of Branch:
       result &= "["
       for n in 0..15:
-        if not nd.bVid[n].isZero or not nd.key[n].isZero:
+        if not nd.bVid[n].isZero or nd.key[n] != EMPTY_ROOT_KEY:
           result &= nd.bVid[n].ppVid
         result &= db.keyVidUpdate(nd.key[n], nd.bVid[n]) & ","
       result[^1] = ']'
 
       result &= ",["
       for n in 0..15:
-        if not nd.bVid[n].isZero or not nd.key[n].isZero:
+        if not nd.bVid[n].isZero or nd.key[n] != EMPTY_ROOT_KEY:
           result &= nd.key[n].ppKey(db)
         result &= ","
       result[^1] = ']'

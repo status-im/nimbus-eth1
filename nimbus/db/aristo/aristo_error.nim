@@ -11,6 +11,7 @@
 type
   AristoError* = enum
     NothingSerious = 0
+    GenericError
 
     # Rlp decoder, `fromRlpRecord()`
     Rlp2Or17ListEntries
@@ -71,10 +72,35 @@ type
     MergeBrLinkVtxPfxTooShort
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
+    MergeBranchLinkLockedKey
+    MergeBranchLinkProofModeLock
+    MergeBranchProofModeLock
     MergeBranchRootExpected
     MergeLeafGarbledHike
+    MergeLeafPathCachedAlready
+    MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
 
-    MergeNodeKeyZero
+    MergeNodeKeyEmpty
+    MergeNodeKeyCachedAlready
+
+    # Update `Merkle` hashes `hashify()`
+    HashifyCannotComplete
+    HashifyCannotHashRoot
+    HashifyExistingHashMismatch
+    HashifyLeafToRootAllFailed
+    HashifyRootHashMismatch
+
+    HashifyCheckRevCountMismatch
+    HashifyCheckRevHashMismatch
+    HashifyCheckRevHashMissing
+    HashifyCheckRevVtxDup
+    HashifyCheckRevVtxMissing
+    HashifyCheckVidVtxMismatch
+    HashifyCheckVtxCountMismatch
+    HashifyCheckVtxHashMismatch
+    HashifyCheckVtxHashMissing
+    HashifyCheckVtxIncomplete
+    HashifyCheckVtxLockWithoutKey
 
 # End

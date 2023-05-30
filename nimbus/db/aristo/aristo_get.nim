@@ -16,7 +16,6 @@
 import
   std/tables,
   stew/results,
-  ../../sync/snap/range_desc,
   "."/[aristo_desc, aristo_error]
 
 type
@@ -32,7 +31,8 @@ proc getVtxCascaded*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
-  ## Cascaded lookup for data record down the transaction cascade.
+  ## Cascaded lookup for data record down the transaction cascade. This
+  ## function will return a potential error code from the backend (if any).
   db.sTab.withValue(vid, vtxPtr):
     return ok vtxPtr[]
 

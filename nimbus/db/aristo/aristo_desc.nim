@@ -25,8 +25,12 @@ import
   std/[sets, tables],
   eth/[common, trie/nibbles],
   stew/results,
-  ../../sync/snap/range_desc,
-  ./aristo_error
+  "."/[aristo_constants, aristo_error]
+
+import
+  ../../sync/snap/range_desc
+export
+  ByteArray32, NodeKey, NodeTag, digestTo, hash, to, `==`, `$`
 
 type
   VertexID* = distinct uint64
@@ -205,8 +209,11 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-proc isZero*[T: NodeKey|VertexID](a: T): bool =
-  a == typeof(a).default
+proc isZero*(a: VertexID): bool =
+  a == VertexID(0)
+
+proc isEmpty*(a: NodeKey): bool =
+  a == EMPTY_ROOT_KEY
 
 proc isError*(a: NodeRef): bool =
   a.error != AristoError(0)

@@ -18,7 +18,6 @@ import
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_debug, aristo_error, aristo_transcode, aristo_vid],
-  ../../nimbus/sync/snap/range_desc,
   "."/[test_aristo_cache, test_helpers]
 
 type
@@ -124,7 +123,9 @@ proc test_transcodeAccounts*(
         for n in 0..15:
           # key[n] <-> vtx[n] correspondence
           check node.key[n] == node0.key[n]
-          check node.key[n].isZero == node.bVid[n].isZero
+          check node.key[n].isEmpty == node.bVid[n].isZero
+          if node.key[n].isEmpty != node.bVid[n].isZero:
+            echo ">>> node=", node.pp
 
     # This NIM object must match to the same RLP encoded byte stream
     block:

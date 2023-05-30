@@ -162,7 +162,7 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
+proc transcodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
   let
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
@@ -175,17 +175,7 @@ proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
   defer:
     db.flushDbs
 
-  suite &"Aristo: transcoding {fileInfo} accounts and proofs for {info}":
-
-    # --- Merging ---
-
-    test &"Merge {accLst.len} account lists to database":
-      noisy.test_mergeAccounts accLst.mapIt(it.data)
-
-    test &"Merge {accLst.len} proof & account lists to database":
-      noisy.test_mergeProofsAndAccounts accLst
-
-    # --- Transcoding ---
+  suite &"Aristo: transcoding {fileInfo} accounts for {info}":
 
     test &"Trancoding VertexID recyling lists (seed={accLst.len})":
       noisy.test_transcodeVidRecycleLists(accLst.len)
@@ -208,12 +198,28 @@ proc trancodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
       noisy.showElapsed("test_transcoder()"):
         noisy.test_transcodeAccounts(db.cdb[0].rocksStoreRef, stopAfter)
 
+
+proc dataRunner(noisy  = true; sample = accSample) =
+  let
+    accLst = sample.to(seq[UndumpAccounts])
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+
+  suite &"Aristo: accounts data import from {fileInfo}":
+
+    test &"Merge {accLst.len} account lists to database":
+      noisy.test_mergeAccounts accLst
+
+    test &"Merge {accLst.len} proof & account lists to database":
+      noisy.test_mergeProofsAndAccounts accLst
+
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc aristoMain*(noisy = defined(debug)) =
-  noisy.trancodeRunner()
+  noisy.transcodeRunner()
+  noisy.dataRunner()
 
 when isMainModule:
   const
@@ -222,9 +228,29 @@ when isMainModule:
   # Borrowed from `test_sync_snap.nim`
   when true: # and false:
     for n,sam in snapTestList:
-      noisy.trancodeRunner(sam)
+      noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:
-      noisy.trancodeRunner(sam)
+      noisy.transcodeRunner(sam)
+
+  # This one uses dumps from the external `nimbus-eth1-blob` repo
+  when true and false:
+    import ./test_sync_snap/snap_other_xx
+    noisy.showElapsed("dataRunner() @snap_other_xx"):
+      for n,sam in snapOtherList:
+        noisy.dataRunner(sam)
+
+  # This one usues dumps from the external `nimbus-eth1-blob` repo
+  when true and false:
+    import ./test_sync_snap/snap_storage_xx
+    noisy.showElapsed("dataRunner() @snap_storage_xx"):
+      for n,sam in snapStorageList:
+        noisy.dataRunner(sam)
+
+  when true: # and false:
+    for n,sam in snapTestList:
+      noisy.dataRunner(sam)
+    for n,sam in snapTestStorageList:
+      noisy.dataRunner(sam)
 
 # ------------------------------------------------------------------------------
 # End
