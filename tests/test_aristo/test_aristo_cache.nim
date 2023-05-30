@@ -10,13 +10,15 @@
 
 {.push raises: [].}
 
+## Parked here, currently uded only for trancode tests
+
 import
   std/tables,
   eth/common,
   stew/results,
-  ../../sync/snap/range_desc,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_transcode,
-       aristo_vid]
+  ../../nimbus/sync/snap/range_desc,
+  ../../nimbus/db/aristo/[
+    aristo_constants, aristo_desc, aristo_error, aristo_transcode, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private helpers

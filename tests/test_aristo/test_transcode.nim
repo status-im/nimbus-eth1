@@ -17,10 +17,9 @@ import
   unittest2,
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_cache, aristo_debug, aristo_error, aristo_transcode,
-    aristo_vid],
+    aristo_desc, aristo_debug, aristo_error, aristo_transcode, aristo_vid],
   ../../nimbus/sync/snap/range_desc,
-  ./test_helpers
+  "."/[test_aristo_cache, test_helpers]
 
 type
   TesterDesc = object
