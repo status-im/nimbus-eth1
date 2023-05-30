@@ -99,14 +99,14 @@ func getHistoricalRootsIndex*(slot: Slot): uint64 =
 func getHistoricalRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
   getHistoricalRootsIndex(blockHeader.slot)
 
-func getBlockRootsIndex*(
-    slot: Slot, historicalRootIndex: uint64): uint64 =
-  uint64(slot - historicalRootIndex * SLOTS_PER_HISTORICAL_ROOT)
+func getBlockRootsIndex*(slot: Slot): uint64 =
+  slot mod SLOTS_PER_HISTORICAL_ROOT
 
-func getBlockRootsIndex*(
-    blockHeader: BeaconBlockHeader, historicalRootIndex: uint64): uint64 =
-  getBlockRootsIndex(blockHeader.slot, historicalRootIndex)
+func getBlockRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
+  getBlockRootsIndex(blockHeader.slot)
 
+# Builds proof to be able to verify that the EL block hash is part of
+# BeaconBlockBody for given root.
 func buildProof*(
     blockBody: bellatrix.BeaconBlockBody): Result[BeaconBlockBodyProof, string] =
   # 16 as there are 10 fields
@@ -121,6 +121,8 @@ func buildProof*(
 
   ok(proof)
 
+# Builds proof to be able to verify that the CL BlockBody root is part of
+# BeaconBlockHeader for given root.
 func buildProof*(
     blockHeader: BeaconBlockHeader): Result[BeaconBlockHeaderProof, string] =
   # 5th field of container with 5 fields -> 7 + 5
@@ -131,6 +133,8 @@ func buildProof*(
 
   ok(proof)
 
+# Builds proof to be able to verify that a BeaconBlock root is part of the
+# HistoricalBatch for given root.
 func buildProof*(
     batch: HistoricalBatch, blockRootIndex: uint64):
     Result[HistoricalRootsProof, string] =
@@ -148,8 +152,7 @@ func buildProof*(
     blockBody: bellatrix.BeaconBlockBody):
     Result[BeaconChainBlockProof, string] =
   let
-    historicalRootsIndex = getHistoricalRootsIndex(blockHeader)
-    blockRootIndex = getBlockRootsIndex(blockHeader, historicalRootsIndex)
+    blockRootIndex = getBlockRootsIndex(blockHeader)
 
     beaconBlockBodyProof = ? blockBody.buildProof()
     beaconBlockHeaderProof = ? blockHeader.buildProof()
@@ -197,7 +200,7 @@ func verifyProof*(
     blockHash: Digest): bool =
   let
     historicalRootsIndex = getHistoricalRootsIndex(proof.slot)
-    blockRootIndex = getBlockRootsIndex(proof.slot, historicalRootsIndex)
+    blockRootIndex = getBlockRootsIndex(proof.slot)
 
   blockHash.verifyProof(
       proof.beaconBlockBodyProof, proof.beaconBlockBodyRoot) and
