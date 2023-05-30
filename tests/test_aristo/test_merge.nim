@@ -12,12 +12,13 @@
 ## Aristo (aka Patricia) DB records merge test
 
 import
+  std/sequtils,
   eth/common,
+  stew/results,
   unittest2,
-  ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_hike,
-    aristo_merge, aristo_transcode],
+    aristo_desc, aristo_debug, aristo_error, aristo_hashify,
+    aristo_hike, aristo_merge],
   ../../nimbus/sync/snap/range_desc,
   ../replay/undump_accounts,
   ./test_helpers
@@ -26,143 +27,204 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc to(w: PackedAccount; T: type LeafKVP): T =
+  T(pathTag: w.accKey.to(NodeTag),
+    payload: PayloadRef(pType: BlobData, blob: w.accBlob))
+
+proc to[T](w: openArray[PackedAccount]; W: type seq[T]): W =
+  w.toSeq.mapIt(it.to(T))
+
+
+proc mergeStepwise(
+    db: AristoDbRef;
+    leafs: openArray[LeafKVP];
+    noisy: bool;
+      ): tuple[merged: int, dups: int, error: AristoError] =
+  let
+    lTabLen = db.lTab.len
+  var
+    (merged, dups, error) = (0, 0, AristoError(0))
+
+  for n,leaf in leafs:
+    var
+      event = false # or (2 < u) or true
+      dumpOk = false or event
+      stopOk = false
+    let
+      preState = db.pp
+      hike = db.merge leaf
+      ekih = leaf.pathTag.hikeUp(db.lRoot, db)
+
+    case hike.error:
+    of AristoError(0):
+      merged.inc
+    of MergeLeafPathCachedAlready:
+      dups.inc
+    else:
+      error = hike.error
+      dumpOk = true
+      stopOk = true
+
+    if ekih.error != AristoError(0):
+      dumpOk = true
+      stopOk = true
+
+    let hashesOk = block:
+      let rc = db.hashifyCheck(relax = true)
+      if rc.isOk:
+        (VertexID(0),AristoError(0))
+      else:
+        dumpOk = true
+        stopOk = true
+        if error == AristoError(0):
+          error = rc.error[1]
+        rc.error
+
+    if dumpOk:
+      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.pathTag.pp,
+        "\n   pre-state ", preState,
+        "\n   --------",
+        "\n   merge => hike",
+        "\n    ", hike.pp(db),
+        "\n   --------",
+        "\n    ekih", ekih.pp(db),
+        "\n   --------",
+        "\n   post-state ", db.pp,
+        "\n"
+
+    check hike.error in {AristoError(0), MergeLeafPathCachedAlready}
+    check ekih.error == AristoError(0)
+    check hashesOk == (VertexID(0),AristoError(0))
+
+    if ekih.legs.len == 0:
+      check 0 < ekih.legs.len
+    elif ekih.legs[^1].wp.vtx.vType != Leaf:
+      check ekih.legs[^1].wp.vtx.vType == Leaf
+    else:
+      check ekih.legs[^1].wp.vtx.lData.blob == leaf.payload.blob
+
+    if db.lTab.len != lTabLen + merged:
+      error = GenericError
+      check db.lTab.len == lTabLen + merged # quick leaf access table
+      stopOk = true                         # makes no sense to go on further
+
+    if stopOk:
+      noisy.say "***", "<", n, "/", leafs.len-1, "> stop"
+      break
+
+  (merged,dups,error)
+
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
 
 proc test_mergeAccounts*(
     noisy: bool;
-    lst: openArray[PackedAccountRange];
+    lst: openArray[UndumpAccounts];
       ) =
-  for u,par in lst:
-    let db = AristoDbRef()
-    var
-      root = VertexID(0)
-      count = 0
+  let
+    db = AristoDbRef()
 
-    for n,w in par.accounts:
-      let
-        sTabState = db.sTab.pp(db)
-        payload = PayloadRef(pType: BlobData, blob:  w.accBlob)
-        pathTag = w.accKey.to(NodeTag)
-        hike = db.merge(pathTag, payload, root, proofMode=false)
-        ekih = pathTag.hikeUp(hike.root, db)
+  for n,par in lst:
+    let
+      lTabLen = db.lTab.len
+      leafs = par.data.accounts.to(seq[LeafKVP])
+      added = db.merge leafs
+      #added = db.mergeStepwise(leafs, noisy=false)
 
-      if hike.error == AristoError(0):
-        root = hike.root
+    check added.error == AristoError(0)
+    check db.lTab.len == lTabLen + added.merged
+    check added.merged + added.dups == leafs.len
 
-      count = n
-      if hike.error != AristoError(0): # or true:
-        noisy.say "***", "<", n, "> ", pathTag.pp,
-          "\n   hike",
-          "\n    ", hike.pp(db),
-          "\n   sTab (prev)",
-          "\n    ", sTabState,
-          "\n   sTab",
-          "\n    ", db.sTab.pp(db),
-          "\n   lTab",
-          "\n    ", db.lTab.pp,
+    let
+      preKMap = (db.kMap.len, db.pp(sTabOk=false, lTabOk=false))
+      prePAmk = (db.pAmk.len, db.pAmk.pp(db))
+
+    block:
+      let rc = db.hashify # (noisy=true)
+      if rc.isErr: # or true:
+        noisy.say "***", "<", n, "> db dump",
+          "\n   pre-kMap(", preKMap[0], ")\n    ", preKMap[1],
+          "\n   --------",
+          "\n   post-state ", db.pp,
           "\n"
+      if rc.isErr:
+        check rc.error == AristoError(0) # force message
+        return
 
-      check hike.error == AristoError(0)
-      check ekih.error == AristoError(0)
+    block:
+      let rc = db.hashifyCheck()
+      if rc.isErr:
+        noisy.say "***", "<", n, "/", lst.len-1, "> db dump",
+          "\n   pre-kMap(", preKMap[0], ")\n    ", preKMap[1],
+          "\n   --------",
+          "\n   pre-pAmk(", prePAmk[0], ")\n    ", prePAmk[1],
+          "\n   --------",
+          "\n   post-state ", db.pp,
+          "\n"
+      if rc.isErr:
+        check rc == Result[void,(VertexID,AristoError)].ok()
+        return
 
-      if ekih.legs.len == 0:
-        check 0 < ekih.legs.len
-      elif ekih.legs[^1].wp.vtx.vType != Leaf:
-        check ekih.legs[^1].wp.vtx.vType == Leaf
-      else:
-        check ekih.legs[^1].wp.vtx.lData.blob == w.accBlob
-
-      if db.lTab.len != n + 1:
-        check db.lTab.len == n + 1 # quick leaf access table
-        break                      # makes no sense to go on further
-
-    noisy.say "***", "sample ", u, "/", lst.len ," leafs merged: ", count+1
+    #noisy.say "***", "sample ",n,"/",lst.len-1," leafs merged: ", added.merged
 
 
 proc test_mergeProofsAndAccounts*(
     noisy: bool;
     lst: openArray[UndumpAccounts];
       ) =
-  for u,par in lst:
+  let
+    db = AristoDbRef()
+
+  for n,par in lst:
     let
-      db = AristoDbRef()
+      sTabLen = db.sTab.len
+      lTabLen = db.lTab.len
+      leafs = par.data.accounts.to(seq[LeafKVP])
+
+    noisy.say "***", "sample ", n, "/", lst.len-1, " start, nLeafs=", leafs.len
+
+    let
       rootKey = par.root.to(NodeKey)
-    var
-      rootID: VertexID
-      count = 0
+      proved = db.merge par.data.proof
 
-    for n,w in par.data.proof:
-      let
-        key = w.Blob.digestTo(NodeKey)
-        node = w.Blob.decode(NodeRef)
-        rc = db.merge(key, node)
-      if rc.isErr:
-        check rc.isOK # provoke message and error
-        check rc.error == AristoError(0)
-        continue
-
-      check n + 1 < db.pAmk.len
-      check n + 1 < db.kMap.len
-      check db.sTab.len == n + 1
+    check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
+    check par.data.proof.len == proved.merged + proved.dups
+    check db.lTab.len == lTabLen
+    check db.sTab.len == proved.merged + sTabLen
+    check proved.merged < db.pAmk.len
+    check proved.merged < db.kMap.len
 
     # Set up root ID
-    db.pAmk.withValue(rootKey, vidPtr):
-      rootID = vidPtr[]
+    db.lRoot = db.pAmk.getOrDefault(rootKey, VertexID(0))
+    check db.lRoot != VertexID(0)
 
-    check not rootID.isZero
+    noisy.say "***", "sample ", n, "/", lst.len-1, " proved=", proved
+    #noisy.say "***", "<", n, "/", lst.len-1, ">\n   ", db.pp
 
-    if true and false:
-      noisy.say "***",  count, " proof nodes, root=", rootID.pp,
-        #"\n   pAmk",
-        #"\n    ", db.pAmk.pp(db),
-        "\n   kMap",
-        "\n    ", db.kMap.pp(db),
-        "\n   sTab",
-        "\n    ", db.sTab.pp(db),
-        "\n"
+    let
+      added = db.merge leafs
+      #added = db.mergeStepwise(leafs, noisy=false)
 
-    for n,w in par.data.accounts:
-      let
-        sTabState = db.sTab.pp(db)
-        payload = PayloadRef(pType: BlobData, blob:  w.accBlob)
-        pathTag = w.accKey.to(NodeTag)
-        hike = db.merge(pathTag, payload, rootID, proofMode=true) #, noisy=true)
-        ekih = pathTag.hikeUp(rootID, db)
+    check db.lTab.len == lTabLen + added.merged
+    check added.merged + added.dups == leafs.len
 
-      count = n
-      if hike.error != AristoError(0): # or true:
-        noisy.say "***", "<", n, "> ", pathTag.pp,
-          "\n   hike",
-          "\n    ", hike.pp(db),
-          "\n   sTab (prev)",
-          "\n    ", sTabState,
-          "\n   sTab",
-          "\n    ", db.sTab.pp(db),
-          "\n   lTab",
-          "\n    ", db.lTab.pp,
-          "\n"
+    block:
+      if added.error notin {AristoError(0), MergeLeafPathCachedAlready}:
+        noisy.say "***", "<", n, "/", lst.len-1, ">\n   ", db.pp
+        check added.error in {AristoError(0), MergeLeafPathCachedAlready}
+        return
 
-      check hike.error == AristoError(0)
-      check ekih.error == AristoError(0)
+    noisy.say "***", "sample ", n, "/", lst.len-1, " added=", added
 
-      if ekih.legs.len == 0:
-        check 0 < ekih.legs.len
-      elif ekih.legs[^1].wp.vtx.vType != Leaf:
-        check ekih.legs[^1].wp.vtx.vType == Leaf
-      else:
-        check ekih.legs[^1].wp.vtx.lData.blob == w.accBlob
+    block:
+      let rc = db.hashify # (noisy=false or (7 <= n))
+      if rc.isErr:
+        noisy.say "***", "<", n, "/", lst.len-1, ">\n   ", db.pp
+        check rc.error == AristoError(0)
+        return
 
-      if db.lTab.len != n + 1:
-        check db.lTab.len == n + 1 # quick leaf access table
-        break                      # makes no sense to go on further
-
-      #if 10 < n:
-      #  break
-
-    noisy.say "***", "sample ", u, "/", lst.len ," leafs merged: ", count+1
-    #break
+    noisy.say "***", "sample ",n,"/",lst.len-1," leafs merged: ", added.merged
 
 # ------------------------------------------------------------------------------
 # End

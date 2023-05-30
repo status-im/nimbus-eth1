@@ -25,8 +25,12 @@ import
   std/[sets, tables],
   eth/[common, trie/nibbles],
   stew/results,
-  ../../sync/snap/range_desc,
-  ./aristo_error
+  "."/[aristo_constants, aristo_error]
+
+import
+  ../../sync/snap/range_desc
+export
+  ByteArray32, NodeKey, NodeTag, digestTo, hash, to, `==`, `$`
 
 type
   VertexID* = distinct uint64
@@ -111,17 +115,18 @@ type
     ## Hexary trie plus helper structures
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table making up a trie
     lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
-    sDel*: HashSet[VertexID]         ## Deleted vertices
+    lRoot*: VertexID                 ## Root vertex for `lTab[]`
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
+    pPrf*: HashSet[VertexID]         ## Locked vertices (from proof vertices)
+    vGen*: seq[VertexID]             ## Unique vertex ID generator
 
     case cascaded*: bool             ## Cascaded delta databases, tx layer
     of true:
       level*: int                    ## Positive number of stack layers
       stack*: AristoDbRef            ## Down the chain, not `nil`
-      base*: AristoDbRef             ## Backend level descriptor
+      base*: AristoDbRef             ## Backend level descriptor, maybe unneeded
     else:
-      vidGen*: seq[VertexID]         ## Unique vertex ID generator
       backend*: AristoBackendRef     ## backend database (maybe `nil`)
 
     # Debugging data below, might go away in future
@@ -204,8 +209,11 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-proc isZero*[T: NodeKey|VertexID](a: T): bool =
-  a == typeof(a).default
+proc isZero*(a: VertexID): bool =
+  a == VertexID(0)
+
+proc isEmpty*(a: NodeKey): bool =
+  a == EMPTY_ROOT_KEY
 
 proc isError*(a: NodeRef): bool =
   a.error != AristoError(0)

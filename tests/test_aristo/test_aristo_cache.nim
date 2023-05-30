@@ -10,12 +10,14 @@
 
 {.push raises: [].}
 
+## Parked here, currently uded only for trancode tests
+
 import
   std/tables,
   eth/common,
   stew/results,
-  ../../sync/snap/range_desc,
-  "."/[aristo_desc, aristo_error, aristo_transcode, aristo_vid]
+  ../../nimbus/db/aristo/[
+    aristo_constants, aristo_desc, aristo_error, aristo_transcode, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -40,8 +42,9 @@ proc convertPartially(
       vType: Extension,
       ePfx:  vtx.ePfx,
       eVid:  vtx.eVid)
-    db.kMap.withValue(vtx.eVid, keyPtr):
-      nd.key[0] = keyPtr[]
+    let key = db.kMap.getOrDefault(vtx.eVid, EMPTY_ROOT_KEY)
+    if key != EMPTY_ROOT_KEY:
+      nd.key[0] = key
       return
     result.add vtx.eVid
   of Branch:
@@ -49,11 +52,11 @@ proc convertPartially(
       vType: Branch,
       bVid:  vtx.bVid)
     for n in 0..15:
-      if vtx.bVid[n].isZero:
-        continue
-      db.kMap.withValue(vtx.bVid[n], kPtr):
-        nd.key[n] = kPtr[]
-        continue
+      if not vtx.bVid[n].isZero:
+        let key = db.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
+        if key != EMPTY_ROOT_KEY:
+          nd.key[n] = key
+          continue
       result.add vtx.bVid[n]
 
 proc convertPartiallyOk(
@@ -74,8 +77,9 @@ proc convertPartiallyOk(
       vType: Extension,
       ePfx:  vtx.ePfx,
       eVid:  vtx.eVid)
-    db.kMap.withValue(vtx.eVid, keyPtr):
-      nd.key[0] = keyPtr[]
+    let key = db.kMap.getOrDefault(vtx.eVid, EMPTY_ROOT_KEY)
+    if key != EMPTY_ROOT_KEY:
+      nd.key[0] = key
       result = true
   of Branch:
     nd = NodeRef(
@@ -84,18 +88,21 @@ proc convertPartiallyOk(
     result = true
     for n in 0..15:
       if not vtx.bVid[n].isZero:
-        db.kMap.withValue(vtx.bVid[n], kPtr):
-          nd.key[n] = kPtr[]
+        let key = db.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
+        if key != EMPTY_ROOT_KEY:
+          nd.key[n] = key
           continue
         return false
 
 proc cachedVID(db: AristoDbRef; nodeKey: NodeKey): VertexID =
   ## Get vertex ID from reverse cache
-  db.pAmk.withValue(nodeKey, vidPtr):
-    return vidPtr[]
-  result = db.vidFetch()
-  db.pAmk[nodeKey] = result
-  db.kMap[result] = nodeKey
+  let vid = db.pAmk.getOrDefault(nodeKey, VertexID(0))
+  if vid != VertexID(0):
+    result = vid
+  else:
+    result = db.vidFetch()
+    db.pAmk[nodeKey] = result
+    db.kMap[result] = nodeKey
 
 # ------------------------------------------------------------------------------
 # Public functions for `VertexID` => `NodeKey` mapping
@@ -110,12 +117,14 @@ proc pal*(db: AristoDbRef; vid: VertexID): NodeKey =
   ## table is checked whether the cache can be updated.
   if not db.isNil:
 
-    db.kMap.withValue(vid, keyPtr):
-      return keyPtr[]
+    let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+    if key != EMPTY_ROOT_KEY:
+      return key
 
-    db.sTab.withValue(vid, vtxPtr):
+    let vtx = db.sTab.getOrDefault(vid, VertexRef(nil))
+    if vtx != VertexRef(nil):
       var node: NodeRef
-      if db.convertPartiallyOk(vtxPtr[],node):
+      if db.convertPartiallyOk(vtx,node):
         var w = initRlpWriter()
         w.append node
         result = w.finish.keccakHash.data.NodeKey
@@ -144,7 +153,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
       result = NodeRef(
         vType:  Extension,
         ePfx:   nd.ePfx)
-      if not nd.key[0].isZero:
+      if not nd.key[0].isEmpty:
         result.eVid = db.cachedVID nd.key[0]
         result.key[0] = nd.key[0]
     of Branch:
@@ -152,7 +161,7 @@ proc updated*(nd: NodeRef; db: AristoDbRef): NodeRef =
         vType: Branch,
         key:   nd.key)
       for n in 0..15:
-        if not nd.key[n].isZero:
+        if not nd.key[n].isEmpty:
           result.bVid[n] = db.cachedVID nd.key[n]
 
 proc asNode*(vtx: VertexRef; db: AristoDbRef): NodeRef =

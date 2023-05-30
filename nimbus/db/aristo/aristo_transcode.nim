@@ -14,7 +14,6 @@ import
   std/[bitops, sequtils],
   eth/[common, trie/nibbles],
   stew/results,
-  ../../sync/snap/range_desc,
   "."/[aristo_constants, aristo_desc, aristo_error]
 
 # ------------------------------------------------------------------------------
@@ -24,6 +23,16 @@ import
 proc aristoError(error: AristoError): NodeRef =
   ## Allows returning de
   NodeRef(vType: Leaf, error: error)
+
+proc aInit(key: var NodeKey; data: openArray[byte]): bool =
+  ## Import argument `data` into `key` which must have length either `32`, or
+  ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
+  if data.len == 32:
+    (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
+    return true
+  elif data.len == 0:
+    key = EMPTY_ROOT_KEY
+    return true
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
@@ -53,7 +62,7 @@ proc read*(
         return aristoError(RlpBlobExpected)
       blobs[top] = rlp.read(Blob)
     of 2 .. 15:
-      if not links[top].init(rlp.read(Blob)):
+      if not links[top].aInit(rlp.read(Blob)):
         return aristoError(RlpBranchLinkExpected)
     of 16:
       if not w.isBlob:
@@ -81,12 +90,12 @@ proc read*(
       var node = NodeRef(
         vType: Extension,
         ePfx:  pathSegment)
-      if not node.key[0].init(blobs[1]):
+      if not node.key[0].aInit(blobs[1]):
         return aristoError(RlpExtPathEncoding)
       return node
   of 17:
     for n in [0,1]:
-      if not links[n].init(blobs[n]):
+      if not links[n].aInit(blobs[n]):
         return aristoError(RlpBranchLinkExpected)
     return NodeRef(
       vType: Branch,
@@ -101,7 +110,7 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
   proc addNodeKey(writer: var RlpWriter; key: NodeKey) =
-    if key.isZero:
+    if key.isEmpty:
       writer.append EmptyBlob
     else:
       writer.append key.to(Hash256)
@@ -203,7 +212,7 @@ proc blobify*(db: AristoDbRef; data: var Blob) =
   ##     0x40
   ##
   data.setLen(0)
-  for w in db.vidGen:
+  for w in db.vGen:
     data &= w.uint64.toBytesBE.toSeq
   data.add 0x40u8
 
@@ -287,7 +296,7 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
   if db.isNil:
     db = AristoDbRef()
   if data.len == 0:
-    db.vidGen = @[1.VertexID]
+    db.vGen = @[1.VertexID]
   else:
     if (data.len mod 8) != 1:
       return ADbGarbledSize
@@ -295,7 +304,7 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
       return ADbWrongType
     for n in 0 ..< (data.len div 8):
       let w = n * 8
-      db.vidGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+      db.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
 
 
 proc deblobify*[W: VertexRef|AristoDbRef](
