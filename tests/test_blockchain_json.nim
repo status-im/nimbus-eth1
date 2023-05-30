@@ -25,11 +25,6 @@ import
   ../nimbus/common/common
 
 type
-  # trick the rlp decoder
-  # so we can separate the body and header
-  EthHeader = object
-    header: BlockHeader
-
   SealEngine = enum
     NoProof
     Ethash
@@ -229,9 +224,7 @@ proc importBlock(tester: var Tester, com: CommonRef,
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: var TestBlock,
                               com: CommonRef, checkSeal, validation: bool) =
-  var rlp = rlpFromBytes(tb.blockRLP)
-  tb.header = rlp.read(EthHeader).header
-  tb.body = rlp.readRecordType(BlockBody, false)
+  decompose(tb.blockRLP, tb.header, tb.body)  
   tester.importBlock(com, tb, checkSeal, validation)
 
 func shouldCheckSeal(tester: Tester): bool =

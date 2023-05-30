@@ -12,13 +12,8 @@ import
   eth/rlp, stew/io2,
   ./chain,
   ../db/select_backend,
-  ../common/common
-
-type
-  # trick the rlp decoder
-  # so we can separate the body and header
-  EthHeader = object
-    header: BlockHeader
+  ../common/common,
+  ../utils/utils
 
 proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: string = ""): bool =
   var
@@ -26,14 +21,14 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
     rlp = rlpFromBytes(blocksRlp)
     chain = newChain(com, extraValidation = true)
     errorCount = 0
+    header: BlockHeader
+    body: BlockBody
   let
     head = com.db.getCanonicalHead()
 
   while rlp.hasData:
     try:
-      let
-        header = rlp.read(EthHeader).header
-        body = rlp.readRecordType(BlockBody, false)
+      rlp.decompose(header, body)
       if header.blockNumber > head.blockNumber:
         if chain.persistBlocks([header], [body]) == ValidationResult.Error:
           # register one more error and continue

@@ -63,3 +63,19 @@ proc short*(h: Hash256): string =
   bytes[0..2] = h.data[0..2]
   bytes[^3..^1] = h.data[^3..^1]
   bytes.toHex
+
+proc decompose*(rlp: var Rlp, 
+                header: var BlockHeader, 
+                body: var BlockBody) {.gcsafe, raises: [RlpError].} =
+  var blk = rlp.read(EthBlock)
+  header = system.move(blk.header)
+  body.transactions = system.move(blk.txs)
+  body.uncles = system.move(blk.uncles)
+  body.withdrawals = system.move(blk.withdrawals)
+
+proc decompose*(rlpBytes: openArray[byte], 
+                header: var BlockHeader, 
+                body: var BlockBody) {.gcsafe, raises: [RlpError].} =
+  var rlp = rlpFromBytes(rlpBytes)
+  rlp.decompose(header, body)
+  
