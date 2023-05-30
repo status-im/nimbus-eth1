@@ -11,10 +11,14 @@ import
   stew/results, chronos, chronicles,
   eth/[common/eth_types_rlp, rlp, trie, trie/db],
   eth/p2p/discoveryv5/[protocol, enr],
+  ../../common/common_types,
   ../../content_db,
+  ../../network_metadata,
   ../../../nimbus/constants,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, accumulator]
+
+from std/times import toUnix
 
 logScope:
   topics = "portal_hist"
@@ -61,23 +65,12 @@ type
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
-func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
-  try:
-    ok(rlp.decode(input, T))
-  except RlpError as e:
-    err(e.msg)
-
-func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
-  try:
-    ok(SSZ.decode(input, T))
-  except SszError as e:
-    err(e.msg)
-
-## Calls to go from SSZ decoded types to RLP fully decoded types
+## Calls to go from SSZ decoded Portal types to RLP fully decoded EL types
 
 func fromPortalBlockBody*(
-    T: type BlockBody, body: BlockBodySSZ): Result[T, string] =
-  ## Get the full decoded BlockBody from the SSZ-decoded `PortalBlockBody`.
+    T: type BlockBody, body: PortalBlockBodyLegacy):
+    Result[T, string] =
+  ## Get the EL BlockBody from the SSZ-decoded `PortalBlockBodyLegacy`.
   try:
     var transactions: seq[Transaction]
     for tx in body.transactions:
@@ -89,9 +82,42 @@ func fromPortalBlockBody*(
   except RlpError as e:
     err("RLP decoding failed: " & e.msg)
 
-func fromReceipts*(
-    T: type seq[Receipt], receipts: ReceiptsSSZ): Result[T, string] =
-  ## Get the full decoded seq[Receipt] from the SSZ-decoded `Receipts`.
+func fromPortalBlockBody*(
+    T: type BlockBody, body: PortalBlockBodyShanghai): Result[T, string] =
+  ## Get the EL BlockBody from the SSZ-decoded `PortalBlockBodyShanghai`.
+  try:
+    var transactions: seq[Transaction]
+    for tx in body.transactions:
+      transactions.add(rlp.decode(tx.asSeq(), Transaction))
+
+    var withdrawals: seq[Withdrawal]
+    for w in body.withdrawals:
+      withdrawals.add(rlp.decode(w.asSeq(), Withdrawal))
+
+    ok(BlockBody(
+      transactions: transactions,
+      uncles: @[], # Uncles must be empty: TODO where validation?
+      withdrawals: some(withdrawals)))
+  except RlpError as e:
+    err("RLP decoding failed: " & e.msg)
+
+func fromPortalBlockBodyOrRaise*(
+    T: type BlockBody,
+    body: PortalBlockBodyLegacy | PortalBlockBodyShanghai):
+    T =
+  ## Get the EL BlockBody from one of the SSZ-decoded Portal BlockBody types.
+  ## Will raise Assertion in case of invalid RLP encodings. Only use of data
+  ## has been validated before!
+  # TODO: Using ValueOr here gives compile error
+  let res = BlockBody.fromPortalBlockBody(body)
+  if res.isOk():
+    res.get()
+  else:
+    raiseAssert(res.error)
+
+func fromPortalReceipts*(
+    T: type seq[Receipt], receipts: PortalReceipts): Result[T, string] =
+  ## Get the full decoded EL seq[Receipt] from the SSZ-decoded `PortalReceipts`.
   try:
     var res: seq[Receipt]
     for receipt in receipts:
@@ -101,31 +127,55 @@ func fromReceipts*(
   except RlpError as e:
     err("RLP decoding failed: " & e.msg)
 
-## Calls to encode Block types to the SSZ types.
+## Calls to encode EL block types to the SSZ encoded Portal types.
 
-func fromBlockBody(T: type BlockBodySSZ, body: BlockBody): T =
+# TODO: The fact that we have different Portal BlockBody types for the different
+# forks but not for the EL BlockBody (usage of Option) does not play so well
+# together.
+
+func fromBlockBody(T: type PortalBlockBodyLegacy, body: BlockBody): T =
   var transactions: Transactions
   for tx in body.transactions:
     discard transactions.add(TransactionByteList(rlp.encode(tx)))
 
   let uncles = Uncles(rlp.encode(body.uncles))
 
-  BlockBodySSZ(transactions: transactions, uncles: uncles)
+  PortalBlockBodyLegacy(transactions: transactions, uncles: uncles)
 
-func fromReceipts*(T: type ReceiptsSSZ, receipts: seq[Receipt]): T =
-  var receiptsSSZ: ReceiptsSSZ
+func fromBlockBody(T: type PortalBlockBodyShanghai, body: BlockBody): T =
+  var transactions: Transactions
+  for tx in body.transactions:
+    discard transactions.add(TransactionByteList(rlp.encode(tx)))
+
+  let uncles = Uncles(rlp.encode(body.uncles))
+
+  doAssert(body.withdrawals.isSome())
+
+  var withdrawals: Withdrawals
+  for w in body.withdrawals.get():
+    discard withdrawals.add(WithdrawalByteList(rlp.encode(w)))
+  PortalBlockBodyShanghai(transactions: transactions, uncles: uncles, withdrawals: withdrawals)
+
+func fromReceipts*(T: type PortalReceipts, receipts: seq[Receipt]): T =
+  var portalReceipts: PortalReceipts
   for receipt in receipts:
-    discard receiptsSSZ.add(ReceiptByteList(rlp.encode(receipt)))
+    discard portalReceipts.add(ReceiptByteList(rlp.encode(receipt)))
 
-  receiptsSSZ
+  portalReceipts
 
 func encode*(blockBody: BlockBody): seq[byte] =
-  let portalBlockBody = BlockBodySSZ.fromBlockBody(blockBody)
+  if blockBody.withdrawals.isSome():
+    SSZ.encode(PortalBlockBodyShanghai.fromBlockBody(blockBody))
+  else:
+    SSZ.encode(PortalBlockBodyLegacy.fromBlockBody(blockBody))
+
+func encode*(blockBody: BlockBody, T: type PortalBlockBodyShanghai): seq[byte] =
+  let portalBlockBody = PortalBlockBodyShanghai.fromBlockBody(blockBody)
 
   SSZ.encode(portalBlockBody)
 
 func encode*(receipts: seq[Receipt]): seq[byte] =
-  let portalReceipts = ReceiptsSSZ.fromReceipts(receipts)
+  let portalReceipts = PortalReceipts.fromReceipts(receipts)
 
   SSZ.encode(portalReceipts)
 
@@ -133,7 +183,7 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # TODO: Failures on validation and perhaps deserialisation should be punished
 # for if/when peer scoring/banning is added.
 
-proc calcRootHash(items: Transactions | ReceiptsSSZ): Hash256 =
+proc calcRootHash(items: Transactions | PortalReceipts| Withdrawals): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
   for i, item in items:
     try:
@@ -148,7 +198,10 @@ proc calcRootHash(items: Transactions | ReceiptsSSZ): Hash256 =
 template calcTxsRoot*(transactions: Transactions): Hash256 =
   calcRootHash(transactions)
 
-template calcReceiptsRoot*(receipts: ReceiptsSSZ): Hash256 =
+template calcReceiptsRoot*(receipts: PortalReceipts): Hash256 =
+  calcRootHash(receipts)
+
+template calcWithdrawalsRoot*(receipts: Withdrawals): Hash256 =
   calcRootHash(receipts)
 
 func validateBlockHeaderBytes*(
@@ -168,34 +221,91 @@ func validateBlockHeaderBytes*(
     ok(header)
 
 proc validateBlockBody(
-    body: BlockBodySSZ, txsRoot, ommersHash: KeccakHash):
+    body: PortalBlockBodyLegacy, header: BlockHeader):
     Result[void, string] =
-  ## Validate the block body against the txRoot amd ommersHash from the header.
-  # TODO: should be checked for hash for empty uncles after merge block
+  ## Validate the block body against the txRoot and ommersHash from the header.
   let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
-  if calculatedOmmersHash != ommersHash:
+  if calculatedOmmersHash != header.ommersHash:
     return err("Invalid ommers hash")
 
   let calculatedTxsRoot = calcTxsRoot(body.transactions)
-  if calculatedTxsRoot != txsRoot:
+  if calculatedTxsRoot != header.txRoot:
     return err("Invalid transactions root")
-
-  # TODO: Add root check for withdrawals after Shanghai
 
   ok()
 
+proc validateBlockBody(
+    body: PortalBlockBodyShanghai, header: BlockHeader):
+    Result[void, string] =
+  ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
+  ## from the header.
+  # Shortcutting the ommersHash calculation as uncles needs to be empty
+  # TODO: This is since post-merge, however, we would need an additional object
+  # type for that period to do this.
+  if body.uncles.len > 0:
+    return err("Invalid ommers hash")
+
+  let calculatedTxsRoot = calcTxsRoot(body.transactions)
+  if calculatedTxsRoot != header.txRoot:
+    return err("Invalid transactions root")
+
+  # TODO: This check is done higher up but perhaps this can become cleaner with
+  # some refactor.
+  doAssert(header.withdrawalsRoot.isSome())
+
+  let calculatedWithdrawalsRoot = calcWithdrawalsRoot(body.withdrawals)
+  if calculatedWithdrawalsRoot != header.txRoot:
+    return err("Invalid transactions root")
+
+  ok()
+
+proc decodeBlockBodyBytes*(bytes: openArray[byte]): Result[BlockBody, string] =
+  if (let body = decodeSsz(bytes, PortalBlockBodyShanghai); body.isOk()):
+    BlockBody.fromPortalBlockBody(body.get())
+  elif (let body = decodeSsz(bytes, PortalBlockBodyLegacy); body.isOk()):
+    BlockBody.fromPortalBlockBody(body.get())
+  else:
+    err("All Portal block body decodings failed")
+
 proc validateBlockBodyBytes*(
-    bytes: openArray[byte], txRoot, ommersHash: KeccakHash):
+    bytes: openArray[byte], header: BlockHeader):
     Result[BlockBody, string] =
-  ## Fully decode the SSZ Block Body and validate it against the header.
-  let body = ? decodeSsz(bytes, BlockBodySSZ)
-
-  ? validateBlockBody(body, txRoot, ommersHash)
-
-  BlockBody.fromPortalBlockBody(body)
+  ## Fully decode the SSZ encoded Portal Block Body and validate it against the
+  ## header.
+  ## TODO: improve this decoding in combination with the block body validation
+  ## calls.
+  let timestamp = Moment.init(header.timestamp.toUnix(), Second)
+  # TODO: The additional header checks are not needed as header is implicitly
+  # verified by means of the accumulator? Except that we don't use this yet
+  # post merge, so the checks are still useful, for now.
+  if isShanghai(chainConfig, timestamp):
+    if header.withdrawalsRoot.isNone():
+      return err("Expected withdrawalsRoot for Shanghai block")
+    elif header.ommersHash != EMPTY_UNCLE_HASH:
+      return err("Expected empty uncles for a Shanghai block")
+    else:
+      let body = ? decodeSsz(bytes, PortalBlockBodyShanghai)
+      ? validateBlockBody(body, header)
+      BlockBody.fromPortalBlockBody(body)
+  elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
+    if header.withdrawalsRoot.isSome():
+      return err("Expected no withdrawalsRoot for pre Shanghai block")
+    elif header.ommersHash != EMPTY_UNCLE_HASH:
+      return err("Expected empty uncles for a PoS block")
+    else:
+      let body = ? decodeSsz(bytes, PortalBlockBodyLegacy)
+      ? validateBlockBody(body, header)
+      BlockBody.fromPortalBlockBody(body)
+  else:
+    if header.withdrawalsRoot.isSome():
+      return err("Expected no withdrawalsRoot for pre Shanghai block")
+    else:
+      let body = ? decodeSsz(bytes, PortalBlockBodyLegacy)
+      ? validateBlockBody(body, header)
+      BlockBody.fromPortalBlockBody(body)
 
 proc validateReceipts*(
-    receipts: ReceiptsSSZ, receiptsRoot: KeccakHash): Result[void, string] =
+    receipts: PortalReceipts, receiptsRoot: KeccakHash): Result[void, string] =
   let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
 
   if calculatedReceiptsRoot != receiptsRoot:
@@ -207,11 +317,11 @@ proc validateReceiptsBytes*(
     bytes: openArray[byte],
     receiptsRoot: KeccakHash): Result[seq[Receipt], string] =
   ## Fully decode the SSZ Block Body and validate it against the header.
-  let receipts = ? decodeSsz(bytes, ReceiptsSSZ)
+  let receipts = ? decodeSsz(bytes, PortalReceipts)
 
   ? validateReceipts(receipts, receiptsRoot)
 
-  seq[Receipt].fromReceipts(receipts)
+  seq[Receipt].fromPortalReceipts(receipts)
 
 ## ContentDB helper calls for specific history network types
 
@@ -232,21 +342,30 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
   else:
     Opt.none(T)
 
-proc get(db: ContentDB, T: type BlockBody, contentId: ContentId): Opt[T] =
-  let contentFromDB = db.getSszDecoded(contentId, BlockBodySSZ)
-  if contentFromDB.isSome():
-    let res = T.fromPortalBlockBody(contentFromDB.get())
-    if res.isErr():
-      raiseAssert(res.error)
+proc get(db: ContentDB, T: type BlockBody, contentId: ContentId,
+    header: BlockHeader): Opt[T] =
+  let encoded = db.get(contentId)
+  if encoded.isNone():
+    return Opt.none(T)
+
+  let timestamp = Moment.init(header.timestamp.toUnix(), Second)
+  let body =
+    if isShanghai(chainConfig, timestamp):
+      BlockBody.fromPortalBlockBodyOrRaise(
+        decodeSszOrRaise(encoded.get(), PortalBlockBodyShanghai))
+    elif isPoSBlock(chainConfig, header.blockNumber.truncate(uint64)):
+      BlockBody.fromPortalBlockBodyOrRaise(
+        decodeSszOrRaise(encoded.get(), PortalBlockBodyLegacy))
     else:
-      Opt.some(res.get())
-  else:
-    Opt.none(T)
+      BlockBody.fromPortalBlockBodyOrRaise(
+        decodeSszOrRaise(encoded.get(), PortalBlockBodyLegacy))
+
+  Opt.some(body)
 
 proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Opt[T] =
-  let contentFromDB = db.getSszDecoded(contentId, ReceiptsSSZ)
+  let contentFromDB = db.getSszDecoded(contentId, PortalReceipts)
   if contentFromDB.isSome():
-    let res = T.fromReceipts(contentFromDB.get())
+    let res = T.fromPortalReceipts(contentFromDB.get())
     if res.isErr():
       raiseAssert(res.error)
     else:
@@ -352,7 +471,7 @@ proc getBlockBody*(
     hash
     contentKey
 
-  let bodyFromDb = n.getContentFromDb(BlockBody, contentId)
+  let bodyFromDb = n.contentDB.get(BlockBody, contentId, header)
   if bodyFromDb.isSome():
     info "Fetched block body from database"
     return bodyFromDb
@@ -365,7 +484,7 @@ proc getBlockBody*(
         return Opt.none(BlockBody)
 
       body = validateBlockBodyBytes(
-          bodyContent.content, header.txRoot, header.ommersHash).valueOr:
+          bodyContent.content, header).valueOr:
         warn "Validation of block body failed", error
         continue
 
@@ -536,7 +655,7 @@ proc validateContent(
       warn "Failed getting canonical header for block"
       return false
 
-    let res = validateBlockBodyBytes(content, header.txRoot, header.ommersHash)
+    let res = validateBlockBodyBytes(content, header)
     if res.isErr():
       warn "Failed validating block body", error = res.error
       return false

@@ -185,53 +185,49 @@ func asReceipt(
   else:
     err("No root nor status field in the JSON receipt object")
 
+proc calculateTransactionData(
+    items: openArray[TypedTransaction]):
+    Hash256 {.raises: [].} =
+
+  var tr = initHexaryTrie(newMemoryDB())
+  for i, t in items:
+    try:
+      let tx = distinctBase(t)
+      tr.put(rlp.encode(i), tx)
+    except RlpError as e:
+      # TODO: Investigate this RlpError as it doesn't sound like this is
+      # something that can actually occur.
+      raiseAssert(e.msg)
+
+  return tr.rootHash()
+
+# TODO: Since Capella we can also access ExecutionPayloadHeader and thus
+# could get the Roots through there instead.
+proc calculateWithdrawalsRoot(
+  items: openArray[WithdrawalV1]):
+    Hash256 {.raises: [].} =
+
+  var tr = initHexaryTrie(newMemoryDB())
+  for i, w in items:
+    try:
+      let withdrawal = etypes.Withdrawal(
+        index: distinctBase(w.index),
+        validatorIndex: distinctBase(w.validatorIndex),
+        address: distinctBase(w.address),
+        amount: distinctBase(w.amount)
+      )
+      tr.put(rlp.encode(i), rlp.encode(withdrawal))
+    except RlpError as e:
+      raiseAssert(e.msg)
+
+  return tr.rootHash()
+
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV1 | ExecutionPayloadV2 | ExecutionPayloadV3):
-    (common_types.BlockHash, BlockHeaderWithProof, BlockBodySSZ) =
-  proc calculateTransactionData(
-      items: openArray[TypedTransaction]):
-      Hash256 {.raises: [].} =
-
-    var tr = initHexaryTrie(newMemoryDB())
-    for i, t in items:
-      try:
-        let tx = distinctBase(t)
-        tr.put(rlp.encode(i), tx)
-      except RlpError as e:
-        # TODO: Investigate this RlpError as it doesn't sound like this is
-        # something that can actually occur.
-        raiseAssert(e.msg)
-
-    return tr.rootHash()
-
-  # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
-  # could get the Roots through there instead.
-  proc calculateWithdrawalsRoot(
-    items: openArray[WithdrawalV1]):
-      Hash256 {.raises: [].} =
-
-    var tr = initHexaryTrie(newMemoryDB())
-    for i, w in items:
-      try:
-        let withdrawal = Withdrawal(
-          index: distinctBase(w.index),
-          validatorIndex: distinctBase(w.validatorIndex),
-          address: distinctBase(w.address),
-          amount: distinctBase(w.amount)
-        )
-        tr.put(rlp.encode(i), rlp.encode(withdrawal))
-      except RlpError as e:
-        raiseAssert(e.msg)
-
-    return tr.rootHash()
-
+    payload: ExecutionPayloadV1):
+    (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyLegacy) =
   let
     txRoot = calculateTransactionData(payload.transactions)
-    withdrawalsRoot =
-      when type(payload) is ExecutionPayloadV1:
-        options.none(Hash256)
-      else:
-        some(calculateWithdrawalsRoot(payload.withdrawals))
+    withdrawalsRoot = options.none(Hash256)
 
     header = etypes.BlockHeader(
       parentHash: payload.parentHash.asEthHash,
@@ -251,7 +247,7 @@ proc asPortalBlockData*(
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      excessDataGas: options.none(UInt256) # TODO: Update later according to fork
+      excessDataGas: options.none(UInt256)
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -262,11 +258,67 @@ proc asPortalBlockData*(
   for tx in payload.transactions:
     discard transactions.add(TransactionByteList(distinctBase(tx)))
 
-  # TODO: Specifications are not ready for Shanghai/Capella on how to add the
-  # withdrawals here.
-  let body = BlockBodySSZ(
+  let body = PortalBlockBodyLegacy(
     transactions: transactions,
     uncles: Uncles(@[byte 0xc0]))
+
+  let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
+
+  (hash, headerWithProof, body)
+
+proc asPortalBlockData*(
+    payload: ExecutionPayloadV2 | ExecutionPayloadV3):
+    (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
+  let
+    txRoot = calculateTransactionData(payload.transactions)
+    withdrawalsRoot = some(calculateWithdrawalsRoot(payload.withdrawals))
+
+    header = etypes.BlockHeader(
+      parentHash: payload.parentHash.asEthHash,
+      ommersHash: EMPTY_UNCLE_HASH,
+      coinbase: EthAddress payload.feeRecipient,
+      stateRoot: payload.stateRoot.asEthHash,
+      txRoot: txRoot,
+      receiptRoot: payload.receiptsRoot.asEthHash,
+      bloom: distinctBase(payload.logsBloom),
+      difficulty: default(DifficultyInt),
+      blockNumber: payload.blockNumber.distinctBase.u256,
+      gasLimit: payload.gasLimit.unsafeQuantityToInt64,
+      gasUsed: payload.gasUsed.unsafeQuantityToInt64,
+      timestamp: fromUnix payload.timestamp.unsafeQuantityToInt64,
+      extraData: bytes payload.extraData,
+      mixDigest: payload.prevRandao.asEthHash,
+      nonce: default(BlockNonce),
+      fee: some(payload.baseFeePerGas),
+      withdrawalsRoot: withdrawalsRoot,
+      excessDataGas: options.none(UInt256) # TODO: adjust later according to deneb fork
+    )
+
+    headerWithProof = BlockHeaderWithProof(
+      header: ByteList(rlp.encode(header)),
+      proof: BlockHeaderProof.init())
+
+  var transactions: Transactions
+  for tx in payload.transactions:
+    discard transactions.add(TransactionByteList(distinctBase(tx)))
+
+  func toWithdrawal(x: WithdrawalV1): Withdrawal =
+    Withdrawal(
+      index: x.index.uint64,
+      validatorIndex: x.validatorIndex.uint64,
+      address: x.address.EthAddress,
+      amount: x.amount.uint64
+    )
+
+  var withdrawals: Withdrawals
+  for w in payload.withdrawals:
+    discard withdrawals.add(WithdrawalByteList(rlp.encode(toWithdrawal(w))))
+
+  let body = PortalBlockBodyShanghai(
+    transactions: transactions,
+    uncles: Uncles(@[byte 0xc0]),
+    withdrawals: withdrawals
+    )
 
   let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
 
@@ -453,8 +505,8 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
                   error "Error getting block receipts", error
                   return
 
-              let sszReceipts = ReceiptsSSZ.fromReceipts(receipts)
-              if validateReceipts(sszReceipts, payload.receiptsRoot).isErr():
+              let portalReceipts = PortalReceipts.fromReceipts(receipts)
+              if validateReceipts(portalReceipts, payload.receiptsRoot).isErr():
                 error "Receipts root is invalid"
                 return
 
@@ -466,7 +518,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               try:
                 let peers = await portalRpcClient.portal_historyGossip(
                   encodedContentKeyHex,
-                  SSZ.encode(sszReceipts).toHex())
+                  SSZ.encode(portalReceipts).toHex())
                 info "Block receipts gossiped", peers,
                     contentKey = encodedContentKeyHex
               except CatchableError as e:
