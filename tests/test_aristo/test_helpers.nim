@@ -13,8 +13,9 @@ import
   std/sequtils,
   eth/common,
   rocksdb,
+  ../../nimbus/db/aristo/[aristo_desc, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
-  ../../nimbus/sync/snap/constants,
+  ../../nimbus/sync/snap/[constants, range_desc],
   ../replay/pp
 
 # ------------------------------------------------------------------------------
@@ -29,6 +30,13 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo pfx, " ", args.toSeq.join
     else:
       echo pfx, args.toSeq.join
+
+proc to*(w: PackedAccount; T: type LeafKVP): T =
+  T(pathTag: w.accKey.to(NodeTag),
+    payload: PayloadRef(pType: BlobData, blob: w.accBlob))
+
+proc to*[T](w: openArray[PackedAccount]; W: type seq[T]): W =
+  w.toSeq.mapIt(it.to(T))
 
 # ------------------------------------------------------------------------------
 # Public iterators

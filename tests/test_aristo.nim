@@ -24,7 +24,7 @@ import
     hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_merge, test_transcode]
+  ./test_aristo/[test_merge, test_nearby, test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -212,6 +212,9 @@ proc dataRunner(noisy  = true; sample = accSample) =
     test &"Merge {accLst.len} proof & account lists to database":
       noisy.test_mergeProofsAndAccounts accLst
 
+    test &"Traverse accounts database w/{accLst.len} account lists":
+      noisy.test_nearbyAccounts accLst
+
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -226,7 +229,7 @@ when isMainModule:
     noisy = defined(debug) or true
 
   # Borrowed from `test_sync_snap.nim`
-  when true: # and false:
+  when true and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:

@@ -27,14 +27,6 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc to(w: PackedAccount; T: type LeafKVP): T =
-  T(pathTag: w.accKey.to(NodeTag),
-    payload: PayloadRef(pType: BlobData, blob: w.accBlob))
-
-proc to[T](w: openArray[PackedAccount]; W: type seq[T]): W =
-  w.toSeq.mapIt(it.to(T))
-
-
 proc mergeStepwise(
     db: AristoDbRef;
     leafs: openArray[LeafKVP];
@@ -182,7 +174,7 @@ proc test_mergeProofsAndAccounts*(
       lTabLen = db.lTab.len
       leafs = par.data.accounts.to(seq[LeafKVP])
 
-    noisy.say "***", "sample ", n, "/", lst.len-1, " start, nLeafs=", leafs.len
+    #noisy.say "***", "sample ",n,"/",lst.len-1, " start, nLeafs=", leafs.len
 
     let
       rootKey = par.root.to(NodeKey)
@@ -199,7 +191,7 @@ proc test_mergeProofsAndAccounts*(
     db.lRoot = db.pAmk.getOrDefault(rootKey, VertexID(0))
     check db.lRoot != VertexID(0)
 
-    noisy.say "***", "sample ", n, "/", lst.len-1, " proved=", proved
+    #noisy.say "***", "sample ", n, "/", lst.len-1, " proved=", proved
     #noisy.say "***", "<", n, "/", lst.len-1, ">\n   ", db.pp
 
     let
@@ -215,7 +207,7 @@ proc test_mergeProofsAndAccounts*(
         check added.error in {AristoError(0), MergeLeafPathCachedAlready}
         return
 
-    noisy.say "***", "sample ", n, "/", lst.len-1, " added=", added
+    #noisy.say "***", "sample ", n, "/", lst.len-1, " added=", added
 
     block:
       let rc = db.hashify # (noisy=false or (7 <= n))
@@ -224,7 +216,7 @@ proc test_mergeProofsAndAccounts*(
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    noisy.say "***", "sample ",n,"/",lst.len-1," leafs merged: ", added.merged
+    #noisy.say "***", "sample ",n,"/",lst.len-1," leafs merged: ", added.merged
 
 # ------------------------------------------------------------------------------
 # End
