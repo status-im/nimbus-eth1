@@ -16,7 +16,13 @@
 import
   std/tables,
   stew/results,
+  ../../sync/snap/range_desc,
   "."/[aristo_desc, aristo_error]
+
+type
+  VidVtxPair* = object
+    vid*: VertexID                 ## Table lookup vertex ID (if any)
+    vtx*: VertexRef                ## Reference to vertex
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -43,13 +49,35 @@ proc getVtxCascaded*(
 
   err(GetVtxNotFound)
 
+proc getVtxCascaded*(
+    db: AristoDbRef;
+    tag: NodeTag;
+      ): Result[VidVtxPair,AristoError] =
+  ## Cascaded lookup for data record down the transaction cascade using
+  ## the Patricia path.
+  db.lTab.withValue(tag, vidPtr):
+    db.sTab.withValue(vidPtr[], vtxPtr):
+      return ok VidVtxPair(vid: vidPtr[], vtx: vtxPtr[])
+    return err(GetTagNotFound)
+
+  # Down the rabbit hole of transaction layers
+  var lDb = db
+  while lDb.cascaded:
+    lDb = lDb.stack
+    lDb.lTab.withValue(tag, vidPtr):
+      lDb.sTab.withValue(vidPtr[], vtxPtr):
+        return ok VidVtxPair(vid: vidPtr[], vtx: vtxPtr[])
+      return err(GetTagNotFound)
+
+  err(GetTagNotFound)
+
 proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
   ## Variant of `getVtxCascaded()` with returning `nil` on error ignoring the
   ## error type information.
   let rc = db.getVtxCascaded vid
   if rc.isOk:
     return rc.value
-    
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
