@@ -17,10 +17,8 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_hike, aristo_merge,
-    aristo_nearby],
+    aristo_desc, aristo_debug, aristo_error, aristo_merge, aristo_nearby],
   ../../nimbus/sync/snap/range_desc,
-  ../replay/undump_accounts,
   ./test_helpers
 
 # ------------------------------------------------------------------------------
@@ -116,16 +114,22 @@ proc revWalkLeafsCompleteDB(
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc test_nearbyAccounts*(
+proc test_nearbyKvpList*(
     noisy: bool;
-    lst: openArray[UndumpAccounts];
+    list: openArray[ProofTrieData];
+    resetDb = false;
       ) =
-  let db = AristoDbRef()
-  var tagSet: HashSet[NodeTag]
-  for n,par in lst:
+  var
+    db = AristoDbRef()
+    tagSet: HashSet[NodeTag]
+  for n,w in list:
+    if resetDb:
+      db = AristoDbRef()
+      tagSet.reset
     let
+      lstLen = list.len
       lTabLen = db.lTab.len
-      leafs = par.data.accounts.to(seq[LeafKVP])
+      leafs = w.kvpLst
       added = db.merge leafs
 
     check added.error == AristoError(0)
@@ -145,13 +149,12 @@ proc test_nearbyAccounts*(
     check fwdWalk == revWalk
 
     if {fwdWalk.error, revWalk.error} != {AristoError(0)}:
-      noisy.say "***", "<", n, "/", lst.len-1, "> db dump",
+      noisy.say "***", "<", n, "/", lstLen-1, "> db dump",
         "\n   post-state ", db.pp,
         "\n"
       break
 
-    noisy.say "***", "sample ",n,"/",lst.len-1, " visited=", fwdWalk.visited
-    if 0 < n: break
+    #noisy.say "***", "sample ",n,"/",lstLen-1, " visited=", fwdWalk.visited
 
 # ------------------------------------------------------------------------------
 # End

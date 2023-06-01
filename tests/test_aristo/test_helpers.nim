@@ -15,8 +15,39 @@ import
   rocksdb,
   ../../nimbus/db/aristo/[aristo_desc, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
+  ../../nimbus/sync/protocol/snap/snap_types,
   ../../nimbus/sync/snap/[constants, range_desc],
-  ../replay/pp
+  ../test_sync_snap/test_types,
+  ../replay/[pp, undump_accounts, undump_storages]
+
+type
+  ProofTrieData* = object
+    root*: NodeKey
+    id*: int
+    proof*: seq[SnapProof]
+    kvpLst*: seq[LeafKVP]
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc to(w: UndumpAccounts; T: type ProofTrieData): T =
+  T(root:   w.root.to(NodeKey),
+    proof:  w.data.proof,
+    kvpLst: w.data.accounts.mapIt(LeafKVP(
+      pathTag: it.accKey.to(NodeTag),
+      payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
+
+proc to(s: UndumpStorages; id: int; T: type seq[ProofTrieData]): T =
+  for w in s.data.storages:
+    result.add ProofTrieData(
+      root:   w.account.storageRoot.to(NodeKey),
+      id:     id,
+      kvpLst: w.data.mapIt(LeafKVP(
+        pathTag: it.slotHash.to(NodeTag),
+        payload: PayloadRef(pType: BlobData, blob: it.slotData))))
+  if 0 < result.len:
+    result[^1].proof = s.data.proof
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -31,12 +62,46 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
-proc to*(w: PackedAccount; T: type LeafKVP): T =
-  T(pathTag: w.accKey.to(NodeTag),
-    payload: PayloadRef(pType: BlobData, blob: w.accBlob))
+# -----------------------
 
-proc to*[T](w: openArray[PackedAccount]; W: type seq[T]): W =
-  w.toSeq.mapIt(it.to(T))
+proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
+  ## Convert test data into usable in-memory format
+  let file = sample.file.findFilePath.value
+  var root: Hash256
+  for w in file.undumpNextAccount:
+    let n = w.seenAccounts - 1
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
+
+proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
+  ## Convert test data into usable in-memory format
+  let file = sample.file.findFilePath.value
+  var root: Hash256
+  for w in file.undumpNextStorages:
+    let n = w.seenAccounts - 1 # storages selector based on accounts
+    if n < sample.firstItem:
+      continue
+    if sample.lastItem < n:
+      break
+    if sample.firstItem == n:
+      root = w.root
+    elif w.root != root:
+      break
+    result.add w
+
+proc to*(w: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
+  w.mapIt(it.to(ProofTrieData))
+
+proc to*(s: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
+  for n,w in s:
+    result &= w.to(n,seq[ProofTrieData])
 
 # ------------------------------------------------------------------------------
 # Public iterators

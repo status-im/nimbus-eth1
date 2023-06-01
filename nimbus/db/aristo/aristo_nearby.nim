@@ -24,7 +24,6 @@ import
   std/tables,
   eth/[common, trie/nibbles],
   stew/results,
-  ./aristo_debug,
   "."/[aristo_desc, aristo_error, aristo_get, aristo_hike, aristo_path]
 
 # ------------------------------------------------------------------------------
