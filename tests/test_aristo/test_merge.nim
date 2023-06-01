@@ -149,7 +149,7 @@ proc test_mergeAccounts*(
           "\n   post-state ", db.pp,
           "\n"
       if rc.isErr:
-        check rc.error == AristoError(0) # force message
+        check rc.error == (VertexID(0),AristoError(0)) # force message
         return
 
     block:
@@ -221,7 +221,7 @@ proc test_mergeProofsAndAccounts*(
       let rc = db.hashify # (noisy=false or (7 <= n))
       if rc.isErr:
         noisy.say "***", "<", n, "/", lst.len-1, ">\n   ", db.pp
-        check rc.error == AristoError(0)
+        check rc.error == (VertexID(0),AristoError(0))
         return
 
     noisy.say "***", "sample ",n,"/",lst.len-1," leafs merged: ", added.merged

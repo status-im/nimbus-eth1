@@ -90,6 +90,7 @@ type
     HashifyExistingHashMismatch
     HashifyLeafToRootAllFailed
     HashifyRootHashMismatch
+    HashifyRootVidMismatch
 
     HashifyCheckRevCountMismatch
     HashifyCheckRevHashMismatch
