@@ -118,4 +118,12 @@ type
     NearbyPathTailInxOverflow
     NearbyUnexpectedVtx
 
+    # Deletion of vertices, `delete()`
+    DelPathTagError
+    DelLeafExpexted
+    DelLeafLocked
+    DelBranchExpexted
+    DelBranchLocked
+    DelExtLocked
+
 # End

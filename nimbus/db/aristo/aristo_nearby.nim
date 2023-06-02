@@ -75,7 +75,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 # ------------------------------------------------------------------------------
 
 proc complete(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     vid: VertexID;                      # Start ID
     db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
@@ -123,7 +123,7 @@ proc complete(
 
 
 proc zeroAdjust(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Hike =
@@ -204,9 +204,9 @@ proc zeroAdjust(
 
 
 proc finalise(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
-    moveRight: static[bool];            # Direction of next node
+    moveRight: static[bool];            # Direction of next vertex
       ): Hike =
   ## Handle some pathological cases after main processing failed
   proc beyond(p: Hike; pfx: NibblesSeq): bool =
@@ -258,10 +258,10 @@ proc finalise(
 
 
 proc nearbyNext(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight: static[bool];            # Direction of next node
+    moveRight: static[bool];            # Direction of next vertex
       ): Hike =
   ## Unified implementation of `nearbyRight()` and `nearbyLeft()`.
   proc accept(nibble: int8): bool =
@@ -364,11 +364,11 @@ proc nearbyNext(
 
 
 proc nearbyNext(
-    baseTag: NodeTag;                   # Some node
+    baseTag: NodeTag;                   # Some `Patricia Trie` path
     root: VertexID;                     # State root
     db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight:static[ bool];            # Direction of next node
+    moveRight:static[ bool];            # Direction of next vertex
       ): Result[NodeTag,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
   let hike = baseTag.hikeUp(root,db).nearbyNext(db, hikeLenMax, moveRight)
@@ -388,7 +388,7 @@ proc nearbyNext(
 # ------------------------------------------------------------------------------
 
 proc nearbyRight*(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
       ): Hike =
   ## Extends the maximally extended argument nodes `hike` to the right (i.e.
@@ -403,7 +403,7 @@ proc nearbyRight*(
   hike.nearbyNext(db, 64, moveRight=true)
 
 proc nearbyRight*(
-    nodeTag: NodeTag;                   # Some node
+    nodeTag: NodeTag;                   # Some `Patricia Trie` path
     root: VertexID;                     # State root
     db: AristoDbRef;                    # Database layer
       ): Result[NodeTag,AristoError] =
@@ -412,7 +412,7 @@ proc nearbyRight*(
   nodeTag.nearbyNext(root, db, 64, moveRight=true)
 
 proc nearbyLeft*(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
       ): Hike =
   ## Similar to `nearbyRight()`.
@@ -422,7 +422,7 @@ proc nearbyLeft*(
   hike.nearbyNext(db, 64, moveRight=false)
 
 proc nearbyLeft*(
-    nodeTag: NodeTag;                   # Some node
+    nodeTag: NodeTag;                   # Some `Patricia Trie` path
     root: VertexID;                     # State root
     db: AristoDbRef;                    # Database layer
       ): Result[NodeTag,AristoError] =
@@ -435,7 +435,7 @@ proc nearbyLeft*(
 # ------------------------------------------------------------------------------
 
 proc nearbyRightMissing*(
-    hike: Hike;                         # Partially expanded path
+    hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDbRef;                    # Database layer
       ): Result[bool,AristoError] =
   ## Returns `true` if the maximally extended argument nodes `hike` is the
