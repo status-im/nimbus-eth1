@@ -23,7 +23,8 @@ import
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_helpers, test_merge, test_nearby, test_transcode]
+  ./test_aristo/[
+    test_delete, test_helpers, test_merge, test_nearby, test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -200,6 +201,9 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
     test &"Traverse accounts database w/{accLst.len} account lists":
       noisy.test_nearbyKvpList(accLst, resetDb)
 
+    test &"Delete accounts database, successively {accLst.len} entries":
+      noisy.test_delete accLst
+
 
 proc storagesRunner(
     noisy = true;
@@ -223,6 +227,9 @@ proc storagesRunner(
     test &"Traverse storage slots database w/{stoLst.len} account lists":
       noisy.test_nearbyKvpList(stoLst, resetDb)
 
+    test &"Delete storage database, successively {stoLst.len} entries":
+      noisy.test_delete stoLst
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -237,7 +244,7 @@ when isMainModule:
     noisy = defined(debug) or true
 
   # Borrowed from `test_sync_snap.nim`
-  when true and false:
+  when true: # and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:
@@ -248,18 +255,18 @@ when isMainModule:
     import ./test_sync_snap/snap_other_xx
     noisy.showElapsed("@snap_other_xx"):
       for n,sam in snapOtherList:
-        noisy.accountsRunner(sam)
+        noisy.accountsRunner(sam, resetDb=true)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
-  when true: # and false:
+  when true and false:
     import ./test_sync_snap/snap_storage_xx
     let knownFailures: KnownHasherFailure = @[
       ("storages5__34__41_dump#10.20512",(VertexID(1),HashifyRootHashMismatch)),
     ]
     noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:
-        noisy.accountsRunner(sam)
-        noisy.storagesRunner(sam,oops=knownFailures)
+        noisy.accountsRunner(sam, resetDb=true)
+        noisy.storagesRunner(sam, resetDb=true, oops=knownFailures)
 
   when true: # and false:
     for n,sam in snapTestList:

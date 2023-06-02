@@ -64,6 +64,9 @@ proc `xPfx=`(vtx: VertexRef, val: NibblesSeq) =
   of Branch:
     doAssert vtx.vType != Branch # Ooops
 
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
