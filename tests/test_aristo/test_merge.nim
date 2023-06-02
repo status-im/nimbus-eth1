@@ -22,8 +22,8 @@ import
   ./test_helpers
 
 type
-  KnownHasherFailure* = seq[(string,(VertexID,AristoError))]
-    ## (<sample-name> & "#" <instance>, @[(<slot-id>, <error-symbol>)), ..])
+  KnownHasherFailure* = seq[(string,(int,AristoError))]
+    ## (<sample-name> & "#" <instance>, (<vertex-id>,<error-symbol>))
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -191,7 +191,7 @@ proc test_mergeProofAndKvpList*(
     rootKey = NodeKey.default
     count = 0
   for n,w in list:
-    if resetDb  or w.root != rootKey or w.proof.len == 0:
+    if resetDb or w.root != rootKey or w.proof.len == 0:
       db = AristoDbRef()
       rootKey = w.root
       count = 0
@@ -209,9 +209,8 @@ proc test_mergeProofAndKvpList*(
       noisy.say "***", "sample <", n, "/", lstLen-1, ">",
         " groups=", count, " nLeafs=", leafs.len
 
-    var proved: tuple[merged: int, dups: int, error: AristoError]
+    let proved = db.merge w.proof
     if 0 < w.proof.len:
-      proved = db.merge w.proof
       check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.lTab.len == lTabLen
@@ -259,8 +258,9 @@ proc test_mergeProofAndKvpList*(
         if rc.isOK:
           check rc.isErr
           return
-        if oopsTab[testId] != rc.error:
-          check oopsTab[testId] == rc.error
+        let oops = (VertexID(oopsTab[testId][0]), oopsTab[testId][1])
+        if oops != rc.error:
+          check oops == rc.error
           return
 
       # Otherwise, check for correctness

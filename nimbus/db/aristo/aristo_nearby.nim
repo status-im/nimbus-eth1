@@ -368,7 +368,7 @@ proc nearbyNext(
     root: VertexID;                     # State root
     db: AristoDbRef;                    # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight:static[ bool];            # Direction of next vertex
+    moveRight:static[bool];             # Direction of next vertex
       ): Result[NodeTag,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
   let hike = baseTag.hikeUp(root,db).nearbyNext(db, hikeLenMax, moveRight)

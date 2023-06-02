@@ -243,6 +243,8 @@ when isMainModule:
   const
     noisy = defined(debug) or true
 
+  setErrorLevel()
+
   # Borrowed from `test_sync_snap.nim`
   when true: # and false:
     for n,sam in snapTestList:
@@ -261,7 +263,11 @@ when isMainModule:
   when true and false:
     import ./test_sync_snap/snap_storage_xx
     let knownFailures: KnownHasherFailure = @[
-      ("storages5__34__41_dump#10.20512",(VertexID(1),HashifyRootHashMismatch)),
+      ("storages3__18__25_dump#11.27367",(3,HashifyExistingHashMismatch)),
+      ("storages4__26__33_dump#11.23924",(6,HashifyExistingHashMismatch)),
+      ("storages5__34__41_dump#10.20512",(1,HashifyRootHashMismatch)),
+      ("storagesB__84__92_dump#6.9709",  (7,HashifyExistingHashMismatch)),
+      ("storagesD_102_109_dump#17.28287",(9,HashifyExistingHashMismatch)),
     ]
     noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:
