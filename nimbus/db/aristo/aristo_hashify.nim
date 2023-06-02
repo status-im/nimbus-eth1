@@ -99,7 +99,7 @@ proc toNode(vtx: VertexRef; db: AristoDbRef): Result[NodeRef,void] =
 proc leafToRootHasher(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Hike for labelling leaf..root
-      ): Result[int,AristoError] =
+      ): Result[int,(VertexID,AristoError)] =
   ## Returns the index of the first node that could not be hashed
   for n in (hike.legs.len-1).countDown(0):
     let
@@ -120,7 +120,7 @@ proc leafToRootHasher(
     elif key != vfyKey:
       let error = HashifyExistingHashMismatch
       debug "hashify failed", vid=wp.vid, key, expected=vfyKey, error
-      return err(error)
+      return err((wp.vid,error))
 
   ok -1 # all could be hashed
 
@@ -141,13 +141,13 @@ proc hashifyClear*(
 
 proc hashify*(
     db: AristoDbRef;                   # Database, top layer
-      ): Result[NodeKey,AristoError] =
+    rootKey = EMPTY_ROOT_KEY;          # Optional root key
+      ): Result[NodeKey,(VertexID,AristoError)] =
   ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle Patricia
   ## Tree`. If successful, the function returns the key (aka Merkle hash) of
   ## the root vertex.
   var
-    fullPath = false
-    rootKey: NodeKey
+    thisRootKey = EMPTY_ROOT_KEY
 
     # Width-first leaf-to-root traversal structure
     backLink: Table[VertexID,VertexID]
@@ -156,7 +156,7 @@ proc hashify*(
   for (pathTag,vid) in db.lTab.pairs:
     let hike = pathTag.hikeUp(db.lRoot,db)
     if hike.error != AristoError(0):
-      return err(hike.error)
+      return err((VertexID(0),hike.error))
 
     # Hash as much of the `hike` as possible
     let n = block:
@@ -178,13 +178,22 @@ proc hashify*(
       for u in (n-1).countDown(1):
         backLink[hike.legs[u].wp.vid] = hike.legs[u-1].wp.vid
 
-    elif not fullPath:
-      rootKey = db.kMap.getOrDefault(hike.legs[0].wp.vid, EMPTY_ROOT_KEY)
-      fullPath = (rootKey != EMPTY_ROOT_KEY)
+    elif thisRootKey == EMPTY_ROOT_KEY:
+      let rootVid = hike.legs[0].wp.vid
+      thisRootKey = db.kMap.getOrDefault(rootVid, EMPTY_ROOT_KEY)
+
+      if thisRootKey != EMPTY_ROOT_KEY:
+        if rootKey != EMPTY_ROOT_KEY and rootKey != thisRootKey:
+          return err((rootVid, HashifyRootHashMismatch))
+
+        if db.lRoot == VertexID(0):
+          db.lRoot = rootVid
+        elif db.lRoot != rootVid:
+          return err((rootVid,HashifyRootVidMismatch))
 
   # At least one full path leaf..root should have succeeded with labelling
-  if not fullPath:
-    return err(HashifyLeafToRootAllFailed)
+  if thisRootKey == EMPTY_ROOT_KEY:
+    return err((VertexID(0),HashifyLeafToRootAllFailed))
 
   # Update remaining hashes
   var n = 0 # for logging
@@ -216,7 +225,7 @@ proc hashify*(
           let error = HashifyExistingHashMismatch
           debug "hashify failed", vid=fromVid, key=nodeKey,
             expected=fromKey.pp, error
-          return err(error)
+          return err((fromVid,error))
 
         done.incl fromVid
 
@@ -228,14 +237,14 @@ proc hashify*(
     # Make sure that the algorithm proceeds
     if done.len == 0:
       let error = HashifyCannotComplete
-      return err(error)
+      return err((VertexID(0),error))
 
     # Clean up dups from `backLink` and restart `downMost`
     for vid in done.items:
       backLink.del vid
     downMost = redo
 
-  ok rootKey
+  ok thisRootKey
 
 # ------------------------------------------------------------------------------
 # Public debugging functions

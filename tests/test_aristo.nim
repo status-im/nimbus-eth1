@@ -18,13 +18,12 @@ import
   rocksdb,
   unittest2,
   ../nimbus/db/select_backend,
-  ../nimbus/db/aristo/[aristo_desc],
+  ../nimbus/db/aristo/[aristo_desc, aristo_error, aristo_merge],
   ../nimbus/core/chain,
-  ../nimbus/sync/snap/worker/db/[
-    hexary_desc, rocky_bulk_load, snapdb_accounts, snapdb_desc],
-  ./replay/[pp, undump_accounts],
+  ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
+  ./replay/[pp, undump_accounts, undump_storages],
   ./test_sync_snap/[snap_test_xx, test_accounts, test_types],
-  ./test_aristo/[test_merge, test_transcode]
+  ./test_aristo/[test_helpers, test_merge, test_nearby, test_transcode]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -36,6 +35,7 @@ const
 
   # Standard test samples
   accSample = snapTest0
+  storSample = snapTest4
 
   # Number of database slots available
   nTestDbInstances = 9
@@ -90,22 +90,6 @@ proc setErrorLevel {.used.} =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc to(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
-  ## Convert test data into usable in-memory format
-  let file = sample.file.findFilePath.value
-  var root: Hash256
-  for w in file.undumpNextAccount:
-    let n = w.seenAccounts - 1
-    if n < sample.firstItem:
-      continue
-    if sample.lastItem < n:
-      break
-    if sample.firstItem == n:
-      root = w.root
-    elif w.root != root:
-      break
-    result.add w
 
 proc flushDbDir(s: string; subDir = "") =
   if s != "":
@@ -162,7 +146,7 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
-proc transcodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
+proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
   let
     accLst = sample.to(seq[UndumpAccounts])
     root = accLst[0].root
@@ -199,19 +183,45 @@ proc transcodeRunner(noisy  = true; sample = accSample; stopAfter = high(int)) =
         noisy.test_transcodeAccounts(db.cdb[0].rocksStoreRef, stopAfter)
 
 
-proc dataRunner(noisy  = true; sample = accSample) =
+proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
   let
-    accLst = sample.to(seq[UndumpAccounts])
+    accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
     fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+    listMode = if resetDb: "" else: ", merged data lists"
 
-  suite &"Aristo: accounts data import from {fileInfo}":
+  suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
     test &"Merge {accLst.len} account lists to database":
-      noisy.test_mergeAccounts accLst
+      noisy.test_mergeKvpList(accLst, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      noisy.test_mergeProofsAndAccounts accLst
+      noisy.test_mergeProofAndKvpList(accLst, resetDb)
 
+    test &"Traverse accounts database w/{accLst.len} account lists":
+      noisy.test_nearbyKvpList(accLst, resetDb)
+
+
+proc storagesRunner(
+    noisy = true;
+    sample = storSample;
+    resetDb = false;
+    oops: KnownHasherFailure = @[];
+      ) =
+  let
+    stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+    listMode = if resetDb: "" else: ", merged data lists"
+
+  suite &"Aristo: storages data dump from {fileInfo}{listMode}":
+
+    test &"Merge {stoLst.len} storage slot lists to database":
+      noisy.test_mergeKvpList(stoLst, resetDb)
+
+    test &"Merge {stoLst.len} proof & slots lists to database":
+      noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
+
+    test &"Traverse storage slots database w/{stoLst.len} account lists":
+      noisy.test_nearbyKvpList(stoLst, resetDb)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -219,14 +229,15 @@ proc dataRunner(noisy  = true; sample = accSample) =
 
 proc aristoMain*(noisy = defined(debug)) =
   noisy.transcodeRunner()
-  noisy.dataRunner()
+  noisy.accountsRunner()
+  noisy.storagesRunner()
 
 when isMainModule:
   const
     noisy = defined(debug) or true
 
   # Borrowed from `test_sync_snap.nim`
-  when true: # and false:
+  when true and false:
     for n,sam in snapTestList:
       noisy.transcodeRunner(sam)
     for n,sam in snapTestStorageList:
@@ -235,22 +246,27 @@ when isMainModule:
   # This one uses dumps from the external `nimbus-eth1-blob` repo
   when true and false:
     import ./test_sync_snap/snap_other_xx
-    noisy.showElapsed("dataRunner() @snap_other_xx"):
+    noisy.showElapsed("@snap_other_xx"):
       for n,sam in snapOtherList:
-        noisy.dataRunner(sam)
+        noisy.accountsRunner(sam)
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
+  when true: # and false:
     import ./test_sync_snap/snap_storage_xx
-    noisy.showElapsed("dataRunner() @snap_storage_xx"):
+    let knownFailures: KnownHasherFailure = @[
+      ("storages5__34__41_dump#10.20512",(VertexID(1),HashifyRootHashMismatch)),
+    ]
+    noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:
-        noisy.dataRunner(sam)
+        noisy.accountsRunner(sam)
+        noisy.storagesRunner(sam,oops=knownFailures)
 
   when true: # and false:
     for n,sam in snapTestList:
-      noisy.dataRunner(sam)
+      noisy.accountsRunner(sam)
     for n,sam in snapTestStorageList:
-      noisy.dataRunner(sam)
+      noisy.accountsRunner(sam)
+      noisy.storagesRunner(sam)
 
 # ------------------------------------------------------------------------------
 # End

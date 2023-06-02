@@ -90,6 +90,7 @@ type
     HashifyExistingHashMismatch
     HashifyLeafToRootAllFailed
     HashifyRootHashMismatch
+    HashifyRootVidMismatch
 
     HashifyCheckRevCountMismatch
     HashifyCheckRevHashMismatch
@@ -102,5 +103,19 @@ type
     HashifyCheckVtxHashMissing
     HashifyCheckVtxIncomplete
     HashifyCheckVtxLockWithoutKey
+
+    # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
+    NearbyBeyondRange
+    NearbyBranchError
+    NearbyDanglingLink
+    NearbyEmptyHike
+    NearbyExtensionError
+    NearbyFailed
+    NearbyBranchExpected
+    NearbyLeafExpected
+    NearbyNestingTooDeep
+    NearbyPathTailUnexpected
+    NearbyPathTailInxOverflow
+    NearbyUnexpectedVtx
 
 # End

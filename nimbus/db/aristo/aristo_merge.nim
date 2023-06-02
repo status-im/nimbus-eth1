@@ -375,6 +375,13 @@ proc topIsEmptyAddLeaf(
     let nibble = hike.tail[0].int8
     if not rootVtx.bVid[nibble].isZero:
       return Hike(error: MergeRootBranchLinkBusy)
+
+    # Clear Merkle hashes (aka node keys) unless proof mode
+    if db.pPrf.len == 0:
+      db.clearMerkleKeys(hike, hike.root)
+    elif hike.root in db.pPrf:
+      return Hike(error: MergeBranchProofModeLock)
+
     let
       leafVid = db.vidFetch
       leafVtx = VertexRef(

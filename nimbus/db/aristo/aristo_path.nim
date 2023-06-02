@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   eth/[common, trie/nibbles],
   stew/results,
   "."/[aristo_constants, aristo_desc, aristo_error]
@@ -39,7 +40,7 @@ proc pathAsNibbles*(key: NodeKey): NibblesSeq =
 proc pathAsNibbles*(tag: NodeTag): NibblesSeq =
   tag.to(NodeKey).pathAsNibbles()
 
-proc pathAsBlob*(keyOrTag: NodeKey|Nodetag): Blob =
+proc pathAsBlob*(keyOrTag: NodeKey|NodeTag): Blob =
   keyOrTag.pathAsNibbles.hexPrefixEncode(isLeaf=true)
 
 
@@ -63,6 +64,33 @@ proc pathToTag*(partPath: NibblesSeq|Blob): Result[NodeTag,AristoError] =
   if rc.isOk:
     return ok(rc.value.to(NodeTag))
   err(rc.error)
+
+# --------------------
+
+proc pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NodeKey =
+  ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
+  ## `NodeKey`.
+  ##
+  ## This function must be handled with some care regarding a meaningful value
+  ## for the `dblNibble` argument. Currently, only static values `0` and `255`
+  ## are allowed for padding. This is checked at compile time.
+  static:
+    doAssert dblNibble == 0 or dblNibble == 255
+
+  # Pad with zeroes
+  var padded: NibblesSeq
+
+  let padLen = 64 - pfx.len
+  if 0 <= padLen:
+    padded = pfx & dblNibble.repeat(padlen div 2).mapIt(it.byte).initNibbleRange
+    if (padLen and 1) == 1:
+      padded = padded & @[dblNibble.byte].initNibbleRange.slice(1)
+  else:
+    let nope = seq[byte].default.initNibbleRange
+    padded = pfx.slice(0,64) & nope # nope forces re-alignment
+
+  let bytes = padded.getBytes
+  (addr result.ByteArray32[0]).copyMem(unsafeAddr bytes[0], bytes.len)
 
 # ------------------------------------------------------------------------------
 # End
