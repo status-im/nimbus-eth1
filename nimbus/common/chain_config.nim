@@ -104,7 +104,7 @@ proc fromHex(c: char): int =
   else: -1
 
 proc readValue(reader: var JsonReader, value: var UInt256)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [SerializationError, IOError].} =
   ## Mixin for `Json.loadFile()`. Note that this driver applies the same
   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
   ## account `balance`.
@@ -148,36 +148,54 @@ proc readValue(reader: var JsonReader, value: var UInt256)
   reader.lexer.next()
 
 proc readValue(reader: var JsonReader, value: var ChainId)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [SerializationError, IOError].} =
   value = reader.readValue(int).ChainId
 
 proc readValue(reader: var JsonReader, value: var Hash256)
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [SerializationError, IOError].} =
   value = Hash256.fromHex(reader.readValue(string))
 
 proc readValue(reader: var JsonReader, value: var BlockNonce)
-    {.gcsafe, raises: [CatchableError].} =
-  value = fromHex[uint64](reader.readValue(string)).toBlockNonce
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = fromHex[uint64](reader.readValue(string)).toBlockNonce
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 proc readValue(reader: var JsonReader, value: var EthTime)
-    {.gcsafe, raises: [CatchableError].} =
-  value = fromHex[int64](reader.readValue(string)).fromUnix
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = fromHex[int64](reader.readValue(string)).fromUnix
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 proc readValue(reader: var JsonReader, value: var seq[byte])
-    {.gcsafe, raises: [CatchableError].} =
-  value = hexToSeqByte(reader.readValue(string))
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = hexToSeqByte(reader.readValue(string))
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 proc readValue(reader: var JsonReader, value: var GasInt)
-    {.gcsafe, raises: [CatchableError].} =
-  value = fromHex[GasInt](reader.readValue(string))
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = fromHex[GasInt](reader.readValue(string))
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 proc readValue(reader: var JsonReader, value: var EthAddress)
-    {.gcsafe, raises: [CatchableError].} =
-  value = parseAddress(reader.readValue(string))
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = parseAddress(reader.readValue(string))
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 proc readValue(reader: var JsonReader, value: var AccountNonce)
-    {.gcsafe, raises: [CatchableError].} =
-  value = fromHex[uint64](reader.readValue(string))
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  try:
+    value = fromHex[uint64](reader.readValue(string))
+  except ValueError as ex:
+    reader.raiseUnexpectedValue(ex.msg)
 
 template to(a: string, b: type EthAddress): EthAddress =
   # json_serialization decode table stuff

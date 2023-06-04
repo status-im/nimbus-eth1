@@ -73,7 +73,7 @@ import
   # for `BlockHeader`.
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
-  beacon_chain/eth1/eth1_monitor,
+  beacon_chain/el/el_manager,
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
@@ -247,7 +247,8 @@ proc asPortalBlockData*(
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      excessDataGas: options.none(UInt256)
+      dataGasUsed: options.none(uint64),
+      excessDataGas: options.none(uint64)
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -291,7 +292,8 @@ proc asPortalBlockData*(
       nonce: default(BlockNonce),
       fee: some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      excessDataGas: options.none(UInt256) # TODO: adjust later according to deneb fork
+      dataGasUsed: options.none(uint64),
+      excessDataGas: options.none(uint64) # TODO: adjust later according to deneb fork
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -401,7 +403,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
       try:
         template genesisData(): auto = metadata.genesisData
         newClone(readSszForkedHashedBeaconState(
-          cfg, genesisData.toOpenArrayByte(genesisData.low, genesisData.high)))
+          cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 

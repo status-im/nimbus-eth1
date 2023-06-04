@@ -1,28 +1,21 @@
 import
   chronos,
   options,
-  sequtils,
   times,
   nimcrypto,
-  os,
-  stew/byteutils,
   stew/results,
   json_rpc/rpcclient,
-  eth/[rlp, common/eth_types, p2p],
-  core/chain/[chain_desc, persist_blocks],
+  eth/[common/eth_types, p2p],
+  core/chain/[chain_desc],
   core/executor/process_block,
-  db/[db_chain, select_backend, storage_types, distinct_tries, incomplete_db, accounts_cache],
+  db/[db_chain, select_backend, accounts_cache],
   eth/trie/[db, trie_defs],
-  rpc/rpc_utils,
   evm/async/[data_sources, operations, data_sources/json_rpc_data_source],
   ./vm_state, ./vm_types,
-  ./sync/stateless,
   chronicles
 
 from strutils import parseInt, startsWith
-from common/chain_config import MainNet, networkParams
 from common/common import initializeEmptyDb
-
 
 proc coinbasesOfThisBlockAndUncles(header: BlockHeader, body: BlockBody): seq[EthAddress] =
   result.add header.coinbase
@@ -46,7 +39,7 @@ proc statelesslyRunBlock*(asyncDataSource: AsyncDataSource, com: CommonRef, head
 
     # FIXME-Adam: this doesn't feel like the right place for this; where should it go?
     com.db.db.put(emptyRlpHash.data, emptyRlp)
-    
+
     let blockHash: Hash256 = header.blockHash
 
     let asyncFactory = AsyncOperationFactory(maybeDataSource: some(asyncDataSource))
@@ -58,7 +51,7 @@ proc statelesslyRunBlock*(asyncDataSource: AsyncDataSource, com: CommonRef, head
 
     let vmState = createVmStateForStatelessMode(com, header, body, parentHeader, asyncFactory).get
     let vres = processBlockNotPoA(vmState, header, body)
-    
+
     let elapsedTime = now() - t0
 
     let headerStateRoot = header.stateRoot
@@ -112,21 +105,21 @@ proc statelesslyRunBlock*(asyncDataSource: AsyncDataSource, com: CommonRef, hash
 
 proc statelesslyRunTransaction*(asyncDataSource: AsyncDataSource, com: CommonRef, headerHash: Hash256, tx: Transaction) =
   let t0 = now()
-  
+
   let (header, body) = waitFor(asyncDataSource.fetchBlockHeaderAndBodyWithHash(headerHash))
 
   # FIXME-Adam: this doesn't feel like the right place for this; where should it go?
   com.db.db.put(emptyRlpHash.data, emptyRlp)
 
-  let blockHash: Hash256 = header.blockHash
-  
+  #let blockHash: Hash256 = header.blockHash
+
   let transaction = com.db.db.beginTransaction()
   defer: transaction.rollback()  # intentionally throwing away the result of this execution
 
   let asyncFactory = AsyncOperationFactory(maybeDataSource: some(asyncDataSource))
   let parentHeader = waitFor(asyncDataSource.fetchBlockHeaderWithHash(header.parentHash))
   com.db.persistHeaderToDbWithoutSetHeadOrScore(parentHeader)
-  
+
   let vmState = createVmStateForStatelessMode(com, header, body, parentHeader, asyncFactory).get
 
   let r = processTransactions(vmState, header, @[tx])

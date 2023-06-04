@@ -91,7 +91,7 @@ proc prepareHeader(dh: TxChainRef; parent: BlockHeader, timestamp: EthTime)
   of ConsensusType.POS:
     dh.com.pos.prepare(dh.prepHeader)
 
-proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [RlpError].} =
+proc prepareForSeal(dh: TxChainRef; header: var BlockHeader) {.gcsafe, raises: [].} =
   case dh.com.consensus
   of ConsensusType.POW:
     # do nothing, tx pool was designed with POW in mind

@@ -222,3 +222,8 @@
 	url = https://github.com/libtom/libtommath
 	ignore = untracked
 	branch = develop
+[submodule "vendor/nim-kzg4844"]
+	path = vendor/nim-kzg4844
+	url = https://github.com/status-im/nim-kzg4844
+	ignore = untracked
+	branch = master

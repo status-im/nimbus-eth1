@@ -183,7 +183,7 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # TODO: Failures on validation and perhaps deserialisation should be punished
 # for if/when peer scoring/banning is added.
 
-proc calcRootHash(items: Transactions | PortalReceipts| Withdrawals): Hash256 =
+proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
   for i, item in items:
     try:

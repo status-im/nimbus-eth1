@@ -169,8 +169,6 @@ proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash256): RespResult =
     ok(resp(getTransactionCount(ctx.chainDB, txRoot)))
   except CatchableError as e:
     err("can't get txcount: " & e.msg)
-  except Exception as em:
-    err("can't get txcount: " & em.msg)
 
 proc longNode(val: uint64 | int64): RespResult =
   ok(Node(kind: nkInt, intVal: $val, pos: Pos()))
@@ -228,8 +226,6 @@ proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
     ok(resp(getUnclesCount(ctx.chainDB, ommersHash)))
   except CatchableError as e:
     err("can't get ommers count: " & e.msg)
-  except Exception as em:
-    err("can't get ommers count: " & em.msg)
 
 proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
   try:
@@ -281,8 +277,6 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
     ok(list)
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
-  except Exception as em:
-    err("can't get transactions: " & em.msg)
 
 proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResult =
   try:
@@ -315,8 +309,6 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
     getTxAt(ctx, header, index)
   except CatchableError as e:
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, e.msg])
-  except Exception as em:
-    err("can't get transaction by hash '$1': $2" % [hash.data.toHex, em.msg])
 
 proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddress): RespResult =
   try:
@@ -999,7 +991,7 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   try:
     let callData = toCallData(param)
     ctx.makeCall(callData, h.header)
-  except Exception as em:
+  except CatchableError as em:
     err("call error: " & em.msg)
 
 proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1011,7 +1003,7 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
     # TODO: DEFAULT_RPC_GAS_CAP should configurable
     let gasUsed = rpcEstimateGas(callData, h.header, ctx.com, DEFAULT_RPC_GAS_CAP)
     longNode(gasUsed)
-  except Exception as em:
+  except CatchableError as em:
     err("estimateGas error: " & em.msg)
 
 proc blockBaseFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1214,7 +1206,7 @@ proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPra
   let ctx = GraphqlContextRef(ud)
   try:
     bigIntNode(calculateMedianGasPrice(ctx.chainDB))
-  except Exception as em:
+  except CatchableError as em:
     err("can't get gasPrice: " & em.msg)
 
 proc queryProtocolVersion(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1260,8 +1252,8 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
     let _      = decodeTx(data) # we want to know if it is a valid tx blob
     let txHash = keccakHash(data)
     resp(txHash)
-  except Exception as em:
-    return err("failed to process raw transaction")
+  except CatchableError as em:
+    return err("failed to process raw transaction: " & em.msg)
 
 const mutationProcs = {
   "sendRawTransaction": sendRawTransaction

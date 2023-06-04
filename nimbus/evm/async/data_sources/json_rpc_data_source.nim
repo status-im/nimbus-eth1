@@ -24,6 +24,7 @@ when defined(legacy_eth66_enabled):
 
 from ../../../rpc/rpc_utils import toHash
 from web3 import Web3, BlockHash, BlockObject, FixedBytes, Address, ProofResponse, StorageProof, newWeb3, fromJson, fromHex, eth_getBlockByHash, eth_getBlockByNumber, eth_getCode, eth_getProof, blockId, `%`
+from web3/ethtypes import Quantity
 #from ../../../premix/downloader import request
 #from ../../../premix/parser import prefixHex, parseBlockHeader, parseReceipt, parseTransaction
 
@@ -31,7 +32,6 @@ from eth/common import BlockHeader
 
 # Trying to do things the new web3 way:
 from ../../../nimbus_verified_proxy/validate_proof import getAccountFromProof
-
 
 export AsyncOperationFactory, AsyncDataSource
 
@@ -84,6 +84,12 @@ proc makeAnRpcClient*(web3Url: string): Future[RpcClient] {.async.} =
     excessDataGas*:   Option[UInt256] # EIP-4844
 ]#
 
+func fromQty(x: Option[Quantity]): Option[uint64] =
+  if x.isSome:
+    some(x.get().uint64)
+  else:
+    none(uint64)
+
 func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
   let nonce: BlockNonce = if o.nonce.isSome: distinctBase(o.nonce.get) else: default(BlockNonce)
   BlockHeader(
@@ -104,7 +110,8 @@ func blockHeaderFromBlockObject(o: BlockObject): BlockHeader =
     nonce: nonce,
     fee: o.baseFeePerGas,
     withdrawalsRoot: o.withdrawalsRoot.map(toHash),
-    excessDataGas: o.excessDataGas
+    dataGasUsed: fromQty(o.dataGasUsed),
+    excessDataGas: fromQty(o.excessDataGas)
   )
 
 proc fetchBlockHeaderWithHash*(rpcClient: RpcClient, h: Hash256): Future[BlockHeader] {.async.} =
@@ -287,8 +294,8 @@ proc fetchCode(client: RpcClient, p: CodeFetchingInfo): Future[seq[byte]] {.asyn
 
 proc verifyFetchedCode(fetchedCode: seq[byte], desiredCodeHash: Hash256): Result[void, Hash256] =
   let fetchedCodeHash = keccakHash(fetchedCode)
-  if (desiredCodeHash == fetchedCodeHash):
-    ok[void]()
+  if desiredCodeHash == fetchedCodeHash:
+    ok()
   else:
     err(fetchedCodeHash)
 
@@ -371,7 +378,7 @@ proc verifyFetchedBlockHeader(fetchedHeader: BlockHeader, desiredBlockNumber: Bl
   # *Can* we do anything to verify this header, given that all we know
   # is the desiredBlockNumber and we want to run statelessly so we don't
   # know what block hash we want?
-  ok[void]()
+  ok()
 
 proc storeBlockHeader(chainDB: ChainDBRef, header: BlockHeader) =
   chainDB.persistHeaderToDbWithoutSetHeadOrScore(header)

@@ -436,8 +436,7 @@ import
   chronicles,
   eth/keys,
   stew/[keyed_queue, results],
-  ../common/common,
-  ./casper
+  ../common/common
 
 export
   TxItemRef,

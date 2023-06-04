@@ -21,7 +21,7 @@ proc prepare*(ctx: CasperRef, header: var BlockHeader) =
   header.prevRandao = ctx.prevRandao
   header.difficulty = DifficultyInt.zero
 
-proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[RlpError].} =
+proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[].} =
   header.nonce      = default(BlockNonce)
   header.extraData  = @[] # TODO: probably this should be configurable by user?
   # this repetition, assigning prevRandao is because how txpool works

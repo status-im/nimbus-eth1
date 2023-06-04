@@ -139,7 +139,7 @@ proc asBlockObject*(
     receiptsRoot: p.receiptsRoot,
     miner: p.feeRecipient,
     difficulty: UInt256.zero,
-    extraData: fromHex(DynamicBytes[0, 32], p.extraData.toHex),
+    extraData: fromHex(DynamicBytes[0, 4096], p.extraData.toHex),
     gasLimit: p.gasLimit,
     gasUsed: p.gasUsed,
     timestamp: p.timestamp,

@@ -16,7 +16,7 @@ import
   eth/common/eth_types as etypes,
   web3,
   web3/[ethhexstrings, ethtypes],
-  beacon_chain/eth1/eth1_monitor,
+  beacon_chain/el/el_manager,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   ./rpc_utils,

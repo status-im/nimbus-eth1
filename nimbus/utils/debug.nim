@@ -49,8 +49,10 @@ proc debug*(h: BlockHeader): string =
     result.add "fee            : " & $h.fee.get()   & "\n"
   if h.withdrawalsRoot.isSome:
     result.add "withdrawalsRoot: " & $h.withdrawalsRoot.get() & "\n"
+  if h.dataGasUsed.isSome:
+    result.add "dataGasUsed    : " & $h.dataGasUsed.get() & "\n"
   if h.excessDataGas.isSome:
-    result.add "excessDataGas:   " & $h.excessDataGas.get() & "\n"
+    result.add "excessDataGas  : " & $h.excessDataGas.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
 proc dumpAccount(stateDB: AccountsCache, address: EthAddress): JsonNode =

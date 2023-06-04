@@ -10,7 +10,7 @@
 import
   std/os,
   json_serialization/std/net,
-  beacon_chain/light_client,
+  beacon_chain/conf_light_client,
   beacon_chain/conf,
   json_rpc/[rpcproxy]
 

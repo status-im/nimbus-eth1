@@ -49,7 +49,7 @@ procSuite "Portal Beacon Light Client":
         try:
           template genesisData(): auto = metadata.genesisData
           newClone(readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArrayByte(genesisData.low, genesisData.high)))
+            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
         except CatchableError as err:
           raiseAssert "Invalid baked-in state: " & err.msg
 

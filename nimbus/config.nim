@@ -503,7 +503,7 @@ type
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "metrics-address" }: ValidIpAddress
-      
+
       statelessModeDataSourceUrl* {.
         desc: "URL of the node to use as a data source for on-demand data fetching via the JSON-RPC API"
         defaultValue: ""

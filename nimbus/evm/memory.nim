@@ -6,9 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sequtils,
   chronicles, eth/common/eth_types,
-  ../errors, ./validation,
+  ./validation,
   ./interpreter/utils/utils_numeric
 
 type
@@ -50,6 +49,6 @@ proc write*(memory: var Memory, startPos: Natural, value: openArray[byte]) =
   let size = value.len
   if size == 0:
     return
-  validateLte(startPos + size, memory.len)  
+  validateLte(startPos + size, memory.len)
   for z, b in value:
     memory.bytes[z + startPos] = b

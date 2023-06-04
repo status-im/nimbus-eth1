@@ -11,8 +11,7 @@ import
   std/os,
   json_serialization/std/net,
   beacon_chain/light_client,
-  beacon_chain/conf,
-  json_rpc/rpcproxy
+  beacon_chain/conf
 
 export net, conf
 

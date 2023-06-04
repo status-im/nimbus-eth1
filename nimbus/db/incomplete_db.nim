@@ -11,7 +11,7 @@ The points of these two files are:
 
 import
   chronicles,
-  eth/[common, rlp],
+  eth/[common],
   eth/trie/[hexary, db, trie_defs],
   storage_types,
   ./values_from_bytes,
@@ -41,7 +41,7 @@ proc populateDbWithBranch*(db: TrieDatabaseRef, branch: seq[seq[byte]]) =
   for nodeBytes in branch:
     let nodeHash = keccakHash(nodeBytes)
     db.put(nodeHash.data, nodeBytes)
-  
+
 # Returns a none if there are missing nodes; if the account itself simply
 # doesn't exist yet, that's fine and it returns some(newAccount()).
 proc ifNodesExistGetAccount*(trie: AccountsTrie, address: EthAddress): Option[Account] =

@@ -11,11 +11,10 @@
 {.push raises: [].}
 
 import
-  eth/[common, p2p],
+  eth/[p2p],
   chronicles,
-  chronos,
-  stew/[interval_set, sorted_set],
-  "."/[sync_desc, sync_sched, protocol]
+  stew/[interval_set],
+  "."/[sync_desc]
 
 logScope:
   topics = "stateless-sync"
@@ -24,7 +23,7 @@ type
   StatelessSyncRef* = ref object
     # FIXME-Adam: what needs to go in here?
 
-    
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

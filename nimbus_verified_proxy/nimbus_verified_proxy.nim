@@ -12,12 +12,12 @@ import
   chronicles, chronicles/chronos_tools, chronos, confutils,
   eth/keys,
   json_rpc/rpcproxy,
-  beacon_chain/eth1/eth1_monitor,
+  beacon_chain/el/el_manager,
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  beacon_chain/[light_client, nimbus_binary_common, version],
+  beacon_chain/[light_client,nimbus_binary_common, version],
   ../nimbus/rpc/cors,
   "."/rpc/[rpc_eth_api, rpc_utils],
   ./nimbus_verified_proxy_conf,
@@ -63,7 +63,7 @@ proc run(config: VerifiedProxyConf) {.raises: [CatchableError].} =
       try:
         template genesisData(): auto = metadata.genesisData
         newClone(readSszForkedHashedBeaconState(
-          cfg, genesisData.toOpenArrayByte(genesisData.low, genesisData.high)))
+          cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)))
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
