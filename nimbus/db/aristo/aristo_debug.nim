@@ -23,12 +23,11 @@ import
 proc toPfx(indent: int): string =
   "\n" & " ".repeat(indent)
 
-proc keyVidUpdate(db: AristoDbRef, key: NodeKey, vid: VertexID): string =
+proc keyVidUpdate(db: var AristoDb, key: NodeKey, vid: VertexID): string =
   if not key.isEmpty and
-     not vid.isZero and
-     not db.isNil:
-    block:
-      let keyVid = db.pAmk.getOrDefault(key, VertexID(0))
+     not vid.isZero:
+    if not db.top.isNil:
+      let keyVid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if keyVid != VertexID(0):
         if keyVid != vid:
           result = "(!)"
@@ -65,12 +64,11 @@ proc stripZeros(a: string): string =
 proc ppVid(vid: VertexID): string =
   if vid.isZero: "ø" else: "$" & vid.uint64.toHex.stripZeros.toLowerAscii
 
-proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
-  if not db.isNil and
-     key != EMPTY_ROOT_KEY and
+proc vidCode(key: NodeKey, db: AristoDb): uint64 =
+  if key != EMPTY_ROOT_KEY and
      key != EMPTY_CODE_KEY:
-    block:
-      let vid = db.pAmk.getOrDefault(key, VertexID(0))
+    if not db.top.isNil:
+      let vid = db.top.pAmk.getOrDefault(key, VertexID(0))
       if vid != VertexID(0):
         return vid.uint64
     block:
@@ -78,7 +76,7 @@ proc vidCode(key: NodeKey, db: AristoDbRef): uint64 =
       if vid != VertexID(0):
         return vid.uint64
 
-proc ppKey(key: NodeKey, db: AristoDbRef): string =
+proc ppKey(key: NodeKey, db: AristoDb): string =
   if key == NodeKey.default:
     return "£ø"
   if key == EMPTY_ROOT_KEY:
@@ -86,32 +84,31 @@ proc ppKey(key: NodeKey, db: AristoDbRef): string =
   if key == EMPTY_CODE_KEY:
     return "£c"
 
-  if not db.isNil:
-    block:
-      let vid = db.pAmk.getOrDefault(key, VertexID(0))
-      if vid != VertexID(0):
-        return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
-    block:
-      let vid = db.xMap.getOrDefault(key, VertexID(0))
-      if vid != VertexID(0):
-        return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
+  if not db.top.isNil:
+    let vid = db.top.pAmk.getOrDefault(key, VertexID(0))
+    if vid != VertexID(0):
+      return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
+  block:
+    let vid = db.xMap.getOrDefault(key, VertexID(0))
+    if vid != VertexID(0):
+      return "£" & vid.uint64.toHex.stripZeros.toLowerAscii
 
   "%" & key.ByteArray32
            .mapIt(it.toHex(2)).join.tolowerAscii
            .squeeze(hex=true,ignLen=true)
 
-proc ppRootKey(a: NodeKey, db: AristoDbRef): string =
+proc ppRootKey(a: NodeKey, db: AristoDb): string =
   if a != EMPTY_ROOT_KEY:
     return a.ppKey(db)
 
-proc ppCodeKey(a: NodeKey, db: AristoDbRef): string =
+proc ppCodeKey(a: NodeKey, db: AristoDb): string =
   if a != EMPTY_CODE_KEY:
     return a.ppKey(db)
 
-proc ppPathTag(tag: NodeTag, db: AristoDbRef): string =
+proc ppPathTag(tag: NodeTag, db: AristoDb): string =
   ## Raw key, for referenced key dump use `key.pp(db)` below
-  if not db.isNil:
-    let vid =  db.lTab.getOrDefault(tag, VertexID(0))
+  if not db.top.isNil:
+    let vid =  db.top.lTab.getOrDefault(tag, VertexID(0))
     if vid != VertexID(0):
       return "@" & vid.ppVid
 
@@ -126,7 +123,7 @@ proc ppPathPfx(pfx: NibblesSeq): string =
 proc ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHex(1).toLowerAscii
 
-proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
+proc ppPayload(p: PayloadRef, db: AristoDb): string =
   if p.isNil:
     result = "n/a"
   else:
@@ -140,11 +137,11 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result &= p.account.storageRoot.to(NodeKey).ppRootKey(db) & ","
       result &= p.account.codeHash.to(NodeKey).ppCodeKey(db) & ")"
 
-proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
+proc ppVtx(nd: VertexRef, db: AristoDb, vid: VertexID): string =
   if nd.isNil:
     result = "n/a"
   else:
-    if db.isNil or vid.isZero or vid in db.pPrf:
+    if db.top.isNil or vid.isZero or vid in db.top.pPrf:
       result = ["l(", "x(", "b("][nd.vType.ord]
     else:
       result = ["ł(", "€(", "þ("][nd.vType.ord]
@@ -162,7 +159,7 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
     result &= ")"
 
 proc ppXMap*(
-    db: AristoDbRef;
+    db: AristoDb;
     kMap: Table[VertexID,NodeKey];
     pAmk: Table[NodeKey,VertexID];
     indent: int;
@@ -233,10 +230,9 @@ proc ppXMap*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
+proc keyToVtxID*(db: var AristoDb, key: NodeKey): VertexID =
   ## Associate a vertex ID with the argument `key` for pretty printing.
-  if not db.isNil and
-     key != EMPTY_ROOT_KEY and
+  if key != EMPTY_ROOT_KEY and
      key != EMPTY_CODE_KEY:
     let vid = db.xMap.getOrDefault(key, VertexID(0))
     if vid != VertexID(0):
@@ -245,10 +241,10 @@ proc keyToVtxID*(db: AristoDbRef, key: NodeKey): VertexID =
       result = db.vidFetch()
       db.xMap[key] = result
 
-proc pp*(vid: NodeKey, db = AristoDbRef(nil)): string =
+proc pp*(vid: NodeKey, db = AristoDb()): string =
   vid.ppKey(db)
 
-proc pp*(tag: NodeTag, db = AristoDbRef(nil)): string =
+proc pp*(tag: NodeTag, db = AristoDb()): string =
   tag.ppPathTag(db)
 
 proc pp*(vid: VertexID): string =
@@ -257,13 +253,13 @@ proc pp*(vid: VertexID): string =
 proc pp*(vid: openArray[VertexID]): string =
   "[" & vid.mapIt(it.ppVid).join(",") & "]"
 
-proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
+proc pp*(p: PayloadRef, db = AristoDb()): string =
   p.ppPayload(db)
 
-proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: VertexRef, db = AristoDb()): string =
   nd.ppVtx(db, VertexID(0))
 
-proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: NodeRef, db: var AristoDB): string =
   if nd.isNil:
     result = "n/a"
   elif nd.isError:
@@ -295,11 +291,11 @@ proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
       result[^1] = ']'
   result &= ")"
 
-proc pp*(
-    sTab: Table[VertexID,VertexRef];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
+proc pp*(nd: NodeRef): string =
+  var db = AristoDB()
+  nd.pp(db)
+
+proc pp*(sTab: Table[VertexID,VertexRef]; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx
   var first = true
   result = "{"
@@ -313,12 +309,11 @@ proc pp*(
       result &= "(" & vid.ppVid & "," & vtx.ppVtx(db,vid) & ")"
   result &= "}"
 
-proc pp*(
-    lTab: Table[NodeTag,VertexID];
-    indent = 4;
-      ): string =
+proc pp*(lTab: Table[NodeTag,VertexID]; indent = 4): string =
   let pfx = indent.toPfx
-  var first = true
+  var
+    db = AristoDb()
+    first = true
   result = "{"
   for tag in toSeq(lTab.keys).mapIt(it.UInt256).sorted.mapIt(it.NodeTag):
     let vid = lTab.getOrDefault(tag, VertexID(0))
@@ -327,7 +322,7 @@ proc pp*(
         first = false
       else:
         result &= pfx & " "
-      result &= "(" & tag.ppPathTag(nil) & "," & vid.ppVid & ")"
+      result &= "(" & tag.ppPathTag(db) & "," & vid.ppVid & ")"
   result &= "}"
 
 proc pp*(vGen: seq[VertexID]): string =
@@ -348,24 +343,17 @@ proc pp*(pPrf: HashSet[VertexID]): string =
   else:
     result &= "}"
 
-proc pp*(
-    leg: Leg;
-    db = AristoDbRef(nil);
-      ): string =
+proc pp*(leg: Leg; db = AristoDb()): string =
   result = " (" & leg.wp.vid.ppVid & ","
-  if not db.isNil:
-    let key = db.kMap.getOrDefault(leg.wp.vid, EMPTY_ROOT_KEY)
+  if not db.top.isNil:
+    let key = db.top.kMap.getOrDefault(leg.wp.vid, EMPTY_ROOT_KEY)
     if key != EMPTY_ROOT_KEY:
       result &= key.ppKey(db)
     else:
       result &= "ø"
   result &= "," & $leg.nibble.ppNibble & "," & leg.wp.vtx.pp(db) & ")"
 
-proc pp*(
-    hike: Hike;
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
+proc pp*(hike: Hike; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx
   var first = true
   result = "[(" & hike.root.ppVid & ")"
@@ -376,11 +364,7 @@ proc pp*(
     result &= "," & pfx & " (" & $hike.error & ")"
   result &= "]"
 
-proc pp*(
-    kMap: Table[VertexID,NodeKey];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
+proc pp*(kMap: Table[VertexID,NodeKey]; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx
   var first = true
   result = "{"
@@ -397,11 +381,7 @@ proc pp*(
   else:
     result &= "}"
 
-proc pp*(
-    pAmk: Table[NodeKey,VertexID];
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
+proc pp*(pAmk: Table[NodeKey,VertexID]; db = AristoDb(); indent = 4): string =
   let pfx = indent.toPfx
   var
     rev = pAmk.pairs.toSeq.mapIt((it[1],it[0])).toTable
@@ -423,10 +403,11 @@ proc pp*(
 # ---------------------
 
 proc pp*(
-    db: AristoDbRef;
+    db: AristoDb;
     sTabOk = true;
     lTabOk = true;
     kMapOk = true;
+    dKeyOk = true;
     pPrfOk = true;
     indent = 4;
       ): string =
@@ -448,18 +429,22 @@ proc pp*(
       pfy2 = pfx2
     rc
 
-  if sTabOk:
-    let info = "sTab(" & $db.sTab.len & ")"
-    result &= info.doPrefix & db.sTab.pp(db,indent)
-  if lTabOk:
-    let info = "lTab(" & $db.lTab.len & "),root=" & db.lRoot.ppVid
-    result &= info.doPrefix & db.lTab.pp(indent)
-  if kMapOk:
-    let info = "kMap(" & $db.kMap.len & "," & $db.pAmk.len & ")"
-    result &= info.doPrefix & db.ppXMap(db.kMap,db.pAmk,indent)
-  if pPrfOk:
-    let info = "pPrf(" & $db.pPrf.len & ")"
-    result &= info.doPrefix & db.pPrf.pp
+  if not db.top.isNil:
+    if sTabOk:
+      let info = "sTab(" & $db.top.sTab.len & ")"
+      result &= info.doPrefix & db.top.sTab.pp(db,indent)
+    if lTabOk:
+      let info = "lTab(" & $db.top.lTab.len & "),root=" & db.top.lRoot.ppVid
+      result &= info.doPrefix & db.top.lTab.pp(indent)
+    if kMapOk:
+      let info = "kMap(" & $db.top.kMap.len & "," & $db.top.pAmk.len & ")"
+      result &= info.doPrefix & db.ppXMap(db.top.kMap,db.top.pAmk,indent)
+    if dKeyOk:
+      let info = "dKey(" & $db.top.dkey.len & ")"
+      result &= info.doPrefix & db.top.dKey.pp
+    if pPrfOk:
+      let info = "pPrf(" & $db.top.pPrf.len & ")"
+      result &= info.doPrefix & db.top.pPrf.pp
 
 # ------------------------------------------------------------------------------
 # End

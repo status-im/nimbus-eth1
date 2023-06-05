@@ -18,7 +18,7 @@ import
   rocksdb,
   unittest2,
   ../nimbus/db/select_backend,
-  ../nimbus/db/aristo/[aristo_desc, aristo_error, aristo_merge],
+  ../nimbus/db/aristo/[aristo_desc, aristo_merge],
   ../nimbus/core/chain,
   ../nimbus/sync/snap/worker/db/[rocky_bulk_load, snapdb_accounts, snapdb_desc],
   ./replay/[pp, undump_accounts, undump_storages],
@@ -261,7 +261,7 @@ when isMainModule:
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
-    import ./test_sync_snap/snap_storage_xx
+    import ./test_sync_snap/snap_storage_xx, ../nimbus/db/aristo/aristo_error
     let knownFailures: KnownHasherFailure = @[
       ("storages3__18__25_dump#11.27367",(3,HashifyExistingHashMismatch)),
       ("storages4__26__33_dump#11.23924",(6,HashifyExistingHashMismatch)),

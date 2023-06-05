@@ -70,17 +70,17 @@ proc rand(td: var TesterDesc; top: int): int =
 # -----------------------
 
 proc fwdWalkVerify(
-    db: AristoDbRef;
+    db: AristoDb;
     noisy: bool;
       ): tuple[visited: int, error:  AristoError] =
   let
-    lTabLen = db.lTab.len
+    lTabLen = db.top.lTab.len
   var
     error = AristoError(0)
     tag: NodeTag
     n = 0
   while n < lTabLen + 1:
-    let rc = tag.nearbyRight(db.lRoot, db) # , noisy)
+    let rc = tag.nearbyRight(db.top.lRoot, db) # , noisy)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -112,7 +112,7 @@ proc test_delete*(
   var td = TesterDesc.init 42
   for n,w in list:
     let
-      db = AristoDbRef()
+      db = AristoDb(top: AristoLayerRef())
       lstLen = list.len
       added = db.merge w.kvpLst
 
@@ -127,7 +127,8 @@ proc test_delete*(
     # Now `db` represents a (fully labelled) `Merkle Patricia Tree`
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    var leafs = db.lTab.keys.toSeq.mapIt(it.Uint256).sorted.mapIt(it.NodeTag)
+    var leafs = db.top.lTab.keys.toSeq
+                      .mapIt(it.Uint256).sorted.mapIt(it.NodeTag)
     if 2 < leafs.len:
       for n in 0 ..< leafs.len-1:
         let r = n + td.rand(leafs.len - n)
@@ -140,11 +141,11 @@ proc test_delete*(
       if rc.isErr:
         check rc.error == (VertexID(0),AristoError(0))
         return
-      if pathTag in db.lTab:
-        check pathTag notin db.lTab
+      if pathTag in db.top.lTab:
+        check pathTag notin db.top.lTab
         return
-      if uMax != db.lTab.len + u:
-        check uMax == db.lTab.len + u
+      if uMax != db.top.lTab.len + u:
+        check uMax == db.top.lTab.len + u
         return
 
       # Walking the database is too slow for large tables. So the hope is that
@@ -156,8 +157,8 @@ proc test_delete*(
           if vfy.error != AristoError(0):
             check vfy == (0, AristoError(0))
             return
-        elif 0 < db.sTab.len:
-          check db.sTab.len == 0
+        elif 0 < db.top.sTab.len:
+          check db.top.sTab.len == 0
           return
         let rc = db.hashifyCheck(relax=true)
         if rc.isErr:
@@ -166,7 +167,7 @@ proc test_delete*(
 
       when true and false:
         if uMax < u + tailCheck or (u mod 777) == 3:
-          noisy.say "***", "step lTab=", db.lTab.len
+          noisy.say "***", "step lTab=", db.top.lTab.len
 
     when true and false:
       noisy.say "***", "sample <", n, "/", list.len-1, ">",

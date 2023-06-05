@@ -8,15 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Read vertex recorfd on the layered Aristo DB delta architecture
-## ===============================================================
+## Read vertex record on the layered Aristo DB delta architecture
+## ==============================================================
 
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[sets, tables],
   stew/results,
-  "."/[aristo_desc, aristo_error]
+  "."/[aristo_constants, aristo_desc, aristo_error]
 
 type
   VidVtxPair* = object
@@ -27,56 +27,86 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getVtxCascaded*(
-    db: AristoDbRef;
+proc getVtxBackend*(
+    db: AristoDb;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
-  ## Cascaded lookup for data record down the transaction cascade. This
-  ## function will return a potential error code from the backend (if any).
-  db.sTab.withValue(vid, vtxPtr):
-    return ok vtxPtr[]
-
-  # Down the rabbit hole of transaction layers
-  var lDb = db
-  while lDb.cascaded:
-    lDb = lDb.stack
-    lDb.sTab.withValue(vid, vtxPtr):
-      return ok vtxPtr[]
-
-  let be = lDb.backend
+  ## Get the vertex from the `backened` layer if available.
+  let be = db.backend
   if not be.isNil:
     return be.getVtxFn vid
 
   err(GetVtxNotFound)
 
+proc getKeyBackend*(
+    db: AristoDb;
+    vid: VertexID;
+      ): Result[NodeKey,AristoError] =
+  ## Get the merkle hash/key from the backend
+  # key must not have been locally deleted (but not saved, yet)
+  if vid notin db.top.dKey:
+    let be = db.backend
+    if not be.isNil:
+      return be.getKeyFn vid
+
+  err(GetKeyNotFound)
+
+
 proc getVtxCascaded*(
-    db: AristoDbRef;
+    db: AristoDb;
+    vid: VertexID;
+      ): Result[VertexRef,AristoError] =
+  ## Get the vertex from the top layer or the `backened` layer if available.
+  let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
+  if vtx != VertexRef(nil):
+    return ok vtx
+
+  db.getVtxBackend vid
+
+proc getKeyCascaded*(
+    db: AristoDb;
+    vid: VertexID;
+      ): Result[NodeKey,AristoError] =
+  ## Get the Merkle hash/key from the top layer or the `backened` layer if
+  ## available.
+  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+  if key != EMPTY_ROOT_KEY:
+    return ok key
+
+  db.getKeyBackend vid
+
+proc getLeaf*(
+    db: AristoDb;
     tag: NodeTag;
       ): Result[VidVtxPair,AristoError] =
-  ## Cascaded lookup for data record down the transaction cascade using
-  ## the Patricia path.
-  db.lTab.withValue(tag, vidPtr):
-    db.sTab.withValue(vidPtr[], vtxPtr):
-      return ok VidVtxPair(vid: vidPtr[], vtx: vtxPtr[])
-    return err(GetTagNotFound)
-
-  # Down the rabbit hole of transaction layers
-  var lDb = db
-  while lDb.cascaded:
-    lDb = lDb.stack
-    lDb.lTab.withValue(tag, vidPtr):
-      lDb.sTab.withValue(vidPtr[], vtxPtr):
-        return ok VidVtxPair(vid: vidPtr[], vtx: vtxPtr[])
-      return err(GetTagNotFound)
+  ## Get the vertex from the top layer by the Patricia Trie path. This
+  ## function does not search on the `backend` layer.
+  let vid = db.top.lTab.getOrDefault(tag, VertexID(0))
+  if vid != VertexID(0):
+    let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
+    if vtx != VertexRef(nil):
+      return ok VidVtxPair(vid: vid, vtx: vtx)
 
   err(GetTagNotFound)
 
-proc getVtx*(db: AristoDbRef; vid: VertexID): VertexRef =
-  ## Variant of `getVtxCascaded()` with returning `nil` on error ignoring the
-  ## error type information.
-  let rc = db.getVtxCascaded vid
+# ---------
+
+proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
+  ## Variant of `getVtxCascaded()` returning `nil` on error (while
+  ## ignoring the detailed error type information.)
+  db.getVtxCascaded(vid).get(otherwise = VertexRef(nil))   
+
+proc getVtx*(db: AristoDb; tag: NodeTag): VertexRef =
+  ## Variant of `getLeaf()` returning `nil` on error (while
+  ## ignoring the detailed error type information.)
+  let rc = db.getLeaf tag
   if rc.isOk:
-    return rc.value
+    return rc.value.vtx
+  
+proc getKey*(db: AristoDb; vid: VertexID): NodeKey =
+  ## Variant of `getKeyCascaded()` returning `EMPTY_ROOT_KEY` on error (while
+  ## ignoring the detailed error type information.)
+  db.getKeyCascaded(vid).get(otherwise = EMPTY_ROOT_KEY)
 
 # ------------------------------------------------------------------------------
 # End

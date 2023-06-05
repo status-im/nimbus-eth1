@@ -13,7 +13,7 @@ type
     NothingSerious = 0
     GenericError
 
-    # Rlp decoder, `fromRlpRecord()`
+    # Rlp decoder, `read()`
     Rlp2Or17ListEntries
     RlpBlobExpected
     RlpBranchLinkExpected
@@ -23,7 +23,7 @@ type
     RlpRlpException
     RlpOtherException
 
-    # Db record decoder, `fromDbRecord()`
+    # Db record decoder, `blobify()`
     DbrNilArgument
     DbrUnknown
     DbrTooShort
@@ -36,20 +36,21 @@ type
     DbrLeafSizeGarbled
     DbrLeafGotExtPrefix
 
-    # Db admin data decoder, `fromAristoDb()`
+    # Db admin data decoder, `deblobify()`
     ADbGarbledSize
     ADbWrongType
 
-    # Db record encoder, `toDbRecord()`
+    # Db record encoder, `blobify()`
     VtxExPathOverflow
     VtxLeafPathOverflow
 
-    # Converter `asNode()`
+    # Converter `asNode()`, currenly for unit tests only
     CacheMissingNodekeys
 
     # Get function `getVtxCascaded()`
     GetVtxNotFound
     GetTagNotFound
+    GetKeyNotFound
 
     # Path function hikeUp()`
     PathRootMissing
@@ -125,5 +126,8 @@ type
     DelBranchExpexted
     DelBranchLocked
     DelExtLocked
+
+    # Save permanently, `save()`
+    BackendMissing
 
 # End

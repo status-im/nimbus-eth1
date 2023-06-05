@@ -26,7 +26,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc fwdWalkLeafsCompleteDB(
-    db: AristoDbRef;
+    db: AristoDb;
     tags: openArray[NodeTag];
     noisy: bool;
       ): tuple[visited: int, error:  AristoError] =
@@ -37,7 +37,7 @@ proc fwdWalkLeafsCompleteDB(
     tag = (tags[0].u256 div 2).NodeTag
     n = 0
   while true:
-    let rc = tag.nearbyRight(db.lRoot, db) # , noisy)
+    let rc = tag.nearbyRight(db.top.lRoot, db) # , noisy)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -69,10 +69,10 @@ proc fwdWalkLeafsCompleteDB(
 
 
 proc revWalkLeafsCompleteDB(
-    db: AristoDbRef;
+    db: AristoDb;
     tags: openArray[NodeTag];
     noisy: bool;
-      ): tuple[visited: int, error:  AristoError] =
+      ): tuple[visited: int, error: AristoError] =
   let
     tLen = tags.len
   var
@@ -81,7 +81,7 @@ proc revWalkLeafsCompleteDB(
     tag = (tags[^1].u256 + delta).NodeTag
     n = tLen-1
   while true: # and false:
-    let rc = tag.nearbyLeft(db.lRoot, db) # , noisy)
+    let rc = tag.nearbyLeft(db.top.lRoot, db) # , noisy)
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
         noisy.say "***", "[", n, "/", tLen-1, "] rev-walk error=", rc.error
@@ -120,20 +120,20 @@ proc test_nearbyKvpList*(
     resetDb = false;
       ) =
   var
-    db = AristoDbRef()
+    db = AristoDb(top: AristoLayerRef())
     tagSet: HashSet[NodeTag]
   for n,w in list:
     if resetDb:
-      db = AristoDbRef()
+      db = AristoDb(top: AristoLayerRef())
       tagSet.reset
     let
       lstLen = list.len
-      lTabLen = db.lTab.len
+      lTabLen = db.top.lTab.len
       leafs = w.kvpLst
       added = db.merge leafs
 
     check added.error == AristoError(0)
-    check db.lTab.len == lTabLen + added.merged
+    check db.top.lTab.len == lTabLen + added.merged
     check added.merged + added.dups == leafs.len
 
     for w in leafs:

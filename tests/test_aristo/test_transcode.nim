@@ -86,7 +86,7 @@ proc test_transcodeAccounts*(
       ) =
   ## Transcoder tests on accounts database
   var
-    adb = AristoDbRef()
+    adb = AristoDb(top: AristoLayerRef())
     count = -1
   for (n, key,value) in rocky.walkAllDb():
     if stopAfter < n:
@@ -175,7 +175,7 @@ proc test_transcodeAccounts*(
 proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
   ## Transcode VID lists held in `AristoDb` descriptor
   var td = TesterDesc.init seed
-  let db = AristoDbRef()
+  let db = AristoDb(top: AristoLayerRef())
 
   # Add some randum numbers
   block:
@@ -192,8 +192,8 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
       expectedVids += (vid < first).ord
       db.vidDispose vid
 
-    check db.vGen.len == expectedVids
-    noisy.say "***", "vids=", db.vGen.len, " discarded=", count-expectedVids
+    check db.top.vGen.len == expectedVids
+    noisy.say "***", "vids=", db.top.vGen.len, " discarded=", count-expectedVids
 
   # Serialise/deserialise
   block:
@@ -201,32 +201,32 @@ proc test_transcodeVidRecycleLists*(noisy = true; seed = 42) =
 
     # Deserialise
     let db1 = block:
-      let rc = dbBlob.deblobify AristoDbRef
+      let rc = dbBlob.deblobify AristoDb
       if rc.isErr:
         check rc.isOk
-      rc.get(otherwise = AristoDbRef())
+      rc.get(otherwise = AristoDb(top: AristoLayerRef()))
 
-    check db.vGen == db1.vGen
+    check db.top.vGen == db1.top.vGen
 
   # Make sure that recycled numbers are fetched first
-  let topVid = db.vGen[^1]
-  while 1 < db.vGen.len:
+  let topVid = db.top.vGen[^1]
+  while 1 < db.top.vGen.len:
     let w = db.vidFetch()
     check w < topVid
-  check db.vGen.len == 1 and db.vGen[0] == topVid
+  check db.top.vGen.len == 1 and db.top.vGen[0] == topVid
 
   # Get some consecutive vertex IDs
   for n in 0 .. 5:
     let w = db.vidFetch()
     check w == topVid + n
-    check db.vGen.len == 1
+    check db.top.vGen.len == 1
 
   # Repeat last test after clearing the cache
-  db.vGen.setLen(0)
+  db.top.vGen.setLen(0)
   for n in 0 .. 5:
     let w = db.vidFetch()
     check w == 1.VertexID + n
-    check db.vGen.len == 1
+    check db.top.vGen.len == 1
 
 # ------------------------------------------------------------------------------
 # End

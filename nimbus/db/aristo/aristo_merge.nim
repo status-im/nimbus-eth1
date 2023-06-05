@@ -69,23 +69,26 @@ proc `xPfx=`(vtx: VertexRef, val: NibblesSeq) =
 # ------------------------------------------------------------------------------
 
 proc clearMerkleKeys(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
   for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
     if key != EMPTY_ROOT_KEY:
-      db.kMap.del vid
-      db.pAmk.del key
+      db.top.kMap.del vid
+      db.top.pAmk.del key
+    elif db.getKeyBackend(vid).isOK:
+      # Register for deleting on backend
+      db.top.dKey.incl vid
 
 # -----------
 
 proc insertBranch(
-    db: AristoDbRef;                   # Database, top layer
-    hike: Hike;
-    linkID: VertexID;
-    linkVtx: VertexRef;
+    db: AristoDb;                      # Database, top layer
+    hike: Hike;                        # Current state
+    linkID: VertexID;                  # Vertex ID to insert
+    linkVtx: VertexRef;                # Vertex to insert
     payload: PayloadRef;               # Leaf data payload
      ): Hike =
   ##
@@ -130,9 +133,9 @@ proc insertBranch(
   # Install `forkVtx`
   block:
     # Clear Merkle hashes (aka node keys) unless proof mode.
-    if db.pPrf.len == 0:
+    if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, linkID)
-    elif linkID in db.pPrf:
+    elif linkID in db.top.pPrf:
       return Hike(error: MergeNonBranchProofModeLock)
 
     if linkVtx.vType == Leaf:
@@ -145,8 +148,8 @@ proc insertBranch(
         return Hike(error: MergeBrLinkLeafGarbled)
 
       let local = db.vidFetch
-      db.lTab[rc.value] = local        # update leaf path lookup cache
-      db.sTab[local] = linkVtx
+      db.top.lTab[rc.value] = local    # update leaf path lookup cache
+      db.top.sTab[local] = linkVtx
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -156,7 +159,7 @@ proc insertBranch(
 
     else:
       let local = db.vidFetch
-      db.sTab[local] = linkVtx
+      db.top.sTab[local] = linkVtx
       linkVtx.ePfx = linkVtx.ePfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -168,7 +171,7 @@ proc insertBranch(
       vType: Leaf,
       lPfx:  hike.tail.slice(1+n),
       lData: payload)
-    db.sTab[local] = leafLeg.wp.vtx
+    db.top.sTab[local] = leafLeg.wp.vtx
 
   # Update branch leg, ready to append more legs
   result = Hike(root: hike.root, legs: hike.legs)
@@ -180,7 +183,7 @@ proc insertBranch(
       ePfx:  hike.tail.slice(0,n),
       eVid:  db.vidFetch)
 
-    db.sTab[linkID] = extVtx
+    db.top.sTab[linkID] = extVtx
 
     result.legs.add Leg(
       nibble: -1,
@@ -188,14 +191,14 @@ proc insertBranch(
         vid: linkID,
         vtx: extVtx))
 
-    db.sTab[extVtx.eVid] = forkVtx
+    db.top.sTab[extVtx.eVid] = forkVtx
     result.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
         vid: extVtx.eVid,
         vtx: forkVtx))
   else:
-    db.sTab[linkID] = forkVtx
+    db.top.sTab[linkID] = forkVtx
     result.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
@@ -206,7 +209,7 @@ proc insertBranch(
 
 
 proc concatBranchAndLeaf(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     brVid: VertexID;                   # Branch vertex ID from from `Hike` top
     brVtx: VertexRef;                  # Branch vertex, linked to from `Hike`
@@ -223,9 +226,9 @@ proc concatBranchAndLeaf(
     return Hike(error: MergeRootBranchLinkBusy)
 
   # Clear Merkle hashes (aka node keys) unless proof mode.
-  if db.pPrf.len == 0:
+  if db.top.pPrf.len == 0:
     db.clearMerkleKeys(hike, brVid)
-  elif brVid in db.pPrf:
+  elif brVid in db.top.pPrf:
     return Hike(error: MergeBranchProofModeLock) # Ooops
 
   # Append branch node
@@ -240,7 +243,7 @@ proc concatBranchAndLeaf(
       lPfx:  hike.tail.slice(1),
       lData: payload)
   brVtx.bVid[nibble] = vid
-  db.sTab[vid] = vtx
+  db.top.sTab[vid] = vtx
   result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 # ------------------------------------------------------------------------------
@@ -248,7 +251,7 @@ proc concatBranchAndLeaf(
 # ------------------------------------------------------------------------------
 
 proc topIsBranchAddLeaf(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     payload: PayloadRef;               # Leaf data payload
       ): Hike =
@@ -273,7 +276,7 @@ proc topIsBranchAddLeaf(
     #
     #  <-------- immutable ------------> <---- mutable ----> ..
     #
-    if db.pPrf.len == 0:
+    if db.top.pPrf.len == 0:
       # Not much else that can be done here
       debug "Dangling leaf link, reused", branch=hike.legs[^1].wp.vid,
         nibble, linkID, leafPfx=hike.tail
@@ -283,7 +286,7 @@ proc topIsBranchAddLeaf(
       vType: Leaf,
       lPfx:  hike.tail,
       lData: payload)
-    db.sTab[linkID] = vtx
+    db.top.sTab[linkID] = vtx
     result = Hike(root: hike.root, legs: hike.legs)
     result.legs.add Leg(wp: VidVtxPair(vid: linkID, vtx: vtx), nibble: -1)
     return
@@ -301,7 +304,7 @@ proc topIsBranchAddLeaf(
 
 
 proc topIsExtAddLeaf(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # Path top has an `Extension` vertex
     payload: PayloadRef;               # Leaf data payload
       ): Hike =
@@ -328,7 +331,7 @@ proc topIsExtAddLeaf(
       vType: Leaf,
       lPfx:  extVtx.ePfx & hike.tail,
       lData: payload)
-    db.sTab[extVid] = vtx
+    db.top.sTab[extVid] = vtx
     result.legs[^1].wp.vtx = vtx
 
   elif brVtx.vType != Branch:
@@ -349,9 +352,9 @@ proc topIsExtAddLeaf(
       return Hike(error: MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka node keys) unless proof mode
-    if db.pPrf.len == 0:
+    if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, brVid)
-    elif brVid in db.pPrf:
+    elif brVid in db.top.pPrf:
       return Hike(error: MergeBranchProofModeLock)
 
     let
@@ -361,13 +364,13 @@ proc topIsExtAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     brVtx.bVid[nibble] = vid
-    db.sTab[vid] = vtx
+    db.top.sTab[vid] = vtx
     result.legs[^1].nibble = nibble
     result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 
 proc topIsEmptyAddLeaf(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     hike: Hike;                        # No path legs
     rootVtx: VertexRef;                # Root vertex
     payload: PayloadRef;               # Leaf data payload
@@ -380,9 +383,9 @@ proc topIsEmptyAddLeaf(
       return Hike(error: MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka node keys) unless proof mode
-    if db.pPrf.len == 0:
+    if db.top.pPrf.len == 0:
       db.clearMerkleKeys(hike, hike.root)
-    elif hike.root in db.pPrf:
+    elif hike.root in db.top.pPrf:
       return Hike(error: MergeBranchProofModeLock)
 
     let
@@ -392,7 +395,7 @@ proc topIsEmptyAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     rootVtx.bVid[nibble] = leafVid
-    db.sTab[leafVid] = leafVtx
+    db.top.sTab[leafVid] = leafVtx
     return Hike(
       root: hike.root,
       legs: @[Leg(wp: VidVtxPair(vtx: rootVtx, vid: hike.root), nibble: nibble),
@@ -405,7 +408,7 @@ proc topIsEmptyAddLeaf(
 # ------------------------------------------------------------------------------
 
 proc merge*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     leaf: LeafKVP;                     # Leaf item to add to the database
       ): Hike =
   ## Merge the argument `leaf` key-value-pair into the top level vertex table
@@ -421,18 +424,18 @@ proc merge*(
         lPfx:  leaf.pathTag.pathAsNibbles,
         lData: leaf.payload)
       wp = VidVtxPair(vid: vid, vtx: vtx)
-    db.sTab[vid] = vtx
+    db.top.sTab[vid] = vtx
     Hike(root: vid, legs: @[Leg(wp: wp, nibble: -1)])
 
-  if db.lRoot.isZero:
+  if db.top.lRoot.isZero:
     result = db.vidFetch.setUpAsRoot() # bootstrap: new root ID
-    db.lRoot = result.root
+    db.top.lRoot = result.root
 
-  elif db.lTab.haskey leaf.pathTag:
+  elif db.top.lTab.hasKey leaf.pathTag:
     result.error = MergeLeafPathCachedAlready
 
   else:
-    let hike = leaf.pathTag.hikeUp(db.lRoot, db)
+    let hike = leaf.pathTag.hikeUp(db.top.lRoot, db)
 
     if 0 < hike.legs.len:
       case hike.legs[^1].wp.vtx.vType:
@@ -447,19 +450,19 @@ proc merge*(
 
     else:
       # Empty hike
-      let rootVtx = db.getVtx db.lRoot
+      let rootVtx = db.getVtx db.top.lRoot
 
       if rootVtx.isNil:
-        result = db.lRoot.setUpAsRoot()    # bootstrap for existing root ID
+        result = db.top.lRoot.setUpAsRoot  # bootstrap for existing root ID
       else:
         result = db.topIsEmptyAddLeaf(hike,rootVtx,leaf.payload)
 
   # Update leaf acccess cache
   if result.error == AristoError(0):
-    db.lTab[leaf.pathTag] = result.legs[^1].wp.vid
+    db.top.lTab[leaf.pathTag] = result.legs[^1].wp.vid
 
 proc merge*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     leafs: openArray[LeafKVP];         # Leaf items to add to the database
       ): tuple[merged: int, dups: int, error: AristoError] =
   ## Variant of `merge()` for leaf lists.
@@ -478,7 +481,7 @@ proc merge*(
 # ---------------------
 
 proc merge*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     nodeKey: NodeKey;                  # Merkel hash of node
     node: NodeRef;                     # Node derived from RLP representation
       ): Result[VertexID,AristoError]  =
@@ -492,11 +495,12 @@ proc merge*(
   ## decoder as expected, these vertex IDs will be all zero.
   ##
   proc register(key: NodeKey): VertexID =
-    var vid = db.pAmk.getOrDefault(key, VertexID(0))
+    var vid = db.top.pAmk.getOrDefault(key, VertexID(0))
     if vid == VertexID(0):
       vid = db.vidFetch
-      db.pAmk[key] = vid
-      db.kMap[vid] = key
+      db.top.dKey.excl vid
+      db.top.pAmk[key] = vid
+      db.top.kMap[vid] = key
     vid
 
   # Check whether the record is correct
@@ -508,8 +512,8 @@ proc merge*(
     return err(MergeNodeKeyEmpty)
 
   # Check whether the node exists, already
-  let nodeVid = db.pAmk.getOrDefault(nodeKey, VertexID(0))
-  if nodeVid != VertexID(0) and db.sTab.hasKey nodeVid:
+  let nodeVid = db.top.pAmk.getOrDefault(nodeKey, VertexID(0))
+  if nodeVid != VertexID(0) and db.getVtx(nodeVid) != VertexRef(nil):
     return err(MergeNodeKeyCachedAlready)
 
   let
@@ -521,7 +525,7 @@ proc merge*(
     discard
   of Extension:
     if not node.key[0].isEmpty:
-      let eVid = db.pAmk.getOrDefault(node.key[0], VertexID(0))
+      let eVid = db.top.pAmk.getOrDefault(node.key[0], VertexID(0))
       if eVid != VertexID(0):
         vtx.eVid = eVid
       else:
@@ -529,18 +533,18 @@ proc merge*(
   of Branch:
     for n in 0..15:
       if not node.key[n].isEmpty:
-        let bVid = db.pAmk.getOrDefault(node.key[n], VertexID(0))
+        let bVid = db.top.pAmk.getOrDefault(node.key[n], VertexID(0))
         if bVid != VertexID(0):
           vtx.bVid[n] = bVid
         else:
           vtx.bVid[n] = node.key[n].register
 
-  db.pPrf.incl vid
-  db.sTab[vid] = vtx
+  db.top.pPrf.incl vid
+  db.top.sTab[vid] = vtx
   ok vid
 
 proc merge*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDb;                      # Database, top layer
     proof: openArray[SnapProof];       # RLP encoded node records
       ): tuple[merged: int, dups: int, error: AristoError]
       {.gcsafe, raises: [RlpError].} =

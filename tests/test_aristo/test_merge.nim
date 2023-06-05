@@ -36,12 +36,12 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
     result &= ")"
 
 proc mergeStepwise(
-    db: AristoDbRef;
+    db: AristoDb;
     leafs: openArray[LeafKVP];
     noisy: bool;
       ): tuple[merged: int, dups: int, error: AristoError] =
   let
-    lTabLen = db.lTab.len
+    lTabLen = db.top.lTab.len
   var
     (merged, dups, error) = (0, 0, AristoError(0))
 
@@ -53,7 +53,7 @@ proc mergeStepwise(
     let
       preState = db.pp
       hike = db.merge leaf
-      ekih = leaf.pathTag.hikeUp(db.lRoot, db)
+      ekih = leaf.pathTag.hikeUp(db.top.lRoot, db)
 
     case hike.error:
     of AristoError(0):
@@ -103,10 +103,10 @@ proc mergeStepwise(
     elif hike.error != MergeLeafPathCachedAlready:
       check ekih.legs[^1].wp.vtx.lData.blob == leaf.payload.blob
 
-    if db.lTab.len != lTabLen + merged:
+    if db.top.lTab.len != lTabLen + merged:
       error = GenericError
-      check db.lTab.len == lTabLen + merged # quick leaf access table
-      stopOk = true                         # makes no sense to go on further
+      check db.top.lTab.len == lTabLen + merged # quick leaf access table
+      stopOk = true                             # makes no sense to go on
 
     if stopOk:
       noisy.say "***", "<", n, "/", leafs.len-1, "> stop"
@@ -123,26 +123,26 @@ proc test_mergeKvpList*(
     list: openArray[ProofTrieData];
     resetDb = false;
       ) =
-  var db = AristoDbRef()
+  var db = AristoDb(top: AristoLayerRef())
   for n,w in list:
     if resetDb:
-      db = AristoDbRef()
+      db.top = AristoLayerRef()
     let
       lstLen = list.len
-      lTabLen = db.lTab.len
+      lTabLen = db.top.lTab.len
       leafs = w.kvpLst
       #prePreDb = db.pp
       added = db.merge leafs
       #added = db.mergeStepwise(leafs, noisy=(6 < n))
 
     check added.error == AristoError(0)
-    check db.lTab.len == lTabLen + added.merged
+    check db.top.lTab.len == lTabLen + added.merged
     check added.merged + added.dups == leafs.len
 
     let
       #preDb = db.pp
-      preKMap = (db.kMap.len, db.pp(sTabOk=false, lTabOk=false))
-      prePAmk = (db.pAmk.len, db.pAmk.pp(db))
+      preKMap = (db.top.kMap.len, db.pp(sTabOk=false, lTabOk=false))
+      prePAmk = (db.top.pAmk.len, db.top.pAmk.pp(db))
 
     block:
       let rc = db.hashify # (noisy=true)
@@ -187,12 +187,12 @@ proc test_mergeProofAndKvpList*(
     oops: KnownHasherFailure = @[];
       ) =
   var
-    db = AristoDbRef(nil)
+    db: AristoDb
     rootKey = NodeKey.default
     count = 0
   for n,w in list:
     if resetDb or w.root != rootKey or w.proof.len == 0:
-      db = AristoDbRef()
+      db.top = AristoLayerRef()
       rootKey = w.root
       count = 0
     count.inc
@@ -201,8 +201,8 @@ proc test_mergeProofAndKvpList*(
       testId = idPfx & "#" & $w.id & "." & $n
       oopsTab = oops.toTable
       lstLen = list.len
-      sTabLen = db.sTab.len
-      lTabLen = db.lTab.len
+      sTabLen = db.top.sTab.len
+      lTabLen = db.top.lTab.len
       leafs = w.kvpLst
 
     when true and false:
@@ -213,15 +213,15 @@ proc test_mergeProofAndKvpList*(
     if 0 < w.proof.len:
       check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
-      check db.lTab.len == lTabLen
-      check db.sTab.len == proved.merged + sTabLen
-      check proved.merged < db.pAmk.len
-      check proved.merged < db.kMap.len
+      check db.top.lTab.len == lTabLen
+      check db.top.sTab.len == proved.merged + sTabLen
+      check proved.merged < db.top.pAmk.len
+      check proved.merged < db.top.kMap.len
 
       # Set up root ID
-      db.lRoot = db.pAmk.getOrDefault(rootKey, VertexID(0))
-      if db.lRoot == VertexID(0):
-        check db.lRoot != VertexID(0)
+      db.top.lRoot = db.top.pAmk.getOrDefault(rootKey, VertexID(0))
+      if db.top.lRoot == VertexID(0):
+        check db.top.lRoot != VertexID(0)
         return
 
     when true and false:
@@ -232,12 +232,12 @@ proc test_mergeProofAndKvpList*(
       merged = db.merge leafs
       #merged = db.mergeStepwise(leafs, noisy=false)
 
-    check db.lTab.len == lTabLen + merged.merged
+    check db.top.lTab.len == lTabLen + merged.merged
     check merged.merged + merged.dups == leafs.len
 
     if w.proof.len == 0:
       let vtx = db.getVtx VertexID(1)
-      #check db.pAmk.getOrDefault(rootKey, VertexID(0)) != VertexID(0)
+      #check db.top.pAmk.getOrDefault(rootKey, VertexID(0)) != VertexID(0)
 
     block:
       if merged.error notin {AristoError(0), MergeLeafPathCachedAlready}:
@@ -249,7 +249,7 @@ proc test_mergeProofAndKvpList*(
 
     block:
       let
-        preRoot = db.lRoot
+        preRoot = db.top.lRoot
         preDb = db.pp(sTabOk=false, lTabOk=false)
         rc = db.hashify rootKey
 
@@ -276,8 +276,8 @@ proc test_mergeProofAndKvpList*(
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    if db.lRoot == VertexID(0):
-      check db.lRoot != VertexID(0)
+    if db.top.lRoot == VertexID(0):
+      check db.top.lRoot != VertexID(0)
       return
 
     when true and false:

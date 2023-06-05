@@ -37,33 +37,68 @@ type
     ## Tip of edge towards child object in the `Patricia Trie` logic. It is
     ## also the key into the structural table of the `Aristo Trie`.
 
+  # -------------
+
   GetVtxFn* =
-    proc(vid: VertexID): Result[VertexRef,AristoError]
-      {.gcsafe, raises: [].}
+    proc(vid: VertexID): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a single structural
         ## `Aristo DB` data record.
 
   GetKeyFn* =
-    proc(vid: VertexID): Result[NodeKey,AristoError]
-      {.gcsafe, raises: [].}
+    proc(vid: VertexID): Result[NodeKey,AristoError] {.gcsafe, raises: [].}
         ## Generic backend database retrieval function for a single
         ## `Aristo DB` hash lookup value.
 
+  GetIdgFn* =
+    proc(): Result[seq[VertexID],AristoError] {.gcsafe, raises: [].}
+        ## Generic backend database retrieval function for a the ID generator
+        ## `Aristo DB` state record.
+
+  # -------------
+
+  PutHdlRef* = ref object of RootRef
+    ## Persistent database transaction frame handle. This handle is used to
+    ## wrap any of `PutVtxFn`, `PutKeyFn`, and `PutIdgFn` into and atomic
+    ## transaction frame. These transaction frames must not be interleaved
+    ## by any library function using the backend.
+
+  PutBegFn* =
+    proc(): PutHdlRef {.gcsafe, raises: [].}
+      ## Generic transaction initialisation function
+
   PutVtxFn* =
-    proc(vrps: openArray[(VertexID,VertexRef)]): AristoError
+    proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)])
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function.
 
   PutKeyFn* =
-    proc(vkps: openArray[(VertexID,NodeKey)]): AristoError
+    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,NodeKey)])
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function.
 
-  DelFn* =
+  PutIdgFn* =
+    proc(hdl: PutHdlRef; vs: openArray[VertexID]) {.gcsafe, raises: [].}
+        ## Generic backend database ID generator state storage function.
+
+  PutEndFn* =
+    proc(hdl: PutHdlRef): AristoError {.gcsafe, raises: [].}
+      ## Generic transaction termination function
+
+  # -------------
+
+  DelVtxFn* =
     proc(vids: openArray[VertexID])
       {.gcsafe, raises: [].}
-        ## Generic backend database delete function for both, the structural
-        ## `Aristo DB` data record and the hash lookup value.
+        ## Generic backend database delete function for the structural
+        ## `Aristo DB` data records
+
+  DelKeyFn* =
+    proc(vids: openArray[VertexID])
+      {.gcsafe, raises: [].}
+        ## Generic backend database delete function for the `Aristo DB`
+        ## Merkle hash key mappings.
+
+  # -------------
 
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
@@ -105,29 +140,33 @@ type
   AristoBackendRef* = ref object
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
-    getKeyFn*: GetKeyFn              ## Read vertex hash
+    getKeyFn*: GetKeyFn              ## Read Merkle hash/key
+    getIdgFn*: GetIdgFn              ## Read ID generator state
+    putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
     putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
-    delFn*: DelFn                    ## Bulk delete vertex records and hashes
+    putIdgFn*: PutIdgFn              ## Store ID generator state
+    putEndFn*: PutEndFn              ## Commit bulk store session
+    delVtxFn*: DelVtxFn              ## Bulk delete vertex records
+    delKeyFn*: DelKeyFn              ## Bulk delete vertex Merkle hashes
 
-  AristoDbRef* = ref AristoDbObj
-  AristoDbObj = object
-    ## Hexary trie plus helper structures
-    sTab*: Table[VertexID,VertexRef] ## Structural vertex table making up a trie
+  AristoLayerRef* = ref object
+    ## Hexary trie database layer structures. Any layer holds the full
+    ## change relative to the backend.
+    sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
     lRoot*: VertexID                 ## Root vertex for `lTab[]`
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
+    dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
-    pPrf*: HashSet[VertexID]         ## Locked vertices (from proof vertices)
+    pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
 
-    case cascaded*: bool             ## Cascaded delta databases, tx layer
-    of true:
-      level*: int                    ## Positive number of stack layers
-      stack*: AristoDbRef            ## Down the chain, not `nil`
-      base*: AristoDbRef             ## Backend level descriptor, maybe unneeded
-    else:
-      backend*: AristoBackendRef     ## backend database (maybe `nil`)
+  AristoDb* = object
+    ## Set of database layers, supporting transaction frames
+    top*: AristoLayerRef             ## Database working layer
+    stack*: seq[AristoLayerRef]      ## Stashed parent layers
+    backend*: AristoBackendRef       ## Backend database (may well be `nil`)
 
     # Debugging data below, might go away in future
     xMap*: Table[NodeKey,VertexID]   ## For pretty printing, extends `pAmk`

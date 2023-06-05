@@ -199,7 +199,7 @@ proc blobify*(node: VertexRef): Result[Blob, AristoError] =
   ok(data)
 
 
-proc blobify*(db: AristoDbRef; data: var Blob) =
+proc blobify*(db: AristoDb; data: var Blob) =
   ## This function serialises some maintenance data for the `AristoDb`
   ## descriptor. At the moment, this contains the recycliing table for the
   ## `VertexID` values, only.
@@ -212,11 +212,12 @@ proc blobify*(db: AristoDbRef; data: var Blob) =
   ##     0x40
   ##
   data.setLen(0)
-  for w in db.vGen:
-    data &= w.uint64.toBytesBE.toSeq
+  if not db.top.isNil:
+    for w in db.top.vGen:
+      data &= w.uint64.toBytesBE.toSeq
   data.add 0x40u8
 
-proc blobify*(db: AristoDbRef): Blob =
+proc blobify*(db: AristoDb): Blob =
   ## Variant of `toDescRecord()`
   db.blobify result
 
@@ -289,14 +290,15 @@ proc deblobify*(record: Blob; vtx: var VertexRef): AristoError =
     return DbrUnknown
 
 
-proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
-  ## De-serialise the data record encoded with `blobify()`. The second
-  ## argument `db` can be `nil` in which case a new `AristoDbRef` type
-  ## descriptor will be created.
-  if db.isNil:
-    db = AristoDbRef()
+proc deblobify*(data: Blob; db: var AristoDb): AristoError =
+  ## De-serialise the data record encoded with `blobify()` into a new current
+  ## top layer. If present, the previous top layer of the `db` descriptor is
+  ## pushed onto the parent layers stack.
+  if not db.top.isNil:
+    db.stack.add db.top
+  db.top = AristoLayerRef()
   if data.len == 0:
-    db.vGen = @[1.VertexID]
+    db.top.vGen = @[1.VertexID]
   else:
     if (data.len mod 8) != 1:
       return ADbGarbledSize
@@ -304,14 +306,13 @@ proc deblobify*(data: Blob; db: var AristoDbRef): AristoError =
       return ADbWrongType
     for n in 0 ..< (data.len div 8):
       let w = n * 8
-      db.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
+      db.top.vGen.add (uint64.fromBytesBE data[w ..< w + 8]).VertexID
 
-
-proc deblobify*[W: VertexRef|AristoDbRef](
+proc deblobify*[W: VertexRef|AristoDb](
     record: Blob;
     T: type W;
       ): Result[T,AristoError] =
-  ## Variant of `deblobify()` for either `VertexRef` or `AristoDbRef`
+  ## Variant of `deblobify()` for either `VertexRef` or `AristoDb`
   var obj: T # isNil, will be auto-initialised
   let info = record.deblobify obj
   if info != AristoError(0):

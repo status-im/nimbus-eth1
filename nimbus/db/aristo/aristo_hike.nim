@@ -60,7 +60,7 @@ func legsTo*(hike: Hike; T: type NibblesSeq): T =
 proc hikeUp*(
     path: NibblesSeq;                            # Partial path
     root: VertexID;                              # Start vertex
-    db: AristoDbRef;                             # Database
+    db: AristoDb;                                # Database
       ): Hike =
   ## For the argument `path`, find and return the logest possible path in the
   ## argument database `db`.
@@ -124,7 +124,7 @@ proc hikeUp*(
         result.tail = result.tail.slice(vtx.ePfx.len)
         vid = vtx.eVid
 
-proc hikeUp*(keyOrTag: NodeKey|NodeTag; root: VertexID; db: AristoDbRef): Hike =
+proc hikeUp*(keyOrTag: NodeKey|NodeTag; root: VertexID; db: AristoDb): Hike =
   ## Variant of `hike()`
   keyOrTag.pathAsNibbles.hikeUp(root, db)
 
