@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/[algorithm, sequtils, sets, tables],
   ./aristo_desc
 
 # ------------------------------------------------------------------------------
@@ -27,11 +28,12 @@ proc vidFetch*(db: AristoDb): VertexID =
   let top = db.top
   case top.vGen.len:
   of 0:
-    top.vGen = @[2.VertexID]
-    result = 1.VertexID
+    # Note that `VertexID(1)` is the root of the main trie
+    top.vGen = @[VertexID(3)]
+    result = VertexID(2)
   of 1:
     result = top.vGen[^1]
-    top.vGen = @[(result.uint64 + 1).VertexID]
+    top.vGen = @[VertexID(result.uint64 + 1)]
   else:
     result = top.vGen[^2]
     top.vGen[^2] = top.vGen[^1]
@@ -41,29 +43,63 @@ proc vidFetch*(db: AristoDb): VertexID =
 proc vidPeek*(db: AristoDb): VertexID =
   ## Like `new()` without consuming this *ID*. It will return the *ID* that
   ## would be returned by the `new()` function.
-  let top = db.top
-  case top.vGen.len:
+  case db.top.vGen.len:
   of 0:
-    1.VertexID
+    VertexID(2)
   of 1:
-    top.vGen[^1]
+    db.top.vGen[^1]
   else:
-    top.vGen[^2]
+    db.top.vGen[^2]
 
 
 proc vidDispose*(db: AristoDb; vid: VertexID) =
   ## Recycle the argument `vtxID` which is useful after deleting entries from
   ## the vertex table to prevent the `VertexID` type key values small.
-  let top = db.top
-  if top.vGen.len == 0:
-    top.vGen = @[vid]
-  else:
-    let topID = top.vGen[^1]
-    # Only store smaller numbers: all numberts larger than `topID`
-    # are free numbers
-    if vid < topID:
-      top.vGen[^1] = vid
-      top.vGen.add topID
+  if VertexID(1) < vid:
+    if db.top.vGen.len == 0:
+      db.top.vGen = @[vid]
+    else:
+      let topID = db.top.vGen[^1]
+      # Only store smaller numbers: all numberts larger than `topID`
+      # are free numbers
+      if vid < topID:
+        db.top.vGen[^1] = vid
+        db.top.vGen.add topID
+
+proc vidReorg*(db: AristoDb) =
+  ## Remove redundant items from the recycle queue. All recycled entries are
+  ## typically kept in the queue until the backend database is committed.
+  if 1 < db.top.vGen.len:
+    let lst = db.top.vGen.mapIt(uint64(it)).sorted.mapIt(VertexID(it))
+    for n in (lst.len-1).countDown(1):
+      if lst[n-1].uint64 + 1 != lst[n].uint64:
+        # All elements larger than `lst[n-1` are in increasing order. For
+        # the last continuously increasing sequence, only the smallest item
+        # is needed and the rest can be removed
+        #
+        # Example:
+        #         ..3, 5, 6, 7     =>   ..3, 5
+        #              ^
+        #              |
+        #              n
+        #
+        if n < lst.len-1:
+          db.top.vGen.shallowCopy lst
+          db.top.vGen.setLen(n+1)
+        return
+    # All entries are continuously increasing
+    db.top.vGen = @[lst[0]]
+
+proc vidAttach*(db: AristoDb; key: NodeKey; vid: VertexID) =
+  ## Attach (i.r. register) a Merkle hash key to a vertex ID.
+  db.top.dKey.excl vid
+  db.top.pAmk[key] = vid
+  db.top.kMap[vid] = key
+
+proc vidAttach*(db: AristoDb; key: NodeKey): VertexID {.discardable.} =
+  ## Variant of `vidAttach()` with auto-generated vertex ID
+  result = db.vidFetch
+  db.vidAttach(key, result)
 
 # ------------------------------------------------------------------------------
 # End

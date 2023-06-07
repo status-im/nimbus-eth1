@@ -57,7 +57,7 @@ proc doneWith(db: AristoDb; vid: VertexID) =
 
 proc deleteImpl(
     hike: Hike;                        # Fully expanded path
-    pathTag: NodeTag;                  # `Patricia Trie` path root-to-leaf
+    lky: LeafKey;                      # `Patricia Trie` path root-to-leaf
     db: AristoDb;                      # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
@@ -110,12 +110,10 @@ proc deleteImpl(
   let rc = db.getVtxBackend lf.vid
   if rc.isErr and rc.error == GetVtxNotFound:
     # No need to keep it any longer
-    db.top.lTab.del pathTag
-    if db.top.lTab.len == 0:
-      db.top.lRoot = VertexID(0)
+    db.top.lTab.del lky
   else:
     # To be deleted in backend when it is updated
-    db.top.lTab[pathTag] = VertexID(0)
+    db.top.lTab[lky] = VertexID(0)
 
   ok()
 
@@ -129,19 +127,19 @@ proc delete*(
       ): Result[void,(VertexID,AristoError)] =
   ## Delete argument `hike` chain of vertices from the database
   # Need path in order to remove it from `lTab[]`
-  let pathTag = block:
+  let lky = block:
     let rc = hike.to(NibblesSeq).pathToTag()
     if rc.isErr:
       return err((VertexID(0),DelPathTagError))
-    rc.value
-  hike.deleteImpl(pathTag, db)
+    LeafKey(root: hike.root, path: rc.value)
+  hike.deleteImpl(lky, db)
 
 proc delete*(
-    pathTag: NodeTag;                  # `Patricia Trie` path root-to-leaf
+    lky: LeafKey;                      # `Patricia Trie` path root-to-leaf
     db: AristoDb;                      # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`
-  pathTag.hikeUp(db.top.lRoot, db).deleteImpl(pathTag, db)
+  lky.hikeUp(db).deleteImpl(lky, db)
 
 # ------------------------------------------------------------------------------
 # End

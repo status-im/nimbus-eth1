@@ -52,7 +52,7 @@ type
     GetTagNotFound
     GetKeyNotFound
 
-    # Path function hikeUp()`
+    # Path function `hikeUp()`
     PathRootMissing
     PathLeafTooEarly
     PathBranchTailEmpty
@@ -84,6 +84,10 @@ type
 
     MergeNodeKeyEmpty
     MergeNodeKeyCachedAlready
+    MergeNodeKeyDiffersFromCached
+    MergeRootKeyEmpty
+
+    MergeRootKeyDiffersForVid
 
     # Update `Merkle` hashes `hashify()`
     HashifyCannotComplete

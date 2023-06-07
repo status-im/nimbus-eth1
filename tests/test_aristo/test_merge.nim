@@ -37,7 +37,7 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
 
 proc mergeStepwise(
     db: AristoDb;
-    leafs: openArray[LeafKVP];
+    leafs: openArray[LeafSubKVP];
     noisy: bool;
       ): tuple[merged: int, dups: int, error: AristoError] =
   let
@@ -53,7 +53,9 @@ proc mergeStepwise(
     let
       preState = db.pp
       hike = db.merge leaf
-      ekih = leaf.pathTag.hikeUp(db.top.lRoot, db)
+      ekih = leaf.leafKey.hikeUp(db)
+
+    noisy.say "***", "step <", n, "/", leafs.len-1, "> "
 
     case hike.error:
     of AristoError(0):
@@ -81,7 +83,7 @@ proc mergeStepwise(
         rc.error
 
     if dumpOk:
-      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.pathTag.pp,
+      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafKey.pp,
         "\n   pre-state ", preState,
         "\n   --------",
         "\n   merge => hike",
@@ -122,7 +124,8 @@ proc test_mergeKvpList*(
     noisy: bool;
     list: openArray[ProofTrieData];
     resetDb = false;
-      ) =
+      ): bool =
+
   var db = AristoDb(top: AristoLayerRef())
   for n,w in list:
     if resetDb:
@@ -130,10 +133,10 @@ proc test_mergeKvpList*(
     let
       lstLen = list.len
       lTabLen = db.top.lTab.len
-      leafs = w.kvpLst
+      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
       #prePreDb = db.pp
       added = db.merge leafs
-      #added = db.mergeStepwise(leafs, noisy=(6 < n))
+      #added = db.mergeStepwise(leafs, noisy=true)
 
     check added.error == AristoError(0)
     check db.top.lTab.len == lTabLen + added.merged
@@ -175,8 +178,9 @@ proc test_mergeKvpList*(
 
     when true and false:
       noisy.say "***", "sample ", n, "/", lstLen-1,
-        " leafs merged=", added.merged,
+        " merged=", added.merged,
         " dup=", added.dups
+  true
 
 
 proc test_mergeProofAndKvpList*(
@@ -185,7 +189,7 @@ proc test_mergeProofAndKvpList*(
     resetDb = false;
     idPfx = "";
     oops: KnownHasherFailure = @[];
-      ) =
+      ): bool =
   var
     db: AristoDb
     rootKey = NodeKey.default
@@ -203,14 +207,20 @@ proc test_mergeProofAndKvpList*(
       lstLen = list.len
       sTabLen = db.top.sTab.len
       lTabLen = db.top.lTab.len
-      leafs = w.kvpLst
+      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
 
     when true and false:
-      noisy.say "***", "sample <", n, "/", lstLen-1, ">",
-        " groups=", count, " nLeafs=", leafs.len
+      noisy.say "***", "sample(1) <", n, "/", lstLen-1, ">",
+        " groups=", count, " nLeafs=", leafs.len,
+        " db-dump\n   ", db.pp
 
-    let proved = db.merge w.proof
+    var proved: tuple[merged: int, dups: int, error: AristoError]
     if 0 < w.proof.len:
+      let rc = db.merge(rootKey, VertexID(1))
+      if rc.isErr:
+        check rc.error == AristoError(0)
+        return
+      proved = db.merge w.proof
       check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.top.lTab.len == lTabLen
@@ -218,15 +228,11 @@ proc test_mergeProofAndKvpList*(
       check proved.merged < db.top.pAmk.len
       check proved.merged < db.top.kMap.len
 
-      # Set up root ID
-      db.top.lRoot = db.top.pAmk.getOrDefault(rootKey, VertexID(0))
-      if db.top.lRoot == VertexID(0):
-        check db.top.lRoot != VertexID(0)
-        return
-
     when true and false:
-      noisy.say "***", "sample <", n, "/", lstLen-1, ">",
-        " groups=", count, " nLeafs=", leafs.len, " proved=", proved
+      if 0 < w.proof.len:
+        noisy.say "***", "sample(2) <", n, "/", lstLen-1, ">",
+          " groups=", count, " nLeafs=", leafs.len, " proved=", proved,
+          " db-dump\n   ", db.pp
 
     let
       merged = db.merge leafs
@@ -237,7 +243,6 @@ proc test_mergeProofAndKvpList*(
 
     if w.proof.len == 0:
       let vtx = db.getVtx VertexID(1)
-      #check db.top.pAmk.getOrDefault(rootKey, VertexID(0)) != VertexID(0)
 
     block:
       if merged.error notin {AristoError(0), MergeLeafPathCachedAlready}:
@@ -245,13 +250,15 @@ proc test_mergeProofAndKvpList*(
         check merged.error in {AristoError(0), MergeLeafPathCachedAlready}
         return
 
-    #noisy.say "***", "sample ", n, "/", lstLen-1, " merged=", merged
+    when true and false:
+      noisy.say "***", "sample(3) <", n, "/", lstLen-1, ">",
+        " groups=", count, " nLeafs=", leafs.len, " merged=", merged,
+        " db-dump\n   ", db.pp
 
     block:
       let
-        preRoot = db.top.lRoot
         preDb = db.pp(sTabOk=false, lTabOk=false)
-        rc = db.hashify rootKey
+        rc = db.hashify() # noisy=true)
 
       # Handle known errors
       if oopsTab.hasKey(testId):
@@ -269,20 +276,21 @@ proc test_mergeProofAndKvpList*(
           " testId=", testId,
           " groups=", count,
           "\n   pre-DB",
-          " lRoot=", preRoot.pp,
           "\n   ", preDb,
           "\n   --------",
           "\n   ", db.pp
         check rc.error == (VertexID(0),AristoError(0))
         return
 
-    if db.top.lRoot == VertexID(0):
-      check db.top.lRoot != VertexID(0)
-      return
+    when true and false:
+      noisy.say "***", "sample(4) <", n, "/", lstLen-1, ">",
+        " groups=", count,
+        " db-dump\n   ", db.pp
 
     when true and false:
-      noisy.say "***", "sample <", n, "/", lstLen-1, ">",
+      noisy.say "***", "sample(5) <", n, "/", lstLen-1, ">",
         " groups=", count, " proved=", proved.pp, " merged=", merged.pp
+  true
 
 # ------------------------------------------------------------------------------
 # End

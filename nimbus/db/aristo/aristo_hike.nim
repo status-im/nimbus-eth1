@@ -68,12 +68,12 @@ proc hikeUp*(
     root: root,
     tail: path)
 
-  if root.isZero:
+  if root == VertexID(0):
     result.error = PathRootMissing
 
   else:
     var vid = root
-    while not vid.isZero:
+    while vid != VertexID(0):
       var vtx = db.getVtx vid
       if vtx.isNil:
         break
@@ -100,7 +100,7 @@ proc hikeUp*(
           nibble = result.tail[0].int8
           nextVid = vtx.bVid[nibble]
 
-        if nextVid.isZero:
+        if nextVid == VertexID(0):
           result.error = PathBranchBlindEdge # Ooops
           break
 
@@ -124,9 +124,9 @@ proc hikeUp*(
         result.tail = result.tail.slice(vtx.ePfx.len)
         vid = vtx.eVid
 
-proc hikeUp*(keyOrTag: NodeKey|NodeTag; root: VertexID; db: AristoDb): Hike =
+proc hikeUp*(lky: LeafKey; db: AristoDb): Hike =
   ## Variant of `hike()`
-  keyOrTag.pathAsNibbles.hikeUp(root, db)
+  lky.path.pathAsNibbles.hikeUp(lky.root, db)
 
 # ------------------------------------------------------------------------------
 # End

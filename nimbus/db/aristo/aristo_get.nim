@@ -77,11 +77,11 @@ proc getKeyCascaded*(
 
 proc getLeaf*(
     db: AristoDb;
-    tag: NodeTag;
+    lky: LeafKey;
       ): Result[VidVtxPair,AristoError] =
-  ## Get the vertex from the top layer by the Patricia Trie path. This
+  ## Get the vertex from the top layer by the `Patricia Trie` path. This
   ## function does not search on the `backend` layer.
-  let vid = db.top.lTab.getOrDefault(tag, VertexID(0))
+  let vid = db.top.lTab.getOrDefault(lky, VertexID(0))
   if vid != VertexID(0):
     let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
     if vtx != VertexRef(nil):
@@ -96,10 +96,10 @@ proc getVtx*(db: AristoDb; vid: VertexID): VertexRef =
   ## ignoring the detailed error type information.)
   db.getVtxCascaded(vid).get(otherwise = VertexRef(nil))   
 
-proc getVtx*(db: AristoDb; tag: NodeTag): VertexRef =
+proc getVtx*(db: AristoDb; lky: LeafKey): VertexRef =
   ## Variant of `getLeaf()` returning `nil` on error (while
   ## ignoring the detailed error type information.)
-  let rc = db.getLeaf tag
+  let rc = db.getLeaf lky
   if rc.isOk:
     return rc.value.vtx
   

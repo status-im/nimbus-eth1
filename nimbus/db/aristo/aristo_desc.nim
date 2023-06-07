@@ -22,10 +22,10 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/[sets, strutils, tables],
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_error]
+  "."/aristo_error
 
 import
   ../../sync/snap/range_desc
@@ -36,6 +36,13 @@ type
   VertexID* = distinct uint64
     ## Tip of edge towards child object in the `Patricia Trie` logic. It is
     ## also the key into the structural table of the `Aristo Trie`.
+
+  LeafKey* = object
+    ## Generalised access key for a leaf vertex on a dedicated sub-trie
+    ## defined by the `root` field. The main trie is the sub-trie with
+    ## root ID `VertexID(1)`.
+    root*: VertexID                  ## Root ID for the sub-trie
+    path*: NodeTag                   ## Path into the `Patricia Trie`
 
   # -------------
 
@@ -154,8 +161,7 @@ type
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
-    lTab*: Table[NodeTag,VertexID]   ## Direct access, path to leaf node
-    lRoot*: VertexID                 ## Root vertex for `lTab[]`
+    lTab*: Table[LeafKey,VertexID]   ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
     dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
@@ -183,6 +189,23 @@ proc `<`*(a, b: VertexID): bool {.borrow.}
 proc `==`*(a, b: VertexID): bool {.borrow.}
 proc cmp*(a, b: VertexID): int {.borrow.}
 proc `$`*(a: VertexID): string = $a.uint64
+
+# ------------------------------------------------------------------------------
+# Public helpers: `LeafKey` scalar data model
+# ------------------------------------------------------------------------------
+
+proc `<`*(a, b: LeafKey): bool =
+  a.root < b.root or (a.root == b.root and a.path < b.path)
+
+proc `==`*(a, b: LeafKey): bool =
+  a.root == b.root and a.path == b.path
+
+proc cmp*(a, b: LeafKey): int =
+  if a < b: -1 elif a == b: 0 else: 1
+
+proc `$`*(a: LeafKey): string =
+  let w = $a.root.uint64.toHex & ":" & $a.path.Uint256.toHex
+  w.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 
 # ------------------------------------------------------------------------------
 # Public helpers: `NodeRef` and `PayloadRef`
@@ -247,15 +270,6 @@ proc `==`*(a, b: NodeRef): bool =
 # ------------------------------------------------------------------------------
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
-
-proc isZero*(a: VertexID): bool =
-  a == VertexID(0)
-
-proc isEmpty*(a: NodeKey): bool =
-  a == EMPTY_ROOT_KEY
-
-proc isError*(a: NodeRef): bool =
-  a.error != AristoError(0)
 
 proc convertTo*(payload: PayloadRef; T: type Blob): T =
   ## Probably lossy conversion as the storage type `kind` gets missing

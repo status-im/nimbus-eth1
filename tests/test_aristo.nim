@@ -147,6 +147,12 @@ proc snapDbAccountsRef(cdb:ChainDb; root:Hash256; pers:bool):SnapDbAccountsRef =
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
 
+proc miscRunner(noisy =true) =
+  suite &"Aristo: Miscellaneous tests":
+    test &"VertexID recyling lists":
+      noisy.test_transcodeVidRecycleLists()
+
+
 proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
   let
     accLst = sample.to(seq[UndumpAccounts])
@@ -161,9 +167,6 @@ proc transcodeRunner(noisy =true; sample=accSample; stopAfter=high(int)) =
     db.flushDbs
 
   suite &"Aristo: transcoding {fileInfo} accounts for {info}":
-
-    test &"Trancoding VertexID recyling lists (seed={accLst.len})":
-      noisy.test_transcodeVidRecycleLists(accLst.len)
 
     # New common descriptor for this sub-group of tests
     let
@@ -193,16 +196,16 @@ proc accountsRunner(noisy=true; sample=accSample, resetDb=false) =
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}":
 
     test &"Merge {accLst.len} account lists to database":
-      noisy.test_mergeKvpList(accLst, resetDb)
+      check noisy.test_mergeKvpList(accLst, resetDb)
 
     test &"Merge {accLst.len} proof & account lists to database":
-      noisy.test_mergeProofAndKvpList(accLst, resetDb)
+      check noisy.test_mergeProofAndKvpList(accLst, resetDb)
 
     test &"Traverse accounts database w/{accLst.len} account lists":
-      noisy.test_nearbyKvpList(accLst, resetDb)
+      check noisy.test_nearbyKvpList(accLst, resetDb)
 
     test &"Delete accounts database, successively {accLst.len} entries":
-      noisy.test_delete accLst
+      check noisy.test_delete accLst
 
 
 proc storagesRunner(
@@ -219,22 +222,23 @@ proc storagesRunner(
   suite &"Aristo: storages data dump from {fileInfo}{listMode}":
 
     test &"Merge {stoLst.len} storage slot lists to database":
-      noisy.test_mergeKvpList(stoLst, resetDb)
+      check noisy.test_mergeKvpList(stoLst, resetDb)
 
     test &"Merge {stoLst.len} proof & slots lists to database":
-      noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
+      check noisy.test_mergeProofAndKvpList(stoLst, resetDb, fileInfo, oops)
 
     test &"Traverse storage slots database w/{stoLst.len} account lists":
-      noisy.test_nearbyKvpList(stoLst, resetDb)
+      check noisy.test_nearbyKvpList(stoLst, resetDb)
 
     test &"Delete storage database, successively {stoLst.len} entries":
-      noisy.test_delete stoLst
+      check noisy.test_delete stoLst
 
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc aristoMain*(noisy = defined(debug)) =
+  noisy.miscRunner()
   noisy.transcodeRunner()
   noisy.accountsRunner()
   noisy.storagesRunner()
@@ -244,6 +248,9 @@ when isMainModule:
     noisy = defined(debug) or true
 
   setErrorLevel()
+
+  when true: # and false:
+    noisy.miscRunner()
 
   # Borrowed from `test_sync_snap.nim`
   when true: # and false:

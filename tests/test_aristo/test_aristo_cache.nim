@@ -52,7 +52,7 @@ proc convertPartially(
       vType: Branch,
       bVid:  vtx.bVid)
     for n in 0..15:
-      if not vtx.bVid[n].isZero:
+      if vtx.bVid[n] != VertexID(0):
         let key = db.top.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
         if key != EMPTY_ROOT_KEY:
           nd.key[n] = key
@@ -87,7 +87,7 @@ proc convertPartiallyOk(
       bVid:  vtx.bVid)
     result = true
     for n in 0..15:
-      if not vtx.bVid[n].isZero:
+      if vtx.bVid[n] != VertexID(0):
         let key = db.top.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
         if key != EMPTY_ROOT_KEY:
           nd.key[n] = key
@@ -153,7 +153,7 @@ proc updated*(nd: NodeRef; db: AristoDb): NodeRef =
       result = NodeRef(
         vType:  Extension,
         ePfx:   nd.ePfx)
-      if not nd.key[0].isEmpty:
+      if nd.key[0] != EMPTY_ROOT_KEY:
         result.eVid = db.cachedVID nd.key[0]
         result.key[0] = nd.key[0]
     of Branch:
@@ -161,7 +161,7 @@ proc updated*(nd: NodeRef; db: AristoDb): NodeRef =
         vType: Branch,
         key:   nd.key)
       for n in 0..15:
-        if not nd.key[n].isEmpty:
+        if nd.key[n] != EMPTY_ROOT_KEY:
           result.bVid[n] = db.cachedVID nd.key[n]
 
 proc asNode*(vtx: VertexRef; db: AristoDb): NodeRef =

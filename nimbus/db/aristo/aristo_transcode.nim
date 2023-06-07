@@ -110,12 +110,12 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
   proc addNodeKey(writer: var RlpWriter; key: NodeKey) =
-    if key.isEmpty:
+    if key == EMPTY_ROOT_KEY:
       writer.append EmptyBlob
     else:
       writer.append key.to(Hash256)
 
-  if node.isError:
+  if node.error != AristoError(0):
     writer.startList(0)
   else:
     case node.vType:
@@ -170,7 +170,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       refs: Blob
       keys: Blob
     for n in 0..15:
-      if not node.bVid[n].isZero:
+      if node.bVid[n] != VertexID(0):
         access = access or (1u16 shl n)
         refs &= node.bVid[n].uint64.toBytesBE.toSeq
     data = refs & access.toBytesBE.toSeq & @[0u8]
