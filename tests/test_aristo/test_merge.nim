@@ -53,7 +53,7 @@ proc mergeStepwise(
     let
       preState = db.pp
       hike = db.merge leaf
-      ekih = leaf.leafKey.hikeUp(db)
+      ekih = leaf.leafTie.hikeUp(db)
 
     noisy.say "***", "step <", n, "/", leafs.len-1, "> "
 
@@ -83,7 +83,7 @@ proc mergeStepwise(
         rc.error
 
     if dumpOk:
-      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafKey.pp,
+      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafTie.pp,
         "\n   pre-state ", preState,
         "\n   --------",
         "\n   merge => hike",

@@ -34,13 +34,18 @@ export
 
 type
   VertexID* = distinct uint64
-    ## Tip of edge towards child object in the `Patricia Trie` logic. It is
-    ## also the key into the structural table of the `Aristo Trie`.
+    ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the
+    ## prefix tree (aka `Patricia Trie`) component. When augmented by hash
+    ## keys, the vertex component will be called a node. On the persistent
+    ## backend of the database, there is no other reference to the node than
+    ## the very same `VertexID`
 
-  LeafKey* = object
-    ## Generalised access key for a leaf vertex on a dedicated sub-trie
-    ## defined by the `root` field. The main trie is the sub-trie with
-    ## root ID `VertexID(1)`.
+  LeafTie* = object
+    ## Unique access key for a leaf vertex. It identifies a root vertex
+    ## followed by a nibble path along the `Patricia Trie` down to a leaf
+    ## vertex. So this implies an obvious injection from the set of `LeafTie`
+    ## objects *into* the set of `VertexID` obvious (which is typically *into*
+    ## only, not a bijection.)
     root*: VertexID                  ## Root ID for the sub-trie
     path*: NodeTag                   ## Path into the `Patricia Trie`
 
@@ -161,7 +166,7 @@ type
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
-    lTab*: Table[LeafKey,VertexID]   ## Direct access, path to leaf vertex
+    lTab*: Table[LeafTie,VertexID]   ## Direct access, path to leaf vertex
     kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
     dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
     pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
@@ -191,19 +196,19 @@ proc cmp*(a, b: VertexID): int {.borrow.}
 proc `$`*(a: VertexID): string = $a.uint64
 
 # ------------------------------------------------------------------------------
-# Public helpers: `LeafKey` scalar data model
+# Public helpers: `LeafTie` scalar data model
 # ------------------------------------------------------------------------------
 
-proc `<`*(a, b: LeafKey): bool =
+proc `<`*(a, b: LeafTie): bool =
   a.root < b.root or (a.root == b.root and a.path < b.path)
 
-proc `==`*(a, b: LeafKey): bool =
+proc `==`*(a, b: LeafTie): bool =
   a.root == b.root and a.path == b.path
 
-proc cmp*(a, b: LeafKey): int =
+proc cmp*(a, b: LeafTie): int =
   if a < b: -1 elif a == b: 0 else: 1
 
-proc `$`*(a: LeafKey): string =
+proc `$`*(a: LeafTie): string =
   let w = $a.root.uint64.toHex & ":" & $a.path.Uint256.toHex
   w.strip(leading=true, trailing=false, chars={'0'}).toLowerAscii
 

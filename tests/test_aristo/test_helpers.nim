@@ -45,7 +45,7 @@ proc pp*(w: ProofTrieData; db: var AristoDb; indent = 4): string =
   for n,kvp in w.kvpLst:
     if 0 < n:
       result &= "," & pfx & "  "
-    result &= "(" & kvp.leafKey.pp(db) & "," & $kvp.payload.pType & ")"
+    result &= "(" & kvp.leafTie.pp(db) & "," & $kvp.payload.pType & ")"
   result &= "])"
 
 proc pp*(w: ProofTrieData; indent = 4): string =
@@ -117,7 +117,7 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
       root:   rootKey,
       proof:  w.data.proof,
       kvpLst: w.data.accounts.mapIt(LeafSubKVP(
-        leafKey: LeafKey(root: rootVid, path: it.accKey.to(NodeTag)),
+        leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
         payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
@@ -131,14 +131,14 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
         root:   thisRoot,
         id:     n + 1,
         kvpLst: w.data.mapIt(LeafSubKVP(
-          leafKey: LeafKey(root: rootVid, path: it.slotHash.to(NodeTag)),
+          leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
           payload: PayloadRef(pType: BlobData, blob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 
 proc mapRootVid*(a: openArray[LeafSubKVP]; toVid: VertexID): seq[LeafSubKVP] =
   a.mapIt(LeafSubKVP(
-    leafKey: LeafKey(root: toVid, path: it.leafKey.path),
+    leafTie: LeafTie(root: toVid, path: it.leafTie.path),
     payload: it.payload))
 
 # ------------------------------------------------------------------------------

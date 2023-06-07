@@ -364,13 +364,13 @@ proc nearbyNext(
 
 
 proc nearbyNext(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
       ): Result[NodeTag,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = lky.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
+  let hike = lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
   if hike.error != AristoError(0):
     return err(hike.error)
 
@@ -402,15 +402,15 @@ proc nearbyRight*(
   hike.nearbyNext(db, 64, moveRight=true)
 
 proc nearbyRight*(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
-      ): Result[LeafKey,AristoError] =
+      ): Result[LeafTie,AristoError] =
   ## Variant of `nearbyRight()` working with a `NodeTag` argument instead
   ## of a `Hike`.
-  let rc = lky.nearbyNext(db, 64, moveRight=true)
+  let rc = lty.nearbyNext(db, 64, moveRight=true)
   if rc.isErr:
     return err(rc.error)
-  ok LeafKey(root: lky.root, path: rc.value)
+  ok LeafTie(root: lty.root, path: rc.value)
 
 proc nearbyLeft*(
     hike: Hike;                         # Partially expanded chain of vertices
@@ -423,15 +423,15 @@ proc nearbyLeft*(
   hike.nearbyNext(db, 64, moveRight=false)
 
 proc nearbyLeft*(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
-      ): Result[LeafKey,AristoError] =
+      ): Result[LeafTie,AristoError] =
   ## Similar to `nearbyRight()` for `NodeTag` argument instead
   ## of a `Hike`.
-  let rc = lky.nearbyNext(db, 64, moveRight=false)
+  let rc = lty.nearbyNext(db, 64, moveRight=false)
   if rc.isErr:
     return err(rc.error)
-  ok LeafKey(root: lky.root, path: rc.value)
+  ok LeafTie(root: lty.root, path: rc.value)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

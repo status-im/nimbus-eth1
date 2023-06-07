@@ -20,8 +20,8 @@ import
 # Ptivate functions
 # ------------------------------------------------------------------------------
 
-proc sortedKeys(lTab: Table[LeafKey,VertexID]): seq[LeafKey] =
-  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafKey): int = cmp(a,b))
+proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
+  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
 
 proc sortedKeys(kMap: Table[VertexID,NodeKey]): seq[VertexID] =
   kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID)
@@ -119,7 +119,7 @@ proc ppPathTag(tag: NodeTag, db: AristoDb): string =
   ## Raw key, for referenced key dump use `key.pp(db)` below
   if not db.top.isNil:
     let
-      lky = LeafKey(root: VertexID(1), path: tag)
+      lky = LeafTie(root: VertexID(1), path: tag)
       vid =  db.top.lTab.getOrDefault(lky, VertexID(0))
     if vid != VertexID(0):
       return "@" & vid.ppVid
@@ -127,15 +127,15 @@ proc ppPathTag(tag: NodeTag, db: AristoDb): string =
   "@" & tag.to(NodeKey).ByteArray32
            .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
 
-proc ppLeafKey(lky: LeafKey, db: AristoDb): string =
+proc ppLeafTie(lty: LeafTie, db: AristoDb): string =
   ## Raw key, for referenced key dump use `key.pp(db)` below
   if not db.top.isNil:
-    let vid =  db.top.lTab.getOrDefault(lky, VertexID(0))
+    let vid =  db.top.lTab.getOrDefault(lty, VertexID(0))
     if vid != VertexID(0):
       return "@" & vid.ppVid
 
-  "@" & ($lky.root.uint64.toHex).stripZeros & ":" &
-    lky.path.to(NodeKey).ByteArray32
+  "@" & ($lty.root.uint64.toHex).stripZeros & ":" &
+    lty.path.to(NodeKey).ByteArray32
             .mapIt(it.toHex(2)).join.squeeze(hex=true,ignLen=true)
 
 proc ppPathPfx(pfx: NibblesSeq): string =
@@ -271,8 +271,8 @@ proc pp*(vid: NodeKey, db = AristoDb()): string =
 proc pp*(tag: NodeTag, db = AristoDb()): string =
   tag.ppPathTag(db)
 
-proc pp*(lky: LeafKey, db = AristoDb()): string =
-  lky.ppLeafKey(db)
+proc pp*(lty: LeafTie, db = AristoDb()): string =
+  lty.ppLeafTie(db)
 
 proc pp*(vid: VertexID): string =
   vid.ppVid
@@ -329,12 +329,12 @@ proc pp*(sTab: Table[VertexID,VertexRef]; db = AristoDb(); indent = 4): string =
             .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
             .join("," & indent.toPfx(1)) & "}"
 
-proc pp*(lTab: Table[LeafKey,VertexID]; indent = 4): string =
+proc pp*(lTab: Table[LeafTie,VertexID]; indent = 4): string =
   var db = AristoDb()
   "{" & lTab.sortedKeys
             .mapIt((it, lTab.getOrDefault(it, VertexID(0))))
             .filterIt(it[1] != VertexID(0))
-            .mapIt("(" & it[0].ppLeafKey(db) & "," & it[1].ppVid & ")")
+            .mapIt("(" & it[0].ppLeafTie(db) & "," & it[1].ppVid & ")")
             .join("," & indent.toPfx(1)) & "}"
 
 proc pp*(vGen: seq[VertexID]): string =

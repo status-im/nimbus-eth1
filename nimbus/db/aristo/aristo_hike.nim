@@ -124,9 +124,9 @@ proc hikeUp*(
         result.tail = result.tail.slice(vtx.ePfx.len)
         vid = vtx.eVid
 
-proc hikeUp*(lky: LeafKey; db: AristoDb): Hike =
+proc hikeUp*(lty: LeafTie; db: AristoDb): Hike =
   ## Variant of `hike()`
-  lky.path.pathAsNibbles.hikeUp(lky.root, db)
+  lty.path.pathAsNibbles.hikeUp(lty.root, db)
 
 # ------------------------------------------------------------------------------
 # End

@@ -40,7 +40,7 @@ type
   LeafSubKVP* = object
     ## Generalised key-value pair for a sub-trie. The main trie is the
     ## sub-trie with `root=VertexID(1)`.
-    leafKey*: LeafKey                  ## Full `Patricia Trie` path root-to-leaf
+    leafTie*: LeafTie                  ## Full `Patricia Trie` path root-to-leaf
     payload*: PayloadRef               ## Leaf data payload
 
   LeafMainKVP* = object
@@ -155,8 +155,8 @@ proc insertBranch(
 
       let
         local = db.vidFetch
-        lky = LeafKey(root: hike.root, path: rc.value)
-      db.top.lTab[lky] = local         # update leaf path lookup cache
+        lty = LeafTie(root: hike.root, path: rc.value)
+      db.top.lTab[lty] = local         # update leaf path lookup cache
       db.top.sTab[local] = linkVtx
       linkVtx.lPfx = linkVtx.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
@@ -426,12 +426,11 @@ proc merge*(
   ## stored with the leaf vertex in the database unless the leaf vertex exists
   ## already.
   ##
-  if db.top.lTab.hasKey leaf.leafKey:
+  if db.top.lTab.hasKey leaf.leafTie:
     result.error = MergeLeafPathCachedAlready
 
   else:
-    let hike = leaf.leafKey.hikeUp(db)
-
+    let hike = leaf.leafTie.hikeUp(db)
     if 0 < hike.legs.len:
       case hike.legs[^1].wp.vtx.vType:
       of Branch:
@@ -455,14 +454,14 @@ proc merge*(
           vid: hike.root,
           vtx: VertexRef(
             vType: Leaf,
-            lPfx:  leaf.leafKey.path.pathAsNibbles,
+            lPfx:  leaf.leafTie.path.pathAsNibbles,
             lData: leaf.payload))
         db.top.sTab[wp.vid] = wp.vtx
         result = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
     # Update leaf acccess cache
     if result.error == AristoError(0):
-      db.top.lTab[leaf.leafKey] = result.legs[^1].wp.vid
+      db.top.lTab[leaf.leafTie] = result.legs[^1].wp.vid
 
     # End else (1st level)
 
@@ -491,7 +490,7 @@ proc merge*(
   var (merged, dups) = (0, 0)
   for n,w in leafs:
     let hike = db.merge(LeafSubKVP(
-      leafKey: LeafKey(root: VertexID(1), path: w.pathTag),
+      leafTie: LeafTie(root: VertexID(1), path: w.pathTag),
       payload: w.payload))
     if hike.error == AristoError(0):
       merged.inc
