@@ -175,7 +175,7 @@ func `-`*(lty: LeafTie, n: int): LeafTie =
 func to*(hid: HashID; T: type Hash256): T =
   result.data = hid.UInt256.toBytesBE
 
-func to*(hid: HashID; T: type HashKey): T =
+proc to*(hid: HashID; T: type HashKey): T =
   hid.UInt256.toBytesBE.T
 
 func to*(key: HashKey; T: type HashID): T =

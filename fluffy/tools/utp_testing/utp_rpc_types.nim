@@ -10,7 +10,7 @@
 import
   std/hashes,
   json_rpc/jsonmarshal,
-  stew/byteutils,
+  stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
   eth/utp/[utp_discv5_protocol, utp_router]
 

@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   unittest2,
+  stew/endians2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_delete, aristo_desc, aristo_get, aristo_merge],
   ../../nimbus/db/[aristo, aristo/aristo_init/persistent],

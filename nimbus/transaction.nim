@@ -50,8 +50,8 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
-  bytes[0..31] = tx.R.toByteArrayBE()
-  bytes[32..63] = tx.S.toByteArrayBE()
+  bytes[0..31] = tx.R.toBytesBE()
+  bytes[32..63] = tx.S.toBytesBE()
 
   if tx.txType == TxLegacy:
     var v = tx.V

@@ -242,7 +242,7 @@ template createTrieKeyFromSlot(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  slot.toByteArrayBE
+  slot.toBytesBE
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types

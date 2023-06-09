@@ -151,7 +151,7 @@ const
       reason = "MSTORE: GasVeryLow + memory expansion")
 
     k.cpt.memory.extend(memPos, 32)
-    k.cpt.memory.write(memPos, value.toByteArrayBE)
+    k.cpt.memory.write(memPos, value.toBytesBE)
 
 
   mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx) =

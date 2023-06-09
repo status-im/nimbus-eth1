@@ -122,10 +122,10 @@ proc put(db: LightClientDb, key, value: openArray[byte]) =
 
 proc get*(db: LightClientDb, key: ContentId):  results.Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
-  db.get(key.toByteArrayBE())
+  db.get(key.toBytesBE())
 
 proc put*(db: LightClientDb, key: ContentId, value: openArray[byte]) =
-  db.put(key.toByteArrayBE(), value)
+  db.put(key.toBytesBE(), value)
 
 proc createGetHandler*(db: LightClientDb): DbGetHandler =
   return (

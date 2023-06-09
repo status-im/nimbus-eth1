@@ -160,7 +160,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   # the selected `Radius`.
   let
     db = ContentDB.new(config.dataDir / "db" / "contentdb_" &
-      d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
+      d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(), maxSize = config.storageSize)
 
     portalConfig = PortalProtocolConfig.init(
       config.tableIpLimit,

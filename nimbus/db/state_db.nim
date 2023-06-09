@@ -122,7 +122,7 @@ proc subBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
 template createTrieKeyFromSlot(slot: UInt256): auto =
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  slot.toByteArrayBE
+  slot.toBytesBE
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
@@ -159,7 +159,7 @@ proc setStorage*(db: AccountStateDB,
   var
     triedb = db.kvt
     # slotHash can be obtained from accountTrie.put?
-    slotHash = keccakHash(slot.toByteArrayBE)
+    slotHash = keccakHash(slot.toBytesBE)
   triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   account.storageRoot = accountTrie.rootHash

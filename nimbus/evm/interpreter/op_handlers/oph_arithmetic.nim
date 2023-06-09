@@ -24,6 +24,12 @@ import
   ./oph_defs,
   eth/common
 
+func slt(x, y: UInt256): bool =
+  type SignedWord = signedWordType(UInt256)
+  let x_neg = cast[SignedWord](x.mostSignificantWord) < 0
+  let y_neg = cast[SignedWord](y.mostSignificantWord) < 0
+  if x_neg xor y_neg: x_neg else: x < y
+
 {.push raises: [CatchableError].} # basically the annotation type of a `Vm2OpFn`
 
 # ------------------------------------------------------------------------------
@@ -184,16 +190,17 @@ const
     ## 0x12, Signed less-than comparison
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
-      (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
+      slt(lhs, rhs).uint.u256
 
   sgtOp: Vm2OpFn = proc(k: var Vm2Ctx) =
-    ## 0x14, Signed greater-than comparison
+    ## 0x13, Signed greater-than comparison
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
-      (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
+      # Arguments are swapped and SLT is used.
+      slt(rhs, lhs).uint.u256
 
   eqOp: Vm2OpFn = proc(k: var Vm2Ctx) =
-    ## 0x14, Signed greater-than comparison
+    ## 0x14, Equality comparison
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
       (lhs == rhs).uint.u256
@@ -272,7 +279,7 @@ const
         k.cpt.stack.push:
           cast[UInt256]((-1).i256)
       else:
-       k.cpt.stack. push:
+        k.cpt.stack. push:
           0
     else:
       # int version of `shr` then force the result

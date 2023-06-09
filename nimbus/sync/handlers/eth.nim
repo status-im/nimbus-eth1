@@ -13,6 +13,7 @@
 import
   std/[tables, times, hashes, sets],
   chronicles, chronos,
+  stew/endians2,
   eth/p2p,
   eth/p2p/peer_pool,
   ".."/[types, protocol],

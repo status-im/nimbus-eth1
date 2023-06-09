@@ -13,6 +13,7 @@
 import
   std/[hashes, sets, tables],
   eth/[common, trie/nibbles],
+  stew/endians2,
   stint,
   "../.."/[constants, range_desc],
   ./hexary_error

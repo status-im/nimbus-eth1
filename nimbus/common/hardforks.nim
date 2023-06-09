@@ -10,6 +10,7 @@
 import
   std/[options, times],
   eth/common,
+  stew/endians2,
   json_serialization,
   ../utils/utils,
   ./evmforks

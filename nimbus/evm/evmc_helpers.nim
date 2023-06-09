@@ -18,7 +18,7 @@ func toEvmc*(n: UInt256): evmc_uint256be {.inline.} =
   when evmc_native:
     cast[evmc_uint256be](n)
   else:
-    cast[evmc_uint256be](n.toByteArrayBE)
+    cast[evmc_uint256be](n.toBytesBE)
 
 func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
   when T is Hash256 | ContractSalt:

@@ -232,19 +232,19 @@ proc contentSize*(db: ContentDB): int64 =
 
 proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
-  db.get(key.toByteArrayBE())
+  db.get(key.toBytesBE())
 
 proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
-  db.put(key.toByteArrayBE(), value)
+  db.put(key.toBytesBE(), value)
 
 proc contains*(db: ContentDB, key: ContentId): bool =
-  db.contains(key.toByteArrayBE())
+  db.contains(key.toBytesBE())
 
 proc del*(db: ContentDB, key: ContentId) =
-  db.del(key.toByteArrayBE())
+  db.del(key.toBytesBE())
 
 proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
-  db.getSszDecoded(key.toByteArrayBE(), T)
+  db.getSszDecoded(key.toBytesBE(), T)
 
 proc deleteContentFraction(
   db: ContentDB,
@@ -264,7 +264,7 @@ proc deleteContentFraction(
 
   var ri: RowInfo
   var bytesDeleted: int64 = 0
-  let targetBytes = target.toByteArrayBE()
+  let targetBytes = target.toBytesBE()
   for e in db.getAllOrderedByDistanceStmt.exec(targetBytes, ri):
     if bytesDeleted + ri.payloadLength < bytesToDelete:
       db.del(ri.contentId)

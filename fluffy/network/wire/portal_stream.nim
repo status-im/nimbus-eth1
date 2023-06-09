@@ -9,7 +9,7 @@
 
 import
   std/sequtils,
-  chronos, stew/[byteutils, leb128], chronicles,
+  chronos, stew/[byteutils, leb128, endians2], chronicles,
   eth/utp/utp_discv5_protocol,
   # even though utp_discv5_protocol exports this, import is still needed,
   # perhaps protocol.Protocol type of usage?

@@ -83,7 +83,7 @@ template fromEvmc*(address: evmc_address): EthAddress =
   cast[EthAddress](address)
 
 template flip256*(word256: evmc_uint256be): evmc_uint256be =
-  cast[evmc_uint256be](UInt256.fromBytesBe(word256.bytes).toBytes)
+  cast[evmc_uint256be](UInt256.fromBytesBE(word256.bytes).toBytes(cpuEndian))
 
 template isCreate*(kind: EvmcCallKind): bool =
   kind in {EVMC_CREATE, EVMC_CREATE2}
