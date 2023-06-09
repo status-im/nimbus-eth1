@@ -251,7 +251,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
 proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =
   try:
     var tx: Transaction
-    item.readTxLegacy(tx)
+    item.decodeTxLegacy(tx)
     return ok(tx)
   except RlpError as x:
     return err(x.msg)
@@ -260,7 +260,7 @@ proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
   try:
     var tx: Transaction
     var rr = rlpFromBytes(item.read(Blob))
-    rr.readTxTyped(tx)
+    rr.decodeTxTyped(tx)
     return ok(tx)
   except RlpError as x:
     return err(x.msg)
