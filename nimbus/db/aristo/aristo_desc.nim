@@ -28,12 +28,13 @@ import
   ../../sync/snap/range_desc,
   ./aristo_constants,
   ./aristo_desc/[
-    aristo_error, aristo_types_backend, aristo_types_identifiers,
-    aristo_types_structural]
+    aristo_error, aristo_types_backend,
+    aristo_types_identifiers, aristo_types_structural]
 
 export
   # Not auto-exporting backend
-  aristo_error, aristo_types_identifiers, aristo_types_structural
+  aristo_constants, aristo_error, aristo_types_identifiers,
+  aristo_types_structural
 
 export # This one should go away one time
   ByteArray32, NodeKey, NodeTag, digestTo, hash, to, `==`, `$`
@@ -44,9 +45,9 @@ type
     ## change relative to the backend.
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     lTab*: Table[LeafTie,VertexID]   ## Direct access, path to leaf vertex
-    kMap*: Table[VertexID,NodeKey]   ## Merkle hash key mapping
+    kMap*: Table[VertexID,HashLabel] ## Merkle hash key mapping
     dKey*: HashSet[VertexID]         ## Locally deleted Merkle hash keys
-    pAmk*: Table[NodeKey,VertexID]   ## Reverse mapper for data import
+    pAmk*: Table[HashLabel,VertexID] ## Reverse mapper for data import
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     vGen*: seq[VertexID]             ## Unique vertex ID generator
 
@@ -57,7 +58,7 @@ type
     backend*: AristoBackendRef       ## Backend database (may well be `nil`)
 
     # Debugging data below, might go away in future
-    xMap*: Table[NodeKey,VertexID]   ## For pretty printing, extends `pAmk`
+    xMap*: Table[HashLabel,VertexID] ## For pretty printing, extends `pAmk`
 
 static:
   # Not that there is no doubt about this ...
@@ -70,8 +71,8 @@ static:
 proc getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))
 
-proc getOrVoid*[W](tab: Table[W,NodeKey]; w: W): NodeKey =
-  tab.getOrDefault(w, VOID_NODE_KEY)
+proc getOrVoid*[W](tab: Table[W,HashLabel]; w: W): HashLabel =
+  tab.getOrDefault(w, VOID_HASH_LABEL)
 
 proc getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
   tab.getOrDefault(w, VertexID(0))
@@ -85,6 +86,9 @@ proc isValid*(nd: NodeRef): bool =
 
 proc isValid*(key: NodeKey): bool =
   key != VOID_NODE_KEY
+
+proc isValid*(lbl: HashLabel): bool =
+  lbl != VOID_HASH_LABEL
 
 proc isValid*(vid: VertexID): bool =
   vid != VertexID(0)

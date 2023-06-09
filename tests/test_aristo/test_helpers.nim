@@ -25,7 +25,7 @@ type
     root*: NodeKey
     id*: int
     proof*: seq[SnapProof]
-    kvpLst*: seq[LeafSubKVP]
+    kvpLst*: seq[LeafTiePayload]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -38,9 +38,15 @@ proc toPfx(indent: int): string =
 # Public pretty printing
 # ------------------------------------------------------------------------------
 
-proc pp*(w: ProofTrieData; db: var AristoDb; indent = 4): string =
+proc pp*(
+    w: ProofTrieData;
+    rootID: VertexID;
+    db: var AristoDb;
+    indent = 4;
+      ): string =
   let pfx = indent.toPfx
-  result = "(" & w.root.pp(db) & "," & $w.id & ",[" & $w.proof.len & "],"
+  result = "(" & HashLabel(root: rootID, key: w.root).pp(db)
+  result &= "," & $w.id & ",[" & $w.proof.len & "],"
   result &= pfx & " ["
   for n,kvp in w.kvpLst:
     if 0 < n:
@@ -50,11 +56,15 @@ proc pp*(w: ProofTrieData; db: var AristoDb; indent = 4): string =
 
 proc pp*(w: ProofTrieData; indent = 4): string =
   var db = AristoDB()
-  w.pp(db, indent)
+  w.pp(VertexID(1), db, indent)
 
-proc pp*(w: openArray[ProofTrieData]; db: var AristoDb; indent = 4): string =
+proc pp*(
+    w: openArray[ProofTrieData];
+    rootID: VertexID;
+    db: var AristoDb;
+    indent = 4): string =
   let pfx = indent.toPfx
-  "[" & w.mapIt(it.pp(db, indent + 1)).join("," & pfx & " ") & "]"
+  "[" & w.mapIt(it.pp(rootID, db, indent + 1)).join("," & pfx & " ") & "]"
 
 proc pp*(w: openArray[ProofTrieData]; indent = 4): string =
   let pfx = indent.toPfx
@@ -117,7 +127,7 @@ proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
       result.add ProofTrieData(
         root:   rootKey,
         proof:  w.data.proof,
-        kvpLst: w.data.accounts.mapIt(LeafSubKVP(
+        kvpLst: w.data.accounts.mapIt(LeafTiePayload(
           leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
           payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
 
@@ -132,14 +142,17 @@ proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
         result.add ProofTrieData(
           root:   thisRoot,
           id:     n + 1,
-          kvpLst: w.data.mapIt(LeafSubKVP(
+          kvpLst: w.data.mapIt(LeafTiePayload(
             leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
             payload: PayloadRef(pType: BlobData, blob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 
-proc mapRootVid*(a: openArray[LeafSubKVP]; toVid: VertexID): seq[LeafSubKVP] =
-  a.mapIt(LeafSubKVP(
+proc mapRootVid*(
+    a: openArray[LeafTiePayload];
+    toVid: VertexID;
+      ): seq[LeafTiePayload] =
+  a.mapIt(LeafTiePayload(
     leafTie: LeafTie(root: toVid, path: it.leafTie.path),
     payload: it.payload))
 

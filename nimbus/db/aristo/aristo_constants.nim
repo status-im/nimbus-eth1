@@ -12,7 +12,8 @@
 
 import
   eth/[common, trie/nibbles],
-  ../../sync/snap/range_desc
+  ../../sync/snap/range_desc,
+  ./aristo_desc/aristo_types_identifiers
 
 const
   EmptyBlob* = seq[byte].default
@@ -26,5 +27,7 @@ const
 
   VOID_CODE_KEY* = EMPTY_CODE_HASH.to(NodeKey)
     ## Equivalent of `nil` for `Account` object code hash
+
+  VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_NODE_KEY)
 
 # End

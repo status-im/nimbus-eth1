@@ -37,7 +37,7 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
 
 proc mergeStepwise(
     db: AristoDb;
-    leafs: openArray[LeafSubKVP];
+    leafs: openArray[LeafTiePayload];
     noisy: bool;
       ): tuple[merged: int, dups: int, error: AristoError] =
   let
@@ -221,7 +221,7 @@ proc test_mergeProofAndKvpList*(
       if rc.isErr:
         check rc.error == AristoError(0)
         return
-      proved = db.merge w.proof
+      proved = db.merge(w.proof, rc.value)
       check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.top.lTab.len == lTabLen

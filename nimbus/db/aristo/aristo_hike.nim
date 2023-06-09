@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_path]
+  "."/[aristo_desc, aristo_get, aristo_path]
 
 type
   Leg* = object

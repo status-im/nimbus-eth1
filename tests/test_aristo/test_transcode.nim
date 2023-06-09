@@ -106,7 +106,7 @@ proc test_transcodeAccounts*(
 
     # Provide DbRecord with dummy links and expanded payload. Registering the
     # node as vertex and re-converting it does the job
-    var node = node0.updated(adb)
+    var node = node0.updated(VertexID(1), adb)
     if node.error != AristoError(0):
       check node.error == AristoError(0)
     else:
@@ -114,8 +114,8 @@ proc test_transcodeAccounts*(
       of aristo_desc.Leaf:
         let account = node.lData.blob.decode(Account)
         node.lData = PayloadRef(pType: AccountData, account: account)
-        discard adb.keyToVtxID node.lData.account.storageRoot.to(NodeKey)
-        discard adb.keyToVtxID node.lData.account.codeHash.to(NodeKey)
+        discard adb.hashToVtxID(VertexID(1), node.lData.account.storageRoot)
+        discard adb.hashToVtxID(VertexID(1), node.lData.account.codeHash)
       of aristo_desc.Extension:
         # key <-> vtx correspondence
         check node.key[0] == node0.key[0]

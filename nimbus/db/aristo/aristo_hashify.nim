@@ -101,7 +101,7 @@ proc leafToRootHasher(
       key = rc.value.encode.digestTo(NodeKey)
       vfy = db.getKey wp.vid
     if not vfy.isValid:
-      db.vidAttach(key, wp.vid)
+      db.vidAttach(HashLabel(root: hike.root, key: key), wp.vid)
     elif key != vfy:
       let error = HashifyExistingHashMismatch
       debug "hashify failed", vid=wp.vid, key, expected=vfy, error
@@ -136,8 +136,8 @@ proc hashify*(
     completed: HashSet[VertexID]
 
     # Width-first leaf-to-root traversal structure
-    backLink: Table[VertexID,VertexID]
-    downMost: Table[VertexID,VertexID]
+    backLink: Table[VertexID,(VertexID,VertexID)]
+    downMost: Table[VertexID,(VertexID,VertexID)]
 
   for (lky,vid) in db.top.lTab.pairs:
     let hike = lky.hikeUp(db)
@@ -163,9 +163,9 @@ proc hashify*(
       #               |                   |          |
       #               |     backLink[]    | downMost |
       #
-      downMost[hike.legs[n].wp.vid] = hike.legs[n-1].wp.vid
+      downMost[hike.legs[n].wp.vid] = (hike.root, hike.legs[n-1].wp.vid)
       for u in (n-1).countDown(1):
-        backLink[hike.legs[u].wp.vid] = hike.legs[u-1].wp.vid
+        backLink[hike.legs[u].wp.vid] = (hike.root, hike.legs[u-1].wp.vid)
 
     elif n < 0:
       completed.incl hike.root
@@ -178,10 +178,10 @@ proc hashify*(
   # Update remaining hashes
   while 0 < downMost.len:
     var
-      redo: Table[VertexID,VertexID]
+      redo: Table[VertexID,(VertexID,VertexID)]
       done: HashSet[VertexID]
 
-    for (fromVid,toVid) in downMost.pairs:
+    for (fromVid,rootAndVid) in downMost.pairs:
       # Try to convert vertex to a node. This is possible only if all link
       # references have Merkle hashes.
       #
@@ -189,28 +189,30 @@ proc hashify*(
       let rc = db.getVtx(fromVid).toNode(db)
       if rc.isErr:
         # Cannot complete with this node, so do it later
-        redo[fromVid] = toVid
+        redo[fromVid] = rootAndVid
 
       else:
         # Register Hashes
-        let nodeKey = rc.value.encode.digestTo(NodeKey)
+        let
+          nodeKey = rc.value.encode.digestTo(NodeKey)
+          toVid = rootAndVid[1]
 
         # Update Merkle hash (aka `nodeKey`)
-        let fromKey = db.top.kMap.getOrVoid fromVid
-        if fromKey.isValid:
-          db.vidAttach(nodeKey, fromVid)
-        elif nodeKey != fromKey:
+        let fromLbl = db.top.kMap.getOrVoid fromVid
+        if fromLbl.isValid:
+          db.vidAttach(HashLabel(root: rootAndVid[0], key: nodeKey), fromVid)
+        elif nodeKey != fromLbl.key:
           let error = HashifyExistingHashMismatch
           debug "hashify failed", vid=fromVid, key=nodeKey,
-            expected=fromKey.pp, error
+            expected=fromLbl.key.pp, error
           return err((fromVid,error))
 
         done.incl fromVid
 
         # Proceed with back link
-        let nextVid = backLink.getOrVoid toVid
-        if nextVid.isValid:
-          redo[toVid] = nextVid
+        let nextItem = backLink.getOrDefault(toVid, (VertexID(0),VertexID(0)))
+        if nextItem[1].isValid:
+          redo[toVid] = nextItem
 
     # Make sure that the algorithm proceeds
     if done.len == 0:
@@ -240,13 +242,13 @@ proc hashifyCheck*(
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.top.kMap.getOrVoid vid
-      if not key.isValid:
+      let lbl = db.top.kMap.getOrVoid vid
+      if not lbl.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
-      if key != rc.value.encode.digestTo(NodeKey):
+      if lbl.key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.top.pAmk.getOrVoid key
+      let revVid = db.top.pAmk.getOrVoid lbl
       if not revVid.isValid:
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
@@ -262,28 +264,28 @@ proc hashifyCheck*(
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.top.kMap.getOrVoid vid
-      if not key.isValid:
+      let lbl = db.top.kMap.getOrVoid vid
+      if not lbl.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
-      if key != rc.value.encode.digestTo(NodeKey):
+      if lbl.key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.top.pAmk.getOrVoid key
+      let revVid = db.top.pAmk.getOrVoid lbl
       if not revVid.isValid:
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
         return err((vid,HashifyCheckRevHashMismatch))
 
   else:
-    for (vid,key) in db.top.kMap.pairs:
+    for (vid,lbl) in db.top.kMap.pairs:
       let vtx = db.getVtx vid
       if vtx.isValid:
         let rc = vtx.toNode(db)
         if rc.isOk:
-          if key != rc.value.encode.digestTo(NodeKey):
+          if lbl.key != rc.value.encode.digestTo(NodeKey):
             return err((vid,HashifyCheckVtxHashMismatch))
 
-          let revVid = db.top.pAmk.getOrVoid key
+          let revVid = db.top.pAmk.getOrVoid lbl
           if not revVid.isValid:
             return err((vid,HashifyCheckRevHashMissing))
           if revVid != vid:

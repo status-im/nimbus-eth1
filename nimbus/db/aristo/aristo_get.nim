@@ -16,7 +16,7 @@
 import
   std/sets,
   stew/results,
-  "."/[aristo_constants, aristo_desc]
+  "."/aristo_desc
 
 type
   VidVtxPair* = object
@@ -69,9 +69,9 @@ proc getKeyCascaded*(
       ): Result[NodeKey,AristoError] =
   ## Get the Merkle hash/key from the top layer or the `backened` layer if
   ## available.
-  let key = db.top.kMap.getOrVoid vid
-  if key.isValid:
-    return ok key
+  let lbl = db.top.kMap.getOrVoid vid
+  if lbl.isValid:
+    return ok lbl.key
 
   db.getKeyBackend vid
 

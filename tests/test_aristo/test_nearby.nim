@@ -58,7 +58,8 @@ proc fwdWalkLeafsCompleteDB(
     if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk -- leafs differ,",
         " got=", rc.value.pp(db),
-        " wanted=", tags[n].pp(db) #, " db-dump\n    ", db.pp
+        " wanted=", LeafTie(root: root, path: tags[n]).pp(db) #,
+        # " db-dump\n    ", db.pp
       error = AristoError(1)
       check rc.value.path == tags[n]
       break

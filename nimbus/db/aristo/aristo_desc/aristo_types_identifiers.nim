@@ -39,6 +39,17 @@ type
     root*: VertexID                  ## Root ID for the sub-trie
     path*: NodeTag                   ## Path into the `Patricia Trie`
 
+  HashLabel* = object
+    ## Merkle hash key uniquely associated with a vertex ID. As hashes in a
+    ## `Merkle Patricia Tree` are unique only on a particular sub-trie, the
+    ## hash key is paired with the top vertex of the relevant sub-trie. This
+    ## construction is similar to the one of a `LeafTie` object.
+    ##
+    ## Note that `LeafTie` objects have no representation in the `Aristo Trie`.
+    ## They are used temporarily and in caches or backlog tables.
+    root*: VertexID                  ## Root ID for the sub-trie
+    key*: NodeKey                    ## Path into the `Patricia Trie`
+
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model
 # ------------------------------------------------------------------------------

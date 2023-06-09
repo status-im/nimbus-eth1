@@ -30,7 +30,6 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/protocol,
-  ./aristo_debug,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
        aristo_vid]
 
@@ -38,15 +37,10 @@ logScope:
   topics = "aristo-merge"
 
 type
-  LeafSubKVP* = object
+  LeafTiePayload* = object
     ## Generalised key-value pair for a sub-trie. The main trie is the
     ## sub-trie with `root=VertexID(1)`.
     leafTie*: LeafTie                  ## Full `Patricia Trie` path root-to-leaf
-    payload*: PayloadRef               ## Leaf data payload
-
-  LeafMainKVP* = object
-    ## Variant of `LeafSubKVP` for the main trie, implies: `root=VertexID(1)`
-    pathTag*: NodeTag                  ## Path root-to-leaf in main trie
     payload*: PayloadRef               ## Leaf data payload
 
 # ------------------------------------------------------------------------------
@@ -256,7 +250,7 @@ proc concatBranchAndLeaf(
   result.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private functions: add Particia Trie leaf vertex
 # ------------------------------------------------------------------------------
 
 proc topIsBranchAddLeaf(
@@ -414,12 +408,86 @@ proc topIsEmptyAddLeaf(
   db.insertBranch(hike, hike.root, rootVtx, payload)
 
 # ------------------------------------------------------------------------------
+# Private functions: add Merkle proof node
+# ------------------------------------------------------------------------------
+
+proc mergeNodeImpl(
+    db: AristoDb;                      # Database, top layer
+    nodeKey: NodeKey;                  # Merkel hash of node
+    node: NodeRef;                     # Node derived from RLP representation
+    rootVid: VertexID;                 # Current sub-trie
+      ): Result[VertexID,AristoError]  =
+  ## The function merges a node key `nodeKey` expanded from its RLP
+  ## representation into the `Aristo Trie` database. The vertex is split off
+  ## from the node and stored separately. So are the Merkle hashes. The
+  ## vertex is labelled `locked`.
+  ##
+  ## The `node` argument is *not* checked, whether the vertex IDs have been
+  ## allocated, already. If the node comes straight from the `decode()` RLP
+  ## decoder as expected, these vertex IDs will be all zero.
+  ##
+  if node.error != AristoError(0):
+    return err(node.error)
+  if not rootVid.isValid:
+    return err(MergeRootKeyEmpty)
+
+  # Verify `nodeKey`
+  if not nodeKey.isValid:
+    return err(MergeNodeKeyEmpty)
+
+  # Check whether the node exists, already. If not then create a new vertex ID
+  var
+    nodeLbl = HashLabel(root: rootVid, key: nodeKey)
+    vid = db.top.pAmk.getOrVoid nodeLbl
+  if not vid.isValid:
+    vid = db.vidAttach nodeLbl
+  else:
+    let lbl = db.top.kMap.getOrVoid vid
+    if lbl == nodeLbl:
+      if db.top.sTab.hasKey vid:
+        # This is tyically considered OK
+        return err(MergeNodeKeyCachedAlready)
+      # Otherwise proceed
+    elif lbl.isValid:
+      # Different key assigned => error
+      return err(MergeNodeKeyDiffersFromCached)
+
+  let vtx = node.to(VertexRef) # the vertex IDs need to be set up now (if any)
+
+  case node.vType:
+  of Leaf:
+    discard
+  of Extension:
+    if node.key[0].isValid:
+      let
+        eLbl = HashLabel(root: rootVid, key: node.key[0])
+        eVid = db.top.pAmk.getOrVoid eLbl
+      if eVid.isValid:
+        vtx.eVid = eVid
+      else:
+        vtx.eVid = db.vidAttach eLbl
+  of Branch:
+    for n in 0..15:
+      if node.key[n].isValid:
+        let
+          bLbl = HashLabel(root: rootVid, key: node.key[n])
+          bVid = db.top.pAmk.getOrVoid bLbl
+        if bVid.isValid:
+          vtx.bVid[n] = bVid
+        else:
+          vtx.bVid[n] = db.vidAttach bLbl
+
+  db.top.pPrf.incl vid
+  db.top.sTab[vid] = vtx
+  ok vid
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    leaf: LeafSubKVP;                  # Leaf item to add to the database
+    leaf: LeafTiePayload;              # Leaf item to add to the database
       ): Hike =
   ## Merge the argument `leaf` key-value-pair into the top level vertex table
   ## of the database `db`. The field `pathKey` of the `leaf` argument is used
@@ -468,7 +536,7 @@ proc merge*(
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    leafs: openArray[LeafSubKVP];      # Leaf items to add to the database
+    leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
       ): tuple[merged: int, dups: int, error: AristoError] =
   ## Variant of `merge()` for leaf lists.
   var (merged, dups) = (0, 0)
@@ -483,92 +551,12 @@ proc merge*(
 
   (merged, dups, AristoError(0))
 
-proc merge*(
-    db: AristoDb;                      # Database, top layer
-    leafs: openArray[LeafMainKVP];     # Leaf items to add to the database
-      ): tuple[merged: int, dups: int, error: AristoError] =
-  ## Variant of `merge()` for leaf lists on the main trie
-  var (merged, dups) = (0, 0)
-  for n,w in leafs:
-    let hike = db.merge(LeafSubKVP(
-      leafTie: LeafTie(root: VertexID(1), path: w.pathTag),
-      payload: w.payload))
-    if hike.error == AristoError(0):
-      merged.inc
-    elif hike.error == MergeLeafPathCachedAlready:
-      dups.inc
-    else:
-      return (n,dups,hike.error)
-
-  (merged, dups, AristoError(0))
-
 # ---------------------
 
 proc merge*(
     db: AristoDb;                      # Database, top layer
-    nodeKey: NodeKey;                  # Merkel hash of node
-    node: NodeRef;                     # Node derived from RLP representation
-      ): Result[VertexID,AristoError]  =
-  ## The function merges a node key `nodeKey` expanded from its RLP
-  ## representation into the `Aristo Trie` database. The vertex is split off
-  ## from the node and stored separately. So are the Merkle hashes. The
-  ## vertex is labelled `locked`.
-  ##
-  ## The `node` argument is *not* checked, whether the vertex IDs have been
-  ## allocated, already. If the node comes straight from the `decode()` RLP
-  ## decoder as expected, these vertex IDs will be all zero.
-  ##
-  # Check whether the record is correct
-  if node.error != AristoError(0):
-    return err(node.error)
-
-  # Verify `nodeKey`
-  if not nodeKey.isValid:
-    return err(MergeNodeKeyEmpty)
-
-  # Check whether the node exists, already. If not then create a new vertex ID
-  var vid = db.top.pAmk.getOrVoid nodeKey
-  if not vid.isValid:
-    vid = db.vidAttach nodeKey
-  else:
-    let key = db.top.kMap.getOrVoid vid
-    if key == nodeKey:
-      if db.top.sTab.hasKey vid:
-        # This is tyically considered OK
-        return err(MergeNodeKeyCachedAlready)
-      # Otherwise proceed
-    elif key.isValid:
-      # Different key assigned => error
-      return err(MergeNodeKeyDiffersFromCached)
-
-  let vtx = node.to(VertexRef) # the vertex IDs need to be set up now (if any)
-
-  case node.vType:
-  of Leaf:
-    discard
-  of Extension:
-    if node.key[0].isValid:
-      let eVid = db.top.pAmk.getOrVoid node.key[0]
-      if eVid.isValid:
-        vtx.eVid = eVid
-      else:
-        vtx.eVid = db.vidAttach node.key[0]
-  of Branch:
-    for n in 0..15:
-      if node.key[n].isValid:
-        let bVid = db.top.pAmk.getOrVoid node.key[n]
-        if bVid.isValid:
-          vtx.bVid[n] = bVid
-        else:
-          vtx.bVid[n] = db.vidAttach node.key[n]
-
-  db.top.pPrf.incl vid
-  db.top.sTab[vid] = vtx
-  ok vid
-
-proc merge*(
-    db: AristoDb;                      # Database, top layer
     proof: openArray[SnapProof];       # RLP encoded node records
+    rootVid: VertexID;                 # Current sub-trie
       ): tuple[merged: int, dups: int, error: AristoError]
       {.gcsafe, raises: [RlpError].} =
   ## The function merges the argument `proof` list of RLP encoded node records
@@ -579,7 +567,7 @@ proc merge*(
     let
       key = w.Blob.digestTo(NodeKey)
       node = w.Blob.decode(NodeRef)
-      rc = db.merge(key, node)
+      rc = db.mergeNodeImpl(key, node, rootVid)
     if rc.isOK:
       merged.inc
     elif rc.error == MergeNodeKeyCachedAlready:
@@ -611,28 +599,27 @@ proc merge*(
   if not rootKey.isValid:
     return err(MergeRootKeyEmpty)
 
-  if not rootVid.isValid or rootVid == VertexID(1):
-    let key = db.getKey VertexID(1)
-    if key == rootKey:
-      return ok VertexID(1)
-
-    # Otherwise assign if empty
-    if not key.isValid:
-      db.vidAttach(rootKey, VertexID(1))
-      return ok VertexID(1)
-
-    # Create new root key
-    if not rootVid.isValid:
-      return ok db.vidAttach(rootKey)
-
-  else:
+  if rootVid.isValid and rootVid != VertexID(1):
     let key = db.getKey rootVid
     if key == rootKey:
       return ok rootVid
 
     if not key.isValid:
-      db.vidAttach(rootKey, rootVid)
+      db.vidAttach(HashLabel(root: rootVid, key: rootKey), rootVid)
       return ok rootVid
+  else:
+    let key = db.getKey VertexID(1)
+    if key == rootKey:
+      return ok VertexID(1)
+
+    # Otherwise assign unless valid
+    if not key.isValid:
+      db.vidAttach(HashLabel(root: VertexID(1), key: rootKey), VertexID(1))
+      return ok VertexID(1)
+
+    # Create and assign a new root key
+    if not rootVid.isValid:
+      return ok db.vidRoot(rootKey)
 
   err(MergeRootKeyDiffersForVid)
 
