@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/sets,
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error]
+  "."/[aristo_constants, aristo_desc]
 
 type
   VidVtxPair* = object
@@ -57,8 +57,8 @@ proc getVtxCascaded*(
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the top layer or the `backened` layer if available.
-  let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-  if vtx != VertexRef(nil):
+  let vtx = db.top.sTab.getOrVoid vid
+  if vtx.isValid:
     return ok vtx
 
   db.getVtxBackend vid
@@ -69,8 +69,8 @@ proc getKeyCascaded*(
       ): Result[NodeKey,AristoError] =
   ## Get the Merkle hash/key from the top layer or the `backened` layer if
   ## available.
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
+  let key = db.top.kMap.getOrVoid vid
+  if key.isValid:
     return ok key
 
   db.getKeyBackend vid
@@ -81,10 +81,10 @@ proc getLeaf*(
       ): Result[VidVtxPair,AristoError] =
   ## Get the vertex from the top layer by the `Patricia Trie` path. This
   ## function does not search on the `backend` layer.
-  let vid = db.top.lTab.getOrDefault(lty, VertexID(0))
-  if vid != VertexID(0):
-    let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-    if vtx != VertexRef(nil):
+  let vid = db.top.lTab.getOrVoid lty
+  if vid.isValid:
+    let vtx = db.top.sTab.getOrVoid vid
+    if vtx.isValid:
       return ok VidVtxPair(vid: vid, vtx: vtx)
 
   err(GetTagNotFound)
@@ -104,9 +104,9 @@ proc getVtx*(db: AristoDb; lty: LeafTie): VertexRef =
     return rc.value.vtx
   
 proc getKey*(db: AristoDb; vid: VertexID): NodeKey =
-  ## Variant of `getKeyCascaded()` returning `EMPTY_ROOT_KEY` on error (while
+  ## Variant of `getKeyCascaded()` returning `VOID_NODE_KEY` on error (while
   ## ignoring the detailed error type information.)
-  db.getKeyCascaded(vid).get(otherwise = EMPTY_ROOT_KEY)
+  db.getKeyCascaded(vid).get(otherwise = VOID_NODE_KEY)
 
 # ------------------------------------------------------------------------------
 # End

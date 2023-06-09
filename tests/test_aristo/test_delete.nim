@@ -17,8 +17,7 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_delete, aristo_error,
-    aristo_hashify, aristo_nearby, aristo_merge],
+    aristo_desc, aristo_delete, aristo_hashify, aristo_nearby, aristo_merge],
   ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 

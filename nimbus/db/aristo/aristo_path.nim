@@ -14,7 +14,7 @@ import
   std/sequtils,
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error]
+  "."/[aristo_constants, aristo_desc]
 
 # Info snippet (just a reminder to keep somewhere)
 #

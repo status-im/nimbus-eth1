@@ -30,8 +30,9 @@ import
   eth/[common, trie/nibbles],
   stew/results,
   ../../sync/protocol,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_hike,
-       aristo_path, aristo_transcode, aristo_vid]
+  ./aristo_debug,
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_transcode,
+       aristo_vid]
 
 logScope:
   topics = "aristo-merge"
@@ -80,8 +81,8 @@ proc clearMerkleKeys(
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
   for vid in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
+    let key = db.top.kMap.getOrVoid vid
+    if key.isValid:
       db.top.kMap.del vid
       db.top.pAmk.del key
     elif db.getKeyBackend(vid).isOK:
@@ -230,7 +231,7 @@ proc concatBranchAndLeaf(
     return Hike(error: MergeBranchGarbledTail)
 
   let nibble = hike.tail[0].int8
-  if brVtx.bVid[nibble] != VertexID(0):
+  if brVtx.bVid[nibble].isValid:
     return Hike(error: MergeRootBranchLinkBusy)
 
   # Clear Merkle hashes (aka node keys) unless proof mode.
@@ -278,7 +279,7 @@ proc topIsBranchAddLeaf(
     linkID = branch.bVid[nibble]
     linkVtx = db.getVtx linkID
 
-  if linkVtx.isNil:
+  if not linkVtx.isValid:
     #
     #  .. <branch>[nibble] --(linkID)--> nil
     #
@@ -328,7 +329,7 @@ proc topIsExtAddLeaf(
 
   result = Hike(root: hike.root, legs: hike.legs)
 
-  if brVtx.isNil:
+  if not brVtx.isValid:
     # Blind vertex, promote to leaf node.
     #
     #  --(extVid)--> <extVtx> --(brVid)--> nil
@@ -356,7 +357,7 @@ proc topIsExtAddLeaf(
     #
     #  <-------- immutable --------------> <-------- mutable ----------> ..
     #
-    if linkID != VertexID(0):
+    if linkID.isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka node keys) unless proof mode
@@ -388,7 +389,7 @@ proc topIsEmptyAddLeaf(
   if rootVtx.vType == Branch:
 
     let nibble = hike.tail[0].int8
-    if rootVtx.bVid[nibble] != VertexID(0):
+    if rootVtx.bVid[nibble].isValid:
       return Hike(error: MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka node keys) unless proof mode
@@ -446,7 +447,7 @@ proc merge*(
       # Empty hike
       let rootVtx = db.getVtx hike.root
 
-      if not rootVtx.isNil:
+      if rootVtx.isValid:
         result = db.topIsEmptyAddLeaf(hike,rootVtx,leaf.payload)
       else:
         # Bootstrap for existing root ID
@@ -517,32 +518,26 @@ proc merge*(
   ## allocated, already. If the node comes straight from the `decode()` RLP
   ## decoder as expected, these vertex IDs will be all zero.
   ##
-  proc register(key: NodeKey): VertexID =
-    var vid = db.top.pAmk.getOrDefault(key, VertexID(0))
-    if vid == VertexID(0):
-      vid = db.vidAttach key
-    vid
-
   # Check whether the record is correct
   if node.error != AristoError(0):
     return err(node.error)
 
   # Verify `nodeKey`
-  if nodeKey == EMPTY_ROOT_KEY:
+  if not nodeKey.isValid:
     return err(MergeNodeKeyEmpty)
 
   # Check whether the node exists, already. If not then create a new vertex ID
-  var vid = db.top.pAmk.getOrDefault(nodeKey, VertexID(0))
-  if vid == VertexID(0):
-    vid = nodeKey.register
+  var vid = db.top.pAmk.getOrVoid nodeKey
+  if not vid.isValid:
+    vid = db.vidAttach nodeKey
   else:
-    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
+    let key = db.top.kMap.getOrVoid vid
     if key == nodeKey:
       if db.top.sTab.hasKey vid:
         # This is tyically considered OK
         return err(MergeNodeKeyCachedAlready)
       # Otherwise proceed
-    elif key != EMPTY_ROOT_KEY:
+    elif key.isValid:
       # Different key assigned => error
       return err(MergeNodeKeyDiffersFromCached)
 
@@ -552,20 +547,20 @@ proc merge*(
   of Leaf:
     discard
   of Extension:
-    if node.key[0] != EMPTY_ROOT_KEY:
-      let eVid = db.top.pAmk.getOrDefault(node.key[0], VertexID(0))
-      if eVid != VertexID(0):
+    if node.key[0].isValid:
+      let eVid = db.top.pAmk.getOrVoid node.key[0]
+      if eVid.isValid:
         vtx.eVid = eVid
       else:
-        vtx.eVid = node.key[0].register
+        vtx.eVid = db.vidAttach node.key[0]
   of Branch:
     for n in 0..15:
-      if node.key[n] != EMPTY_ROOT_KEY:
-        let bVid = db.top.pAmk.getOrDefault(node.key[n], VertexID(0))
-        if bVid != VertexID(0):
+      if node.key[n].isValid:
+        let bVid = db.top.pAmk.getOrVoid node.key[n]
+        if bVid.isValid:
           vtx.bVid[n] = bVid
         else:
-          vtx.bVid[n] = node.key[n].register
+          vtx.bVid[n] = db.vidAttach node.key[n]
 
   db.top.pPrf.incl vid
   db.top.sTab[vid] = vtx
@@ -613,22 +608,21 @@ proc merge*(
   ##
   ## Upon successful return, the vertex ID assigned to the root key is returned.
   ##
-  if rootKey == EMPTY_ROOT_KEY:
+  if not rootKey.isValid:
     return err(MergeRootKeyEmpty)
 
-  if rootVid == VertexID(0) or
-     rootVid == VertexID(1):
+  if not rootVid.isValid or rootVid == VertexID(1):
     let key = db.getKey VertexID(1)
     if key == rootKey:
       return ok VertexID(1)
 
     # Otherwise assign if empty
-    if key == EMPTY_ROOT_KEY:
+    if not key.isValid:
       db.vidAttach(rootKey, VertexID(1))
       return ok VertexID(1)
 
     # Create new root key
-    if rootVid == VertexID(0):
+    if not rootVid.isValid:
       return ok db.vidAttach(rootKey)
 
   else:
@@ -636,7 +630,7 @@ proc merge*(
     if key == rootKey:
       return ok rootVid
 
-    if key == EMPTY_ROOT_KEY:
+    if not key.isValid:
       db.vidAttach(rootKey, rootVid)
       return ok rootVid
 

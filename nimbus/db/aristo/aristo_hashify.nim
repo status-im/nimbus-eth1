@@ -46,7 +46,7 @@ import
   chronicles,
   eth/common,
   stew/results,
-  "."/[aristo_constants, aristo_debug, aristo_desc, aristo_error, aristo_get,
+  "."/[aristo_constants, aristo_debug, aristo_desc, aristo_get,
        aristo_hike, aristo_transcode, aristo_vid]
 
 logScope:
@@ -63,19 +63,19 @@ proc toNode(vtx: VertexRef; db: AristoDb): Result[NodeRef,void] =
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid)
     for n in 0 .. 15:
-      if vtx.bVid[n] == VertexID(0):
-        node.key[n] = EMPTY_ROOT_KEY
-      else:
+      if vtx.bVid[n].isValid:
         let key = db.getKey vtx.bVid[n]
-        if key != EMPTY_ROOT_KEY:
+        if key.isValid:
           node.key[n] = key
           continue
         return err()
+      else:
+        node.key[n] = VOID_NODE_KEY
     return ok node
   of Extension:
-    if vtx.eVid != VertexID(0):
+    if vtx.eVid.isValid:
       let key = db.getKey vtx.eVid
-      if key != EMPTY_ROOT_KEY:
+      if key.isValid:
         let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vtx.eVid)
         node.key[0] = key
         return ok node
@@ -100,7 +100,7 @@ proc leafToRootHasher(
     let
       key = rc.value.encode.digestTo(NodeKey)
       vfy = db.getKey wp.vid
-    if vfy == EMPTY_ROOT_KEY:
+    if not vfy.isValid:
       db.vidAttach(key, wp.vid)
     elif key != vfy:
       let error = HashifyExistingHashMismatch
@@ -196,8 +196,8 @@ proc hashify*(
         let nodeKey = rc.value.encode.digestTo(NodeKey)
 
         # Update Merkle hash (aka `nodeKey`)
-        let fromKey = db.top.kMap.getOrDefault(fromVid, EMPTY_ROOT_KEY)
-        if fromKey == EMPTY_ROOT_KEY:
+        let fromKey = db.top.kMap.getOrVoid fromVid
+        if fromKey.isValid:
           db.vidAttach(nodeKey, fromVid)
         elif nodeKey != fromKey:
           let error = HashifyExistingHashMismatch
@@ -208,8 +208,8 @@ proc hashify*(
         done.incl fromVid
 
         # Proceed with back link
-        let nextVid = backLink.getOrDefault(toVid, VertexID(0))
-        if nextVid != VertexID(0):
+        let nextVid = backLink.getOrVoid toVid
+        if nextVid.isValid:
           redo[toVid] = nextVid
 
     # Make sure that the algorithm proceeds
@@ -240,36 +240,36 @@ proc hashifyCheck*(
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-      if key == EMPTY_ROOT_KEY:
+      let key = db.top.kMap.getOrVoid vid
+      if not key.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
       if key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
-      if revVid == VertexID(0):
+      let revVid = db.top.pAmk.getOrVoid key
+      if not revVid.isValid:
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
         return err((vid,HashifyCheckRevHashMismatch))
 
   elif 0 < db.top.pPrf.len:
     for vid in db.top.pPrf:
-      let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-      if vtx == VertexRef(nil):
+      let vtx = db.top.sTab.getOrVoid vid
+      if not vtx.isValid:
         return err((vid,HashifyCheckVidVtxMismatch))
 
       let rc = vtx.toNode(db)
       if rc.isErr:
         return err((vid,HashifyCheckVtxIncomplete))
 
-      let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-      if key == EMPTY_ROOT_KEY:
+      let key = db.top.kMap.getOrVoid vid
+      if not key.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
       if key != rc.value.encode.digestTo(NodeKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
-      let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
-      if revVid == VertexID(0):
+      let revVid = db.top.pAmk.getOrVoid key
+      if not revVid.isValid:
         return err((vid,HashifyCheckRevHashMissing))
       if revVid != vid:
         return err((vid,HashifyCheckRevHashMismatch))
@@ -277,14 +277,14 @@ proc hashifyCheck*(
   else:
     for (vid,key) in db.top.kMap.pairs:
       let vtx = db.getVtx vid
-      if not vtx.isNil:
+      if vtx.isValid:
         let rc = vtx.toNode(db)
         if rc.isOk:
           if key != rc.value.encode.digestTo(NodeKey):
             return err((vid,HashifyCheckVtxHashMismatch))
 
-          let revVid = db.top.pAmk.getOrDefault(key, VertexID(0))
-          if revVid == VertexID(0):
+          let revVid = db.top.pAmk.getOrVoid key
+          if not revVid.isValid:
             return err((vid,HashifyCheckRevHashMissing))
           if revVid != vid:
             return err((vid,HashifyCheckRevHashMismatch))

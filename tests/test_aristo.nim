@@ -268,13 +268,13 @@ when isMainModule:
 
   # This one usues dumps from the external `nimbus-eth1-blob` repo
   when true and false:
-    import ./test_sync_snap/snap_storage_xx, ../nimbus/db/aristo/aristo_error
+    import ./test_sync_snap/snap_storage_xx
     let knownFailures: KnownHasherFailure = @[
-      ("storages3__18__25_dump#11.27367",(3,HashifyExistingHashMismatch)),
-      ("storages4__26__33_dump#11.23924",(6,HashifyExistingHashMismatch)),
+      ("storages3__18__25_dump#12.27367",(3,HashifyExistingHashMismatch)),
+      ("storages4__26__33_dump#12.23924",(6,HashifyExistingHashMismatch)),
       ("storages5__34__41_dump#10.20512",(1,HashifyRootHashMismatch)),
-      ("storagesB__84__92_dump#6.9709",  (7,HashifyExistingHashMismatch)),
-      ("storagesD_102_109_dump#17.28287",(9,HashifyExistingHashMismatch)),
+      ("storagesB__84__92_dump#7.9709",  (7,HashifyExistingHashMismatch)),
+      ("storagesD_102_109_dump#18.28287",(9,HashifyExistingHashMismatch)),
     ]
     noisy.showElapsed("@snap_storage_xx"):
       for n,sam in snapStorageList:

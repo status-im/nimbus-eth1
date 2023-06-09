@@ -12,13 +12,13 @@
 ## Aristo (aka Patricia) DB records merge test
 
 import
+  std/tables,
   eth/common,
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_get, aristo_hashify,
+    aristo_desc, aristo_debug, aristo_get, aristo_hashify,
     aristo_hike, aristo_merge],
-  ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
 type
@@ -190,6 +190,8 @@ proc test_mergeProofAndKvpList*(
     idPfx = "";
     oops: KnownHasherFailure = @[];
       ): bool =
+  let
+    oopsTab = oops.toTable
   var
     db: AristoDb
     rootKey = NodeKey.default
@@ -203,7 +205,6 @@ proc test_mergeProofAndKvpList*(
 
     let
       testId = idPfx & "#" & $w.id & "." & $n
-      oopsTab = oops.toTable
       lstLen = list.len
       sTabLen = db.top.sTab.len
       lTabLen = db.top.lTab.len
@@ -261,7 +262,7 @@ proc test_mergeProofAndKvpList*(
         rc = db.hashify() # noisy=true)
 
       # Handle known errors
-      if oopsTab.hasKey(testId):
+      if oopsTab.hasKey testId:
         if rc.isOK:
           check rc.isErr
           return

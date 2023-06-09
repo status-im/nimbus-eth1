@@ -16,8 +16,7 @@ import
   std/tables,
   eth/common,
   stew/results,
-  ../../nimbus/db/aristo/[
-    aristo_constants, aristo_desc, aristo_error, aristo_transcode, aristo_vid]
+  ../../nimbus/db/aristo/[aristo_desc, aristo_transcode, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -42,8 +41,8 @@ proc convertPartially(
       vType: Extension,
       ePfx:  vtx.ePfx,
       eVid:  vtx.eVid)
-    let key = db.top.kMap.getOrDefault(vtx.eVid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
+    let key = db.top.kMap.getOrVoid vtx.eVid
+    if key.isValid:
       nd.key[0] = key
       return
     result.add vtx.eVid
@@ -52,9 +51,9 @@ proc convertPartially(
       vType: Branch,
       bVid:  vtx.bVid)
     for n in 0..15:
-      if vtx.bVid[n] != VertexID(0):
-        let key = db.top.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
-        if key != EMPTY_ROOT_KEY:
+      if vtx.bVid[n].isValid:
+        let key = db.top.kMap.getOrVoid vtx.bVid[n]
+        if key.isValid:
           nd.key[n] = key
           continue
       result.add vtx.bVid[n]
@@ -77,8 +76,8 @@ proc convertPartiallyOk(
       vType: Extension,
       ePfx:  vtx.ePfx,
       eVid:  vtx.eVid)
-    let key = db.top.kMap.getOrDefault(vtx.eVid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
+    let key = db.top.kMap.getOrVoid vtx.eVid
+    if key.isValid:
       nd.key[0] = key
       result = true
   of Branch:
@@ -87,9 +86,9 @@ proc convertPartiallyOk(
       bVid:  vtx.bVid)
     result = true
     for n in 0..15:
-      if vtx.bVid[n] != VertexID(0):
-        let key = db.top.kMap.getOrDefault(vtx.bVid[n], EMPTY_ROOT_KEY)
-        if key != EMPTY_ROOT_KEY:
+      if vtx.bVid[n].isValid:
+        let key = db.top.kMap.getOrVoid vtx.bVid[n]
+        if key.isValid:
           nd.key[n] = key
           continue
         return false
@@ -117,12 +116,12 @@ proc pal*(db: AristoDb; vid: VertexID): NodeKey =
   ## table is checked whether the cache can be updated.
   if not db.top.isNil:
 
-    let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-    if key != EMPTY_ROOT_KEY:
+    let key = db.top.kMap.getOrVoid vid
+    if key.isValid:
       return key
 
-    let vtx = db.top.sTab.getOrDefault(vid, VertexRef(nil))
-    if vtx != VertexRef(nil):
+    let vtx = db.top.sTab.getOrVoid vid
+    if vtx.isValid:
       var node: NodeRef
       if db.convertPartiallyOk(vtx,node):
         var w = initRlpWriter()
@@ -142,7 +141,7 @@ proc updated*(nd: NodeRef; db: AristoDb): NodeRef =
   ##
   ## This function will not complain if all `Merkel` hashes (aka `NodeKey`
   ## objects) are zero for either `Extension` or `Leaf` nodes.
-  if not nd.isNil:
+  if nd.isValid:
     case nd.vType:
     of Leaf:
       result = NodeRef(
@@ -153,7 +152,7 @@ proc updated*(nd: NodeRef; db: AristoDb): NodeRef =
       result = NodeRef(
         vType:  Extension,
         ePfx:   nd.ePfx)
-      if nd.key[0] != EMPTY_ROOT_KEY:
+      if nd.key[0].isValid:
         result.eVid = db.cachedVID nd.key[0]
         result.key[0] = nd.key[0]
     of Branch:
@@ -161,7 +160,7 @@ proc updated*(nd: NodeRef; db: AristoDb): NodeRef =
         vType: Branch,
         key:   nd.key)
       for n in 0..15:
-        if nd.key[n] != EMPTY_ROOT_KEY:
+        if nd.key[n].isValid:
           result.bVid[n] = db.cachedVID nd.key[n]
 
 proc asNode*(vtx: VertexRef; db: AristoDb): NodeRef =

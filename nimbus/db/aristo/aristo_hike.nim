@@ -12,7 +12,7 @@
 
 import
   eth/[common, trie/nibbles],
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_path]
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_path]
 
 type
   Leg* = object
@@ -68,14 +68,14 @@ proc hikeUp*(
     root: root,
     tail: path)
 
-  if root == VertexID(0):
+  if not root.isValid:
     result.error = PathRootMissing
 
   else:
     var vid = root
-    while vid != VertexID(0):
+    while vid.isValid:
       var vtx = db.getVtx vid
-      if vtx.isNil:
+      if not vtx.isValid:
         break
 
       var leg = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: -1)
@@ -100,7 +100,7 @@ proc hikeUp*(
           nibble = result.tail[0].int8
           nextVid = vtx.bVid[nibble]
 
-        if nextVid == VertexID(0):
+        if not nextVid.isValid:
           result.error = PathBranchBlindEdge # Ooops
           break
 

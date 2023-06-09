@@ -108,31 +108,33 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
     result.add w
 
 proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (EMPTY_ROOT_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
   for w in ua:
     let thisRoot = w.root.to(NodeKey)
     if rootKey != thisRoot:
       (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-    result.add ProofTrieData(
-      root:   rootKey,
-      proof:  w.data.proof,
-      kvpLst: w.data.accounts.mapIt(LeafSubKVP(
-        leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
-        payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
+    if 0 < w.data.accounts.len:
+      result.add ProofTrieData(
+        root:   rootKey,
+        proof:  w.data.proof,
+        kvpLst: w.data.accounts.mapIt(LeafSubKVP(
+          leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
+          payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (EMPTY_ROOT_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
   for n,s in us:
     for w in s.data.storages:
       let thisRoot = w.account.storageRoot.to(NodeKey)
       if rootKey != thisRoot:
         (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-      result.add ProofTrieData(
-        root:   thisRoot,
-        id:     n + 1,
-        kvpLst: w.data.mapIt(LeafSubKVP(
-          leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
-          payload: PayloadRef(pType: BlobData, blob: it.slotData))))
+      if 0 < w.data.len:
+        result.add ProofTrieData(
+          root:   thisRoot,
+          id:     n + 1,
+          kvpLst: w.data.mapIt(LeafSubKVP(
+            leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
+            payload: PayloadRef(pType: BlobData, blob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 

@@ -11,8 +11,8 @@
 {.push raises: [].}
 
 import
-  ../../sync/snap/range_desc,
-  eth/[common, trie/nibbles]
+  eth/[common, trie/nibbles],
+  ../../sync/snap/range_desc
 
 const
   EmptyBlob* = seq[byte].default
@@ -21,8 +21,10 @@ const
   EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
-  EMPTY_ROOT_KEY* = EMPTY_ROOT_HASH.to(NodeKey)
+  VOID_NODE_KEY* = EMPTY_ROOT_HASH.to(NodeKey)
+    ## Equivalent of `nil` for Merkle hash ket
 
-  EMPTY_CODE_KEY* = EMPTY_CODE_HASH.to(NodeKey)
+  VOID_CODE_KEY* = EMPTY_CODE_HASH.to(NodeKey)
+    ## Equivalent of `nil` for `Account` object code hash
 
 # End

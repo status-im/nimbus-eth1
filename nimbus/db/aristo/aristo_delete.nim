@@ -20,8 +20,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_hike,
-       aristo_path, aristo_vid]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_vid]
 
 logScope:
   topics = "aristo-delete"
@@ -32,12 +31,12 @@ logScope:
 
 proc branchStillNeeded(vtx: VertexRef): bool =
   for n in 0 .. 15:
-    if vtx.bVid[n] != VertexID(0):
+    if vtx.bVid[n].isValid:
       return true
 
 proc clearKey(db: AristoDb; vid: VertexID) =
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
+  let key = db.top.kMap.getOrVoid vid
+  if key.isValid:
     db.top.kMap.del vid
     db.top.pAmk.del key
   elif db.getKeyBackend(vid).isOK:
@@ -49,8 +48,8 @@ proc doneWith(db: AristoDb; vid: VertexID) =
   db.top.dKey.excl vid # No need to register for deleting on backend
   db.vidDispose vid    # Will be propagated to backend
   db.top.sTab.del vid
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
+  let key = db.top.kMap.getOrVoid vid
+  if key.isValid:
     db.top.kMap.del vid
     db.top.pAmk.del key
 
