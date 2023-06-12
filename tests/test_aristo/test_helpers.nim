@@ -25,7 +25,7 @@ type
     root*: NodeKey
     id*: int
     proof*: seq[SnapProof]
-    kvpLst*: seq[LeafSubKVP]
+    kvpLst*: seq[LeafTiePayload]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -38,23 +38,33 @@ proc toPfx(indent: int): string =
 # Public pretty printing
 # ------------------------------------------------------------------------------
 
-proc pp*(w: ProofTrieData; db: var AristoDb; indent = 4): string =
+proc pp*(
+    w: ProofTrieData;
+    rootID: VertexID;
+    db: var AristoDb;
+    indent = 4;
+      ): string =
   let pfx = indent.toPfx
-  result = "(" & w.root.pp(db) & "," & $w.id & ",[" & $w.proof.len & "],"
+  result = "(" & HashLabel(root: rootID, key: w.root).pp(db)
+  result &= "," & $w.id & ",[" & $w.proof.len & "],"
   result &= pfx & " ["
   for n,kvp in w.kvpLst:
     if 0 < n:
       result &= "," & pfx & "  "
-    result &= "(" & kvp.leafKey.pp(db) & "," & $kvp.payload.pType & ")"
+    result &= "(" & kvp.leafTie.pp(db) & "," & $kvp.payload.pType & ")"
   result &= "])"
 
 proc pp*(w: ProofTrieData; indent = 4): string =
   var db = AristoDB()
-  w.pp(db, indent)
+  w.pp(VertexID(1), db, indent)
 
-proc pp*(w: openArray[ProofTrieData]; db: var AristoDb; indent = 4): string =
+proc pp*(
+    w: openArray[ProofTrieData];
+    rootID: VertexID;
+    db: var AristoDb;
+    indent = 4): string =
   let pfx = indent.toPfx
-  "[" & w.mapIt(it.pp(db, indent + 1)).join("," & pfx & " ") & "]"
+  "[" & w.mapIt(it.pp(rootID, db, indent + 1)).join("," & pfx & " ") & "]"
 
 proc pp*(w: openArray[ProofTrieData]; indent = 4): string =
   let pfx = indent.toPfx
@@ -108,37 +118,42 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
     result.add w
 
 proc to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (EMPTY_ROOT_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
   for w in ua:
     let thisRoot = w.root.to(NodeKey)
     if rootKey != thisRoot:
       (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-    result.add ProofTrieData(
-      root:   rootKey,
-      proof:  w.data.proof,
-      kvpLst: w.data.accounts.mapIt(LeafSubKVP(
-        leafKey: LeafKey(root: rootVid, path: it.accKey.to(NodeTag)),
-        payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
+    if 0 < w.data.accounts.len:
+      result.add ProofTrieData(
+        root:   rootKey,
+        proof:  w.data.proof,
+        kvpLst: w.data.accounts.mapIt(LeafTiePayload(
+          leafTie: LeafTie(root: rootVid, path: it.accKey.to(NodeTag)),
+          payload: PayloadRef(pType: BlobData, blob: it.accBlob))))
 
 proc to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (EMPTY_ROOT_KEY, VertexID(0))
+  var (rootKey, rootVid) = (VOID_NODE_KEY, VertexID(0))
   for n,s in us:
     for w in s.data.storages:
       let thisRoot = w.account.storageRoot.to(NodeKey)
       if rootKey != thisRoot:
         (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-      result.add ProofTrieData(
-        root:   thisRoot,
-        id:     n + 1,
-        kvpLst: w.data.mapIt(LeafSubKVP(
-          leafKey: LeafKey(root: rootVid, path: it.slotHash.to(NodeTag)),
-          payload: PayloadRef(pType: BlobData, blob: it.slotData))))
+      if 0 < w.data.len:
+        result.add ProofTrieData(
+          root:   thisRoot,
+          id:     n + 1,
+          kvpLst: w.data.mapIt(LeafTiePayload(
+            leafTie: LeafTie(root: rootVid, path: it.slotHash.to(NodeTag)),
+            payload: PayloadRef(pType: BlobData, blob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 
-proc mapRootVid*(a: openArray[LeafSubKVP]; toVid: VertexID): seq[LeafSubKVP] =
-  a.mapIt(LeafSubKVP(
-    leafKey: LeafKey(root: toVid, path: it.leafKey.path),
+proc mapRootVid*(
+    a: openArray[LeafTiePayload];
+    toVid: VertexID;
+      ): seq[LeafTiePayload] =
+  a.mapIt(LeafTiePayload(
+    leafTie: LeafTie(root: toVid, path: it.leafTie.path),
     payload: it.payload))
 
 # ------------------------------------------------------------------------------

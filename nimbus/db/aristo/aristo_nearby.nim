@@ -24,7 +24,7 @@ import
   std/tables,
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_desc, aristo_error, aristo_get, aristo_hike, aristo_path]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -57,7 +57,7 @@ proc branchNibbleMin*(vtx: VertexRef; minInx: int8): int8 =
   ## greater or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in minInx .. 15:
-      if vtx.bVid[n] != VertexID(0):
+      if vtx.bVid[n].isValid:
         return n
   -1
 
@@ -66,7 +66,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
   ## less or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in maxInx.countDown 0:
-      if vtx.bVid[n] != VertexID(0):
+      if vtx.bVid[n].isValid:
         return n
   -1
 
@@ -86,7 +86,7 @@ proc complete(
     vid = vid
     vtx = db.getVtx vid
     uHike = Hike(root: hike.root, legs: hike.legs)
-  if vtx.isNil:
+  if not vtx.isValid:
     return Hike(error: GetVtxNotFound)
 
   while uHike.legs.len < hikeLenMax:
@@ -99,9 +99,9 @@ proc complete(
 
     of Extension:
       vid = vtx.eVid
-      if vid != VertexID(0):
+      if vid.isValid:
         vtx = db.getVtx vid
-        if not vtx.isNil:
+        if vtx.isValid:
           uHike.legs.add leg
           continue
       return Hike(error: NearbyExtensionError) # Oops, no way
@@ -114,7 +114,7 @@ proc complete(
       if 0 <= leg.nibble:
         vid = vtx.bVid[leg.nibble]
         vtx = db.getVtx vid
-        if not vtx.isNil:
+        if vtx.isValid:
           uHike.legs.add leg
           continue
       return Hike(error: NearbyBranchError) # Oops, no way
@@ -154,7 +154,7 @@ proc zeroAdjust(
     return
 
   let root = db.getVtx hike.root
-  if not root.isNil:
+  if root.isValid:
     block fail:
       var pfx: NibblesSeq
       case root.vType:
@@ -175,7 +175,7 @@ proc zeroAdjust(
         if hike.tail.len < 2 or not hike.accept(ePfx):
           break fail
         let vtx = db.getVtx root.eVid
-        if vtx.isNil:
+        if not vtx.isValid:
           break fail
         let ePfxLen = ePfx.len
         if hike.tail.len <= ePfxLen:
@@ -233,7 +233,7 @@ proc finalise(
     if 0 <= top.nibble and top.nibble == top.wp.vtx.branchBorderNibble:
       # Check the following up node
       let vtx = db.getVtx top.wp.vtx.bVid[top.nibble]
-      if vtx.isNil:
+      if not vtx.isValid:
         return Hike(error: NearbyDanglingLink)
 
       var pfx: NibblesSeq
@@ -317,11 +317,11 @@ proc nearbyNext(
     # Look ahead checking next node
     if start:
       let vid = top.wp.vtx.bVid[top.nibble]
-      if vid == VertexID(0):
+      if not vid.isValid:
         return Hike(error: NearbyDanglingLink) # error
 
       let vtx = db.getVtx vid
-      if vtx.isNil:
+      if not vtx.isValid:
         return Hike(error: GetVtxNotFound) # error
 
       case vtx.vType
@@ -364,13 +364,13 @@ proc nearbyNext(
 
 
 proc nearbyNext(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
       ): Result[NodeTag,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = lky.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
+  let hike = lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
   if hike.error != AristoError(0):
     return err(hike.error)
 
@@ -402,15 +402,15 @@ proc nearbyRight*(
   hike.nearbyNext(db, 64, moveRight=true)
 
 proc nearbyRight*(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
-      ): Result[LeafKey,AristoError] =
+      ): Result[LeafTie,AristoError] =
   ## Variant of `nearbyRight()` working with a `NodeTag` argument instead
   ## of a `Hike`.
-  let rc = lky.nearbyNext(db, 64, moveRight=true)
+  let rc = lty.nearbyNext(db, 64, moveRight=true)
   if rc.isErr:
     return err(rc.error)
-  ok LeafKey(root: lky.root, path: rc.value)
+  ok LeafTie(root: lty.root, path: rc.value)
 
 proc nearbyLeft*(
     hike: Hike;                         # Partially expanded chain of vertices
@@ -423,15 +423,15 @@ proc nearbyLeft*(
   hike.nearbyNext(db, 64, moveRight=false)
 
 proc nearbyLeft*(
-    lky: LeafKey;                       # Some `Patricia Trie` path
+    lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
-      ): Result[LeafKey,AristoError] =
+      ): Result[LeafTie,AristoError] =
   ## Similar to `nearbyRight()` for `NodeTag` argument instead
   ## of a `Hike`.
-  let rc = lky.nearbyNext(db, 64, moveRight=false)
+  let rc = lty.nearbyNext(db, 64, moveRight=false)
   if rc.isErr:
     return err(rc.error)
-  ok LeafKey(root: lky.root, path: rc.value)
+  ok LeafTie(root: lty.root, path: rc.value)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -467,11 +467,11 @@ proc nearbyRightMissing*(
     return err(NearbyBranchError)
 
   let vid = top.wp.vtx.bVid[top.nibble]
-  if vid == VertexID(0):
+  if not vid.isValid:
     return err(NearbyDanglingLink) # error
 
   let vtx = db.getVtx vid
-  if vtx.isNil:
+  if not vtx.isValid:
     return err(GetVtxNotFound) # error
 
   case vtx.vType

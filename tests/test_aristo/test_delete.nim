@@ -17,8 +17,7 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_delete, aristo_error,
-    aristo_hashify, aristo_nearby, aristo_merge],
+    aristo_desc, aristo_delete, aristo_hashify, aristo_nearby, aristo_merge],
   ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
@@ -30,8 +29,8 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc sortedKeys(lTab: Table[LeafKey,VertexID]): seq[LeafKey] =
-  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafKey): int = cmp(a,b))
+proc sortedKeys(lTab: Table[LeafTie,VertexID]): seq[LeafTie] =
+  lTab.keys.toSeq.sorted(cmp = proc(a,b: LeafTie): int = cmp(a,b))
 
 # --------------
 
@@ -83,10 +82,10 @@ proc fwdWalkVerify(
     lTabLen = db.top.lTab.len
   var
     error = AristoError(0)
-    lky = LeafKey(root: root)
+    lty = LeafTie(root: root)
     n = 0
   while n < lTabLen + 1:
-    let rc = lky.nearbyRight(db)
+    let rc = lty.nearbyRight(db)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -95,7 +94,7 @@ proc fwdWalkVerify(
         check rc.error == AristoError(0)
       break
     if rc.value.path < high(NodeTag):
-      lky.path = NodeTag(rc.value.path.u256 + 1)
+      lty.path = NodeTag(rc.value.path.u256 + 1)
     n.inc
 
   if error != AristoError(0):
@@ -134,21 +133,20 @@ proc test_delete*(
     # Now `db` represents a (fully labelled) `Merkle Patricia Tree`
 
     # Provide a (reproducible) peudo-random copy of the leafs list
-    var leafKeys = db.top.lTab.sortedKeys
-    if 2 < leafKeys.len:
-      for n in 0 ..< leafKeys.len-1:
-        let r = n + td.rand(leafKeys.len - n)
-        leafKeys[n].swap leafKeys[r]
+    var leafTies = db.top.lTab.sortedKeys
+    if 2 < leafTies.len:
+      for n in 0 ..< leafTies.len-1:
+        let r = n + td.rand(leafTies.len - n)
+        leafTies[n].swap leafTies[r]
 
-    let uMax = leafKeys.len - 1
-    for u,leafKey in leafKeys:
-      let rc = leafKey.delete(db)
-
+    let uMax = leafTies.len - 1
+    for u,leafTie in leafTies:
+      let rc = leafTie.delete(db)
       if rc.isErr:
         check rc.error == (VertexID(0),AristoError(0))
         return
-      if leafKey in db.top.lTab:
-        check leafKey notin db.top.lTab
+      if leafTie in db.top.lTab:
+        check leafTie notin db.top.lTab
         return
       if uMax != db.top.lTab.len + u:
         check uMax == db.top.lTab.len + u
@@ -159,7 +157,7 @@ proc test_delete*(
       const tailCheck = 999
       if uMax < u + tailCheck:
         if u < uMax:
-          let vfy = db.fwdWalkVerify(leafKey.root, noisy)
+          let vfy = db.fwdWalkVerify(leafTie.root, noisy)
           if vfy.error != AristoError(0):
             check vfy == (0, AristoError(0))
             return

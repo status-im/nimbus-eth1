@@ -20,8 +20,7 @@ import
   chronicles,
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error, aristo_get, aristo_hike,
-       aristo_path, aristo_vid]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path, aristo_vid]
 
 logScope:
   topics = "aristo-delete"
@@ -32,12 +31,12 @@ logScope:
 
 proc branchStillNeeded(vtx: VertexRef): bool =
   for n in 0 .. 15:
-    if vtx.bVid[n] != VertexID(0):
+    if vtx.bVid[n].isValid:
       return true
 
 proc clearKey(db: AristoDb; vid: VertexID) =
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
+  let key = db.top.kMap.getOrVoid vid
+  if key.isValid:
     db.top.kMap.del vid
     db.top.pAmk.del key
   elif db.getKeyBackend(vid).isOK:
@@ -49,15 +48,15 @@ proc doneWith(db: AristoDb; vid: VertexID) =
   db.top.dKey.excl vid # No need to register for deleting on backend
   db.vidDispose vid    # Will be propagated to backend
   db.top.sTab.del vid
-  let key = db.top.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-  if key != EMPTY_ROOT_KEY:
+  let key = db.top.kMap.getOrVoid vid
+  if key.isValid:
     db.top.kMap.del vid
     db.top.pAmk.del key
 
 
 proc deleteImpl(
     hike: Hike;                        # Fully expanded path
-    lky: LeafKey;                      # `Patricia Trie` path root-to-leaf
+    lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
     db: AristoDb;                      # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
@@ -110,10 +109,10 @@ proc deleteImpl(
   let rc = db.getVtxBackend lf.vid
   if rc.isErr and rc.error == GetVtxNotFound:
     # No need to keep it any longer
-    db.top.lTab.del lky
+    db.top.lTab.del lty
   else:
     # To be deleted in backend when it is updated
-    db.top.lTab[lky] = VertexID(0)
+    db.top.lTab[lty] = VertexID(0)
 
   ok()
 
@@ -131,15 +130,15 @@ proc delete*(
     let rc = hike.to(NibblesSeq).pathToTag()
     if rc.isErr:
       return err((VertexID(0),DelPathTagError))
-    LeafKey(root: hike.root, path: rc.value)
+    LeafTie(root: hike.root, path: rc.value)
   hike.deleteImpl(lky, db)
 
 proc delete*(
-    lky: LeafKey;                      # `Patricia Trie` path root-to-leaf
+    lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
     db: AristoDb;                      # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `delete()`
-  lky.hikeUp(db).deleteImpl(lky, db)
+  lty.hikeUp(db).deleteImpl(lty, db)
 
 # ------------------------------------------------------------------------------
 # End

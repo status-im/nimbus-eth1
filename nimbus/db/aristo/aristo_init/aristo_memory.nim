@@ -16,7 +16,8 @@
 import
   std/[sequtils, tables],
   stew/results,
-  ".."/[aristo_constants, aristo_desc, aristo_error]
+  ../aristo_desc,
+  ../aristo_desc/aristo_types_backend
 
 type
   MemBackendRef = ref object

@@ -14,7 +14,7 @@ import
   std/[bitops, sequtils],
   eth/[common, trie/nibbles],
   stew/results,
-  "."/[aristo_constants, aristo_desc, aristo_error]
+  "."/[aristo_constants, aristo_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -31,7 +31,7 @@ proc aInit(key: var NodeKey; data: openArray[byte]): bool =
     (addr key.ByteArray32[0]).copyMem(unsafeAddr data[0], data.len)
     return true
   elif data.len == 0:
-    key = EMPTY_ROOT_KEY
+    key = VOID_NODE_KEY
     return true
 
 # ------------------------------------------------------------------------------
@@ -110,7 +110,7 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
   proc addNodeKey(writer: var RlpWriter; key: NodeKey) =
-    if key == EMPTY_ROOT_KEY:
+    if not key.isValid:
       writer.append EmptyBlob
     else:
       writer.append key.to(Hash256)
@@ -170,7 +170,7 @@ proc blobify*(node: VertexRef; data: var Blob): AristoError =
       refs: Blob
       keys: Blob
     for n in 0..15:
-      if node.bVid[n] != VertexID(0):
+      if node.bVid[n].isValid:
         access = access or (1u16 shl n)
         refs &= node.bVid[n].uint64.toBytesBE.toSeq
     data = refs & access.toBytesBE.toSeq & @[0u8]

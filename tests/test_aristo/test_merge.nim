@@ -12,13 +12,13 @@
 ## Aristo (aka Patricia) DB records merge test
 
 import
+  std/tables,
   eth/common,
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_get, aristo_hashify,
+    aristo_desc, aristo_debug, aristo_get, aristo_hashify,
     aristo_hike, aristo_merge],
-  ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
 type
@@ -37,7 +37,7 @@ proc pp(w: tuple[merged: int, dups: int, error: AristoError]): string =
 
 proc mergeStepwise(
     db: AristoDb;
-    leafs: openArray[LeafSubKVP];
+    leafs: openArray[LeafTiePayload];
     noisy: bool;
       ): tuple[merged: int, dups: int, error: AristoError] =
   let
@@ -53,7 +53,7 @@ proc mergeStepwise(
     let
       preState = db.pp
       hike = db.merge leaf
-      ekih = leaf.leafKey.hikeUp(db)
+      ekih = leaf.leafTie.hikeUp(db)
 
     noisy.say "***", "step <", n, "/", leafs.len-1, "> "
 
@@ -83,7 +83,7 @@ proc mergeStepwise(
         rc.error
 
     if dumpOk:
-      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafKey.pp,
+      noisy.say "***", "<", n, "/", leafs.len-1, "> ", leaf.leafTie.pp,
         "\n   pre-state ", preState,
         "\n   --------",
         "\n   merge => hike",
@@ -190,6 +190,8 @@ proc test_mergeProofAndKvpList*(
     idPfx = "";
     oops: KnownHasherFailure = @[];
       ): bool =
+  let
+    oopsTab = oops.toTable
   var
     db: AristoDb
     rootKey = NodeKey.default
@@ -203,7 +205,6 @@ proc test_mergeProofAndKvpList*(
 
     let
       testId = idPfx & "#" & $w.id & "." & $n
-      oopsTab = oops.toTable
       lstLen = list.len
       sTabLen = db.top.sTab.len
       lTabLen = db.top.lTab.len
@@ -220,7 +221,7 @@ proc test_mergeProofAndKvpList*(
       if rc.isErr:
         check rc.error == AristoError(0)
         return
-      proved = db.merge w.proof
+      proved = db.merge(w.proof, rc.value)
       check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.top.lTab.len == lTabLen
@@ -261,7 +262,7 @@ proc test_mergeProofAndKvpList*(
         rc = db.hashify() # noisy=true)
 
       # Handle known errors
-      if oopsTab.hasKey(testId):
+      if oopsTab.hasKey testId:
         if rc.isOK:
           check rc.isErr
           return

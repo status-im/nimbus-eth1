@@ -17,7 +17,7 @@ import
   stew/results,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_desc, aristo_debug, aristo_error, aristo_merge, aristo_nearby],
+    aristo_desc, aristo_debug, aristo_merge, aristo_nearby],
   ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
@@ -35,10 +35,10 @@ proc fwdWalkLeafsCompleteDB(
     tLen = tags.len
   var
     error = AristoError(0)
-    lky = LeafKey(root: root, path: NodeTag(tags[0].u256 div 2))
+    lty = LeafTie(root: root, path: NodeTag(tags[0].u256 div 2))
     n = 0
   while true:
-    let rc = lky.nearbyRight(db)
+    let rc = lty.nearbyRight(db)
     #noisy.say "=================== ", n
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
@@ -58,12 +58,13 @@ proc fwdWalkLeafsCompleteDB(
     if rc.value.path != tags[n]:
       noisy.say "***", "[", n, "/", tLen-1, "] fwd-walk -- leafs differ,",
         " got=", rc.value.pp(db),
-        " wanted=", tags[n].pp(db) #, " db-dump\n    ", db.pp
+        " wanted=", LeafTie(root: root, path: tags[n]).pp(db) #,
+        # " db-dump\n    ", db.pp
       error = AristoError(1)
       check rc.value.path == tags[n]
       break
     if rc.value.path < high(NodeTag):
-      lky.path = NodeTag(rc.value.path.u256 + 1)
+      lty.path = NodeTag(rc.value.path.u256 + 1)
     n.inc
 
   (n,error)
@@ -80,10 +81,10 @@ proc revWalkLeafsCompleteDB(
   var
     error = AristoError(0)
     delta = ((high(UInt256) - tags[^1].u256) div 2)
-    lky = LeafKey(root: root, path:  NodeTag(tags[^1].u256 + delta))
+    lty = LeafTie(root: root, path:  NodeTag(tags[^1].u256 + delta))
     n = tLen-1
   while true: # and false:
-    let rc = lky.nearbyLeft(db)
+    let rc = lty.nearbyLeft(db)
     if rc.isErr:
       if rc.error != NearbyBeyondRange:
         noisy.say "***", "[", n, "/", tLen-1, "] rev-walk error=", rc.error
@@ -107,7 +108,7 @@ proc revWalkLeafsCompleteDB(
       check rc.value.path == tags[n]
       break
     if low(NodeTag) < rc.value.path:
-      lky.path = NodeTag(rc.value.path.u256 - 1)
+      lty.path = NodeTag(rc.value.path.u256 - 1)
     n.dec
 
   (tLen-1 - n, error)
@@ -148,11 +149,11 @@ proc test_nearbyKvpList*(
     check added.merged + added.dups == leafs.len
 
     for kvp in leafs:
-      tagSet.incl kvp.leafKey.path
+      tagSet.incl kvp.leafTie.path
 
     let
       tags = tagSet.toSeq.sorted
-      rootVid = leafs[0].leafKey.root
+      rootVid = leafs[0].leafTie.root
       fwdWalk = db.fwdWalkLeafsCompleteDB(rootVid, tags, noisy=true)
       revWalk = db.revWalkLeafsCompleteDB(rootVid, tags, noisy=true)
 
