@@ -430,10 +430,10 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     if com.isCancunOrLater(ctx.env.currentTimestamp):
       if ctx.env.parentDataGasUsed.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentDataGasUsed' env section")
+        raise newError(ErrorConfig, "Cancun config but missing 'parentDataGasUsed' in env section")
 
       if ctx.env.parentExcessDataGas.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessDataGas' env section")
+        raise newError(ErrorConfig, "Cancun config but missing 'parentExcessDataGas' in env section")
 
       let res = loadKzgTrustedSetup()
       if res.isErr:
