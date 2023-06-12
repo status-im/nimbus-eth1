@@ -194,7 +194,7 @@ proc test_mergeProofAndKvpList*(
     oopsTab = oops.toTable
   var
     db: AristoDb
-    rootKey = NodeKey.default
+    rootKey = HashKey.default
     count = 0
   for n,w in list:
     if resetDb or w.root != rootKey or w.proof.len == 0:
@@ -222,7 +222,7 @@ proc test_mergeProofAndKvpList*(
         check rc.error == AristoError(0)
         return
       proved = db.merge(w.proof, rc.value)
-      check proved.error in {AristoError(0),MergeNodeKeyCachedAlready}
+      check proved.error in {AristoError(0),MergeHashKeyCachedAlready}
       check w.proof.len == proved.merged + proved.dups
       check db.top.lTab.len == lTabLen
       check db.top.sTab.len == proved.merged + sTabLen

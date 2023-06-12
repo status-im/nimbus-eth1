@@ -82,9 +82,9 @@ type
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
 
-    MergeNodeKeyEmpty
-    MergeNodeKeyCachedAlready
-    MergeNodeKeyDiffersFromCached
+    MergeHashKeyEmpty
+    MergeHashKeyCachedAlready
+    MergeHashKeyDiffersFromCached
     MergeRootKeyEmpty
 
     MergeRootKeyDiffersForVid

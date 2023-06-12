@@ -18,7 +18,6 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_desc, aristo_delete, aristo_hashify, aristo_nearby, aristo_merge],
-  ../../nimbus/sync/snap/range_desc,
   ./test_helpers
 
 type
@@ -93,8 +92,8 @@ proc fwdWalkVerify(
         error = rc.error
         check rc.error == AristoError(0)
       break
-    if rc.value.path < high(NodeTag):
-      lty.path = NodeTag(rc.value.path.u256 + 1)
+    if rc.value.path < high(HashID):
+      lty.path = HashID(rc.value.path.u256 + 1)
     n.inc
 
   if error != AristoError(0):

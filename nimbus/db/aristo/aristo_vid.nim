@@ -101,7 +101,7 @@ proc vidAttach*(db: AristoDb; lbl: HashLabel): VertexID {.discardable.} =
   result = db.vidFetch
   db.vidAttach(lbl, result)
 
-proc vidRoot*(db: AristoDb; key: NodeKey): VertexID {.discardable.} =
+proc vidRoot*(db: AristoDb; key: HashKey): VertexID {.discardable.} =
   ## Variant of `vidAttach()` for generating a sub-trie root
   result = db.vidFetch
   db.vidAttach(HashLabel(root: result, key: key), result)

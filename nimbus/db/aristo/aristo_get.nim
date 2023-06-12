@@ -41,7 +41,7 @@ proc getVtxBackend*(
 proc getKeyBackend*(
     db: AristoDb;
     vid: VertexID;
-      ): Result[NodeKey,AristoError] =
+      ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the backend
   # key must not have been locally deleted (but not saved, yet)
   if vid notin db.top.dKey:
@@ -66,7 +66,7 @@ proc getVtxCascaded*(
 proc getKeyCascaded*(
     db: AristoDb;
     vid: VertexID;
-      ): Result[NodeKey,AristoError] =
+      ): Result[HashKey,AristoError] =
   ## Get the Merkle hash/key from the top layer or the `backened` layer if
   ## available.
   let lbl = db.top.kMap.getOrVoid vid
@@ -103,10 +103,10 @@ proc getVtx*(db: AristoDb; lty: LeafTie): VertexRef =
   if rc.isOk:
     return rc.value.vtx
   
-proc getKey*(db: AristoDb; vid: VertexID): NodeKey =
-  ## Variant of `getKeyCascaded()` returning `VOID_NODE_KEY` on error (while
+proc getKey*(db: AristoDb; vid: VertexID): HashKey =
+  ## Variant of `getKeyCascaded()` returning `VOID_HASH_KEY` on error (while
   ## ignoring the detailed error type information.)
-  db.getKeyCascaded(vid).get(otherwise = VOID_NODE_KEY)
+  db.getKeyCascaded(vid).get(otherwise = VOID_HASH_KEY)
 
 # ------------------------------------------------------------------------------
 # End

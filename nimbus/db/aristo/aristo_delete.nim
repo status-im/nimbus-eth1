@@ -78,7 +78,7 @@ proc deleteImpl(
   inx.dec
 
   while 0 <= inx:
-    # Unlink child node
+    # Unlink child vertex
     let br = hike.legs[inx].wp
     if br.vtx.vType != Branch:
       return err((br.vid,DelBranchExpexted))

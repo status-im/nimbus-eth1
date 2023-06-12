@@ -35,8 +35,8 @@
 ##     vertex as long as possible.
 ##   + Stash the rest of the partial chain to be completed later
 ##
-## * While there is a partial chain left, use the ends towards the leaf nodes
-##   and calculate the remaining keys (which results in a width-first
+## * While there is a partial chain left, use the ends towards the leaf
+##   vertices and calculate the remaining keys (which results in a width-first
 ##   traversal, again.)
 
 {.push raises: [].}
@@ -70,7 +70,7 @@ proc toNode(vtx: VertexRef; db: AristoDb): Result[NodeRef,void] =
           continue
         return err()
       else:
-        node.key[n] = VOID_NODE_KEY
+        node.key[n] = VOID_HASH_KEY
     return ok node
   of Extension:
     if vtx.eVid.isValid:
@@ -98,7 +98,7 @@ proc leafToRootHasher(
 
     # Check against existing key, or store new key
     let
-      key = rc.value.encode.digestTo(NodeKey)
+      key = rc.value.encode.digestTo(HashKey)
       vfy = db.getKey wp.vid
     if not vfy.isValid:
       db.vidAttach(HashLabel(root: hike.root, key: key), wp.vid)
@@ -188,22 +188,22 @@ proc hashify*(
       # Also `db.getVtx(fromVid)` => not nil as it was fetched earlier, already
       let rc = db.getVtx(fromVid).toNode(db)
       if rc.isErr:
-        # Cannot complete with this node, so do it later
+        # Cannot complete with this vertex, so do it later
         redo[fromVid] = rootAndVid
 
       else:
         # Register Hashes
         let
-          nodeKey = rc.value.encode.digestTo(NodeKey)
+          hashKey = rc.value.encode.digestTo(HashKey)
           toVid = rootAndVid[1]
 
-        # Update Merkle hash (aka `nodeKey`)
+        # Update Merkle hash (aka `HashKey`)
         let fromLbl = db.top.kMap.getOrVoid fromVid
         if fromLbl.isValid:
-          db.vidAttach(HashLabel(root: rootAndVid[0], key: nodeKey), fromVid)
-        elif nodeKey != fromLbl.key:
+          db.vidAttach(HashLabel(root: rootAndVid[0], key: hashKey), fromVid)
+        elif hashKey != fromLbl.key:
           let error = HashifyExistingHashMismatch
-          debug "hashify failed", vid=fromVid, key=nodeKey,
+          debug "hashify failed", vid=fromVid, key=hashKey,
             expected=fromLbl.key.pp, error
           return err((fromVid,error))
 
@@ -245,7 +245,7 @@ proc hashifyCheck*(
       let lbl = db.top.kMap.getOrVoid vid
       if not lbl.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
-      if lbl.key != rc.value.encode.digestTo(NodeKey):
+      if lbl.key != rc.value.encode.digestTo(HashKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
       let revVid = db.top.pAmk.getOrVoid lbl
@@ -267,7 +267,7 @@ proc hashifyCheck*(
       let lbl = db.top.kMap.getOrVoid vid
       if not lbl.isValid:
         return err((vid,HashifyCheckVtxHashMissing))
-      if lbl.key != rc.value.encode.digestTo(NodeKey):
+      if lbl.key != rc.value.encode.digestTo(HashKey):
         return err((vid,HashifyCheckVtxHashMismatch))
 
       let revVid = db.top.pAmk.getOrVoid lbl
@@ -282,7 +282,7 @@ proc hashifyCheck*(
       if vtx.isValid:
         let rc = vtx.toNode(db)
         if rc.isOk:
-          if lbl.key != rc.value.encode.digestTo(NodeKey):
+          if lbl.key != rc.value.encode.digestTo(HashKey):
             return err((vid,HashifyCheckVtxHashMismatch))
 
           let revVid = db.top.pAmk.getOrVoid lbl

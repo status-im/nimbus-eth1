@@ -22,7 +22,7 @@ import
 type
   MemBackendRef = ref object
     sTab: Table[VertexID,VertexRef]  ## Structural vertex table making up a trie
-    kMap: Table[VertexID,NodeKey]    ## Merkle hash key mapping
+    kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
     vGen: seq[VertexID]
     txGen: uint                      ## Transaction ID generator (for debugging)
     txId: uint                       ## Active transaction ID (for debugging)
@@ -47,9 +47,9 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
-    proc(vid: VertexID): Result[NodeKey,AristoError] =
-      let key = db.kMap.getOrDefault(vid, EMPTY_ROOT_KEY)
-      if key != EMPTY_ROOT_KEY:
+    proc(vid: VertexID): Result[HashKey,AristoError] =
+      let key = db.kMap.getOrDefault(vid, VOID_HASH_KEY)
+      if key != VOID_HASH_KEY:
         return ok key
       err(MemBeKeyNotFound)
 
@@ -79,7 +79,7 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
-    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,NodeKey)]) =
+    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       when VerifyIxId:
         doAssert db.txId == hdl.MemPutHdlRef.txId
       for (vid,key) in vkps:

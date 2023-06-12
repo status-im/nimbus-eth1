@@ -127,7 +127,7 @@ proc zeroAdjust(
     db: AristoDb;                       # Database layer
     doLeast: static[bool];              # Direction: *least* or *most*
       ): Hike =
-  ## Adjust empty argument path to the first node entry to the right. Ths
+  ## Adjust empty argument path to the first vertex entry to the right. Ths
   ## applies is the argument `hike` is before the first entry in the database.
   ## The result is a hike which is aligned with the first entry.
   proc accept(p: Hike; pfx: NibblesSeq): bool =
@@ -171,7 +171,7 @@ proc zeroAdjust(
 
       of Extension:
         let ePfx = root.ePfx
-        # Must be followed by a branch node
+        # Must be followed by a branch vertex
         if hike.tail.len < 2 or not hike.accept(ePfx):
           break fail
         let vtx = db.getVtx root.eVid
@@ -229,9 +229,9 @@ proc finalise(
   if 0 < hike.tail.len:                 # nothing to compare against, otherwise
     let top = hike.legs[^1]
 
-    # Note that only a `Branch` nodes has a non-zero nibble
+    # Note that only a `Branch` vertices has a non-zero nibble
     if 0 <= top.nibble and top.nibble == top.wp.vtx.branchBorderNibble:
-      # Check the following up node
+      # Check the following up vertex
       let vtx = db.getVtx top.wp.vtx.bVid[top.nibble]
       if not vtx.isValid:
         return Hike(error: NearbyDanglingLink)
@@ -252,7 +252,7 @@ proc finalise(
   # * finalise left: n00000.. for 0 < n
   if hike.legs[0].wp.vtx.vType == Branch or
      (1 < hike.legs.len and hike.legs[1].wp.vtx.vType == Branch):
-    return Hike(error: NearbyFailed) # no more nodes
+    return Hike(error: NearbyFailed) # no more vertices
 
   Hike(error: NearbyUnexpectedVtx) # error
 
@@ -314,7 +314,7 @@ proc nearbyNext(
       uHikeLen = uHike.legs.len # in case of backtracking
       uHikeTail = uHike.tail    # in case of backtracking
 
-    # Look ahead checking next node
+    # Look ahead checking next vertex
     if start:
       let vid = top.wp.vtx.bVid[top.nibble]
       if not vid.isValid:
@@ -334,7 +334,7 @@ proc nearbyNext(
       of Branch:
         let nibble = uHike.tail[0].int8
         if start and accept nibble:
-          # Step down and complete with a branch link on the child node
+          # Step down and complete with a branch link on the child vertex
           step = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: nibble)
           uHike.legs.add step
 
@@ -354,7 +354,7 @@ proc nearbyNext(
         uHike.legs.setLen(uHikeLen)
         uHike.tail = uHikeTail
     else:
-      # Pop current `Branch` node on top and append nibble to `tail`
+      # Pop current `Branch` vertex on top and append nibble to `tail`
       uHike.tail = @[top.nibble.byte].initNibbleRange.slice(1) & uHike.tail
       uHike.legs.setLen(uHike.legs.len - 1)
     # End while
@@ -368,7 +368,7 @@ proc nearbyNext(
     db: AristoDb;                       # Database layer
     hikeLenMax: static[int];            # Beware of loops (if any)
     moveRight:static[bool];             # Direction of next vertex
-      ): Result[NodeTag,AristoError] =
+      ): Result[HashID,AristoError] =
   ## Variant of `nearbyNext()`, convenience wrapper
   let hike = lty.hikeUp(db).nearbyNext(db, hikeLenMax, moveRight)
   if hike.error != AristoError(0):
@@ -377,7 +377,7 @@ proc nearbyNext(
   if 0 < hike.legs.len and hike.legs[^1].wp.vtx.vType == Leaf:
     let rc = hike.legsTo(NibblesSeq).pathToKey
     if rc.isOk:
-      return ok rc.value.to(NodeTag)
+      return ok rc.value.to(HashID)
     return err(rc.error)
 
   err(NearbyLeafExpected)
@@ -390,22 +390,22 @@ proc nearbyRight*(
     hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDb;                       # Database layer
       ): Hike =
-  ## Extends the maximally extended argument nodes `hike` to the right (i.e.
+  ## Extends the maximally extended argument vertices `hike` to the right (i.e.
   ## with non-decreasing path value). This function does not backtrack if
   ## there are dangling links in between. It will return an error in that case.
   ##
-  ## If there is no more leaf node to the right of the argument `hike`, the
+  ## If there is no more leaf vertices to the right of the argument `hike`, the
   ## particular error code `NearbyBeyondRange` is returned.
   ##
   ## This code is intended to be used for verifying a left-bound proof to
-  ## verify that there is no leaf node *right* of a boundary path value.
+  ## verify that there is no leaf vertex *right* of a boundary path value.
   hike.nearbyNext(db, 64, moveRight=true)
 
 proc nearbyRight*(
     lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
       ): Result[LeafTie,AristoError] =
-  ## Variant of `nearbyRight()` working with a `NodeTag` argument instead
+  ## Variant of `nearbyRight()` working with a `HashID` argument instead
   ## of a `Hike`.
   let rc = lty.nearbyNext(db, 64, moveRight=true)
   if rc.isErr:
@@ -419,15 +419,14 @@ proc nearbyLeft*(
   ## Similar to `nearbyRight()`.
   ##
   ## This code is intended to be used for verifying a right-bound proof to
-  ## verify that there is no leaf node *left* to a boundary path value.
+  ## verify that there is no leaf vertex *left* to a boundary path value.
   hike.nearbyNext(db, 64, moveRight=false)
 
 proc nearbyLeft*(
     lty: LeafTie;                       # Some `Patricia Trie` path
     db: AristoDb;                       # Database layer
       ): Result[LeafTie,AristoError] =
-  ## Similar to `nearbyRight()` for `NodeTag` argument instead
-  ## of a `Hike`.
+  ## Similar to `nearbyRight()` for `HashID` argument instead of a `Hike`.
   let rc = lty.nearbyNext(db, 64, moveRight=false)
   if rc.isErr:
     return err(rc.error)
@@ -441,10 +440,10 @@ proc nearbyRightMissing*(
     hike: Hike;                         # Partially expanded chain of vertices
     db: AristoDb;                       # Database layer
       ): Result[bool,AristoError] =
-  ## Returns `true` if the maximally extended argument nodes `hike` is the
-  ## rightmost on the hexary trie database. It verifies that there is no more
+  ## Returns `true` if the maximally extended argument vertex `hike` is the
+  ## right most on the hexary trie database. It verifies that there is no more
   ## leaf entry to the right of the argument `hike`. This function is an
-  ## an alternative to
+  ## alternative to
   ## ::
   ##   let rc = path.nearbyRight(db)
   ##   if rc.isOk:
@@ -454,7 +453,7 @@ proc nearbyRightMissing*(
   ##     # problem with database => error
   ##     ...
   ##   else:
-  ##     # no nore nodes => true
+  ##     # no nore vertices => true
   ##     ...
   ## and is intended mainly for debugging.
   if hike.legs.len == 0:

@@ -12,7 +12,6 @@
 
 import
   eth/[common, trie/nibbles],
-  ../../sync/snap/range_desc,
   ./aristo_desc/aristo_types_identifiers
 
 const
@@ -22,12 +21,12 @@ const
   EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
-  VOID_NODE_KEY* = EMPTY_ROOT_HASH.to(NodeKey)
-    ## Equivalent of `nil` for Merkle hash ket
-
-  VOID_CODE_KEY* = EMPTY_CODE_HASH.to(NodeKey)
+  VOID_CODE_KEY* = EMPTY_CODE_HASH.to(HashKey)
     ## Equivalent of `nil` for `Account` object code hash
 
-  VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_NODE_KEY)
+  VOID_HASH_KEY* = EMPTY_ROOT_HASH.to(HashKey)
+    ## Equivalent of `nil` for Merkle hash ket
+
+  VOID_HASH_LABEL* = HashLabel(root: VertexID(0), key: VOID_HASH_KEY)
 
 # End
